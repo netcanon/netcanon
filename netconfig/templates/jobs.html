@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Jobs — NetConfig{% endblock %}
+
+{% block content %}
+<style>
+  .job-card { background:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:.6rem; overflow:hidden; }
+  .job-card-header {
+    display:flex; align-items:center; gap:.75rem; padding:.7rem 1rem;
+    cursor:pointer; user-select:none; flex-wrap:wrap;
+  }
+  .job-card-header:hover { background:#f8f8f8; }
+  .job-id  { font-family:monospace; font-size:.88rem; color:#444; min-width:7rem; }
+  .job-when { font-size:.85rem; color:#666; }
+  .job-trigger { font-size:.8rem; color:#888; margin-left:.25rem; }
+  .job-duration { font-size:.8rem; color:#aaa; }
+  .job-chevron { margin-left:auto; color:#aaa; font-size:.75rem; transition:transform .15s; }
+  .job-chevron.open { transform:rotate(90deg); }
+  .job-card-body { border-top:1px solid #f0f0f0; padding:.75rem 1rem 1rem; }
+  .job-results-table th { font-size:.8rem; }
+  .job-results-table td { font-size:.85rem; vertical-align:middle; }
+  .filename { font-family:monospace; font-size:.78rem; color:#888; display:block; margin-top:.15rem; }
+  .error-msg { color:#721c24; font-size:.82rem; }
+  .btn-link { font-size:.82rem; padding:.2rem .5rem; border-radius:3px;
+              background:#e8e8f0; color:#1a1a2e; text-decoration:none;
+              margin-right:.25rem; display:inline-block; }
+  .btn-link:hover { background:#d0d0e0; text-decoration:none; }
+  .btn-link-btn { font-size:.82rem; padding:.2rem .5rem; border-radius:3px;
+                  background:#e8e8f0; color:#1a1a2e; border:none; cursor:pointer;
+                  margin-right:.25rem; font-weight:normal; }
+  .btn-link-btn:hover { background:#d0d0e0; }
+</style>
+
+<div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1.25rem">
+  <h1 style="margin-bottom:0">Backup Jobs</h1>
+  <span style="font-size:.85rem;color:#888">{{ jobs|length }} job{{ 's' if jobs|length != 1 else '' }}</span>
+</div>
+
+{% if not jobs %}
+<p class="empty-msg" data-testid="no-jobs-msg">
+  No backup jobs yet. Start one from the <a href="/">Dashboard</a>
+  or set up a recurring <a href="/schedules">Schedule</a>.
+</p>
+{% else %}
+
+{% for job in jobs %}
+{% set success_count = job.results | selectattr('status','eq','success') | list | length %}
+{% set duration_secs = ((job.completed_at - job.created_at).total_seconds() | int) if job.completed_at else none %}
+
+<div class="job-card" data-testid="job-card" data-job-id="{{ job.id }}"
+     id="job-{{ job.id[:8] }}">
+
+  <div class="job-card-header" data-testid="job-card-header"
+       onclick="toggleJob(this)">
+
+    <span class="job-id" data-testid="job-id-text">{{ job.id[:8] }}&hellip;</span>
+
+    <span class="badge badge-{{ job.status }}" data-testid="job-status">{{ job.status }}</span>
+
+    <span data-testid="job-success-count">
+      {{ success_count }}/{{ job.total_devices }}
+      {% if success_count == job.total_devices and job.total_devices > 0 %}
+        <span style="color:#155724">&#10003;</span>
+      {% elif success_count < job.total_devices %}
+        <span style="color:#721c24">&#10007;</span>
+      {% endif %}
+    </span>
+
+    <span class="job-when" data-testid="job-created"
+          data-utc="{{ job.created_at.isoformat() }}">
+      {{ job.created_at.strftime('%Y-%m-%d %H:%M') }}
+    </span>
+
+    {% if duration_secs is not none %}
+    <span class="job-duration" data-testid="job-duration">{{ duration_secs }}s</span>
+    {% endif %}
+
+    {% if job.schedule_name %}
+    <span class="job-trigger" data-testid="job-trigger">&#128197; {{ job.schedule_name }}</span>
+    {% else %}
+    <span class="job-trigger" data-testid="job-trigger">Manual</span>
+    {% endif %}
+
+    <span class="job-chevron" aria-hidden="true">&#9654;</span>
+  </div>
+
+  <div class="job-card-body" data-testid="job-card-body" style="display:none">
+    {% if job.results %}
+    <table class="job-results-table">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Host</th>
+          <th>Result</th>
+          <th>Config file</th>
+          <th>Duration</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for result in job.results %}
+      <tr data-testid="job-result-row">
+        <td data-testid="job-result-type">{{ result.device_type }}</td>
+        <td data-testid="job-result-host">{{ result.host }}</td>
+        <td>
+          <span class="badge badge-{{ result.status }}"
+                data-testid="job-result-status">{{ result.status }}</span>
+        </td>
+        <td data-testid="job-result-file">
+          {% if result.config_record %}
+            <a href="/api/v1/configs/{{ result.config_record.filename }}"
+               target="_blank"
+               data-testid="job-config-view-link"
+               class="btn-link">View</a>
+            <a href="/api/v1/configs/{{ result.config_record.filename }}"
+               download="{{ result.config_record.filename }}"
+               data-testid="job-config-download-btn"
+               class="btn-link">Download</a>
+            {% if open_in_editor %}
+            <button onclick="openJobConfig('{{ result.config_record.filename }}')"
+                    data-testid="job-config-open-btn"
+                    class="btn-link-btn">Open</button>
+            {% endif %}
+            <code class="filename">{{ result.config_record.filename }}</code>
+          {% else %}
+            <span class="error-msg" data-testid="job-result-error"
+                  title="{{ result.error }}">
+              {{ result.error[:100] if result.error else 'failed' }}{% if result.error and result.error|length > 100 %}&hellip;{% endif %}
+            </span>
+          {% endif %}
+        </td>
+        <td data-testid="job-result-duration">
+          {{ '%.1f'|format(result.duration_seconds) }}s
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-msg" style="padding:.25rem 0">Still running&hellip;</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endfor %}
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+function toggleJob(header) {
+  var body    = header.nextElementSibling;
+  var chevron = header.querySelector('.job-chevron');
+  var open    = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  chevron.classList.toggle('open', open);
+}
+
+/* Open all jobs that match the URL hash (e.g. /jobs#a1b2c3d4) */
+document.addEventListener('DOMContentLoaded', function() {
+  var hash = window.location.hash.replace('#', '');
+  if (hash) {
+    var card = document.getElementById('job-' + hash);
+    if (card) {
+      var header = card.querySelector('[data-testid="job-card-header"]');
+      if (header) toggleJob(header);
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+});
+
+{% if open_in_editor %}
+function openJobConfig(filename) {
+  fetch('/api/v1/configs/' + encodeURIComponent(filename) + '/open', { method: 'POST' })
+    .then(function(r) {
+      if (r.status === 204) showToast('Opened ' + filename, 'success');
+      else r.json().then(function(d) { showToast('Error: ' + (d.detail || r.statusText), 'error'); });
+    })
+    .catch(function(e) { showToast('Network error: ' + e.message, 'error'); });
+}
+{% endif %}
+</script>
+{% endblock %}

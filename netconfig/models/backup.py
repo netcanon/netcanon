@@ -88,3 +88,5 @@ class BackupJob(BaseModel):
     created_at: datetime
     completed_at: datetime | None = None
     total_devices: int = 0
+    schedule_id: str | None = None    # None for manually triggered jobs
+    schedule_name: str | None = None  # snapshot of schedule name at run time

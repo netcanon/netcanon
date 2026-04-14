@@ -11,6 +11,8 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav`              | `<nav>` | Top navigation bar |
 | `nav-brand`        | `<a>`   | "NetConfig" brand link — navigates to `/` |
 | `nav-home`         | `<a>`   | Link to `/`; has `class="active"` and `aria-current="page"` on Dashboard |
+| `nav-jobs`         | `<a>`   | Link to `/jobs`; active on Jobs page |
+| `nav-schedules`    | `<a>`   | Link to `/schedules`; active on Schedules page |
 | `nav-configs`      | `<a>`   | Link to `/configs`; active on Configs page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
@@ -91,6 +93,72 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `def-priority`         | `<td>` | Priority value |
 | `def-notes`            | `<td>` | Notes truncated at 120 chars; full text in `title` tooltip |
 | `no-definitions-msg`   | `<p>` | Shown when no definitions are loaded |
+
+## Jobs page (`jobs.html`)
+
+| `data-testid`             | Element | Notes |
+|---------------------------|---------|-------|
+| `no-jobs-msg`             | `<p>`   | Shown when no jobs exist |
+| `job-card`                | `<div>` | One collapsible card per job; also has `data-job-id` and `id="job-{id[:8]}"` for anchor linking |
+| `job-card-header`         | `<div>` | Clickable header row; calls `toggleJob()` to expand/collapse body |
+| `job-id-text`             | `<span>`| First 8 chars of job UUID + "…" |
+| `job-status`              | `<span>`| Status badge (`pending`, `running`, `completed`, `failed`) |
+| `job-success-count`       | `<span>`| `success / total` with ✓ or ✗ indicator |
+| `job-created`             | `<span>`| Creation timestamp (localised by JS); also has `data-utc` |
+| `job-duration`            | `<span>`| Total job duration in seconds; absent until job completes |
+| `job-trigger`             | `<span>`| Schedule name (with calendar icon) or "Manual" for ad-hoc runs |
+| `job-card-body`           | `<div>` | Expanded body; hidden by default |
+| `job-result-row`          | `<tr>`  | One row per device result |
+| `job-result-type`         | `<td>`  | Device type key |
+| `job-result-host`         | `<td>`  | Device host / IP |
+| `job-result-status`       | `<span>`| Per-device status badge |
+| `job-result-file`         | `<td>`  | Config file cell — contains view/download/(open) links on success, or error message on failure |
+| `job-config-view-link`    | `<a>`   | Opens raw config in new tab |
+| `job-config-download-btn` | `<a download>` | Triggers browser file download |
+| `job-config-open-btn`     | `<button>` | Opens file in OS default editor; **only rendered when `open_in_editor=True`** (desktop app) |
+| `job-result-error`        | `<span>`| Error text (≤100 chars, full text in `title` tooltip); shown when no config file exists |
+| `job-result-duration`     | `<td>`  | Per-device duration in seconds |
+
+## Schedules page (`schedules.html`)
+
+### New schedule form
+
+| `data-testid`                  | Element | Notes |
+|-------------------------------|---------|-------|
+| `new-schedule-section`         | `<section>` | Wraps the new schedule form |
+| `schedule-form`                | `<form>` | The form element |
+| `sched-name-input`             | `<input>` | Schedule name |
+| `sched-interval-select`        | `<select>` | Preset interval: 1h / 6h / 12h / 24h (default) / 7d / Custom |
+| `sched-custom-interval-input`  | `<input type="number">` | Custom interval in minutes; shown only when "Custom…" is selected |
+| `sched-device-list`            | `<div>` | Container for all schedule device rows |
+| `sched-device-entry`           | `<div>` | One device row (cloned on add) |
+| `sched-device-type-select`     | `<select>` | Device type dropdown; options carry `data-needs-enable` |
+| `sched-device-host-input`      | `<input>` | Host / IP field |
+| `sched-device-username-input`  | `<input>` | Username field |
+| `sched-device-password-input`  | `<input type="password">` | Password field |
+| `sched-device-enable-input`    | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
+| `sched-device-port-input`      | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
+| `sched-remove-device-btn`      | `<button>` | Remove device row; hidden when only one row exists |
+| `sched-add-device-btn`         | `<button>` | Add a new device row |
+| `sched-submit-btn`             | `<button type="submit">` | Create schedule; disabled while request is in flight |
+
+### Existing schedules table
+
+| `data-testid`                  | Element | Notes |
+|-------------------------------|---------|-------|
+| `schedules-section`            | `<section>` | Wraps the schedules table |
+| `no-schedules-msg`             | `<p>`   | Shown when no schedules exist |
+| `schedules-table`              | `<table>` | Schedules table |
+| `schedule-row`                 | `<tr>`  | One row per schedule; also has `data-schedule-id` |
+| `schedule-name`                | `<td>`  | Schedule name (bold) with short UUID below |
+| `schedule-interval`            | `<td>`  | Human-readable interval (e.g. "Every 24 hours") |
+| `schedule-toggle-btn`          | `<button>` | Styled badge; click to toggle enabled/disabled; reloads page |
+| `schedule-next-run`            | `<td>`  | Next scheduled run (localised by JS); also has `data-utc` |
+| `schedule-last-run`            | `<td>`  | Last run timestamp (localised by JS); "Never" when never run; also has `data-utc` |
+| `schedule-last-job`            | `<td>`  | Link to last job card (`/jobs#{id[:8]}`); "—" if none |
+| `schedule-delete-btn`          | `<button>` | Shows inline confirm — does NOT call `confirm()` |
+| `schedule-delete-confirm-btn`  | `<button>` | "Yes" — confirms deletion |
+| `schedule-delete-cancel-btn`   | `<button>` | "No" — cancels and restores Delete button |
 
 ## Playwright Selector Patterns
 

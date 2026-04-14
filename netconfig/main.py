@@ -31,20 +31,37 @@ from fastapi.templating import Jinja2Templates
 from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
+from .api.routes import schedules as schedules_router
 from .config import Settings
 from .definitions.loader import DefinitionLoader
 from .storage.file_store import FileConfigStore
+from .storage.job_store import FileJobStore
+from .storage.schedule_store import FileScheduleStore
 
 logger = logging.getLogger(__name__)
 _TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+
+def _format_interval(minutes: int) -> str:
+    """Human-readable interval string for use in templates."""
+    if minutes < 60:
+        return f"Every {minutes} min"
+    if minutes < 1440:
+        h = minutes // 60
+        return f"Every {h} hour{'s' if h != 1 else ''}"
+    if minutes < 10080:
+        d = minutes // 1440
+        return f"Every {d} day{'s' if d != 1 else ''}"
+    w = minutes // 10080
+    return f"Every {w} week{'s' if w != 1 else ''}"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     """Create and configure a NetConfig FastAPI application instance.
 
     Calling this multiple times produces independent application instances,
-    each with its own state (definitions, storage, job registry).  This
-    is essential for test isolation — each test fixture calls
+    each with its own state (definitions, storage, job registry, scheduler).
+    This is essential for test isolation — each test fixture calls
     ``create_app(test_settings)`` to get a fresh, isolated instance.
 
     Args:
@@ -61,17 +78,51 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         """Initialise shared state on startup; clean up on shutdown."""
-        logger.info("Loading device definitions from %s", settings.definitions_dir)
-        _app.state.settings = settings
-        _app.state.definitions = DefinitionLoader(settings.definitions_dir).load_all()
-        _app.state.storage = FileConfigStore(settings.configs_dir)
-        _app.state.jobs: dict = {}
+        from apscheduler.schedulers.asyncio import AsyncIOScheduler
+        from .api.routes.schedules import register_schedule_job
+
         logger.info(
-            "NetConfig started — %d definition(s) loaded",
-            len(_app.state.definitions),
+            "Loading device definitions from %s", settings.definitions_dir
         )
+        _app.state.settings = settings
+        _app.state.definitions = DefinitionLoader(
+            settings.definitions_dir
+        ).load_all()
+        _app.state.storage = FileConfigStore(settings.configs_dir)
+
+        # Job persistence — sibling directory to configs_dir
+        data_root = settings.configs_dir.parent
+        _app.state.job_store = FileJobStore(data_root / "jobs")
+        _app.state.jobs = _app.state.job_store.load_all()
+
+        # Schedule persistence
+        _app.state.schedule_store = FileScheduleStore(data_root / "schedules")
+        _app.state.schedules = _app.state.schedule_store.load_all()
+
+        # APScheduler — purely in-memory; schedules are persisted separately
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        _app.state.scheduler = scheduler
+
+        # Re-register all enabled schedules
+        for schedule in _app.state.schedules.values():
+            if schedule.enabled:
+                register_schedule_job(scheduler, schedule, _app)
+                ap_job = scheduler.get_job(schedule.id)
+                if ap_job and ap_job.next_run_time:
+                    schedule.next_run_at = ap_job.next_run_time
+                    _app.state.schedule_store.save(schedule)
+
+        scheduler.start()
+        logger.info(
+            "NetConfig started — %d definition(s) loaded, %d schedule(s) active",
+            len(_app.state.definitions),
+            len([s for s in _app.state.schedules.values() if s.enabled]),
+        )
+
         yield
-        # Nothing to clean up for file-based storage.
+
+        scheduler.shutdown(wait=False)
+        logger.info("Scheduler stopped")
 
     app = FastAPI(
         title="NetConfig",
@@ -91,15 +142,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(defs_router.router, prefix="/api/v1")
     app.include_router(configs_router.router, prefix="/api/v1")
     app.include_router(backups_router.router, prefix="/api/v1")
+    app.include_router(schedules_router.router, prefix="/api/v1")
 
     # ------------------------------------------------------------------
     # UI routes (Jinja2 server-rendered HTML)
     # ------------------------------------------------------------------
     templates = Jinja2Templates(directory=_TEMPLATES_DIR)
+    templates.env.globals["format_interval"] = _format_interval
 
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def index(request: Request) -> HTMLResponse:
-        """Dashboard: recent jobs and backup form."""
+        """Dashboard: recent jobs summary and backup form."""
         jobs = sorted(
             request.app.state.jobs.values(),
             key=lambda j: j.created_at,
@@ -112,6 +165,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "active_page": "home",
                 "definitions": request.app.state.definitions,
                 "recent_jobs": jobs[:10],
+            },
+        )
+
+    @app.get("/jobs", response_class=HTMLResponse, include_in_schema=False)
+    async def jobs_page(request: Request) -> HTMLResponse:
+        """Full job history: all backup jobs with per-device config file links."""
+        jobs = sorted(
+            request.app.state.jobs.values(),
+            key=lambda j: j.created_at,
+            reverse=True,
+        )
+        return templates.TemplateResponse(
+            request,
+            "jobs.html",
+            {
+                "active_page": "jobs",
+                "jobs": jobs,
+                "open_in_editor": request.app.state.settings.open_in_editor,
+            },
+        )
+
+    @app.get("/schedules", response_class=HTMLResponse, include_in_schema=False)
+    async def schedules_page(request: Request) -> HTMLResponse:
+        """Schedule manager: create and manage recurring backup schedules."""
+        schedules = sorted(
+            request.app.state.schedules.values(),
+            key=lambda s: s.created_at,
+            reverse=True,
+        )
+        return templates.TemplateResponse(
+            request,
+            "schedules.html",
+            {
+                "active_page": "schedules",
+                "schedules": schedules,
+                "definitions": request.app.state.definitions,
             },
         )
 
@@ -156,6 +245,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             '<nav id="nc-nav">'
             '<a href="/" class="brand">NetConfig</a>'
             '<a href="/">Dashboard</a>'
+            '<a href="/jobs">Jobs</a>'
+            '<a href="/schedules">Schedules</a>'
             '<a href="/configs">Configs</a>'
             '<a href="/definitions">Definitions</a>'
             '<a href="/docs" class="active">API Docs</a>'
@@ -163,39 +254,41 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         nav_css = (
             "<style>"
+            # Nuke any body/html margin that creates the white stripe above our nav
+            "html,body{margin:0!important;padding:0!important}"
             "nav#nc-nav{"
-            "  all:revert;"  # reset any Swagger resets
-            "  box-sizing:border-box;"
-            "  background:#1a1a2e;"
-            "  padding:.75rem 1.5rem;"
-            "  display:flex;"
-            "  gap:1.5rem;"
-            "  align-items:center;"
-            "  position:sticky;"
-            "  top:0;"
-            "  z-index:10000;"
-            "  box-shadow:0 1px 4px rgba(0,0,0,.4);"
-            "  font-family:system-ui,sans-serif;"
+            "box-sizing:border-box!important;"
+            "background:#1a1a2e!important;"
+            "padding:.75rem 1.5rem!important;"
+            "display:flex!important;"
+            "gap:1.5rem!important;"
+            "align-items:center!important;"
+            "position:sticky!important;"
+            "top:0!important;"
+            "z-index:10000!important;"
+            "box-shadow:0 1px 4px rgba(0,0,0,.4)!important;"
+            "font-family:system-ui,sans-serif!important;"
+            "margin:0!important;"
+            "width:100%!important;"
             "}"
             "nav#nc-nav a{"
-            "  all:revert;"
-            "  color:#eee;"
-            "  text-decoration:none;"
-            "  font-size:.95rem;"
-            "  font-family:system-ui,sans-serif;"
+            "color:#eee!important;"
+            "text-decoration:none!important;"
+            "font-size:.95rem!important;"
+            "font-family:system-ui,sans-serif!important;"
             "}"
-            "nav#nc-nav a:hover{color:#fff;text-decoration:underline}"
+            "nav#nc-nav a:hover{color:#fff!important;text-decoration:underline!important}"
             "nav#nc-nav a.brand{"
-            "  color:#7eb8f7;"
-            "  font-weight:700;"
-            "  font-size:1.1rem;"
-            "  margin-right:auto;"
-            "  text-decoration:none;"
+            "color:#7eb8f7!important;"
+            "font-weight:700!important;"
+            "font-size:1.1rem!important;"
+            "margin-right:auto!important;"
+            "text-decoration:none!important;"
             "}"
             "nav#nc-nav a.active{"
-            "  color:#fff;"
-            "  border-bottom:2px solid #7eb8f7;"
-            "  padding-bottom:2px;"
+            "color:#fff!important;"
+            "border-bottom:2px solid #7eb8f7!important;"
+            "padding-bottom:2px!important;"
             "}"
             "</style>"
         )

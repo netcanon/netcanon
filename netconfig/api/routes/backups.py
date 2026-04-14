@@ -24,7 +24,8 @@ from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, BackupResult, JobStatus
 from ...models.device import BackupRequest
 from ...storage.base import BaseConfigStore
-from ..deps import get_definitions, get_jobs, get_storage
+from ...storage.job_store import FileJobStore
+from ..deps import get_definitions, get_job_store, get_jobs, get_storage
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/backups", tags=["backups"])
@@ -42,6 +43,7 @@ def create_backup(
     definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
     storage: BaseConfigStore = Depends(get_storage),
     jobs: dict[str, BackupJob] = Depends(get_jobs),
+    job_store: FileJobStore = Depends(get_job_store),
 ) -> BackupJob:
     """Validate devices, create a job, and enqueue the backup task.
 
@@ -80,7 +82,7 @@ def create_backup(
     )
     jobs[job.id] = job
     background_tasks.add_task(
-        _run_backup_job, job, request_body, definitions, storage
+        _run_backup_job, job, request_body, definitions, storage, job_store
     )
     logger.info(
         "Created backup job %s for %d device(s)",
@@ -134,6 +136,7 @@ def _run_backup_job(
     request: BackupRequest,
     definitions: dict[str, DeviceDefinition],
     storage: BaseConfigStore,
+    job_store: FileJobStore | None = None,
 ) -> None:
     """Execute all device backups for *job* and update its state.
 
@@ -209,3 +212,5 @@ def _run_backup_job(
         success,
         job.total_devices,
     )
+    if job_store is not None:
+        job_store.save(job)

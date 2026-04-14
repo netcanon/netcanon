@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Schedules — NetConfig{% endblock %}
+
+{% block content %}
+<style>
+  .sched-form { margin-bottom:2rem; }
+  .interval-row { display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap; }
+  .sched-table td { vertical-align:middle; }
+  .enabled-badge  { background:#d4edda; color:#155724; }
+  .disabled-badge { background:#e2e3e5; color:#383d41; }
+  .next-run { font-size:.82rem; color:#555; }
+  .last-run { font-size:.82rem; color:#888; }
+  .no-run   { color:#bbb; }
+</style>
+
+<h1>Schedules</h1>
+
+<!-- ── New schedule form ─────────────────────────────────────────── -->
+<section data-testid="new-schedule-section">
+  <h2>New Schedule</h2>
+  <form id="sched-form" data-testid="schedule-form">
+    <div class="form-row">
+      <div class="form-group" style="flex:1;min-width:180px">
+        <label>Schedule Name</label>
+        <input id="sched-name" name="name" type="text"
+               placeholder="e.g. Daily Cisco backup"
+               data-testid="sched-name-input" required>
+      </div>
+      <div class="form-group">
+        <label>Run every</label>
+        <div class="interval-row">
+          <select id="sched-interval-preset" data-testid="sched-interval-select">
+            <option value="60">1 hour</option>
+            <option value="360">6 hours</option>
+            <option value="720">12 hours</option>
+            <option value="1440" selected>24 hours</option>
+            <option value="10080">7 days</option>
+            <option value="custom">Custom&hellip;</option>
+          </select>
+          <div id="sched-custom-wrap" style="display:none;gap:.35rem;align-items:center;display:none">
+            <input id="sched-custom-mins" type="number" min="1" max="43200"
+                   placeholder="minutes" style="width:90px"
+                   data-testid="sched-custom-interval-input">
+            <span style="font-size:.85rem;color:#666">min</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Device list (same pattern as Dashboard) -->
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">Devices</h3>
+    <div id="sched-device-list" data-testid="sched-device-list">
+      <div class="form-row device-entry" data-testid="sched-device-entry">
+        <div class="form-group">
+          <label>Type</label>
+          <select name="type_key" data-testid="sched-device-type-select">
+            {% for key, def in definitions.items() | sort %}
+            <option value="{{ key }}"
+                    data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
+              {{ def.vendor }} {{ def.os }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Host / IP</label>
+          <input name="host" type="text" placeholder="192.168.1.1"
+                 data-testid="sched-device-host-input" required>
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input name="username" type="text" placeholder="admin"
+                 data-testid="sched-device-username-input" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input name="password" type="password"
+                 data-testid="sched-device-password-input" required>
+        </div>
+        <div class="form-group enable-group">
+          <label>Enable Password</label>
+          <input name="enable_password" type="password" placeholder="optional"
+                 data-testid="sched-device-enable-input">
+        </div>
+        <details class="port-details" style="align-self:flex-end">
+          <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                          user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
+          <input name="port" type="number" value="22" min="1" max="65535"
+                 style="width:72px;margin-top:.25rem"
+                 data-testid="sched-device-port-input">
+        </details>
+        <div class="form-group" style="justify-content:flex-end">
+          <button type="button" class="btn-danger remove-sched-device-btn"
+                  data-testid="sched-remove-device-btn"
+                  aria-label="Remove this device"
+                  style="display:none">&#x2715;</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:.75rem">
+      <button type="button" id="sched-add-device-btn" class="btn-secondary"
+              data-testid="sched-add-device-btn">+ Add Device</button>
+      <button type="submit" id="sched-submit-btn" class="btn-primary"
+              data-testid="sched-submit-btn">Create Schedule</button>
+    </div>
+  </form>
+</section>
+
+<!-- ── Existing schedules ────────────────────────────────────────── -->
+<section data-testid="schedules-section">
+  <h2>Active Schedules</h2>
+
+  {% if not schedules %}
+  <p class="empty-msg" data-testid="no-schedules-msg">
+    No schedules yet. Fill in the form above to create one.
+  </p>
+  {% else %}
+  <table data-testid="schedules-table">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Interval</th>
+        <th>Status</th>
+        <th>Next run</th>
+        <th>Last run</th>
+        <th>Last job</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for sched in schedules %}
+    <tr data-testid="schedule-row" data-schedule-id="{{ sched.id }}">
+      <td data-testid="schedule-name"><strong>{{ sched.name }}</strong>
+        <div style="font-size:.75rem;color:#aaa;font-family:monospace">{{ sched.id[:8] }}&hellip;</div>
+      </td>
+      <td data-testid="schedule-interval">{{ format_interval(sched.interval_minutes) }}</td>
+      <td>
+        <button onclick="toggleSchedule('{{ sched.id }}')"
+                data-testid="schedule-toggle-btn"
+                class="badge {% if sched.enabled %}enabled-badge{% else %}disabled-badge{% endif %}"
+                style="border:none;cursor:pointer;padding:.25rem .6rem">
+          {{ 'Enabled' if sched.enabled else 'Disabled' }}
+        </button>
+      </td>
+      <td class="next-run" data-testid="schedule-next-run"
+          {% if sched.next_run_at %}data-utc="{{ sched.next_run_at.isoformat() }}"{% endif %}>
+        {% if sched.next_run_at %}
+          {{ sched.next_run_at.strftime('%Y-%m-%d %H:%M') }}
+        {% else %}
+          <span class="no-run">—</span>
+        {% endif %}
+      </td>
+      <td class="last-run" data-testid="schedule-last-run"
+          {% if sched.last_run_at %}data-utc="{{ sched.last_run_at.isoformat() }}"{% endif %}>
+        {% if sched.last_run_at %}
+          {{ sched.last_run_at.strftime('%Y-%m-%d %H:%M') }}
+        {% else %}
+          <span class="no-run">Never</span>
+        {% endif %}
+      </td>
+      <td data-testid="schedule-last-job">
+        {% if sched.last_job_id %}
+          <a href="/jobs#{{ sched.last_job_id[:8] }}"
+             style="font-family:monospace;font-size:.82rem">
+            {{ sched.last_job_id[:8] }}&hellip;
+          </a>
+        {% else %}
+          <span class="no-run">—</span>
+        {% endif %}
+      </td>
+      <td>
+        <button data-testid="schedule-delete-btn"
+                onclick="deleteSchedule('{{ sched.id }}', this)"
+                class="btn-danger">Delete</button>
+        <span class="sched-confirm" style="display:none;gap:.35rem">
+          Delete?
+          <button data-testid="schedule-delete-confirm-btn"
+                  onclick="confirmDeleteSchedule('{{ sched.id }}')"
+                  class="btn-danger" style="font-size:.8rem">Yes</button>
+          <button data-testid="schedule-delete-cancel-btn"
+                  onclick="cancelDeleteSchedule(this)"
+                  class="btn-secondary" style="font-size:.8rem">No</button>
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const schedDeviceList = document.getElementById('sched-device-list');
+const schedAddBtn     = document.getElementById('sched-add-device-btn');
+const schedForm       = document.getElementById('sched-form');
+const schedSubmitBtn  = document.getElementById('sched-submit-btn');
+const presetSel       = document.getElementById('sched-interval-preset');
+const customWrap      = document.getElementById('sched-custom-wrap');
+const customMins      = document.getElementById('sched-custom-mins');
+
+/* ── Interval preset / custom toggle ── */
+presetSel.addEventListener('change', function() {
+  var isCustom = presetSel.value === 'custom';
+  customWrap.style.display = isCustom ? 'flex' : 'none';
+  if (isCustom) customMins.required = true;
+  else customMins.required = false;
+});
+
+/* ── Enable password visibility ── */
+function updateSchedEnableGroup(row) {
+  var sel = row.querySelector('[data-testid="sched-device-type-select"]');
+  var opt = sel.options[sel.selectedIndex];
+  var grp = row.querySelector('.enable-group');
+  if (grp) grp.style.display = opt.dataset.needsEnable === 'true' ? '' : 'none';
+}
+
+function updateSchedRemoveButtons() {
+  var rows = schedDeviceList.querySelectorAll('.device-entry');
+  rows.forEach(function(r) {
+    r.querySelector('[data-testid="sched-remove-device-btn"]').style.display =
+      rows.length > 1 ? '' : 'none';
+  });
+}
+
+function initSchedRow(row) {
+  updateSchedEnableGroup(row);
+  row.querySelector('[data-testid="sched-device-type-select"]')
+     .addEventListener('change', function() { updateSchedEnableGroup(row); });
+  row.querySelector('[data-testid="sched-remove-device-btn"]')
+     .addEventListener('click', function(e) {
+       e.target.closest('.device-entry').remove();
+       updateSchedRemoveButtons();
+     });
+}
+
+schedDeviceList.querySelectorAll('.device-entry').forEach(initSchedRow);
+
+schedAddBtn.addEventListener('click', function() {
+  var first = schedDeviceList.querySelector('.device-entry');
+  var clone = first.cloneNode(true);
+  clone.querySelectorAll('input').forEach(function(i) {
+    i.value = i.name === 'port' ? '22' : '';
+  });
+  clone.querySelector('select').selectedIndex = 0;
+  clone.querySelectorAll('details').forEach(function(d) { d.removeAttribute('open'); });
+  schedDeviceList.appendChild(clone);
+  initSchedRow(clone);
+  updateSchedRemoveButtons();
+});
+
+/* ── Form submission ── */
+schedForm.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  schedSubmitBtn.disabled = true;
+  schedSubmitBtn.textContent = 'Creating\u2026';
+
+  var intervalMins = presetSel.value === 'custom'
+    ? parseInt(customMins.value, 10)
+    : parseInt(presetSel.value, 10);
+
+  var rows    = schedDeviceList.querySelectorAll('.device-entry');
+  var devices = Array.from(rows).map(function(row) {
+    var g  = function(name) { return row.querySelector('[name="' + name + '"]').value; };
+    var ep = g('enable_password');
+    return Object.assign(
+      { type_key: g('type_key'), host: g('host'),
+        port: parseInt(g('port'), 10) || 22,
+        username: g('username'), password: g('password') },
+      ep ? { enable_password: ep } : {}
+    );
+  });
+
+  try {
+    var res = await fetch('/api/v1/schedules/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: document.getElementById('sched-name').value,
+        interval_minutes: intervalMins,
+        devices: devices,
+      }),
+    });
+    if (!res.ok) {
+      var err = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      return;
+    }
+    showToast('Schedule created — reloading\u2026', 'success');
+    setTimeout(function() { window.location.reload(); }, 800);
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  } finally {
+    schedSubmitBtn.disabled = false;
+    schedSubmitBtn.textContent = 'Create Schedule';
+  }
+});
+
+/* ── Toggle enable/disable ── */
+async function toggleSchedule(schedId) {
+  try {
+    var res = await fetch('/api/v1/schedules/' + schedId + '/toggle', { method: 'POST' });
+    if (!res.ok) {
+      var d = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      return;
+    }
+    window.location.reload();
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+
+/* ── Inline delete confirm ── */
+function deleteSchedule(schedId, btn) {
+  btn.style.display = 'none';
+  var confirm = btn.nextElementSibling;
+  confirm.style.display = 'inline-flex';
+}
+
+function cancelDeleteSchedule(btn) {
+  var confirm = btn.closest('.sched-confirm');
+  confirm.style.display = 'none';
+  confirm.previousElementSibling.style.display = '';
+}
+
+async function confirmDeleteSchedule(schedId) {
+  try {
+    var res = await fetch('/api/v1/schedules/' + schedId, { method: 'DELETE' });
+    if (res.status === 204) {
+      showToast('Schedule deleted', 'success');
+      var row = document.querySelector('[data-schedule-id="' + schedId + '"]');
+      if (row) row.remove();
+      var tbody = document.querySelector('[data-testid="schedules-table"] tbody');
+      if (tbody && !tbody.querySelector('tr')) window.location.reload();
+    } else {
+      var d = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (d.detail || res.statusText), 'error');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

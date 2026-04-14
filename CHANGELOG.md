@@ -7,6 +7,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (backup jobs page + recurring schedules)
+
+- **Job persistence** — `FileJobStore` writes one JSON file per completed backup
+  job to `{data_root}/jobs/`.  All jobs are reloaded into `app.state.jobs` at
+  startup, so job history survives server restarts.
+- **`BackupJob.schedule_id` / `schedule_name`** — new optional fields track
+  which schedule triggered a job (snapshot of name at run time).  `None` for
+  manually triggered runs.
+- **`GET /jobs`** — dedicated Jobs page listing all backup jobs newest-first.
+  Each job is a collapsible card showing: short ID, status badge, success/total
+  count, timestamp, duration, and trigger (schedule name or "Manual").  Expanded
+  body shows a per-device results table with View / Download / (Open) links and
+  the config filename.  URL hash navigation: `/jobs#a1b2c3d4` auto-expands and
+  scrolls to the matching job card.
+- **`/schedules`** — Schedule management page and backing API:
+  - **`GET /api/v1/schedules/`** — list all schedules
+  - **`POST /api/v1/schedules/`** — create a recurring backup schedule
+    (name, interval\_minutes, devices list)
+  - **`DELETE /api/v1/schedules/{id}`** — delete a schedule
+  - **`POST /api/v1/schedules/{id}/toggle`** — enable / disable a schedule
+- **`BackupSchedule` model** (`netconfig/models/schedule.py`) — stores schedule
+  metadata: id, name, enabled, interval\_minutes, devices, created\_at,
+  last\_run\_at, next\_run\_at, last\_job\_id.
+- **`FileScheduleStore`** (`netconfig/storage/schedule_store.py`) — persists
+  schedule definitions as JSON under `{data_root}/schedules/`.
+- **APScheduler integration** — `AsyncIOScheduler` (timezone=UTC) is started in
+  the app lifespan.  Each enabled schedule registers an `IntervalTrigger` job.
+  Blocking SSH runs via `asyncio.to_thread` so it never blocks the event loop.
+  Scheduler state is purely in-memory; schedule definitions are re-loaded from
+  disk and re-registered on every startup.
+- **`next_run_at` tracking** — captured from APScheduler after registration and
+  after each run; persisted to disk so the Schedules page always shows an
+  accurate value even before the first tick.
+- **Nav updated** — "Jobs" and "Schedules" links added between Dashboard and
+  Configs in the nav bar (order: Dashboard | Jobs | Schedules | Configs |
+  Definitions | API Docs).  Swagger nav updated to match.
+- **`apscheduler>=3.10.4`** added to `requirements.txt` and `pyproject.toml`.
+
 ### Added (nav bar on API Docs page)
 
 - **`GET /docs`** — FastAPI's built-in Swagger UI is now replaced by a
