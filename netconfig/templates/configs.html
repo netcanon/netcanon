@@ -48,7 +48,7 @@ document.querySelectorAll('.delete-btn').forEach(btn => {
                             { method: 'DELETE' });
     if (res.ok || res.status === 204) {
       btn.closest('tr').remove();
-      if (!document.querySelector('.config-row')) location.reload();
+      if (!document.querySelector('[data-testid="config-row"]')) location.reload();
     } else {
       alert('Delete failed: ' + res.statusText);
     }
