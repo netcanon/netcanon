@@ -149,18 +149,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             title="NetConfig — API Docs",
         )
         html = base.body.decode("utf-8")
-        nav_css = (
-            "<style>"
-            "#nc-nav{background:#1a1a2e;padding:.75rem 1.5rem;display:flex;"
-            "gap:1.5rem;align-items:center;position:sticky;top:0;z-index:10000;"
-            "box-shadow:0 1px 4px rgba(0,0,0,.4)}"
-            "#nc-nav a{color:#eee;text-decoration:none;font-size:.95rem}"
-            "#nc-nav a:hover{color:#fff;text-decoration:underline}"
-            "#nc-nav .brand{color:#7eb8f7;font-weight:700;font-size:1.1rem;"
-            "margin-right:auto;text-decoration:none}"
-            "#nc-nav .active{color:#fff;border-bottom:2px solid #7eb8f7;padding-bottom:2px}"
-            "</style>"
-        )
+        # Inject nav HTML right after <body> so it appears first in the DOM.
+        # Inject our CSS right before </body> so it loads AFTER Swagger UI's
+        # stylesheet and wins any specificity ties without needing !important.
         nav_html = (
             '<nav id="nc-nav">'
             '<a href="/" class="brand">NetConfig</a>'
@@ -170,8 +161,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             '<a href="/docs" class="active">API Docs</a>'
             "</nav>"
         )
-        html = html.replace("</head>", f"{nav_css}</head>", 1)
+        nav_css = (
+            "<style>"
+            "nav#nc-nav{"
+            "  all:revert;"  # reset any Swagger resets
+            "  box-sizing:border-box;"
+            "  background:#1a1a2e;"
+            "  padding:.75rem 1.5rem;"
+            "  display:flex;"
+            "  gap:1.5rem;"
+            "  align-items:center;"
+            "  position:sticky;"
+            "  top:0;"
+            "  z-index:10000;"
+            "  box-shadow:0 1px 4px rgba(0,0,0,.4);"
+            "  font-family:system-ui,sans-serif;"
+            "}"
+            "nav#nc-nav a{"
+            "  all:revert;"
+            "  color:#eee;"
+            "  text-decoration:none;"
+            "  font-size:.95rem;"
+            "  font-family:system-ui,sans-serif;"
+            "}"
+            "nav#nc-nav a:hover{color:#fff;text-decoration:underline}"
+            "nav#nc-nav a.brand{"
+            "  color:#7eb8f7;"
+            "  font-weight:700;"
+            "  font-size:1.1rem;"
+            "  margin-right:auto;"
+            "  text-decoration:none;"
+            "}"
+            "nav#nc-nav a.active{"
+            "  color:#fff;"
+            "  border-bottom:2px solid #7eb8f7;"
+            "  padding-bottom:2px;"
+            "}"
+            "</style>"
+        )
         html = html.replace("<body>", f"<body>{nav_html}", 1)
+        html = html.replace("</body>", f"{nav_css}</body>", 1)
         return HTMLResponse(content=html)
 
     return app
