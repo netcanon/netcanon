@@ -181,15 +181,13 @@ class TestBackupSubmission:
         job_id_text = job_id_el.text_content()
         assert job_id_text and len(job_id_text.strip()) > 0
 
-    def test_submit_completes_and_page_reloads(self, page: Page, base_url: str):
-        """After completion the page reloads and shows the job in recent jobs."""
+    def test_submit_completes_and_shows_job_in_table(self, page: Page, base_url: str):
+        """After completion the job row is injected inline and jobs table becomes visible."""
         page.goto("/")
         form = BackupFormPage(page)
         form.fill_first_device()
         form.submit_and_wait()
-        # Wait for auto-reload (triggered after 'completed' or 'failed' status)
-        page.wait_for_load_state("networkidle", timeout=10_000)
-        # Recent jobs table should now be visible
+        # JS injects a row and un-hides the table — no page reload needed
         jobs_table = page.locator('[data-testid="jobs-table"]')
         expect(jobs_table).to_be_visible(timeout=5_000)
 

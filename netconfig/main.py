@@ -106,6 +106,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request,
             "index.html",
             {
+                "active_page": "home",
                 "definitions": request.app.state.definitions,
                 "recent_jobs": jobs[:10],
             },
@@ -118,7 +119,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "configs.html",
-            {"configs": configs},
+            {"active_page": "configs", "configs": configs},
         )
 
     @app.get("/definitions", response_class=HTMLResponse, include_in_schema=False)
@@ -130,7 +131,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "definitions.html",
-            {"definitions": defs},
+            {"active_page": "definitions", "definitions": defs},
         )
 
     return app

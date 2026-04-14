@@ -9,50 +9,97 @@
   <thead>
     <tr>
       <th>Filename</th><th>Device Type</th><th>Host</th>
-      <th>Captured (UTC)</th><th>Size</th><th>Actions</th>
+      <th>Captured</th><th>Size</th><th>Actions</th>
     </tr>
   </thead>
   <tbody>
   {% for cfg in configs %}
   <tr data-testid="config-row" data-filename="{{ cfg.filename }}">
-    <td data-testid="config-filename">
-      <a href="/api/v1/configs/{{ cfg.filename }}" target="_blank"
-         data-testid="config-view-link">{{ cfg.filename }}</a>
-    </td>
+    <td data-testid="config-filename">{{ cfg.filename }}</td>
     <td data-testid="config-device-type">{{ cfg.device_type }}</td>
     <td data-testid="config-host">{{ cfg.host }}</td>
-    <td data-testid="config-timestamp">
+    <td data-testid="config-timestamp"
+        data-utc="{{ cfg.timestamp.isoformat() }}">
       {{ cfg.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
     <td data-testid="config-size">{{ cfg.size_bytes | filesizeformat }}</td>
-    <td>
+    <td style="white-space:nowrap">
+      <a href="/api/v1/configs/{{ cfg.filename }}" target="_blank"
+         class="btn-secondary" data-testid="config-view-link"
+         style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block">View</a>
+      <a href="/api/v1/configs/{{ cfg.filename }}" download="{{ cfg.filename }}"
+         class="btn-secondary" data-testid="config-download-btn"
+         style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block;margin-left:.3rem"
+         title="Download {{ cfg.filename }}">&#8595;</a>
       <button class="btn-danger delete-btn"
               data-testid="config-delete-btn"
-              data-filename="{{ cfg.filename }}">Delete</button>
+              data-filename="{{ cfg.filename }}"
+              style="margin-left:.3rem">Delete</button>
     </td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p class="empty-msg" data-testid="no-configs-msg">No configuration files stored yet.</p>
+<p class="empty-msg" data-testid="no-configs-msg">
+  No configuration files stored yet. Run a backup from the
+  <a href="/">Dashboard</a> to capture your first config.
+</p>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.delete-btn').forEach(btn => {
-  btn.addEventListener('click', async () => {
-    const fn = btn.dataset.filename;
-    if (!confirm(`Delete ${fn}?`)) return;
-    const res = await fetch(`/api/v1/configs/${encodeURIComponent(fn)}`,
-                            { method: 'DELETE' });
-    if (res.ok || res.status === 204) {
-      btn.closest('tr').remove();
-      if (!document.querySelector('[data-testid="config-row"]')) location.reload();
-    } else {
-      alert('Delete failed: ' + res.statusText);
-    }
+function attachDeleteListener(btn) {
+  btn.addEventListener('click', function() {
+    var fn  = this.dataset.filename;
+    var td  = this.closest('td');
+    var self = this;
+
+    /* Hide the original button, show inline confirm */
+    self.style.display = 'none';
+    var confirmEl = document.createElement('span');
+    confirmEl.style.cssText = 'white-space:nowrap;font-size:.85rem';
+    confirmEl.innerHTML =
+      'Delete?&nbsp;'
+      + '<button class="btn-danger" data-testid="config-delete-confirm-btn"'
+      + ' style="padding:.3rem .6rem;font-size:.8rem">Yes</button>'
+      + '<button class="btn-secondary" data-testid="config-delete-cancel-btn"'
+      + ' style="padding:.3rem .6rem;font-size:.8rem;margin-left:.3rem">No</button>';
+    td.appendChild(confirmEl);
+
+    confirmEl.querySelector('[data-testid="config-delete-cancel-btn"]')
+      .addEventListener('click', function() {
+        confirmEl.remove();
+        self.style.display = '';
+      });
+
+    confirmEl.querySelector('[data-testid="config-delete-confirm-btn"]')
+      .addEventListener('click', async function() {
+        try {
+          var res = await fetch(
+            '/api/v1/configs/' + encodeURIComponent(fn),
+            { method: 'DELETE' }
+          );
+          if (res.ok || res.status === 204) {
+            self.closest('tr').remove();
+            if (!document.querySelector('[data-testid="config-row"]')) {
+              location.reload();
+            }
+          } else {
+            confirmEl.remove();
+            self.style.display = '';
+            showToast('Delete failed: ' + res.statusText, 'error');
+          }
+        } catch (err) {
+          confirmEl.remove();
+          self.style.display = '';
+          showToast('Delete failed: ' + err.message, 'error');
+        }
+      });
   });
-});
+}
+
+document.querySelectorAll('[data-testid="config-delete-btn"]')
+  .forEach(attachDeleteListener);
 </script>
 {% endblock %}

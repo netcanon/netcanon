@@ -1,13 +1,14 @@
 """
 ``/api/v1/definitions`` routes.
 
-Definitions are read-only at runtime — they are loaded from disk at
-startup and refreshed only by restarting the server.  These endpoints
-expose the loaded registry for inspection by the UI and API clients.
+Definitions are loaded from disk at startup.  Use ``POST /reload`` to
+refresh the in-memory registry after editing YAML files without
+restarting the server.
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from ...definitions.loader import DefinitionLoader
 from ...definitions.schema import DeviceDefinition
 from ..deps import get_definitions
 
@@ -55,3 +56,28 @@ def get_definition(
             ),
         )
     return definitions[type_key]
+
+
+@router.post(
+    "/reload",
+    summary="Reload device definitions from disk",
+)
+def reload_definitions(request: Request) -> dict:
+    """Reload all device definitions from the definitions directory.
+
+    Re-reads every YAML file under the configured ``definitions_dir`` and
+    replaces the in-memory registry.  Useful after adding or editing
+    definition files without restarting the server.
+
+    Returns:
+        A mapping with ``loaded`` (int count) and ``type_keys`` (sorted list).
+    """
+    settings = request.app.state.settings
+    request.app.state.definitions = DefinitionLoader(
+        settings.definitions_dir
+    ).load_all()
+    count = len(request.app.state.definitions)
+    return {
+        "loaded": count,
+        "type_keys": sorted(request.app.state.definitions.keys()),
+    }

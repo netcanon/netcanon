@@ -3,18 +3,22 @@
 
 {% block content %}
 <h1>Loaded Device Definitions</h1>
-<p style="color:#666;margin-bottom:1rem">
-  {{ definitions | length }} definition(s) loaded from
-  <code>definitions/</code>.
-  Add or edit YAML files there and restart to update.
-</p>
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
+  <p style="color:#666;margin:0">
+    {{ definitions | length }} definition(s) loaded from <code>definitions/</code>.
+  </p>
+  <button id="reload-defs-btn" class="btn-secondary" data-testid="def-reload-btn">
+    &#8635; Reload
+  </button>
+</div>
 
 {% if definitions %}
 <table data-testid="definitions-table">
   <thead>
     <tr>
       <th>Type Key</th><th>Vendor</th><th>OS</th>
-      <th>Strategy</th><th>Ext</th><th>Priority</th><th>Notes</th>
+      <th>Collection</th><th>File Ext</th><th>Priority</th><th>Notes</th>
     </tr>
   </thead>
   <tbody>
@@ -24,20 +28,57 @@
     <td data-testid="def-vendor">{{ def.vendor }}</td>
     <td data-testid="def-os">{{ def.os }}</td>
     <td data-testid="def-strategy">
-      <code>{{ def.collector.strategy }}</code>
-      {% if def.collector.netmiko_device_type %}
-      <br><small style="color:#888">{{ def.collector.netmiko_device_type }}</small>
+      {% if def.collector.strategy == 'netmiko' %}
+        SSH (Netmiko)
+        {% if def.collector.netmiko_device_type %}
+        <br><small style="color:#888">{{ def.collector.netmiko_device_type }}</small>
+        {% endif %}
+      {% elif def.collector.strategy == 'paramiko_shell' %}
+        SSH (Shell)
+      {% else %}
+        <code>{{ def.collector.strategy }}</code>
       {% endif %}
     </td>
     <td data-testid="def-ext"><code>.{{ def.file_extension }}</code></td>
     <td data-testid="def-priority">{{ def.priority }}</td>
-    <td data-testid="def-notes" style="max-width:300px;color:#555;font-size:.85rem">
+    <td data-testid="def-notes"
+        style="max-width:300px;color:#555;font-size:.85rem"
+        title="{{ def.notes }}">
       {{ def.notes | truncate(120) }}</td>
   </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p class="empty-msg" data-testid="no-definitions-msg">No definitions loaded.</p>
+<p class="empty-msg" data-testid="no-definitions-msg">
+  No definitions loaded. Add YAML files to the <code>definitions/</code>
+  directory and click <strong>Reload</strong>.
+</p>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('reload-defs-btn').addEventListener('click', async function() {
+  var btn = this;
+  btn.disabled = true;
+  btn.textContent = 'Reloading\u2026';
+  try {
+    var res = await fetch('/api/v1/definitions/reload', { method: 'POST' });
+    if (res.ok) {
+      var data = await res.json();
+      showToast('Loaded ' + data.loaded + ' definition(s)', 'success');
+      setTimeout(function() { location.reload(); }, 800);
+    } else {
+      showToast('Reload failed: ' + res.statusText, 'error');
+      btn.disabled = false;
+      btn.textContent = '\u21BB Reload';
+    }
+  } catch (err) {
+    showToast('Reload failed: ' + err.message, 'error');
+    btn.disabled = false;
+    btn.textContent = '\u21BB Reload';
+  }
+});
+</script>
 {% endblock %}

@@ -10,7 +10,9 @@
     nav { background: #1a1a2e; padding: .75rem 1.5rem; display: flex; gap: 1.5rem; align-items: center; }
     nav a { color: #eee; text-decoration: none; font-size: .95rem; }
     nav a:hover { color: #fff; text-decoration: underline; }
-    nav .brand { color: #7eb8f7; font-weight: bold; font-size: 1.1rem; margin-right: auto; }
+    nav a.active { color: #fff; border-bottom: 2px solid #7eb8f7; padding-bottom: 2px; }
+    nav .brand { color: #7eb8f7; font-weight: bold; font-size: 1.1rem; margin-right: auto; text-decoration: none; }
+    nav .brand:hover { color: #a8d0ff; text-decoration: none; }
     main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
     h1 { margin-bottom: 1.25rem; font-size: 1.5rem; }
     h2 { margin: 1.5rem 0 .75rem; font-size: 1.15rem; }
@@ -30,12 +32,13 @@
     input, select { padding: .4rem .6rem; border: 1px solid #ccc; border-radius: 4px; font-size: .9rem; }
     input:focus, select:focus { outline: 2px solid #7eb8f7; border-color: transparent; }
     button { padding: .45rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: .9rem; font-weight: 600; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
     .btn-primary { background: #1a1a2e; color: #fff; }
-    .btn-primary:hover { background: #2a2a4e; }
+    .btn-primary:hover:not(:disabled) { background: #2a2a4e; }
     .btn-secondary { background: #e2e3e5; color: #383d41; }
-    .btn-secondary:hover { background: #d0d0d8; }
+    .btn-secondary:hover:not(:disabled) { background: #d0d0d8; }
     .btn-danger { background: #dc3545; color: #fff; font-size: .8rem; padding: .3rem .7rem; }
-    .btn-danger:hover { background: #c82333; }
+    .btn-danger:hover:not(:disabled) { background: #c82333; }
     .empty-msg { color: #888; font-style: italic; padding: 1rem 0; }
     pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 6px; overflow: auto; font-size: .85rem; line-height: 1.5; }
     .alert { padding: .75rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
@@ -44,15 +47,50 @@
 </head>
 <body>
   <nav data-testid="nav">
-    <span class="brand" data-testid="nav-brand">NetConfig</span>
-    <a href="/"            data-testid="nav-home">Dashboard</a>
-    <a href="/configs"     data-testid="nav-configs">Configs</a>
-    <a href="/definitions" data-testid="nav-definitions">Definitions</a>
+    <a href="/" class="brand" data-testid="nav-brand">NetConfig</a>
+    <a href="/"            data-testid="nav-home"        {% if active_page == 'home' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
+    <a href="/configs"     data-testid="nav-configs"     {% if active_page == 'configs' %}class="active" aria-current="page"{% endif %}>Configs</a>
+    <a href="/definitions" data-testid="nav-definitions" {% if active_page == 'definitions' %}class="active" aria-current="page"{% endif %}>Definitions</a>
     <a href="/docs"        data-testid="nav-api-docs">API Docs</a>
   </nav>
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Toast notification -->
+  <div id="_toast" data-testid="toast"
+       style="position:fixed;bottom:1.5rem;right:1.5rem;max-width:360px;z-index:9999;display:none;
+              padding:.75rem 1rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);
+              font-size:.9rem;line-height:1.4">
+    <span id="_toast-msg"></span>
+  </div>
+
+  <script>
+  /* ── Localize UTC timestamps ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-utc]').forEach(el => {
+      try { el.textContent = new Date(el.dataset.utc).toLocaleString(); } catch (_) {}
+    });
+  });
+
+  /* ── Toast notifications ── */
+  function showToast(msg, type) {
+    var colours = {
+      info:    { bg: '#d1ecf1', fg: '#0c5460' },
+      error:   { bg: '#f8d7da', fg: '#721c24' },
+      success: { bg: '#d4edda', fg: '#155724' }
+    };
+    var c = colours[type] || colours.info;
+    var toast = document.getElementById('_toast');
+    var msgEl = document.getElementById('_toast-msg');
+    toast.style.background = c.bg;
+    toast.style.color = c.fg;
+    msgEl.textContent = msg;
+    toast.style.display = '';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function() { toast.style.display = 'none'; }, 4000);
+  }
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

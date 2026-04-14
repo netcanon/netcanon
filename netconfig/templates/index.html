@@ -15,7 +15,10 @@
           <label>Type</label>
           <select name="type_key" data-testid="device-type-select">
             {% for key, def in definitions.items() | sort %}
-            <option value="{{ key }}">{{ def.vendor }} {{ def.os }}</option>
+            <option value="{{ key }}"
+                    data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
+              {{ def.vendor }} {{ def.os }}
+            </option>
             {% endfor %}
           </select>
         </div>
@@ -23,11 +26,6 @@
           <label>Host / IP</label>
           <input name="host" type="text" placeholder="192.168.1.1"
                  data-testid="device-host-input" required>
-        </div>
-        <div class="form-group">
-          <label>Port</label>
-          <input name="port" type="number" value="22" min="1" max="65535"
-                 style="width:80px" data-testid="device-port-input">
         </div>
         <div class="form-group">
           <label>Username</label>
@@ -39,14 +37,24 @@
           <input name="password" type="password"
                  data-testid="device-password-input" required>
         </div>
-        <div class="form-group">
-          <label>Enable PW <small>(Cisco)</small></label>
+        <!-- Enable password: shown only when the selected definition requires it -->
+        <div class="form-group enable-group">
+          <label>Enable Password</label>
           <input name="enable_password" type="password"
                  placeholder="optional" data-testid="device-enable-input">
         </div>
+        <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
+        <details class="port-details" style="align-self:flex-end">
+          <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                          user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
+          <input name="port" type="number" value="22" min="1" max="65535"
+                 style="width:72px;margin-top:.25rem" data-testid="device-port-input">
+        </details>
         <div class="form-group" style="justify-content:flex-end">
           <button type="button" class="btn-danger remove-device-btn"
-                  data-testid="remove-device-btn" style="display:none">✕</button>
+                  data-testid="remove-device-btn"
+                  aria-label="Remove this device"
+                  style="display:none">&#x2715;</button>
         </div>
       </div>
     </div>
@@ -54,138 +62,232 @@
     <div class="form-row" style="margin-top:.75rem">
       <button type="button" id="add-device-btn" class="btn-secondary"
               data-testid="add-device-btn">+ Add Device</button>
-      <button type="submit" class="btn-primary"
+      <button type="submit" id="submit-btn" class="btn-primary"
               data-testid="submit-backup-btn">Start Backup</button>
     </div>
   </form>
 </section>
 
-<!-- ── Job status banner (shown while polling) ──────────────────── -->
+<!-- ── Job status / results banner (shown after form submit) ────── -->
 <div id="job-status-banner" data-testid="job-status-banner" style="display:none;margin-top:1rem">
-  <div class="alert alert-info">
+  <div class="alert alert-info" id="job-status-inner">
     Job <strong id="job-id-display" data-testid="job-id-display"></strong>:
     <span id="job-status-display" data-testid="job-status-display">pending</span>
   </div>
 </div>
 
 <!-- ── Recent jobs table ─────────────────────────────────────────── -->
+<!-- Always present in DOM so JS can inject rows without a page reload -->
 <section data-testid="recent-jobs-section">
   <h2>Recent Jobs</h2>
-  {% if recent_jobs %}
-  <table data-testid="jobs-table">
+  <table data-testid="jobs-table" id="jobs-table"
+         {% if not recent_jobs %}style="display:none"{% endif %}>
     <thead>
       <tr>
-        <th>Job ID</th><th>Status</th><th>Devices</th>
-        <th>Success / Total</th><th>Created (UTC)</th>
+        <th>Job ID</th><th>Status</th><th>Success / Total</th><th>Created</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="jobs-tbody">
     {% for job in recent_jobs %}
     <tr data-testid="job-row" data-job-id="{{ job.id }}">
-      <td><a href="/api/v1/backups/{{ job.id }}" data-testid="job-link">
-        {{ job.id[:8] }}…</a></td>
+      <td data-testid="job-id-text">{{ job.id[:8] }}&hellip;</td>
       <td><span class="badge badge-{{ job.status }}"
                data-testid="job-status">{{ job.status }}</span></td>
-      <td data-testid="job-device-count">{{ job.total_devices }}</td>
       <td data-testid="job-success-count">
         {{ job.results | selectattr('status','eq','success') | list | length }}
         / {{ job.total_devices }}
       </td>
-      <td data-testid="job-created">
+      <td data-testid="job-created"
+          data-utc="{{ job.created_at.isoformat() }}">
         {{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table>
-  {% else %}
-  <p class="empty-msg" data-testid="no-jobs-msg">No backup jobs yet.</p>
+  {% if not recent_jobs %}
+  <p class="empty-msg" data-testid="no-jobs-msg" id="no-jobs-msg">
+    No backup jobs yet. Fill in the form above and click <strong>Start Backup</strong>.
+  </p>
   {% endif %}
 </section>
 {% endblock %}
 
 {% block scripts %}
 <script>
-/* ── Multi-device form ── */
-const deviceList  = document.getElementById('device-list');
-const addBtn      = document.getElementById('add-device-btn');
-const form        = document.getElementById('backup-form');
-const banner      = document.getElementById('job-status-banner');
-const jobIdEl     = document.getElementById('job-id-display');
-const jobStatusEl = document.getElementById('job-status-display');
+const deviceList   = document.getElementById('device-list');
+const addBtn       = document.getElementById('add-device-btn');
+const submitBtn    = document.getElementById('submit-btn');
+const form         = document.getElementById('backup-form');
+const banner       = document.getElementById('job-status-banner');
+const jobIdEl      = document.getElementById('job-id-display');
+const jobStatusEl  = document.getElementById('job-status-display');
+const jobsInner    = document.getElementById('job-status-inner');
+const jobsTbody    = document.getElementById('jobs-tbody');
+const jobsTable    = document.getElementById('jobs-table');
+const noJobsMsg    = document.getElementById('no-jobs-msg');
 
+/* ── Show / hide Enable Password based on selected definition ── */
+function updateEnableGroup(row) {
+  var sel  = row.querySelector('[data-testid="device-type-select"]');
+  var opt  = sel.options[sel.selectedIndex];
+  var grp  = row.querySelector('.enable-group');
+  if (grp) grp.style.display = opt.dataset.needsEnable === 'true' ? '' : 'none';
+}
+
+/* ── Remove-button visibility ── */
 function updateRemoveButtons() {
-  const rows = deviceList.querySelectorAll('.device-entry');
-  rows.forEach(r => {
-    r.querySelector('.remove-device-btn').style.display =
+  var rows = deviceList.querySelectorAll('.device-entry');
+  rows.forEach(function(r) {
+    r.querySelector('[data-testid="remove-device-btn"]').style.display =
       rows.length > 1 ? '' : 'none';
   });
 }
 
-addBtn.addEventListener('click', () => {
-  const first = deviceList.querySelector('.device-entry');
-  const clone = first.cloneNode(true);
-  clone.querySelectorAll('input').forEach(i => i.value = '');
-  clone.querySelector('select').selectedIndex = 0;
-  clone.querySelector('.remove-device-btn').addEventListener('click', e => {
-    e.target.closest('.device-entry').remove();
-    updateRemoveButtons();
-  });
-  deviceList.appendChild(clone);
-  updateRemoveButtons();
-});
+/* ── Wire up a single device row ── */
+function initRow(row) {
+  updateEnableGroup(row);
+  row.querySelector('[data-testid="device-type-select"]')
+     .addEventListener('change', function() { updateEnableGroup(row); });
+  row.querySelector('[data-testid="remove-device-btn"]')
+     .addEventListener('click', function(e) {
+       e.target.closest('.device-entry').remove();
+       updateRemoveButtons();
+     });
+}
 
-deviceList.querySelector('.remove-device-btn').addEventListener('click', e => {
-  e.target.closest('.device-entry').remove();
+/* ── Initialise first row ── */
+deviceList.querySelectorAll('.device-entry').forEach(initRow);
+
+/* ── Add Device ── */
+addBtn.addEventListener('click', function() {
+  var first = deviceList.querySelector('.device-entry');
+  var clone = first.cloneNode(true);
+  clone.querySelectorAll('input').forEach(function(i) {
+    i.value = i.name === 'port' ? '22' : '';
+  });
+  clone.querySelector('select').selectedIndex = 0;
+  clone.querySelectorAll('details').forEach(function(d) { d.removeAttribute('open'); });
+  deviceList.appendChild(clone);
+  initRow(clone);
   updateRemoveButtons();
 });
 
 /* ── Form submission → JSON → poll ── */
-form.addEventListener('submit', async e => {
+form.addEventListener('submit', async function(e) {
   e.preventDefault();
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Running\u2026';
 
-  const rows = deviceList.querySelectorAll('.device-entry');
-  const devices = Array.from(rows).map(row => {
-    const g = name => row.querySelector(`[name="${name}"]`).value;
-    const ep = g('enable_password');
+  var rows    = deviceList.querySelectorAll('.device-entry');
+  var devices = Array.from(rows).map(function(row) {
+    var g  = function(name) { return row.querySelector('[name="' + name + '"]').value; };
+    var ep = g('enable_password');
     return {
       type_key: g('type_key'),
-      host: g('host'),
-      port: parseInt(g('port'), 10) || 22,
-      credentials: {
-        username: g('username'),
-        password: g('password'),
-        ...(ep ? { enable_password: ep } : {}),
-      },
+      host:     g('host'),
+      port:     parseInt(g('port'), 10) || 22,
+      credentials: Object.assign(
+        { username: g('username'), password: g('password') },
+        ep ? { enable_password: ep } : {}
+      ),
     };
   });
 
-  const res = await fetch('/api/v1/backups', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ devices }),
-  });
-
-  if (!res.ok) {
-    const err = await res.json();
-    alert('Error: ' + (err.detail || res.statusText));
+  var job = null;
+  try {
+    var res = await fetch('/api/v1/backups', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ devices: devices }),
+    });
+    if (!res.ok) {
+      var err = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      return;
+    }
+    job = await res.json();
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
     return;
+  } finally {
+    if (!job) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Start Backup';
+    }
   }
 
-  const job = await res.json();
-  jobIdEl.textContent = job.id.substring(0, 8) + '…';
+  jobIdEl.textContent  = job.id.substring(0, 8) + '\u2026';
   jobStatusEl.textContent = job.status;
   banner.style.display = '';
 
-  /* Poll until complete */
-  const poll = setInterval(async () => {
-    const r = await fetch(`/api/v1/backups/${job.id}`);
-    const j = await r.json();
-    jobStatusEl.textContent = j.status;
-    if (j.status === 'completed' || j.status === 'failed') {
-      clearInterval(poll);
-      setTimeout(() => location.reload(), 800);
+  /* ── Poll until terminal state ── */
+  var pollErrors = 0;
+  var MAX_ERRORS = 3;
+  var poll = setInterval(async function() {
+    try {
+      var r = await fetch('/api/v1/backups/' + job.id);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      var j = await r.json();
+      jobStatusEl.textContent = j.status;
+      pollErrors = 0;
+
+      if (j.status === 'completed' || j.status === 'failed') {
+        clearInterval(poll);
+        renderInlineResults(j);
+        injectJobRow(j);
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Start Backup';
+      }
+    } catch (_) {
+      if (++pollErrors >= MAX_ERRORS) {
+        clearInterval(poll);
+        showToast('Lost contact with server while polling job status.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Start Backup';
+      }
     }
   }, 1500);
 });
+
+/* ── Render per-device results inside the banner ── */
+function renderInlineResults(j) {
+  var ok = j.results.filter(function(r) { return r.status === 'success'; }).length;
+  var html = '<strong>' + j.id.substring(0, 8) + '\u2026</strong>: ';
+  html += j.status === 'completed'
+    ? '<span style="color:#155724">&#10003; ' + ok + '/' + j.total_devices + ' succeeded</span>'
+    : '<span style="color:#721c24">&#10007; ' + ok + '/' + j.total_devices + ' succeeded</span>';
+  if (j.results.length) {
+    html += '<table style="width:100%;margin-top:.5rem;border-collapse:collapse;font-size:.85rem">';
+    j.results.forEach(function(r) {
+      var pass = r.status === 'success';
+      html += '<tr>'
+        + '<td style="padding:.15rem .4rem;color:' + (pass ? '#155724' : '#721c24') + ';font-weight:700">'
+        +   (pass ? '&#10003;' : '&#10007;') + '</td>'
+        + '<td style="padding:.15rem .4rem"><strong>' + r.device_type + '</strong> ' + r.host + '</td>'
+        + '<td style="padding:.15rem .4rem;color:#555;font-size:.8rem">'
+        +   (pass ? 'saved' : (r.error || 'failed')) + '</td>'
+        + '</tr>';
+    });
+    html += '</table>';
+  }
+  jobsInner.innerHTML = html;
+}
+
+/* ── Inject a new row into the jobs table without a page reload ── */
+function injectJobRow(j) {
+  var ok  = j.results.filter(function(r) { return r.status === 'success'; }).length;
+  var ts  = new Date(j.created_at).toLocaleString();
+  var tr  = document.createElement('tr');
+  tr.setAttribute('data-testid', 'job-row');
+  tr.setAttribute('data-job-id', j.id);
+  tr.innerHTML =
+    '<td data-testid="job-id-text">' + j.id.substring(0, 8) + '\u2026</td>'
+    + '<td><span class="badge badge-' + j.status + '" data-testid="job-status">' + j.status + '</span></td>'
+    + '<td data-testid="job-success-count">' + ok + ' / ' + j.total_devices + '</td>'
+    + '<td data-testid="job-created">' + ts + '</td>';
+  jobsTbody.insertBefore(tr, jobsTbody.firstChild);
+  jobsTable.style.removeProperty('display');
+  if (noJobsMsg) noJobsMsg.style.display = 'none';
+}
 </script>
 {% endblock %}
