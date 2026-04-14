@@ -115,8 +115,8 @@ function Import-DeviceDefinitions {
                 ConfigCommand          = [string]$def.commands.config
                 PostCommands           = $postCmd
                 NeedsEnable            = [bool]$def.connection.needs_enable
-                HandlePaging           = [bool]$def.connection.handle_paging
-                NeedsShellMenu         = [bool]$def.connection.needs_shell_menu
+                CiscoMorePaging        = [bool]$def.connection.cisco_more_paging
+                OpnsenseShellMenu      = [bool]$def.connection.opnsense_shell_menu
                 FileExtension          = [string]$def.file_extension
                 TrailingPromptPatterns = $trailing
                 # Metadata — informational, for diagnostics and future use
@@ -215,7 +215,7 @@ function Get-DeviceConfig {
         }
 
         # OPNsense console menu detection
-        if ($profile.NeedsShellMenu) {
+        if ($profile.OpnsenseShellMenu) {
             if ($initialOutput -match '8\)\s*Shell' -or $initialOutput -match 'Enter an option:') {
                 Write-Host "  Detected OPNsense console menu, entering shell..." -ForegroundColor Yellow
                 $stream.WriteLine('8')
@@ -281,7 +281,7 @@ function Get-DeviceConfig {
                 $buffer += $chunk
                 $idleCount = 0
 
-                if ($profile.HandlePaging -and $chunk -match '--More--') {
+                if ($profile.CiscoMorePaging -and $chunk -match '--More--') {
                     $stream.Write(' ')
                 }
 

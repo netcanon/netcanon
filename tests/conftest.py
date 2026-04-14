@@ -34,8 +34,8 @@ CISCO_YAML = textwrap.dedent("""\
     file_extension: cfg
     connection:
       needs_enable: true
-      handle_paging: true
-      needs_shell_menu: false
+      cisco_more_paging: true
+      opnsense_shell_menu: false
     commands:
       pre: []
       config: "show running-config"
@@ -57,8 +57,8 @@ OPNSENSE_YAML = textwrap.dedent("""\
     file_extension: xml
     connection:
       needs_enable: false
-      handle_paging: false
-      needs_shell_menu: true
+      cisco_more_paging: false
+      opnsense_shell_menu: true
     commands:
       pre: []
       config: "cat /conf/config.xml"

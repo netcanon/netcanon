@@ -96,7 +96,7 @@ tests use these exclusively — never CSS classes or element structure.  See
 - **Never** add a feature to one platform without adding it to the other
   (unless explicitly listed under Platform-Specific Exceptions above).
 - **Never** use `terminal length 0` for Cisco paging.  Use space-injection
-  via `connection.handle_paging: true` in the YAML definition.
+  via `connection.cisco_more_paging: true` in the YAML definition.
 - **Never** commit real credentials, device IPs, or secrets.
 - **Never** skip `data-testid` attributes on new interactive template elements.
 - **Never** patch `ConnectHandler` or `paramiko.SSHClient` directly in tests —

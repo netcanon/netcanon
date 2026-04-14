@@ -7,6 +7,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (vendor-specific field naming)
+
+- **`ConnectionConfig.handle_paging` → `cisco_more_paging`** — renamed to make
+  clear this flag controls Cisco `--More--` space-injection specifically.
+  `terminal length 0` remains deliberately avoided on all Cisco definitions.
+- **`ConnectionConfig.needs_shell_menu` → `opnsense_shell_menu`** — renamed to
+  make clear this flag detects and dismisses the OPNsense numbered console menu
+  (sends `"8"` to enter the shell).  Not applicable to any other current vendor.
+- **`ConnectionConfig.needs_enable`** — unchanged.  Enable/privileged-mode
+  escalation is a cross-vendor concept in Netmiko (Cisco IOS, HP ProCurve,
+  Aruba OS-CX, and others).
+- Updated all four YAML definition files, both collectors, all test YAML strings,
+  `tests/fixtures/definitions.py`, `Get-NetworkConfigs.ps1`,
+  `Test-NetworkConfigs.ps1`, and all README/doc files to match.
+
 ### Added (config storage & open-in-editor)
 
 - **Subdirectory storage layout** — config files are now saved under

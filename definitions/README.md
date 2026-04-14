@@ -34,8 +34,8 @@ file_extension: cfg                # Extension without leading dot (cfg / xml / 
 # ── SSH session behaviour ────────────────────────────────────────────────────
 connection:
   needs_enable: false              # Send 'enable' if banner shows '>' prompt
-  handle_paging: false             # Inject SPACE to dismiss --More-- mid-stream
-  needs_shell_menu: false          # Detect + dismiss a numbered console menu (OPNsense)
+  cisco_more_paging: false         # Cisco only: inject SPACE to dismiss --More-- mid-stream
+  opnsense_shell_menu: false       # OPNsense only: detect + dismiss the numbered console menu
 
 # ── Command sequence ─────────────────────────────────────────────────────────
 commands:
@@ -95,7 +95,7 @@ cisco/ios-xe/models/ASR1K.yaml priority: 20 ← overrides both for ASR1000 serie
 
 ### Cisco IOS-XE
 - `connection.needs_enable: true` — SSH often lands in user-exec mode.
-- `connection.handle_paging: true` — **`terminal length 0` is deliberately
+- `connection.cisco_more_paging: true` — **`terminal length 0` is deliberately
   avoided**; instead, the collector injects a SPACE character to dismiss each
   `--More--` prompt mid-stream.  This is more reliable across IOS versions.
 
@@ -105,7 +105,7 @@ cisco/ios-xe/models/ASR1K.yaml priority: 20 ← overrides both for ASR1000 serie
 - Prompt has a space before `#`: `hostname # ` — pattern must account for it.
 
 ### OPNsense
-- `connection.needs_shell_menu: true` — SSH lands at a numbered menu;
+- `connection.opnsense_shell_menu: true` — SSH lands at a numbered menu;
   the paramiko_shell collector detects `"Enter an option:"` and sends `"8"`.
 - `collector.strategy: paramiko_shell` — Netmiko does not support OPNsense.
 

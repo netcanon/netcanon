@@ -49,7 +49,7 @@ See `netconfig/definitions/schema.py` for the authoritative Pydantic models:
 | Class | Fields |
 |-------|--------|
 | `DeviceDefinition` | `vendor`, `os`, `version_match`, `type_key`, `priority`, `file_extension`, `connection`, `commands`, `prompts`, `collector`, `notes` |
-| `ConnectionConfig` | `needs_enable`, `handle_paging`, `needs_shell_menu` |
+| `ConnectionConfig` | `needs_enable`, `cisco_more_paging`, `opnsense_shell_menu` |
 | `CommandConfig` | `pre`, `config`, `post` |
 | `PromptConfig` | `trailing` |
 | `CollectorConfig` | `strategy`, `netmiko_device_type` |

@@ -87,7 +87,7 @@ class ParamikoShellCollector(BaseCollector):
             initial = self._drain(shell)
 
             # OPNsense console menu — send "8" to enter shell
-            if definition.connection.needs_shell_menu:
+            if definition.connection.opnsense_shell_menu:
                 if "8) Shell" in initial or "Enter an option:" in initial:
                     logger.debug(
                         "OPNsense menu detected on %s — sending '8'", device.host

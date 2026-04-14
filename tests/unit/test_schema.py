@@ -69,18 +69,18 @@ class TestConnectionConfig:
     def test_all_defaults_false(self):
         cfg = ConnectionConfig()
         assert cfg.needs_enable is False
-        assert cfg.handle_paging is False
-        assert cfg.needs_shell_menu is False
+        assert cfg.cisco_more_paging is False
+        assert cfg.opnsense_shell_menu is False
 
     def test_cisco_flags(self):
-        cfg = ConnectionConfig(needs_enable=True, handle_paging=True)
+        cfg = ConnectionConfig(needs_enable=True, cisco_more_paging=True)
         assert cfg.needs_enable is True
-        assert cfg.handle_paging is True
-        assert cfg.needs_shell_menu is False
+        assert cfg.cisco_more_paging is True
+        assert cfg.opnsense_shell_menu is False
 
     def test_opnsense_flags(self):
-        cfg = ConnectionConfig(needs_shell_menu=True)
-        assert cfg.needs_shell_menu is True
+        cfg = ConnectionConfig(opnsense_shell_menu=True)
+        assert cfg.opnsense_shell_menu is True
 
 
 # ---------------------------------------------------------------------------
@@ -208,7 +208,7 @@ class TestDeviceDefinition:
             vendor="OPNsense",
             os="OPNsense",
             type_key="OPNsense",
-            connection=ConnectionConfig(needs_shell_menu=True),
+            connection=ConnectionConfig(opnsense_shell_menu=True),
             commands=CommandConfig(config="cat /conf/config.xml"),
             collector=CollectorConfig(strategy="paramiko_shell"),
         )

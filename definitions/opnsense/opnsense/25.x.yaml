@@ -10,8 +10,8 @@ file_extension: xml
 
 connection:
   needs_enable: false
-  handle_paging: false
-  needs_shell_menu: true    # console presents a numbered menu; sends "8" to enter shell
+  cisco_more_paging: false
+  opnsense_shell_menu: true    # console presents a numbered menu; sends "8" to enter shell
 
 commands:
   pre: []

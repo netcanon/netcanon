@@ -56,7 +56,7 @@ class TestListDefinitions:
         resp = client.get("/api/v1/definitions/")
         cisco = next(d for d in resp.json() if d["type_key"] == "Cisco")
         assert cisco["connection"]["needs_enable"] is True
-        assert cisco["connection"]["handle_paging"] is True
+        assert cisco["connection"]["cisco_more_paging"] is True
 
 
 class TestGetDefinition:

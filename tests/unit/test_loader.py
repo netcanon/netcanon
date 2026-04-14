@@ -28,8 +28,8 @@ VALID_CISCO = textwrap.dedent("""\
     file_extension: cfg
     connection:
       needs_enable: true
-      handle_paging: true
-      needs_shell_menu: false
+      cisco_more_paging: true
+      opnsense_shell_menu: false
     commands:
       config: "show running-config"
     collector:
@@ -46,7 +46,7 @@ VALID_OPNSENSE = textwrap.dedent("""\
     file_extension: xml
     connection:
       needs_enable: false
-      needs_shell_menu: true
+      opnsense_shell_menu: true
     commands:
       config: "cat /conf/config.xml"
     collector:

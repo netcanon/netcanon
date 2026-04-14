@@ -37,7 +37,7 @@ Uses Netmiko's `ConnectHandler` context manager.  Handles:
 - Enable mode (`needs_enable: true`): detects `>` prompt and issues `enable`.
 - Pre/post commands from `commands.pre` / `commands.post`.
 - Main config command via `send_command(..., read_timeout=120)`.
-- `--More--` paging via `handle_paging: true` (space-injection, not
+- `--More--` paging via `cisco_more_paging: true` (space-injection, not
   `terminal length 0` — see note below).
 
 Supported `netmiko_device_type` values (non-exhaustive):
@@ -50,7 +50,7 @@ Supported `netmiko_device_type` values (non-exhaustive):
 
 > **Why no `terminal length 0`?**  This command is unreliable on some IOS-XE
 > versions and was deliberately removed.  The space-injection approach
-> (`handle_paging: true`) is used instead.
+> (`cisco_more_paging: true`) is used instead.
 
 ### `paramiko_shell` — `ParamikoShellCollector`
 
@@ -61,7 +61,7 @@ PowerShell idle-detection heuristic from the original script:
 - After 15 consecutive idle polls (~3 s of silence) the command is considered
   complete.
 - Handles OPNsense console menu automatically when
-  `connection.needs_shell_menu: true`.
+  `connection.opnsense_shell_menu: true`.
 
 Use this strategy for devices that need custom session orchestration that
 Netmiko cannot express (numbered menus, non-standard prompts, etc.).

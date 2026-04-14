@@ -10,8 +10,8 @@ file_extension: cfg
 
 connection:
   needs_enable: false
-  handle_paging: false
-  needs_shell_menu: false
+  cisco_more_paging: false
+  opnsense_shell_menu: false
 
 commands:
   pre:

@@ -12,9 +12,9 @@ priority: 10               # higher wins when multiple definitions share a type_
 file_extension: cfg
 
 connection:
-  needs_enable: true       # enter privileged exec via 'enable' if banner shows '>'
-  handle_paging: true      # space-inject to dismiss '--More--' prompts mid-stream
-  needs_shell_menu: false
+  needs_enable: true          # enter privileged exec via 'enable' if banner shows '>'
+  cisco_more_paging: true     # space-inject to dismiss '--More--' prompts mid-stream
+  opnsense_shell_menu: false
 
 commands:
   pre: []

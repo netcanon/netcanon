@@ -37,7 +37,7 @@ def make_cisco_definition(**overrides) -> DeviceDefinition:
         type_key="Cisco",
         priority=10,
         file_extension="cfg",
-        connection=ConnectionConfig(needs_enable=True, handle_paging=True),
+        connection=ConnectionConfig(needs_enable=True, cisco_more_paging=True),
         commands=CommandConfig(
             pre=[],
             config="show running-config",
@@ -87,7 +87,7 @@ def make_opnsense_definition(**overrides) -> DeviceDefinition:
         type_key="OPNsense",
         priority=10,
         file_extension="xml",
-        connection=ConnectionConfig(needs_shell_menu=True),
+        connection=ConnectionConfig(opnsense_shell_menu=True),
         commands=CommandConfig(
             config="cat /conf/config.xml",
             post=["exit"],

@@ -21,19 +21,21 @@ class ConnectionConfig(BaseModel):
 
     Attributes:
         needs_enable: Send ``enable`` if the initial banner shows a
-            user-exec prompt (``>``).  Required for Cisco IOS/IOS-XE in
-            non-privileged mode.
-        handle_paging: Suppress ``--More--`` prompts by sending a space
-            character mid-stream.  Used for Cisco when
-            ``terminal length 0`` is unreliable.
-        needs_shell_menu: Detect and dismiss a numbered console menu
-            before issuing any commands.  Required for OPNsense which
-            presents a menu on SSH login.
+            user-exec prompt (``>``).  Applies to any device that requires
+            privileged-mode escalation (Cisco IOS/IOS-XE, HP ProCurve,
+            Aruba OS-CX, and others supported by Netmiko).
+        cisco_more_paging: Suppress Cisco ``--More--`` prompts by injecting
+            a SPACE character mid-stream.  Cisco IOS/IOS-XE only —
+            ``terminal length 0`` is deliberately avoided on this platform.
+        opnsense_shell_menu: Detect and dismiss the OPNsense numbered
+            console menu by sending ``8`` before issuing any commands.
+            OPNsense only — SSH on this device lands at a menu rather than
+            a shell prompt.
     """
 
     needs_enable: bool = False
-    handle_paging: bool = False
-    needs_shell_menu: bool = False
+    cisco_more_paging: bool = False
+    opnsense_shell_menu: bool = False
 
 
 class CommandConfig(BaseModel):

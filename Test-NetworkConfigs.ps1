@@ -180,8 +180,8 @@ priority: 5
 file_extension: cfg
 connection:
   needs_enable: false
-  handle_paging: false
-  needs_shell_menu: false
+  cisco_more_paging: false
+  opnsense_shell_menu: false
 commands:
   pre: []
   config: "show base"
@@ -200,8 +200,8 @@ priority: 20
 file_extension: cfg
 connection:
   needs_enable: false
-  handle_paging: false
-  needs_shell_menu: false
+  cisco_more_paging: false
+  opnsense_shell_menu: false
 commands:
   pre: []
   config: "show specific"
