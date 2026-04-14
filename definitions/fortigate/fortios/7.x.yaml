@@ -1,0 +1,33 @@
+# Fortigate FortiOS 7.x
+
+vendor: Fortigate
+os: FortiOS
+version_match: "^7\\."
+type_key: Fortigate
+priority: 10
+
+file_extension: cfg
+
+connection:
+  needs_enable: false
+  handle_paging: false
+  needs_shell_menu: false
+
+commands:
+  pre:
+    - "config system console"
+    - "set output standard"    # disable pager so full config streams without interruption
+    - "end"
+  config: "show full-configuration"
+  post:
+    - "config system console"
+    - "set output more"        # restore pager — leave device in original state
+    - "end"
+
+prompts:
+  trailing:
+    - '^\S+\s+[#]\s*$'         # hostname # (FortiOS always has a space before the #)
+
+notes: >
+  FortiOS 7.x. Paging is suppressed with 'set output standard' before collection
+  and restored with 'set output more' afterwards. No enable mode required.

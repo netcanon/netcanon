@@ -1,0 +1,28 @@
+# MikroTik RouterOS 7.x
+
+vendor: MikroTik
+os: RouterOS
+version_match: "^7\\."
+type_key: MikroTik
+priority: 10
+
+file_extension: rsc
+
+connection:
+  needs_enable: false
+  handle_paging: false
+  needs_shell_menu: false
+
+commands:
+  pre: []
+  config: "/export verbose"   # verbose flag ensures all defaults are included
+  post: []
+
+prompts:
+  trailing:
+    - '^\[.+\]\s*>\s*$'       # [admin@MikroTik] >
+
+notes: >
+  RouterOS 7.x. Verbose export includes all configuration including defaults,
+  which is preferable for a complete backup and future diff/translation work.
+  Prompt is [user@hostname] >.

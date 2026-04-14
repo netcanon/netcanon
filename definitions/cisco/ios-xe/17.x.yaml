@@ -1,0 +1,30 @@
+# Cisco IOS-XE 17.x
+# Each file in this tree is self-contained and covers a specific vendor/os/version
+# combination. Add a new file here (or under models/) when a device behaves
+# differently enough to warrant its own definition.
+
+vendor: Cisco
+os: IOS-XE
+version_match: "^17\\."   # matched against detected version string post-connection (future)
+type_key: Cisco            # maps to the -Type parameter and $DeviceProfiles lookup key
+priority: 10               # higher wins when multiple definitions share a type_key
+
+file_extension: cfg
+
+connection:
+  needs_enable: true       # enter privileged exec via 'enable' if banner shows '>'
+  handle_paging: true      # space-inject to dismiss '--More--' prompts mid-stream
+  needs_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+[#>]\s*$'       # Router# or Router>
+
+notes: >
+  IOS-XE 17.x. Requires enable mode. Uses space-injection for --More-- paging;
+  terminal length 0 is avoided — unreliable on this platform.

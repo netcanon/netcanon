@@ -1,0 +1,29 @@
+# OPNsense 25.x
+
+vendor: OPNsense
+os: OPNsense
+version_match: "^25\\."
+type_key: OPNsense
+priority: 10
+
+file_extension: xml
+
+connection:
+  needs_enable: false
+  handle_paging: false
+  needs_shell_menu: true    # console presents a numbered menu; sends "8" to enter shell
+
+commands:
+  pre: []
+  config: "cat /conf/config.xml"
+  post:
+    - "exit"                # return to console menu after collection
+
+prompts:
+  trailing:
+    - '^root@\S+:.*[#$]\s*$'   # root@OPNsense:/root #
+
+notes: >
+  OPNsense 25.x. SSH lands at a numbered console menu; connection logic
+  detects "8) Shell" or "Enter an option:" and sends "8" automatically.
+  The config is a single XML file at /conf/config.xml.
