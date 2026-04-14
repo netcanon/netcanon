@@ -13,11 +13,14 @@ using Pillow — no binary assets are required.
 """
 from __future__ import annotations
 
+import logging
 from typing import Callable
 
 import pystray
 
 from netconfig_desktop.icons import generate_tray_image
+
+logger = logging.getLogger(__name__)
 
 
 class TrayIcon:
@@ -69,6 +72,7 @@ class TrayIcon:
         ``pystray.Icon.run_detached()`` spawns its own OS thread and returns
         immediately, leaving the tray icon active until ``stop()`` is called.
         """
+        logger.debug("Starting system-tray icon")
         self._icon.run_detached()
 
     def stop(self) -> None:
@@ -77,15 +81,17 @@ class TrayIcon:
             self._icon.stop()
         except Exception:  # noqa: BLE001
             # pystray may raise if the icon was never started or already
-            # stopped — swallow silently so shutdown is always clean.
-            pass
+            # stopped — log at DEBUG so shutdown is always clean.
+            logger.debug("pystray stop() raised during shutdown", exc_info=True)
 
     # ------------------------------------------------------------------
     # Internal menu callbacks
     # ------------------------------------------------------------------
 
     def _handle_show(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+        logger.debug("User selected Show from tray menu")
         self._on_show()
 
     def _handle_quit(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+        logger.info("User selected Quit from tray menu")
         self._on_quit()

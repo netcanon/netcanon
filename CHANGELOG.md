@@ -7,6 +7,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (logging)
+
+- **`netconfig/logging_config.py`** — New `configure_logging(level, log_file)` function.
+  Sets up a `StreamHandler` (stderr) plus an optional `RotatingFileHandler` (5 MB, 3
+  backups) on the root logger.  Idempotent: skips when real (non-pytest) handlers are
+  already present.  Suppresses `paramiko`, `uvicorn.access`, `multipart`, and `asyncio`
+  to `WARNING` regardless of root level to reduce noise in INFO/DEBUG runs.
+- **`netconfig_desktop/__main__.py`** — `_configure_logging()` called before
+  `DesktopApp()`.  In frozen (installed) mode writes to
+  `%APPDATA%\NetConfig\netconfig.log`; in dev mode uses console only.  Fatal startup
+  exceptions now go through `logger.critical(..., exc_info=True)` before the message
+  box so the stack trace is captured in the log file.
+- **`netconfig_desktop/server.py`** — `log_config=None` added to `uvicorn.Config` so
+  uvicorn's startup does not call `logging.config.dictConfig()` and overwrite the root
+  logger configuration set by `configure_logging()`.
+- **`netconfig_desktop/settings.py`** — `log_level` default raised from `"warning"` to
+  `"info"` so desktop INFO logs reach the file handler.
+
+### Changed (logging)
+
+- **`netconfig/api/routes/backups.py`** — Device backup failures upgraded from
+  `WARNING` to `ERROR` and now include `exc_info=True` for full traceback capture.
+- **`netconfig/api/routes/configs.py`** — Added module logger; all three endpoints now
+  emit structured log records (`DEBUG` for list/get, `INFO` for delete success,
+  `WARNING` for 404 paths).
+- **`netconfig/api/routes/definitions.py`** — Added module logger; reload endpoint
+  logs loaded count and source directory at `INFO`.
+- **`netconfig/storage/file_store.py`** — Added module logger; `save()` logs filename
+  and byte count at `INFO`, `list_configs()` at `DEBUG`, `delete()` at `INFO`.
+- **`netconfig_desktop/app.py`** — Lifecycle events (start, server ready, quit, window
+  closed) logged at `INFO`.
+- **`netconfig_desktop/tray.py`** — Added module logger; `run_detached()` at `DEBUG`,
+  Show/Quit callbacks at `DEBUG`/`INFO`, `stop()` exception swallowed at `DEBUG`
+  (was silent).
+- **`netconfig_desktop/window.py`** — Added module logger; `create()` and `start()` at
+  `INFO`, show/hide/destroy at `DEBUG`, `on_closed` callback exception at `DEBUG`
+  (was silent).
+
+### Tests (logging)
+
+- `tests/unit/test_logging_config.py` — 17 new unit tests across three classes:
+  `TestConfigureLoggingBasic` (handler type, levels, idempotency),
+  `TestFileHandler` (rotating handler, directory creation, write-through),
+  `TestNoisyLoggerSuppression` (third-party loggers capped at WARNING, netconfig.*
+  left at NOTSET).  `reset_root_logger` autouse fixture restores root logger state
+  after each test.
+
+---
+
 ### Fixed
 
 - **`configs.html`** — Post-delete empty-check used CSS selector `.config-row`

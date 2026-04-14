@@ -14,12 +14,15 @@ timestamp) are recovered by parsing the filename, making the directory
 self-describing without a sidecar database.
 """
 
+import logging
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 
 from ..models.backup import ConfigRecord
 from .base import BaseConfigStore
+
+logger = logging.getLogger(__name__)
 
 # Regex to parse filenames produced by this store.
 # Groups: device_type, safe_host, timestamp_str, extension
@@ -67,13 +70,15 @@ class FileConfigStore(BaseConfigStore):
         filename = f"{device_type}_{safe_host}_{ts_str}.{extension}"
         path = self._dir / filename
         path.write_text(content, encoding="utf-8")
+        size = path.stat().st_size
+        logger.info("Saved config %r (%d bytes) → %s", filename, size, self._dir)
         return ConfigRecord(
             device_type=device_type,
             host=host,
             timestamp=timestamp,
             filename=filename,
             file_extension=extension,
-            size_bytes=path.stat().st_size,
+            size_bytes=size,
         )
 
     def list_configs(self) -> list[ConfigRecord]:
@@ -87,7 +92,9 @@ class FileConfigStore(BaseConfigStore):
             record = self._parse_filename(path)
             if record is not None:
                 records.append(record)
-        return sorted(records, key=lambda r: r.timestamp, reverse=True)
+        records.sort(key=lambda r: r.timestamp, reverse=True)
+        logger.debug("Listed %d config(s) from %s", len(records), self._dir)
+        return records
 
     def get_content(self, filename: str) -> str:
         """Return the text of a stored config file.
@@ -110,6 +117,7 @@ class FileConfigStore(BaseConfigStore):
         if not path.exists():
             raise FileNotFoundError(f"Config not found: {filename!r}")
         path.unlink()
+        logger.info("Deleted config %r from %s", filename, self._dir)
 
     # ------------------------------------------------------------------
     # Internal helpers

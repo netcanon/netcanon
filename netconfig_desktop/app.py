@@ -30,7 +30,11 @@ Shutdown sequence (window ✕ button)::
 """
 from __future__ import annotations
 
+import logging
+
 from netconfig.main import create_app
+
+logger = logging.getLogger(__name__)
 from netconfig_desktop.server import ServerThread
 from netconfig_desktop.settings import desktop_settings
 from netconfig_desktop.tray import TrayIcon
@@ -78,12 +82,15 @@ class DesktopApp:
         ``webview.start()`` (called inside ``WebViewWindow.start()``) requires
         the main thread on Windows.
         """
+        logger.info("NetConfig desktop starting")
+
         # 1. Start the embedded HTTP server in a daemon thread.
         self._server.start()
 
         # 2. Wait until the server is accepting connections.
         #    Raises RuntimeError if it doesn't start within the timeout.
         self._server.wait_ready()
+        logger.info("Embedded server ready at %s", self._server.url)
 
         # 3. Start the system-tray icon in its own thread (non-blocking).
         self._tray.run_detached()
@@ -93,6 +100,7 @@ class DesktopApp:
 
         # 5. Start the pywebview event loop — BLOCKS until destroy() is called.
         self._window.start()
+        logger.info("NetConfig desktop exited cleanly")
 
     # ------------------------------------------------------------------
     # Internal callbacks
@@ -100,6 +108,7 @@ class DesktopApp:
 
     def _quit(self) -> None:
         """Called when the user selects *Quit* from the tray menu."""
+        logger.info("Quit requested — stopping tray, server, and window")
         self._tray.stop()
         self._server.stop()
         self._window.destroy()
@@ -111,5 +120,6 @@ class DesktopApp:
         was destroyed through a mechanism other than the Quit menu item
         (e.g. programmatic destroy in tests, or OS session logout).
         """
+        logger.info("Window closed — stopping tray and server")
         self._tray.stop()
         self._server.stop()

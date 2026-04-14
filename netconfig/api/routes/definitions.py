@@ -6,12 +6,15 @@ refresh the in-memory registry after editing YAML files without
 restarting the server.
 """
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...definitions.loader import DefinitionLoader
 from ...definitions.schema import DeviceDefinition
 from ..deps import get_definitions
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/definitions", tags=["definitions"])
 
 
@@ -77,6 +80,11 @@ def reload_definitions(request: Request) -> dict:
         settings.definitions_dir
     ).load_all()
     count = len(request.app.state.definitions)
+    logger.info(
+        "Definitions reloaded from %s: %d definition(s)",
+        settings.definitions_dir,
+        count,
+    )
     return {
         "loaded": count,
         "type_keys": sorted(request.app.state.definitions.keys()),

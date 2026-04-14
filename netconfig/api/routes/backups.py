@@ -191,12 +191,13 @@ def _run_backup_job(
                     duration_seconds=time.monotonic() - start,
                 )
             )
-            logger.warning(
-                "Job %s: failed %s/%s — %s",
+            logger.error(
+                "Job %s: device %s/%s failed — %s",
                 job.id,
                 device.type_key,
                 device.host,
                 exc,
+                exc_info=True,
             )
 
     job.status = JobStatus.completed

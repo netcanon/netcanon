@@ -8,18 +8,44 @@ a visible console when built with ``base="Win32GUI"``.
 """
 from __future__ import annotations
 
+import logging
 import sys
 
 
 def main() -> None:
     """Bootstrap the NetConfig desktop application."""
+    _configure_logging()
+    logger = logging.getLogger(__name__)
     try:
         from netconfig_desktop.app import DesktopApp
 
         app = DesktopApp()
         app.run()
     except Exception as exc:  # noqa: BLE001
+        logger.critical("Fatal startup error", exc_info=True)
         _fatal(str(exc))
+
+
+def _configure_logging() -> None:
+    """Set up the root logger before any other module is imported.
+
+    Uses the frozen-vs-dev detection from ``netconfig_desktop.settings`` to
+    decide whether to write a log file.  In frozen (installed) mode the log
+    goes to ``%APPDATA%\\NetConfig\\netconfig.log``; in dev mode only the
+    console handler is added.
+    """
+    import os
+    from pathlib import Path
+
+    from netconfig.logging_config import configure_logging
+
+    if getattr(sys, "frozen", False):
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+        log_file = base / "NetConfig" / "netconfig.log"
+    else:
+        log_file = None  # console only in development
+
+    configure_logging(level="INFO", log_file=log_file)
 
 
 def _fatal(message: str) -> None:

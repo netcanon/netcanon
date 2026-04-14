@@ -73,6 +73,9 @@ class ServerThread(threading.Thread):
             host=host,
             port=port,
             log_level=log_level,
+            # Prevent uvicorn from calling logging.config.dictConfig() so that
+            # the root logger configured by configure_logging() is not replaced.
+            log_config=None,
             # Disable signal handlers — the main thread owns signal handling.
             # Without this, uvicorn's SIGINT/SIGTERM handlers conflict with
             # pywebview's own signal management on Windows.

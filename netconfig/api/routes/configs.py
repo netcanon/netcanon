@@ -6,6 +6,10 @@ backup engine.  Files are served as plain text so clients can diff,
 display, or parse them without an extra encoding step.
 """
 
+from __future__ import annotations
+
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse
 
@@ -13,6 +17,7 @@ from ...models.backup import ConfigRecord
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/configs", tags=["configs"])
 
 
@@ -25,7 +30,9 @@ def list_configs(
     storage: BaseConfigStore = Depends(get_storage),
 ) -> list[ConfigRecord]:
     """Return metadata for all stored configuration files, newest first."""
-    return storage.list_configs()
+    configs = storage.list_configs()
+    logger.debug("Listed %d stored config(s)", len(configs))
+    return configs
 
 
 @router.get(
@@ -47,8 +54,11 @@ def get_config(
         HTTPException 404: If the file does not exist.
     """
     try:
-        return storage.get_content(filename)
+        content = storage.get_content(filename)
+        logger.debug("Served config %r (%d bytes)", filename, len(content))
+        return content
     except FileNotFoundError:
+        logger.warning("Config not found: %r", filename)
         raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
 
 
@@ -71,5 +81,7 @@ def delete_config(
     """
     try:
         storage.delete(filename)
+        logger.info("Deleted config %r", filename)
     except FileNotFoundError:
+        logger.warning("Delete requested for missing config: %r", filename)
         raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")

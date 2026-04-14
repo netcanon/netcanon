@@ -24,8 +24,11 @@ Why PySide6 instead of pywebview:
 """
 from __future__ import annotations
 
+import logging
 import sys
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 
 class WebViewWindow:
@@ -105,6 +108,7 @@ class WebViewWindow:
         win.setCentralWidget(view)
 
         self._win = win
+        logger.info("WebView window created (%dx%d) → %s", self._width, self._height, self._url)
 
     def start(self) -> None:
         """Start the Qt event loop (blocks until ``destroy()`` is called).
@@ -117,14 +121,16 @@ class WebViewWindow:
         if self._app is None or self._win is None:
             raise RuntimeError("create() must be called before start()")
 
+        logger.info("Starting Qt event loop")
         self._win.show()
         self._app.exec()
+        logger.info("Qt event loop exited")
 
         if self._on_closed is not None:
             try:
                 self._on_closed()
             except Exception:  # noqa: BLE001
-                pass
+                logger.debug("on_closed callback raised during shutdown", exc_info=True)
 
     # ------------------------------------------------------------------
     # Thread-safe window operations (called from pystray thread)
@@ -134,6 +140,7 @@ class WebViewWindow:
         """Restore and bring the window to the foreground."""
         if self._win is None:
             return
+        logger.debug("Window show requested")
         from PySide6.QtCore import QMetaObject, Qt
 
         QMetaObject.invokeMethod(self._win, "show", Qt.ConnectionType.QueuedConnection)
@@ -146,12 +153,14 @@ class WebViewWindow:
         """Hide the window without destroying it (minimize to tray)."""
         if self._win is None:
             return
+        logger.debug("Window hide requested (minimize to tray)")
         from PySide6.QtCore import QMetaObject, Qt
 
         QMetaObject.invokeMethod(self._win, "hide", Qt.ConnectionType.QueuedConnection)
 
     def destroy(self) -> None:
         """Quit the Qt event loop, causing ``start()`` to return."""
+        logger.debug("Window destroy requested")
         self._destroying = True
         if self._app is None:
             return

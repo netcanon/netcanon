@@ -53,7 +53,7 @@ def desktop_settings() -> Settings:
         configs_dir=configs_dir,
         host="127.0.0.1",
         port=DESKTOP_PORT,
-        log_level="warning",
+        log_level="info",
     )
 
 
