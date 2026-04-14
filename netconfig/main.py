@@ -103,9 +103,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             reverse=True,
         )
         return templates.TemplateResponse(
+            request,
             "index.html",
             {
-                "request": request,
                 "definitions": request.app.state.definitions,
                 "recent_jobs": jobs[:10],
             },
@@ -116,8 +116,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """Config browser: list and delete stored configuration files."""
         configs = request.app.state.storage.list_configs()
         return templates.TemplateResponse(
+            request,
             "configs.html",
-            {"request": request, "configs": configs},
+            {"configs": configs},
         )
 
     @app.get("/definitions", response_class=HTMLResponse, include_in_schema=False)
@@ -127,8 +128,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             request.app.state.definitions.values(), key=lambda d: d.type_key
         )
         return templates.TemplateResponse(
+            request,
             "definitions.html",
-            {"request": request, "definitions": defs},
+            {"definitions": defs},
         )
 
     return app
