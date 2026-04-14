@@ -1,0 +1,17 @@
+# Windows OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# PowerShell temp/output artifacts
+*.ps1xml
+*.psd1.bak
+
+# Editor/IDE
+.vscode/
+*.suo
+*.user
+
+# Claude Code internal
+.claude/
