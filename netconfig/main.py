@@ -119,7 +119,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return templates.TemplateResponse(
             request,
             "configs.html",
-            {"active_page": "configs", "configs": configs},
+            {
+                "active_page": "configs",
+                "configs": configs,
+                "open_in_editor": request.app.state.settings.open_in_editor,
+            },
         )
 
     @app.get("/definitions", response_class=HTMLResponse, include_in_schema=False)

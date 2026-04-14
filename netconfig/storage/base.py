@@ -7,6 +7,7 @@ intentionally narrow to keep implementations simple and swappable.
 
 from abc import ABC, abstractmethod
 from datetime import datetime
+from pathlib import Path
 
 from ..models.backup import ConfigRecord
 
@@ -68,6 +69,23 @@ class BaseConfigStore(ABC):
 
         Args:
             filename: Bare filename (no directory component).
+
+        Raises:
+            FileNotFoundError: If no file with that name exists.
+        """
+
+    @abstractmethod
+    def resolve_path(self, filename: str) -> Path:
+        """Return the absolute filesystem path for a stored config file.
+
+        Implementations must resolve the correct subdirectory (or legacy flat
+        location) from the filename alone.
+
+        Args:
+            filename: Bare filename as returned by ``list_configs()``.
+
+        Returns:
+            Absolute ``Path`` to the file on disk.
 
         Raises:
             FileNotFoundError: If no file with that name exists.

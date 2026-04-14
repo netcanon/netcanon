@@ -70,6 +70,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `config-size`              | `<td>` | Human-readable file size |
 | `config-view-link`         | `<a>` | Opens raw config in new tab |
 | `config-download-btn`      | `<a download>` | Triggers browser file download |
+| `config-open-btn`          | `<button>` | Opens file in OS default editor via `POST …/open`; **only rendered when `open_in_editor=True`** (desktop app) |
 | `config-delete-btn`        | `<button>` | Shows inline confirm — does NOT call `confirm()` |
 | `config-delete-confirm-btn`| `<button>` | "Yes" — confirms deletion |
 | `config-delete-cancel-btn` | `<button>` | "No" — cancels and restores Delete button |

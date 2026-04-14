@@ -39,6 +39,11 @@ cross-platform equivalents:
 - Embedded WebView window management (hide-to-tray on close, restore on show)
 - Native window chrome (title bar, window icon via `.ico`)
 - `setup_desktop.py` build script and `netconfig_desktop/` package
+- **Open in text editor** (`config-open-btn`, `POST /api/v1/configs/{filename}/open`) —
+  calls `os.startfile()` on the local filesystem.  Only meaningful when the server runs
+  on the same machine as the user.  Enabled via `Settings.open_in_editor = True` in
+  `netconfig_desktop/settings.py`.  The web platform equivalent is the existing
+  **View** button (`config-view-link`) which renders the file in the browser.
 
 **Web only**
 - Interactive Swagger API docs at `/docs` — the web browser opens this freely;

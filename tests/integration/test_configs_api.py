@@ -3,13 +3,17 @@ Integration tests for ``/api/v1/configs/`` endpoints.
 
 Tests cover the full config lifecycle:
 list (empty) → backup creates a file → list (populated) → get content → delete.
+
+Also covers ``POST /{filename}/open`` (open-in-editor endpoint).
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
+from netconfig.config import Settings
 from netconfig.storage.file_store import FileConfigStore
 
 pytestmark = pytest.mark.integration
@@ -135,3 +139,62 @@ class TestDeleteConfig:
         remaining = client.get("/api/v1/configs/").json()
         assert len(remaining) == 1
         assert remaining[0]["host"] == "2.2.2.2"
+
+
+class TestOpenConfig:
+    """Tests for ``POST /api/v1/configs/{filename}/open``."""
+
+    @pytest.fixture()
+    def open_client(self, sample_definitions_dir: Path, tmp_path: Path):
+        """TestClient with ``open_in_editor=True`` and SSH mocked out."""
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        from netconfig.main import create_app
+        from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
+
+        settings = Settings(
+            definitions_dir=sample_definitions_dir,
+            configs_dir=tmp_path / "configs",
+            open_in_editor=True,
+        )
+        app = create_app(settings)
+        fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
+        with patch(
+            "netconfig.api.routes.backups.get_collector", return_value=fake
+        ):
+            with TestClient(app, raise_server_exceptions=True) as c:
+                yield c
+
+    def test_open_returns_403_when_disabled(self, client):
+        """Default ``test_settings`` has ``open_in_editor=False``."""
+        filename = _seed_config(client)
+        resp = client.post(f"/api/v1/configs/{filename}/open")
+        assert resp.status_code == 403
+
+    def test_open_returns_404_for_missing_file(self, open_client):
+        with patch("os.startfile"):
+            resp = open_client.post("/api/v1/configs/ghost.cfg/open")
+        assert resp.status_code == 404
+
+    def test_open_returns_204_on_success(self, open_client):
+        filename = _seed_config(open_client)
+        with patch("os.startfile") as mock_sf:
+            resp = open_client.post(f"/api/v1/configs/{filename}/open")
+        assert resp.status_code == 204
+        mock_sf.assert_called_once()
+
+    def test_open_passes_correct_path_to_startfile(self, open_client):
+        filename = _seed_config(open_client)
+        with patch("os.startfile") as mock_sf:
+            open_client.post(f"/api/v1/configs/{filename}/open")
+        called_path = mock_sf.call_args[0][0]
+        assert filename in called_path
+
+    def test_open_returns_500_when_startfile_raises(self, open_client):
+        filename = _seed_config(open_client)
+        with patch("os.startfile", side_effect=OSError("access denied")):
+            resp = open_client.post(f"/api/v1/configs/{filename}/open")
+        assert resp.status_code == 500
+        assert "access denied" in resp.json()["detail"]

@@ -1,16 +1,18 @@
 """
 ``/api/v1/configs`` routes.
 
-Provides read and delete access to configuration files stored by the
-backup engine.  Files are served as plain text so clients can diff,
-display, or parse them without an extra encoding step.
+Provides read, delete, and (when enabled) open-in-editor access to
+configuration files stored by the backup engine.  Files are served as plain
+text so clients can diff, display, or parse them without an extra encoding
+step.
 """
 
 from __future__ import annotations
 
 import logging
+import sys
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from ...models.backup import ConfigRecord
@@ -85,3 +87,65 @@ def delete_config(
     except FileNotFoundError:
         logger.warning("Delete requested for missing config: %r", filename)
         raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
+
+
+@router.post(
+    "/{filename}/open",
+    status_code=204,
+    summary="Open a stored configuration in the OS default text editor",
+)
+def open_config(
+    filename: str,
+    request: Request,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> None:
+    """Open the named config file in the OS default application.
+
+    Uses ``os.startfile()`` (Windows) or ``xdg-open`` / ``open`` on Linux /
+    macOS.  Only available when ``settings.open_in_editor`` is ``True``
+    (enabled by the desktop application; disabled for remote web deployments).
+
+    Args:
+        filename: Bare filename as returned by the list endpoint.
+
+    Raises:
+        HTTPException 403: If ``open_in_editor`` is disabled in settings.
+        HTTPException 404: If the file does not exist.
+        HTTPException 501: If the platform does not support ``os.startfile``.
+        HTTPException 500: If the OS refuses to open the file.
+    """
+    settings = request.app.state.settings
+    if not settings.open_in_editor:
+        raise HTTPException(
+            status_code=403,
+            detail="open_in_editor is disabled on this server.",
+        )
+
+    try:
+        path = storage.resolve_path(filename)
+    except FileNotFoundError:
+        logger.warning("Open requested for missing config: %r", filename)
+        raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
+
+    try:
+        if sys.platform == "win32":
+            import os
+            os.startfile(str(path))  # noqa: S606
+        elif sys.platform == "darwin":
+            import subprocess
+            subprocess.run(["open", str(path)], check=True)  # noqa: S603,S607
+        else:
+            import subprocess
+            subprocess.run(["xdg-open", str(path)], check=True)  # noqa: S603,S607
+        logger.info("Opened config %r in default editor", filename)
+    except NotImplementedError:
+        raise HTTPException(
+            status_code=501,
+            detail="os.startfile is not supported on this platform.",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Failed to open config %r: %s", filename, exc, exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Could not open file: {exc}",
+        )

@@ -54,6 +54,7 @@ def desktop_settings() -> Settings:
         host="127.0.0.1",
         port=DESKTOP_PORT,
         log_level="info",
+        open_in_editor=True,
     )
 
 

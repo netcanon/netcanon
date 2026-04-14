@@ -7,6 +7,50 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (config storage & open-in-editor)
+
+- **Subdirectory storage layout** — config files are now saved under
+  `{device_type}/{safe_host}/` inside `configs_dir` instead of a flat root.
+  Example: `configs/Cisco/192-168-1-1/Cisco_192-168-1-1_20260414_120000.cfg`.
+  The self-describing filename format is unchanged.
+- **Startup migration** — `FileConfigStore.__init__` automatically moves any
+  flat files left by older versions into the correct subdirectory.  Non-config
+  files (log files, README) are left untouched.
+- **Collision safety** — if two backups of the same device complete within the
+  same second, a numeric suffix is appended (`…_1.cfg`, `…_2.cfg`, …) so no
+  file is ever silently overwritten.
+- **`resolve_path(filename)`** — new public method on `BaseConfigStore` and
+  `FileConfigStore`.  Returns the absolute filesystem path for a given filename,
+  checking the subdirectory location first then falling back to the root for
+  files that pre-date migration.
+- **`Settings.open_in_editor: bool = False`** — new flag.  When `True`, enables
+  the `POST /api/v1/configs/{filename}/open` endpoint.  Set to `True` in
+  `netconfig_desktop/settings.py`.  Can also be enabled for local web
+  deployments via `NETCONFIG_OPEN_IN_EDITOR=true`.
+- **`POST /api/v1/configs/{filename}/open`** — opens the named config file in
+  the OS default text editor (`os.startfile` on Windows, `open` on macOS,
+  `xdg-open` on Linux).  Returns 204 on success; 403 if disabled; 404 if not
+  found; 500 if the OS refuses to open the file.  Documented as desktop-only
+  in `CLAUDE.md`; the web equivalent is the existing View button.
+- **"Open" button** (`data-testid="config-open-btn"`) — appears in the Actions
+  column of the Configs page only when `open_in_editor=True`.  Calls the open
+  endpoint; shows a success or error toast via `showToast()`.
+
+### Tests (config storage & open-in-editor)
+
+- `tests/unit/test_storage.py` — 19 new/updated tests: subdirectory save,
+  collision safety (triple-collision), `resolve_path` (subdir + flat fallback +
+  missing), startup migration (multiple files, non-config left in place,
+  idempotent), and `rglob`-based listing.  Existing tests updated to use
+  `store.resolve_path()` instead of manually constructing paths.
+- `tests/integration/test_configs_api.py` — `TestOpenConfig` (5 tests): 403
+  when disabled, 404 for missing file, 204 on success, correct path passed to
+  `os.startfile`, 500 when OS refuses.
+- `tests/testid_reference.md` — `config-open-btn` added with conditional
+  visibility note.
+
+---
+
 ### Added (logging)
 
 - **`netconfig/logging_config.py`** — New `configure_logging(level, log_file)` function.

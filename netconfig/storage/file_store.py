@@ -1,21 +1,40 @@
 """
 File-based configuration storage.
 
-Configurations are saved as plain text files under a configurable
-directory.  Filenames encode all metadata using the convention::
+Configurations are saved as plain text files under a configurable directory,
+organised into ``{DeviceType}/{safe_host}/`` subdirectories::
 
-    {DeviceType}_{Host}_{YYYYMMDD_HHmmss}.{ext}
+    configs/
+      Cisco/
+        192-168-1-1/
+          Cisco_192-168-1-1_20260414_120000.cfg
+      OPNsense/
+        192-168-1-254/
+          OPNsense_192-168-1-254_20260414_120001.xml
+
+Filenames encode all metadata using the convention::
+
+    {DeviceType}_{safe_host}_{YYYYMMDD_HHmmss}.{ext}
 
 e.g. ``Cisco_192-168-1-1_20260414_120000.cfg``
 
-Dots and colons in host addresses are replaced with hyphens so filenames
-are safe on all platforms.  The metadata fields (device type, host,
-timestamp) are recovered by parsing the filename, making the directory
-self-describing without a sidecar database.
+Dots and colons in host addresses are replaced with hyphens so filenames are
+safe on all platforms.  The metadata fields (device type, host, timestamp) are
+recovered by parsing the filename, making the directory self-describing without
+a sidecar database.
+
+**Startup migration**: any files found directly in ``storage_dir`` (flat layout
+from older versions) are automatically moved into the appropriate subdirectory
+on first instantiation.
+
+**Collision safety**: if two backups of the same device complete within the same
+second a numeric suffix is appended (``…_1.cfg``, ``…_2.cfg``, …) so no file
+is ever silently overwritten.
 """
 
 import logging
 import re
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -25,20 +44,21 @@ from .base import BaseConfigStore
 logger = logging.getLogger(__name__)
 
 # Regex to parse filenames produced by this store.
-# Groups: device_type, safe_host, timestamp_str, extension
+# Groups: device_type, safe_host, ts, optional collision counter n, extension.
 _FILENAME_RE = re.compile(
     r"^(?P<device_type>.+?)_(?P<safe_host>[^_]+(?:_[^_]+)*)_"
-    r"(?P<ts>\d{8}_\d{6})\.(?P<ext>[^.]+)$"
+    r"(?P<ts>\d{8}_\d{6})(?:_(?P<n>\d+))?\.(?P<ext>[^.]+)$"
 )
 _TS_FORMAT = "%Y%m%d_%H%M%S"
 
 
 class FileConfigStore(BaseConfigStore):
-    """Stores configuration files in a local directory.
+    """Stores configuration files in a local directory tree.
 
     Args:
-        storage_dir: Directory to read and write configuration files.
-            Created automatically if it does not exist.
+        storage_dir: Root directory for all configuration files.
+            Created automatically if it does not exist.  On first use any
+            flat files left by older versions are migrated to subdirectories.
 
     Raises:
         OSError: If the directory cannot be created.
@@ -47,6 +67,7 @@ class FileConfigStore(BaseConfigStore):
     def __init__(self, storage_dir: Path) -> None:
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
+        self._migrate_flat_files()
 
     # ------------------------------------------------------------------
     # BaseConfigStore interface
@@ -60,18 +81,36 @@ class FileConfigStore(BaseConfigStore):
         extension: str,
         content: str,
     ) -> ConfigRecord:
-        """Write *content* to disk and return its ``ConfigRecord``.
+        """Write *content* to ``{device_type}/{safe_host}/`` and return its record.
 
         Dots and colons in *host* are replaced with hyphens to keep the
         filename safe across platforms (IPv6 addresses contain colons).
+
+        If a file with the same name already exists (two backups within the
+        same second), a numeric suffix is appended so no file is overwritten.
         """
         safe_host = re.sub(r"[.:]", "-", host)
         ts_str = timestamp.strftime(_TS_FORMAT)
-        filename = f"{device_type}_{safe_host}_{ts_str}.{extension}"
-        path = self._dir / filename
+        stem = f"{device_type}_{safe_host}_{ts_str}"
+        filename = f"{stem}.{extension}"
+
+        subdir = self._dir / device_type / safe_host
+        subdir.mkdir(parents=True, exist_ok=True)
+        path = subdir / filename
+
+        # Collision safety — append _1, _2, … if the same-second file exists.
+        counter = 0
+        while path.exists():
+            counter += 1
+            filename = f"{stem}_{counter}.{extension}"
+            path = subdir / filename
+            logger.warning(
+                "Filename collision: renamed to %r (counter=%d)", filename, counter
+            )
+
         path.write_text(content, encoding="utf-8")
         size = path.stat().st_size
-        logger.info("Saved config %r (%d bytes) → %s", filename, size, self._dir)
+        logger.info("Saved config %r (%d bytes) → %s", filename, size, subdir)
         return ConfigRecord(
             device_type=device_type,
             host=host,
@@ -84,14 +123,16 @@ class FileConfigStore(BaseConfigStore):
     def list_configs(self) -> list[ConfigRecord]:
         """Return metadata for all config files, sorted newest-first.
 
-        Files whose names do not match the expected pattern are silently
-        skipped (e.g. log files, temp files).
+        Walks the full directory tree so both subdirectory-organised files and
+        any remaining flat files are returned.  Non-matching files (log files,
+        temp files, etc.) are silently skipped.
         """
         records: list[ConfigRecord] = []
-        for path in self._dir.iterdir():
-            record = self._parse_filename(path)
-            if record is not None:
-                records.append(record)
+        for path in self._dir.rglob("*"):
+            if path.is_file():
+                record = self._parse_filename(path)
+                if record is not None:
+                    records.append(record)
         records.sort(key=lambda r: r.timestamp, reverse=True)
         logger.debug("Listed %d config(s) from %s", len(records), self._dir)
         return records
@@ -102,10 +143,7 @@ class FileConfigStore(BaseConfigStore):
         Raises:
             FileNotFoundError: If the file does not exist.
         """
-        path = self._dir / filename
-        if not path.exists():
-            raise FileNotFoundError(f"Config not found: {filename!r}")
-        return path.read_text(encoding="utf-8")
+        return self.resolve_path(filename).read_text(encoding="utf-8")
 
     def delete(self, filename: str) -> None:
         """Delete a stored config file.
@@ -113,15 +151,67 @@ class FileConfigStore(BaseConfigStore):
         Raises:
             FileNotFoundError: If the file does not exist.
         """
-        path = self._dir / filename
-        if not path.exists():
-            raise FileNotFoundError(f"Config not found: {filename!r}")
+        path = self.resolve_path(filename)
         path.unlink()
-        logger.info("Deleted config %r from %s", filename, self._dir)
+        logger.info("Deleted config %r from %s", filename, path.parent)
+
+    def resolve_path(self, filename: str) -> Path:
+        """Return the absolute filesystem path for *filename*.
+
+        Checks the canonical ``{device_type}/{safe_host}/{filename}`` location
+        first, then falls back to a flat file at the storage root for files
+        that were not reached by the startup migration.
+
+        Raises:
+            FileNotFoundError: If the file is not found in either location.
+        """
+        m = _FILENAME_RE.match(filename)
+        if m:
+            candidate = (
+                self._dir / m.group("device_type") / m.group("safe_host") / filename
+            )
+            if candidate.exists():
+                return candidate
+
+        flat = self._dir / filename
+        if flat.exists():
+            return flat
+
+        raise FileNotFoundError(f"Config not found: {filename!r}")
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _migrate_flat_files(self) -> None:
+        """Move flat files in the storage root into subdirectories.
+
+        Called once at construction time.  Files that cannot be parsed (e.g.
+        log files, README) are left in place.  Errors on individual files are
+        logged and skipped so a single bad file cannot block startup.
+        """
+        moved = 0
+        for path in list(self._dir.iterdir()):
+            if not path.is_file():
+                continue
+            m = _FILENAME_RE.match(path.name)
+            if not m:
+                continue  # not a config file — leave untouched
+            dest_dir = self._dir / m.group("device_type") / m.group("safe_host")
+            dest = dest_dir / path.name
+            try:
+                dest_dir.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(path), str(dest))
+                moved += 1
+                logger.debug("Migrated %r → %s", path.name, dest_dir)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "Could not migrate %r to subdirectory", path.name, exc_info=True
+                )
+        if moved:
+            logger.info(
+                "Migrated %d flat config file(s) to subdirectory layout", moved
+            )
 
     def _parse_filename(self, path: Path) -> ConfigRecord | None:
         """Attempt to reconstruct a ``ConfigRecord`` from a filename.

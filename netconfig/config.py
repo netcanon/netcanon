@@ -27,6 +27,14 @@ class Settings(BaseSettings):
         log_level: Logging verbosity passed to Uvicorn and the standard-library
             ``logging`` module.  One of ``debug``, ``info``, ``warning``,
             ``error``, ``critical``.
+        open_in_editor: Enable the ``POST /api/v1/configs/{filename}/open``
+            endpoint that opens a config file in the OS default text editor
+            via ``os.startfile()``.  Disabled by default because it only
+            makes sense when the server process runs on the same machine as
+            the user (i.e. the desktop application).  Set to ``True`` in
+            ``netconfig_desktop/settings.py``; can also be enabled for a
+            local web deployment via the ``NETCONFIG_OPEN_IN_EDITOR=true``
+            environment variable.
     """
 
     definitions_dir: Path = Path("definitions")
@@ -34,6 +42,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 8000
     log_level: str = "info"
+    open_in_editor: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="NETCONFIG_",

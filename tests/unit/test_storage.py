@@ -5,6 +5,7 @@ All I/O is directed to pytest's ``tmp_path`` — no network, no shared state.
 """
 from __future__ import annotations
 
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,7 +29,7 @@ def _ts(
 
 
 # ---------------------------------------------------------------------------
-# save()
+# save() — basic contract
 # ---------------------------------------------------------------------------
 
 
@@ -36,12 +37,19 @@ class TestFileConfigStoreSave:
     def test_save_creates_file_on_disk(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
         record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "hostname R1\n!")
-        assert (tmp_path / record.filename).exists()
+        assert store.resolve_path(record.filename).exists()
 
     def test_save_filename_follows_convention(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
         record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "x")
         assert record.filename == "Cisco_192-168-1-1_20260414_120000.cfg"
+
+    def test_save_creates_subdirectory(self, tmp_path: Path):
+        """Files must land in {device_type}/{safe_host}/ not in the root."""
+        store = FileConfigStore(tmp_path)
+        record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "x")
+        expected_dir = tmp_path / "Cisco" / "192-168-1-1"
+        assert (expected_dir / record.filename).exists()
 
     def test_save_dots_in_host_become_hyphens(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
@@ -67,15 +75,14 @@ class TestFileConfigStoreSave:
         content = "hostname Router\n!"
         store = FileConfigStore(tmp_path)
         record = store.save("Cisco", "1.2.3.4", _ts(), "cfg", content)
-        # Compare against on-disk size (may differ from len on Windows due to CRLF)
-        saved_path = tmp_path / record.filename
+        saved_path = store.resolve_path(record.filename)
         assert record.size_bytes == saved_path.stat().st_size
 
     def test_save_file_content_is_preserved(self, tmp_path: Path):
         content = "hostname Router\ninterface Gi0\n!"
         store = FileConfigStore(tmp_path)
         record = store.save("Cisco", "1.2.3.4", _ts(), "cfg", content)
-        assert (tmp_path / record.filename).read_text(encoding="utf-8") == content
+        assert store.resolve_path(record.filename).read_text(encoding="utf-8") == content
 
     def test_save_xml_extension(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
@@ -86,13 +93,125 @@ class TestFileConfigStoreSave:
     def test_save_creates_storage_dir_if_missing(self, tmp_path: Path):
         store = FileConfigStore(tmp_path / "new_subdir")
         record = store.save("Cisco", "1.2.3.4", _ts(), "cfg", "x")
-        assert (tmp_path / "new_subdir" / record.filename).exists()
+        assert store.resolve_path(record.filename).exists()
 
     def test_save_different_devices_different_files(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)
         r1 = store.save("Cisco", "1.1.1.1", _ts(second=0), "cfg", "cisco")
         r2 = store.save("OPNsense", "2.2.2.2", _ts(second=1), "xml", "<op/>")
         assert r1.filename != r2.filename
+
+
+# ---------------------------------------------------------------------------
+# save() — collision safety
+# ---------------------------------------------------------------------------
+
+
+class TestCollisionSafety:
+    def test_same_second_backup_gets_unique_filename(self, tmp_path: Path):
+        """Two saves within the same second must not overwrite each other."""
+        store = FileConfigStore(tmp_path)
+        r1 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "first")
+        r2 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "second")
+        assert r1.filename != r2.filename
+
+    def test_collision_suffix_appended(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        store.save("Cisco", "1.1.1.1", _ts(), "cfg", "first")
+        r2 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "second")
+        assert "_1" in r2.filename
+
+    def test_both_collision_files_readable(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        r1 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "first")
+        r2 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "second")
+        assert store.get_content(r1.filename) == "first"
+        assert store.get_content(r2.filename) == "second"
+
+    def test_triple_collision(self, tmp_path: Path):
+        """Suffix counter must increment correctly past _1."""
+        store = FileConfigStore(tmp_path)
+        store.save("Cisco", "1.1.1.1", _ts(), "cfg", "a")
+        store.save("Cisco", "1.1.1.1", _ts(), "cfg", "b")
+        r3 = store.save("Cisco", "1.1.1.1", _ts(), "cfg", "c")
+        assert "_2" in r3.filename
+
+
+# ---------------------------------------------------------------------------
+# resolve_path()
+# ---------------------------------------------------------------------------
+
+
+class TestResolvePath:
+    def test_resolve_finds_subdirectory_file(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "x")
+        path = store.resolve_path(record.filename)
+        assert path.exists()
+        assert path.parent.name == "192-168-1-1"
+
+    def test_resolve_flat_fallback(self, tmp_path: Path):
+        """Files placed directly in the root (pre-migration) must still be found."""
+        store = FileConfigStore(tmp_path)
+        flat_file = tmp_path / "Cisco_192-168-1-1_20260414_120000.cfg"
+        flat_file.write_text("flat", encoding="utf-8")
+        path = store.resolve_path("Cisco_192-168-1-1_20260414_120000.cfg")
+        assert path == flat_file
+
+    def test_resolve_missing_raises_file_not_found(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError, match="ghost.cfg"):
+            store.resolve_path("ghost.cfg")
+
+
+# ---------------------------------------------------------------------------
+# Startup migration
+# ---------------------------------------------------------------------------
+
+
+class TestStartupMigration:
+    def test_flat_files_moved_to_subdir_on_init(self, tmp_path: Path):
+        """Flat config files in the root must be moved into subdirs at startup."""
+        flat = tmp_path / "Cisco_192-168-1-1_20260414_120000.cfg"
+        flat.write_text("config", encoding="utf-8")
+        FileConfigStore(tmp_path)  # triggers migration
+        assert not flat.exists()
+        moved = tmp_path / "Cisco" / "192-168-1-1" / "Cisco_192-168-1-1_20260414_120000.cfg"
+        assert moved.exists()
+
+    def test_flat_files_content_preserved_after_migration(self, tmp_path: Path):
+        flat = tmp_path / "Cisco_10-0-0-1_20260414_120000.cfg"
+        flat.write_text("preserved content", encoding="utf-8")
+        store = FileConfigStore(tmp_path)
+        moved = tmp_path / "Cisco" / "10-0-0-1" / "Cisco_10-0-0-1_20260414_120000.cfg"
+        assert moved.read_text(encoding="utf-8") == "preserved content"
+
+    def test_non_config_flat_files_not_moved(self, tmp_path: Path):
+        readme = tmp_path / "README.txt"
+        readme.write_text("not a config", encoding="utf-8")
+        logfile = tmp_path / "backup.log"
+        logfile.write_text("log", encoding="utf-8")
+        FileConfigStore(tmp_path)
+        assert readme.exists()
+        assert logfile.exists()
+
+    def test_multiple_flat_files_all_migrated(self, tmp_path: Path):
+        files = [
+            "Cisco_1-1-1-1_20260414_120000.cfg",
+            "OPNsense_2-2-2-2_20260414_120001.xml",
+        ]
+        for f in files:
+            (tmp_path / f).write_text("x", encoding="utf-8")
+        FileConfigStore(tmp_path)
+        for f in files:
+            assert not (tmp_path / f).exists()
+
+    def test_migration_idempotent(self, tmp_path: Path):
+        """Constructing FileConfigStore twice must not error."""
+        flat = tmp_path / "Cisco_1-1-1-1_20260414_120000.cfg"
+        flat.write_text("x", encoding="utf-8")
+        FileConfigStore(tmp_path)
+        FileConfigStore(tmp_path)  # second init — file is already in subdir
 
 
 # ---------------------------------------------------------------------------
@@ -143,6 +262,12 @@ class TestFileConfigStoreList:
             store.save("Cisco", f"1.1.1.{i}", _ts(second=i), "cfg", f"content{i}")
         assert len(store.list_configs()) == 5
 
+    def test_list_finds_files_in_subdirectories(self, tmp_path: Path):
+        """rglob must pick up files regardless of nesting depth."""
+        store = FileConfigStore(tmp_path)
+        store.save("Cisco", "1.1.1.1", _ts(), "cfg", "nested")
+        assert len(store.list_configs()) == 1
+
 
 # ---------------------------------------------------------------------------
 # get_content()
@@ -178,7 +303,8 @@ class TestFileConfigStoreDelete:
         store = FileConfigStore(tmp_path)
         record = store.save("Cisco", "1.2.3.4", _ts(), "cfg", "x")
         store.delete(record.filename)
-        assert not (tmp_path / record.filename).exists()
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path(record.filename)
 
     def test_delete_removes_from_list(self, tmp_path: Path):
         store = FileConfigStore(tmp_path)

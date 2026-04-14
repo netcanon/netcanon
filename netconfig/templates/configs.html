@@ -30,6 +30,13 @@
          class="btn-secondary" data-testid="config-download-btn"
          style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block;margin-left:.3rem"
          title="Download {{ cfg.filename }}">&#8595;</a>
+      {% if open_in_editor %}
+      <button class="btn-secondary"
+              data-testid="config-open-btn"
+              data-filename="{{ cfg.filename }}"
+              style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+              title="Open in default text editor">Open</button>
+      {% endif %}
       <button class="btn-danger delete-btn"
               data-testid="config-delete-btn"
               data-filename="{{ cfg.filename }}"
@@ -101,5 +108,37 @@ function attachDeleteListener(btn) {
 
 document.querySelectorAll('[data-testid="config-delete-btn"]')
   .forEach(attachDeleteListener);
+
+{% if open_in_editor %}
+function attachOpenListener(btn) {
+  btn.addEventListener('click', async function() {
+    var fn = this.dataset.filename;
+    var self = this;
+    var orig = self.textContent;
+    self.disabled = true;
+    self.textContent = 'Opening\u2026';
+    try {
+      var res = await fetch(
+        '/api/v1/configs/' + encodeURIComponent(fn) + '/open',
+        { method: 'POST' }
+      );
+      if (res.status === 204) {
+        showToast('Opened \u201c' + fn + '\u201d in your default editor.', 'success');
+      } else {
+        var err = await res.json().catch(function() { return {}; });
+        showToast('Could not open file: ' + (err.detail || res.statusText), 'error');
+      }
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    } finally {
+      self.disabled = false;
+      self.textContent = orig;
+    }
+  });
+}
+
+document.querySelectorAll('[data-testid="config-open-btn"]')
+  .forEach(attachOpenListener);
+{% endif %}
 </script>
 {% endblock %}
