@@ -25,6 +25,10 @@ prompts:
   trailing:
     - '^\S+[#>]\s*$'       # Router# or Router>
 
+collector:
+  strategy: netmiko
+  netmiko_device_type: cisco_xe
+
 notes: >
   IOS-XE 17.x. Requires enable mode. Uses space-injection for --More-- paging;
   terminal length 0 is avoided — unreliable on this platform.

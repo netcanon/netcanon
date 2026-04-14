@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — NetConfig{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- ── Backup form ──────────────────────────────────────────────── -->
+<section data-testid="backup-form-section">
+  <h2>New Backup</h2>
+  <form id="backup-form" data-testid="backup-form">
+    <div id="device-list" data-testid="device-list">
+      <!-- Device rows injected by JS; first row is the template -->
+      <div class="form-row device-entry" data-testid="device-entry">
+        <div class="form-group">
+          <label>Type</label>
+          <select name="type_key" data-testid="device-type-select">
+            {% for key, def in definitions.items() | sort %}
+            <option value="{{ key }}">{{ def.vendor }} {{ def.os }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Host / IP</label>
+          <input name="host" type="text" placeholder="192.168.1.1"
+                 data-testid="device-host-input" required>
+        </div>
+        <div class="form-group">
+          <label>Port</label>
+          <input name="port" type="number" value="22" min="1" max="65535"
+                 style="width:80px" data-testid="device-port-input">
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input name="username" type="text" placeholder="admin"
+                 data-testid="device-username-input" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input name="password" type="password"
+                 data-testid="device-password-input" required>
+        </div>
+        <div class="form-group">
+          <label>Enable PW <small>(Cisco)</small></label>
+          <input name="enable_password" type="password"
+                 placeholder="optional" data-testid="device-enable-input">
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <button type="button" class="btn-danger remove-device-btn"
+                  data-testid="remove-device-btn" style="display:none">✕</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:.75rem">
+      <button type="button" id="add-device-btn" class="btn-secondary"
+              data-testid="add-device-btn">+ Add Device</button>
+      <button type="submit" class="btn-primary"
+              data-testid="submit-backup-btn">Start Backup</button>
+    </div>
+  </form>
+</section>
+
+<!-- ── Job status banner (shown while polling) ──────────────────── -->
+<div id="job-status-banner" data-testid="job-status-banner" style="display:none;margin-top:1rem">
+  <div class="alert alert-info">
+    Job <strong id="job-id-display" data-testid="job-id-display"></strong>:
+    <span id="job-status-display" data-testid="job-status-display">pending</span>
+  </div>
+</div>
+
+<!-- ── Recent jobs table ─────────────────────────────────────────── -->
+<section data-testid="recent-jobs-section">
+  <h2>Recent Jobs</h2>
+  {% if recent_jobs %}
+  <table data-testid="jobs-table">
+    <thead>
+      <tr>
+        <th>Job ID</th><th>Status</th><th>Devices</th>
+        <th>Success / Total</th><th>Created (UTC)</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for job in recent_jobs %}
+    <tr data-testid="job-row" data-job-id="{{ job.id }}">
+      <td><a href="/api/v1/backups/{{ job.id }}" data-testid="job-link">
+        {{ job.id[:8] }}…</a></td>
+      <td><span class="badge badge-{{ job.status }}"
+               data-testid="job-status">{{ job.status }}</span></td>
+      <td data-testid="job-device-count">{{ job.total_devices }}</td>
+      <td data-testid="job-success-count">
+        {{ job.results | selectattr('status','eq','success') | list | length }}
+        / {{ job.total_devices }}
+      </td>
+      <td data-testid="job-created">
+        {{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty-msg" data-testid="no-jobs-msg">No backup jobs yet.</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Multi-device form ── */
+const deviceList  = document.getElementById('device-list');
+const addBtn      = document.getElementById('add-device-btn');
+const form        = document.getElementById('backup-form');
+const banner      = document.getElementById('job-status-banner');
+const jobIdEl     = document.getElementById('job-id-display');
+const jobStatusEl = document.getElementById('job-status-display');
+
+function updateRemoveButtons() {
+  const rows = deviceList.querySelectorAll('.device-entry');
+  rows.forEach(r => {
+    r.querySelector('.remove-device-btn').style.display =
+      rows.length > 1 ? '' : 'none';
+  });
+}
+
+addBtn.addEventListener('click', () => {
+  const first = deviceList.querySelector('.device-entry');
+  const clone = first.cloneNode(true);
+  clone.querySelectorAll('input').forEach(i => i.value = '');
+  clone.querySelector('select').selectedIndex = 0;
+  clone.querySelector('.remove-device-btn').addEventListener('click', e => {
+    e.target.closest('.device-entry').remove();
+    updateRemoveButtons();
+  });
+  deviceList.appendChild(clone);
+  updateRemoveButtons();
+});
+
+deviceList.querySelector('.remove-device-btn').addEventListener('click', e => {
+  e.target.closest('.device-entry').remove();
+  updateRemoveButtons();
+});
+
+/* ── Form submission → JSON → poll ── */
+form.addEventListener('submit', async e => {
+  e.preventDefault();
+
+  const rows = deviceList.querySelectorAll('.device-entry');
+  const devices = Array.from(rows).map(row => {
+    const g = name => row.querySelector(`[name="${name}"]`).value;
+    const ep = g('enable_password');
+    return {
+      type_key: g('type_key'),
+      host: g('host'),
+      port: parseInt(g('port'), 10) || 22,
+      credentials: {
+        username: g('username'),
+        password: g('password'),
+        ...(ep ? { enable_password: ep } : {}),
+      },
+    };
+  });
+
+  const res = await fetch('/api/v1/backups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ devices }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json();
+    alert('Error: ' + (err.detail || res.statusText));
+    return;
+  }
+
+  const job = await res.json();
+  jobIdEl.textContent = job.id.substring(0, 8) + '…';
+  jobStatusEl.textContent = job.status;
+  banner.style.display = '';
+
+  /* Poll until complete */
+  const poll = setInterval(async () => {
+    const r = await fetch(`/api/v1/backups/${job.id}`);
+    const j = await r.json();
+    jobStatusEl.textContent = j.status;
+    if (j.status === 'completed' || j.status === 'failed') {
+      clearInterval(poll);
+      setTimeout(() => location.reload(), 800);
+    }
+  }, 1500);
+});
+</script>
+{% endblock %}

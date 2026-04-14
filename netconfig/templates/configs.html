@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Configs — NetConfig{% endblock %}
+
+{% block content %}
+<h1>Stored Configurations</h1>
+
+{% if configs %}
+<table data-testid="configs-table">
+  <thead>
+    <tr>
+      <th>Filename</th><th>Device Type</th><th>Host</th>
+      <th>Captured (UTC)</th><th>Size</th><th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for cfg in configs %}
+  <tr data-testid="config-row" data-filename="{{ cfg.filename }}">
+    <td data-testid="config-filename">
+      <a href="/api/v1/configs/{{ cfg.filename }}" target="_blank"
+         data-testid="config-view-link">{{ cfg.filename }}</a>
+    </td>
+    <td data-testid="config-device-type">{{ cfg.device_type }}</td>
+    <td data-testid="config-host">{{ cfg.host }}</td>
+    <td data-testid="config-timestamp">
+      {{ cfg.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    <td data-testid="config-size">{{ cfg.size_bytes | filesizeformat }}</td>
+    <td>
+      <button class="btn-danger delete-btn"
+              data-testid="config-delete-btn"
+              data-filename="{{ cfg.filename }}">Delete</button>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-msg" data-testid="no-configs-msg">No configuration files stored yet.</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.delete-btn').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const fn = btn.dataset.filename;
+    if (!confirm(`Delete ${fn}?`)) return;
+    const res = await fetch(`/api/v1/configs/${encodeURIComponent(fn)}`,
+                            { method: 'DELETE' });
+    if (res.ok || res.status === 204) {
+      btn.closest('tr').remove();
+      if (!document.querySelector('.config-row')) location.reload();
+    } else {
+      alert('Delete failed: ' + res.statusText);
+    }
+  });
+});
+</script>
+{% endblock %}

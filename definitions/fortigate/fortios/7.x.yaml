@@ -28,6 +28,10 @@ prompts:
   trailing:
     - '^\S+\s+[#]\s*$'         # hostname # (FortiOS always has a space before the #)
 
+collector:
+  strategy: netmiko
+  netmiko_device_type: fortinet
+
 notes: >
   FortiOS 7.x. Paging is suppressed with 'set output standard' before collection
   and restored with 'set output more' afterwards. No enable mode required.

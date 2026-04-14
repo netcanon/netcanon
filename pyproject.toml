@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "netconfig"
+version = "0.1.0"
+description = "Multi-vendor network configuration backup and translation engine"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0.0",
+    "pydantic-settings>=2.0.0",
+    "pyyaml>=6.0",
+    "netmiko>=4.4.0",
+    "paramiko>=3.4.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+    "aiofiles>=23.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-playwright>=0.5.0",
+    "httpx>=0.27.0",
+    "pytest-xdist>=3.5.0",
+    "coverage>=7.4.0",
+    "pytest-cov>=4.1.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["netconfig*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: pure-function tests, no I/O",
+    "integration: API-level tests using TestClient, no real SSH",
+    "e2e: full browser tests via Playwright against a live server",
+    "slow: tests that take longer than 5 seconds",
+]
+# -x: stop on first failure; --strict-markers: fail on unknown markers
+addopts = "-x --strict-markers -q"
+
+[tool.coverage.run]
+source = ["netconfig"]
+omit = ["tests/*", "netconfig/templates/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false

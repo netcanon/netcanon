@@ -23,6 +23,9 @@ prompts:
   trailing:
     - '^root@\S+:.*[#$]\s*$'   # root@OPNsense:/root #
 
+collector:
+  strategy: paramiko_shell
+
 notes: >
   OPNsense 25.x. SSH lands at a numbered console menu; connection logic
   detects "8) Shell" or "Enter an option:" and sends "8" automatically.

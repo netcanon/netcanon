@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Definitions — NetConfig{% endblock %}
+
+{% block content %}
+<h1>Loaded Device Definitions</h1>
+<p style="color:#666;margin-bottom:1rem">
+  {{ definitions | length }} definition(s) loaded from
+  <code>definitions/</code>.
+  Add or edit YAML files there and restart to update.
+</p>
+
+{% if definitions %}
+<table data-testid="definitions-table">
+  <thead>
+    <tr>
+      <th>Type Key</th><th>Vendor</th><th>OS</th>
+      <th>Strategy</th><th>Ext</th><th>Priority</th><th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for def in definitions %}
+  <tr data-testid="definition-row" data-type-key="{{ def.type_key }}">
+    <td data-testid="def-type-key"><strong>{{ def.type_key }}</strong></td>
+    <td data-testid="def-vendor">{{ def.vendor }}</td>
+    <td data-testid="def-os">{{ def.os }}</td>
+    <td data-testid="def-strategy">
+      <code>{{ def.collector.strategy }}</code>
+      {% if def.collector.netmiko_device_type %}
+      <br><small style="color:#888">{{ def.collector.netmiko_device_type }}</small>
+      {% endif %}
+    </td>
+    <td data-testid="def-ext"><code>.{{ def.file_extension }}</code></td>
+    <td data-testid="def-priority">{{ def.priority }}</td>
+    <td data-testid="def-notes" style="max-width:300px;color:#555;font-size:.85rem">
+      {{ def.notes | truncate(120) }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty-msg" data-testid="no-definitions-msg">No definitions loaded.</p>
+{% endif %}
+{% endblock %}

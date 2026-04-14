@@ -22,6 +22,10 @@ prompts:
   trailing:
     - '^\[.+\]\s*>\s*$'       # [admin@MikroTik] >
 
+collector:
+  strategy: netmiko
+  netmiko_device_type: mikrotik_routeros
+
 notes: >
   RouterOS 7.x. Verbose export includes all configuration including defaults,
   which is preferable for a complete backup and future diff/translation work.

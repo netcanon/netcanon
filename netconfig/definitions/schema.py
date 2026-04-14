@@ -1,0 +1,144 @@
+"""
+Pydantic schema for device definition YAML files.
+
+Every ``*.yaml`` file under ``definitions/`` is validated against
+``DeviceDefinition`` when the application starts.  Malformed or
+incomplete files emit a warning and are skipped rather than crashing
+the server.
+
+Field-level documentation here also serves as the authoritative reference
+for definition authors — keep it in sync with ``definitions/README.md``.
+"""
+
+from pathlib import Path
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+
+class ConnectionConfig(BaseModel):
+    """SSH session behaviour flags.
+
+    Attributes:
+        needs_enable: Send ``enable`` if the initial banner shows a
+            user-exec prompt (``>``).  Required for Cisco IOS/IOS-XE in
+            non-privileged mode.
+        handle_paging: Suppress ``--More--`` prompts by sending a space
+            character mid-stream.  Used for Cisco when
+            ``terminal length 0`` is unreliable.
+        needs_shell_menu: Detect and dismiss a numbered console menu
+            before issuing any commands.  Required for OPNsense which
+            presents a menu on SSH login.
+    """
+
+    needs_enable: bool = False
+    handle_paging: bool = False
+    needs_shell_menu: bool = False
+
+
+class CommandConfig(BaseModel):
+    """Command sequence for configuration retrieval.
+
+    Attributes:
+        pre: Commands sent (and drained) before the main config command.
+            Typically used to disable paging or adjust output formatting.
+        config: The command whose output *is* the device configuration.
+        post: Commands sent after collection, e.g. to restore settings
+            changed by ``pre`` commands.
+    """
+
+    pre: list[str] = Field(default_factory=list)
+    config: str
+    post: list[str] = Field(default_factory=list)
+
+
+class PromptConfig(BaseModel):
+    """Prompt patterns used for SSH output post-processing.
+
+    Attributes:
+        trailing: List of regular expressions that match shell-prompt
+            lines at the end of captured output.  The output cleaner
+            strips any trailing lines matching any of these patterns.
+            Vendor-specific patterns yield tighter stripping than the
+            broad fallback used when patterns are absent.
+    """
+
+    trailing: list[str] = Field(default_factory=list)
+
+
+class CollectorConfig(BaseModel):
+    """Specifies which collection strategy to use for this definition.
+
+    Attributes:
+        strategy: ``"netmiko"`` uses Netmiko's high-level
+            ``ConnectHandler`` for vendors it supports natively.
+            ``"paramiko_shell"`` opens a raw interactive shell via
+            Paramiko for devices requiring custom session orchestration
+            (e.g. OPNsense's console menu).
+        netmiko_device_type: Netmiko device-type string passed to
+            ``ConnectHandler``.  Required when ``strategy`` is
+            ``"netmiko"``; ignored otherwise.
+            Common values: ``cisco_xe``, ``fortinet``,
+            ``mikrotik_routeros``.
+    """
+
+    strategy: Literal["netmiko", "paramiko_shell"] = "netmiko"
+    netmiko_device_type: str | None = None
+
+    @field_validator("netmiko_device_type")
+    @classmethod
+    def device_type_required_for_netmiko(
+        cls, v: str | None, info: object
+    ) -> str | None:
+        """Validate that netmiko_device_type is present when strategy is netmiko."""
+        # info.data is populated with already-validated fields
+        strategy = getattr(info, "data", {}).get("strategy", "netmiko")
+        if strategy == "netmiko" and not v:
+            raise ValueError(
+                "netmiko_device_type is required when collector.strategy is 'netmiko'"
+            )
+        return v
+
+
+class DeviceDefinition(BaseModel):
+    """A fully-validated device definition loaded from a YAML file.
+
+    This is the central object that every other component depends on.
+    The loader populates ``source_file`` after validation so callers can
+    report which file a definition came from.
+
+    Attributes:
+        vendor: Human-readable vendor name (e.g. ``"Cisco"``).
+        os: Operating system name (e.g. ``"IOS-XE"``).
+        version_match: Regex matched against the detected version string
+            post-connection for future automatic selection.  Defaults to
+            ``".*"`` (matches any version).
+        type_key: Primary lookup key.  Must be unique across all loaded
+            definitions (higher-priority files win on collision).  This
+            is the value users pass as ``type_key`` in device lists.
+        priority: Load order for conflict resolution.  Higher numbers are
+            loaded later and override lower-priority definitions that share
+            the same ``type_key``.  Use ``0`` for base definitions and
+            larger values for model- or version-specific overrides.
+        file_extension: Output file extension without the leading dot.
+        connection: SSH session flags.
+        commands: Pre/config/post command sequence.
+        prompts: Trailing-prompt patterns for output cleaning.
+        collector: Collector strategy selection.
+        notes: Free-text notes visible in the web UI and ``--verbose``
+            loader output.  Document known quirks here.
+        source_file: Set by the loader; not present in YAML files.
+    """
+
+    vendor: str
+    os: str
+    version_match: str = ".*"
+    type_key: str
+    priority: int = 0
+    file_extension: str = "cfg"
+    connection: ConnectionConfig
+    commands: CommandConfig
+    prompts: PromptConfig = Field(default_factory=PromptConfig)
+    collector: CollectorConfig = Field(default_factory=CollectorConfig)
+    notes: str = ""
+    source_file: Path | None = Field(None, exclude=True)
