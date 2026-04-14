@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from fastapi import FastAPI, Request
+from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
@@ -80,6 +81,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         version="0.1.0",
         lifespan=lifespan,
+        docs_url=None,   # we serve a nav-wrapped version at /docs below
+        redoc_url=None,  # not surfaced in the UI
     )
 
     # ------------------------------------------------------------------
@@ -137,6 +140,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "definitions.html",
             {"active_page": "definitions", "definitions": defs},
         )
+
+    @app.get("/docs", include_in_schema=False)
+    async def swagger_ui() -> HTMLResponse:
+        """Swagger UI wrapped in the NetConfig nav bar."""
+        base = get_swagger_ui_html(
+            openapi_url="/openapi.json",
+            title="NetConfig — API Docs",
+        )
+        html = base.body.decode("utf-8")
+        nav_css = (
+            "<style>"
+            "#nc-nav{background:#1a1a2e;padding:.75rem 1.5rem;display:flex;"
+            "gap:1.5rem;align-items:center;position:sticky;top:0;z-index:10000;"
+            "box-shadow:0 1px 4px rgba(0,0,0,.4)}"
+            "#nc-nav a{color:#eee;text-decoration:none;font-size:.95rem}"
+            "#nc-nav a:hover{color:#fff;text-decoration:underline}"
+            "#nc-nav .brand{color:#7eb8f7;font-weight:700;font-size:1.1rem;"
+            "margin-right:auto;text-decoration:none}"
+            "#nc-nav .active{color:#fff;border-bottom:2px solid #7eb8f7;padding-bottom:2px}"
+            "</style>"
+        )
+        nav_html = (
+            '<nav id="nc-nav">'
+            '<a href="/" class="brand">NetConfig</a>'
+            '<a href="/">Dashboard</a>'
+            '<a href="/configs">Configs</a>'
+            '<a href="/definitions">Definitions</a>'
+            '<a href="/docs" class="active">API Docs</a>'
+            "</nav>"
+        )
+        html = html.replace("</head>", f"{nav_css}</head>", 1)
+        html = html.replace("<body>", f"<body>{nav_html}", 1)
+        return HTMLResponse(content=html)
 
     return app
 

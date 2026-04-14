@@ -7,6 +7,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (nav bar on API Docs page)
+
+- **`GET /docs`** — FastAPI's built-in Swagger UI is now replaced by a
+  custom route that injects the NetConfig nav bar (sticky, same style as
+  all other pages) so users can always navigate back from the API explorer.
+  The raw `/openapi.json` schema endpoint is unchanged.  `/redoc` is
+  disabled (it was unreachable from the UI anyway).
+
 ### Changed (vendor-specific field naming)
 
 - **`ConnectionConfig.handle_paging` → `cisco_more_paging`** — renamed to make
