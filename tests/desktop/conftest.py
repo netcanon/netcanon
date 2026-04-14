@@ -19,33 +19,78 @@ import pytest
 
 
 @pytest.fixture()
-def mock_webview() -> Generator[MagicMock, None, None]:
-    """Inject a fake ``webview`` module so lazy ``import webview`` calls work.
+def mock_pyside6() -> Generator[MagicMock, None, None]:
+    """Inject fake PySide6 sub-modules so Qt GUI is never created in tests.
 
-    ``webview`` is imported lazily inside ``WebViewWindow.create()`` and
-    ``start()``, so we inject the mock at the ``sys.modules`` level.  Each
-    fake window gets its own ``_EventSlot`` so event-handler registration is
-    testable.
+    ``WebViewWindow.create()`` and the thread-safe helpers do lazy
+    ``from PySide6.QtXxx import ...`` imports; injecting mocks via
+    ``sys.modules`` intercepts all of them.
+
+    The fixture yields a namespace object with attributes:
+      .QApplication  .QMainWindow  .QWebEngineView
+      .QUrl  .QIcon  .QMetaObject  .Qt
     """
     import sys
 
-    fake_window = MagicMock(name="webview.Window")
-    fake_window.events = MagicMock()
-    fake_window.events.closing = _EventSlot()
+    fake_app = MagicMock(name="QApplication_instance")
+    fake_app.exec.return_value = 0
 
-    mock_wv = MagicMock(name="webview")
-    mock_wv.create_window.return_value = fake_window
-    mock_wv.start.return_value = None
+    QApplication_cls = MagicMock(name="QApplication")
+    QApplication_cls.instance.return_value = None
+    QApplication_cls.return_value = fake_app
 
-    original = sys.modules.get("webview")
-    sys.modules["webview"] = mock_wv
+    QMainWindow_cls = MagicMock(name="QMainWindow")
+
+    QWebEngineView_cls = MagicMock(name="QWebEngineView")
+
+    qt_core = MagicMock(name="PySide6.QtCore")
+    qt_core.QUrl = MagicMock(name="QUrl")
+    qt_core.QMetaObject = MagicMock(name="QMetaObject")
+    qt_core.Qt = MagicMock(name="Qt")
+    qt_core.Qt.ConnectionType = MagicMock(name="ConnectionType")
+    qt_core.Qt.ConnectionType.QueuedConnection = 2  # Qt::QueuedConnection value
+
+    qt_gui = MagicMock(name="PySide6.QtGui")
+    qt_gui.QIcon = MagicMock(name="QIcon")
+
+    qt_widgets = MagicMock(name="PySide6.QtWidgets")
+    qt_widgets.QApplication = QApplication_cls
+    qt_widgets.QMainWindow = QMainWindow_cls
+
+    qt_webengine = MagicMock(name="PySide6.QtWebEngineWidgets")
+    qt_webengine.QWebEngineView = QWebEngineView_cls
+
+    pyside6 = MagicMock(name="PySide6")
+
+    modules_to_inject = {
+        "PySide6": pyside6,
+        "PySide6.QtCore": qt_core,
+        "PySide6.QtGui": qt_gui,
+        "PySide6.QtWidgets": qt_widgets,
+        "PySide6.QtWebEngineWidgets": qt_webengine,
+    }
+
+    originals = {k: sys.modules.get(k) for k in modules_to_inject}
+    sys.modules.update(modules_to_inject)
+
+    class _NS:
+        QApplication = QApplication_cls
+        app_instance = fake_app
+        QMainWindow = QMainWindow_cls
+        QWebEngineView = QWebEngineView_cls
+        QUrl = qt_core.QUrl
+        QIcon = qt_gui.QIcon
+        QMetaObject = qt_core.QMetaObject
+        Qt = qt_core.Qt
+
     try:
-        yield mock_wv
+        yield _NS()
     finally:
-        if original is None:
-            sys.modules.pop("webview", None)
-        else:
-            sys.modules["webview"] = original
+        for k, v in originals.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
 
 
 @pytest.fixture()

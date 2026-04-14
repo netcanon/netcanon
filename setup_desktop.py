@@ -62,7 +62,7 @@ build_exe_options: dict = {
         "netmiko",
         "paramiko",
         "pystray",
-        "webview",
+        "PySide6",
         "PIL",
         "yaml",
         "httpx",
