@@ -30,6 +30,10 @@ dist/
 build/
 .eggs/
 
+# cx_Freeze / MSI build outputs
+*.msi
+*.wixpdb
+
 # Pytest / coverage
 .pytest_cache/
 .coverage

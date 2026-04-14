@@ -30,10 +30,19 @@ dev = [
     "coverage>=7.4.0",
     "pytest-cov>=4.1.0",
 ]
+desktop = [
+    "pywebview>=5.0.0",
+    "pystray>=0.19.0",
+    "Pillow>=10.0.0",
+]
+desktop-build = [
+    "netconfig[desktop]",
+    "cx_Freeze>=7.0.0",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["netconfig*"]
+include = ["netconfig*", "netconfig_desktop*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

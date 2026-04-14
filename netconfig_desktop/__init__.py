@@ -1,0 +1,22 @@
+"""
+NetConfig Desktop — Windows desktop shell for the NetConfig web application.
+
+This package wraps the ``netconfig`` FastAPI application in a native Windows
+desktop experience:
+
+* An embedded Edge/WebView2 window shows the full web UI.
+* A system tray icon provides Show and Quit actions when the window is hidden.
+* The Uvicorn HTTP server runs on a loopback port in a daemon thread.
+
+Entry point::
+
+    python -m netconfig_desktop          # launch the desktop application
+
+Build MSI installer::
+
+    python setup_desktop.py bdist_msi
+
+See ``netconfig_desktop/README.md`` for architecture details.
+"""
+
+__version__ = "0.1.0"
