@@ -1,6 +1,6 @@
 # NetConfig Test Suite
 
-Three-layer test infrastructure: **unit → integration → E2E**.
+Four-layer test infrastructure: **unit → integration → E2E → desktop**.
 
 ## Layout
 
@@ -20,10 +20,17 @@ tests/
 │   ├── test_definitions_api.py
 │   ├── test_configs_api.py
 │   └── test_backups_api.py
-└── e2e/                     Full browser tests via Playwright
-    ├── conftest.py          Live Uvicorn server + Playwright base_url
-    ├── helpers.py           Page-object helpers (NavBar, BackupFormPage, …)
-    └── test_backup_flow.py
+├── e2e/                     Full browser tests via Playwright
+│   ├── conftest.py          Live Uvicorn server + Playwright base_url
+│   ├── helpers.py           Page-object helpers (NavBar, BackupFormPage, …)
+│   └── test_backup_flow.py
+└── desktop/                 Desktop-shell unit tests (no display required)
+    ├── conftest.py          mock_pyside6, mock_pystray, mock_generate_tray_image fixtures
+    ├── test_app.py          DesktopApp orchestration and startup order
+    ├── test_server.py       ServerThread (real Uvicorn on a free port)
+    ├── test_tray.py         TrayIcon construction, callbacks, stop()
+    ├── test_window.py       WebViewWindow lifecycle and _handle_close()
+    └── test_settings.py     Path resolution in frozen vs. dev mode
 ```
 
 ## Running Tests
@@ -42,6 +49,9 @@ pytest tests/integration -m integration -v
 playwright install chromium
 pytest tests/e2e -m e2e -v
 
+# Desktop tests (no display needed — PySide6/pystray fully mocked)
+pytest tests/desktop/ -v
+
 # Full suite with coverage
 pytest --cov=netconfig --cov-report=term-missing
 
@@ -56,6 +66,7 @@ pytest -m "not e2e" -n auto
 | Unit        | `pytest tmp_path` — fresh tmp dir per test |
 | Integration | `create_app(test_settings)` factory — independent in-memory state per test |
 | E2E         | Session-scoped live server; function-scoped Playwright `page` |
+| Desktop     | `sys.modules` injection — PySide6, pystray, and Pillow fully mocked per test |
 
 ## Mocking Strategy
 
@@ -81,6 +92,10 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 3. **E2E**: add a `test_*.py` file under `tests/e2e/`.  Use the `page`
    fixture from pytest-playwright and helpers from `tests/e2e/helpers.py`.
    All selectors should use `data-testid` attributes.
+
+4. **Desktop**: add a `test_*.py` file under `tests/desktop/`.  Use the
+   `mock_pyside6`, `mock_pystray`, and `mock_generate_tray_image` fixtures
+   from `tests/desktop/conftest.py` to keep tests headless and fast.
 
 ## Markers
 
