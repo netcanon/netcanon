@@ -32,6 +32,7 @@ second a numeric suffix is appended (``…_1.cfg``, ``…_2.cfg``, …) so no fi
 is ever silently overwritten.
 """
 
+import json
 import logging
 import re
 import shutil
@@ -80,6 +81,7 @@ class FileConfigStore(BaseConfigStore):
         timestamp: datetime,
         extension: str,
         content: str,
+        device_profile_id: str | None = None,
     ) -> ConfigRecord:
         """Write *content* to ``{device_type}/{safe_host}/`` and return its record.
 
@@ -88,6 +90,10 @@ class FileConfigStore(BaseConfigStore):
 
         If a file with the same name already exists (two backups within the
         same second), a numeric suffix is appended so no file is overwritten.
+
+        If *device_profile_id* is not ``None``, a sidecar
+        ``{filename}.meta.json`` is written alongside the config file
+        containing ``{"device_profile_id": "..."}``.
         """
         safe_host = re.sub(r"[.:]", "-", host)
         ts_str = timestamp.strftime(_TS_FORMAT)
@@ -111,6 +117,15 @@ class FileConfigStore(BaseConfigStore):
         path.write_text(content, encoding="utf-8")
         size = path.stat().st_size
         logger.info("Saved config %r (%d bytes) → %s", filename, size, subdir)
+
+        if device_profile_id is not None:
+            meta_path = subdir / f"{filename}.meta.json"
+            meta_path.write_text(
+                json.dumps({"device_profile_id": device_profile_id}),
+                encoding="utf-8",
+            )
+            logger.debug("Wrote sidecar metadata %s", meta_path.name)
+
         return ConfigRecord(
             device_type=device_type,
             host=host,
@@ -118,6 +133,7 @@ class FileConfigStore(BaseConfigStore):
             filename=filename,
             file_extension=extension,
             size_bytes=size,
+            device_profile_id=device_profile_id,
         )
 
     def list_configs(self) -> list[ConfigRecord]:
@@ -125,13 +141,27 @@ class FileConfigStore(BaseConfigStore):
 
         Walks the full directory tree so both subdirectory-organised files and
         any remaining flat files are returned.  Non-matching files (log files,
-        temp files, etc.) are silently skipped.
+        temp files, sidecar ``.meta.json`` files, etc.) are silently skipped.
+
+        For each config file, if a sidecar ``{filename}.meta.json`` exists
+        alongside it, the ``device_profile_id`` is read from it and set on
+        the returned record.
         """
         records: list[ConfigRecord] = []
         for path in self._dir.rglob("*"):
             if path.is_file():
                 record = self._parse_filename(path)
                 if record is not None:
+                    meta_path = path.parent / f"{path.name}.meta.json"
+                    if meta_path.exists():
+                        try:
+                            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                            record.device_profile_id = meta.get("device_profile_id")
+                        except Exception:  # noqa: BLE001
+                            logger.warning(
+                                "Could not read sidecar metadata %s", meta_path.name,
+                                exc_info=True,
+                            )
                     records.append(record)
         records.sort(key=lambda r: r.timestamp, reverse=True)
         logger.debug("Listed %d config(s) from %s", len(records), self._dir)
@@ -148,12 +178,19 @@ class FileConfigStore(BaseConfigStore):
     def delete(self, filename: str) -> None:
         """Delete a stored config file.
 
+        Also removes the sidecar ``{filename}.meta.json`` if it exists
+        (no error if the sidecar is absent).
+
         Raises:
             FileNotFoundError: If the file does not exist.
         """
         path = self.resolve_path(filename)
         path.unlink()
         logger.info("Deleted config %r from %s", filename, path.parent)
+        meta_path = path.parent / f"{path.name}.meta.json"
+        if meta_path.exists():
+            meta_path.unlink()
+            logger.debug("Deleted sidecar metadata %s", meta_path.name)
 
     def resolve_path(self, filename: str) -> Path:
         """Return the absolute filesystem path for *filename*.

@@ -19,8 +19,10 @@ from fastapi import Request
 
 from ..definitions.schema import DeviceDefinition
 from ..models.backup import BackupJob
+from ..models.device_profile import DeviceProfile
 from ..models.schedule import BackupSchedule
 from ..storage.base import BaseConfigStore
+from ..storage.device_profile_store import FileDeviceProfileStore
 from ..storage.job_store import FileJobStore
 from ..storage.schedule_store import FileScheduleStore
 
@@ -61,3 +63,13 @@ def get_schedule_store(request: Request) -> FileScheduleStore:
 def get_scheduler(request: Request):
     """Inject the APScheduler instance from application state."""
     return request.app.state.scheduler
+
+
+def get_device_profiles(request: Request) -> dict[str, DeviceProfile]:
+    """Inject the in-memory device profile registry from application state."""
+    return request.app.state.device_profiles
+
+
+def get_device_profile_store(request: Request) -> FileDeviceProfileStore:
+    """Inject the device profile persistence store from application state."""
+    return request.app.state.device_profile_store

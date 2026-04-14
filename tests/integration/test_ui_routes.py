@@ -35,14 +35,7 @@ _BACKUP_PAYLOAD = {"devices": [_CISCO_DEVICE]}
 _SCHEDULE_PAYLOAD = {
     "name": "Test Schedule",
     "interval_minutes": 60,
-    "devices": [
-        {
-            "type_key": "Cisco",
-            "host": "192.168.1.1",
-            "username": "admin",
-            "password": "pw",
-        }
-    ],
+    "target_type_keys": ["Cisco"],
 }
 
 

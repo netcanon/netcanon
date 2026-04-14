@@ -47,60 +47,47 @@
       </div>
     </div>
 
-    <!-- Device list (same pattern as Dashboard) -->
-    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">Devices</h3>
-    <div id="sched-device-list" data-testid="sched-device-list">
-      <div class="form-row device-entry" data-testid="sched-device-entry">
-        <div class="form-group">
-          <label>Type</label>
-          <select name="type_key" data-testid="sched-device-type-select">
-            {% for key, def in definitions.items() | sort %}
-            <option value="{{ key }}"
-                    data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
-              {{ def.vendor }} {{ def.os }}
-            </option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Host / IP</label>
-          <input name="host" type="text" placeholder="192.168.1.1"
-                 data-testid="sched-device-host-input" required>
-        </div>
-        <div class="form-group">
-          <label>Username</label>
-          <input name="username" type="text" placeholder="admin"
-                 data-testid="sched-device-username-input" required>
-        </div>
-        <div class="form-group">
-          <label>Password</label>
-          <input name="password" type="password"
-                 data-testid="sched-device-password-input" required>
-        </div>
-        <div class="form-group enable-group">
-          <label>Enable Password</label>
-          <input name="enable_password" type="password" placeholder="optional"
-                 data-testid="sched-device-enable-input">
-        </div>
-        <details class="port-details" style="align-self:flex-end">
-          <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
-                          user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
-          <input name="port" type="number" value="22" min="1" max="65535"
-                 style="width:72px;margin-top:.25rem"
-                 data-testid="sched-device-port-input">
-        </details>
-        <div class="form-group" style="justify-content:flex-end">
-          <button type="button" class="btn-danger remove-sched-device-btn"
-                  data-testid="sched-remove-device-btn"
-                  aria-label="Remove this device"
-                  style="display:none">&#x2715;</button>
-        </div>
-      </div>
+    <!-- ── Target by device type ─────────────────────────────────── -->
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">
+      Target by Device Type
+      <span style="font-size:.8rem;font-weight:normal;color:#888">— back up all profiles of these types</span>
+    </h3>
+    <div id="sched-type-keys" data-testid="sched-type-keys-section"
+         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:#f8f8f8;border-radius:4px;margin-bottom:.75rem">
+      {% for key, def in definitions.items() | sort %}
+      <label style="display:flex;align-items:center;gap:.3rem;font-size:.85rem;font-weight:normal;cursor:pointer">
+        <input type="checkbox" name="target_type_keys" value="{{ key }}"
+               data-testid="sched-type-key-checkbox">
+        {{ def.vendor }} {{ def.os }}
+      </label>
+      {% endfor %}
+    </div>
+
+    <!-- ── Target specific devices ──────────────────────────────────── -->
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">
+      Target Specific Devices
+      <span style="font-size:.8rem;font-weight:normal;color:#888">— include individual profiles regardless of type</span>
+    </h3>
+    <div id="sched-devices" data-testid="sched-devices-section"
+         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:#f8f8f8;border-radius:4px;margin-bottom:.75rem">
+      {% if device_profiles %}
+        {% for profile in device_profiles %}
+        <label style="display:flex;align-items:center;gap:.3rem;font-size:.85rem;font-weight:normal;cursor:pointer">
+          <input type="checkbox" name="target_device_ids" value="{{ profile.id }}"
+                 data-testid="sched-device-checkbox">
+          <span class="badge" style="font-size:.75rem;background:#e8e8f0;color:#333">{{ profile.type_key }}</span>
+          {{ profile.name }}
+          <span style="color:#aaa;font-size:.75rem">{{ profile.host }}</span>
+        </label>
+        {% endfor %}
+      {% else %}
+      <p data-testid="no-profiles-for-sched-msg" style="color:#888;font-style:italic;font-size:.85rem;margin:0">
+        No device profiles saved yet. <a href="/devices">Add a device profile</a> first.
+      </p>
+      {% endif %}
     </div>
 
     <div class="form-row" style="margin-top:.75rem">
-      <button type="button" id="sched-add-device-btn" class="btn-secondary"
-              data-testid="sched-add-device-btn">+ Add Device</button>
       <button type="submit" id="sched-submit-btn" class="btn-primary"
               data-testid="sched-submit-btn">Create Schedule</button>
     </div>
@@ -193,13 +180,11 @@
 
 {% block scripts %}
 <script>
-const schedDeviceList = document.getElementById('sched-device-list');
-const schedAddBtn     = document.getElementById('sched-add-device-btn');
-const schedForm       = document.getElementById('sched-form');
-const schedSubmitBtn  = document.getElementById('sched-submit-btn');
-const presetSel       = document.getElementById('sched-interval-preset');
-const customWrap      = document.getElementById('sched-custom-wrap');
-const customMins      = document.getElementById('sched-custom-mins');
+const schedForm      = document.getElementById('sched-form');
+const schedSubmitBtn = document.getElementById('sched-submit-btn');
+const presetSel      = document.getElementById('sched-interval-preset');
+const customWrap     = document.getElementById('sched-custom-wrap');
+const customMins     = document.getElementById('sched-custom-mins');
 
 /* ── Interval preset / custom toggle ── */
 presetSel.addEventListener('change', function() {
@@ -207,48 +192,6 @@ presetSel.addEventListener('change', function() {
   customWrap.style.display = isCustom ? 'flex' : 'none';
   if (isCustom) customMins.required = true;
   else customMins.required = false;
-});
-
-/* ── Enable password visibility ── */
-function updateSchedEnableGroup(row) {
-  var sel = row.querySelector('[data-testid="sched-device-type-select"]');
-  var opt = sel.options[sel.selectedIndex];
-  var grp = row.querySelector('.enable-group');
-  if (grp) grp.style.display = opt.dataset.needsEnable === 'true' ? '' : 'none';
-}
-
-function updateSchedRemoveButtons() {
-  var rows = schedDeviceList.querySelectorAll('.device-entry');
-  rows.forEach(function(r) {
-    r.querySelector('[data-testid="sched-remove-device-btn"]').style.display =
-      rows.length > 1 ? '' : 'none';
-  });
-}
-
-function initSchedRow(row) {
-  updateSchedEnableGroup(row);
-  row.querySelector('[data-testid="sched-device-type-select"]')
-     .addEventListener('change', function() { updateSchedEnableGroup(row); });
-  row.querySelector('[data-testid="sched-remove-device-btn"]')
-     .addEventListener('click', function(e) {
-       e.target.closest('.device-entry').remove();
-       updateSchedRemoveButtons();
-     });
-}
-
-schedDeviceList.querySelectorAll('.device-entry').forEach(initSchedRow);
-
-schedAddBtn.addEventListener('click', function() {
-  var first = schedDeviceList.querySelector('.device-entry');
-  var clone = first.cloneNode(true);
-  clone.querySelectorAll('input').forEach(function(i) {
-    i.value = i.name === 'port' ? '22' : '';
-  });
-  clone.querySelector('select').selectedIndex = 0;
-  clone.querySelectorAll('details').forEach(function(d) { d.removeAttribute('open'); });
-  schedDeviceList.appendChild(clone);
-  initSchedRow(clone);
-  updateSchedRemoveButtons();
 });
 
 /* ── Form submission ── */
@@ -261,17 +204,20 @@ schedForm.addEventListener('submit', async function(e) {
     ? parseInt(customMins.value, 10)
     : parseInt(presetSel.value, 10);
 
-  var rows    = schedDeviceList.querySelectorAll('.device-entry');
-  var devices = Array.from(rows).map(function(row) {
-    var g  = function(name) { return row.querySelector('[name="' + name + '"]').value; };
-    var ep = g('enable_password');
-    return Object.assign(
-      { type_key: g('type_key'), host: g('host'),
-        port: parseInt(g('port'), 10) || 22,
-        username: g('username'), password: g('password') },
-      ep ? { enable_password: ep } : {}
-    );
-  });
+  var targetTypeKeys = Array.from(
+    schedForm.querySelectorAll('[name="target_type_keys"]:checked')
+  ).map(function(cb) { return cb.value; });
+
+  var targetDeviceIds = Array.from(
+    schedForm.querySelectorAll('[name="target_device_ids"]:checked')
+  ).map(function(cb) { return cb.value; });
+
+  if (!targetTypeKeys.length && !targetDeviceIds.length) {
+    showToast('Select at least one device type or specific device.', 'error');
+    schedSubmitBtn.disabled = false;
+    schedSubmitBtn.textContent = 'Create Schedule';
+    return;
+  }
 
   try {
     var res = await fetch('/api/v1/schedules/', {
@@ -280,7 +226,8 @@ schedForm.addEventListener('submit', async function(e) {
       body: JSON.stringify({
         name: document.getElementById('sched-name').value,
         interval_minutes: intervalMins,
-        devices: devices,
+        target_type_keys: targetTypeKeys,
+        target_device_ids: targetDeviceIds,
       }),
     });
     if (!res.ok) {
@@ -288,7 +235,7 @@ schedForm.addEventListener('submit', async function(e) {
       showToast('Error: ' + (err.detail || res.statusText), 'error');
       return;
     }
-    showToast('Schedule created — reloading\u2026', 'success');
+    showToast('Schedule created \u2014 reloading\u2026', 'success');
     setTimeout(function() { window.location.reload(); }, 800);
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');

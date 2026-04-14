@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block title %}Devices — NetConfig{% endblock %}
+
+{% block content %}
+<style>
+  .device-card { background:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:.6rem; overflow:hidden; }
+  .device-card-header { display:flex; align-items:center; gap:.75rem; padding:.7rem 1rem; cursor:pointer; user-select:none; flex-wrap:wrap; }
+  .device-card-header:hover { background:#f8f8f8; }
+  .device-card-body { border-top:1px solid #f0f0f0; padding:.75rem 1rem 1rem; }
+  .device-edit-panel { border-top:1px solid #e8e8f0; padding:.75rem 1rem; background:#fafafa; }
+  .device-chevron { margin-left:auto; color:#aaa; font-size:.75rem; transition:transform .15s; }
+  .device-chevron.open { transform:rotate(90deg); }
+  .device-confirm { display:none; gap:.35rem; align-items:center; }
+</style>
+
+<h1>Devices</h1>
+
+<!-- ── New Device Profile form ──────────────────────────────────── -->
+<section data-testid="new-device-section">
+  <h2>New Device Profile</h2>
+  <form id="device-form" data-testid="device-form">
+    <div class="form-row">
+      <div class="form-group" style="flex:1;min-width:160px">
+        <label>Profile Name</label>
+        <input name="name" type="text" placeholder="e.g. Office Cisco"
+               data-testid="device-name-input" required>
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select name="type_key" data-testid="device-type-select">
+          {% for key, def in definitions.items() | sort %}
+          <option value="{{ key }}"
+                  data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
+            {{ def.vendor }} {{ def.os }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Host / IP</label>
+        <input name="host" type="text" placeholder="192.168.1.1"
+               data-testid="device-host-input" required>
+      </div>
+      <div class="form-group">
+        <label>Username</label>
+        <input name="username" type="text" placeholder="admin"
+               data-testid="device-username-input" required>
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input name="password" type="password"
+               data-testid="device-password-input" required>
+      </div>
+      <!-- Enable password: shown only when the selected definition requires it -->
+      <div class="form-group enable-group">
+        <label>Enable Password</label>
+        <input name="enable_password" type="password"
+               placeholder="optional" data-testid="device-enable-input">
+      </div>
+      <div class="form-group">
+        <label>Notes</label>
+        <input name="notes" type="text" placeholder="optional notes"
+               data-testid="device-notes-input">
+      </div>
+      <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
+      <details class="port-details" style="align-self:flex-end">
+        <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                        user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
+        <input name="port" type="number" value="22" min="1" max="65535"
+               style="width:72px;margin-top:.25rem" data-testid="device-port-input">
+      </details>
+    </div>
+    <div class="form-row" style="margin-top:.75rem">
+      <button type="submit" id="device-submit-btn" class="btn-primary"
+              data-testid="device-submit-btn">Add Device Profile</button>
+    </div>
+  </form>
+</section>
+
+<!-- ── Saved Devices ──────────────────────────────────────────────── -->
+<section data-testid="devices-section">
+  <h2>Saved Devices</h2>
+
+  {% if not device_profiles %}
+  <p class="empty-msg" data-testid="no-devices-msg">
+    No device profiles yet. Fill in the form above to add one.
+  </p>
+  {% else %}
+
+  {% for profile in device_profiles %}
+  <div class="device-card" data-testid="device-card"
+       data-device-id="{{ profile.id }}"
+       data-profile="{{ profile | tojson }}">
+
+    <div class="device-card-header" data-testid="device-card-header"
+         onclick="toggleDevice(this)">
+
+      <strong data-testid="device-name">{{ profile.name }}</strong>
+      <span class="badge" data-testid="device-type"
+            style="background:#e8e8f0;color:#333">{{ profile.type_key }}</span>
+      <span data-testid="device-host" style="font-size:.88rem;color:#555">{{ profile.host }}</span>
+      <span style="font-size:.82rem;color:#aaa">
+        {{ configs_by_profile.get(profile.id, []) | length }} backup(s)
+      </span>
+
+      <!-- Actions -->
+      <button class="btn-primary" style="font-size:.8rem;padding:.3rem .7rem;margin-left:.25rem"
+              data-testid="device-run-btn"
+              onclick="event.stopPropagation();runDeviceBackup('{{ profile.id }}')">&#9654; Backup</button>
+      <button class="btn-secondary" style="font-size:.8rem;padding:.3rem .7rem"
+              data-testid="device-edit-btn"
+              onclick="event.stopPropagation();toggleEditDevice('{{ profile.id }}')">Edit</button>
+      <button class="btn-danger" style="font-size:.8rem;padding:.3rem .7rem"
+              data-testid="device-delete-btn"
+              onclick="event.stopPropagation();deleteDevice('{{ profile.id }}', this)">Delete</button>
+      <span class="device-confirm" data-testid="device-confirm-{{ profile.id }}"
+            style="display:none">
+        Delete?
+        <button class="btn-danger" style="font-size:.8rem;padding:.3rem .6rem"
+                data-testid="device-delete-confirm-btn"
+                onclick="event.stopPropagation();confirmDeleteDevice('{{ profile.id }}')">Yes</button>
+        <button class="btn-secondary" style="font-size:.8rem;padding:.3rem .6rem"
+                data-testid="device-delete-cancel-btn"
+                onclick="event.stopPropagation();cancelDeleteDevice(this)">No</button>
+      </span>
+
+      <span class="device-chevron" aria-hidden="true">&#9654;</span>
+    </div>
+
+    <!-- Inline edit panel (hidden by default) -->
+    <div class="device-edit-panel" data-testid="device-edit-panel"
+         data-device-id="{{ profile.id }}" style="display:none">
+      <form data-testid="device-edit-form"
+            onsubmit="saveEditDevice(event, '{{ profile.id }}')">
+        <div class="form-row">
+          <div class="form-group" style="flex:1;min-width:160px">
+            <label>Profile Name</label>
+            <input name="name" type="text" value="{{ profile.name }}"
+                   data-testid="device-edit-name-input">
+          </div>
+          <div class="form-group">
+            <label>Type</label>
+            <select name="type_key" data-testid="device-edit-type-select">
+              {% for key, def in definitions.items() | sort %}
+              <option value="{{ key }}"
+                      data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}"
+                      {% if key == profile.type_key %}selected{% endif %}>
+                {{ def.vendor }} {{ def.os }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Host / IP</label>
+            <input name="host" type="text" value="{{ profile.host }}"
+                   data-testid="device-edit-host-input">
+          </div>
+          <div class="form-group">
+            <label>Username</label>
+            <input name="username" type="text" value="{{ profile.username }}"
+                   data-testid="device-edit-username-input">
+          </div>
+          <div class="form-group">
+            <label>New Password</label>
+            <input name="password" type="password" placeholder="leave blank to keep"
+                   data-testid="device-edit-password-input">
+          </div>
+          <!-- Enable password shown conditionally based on selected type -->
+          <div class="form-group enable-group">
+            <label>New Enable Password</label>
+            <input name="enable_password" type="password" placeholder="leave blank to keep"
+                   data-testid="device-edit-enable-input">
+          </div>
+          <div class="form-group">
+            <label>Notes</label>
+            <input name="notes" type="text" value="{{ profile.notes or '' }}"
+                   data-testid="device-edit-notes-input">
+          </div>
+          <details class="port-details" style="align-self:flex-end">
+            <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                            user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
+            <input name="port" type="number" value="{{ profile.port }}" min="1" max="65535"
+                   style="width:72px;margin-top:.25rem"
+                   data-testid="device-edit-port-input">
+          </details>
+        </div>
+        <div class="form-row" style="margin-top:.5rem">
+          <button type="submit" class="btn-primary" style="font-size:.85rem"
+                  data-testid="device-edit-save-btn">Save</button>
+          <button type="button" class="btn-secondary" style="font-size:.85rem"
+                  onclick="toggleEditDevice('{{ profile.id }}')"
+                  data-testid="device-edit-cancel-btn">Cancel</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Config history (hidden by default, toggled by clicking header) -->
+    <div class="device-card-body" data-testid="device-card-body" style="display:none">
+      {% if configs_by_profile.get(profile.id) %}
+      <table style="margin-top:.25rem">
+        <thead>
+          <tr>
+            <th>Filename</th>
+            <th>Captured</th>
+            <th>Size</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for config in configs_by_profile[profile.id] | sort(attribute='timestamp', reverse=True) %}
+        <tr data-testid="device-config-row">
+          <td data-testid="device-config-file">
+            <code style="font-size:.78rem;color:#888">{{ config.filename }}</code>
+          </td>
+          <td data-testid="device-config-timestamp"
+              data-utc="{{ config.timestamp.isoformat() }}">
+            {{ config.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}
+          </td>
+          <td data-testid="device-config-size">{{ config.size_bytes | filesizeformat }}</td>
+          <td style="white-space:nowrap">
+            <a href="/api/v1/configs/{{ config.filename }}" target="_blank"
+               class="btn-secondary"
+               data-testid="device-config-view-link"
+               style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block">View</a>
+            <a href="/api/v1/configs/{{ config.filename }}" download="{{ config.filename }}"
+               class="btn-secondary"
+               data-testid="device-config-download-btn"
+               style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block;margin-left:.3rem"
+               title="Download {{ config.filename }}">&#8595;</a>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="empty-msg" style="padding:.25rem 0">No backups yet for this device.</p>
+      {% endif %}
+    </div>
+
+  </div>
+  {% endfor %}
+
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+var deviceForm      = document.getElementById('device-form');
+var deviceSubmitBtn = document.getElementById('device-submit-btn');
+
+/* ── Show / hide Enable Password based on selected type ── */
+function updateEnableGroup(form) {
+  var sel = form.querySelector('[name="type_key"]');
+  if (!sel) return;
+  var opt = sel.options[sel.selectedIndex];
+  var grp = form.querySelector('.enable-group');
+  if (grp) grp.style.display = opt.dataset.needsEnable === 'true' ? '' : 'none';
+}
+
+/* Initialise enable-group visibility on the create form */
+updateEnableGroup(deviceForm);
+deviceForm.querySelector('[name="type_key"]')
+  .addEventListener('change', function() { updateEnableGroup(deviceForm); });
+
+/* Initialise enable-group visibility on all edit forms */
+document.querySelectorAll('[data-testid="device-edit-panel"]').forEach(function(panel) {
+  var form = panel.querySelector('form');
+  if (!form) return;
+  updateEnableGroup(form);
+  var sel = form.querySelector('[name="type_key"]');
+  if (sel) sel.addEventListener('change', function() { updateEnableGroup(form); });
+});
+
+/* ── Toggle config history body ── */
+function toggleDevice(header) {
+  var card    = header.closest('.device-card');
+  var body    = card.querySelector('[data-testid="device-card-body"]');
+  var chevron = header.querySelector('.device-chevron');
+  var open    = body.style.display === 'none';
+  body.style.display = open ? '' : 'none';
+  chevron.classList.toggle('open', open);
+}
+
+/* ── Toggle inline edit panel ── */
+function toggleEditDevice(profileId) {
+  var panel = document.querySelector('[data-testid="device-edit-panel"][data-device-id="' + profileId + '"]');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? '' : 'none';
+}
+
+/* ── Create new profile ── */
+deviceForm.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  deviceSubmitBtn.disabled = true;
+  deviceSubmitBtn.textContent = 'Saving\u2026';
+
+  var g = function(name) { return deviceForm.querySelector('[name="' + name + '"]').value; };
+  var portVal = parseInt(g('port'), 10) || 22;
+  var body = {
+    name:     g('name'),
+    type_key: g('type_key'),
+    host:     g('host'),
+    port:     portVal,
+    username: g('username'),
+    password: g('password'),
+  };
+  var ep = g('enable_password');
+  if (ep) body.enable_password = ep;
+  var notes = g('notes');
+  if (notes) body.notes = notes;
+
+  try {
+    var res = await fetch('/api/v1/devices/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      var err = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      return;
+    }
+    showToast('Device profile saved \u2014 reloading\u2026', 'success');
+    setTimeout(function() { window.location.reload(); }, 600);
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  } finally {
+    deviceSubmitBtn.disabled = false;
+    deviceSubmitBtn.textContent = 'Add Device Profile';
+  }
+});
+
+/* ── Run backup now for a single profile ── */
+async function runDeviceBackup(profileId) {
+  var card = document.querySelector('[data-device-id="' + profileId + '"]');
+  var profile;
+  try {
+    profile = JSON.parse(card.dataset.profile);
+  } catch (_) {
+    showToast('Could not read profile data.', 'error');
+    return;
+  }
+
+  var credentials = { username: profile.username, password: profile.password };
+  if (profile.enable_password) credentials.enable_password = profile.enable_password;
+
+  try {
+    var res = await fetch('/api/v1/backups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        devices: [{
+          type_key: profile.type_key,
+          host:     profile.host,
+          port:     profile.port,
+          credentials: credentials,
+          device_profile_id: profile.id,
+        }],
+      }),
+    });
+    if (res.ok) {
+      var job = await res.json();
+      showToast('Backup started \u2014 job ' + job.id.slice(0, 8) + '\u2026', 'success');
+    } else {
+      var d = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (d.detail || res.statusText), 'error');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+
+/* ── Save edit ── */
+async function saveEditDevice(e, profileId) {
+  e.preventDefault();
+  var form = e.target;
+  var body = {};
+  ['name', 'type_key', 'host', 'username', 'password', 'enable_password', 'notes'].forEach(function(f) {
+    var input = form.querySelector('[name="' + f + '"]');
+    if (input && input.value !== '') body[f] = input.value;
+  });
+  var portInput = form.querySelector('[name="port"]');
+  if (portInput && portInput.value) body.port = parseInt(portInput.value, 10);
+
+  try {
+    var res = await fetch('/api/v1/devices/' + profileId, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (res.ok) {
+      showToast('Profile updated', 'success');
+      setTimeout(function() { window.location.reload(); }, 600);
+    } else {
+      var d = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (d.detail || res.statusText), 'error');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+
+/* ── Delete (inline confirm pattern) ── */
+function deleteDevice(profileId, btn) {
+  btn.style.display = 'none';
+  btn.nextElementSibling.style.display = 'inline-flex';
+}
+
+function cancelDeleteDevice(btn) {
+  var confirm = btn.closest('.device-confirm');
+  confirm.style.display = 'none';
+  confirm.previousElementSibling.style.display = '';
+}
+
+async function confirmDeleteDevice(profileId) {
+  try {
+    var res = await fetch('/api/v1/devices/' + profileId, { method: 'DELETE' });
+    if (res.status === 204) {
+      showToast('Profile deleted', 'success');
+      var card = document.querySelector('[data-device-id="' + profileId + '"]');
+      if (card) card.remove();
+      if (!document.querySelector('[data-testid="device-card"]')) {
+        window.location.reload();
+      }
+    } else {
+      var d = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (d.detail || res.statusText), 'error');
+    }
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+  }
+}
+</script>
+{% endblock %}

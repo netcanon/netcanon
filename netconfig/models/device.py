@@ -36,12 +36,15 @@ class DeviceTarget(BaseModel):
         host: Hostname or IP address.
         port: SSH port number.  Defaults to 22.
         credentials: Login credentials.
+        device_profile_id: UUID of the linked DeviceProfile, or None for
+            ad-hoc backups.
     """
 
     type_key: str = Field(..., description="Must match a loaded definition type_key")
     host: str
     port: int = Field(22, ge=1, le=65535)
     credentials: DeviceCredentials
+    device_profile_id: str | None = None  # UUID of the linked DeviceProfile, or None for ad-hoc backups.
 
 
 class BackupRequest(BaseModel):

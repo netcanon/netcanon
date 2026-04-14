@@ -27,6 +27,7 @@ class BaseConfigStore(ABC):
         timestamp: datetime,
         extension: str,
         content: str,
+        device_profile_id: str | None = None,
     ) -> ConfigRecord:
         """Persist a configuration string and return its metadata record.
 
@@ -36,6 +37,8 @@ class BaseConfigStore(ABC):
             timestamp: UTC time of collection.
             extension: File extension without the leading dot (e.g. ``cfg``).
             content: Raw configuration text to store.
+            device_profile_id: UUID of the linked DeviceProfile, or None
+                for ad-hoc backups.
 
         Returns:
             A ``ConfigRecord`` describing the stored file.

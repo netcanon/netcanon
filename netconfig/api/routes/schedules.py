@@ -67,6 +67,7 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
     from pydantic import SecretStr
 
     from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
+    from ...models.device_profile import DeviceProfile
     from .backups import _run_backup_job
 
     schedules = app.state.schedules
@@ -74,21 +75,58 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
     if not schedule or not schedule.enabled:
         return
 
-    devices = [
-        DeviceTarget(
-            type_key=d.type_key,
-            host=d.host,
-            port=d.port,
-            credentials=DeviceCredentials(
-                username=d.username,
-                password=SecretStr(d.password),
-                enable_password=(
-                    SecretStr(d.enable_password) if d.enable_password else None
+    device_profiles: dict[str, DeviceProfile] = app.state.device_profiles
+
+    # Resolve target devices (new-style: profile-based)
+    target: dict[str, DeviceProfile] = {}
+    for type_key in schedule.target_type_keys:
+        for pid, p in device_profiles.items():
+            if p.type_key == type_key:
+                target[pid] = p
+    for device_id in schedule.target_device_ids:
+        if device_id in device_profiles:
+            target[device_id] = device_profiles[device_id]
+
+    if target:
+        devices = [
+            DeviceTarget(
+                type_key=p.type_key,
+                host=p.host,
+                port=p.port,
+                credentials=DeviceCredentials(
+                    username=p.username,
+                    password=SecretStr(p.password),
+                    enable_password=(
+                        SecretStr(p.enable_password) if p.enable_password else None
+                    ),
                 ),
-            ),
+                device_profile_id=p.id,
+            )
+            for p in target.values()
+        ]
+    elif schedule.devices:
+        # Backward compat: fall back to inline devices (old-style schedules)
+        devices = [
+            DeviceTarget(
+                type_key=d.type_key,
+                host=d.host,
+                port=d.port,
+                credentials=DeviceCredentials(
+                    username=d.username,
+                    password=SecretStr(d.password),
+                    enable_password=(
+                        SecretStr(d.enable_password) if d.enable_password else None
+                    ),
+                ),
+            )
+            for d in schedule.devices
+        ]
+    else:
+        logger.warning(
+            "Schedule '%s' has no resolvable targets — skipping run", schedule.name
         )
-        for d in schedule.devices
-    ]
+        return
+
     request = BackupRequest(devices=devices)
 
     job = BackupJob(

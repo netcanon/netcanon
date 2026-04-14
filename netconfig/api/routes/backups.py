@@ -167,6 +167,7 @@ def _run_backup_job(
                 timestamp=datetime.now(timezone.utc),
                 extension=definition.file_extension,
                 content=raw_output,
+                device_profile_id=device.device_profile_id,
             )
             job.results.append(
                 BackupResult(

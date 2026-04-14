@@ -19,6 +19,7 @@ Uvicorn::
 from __future__ import annotations
 
 import logging
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator
@@ -31,9 +32,11 @@ from fastapi.templating import Jinja2Templates
 from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
+from .api.routes import device_profiles as device_profiles_router
 from .api.routes import schedules as schedules_router
 from .config import Settings
 from .definitions.loader import DefinitionLoader
+from .storage.device_profile_store import FileDeviceProfileStore
 from .storage.file_store import FileConfigStore
 from .storage.job_store import FileJobStore
 from .storage.schedule_store import FileScheduleStore
@@ -99,6 +102,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _app.state.schedule_store = FileScheduleStore(data_root / "schedules")
         _app.state.schedules = _app.state.schedule_store.load_all()
 
+        # Device profile persistence
+        _app.state.device_profile_store = FileDeviceProfileStore(data_root / "devices")
+        _app.state.device_profiles = _app.state.device_profile_store.load_all()
+
         # APScheduler — purely in-memory; schedules are persisted separately
         scheduler = AsyncIOScheduler(timezone="UTC")
         _app.state.scheduler = scheduler
@@ -143,6 +150,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(configs_router.router, prefix="/api/v1")
     app.include_router(backups_router.router, prefix="/api/v1")
     app.include_router(schedules_router.router, prefix="/api/v1")
+    app.include_router(device_profiles_router.router, prefix="/api/v1")
 
     # ------------------------------------------------------------------
     # UI routes (Jinja2 server-rendered HTML)
@@ -165,6 +173,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "active_page": "home",
                 "definitions": request.app.state.definitions,
                 "recent_jobs": jobs[:10],
+                "device_profiles": sorted(
+                    request.app.state.device_profiles.values(), key=lambda p: p.name
+                ),
             },
         )
 
@@ -201,6 +212,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "active_page": "schedules",
                 "schedules": schedules,
                 "definitions": request.app.state.definitions,
+                "device_profiles": sorted(
+                    request.app.state.device_profiles.values(), key=lambda p: p.name
+                ),
             },
         )
 
@@ -215,6 +229,30 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "active_page": "configs",
                 "configs": configs,
                 "open_in_editor": request.app.state.settings.open_in_editor,
+            },
+        )
+
+    @app.get("/devices", response_class=HTMLResponse, include_in_schema=False)
+    async def devices_page(request: Request) -> HTMLResponse:
+        """Device profile manager: create and manage persistent device profiles."""
+        profiles = sorted(
+            request.app.state.device_profiles.values(),
+            key=lambda p: p.created_at,
+            reverse=True,
+        )
+        configs = request.app.state.storage.list_configs()
+        configs_by_profile: dict[str, list] = defaultdict(list)
+        for c in configs:
+            if c.device_profile_id:
+                configs_by_profile[c.device_profile_id].append(c)
+        return templates.TemplateResponse(
+            request,
+            "devices.html",
+            {
+                "active_page": "devices",
+                "device_profiles": profiles,
+                "definitions": request.app.state.definitions,
+                "configs_by_profile": dict(configs_by_profile),
             },
         )
 
@@ -245,6 +283,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             '<nav id="nc-nav">'
             '<a href="/" class="brand">NetConfig</a>'
             '<a href="/">Dashboard</a>'
+            '<a href="/devices">Devices</a>'
             '<a href="/jobs">Jobs</a>'
             '<a href="/schedules">Schedules</a>'
             '<a href="/configs">Configs</a>'

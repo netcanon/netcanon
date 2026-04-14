@@ -37,6 +37,8 @@ class ConfigRecord(BaseModel):
             configured ``configs_dir``.
         file_extension: Extension without the leading dot (e.g. ``cfg``).
         size_bytes: File size at the time of writing.
+        device_profile_id: UUID of the linked DeviceProfile, or None for
+            ad-hoc backups.
     """
 
     device_type: str
@@ -45,6 +47,7 @@ class ConfigRecord(BaseModel):
     filename: str
     file_extension: str
     size_bytes: int
+    device_profile_id: str | None = None  # UUID of the linked DeviceProfile, or None for ad-hoc backups.
 
 
 class BackupResult(BaseModel):

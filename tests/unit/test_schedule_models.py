@@ -89,55 +89,65 @@ class TestScheduleDevice:
 
 
 class TestScheduleCreate:
-    def _make_device(self) -> ScheduleDevice:
-        return ScheduleDevice(
-            type_key="Cisco",
-            host="192.168.1.1",
-            username="admin",
-            password="secret",
-        )
-
-    def test_valid_construction(self):
+    def test_valid_construction_with_type_keys(self):
         sc = ScheduleCreate(
             name="Nightly Backup",
             interval_minutes=60,
-            devices=[self._make_device()],
+            target_type_keys=["Cisco"],
         )
         assert sc.name == "Nightly Backup"
         assert sc.interval_minutes == 60
-        assert len(sc.devices) == 1
+        assert sc.target_type_keys == ["Cisco"]
+
+    def test_valid_construction_with_device_ids(self):
+        sc = ScheduleCreate(
+            name="Specific Device Backup",
+            interval_minutes=60,
+            target_device_ids=["some-uuid-1234"],
+        )
+        assert sc.target_device_ids == ["some-uuid-1234"]
+
+    def test_valid_construction_with_both_targets(self):
+        sc = ScheduleCreate(
+            name="Combined",
+            interval_minutes=30,
+            target_type_keys=["Cisco"],
+            target_device_ids=["some-uuid-1234"],
+        )
+        assert sc.target_type_keys == ["Cisco"]
+        assert sc.target_device_ids == ["some-uuid-1234"]
 
     def test_interval_minutes_zero_raises(self):
         with pytest.raises(ValidationError):
             ScheduleCreate(
                 name="Bad Schedule",
                 interval_minutes=0,
-                devices=[self._make_device()],
+                target_type_keys=["Cisco"],
             )
 
     def test_interval_minutes_one_is_valid(self):
         sc = ScheduleCreate(
             name="Fast Schedule",
             interval_minutes=1,
-            devices=[self._make_device()],
+            target_type_keys=["Cisco"],
         )
         assert sc.interval_minutes == 1
 
-    def test_empty_devices_raises(self):
+    def test_no_targets_raises(self):
         with pytest.raises(ValidationError):
             ScheduleCreate(
-                name="No Devices",
+                name="No Targets",
                 interval_minutes=30,
-                devices=[],
+                target_type_keys=[],
+                target_device_ids=[],
             )
 
-    def test_devices_with_one_entry_is_valid(self):
-        sc = ScheduleCreate(
-            name="Single Device",
-            interval_minutes=30,
-            devices=[self._make_device()],
-        )
-        assert len(sc.devices) == 1
+    def test_no_targets_omitted_raises(self):
+        with pytest.raises(ValidationError):
+            ScheduleCreate(
+                name="No Targets",
+                interval_minutes=30,
+            )
 
 
 # ---------------------------------------------------------------------------

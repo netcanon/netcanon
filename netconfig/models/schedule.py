@@ -11,7 +11,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ScheduleDevice(BaseModel):
@@ -48,7 +48,11 @@ class BackupSchedule(BaseModel):
         enabled: When ``False`` the schedule is paused — the APScheduler
             job is removed but the definition is kept on disk.
         interval_minutes: How often the backup runs, in minutes.
-        devices: Devices to back up on each run.
+        devices: Devices to back up on each run (legacy inline list, kept
+            for backward compatibility with pre-profile schedules).
+        target_type_keys: Back up all profiles whose ``type_key`` is in
+            this list.
+        target_device_ids: Back up the specific profile UUIDs in this list.
         created_at: UTC time the schedule was created.
         last_run_at: UTC time of the most recent triggered run.
         next_run_at: UTC time APScheduler will next fire this schedule;
@@ -60,7 +64,9 @@ class BackupSchedule(BaseModel):
     name: str
     enabled: bool = True
     interval_minutes: int = Field(ge=1)
-    devices: list[ScheduleDevice]
+    devices: list[ScheduleDevice] = []
+    target_type_keys: list[str] = []   # back up all profiles of these type_keys
+    target_device_ids: list[str] = []  # back up these specific profile UUIDs
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
@@ -75,9 +81,23 @@ class ScheduleCreate(BaseModel):
     Attributes:
         name: Human-readable label.
         interval_minutes: Run frequency in minutes (minimum 1).
-        devices: One or more devices to back up on each run.
+        target_type_keys: Back up all profiles whose ``type_key`` is in
+            this list.
+        target_device_ids: Back up the specific profile UUIDs in this list.
+
+    At least one of ``target_type_keys`` or ``target_device_ids`` must be
+    non-empty.
     """
 
     name: str
     interval_minutes: int = Field(ge=1, description="Interval between runs, in minutes")
-    devices: list[ScheduleDevice] = Field(min_length=1)
+    target_type_keys: list[str] = []
+    target_device_ids: list[str] = []
+
+    @model_validator(mode="after")
+    def _at_least_one_target(self) -> "ScheduleCreate":
+        if not self.target_type_keys and not self.target_device_ids:
+            raise ValueError(
+                "At least one of target_type_keys or target_device_ids must be non-empty"
+            )
+        return self

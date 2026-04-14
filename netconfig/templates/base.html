@@ -49,6 +49,7 @@
   <nav data-testid="nav">
     <a href="/" class="brand" data-testid="nav-brand">NetConfig</a>
     <a href="/"            data-testid="nav-home"        {% if active_page == 'home' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
+    <a href="/devices"     data-testid="nav-devices"     {% if active_page == 'devices' %}class="active" aria-current="page"{% endif %}>Devices</a>
     <a href="/jobs"        data-testid="nav-jobs"        {% if active_page == 'jobs' %}class="active" aria-current="page"{% endif %}>Jobs</a>
     <a href="/schedules"   data-testid="nav-schedules"   {% if active_page == 'schedules' %}class="active" aria-current="page"{% endif %}>Schedules</a>
     <a href="/configs"     data-testid="nav-configs"     {% if active_page == 'configs' %}class="active" aria-current="page"{% endif %}>Configs</a>

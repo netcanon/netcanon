@@ -19,31 +19,17 @@ pytestmark = pytest.mark.integration
 # ---------------------------------------------------------------------------
 
 
-def _device_payload(
-    type_key: str = "Cisco",
-    host: str = "192.168.1.1",
-    username: str = "admin",
-    password: str = "pw",
-) -> dict:
-    return {
-        "type_key": type_key,
-        "host": host,
-        "username": username,
-        "password": password,
-    }
-
-
 def _schedule_payload(
     name: str = "Test schedule",
     interval_minutes: int = 1440,
-    devices: list[dict] | None = None,
+    target_type_keys: list[str] | None = None,
 ) -> dict:
-    if devices is None:
-        devices = [_device_payload()]
+    if target_type_keys is None:
+        target_type_keys = ["Cisco"]
     return {
         "name": name,
         "interval_minutes": interval_minutes,
-        "devices": devices,
+        "target_type_keys": target_type_keys,
     }
 
 
@@ -147,8 +133,11 @@ class TestCreateSchedule:
         resp = _post_schedule(client, payload)
         assert resp.status_code == 422
 
-    def test_empty_devices_list_returns_422(self, client):
-        resp = _post_schedule(client, _schedule_payload(devices=[]))
+    def test_no_targets_returns_422(self, client):
+        resp = _post_schedule(
+            client,
+            {"name": "Test", "interval_minutes": 1440, "target_type_keys": [], "target_device_ids": []},
+        )
         assert resp.status_code == 422
 
 
