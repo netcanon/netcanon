@@ -46,6 +46,14 @@ class NavBar:
         self._page.locator('[data-testid="nav-definitions"]').click()
         self._page.wait_for_url("**/definitions")
 
+    def go_to_jobs(self) -> None:
+        self._page.locator('[data-testid="nav-jobs"]').click()
+        self._page.wait_for_url("**/jobs")
+
+    def go_to_schedules(self) -> None:
+        self._page.locator('[data-testid="nav-schedules"]').click()
+        self._page.wait_for_url("**/schedules")
+
     def go_to_api_docs(self) -> None:
         self._page.locator('[data-testid="nav-api-docs"]').click()
 
@@ -183,3 +191,90 @@ class DefinitionsPage:
 
     def row_for_type_key(self, type_key: str):
         return self._page.locator(f'[data-testid="definition-row"][data-type-key="{type_key}"]')
+
+
+# ---------------------------------------------------------------------------
+# Jobs page
+# ---------------------------------------------------------------------------
+
+
+class JobsPage:
+    """Helpers for the ``/jobs`` page."""
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def no_jobs_msg(self):
+        return self._page.locator('[data-testid="no-jobs-msg"]')
+
+    def cards(self):
+        return self._page.locator('[data-testid="job-card"]')
+
+    def first_card_header(self):
+        return self._page.locator('[data-testid="job-card-header"]').first
+
+    def toggle_first_card(self) -> None:
+        """Click the first card header to expand or collapse it."""
+        self.first_card_header().click()
+
+    def card_body(self, n: int = 0):
+        """Return the nth card body (``data-testid="job-card-body"``)."""
+        return self._page.locator('[data-testid="job-card-body"]').nth(n)
+
+
+# ---------------------------------------------------------------------------
+# Schedules page
+# ---------------------------------------------------------------------------
+
+
+class SchedulesPage:
+    """Helpers for the ``/schedules`` page."""
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def form(self):
+        return self._page.locator('[data-testid="schedule-form"]')
+
+    @property
+    def no_schedules_msg(self):
+        return self._page.locator('[data-testid="no-schedules-msg"]')
+
+    def rows(self):
+        return self._page.locator('[data-testid="schedule-row"]')
+
+    def fill_form(self, name: str, interval_value: str = "1440") -> None:
+        """Fill the schedule name input and select the interval.
+
+        ``interval_value`` is the ``<option value>`` of the interval select.
+        Use ``"custom"`` (or any non-preset value) to trigger the custom input,
+        then supply the numeric minutes string.  For the standard presets
+        (``"60"``, ``"360"``, ``"720"``, ``"1440"``, ``"10080"``) no custom
+        field will appear.
+        """
+        self._page.locator('[data-testid="sched-name-input"]').fill(name)
+        self._page.locator('[data-testid="sched-interval-select"]').select_option(
+            value=interval_value
+        )
+
+    def submit_form(self) -> None:
+        """Click the submit button and wait for the page to finish loading."""
+        self._page.locator('[data-testid="sched-submit-btn"]').click()
+        self._page.wait_for_url("**/schedules")
+        self._page.wait_for_load_state("networkidle")
+
+    def toggle_first(self) -> None:
+        """Click the first schedule's toggle button and wait for reload."""
+        self._page.locator('[data-testid="schedule-toggle-btn"]').first.click()
+        self._page.wait_for_load_state("networkidle")
+
+    def delete_first(self) -> None:
+        """Click the delete button on the first schedule row.
+
+        This only opens the inline confirm; the caller must click either
+        ``schedule-delete-confirm-btn`` (Yes) or ``schedule-delete-cancel-btn``
+        (No) to complete the interaction.
+        """
+        self._page.locator('[data-testid="schedule-delete-btn"]').first.click()
