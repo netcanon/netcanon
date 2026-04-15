@@ -1,0 +1,676 @@
+================================================================================
+                    NETCONFIG ARCHITECTURAL REVIEW REPORT
+                    12-Lens Analysis — Generated 2026-04-14
+================================================================================
+
+
+================================================================================
+ 1. SECURITY
+================================================================================
+
+Authentication / Authorization
+  - Zero authentication on all endpoints. No JWT, OAuth, or Basic Auth.
+  - Credentials exposed via /api/v1/devices/ endpoint in plaintext.
+  - Default binding 0.0.0.0:8000 — open to entire network.
+
+Credential Storage
+  - Fernet encryption via credentials.py.
+  - SecretStr in Pydantic models prevents repr/str leakage.
+  - Legacy plaintext migration supported.
+  - CRITICAL GAP: API responses expose plaintext credentials.
+
+Input Validation
+  - Pydantic validators on all input models.
+  - Hostname/IP validation via regex and ipaddress library.
+  - No shell injection risk — SSH commands sourced from YAML definitions only.
+
+Path Traversal
+  - _FILENAME_RE regex in file_store.py.
+  - resolve_path() with is_relative_to() check.
+  - Layered defense (regex + path resolution).
+
+XSS / Template Injection
+  - Jinja2 autoescape enabled globally.
+  - textContent used (not innerHTML) in JavaScript.
+  - profiles_safe strips credentials before embedding in templates.
+
+Dependency Security
+  - Well-maintained dependencies (FastAPI, Pydantic, Netmiko, Paramiko).
+  - Loose version pinning (>= constraints) — no lock file.
+
+Data at Rest / In Transit
+  - Fernet encryption at rest for credentials.
+  - No HTTPS enforcement (HTTP only).
+  - SSH to devices encrypted via Paramiko/Netmiko.
+
+Attack Surface
+  - Binds 0.0.0.0:8000 by default.
+  - All endpoints publicly accessible.
+  - Swagger UI at /docs publicly available.
+  - open_in_editor uses os.startfile() — desktop only.
+
+Secrets Management
+  - OS keyring for encryption key storage.
+  - No HSM integration.
+  - No key rotation mechanism.
+  - Plaintext credentials held in memory during operations.
+
+Known Limitations
+  - No API authentication.
+  - HTTP-only (no TLS).
+  - No audit logging with user identity.
+  - Single encryption key for all credentials.
+
+Risk Summary
+  CRITICAL: Unauthenticated API, plaintext credentials in API responses, HTTP-only.
+  MEDIUM: Single encryption key, no rate limiting, loose dependency pinning.
+
+
+================================================================================
+ 2. RELIABILITY
+================================================================================
+
+Error Handling
+  - Broad except Exception in _run_backup_job (backups.py:188).
+  - Per-device isolation — one device failure does not affect others.
+  - NetmikoCollector: 30s connect timeout, 120s read timeout.
+  - ParamikoCollector: try/finally for session cleanup.
+
+Background Tasks
+  - FastAPI BackgroundTasks for job execution.
+  - APScheduler AsyncIOScheduler for recurring schedules.
+  - asyncio.to_thread() bridges blocking SSH to async event loop.
+
+SSH / Network Failures
+  - Caught and recorded per-device in BackupResult.
+  - AutoAddPolicy used (no SSH host key verification).
+  - No circuit breaker pattern.
+
+Data Persistence
+  - File-based JSON stores.
+  - Skip-on-corrupt pattern: log warning, continue with valid files.
+  - Collision safety with numeric filename suffixes.
+
+Test Coverage
+  - 20 test modules, 454+ test cases.
+  - Unit / integration / e2e / desktop test layers.
+  - FakeCollector for SSH isolation in tests.
+
+Retry Logic
+  - NONE. All operations are single-shot attempts.
+
+Crash Recovery
+  - In-flight jobs lost on crash (no persistent job store).
+  - Running state orphaned — no cleanup mechanism.
+  - Schedules survive restart (reload from disk).
+
+Scheduler Persistence
+  - Schedule definitions reload from disk on startup.
+  - APScheduler runs in-memory only — no catch-up for missed runs during downtime.
+
+Job State Tracking
+  - pending -> running -> completed lifecycle.
+  - In-memory source of truth during execution.
+  - Disk persistence only on completion.
+
+Risk Summary
+  HIGH: No persistent job store (in-flight lost on crash), no retry logic,
+        wait=False scheduler shutdown.
+  MEDIUM: Orphaned running state, single-shot SSH timeouts.
+
+
+================================================================================
+ 3. USABILITY
+================================================================================
+
+UI Feedback
+  - Toast notification system (base.html:83-114).
+  - Three severity levels (success, warning, error).
+  - 4-second auto-dismiss.
+  - Button state changes ("Start Backup" -> "Running...").
+  - No animated spinner/progress indicator.
+
+Form UX
+  - HTML5 required attributes for validation.
+  - No inline field-level validation feedback.
+  - Conditional enable_password field.
+  - Port hidden in HTML details element.
+  - Profile pre-fill via async API fetch.
+
+Navigation
+  - 7-tab horizontal nav with aria-current.
+  - No hamburger menu for mobile viewports.
+  - Hash-based navigation for /configs#{filename} and /jobs#{job_id}.
+
+Accessibility
+  - aria-current on nav links.
+  - aria-hidden on decorative elements.
+  - No focus trapping in delete confirmation dialogs.
+  - No role="alertdialog" on confirmation dialogs.
+  - Color contrast mostly adequate (.badge-running borderline at 3.1:1).
+
+Responsive Design
+  - viewport meta tag present.
+  - max-width 1100px container.
+  - Config viewer: min(800px, 94vw).
+  - Tables lack horizontal scroll on mobile.
+  - No media queries for mobile breakpoints.
+
+Desktop vs Web
+  - open_in_editor: desktop-only (conditional template rendering).
+  - Blob download works in both platforms.
+  - Settings diverge via sys.frozen detection.
+
+Onboarding
+  - Good empty states with actionable next steps.
+  - Form-first approach for adding devices.
+  - No guided tour or tutorial.
+  - type_key field not explained to users.
+
+Config Viewer
+  - Modal with <pre> element.
+  - Escape key to close.
+  - No syntax highlighting.
+  - No copy-to-clipboard button.
+  - No diff view between config versions.
+
+Risk Summary
+  CRITICAL: Accessibility gaps (no focus trapping, no aria-live on toasts),
+            mobile tables break below 500px.
+  MODERATE: No inline validation, no syntax highlighting, no diff view.
+
+
+================================================================================
+ 4. MAINTAINABILITY
+================================================================================
+
+Code Organisation
+  - Strong layered architecture (routes / services / models / storage).
+  - BaseConfigStore interface for storage abstraction.
+  - Collector strategy pattern via get_collector factory.
+  - Models separated by domain.
+  - Five route modules.
+  - Settings singleton pattern.
+
+Duplication
+  - _validate_host() duplicated in device.py and device_profile.py (~22 lines each).
+  - Store loading boilerplate in 3 stores (~35 lines each).
+  - Credential migration logic duplicated across stores.
+  - JSON serialization inconsistency: device_profile_store uses double serialization.
+
+Abstraction Quality
+  - Good storage abstraction (5 methods in base interface).
+  - Adequate collector abstraction (single collect() method).
+  - Strong configuration abstraction via DeviceDefinition schema.
+  - Missing: output cleaning/normalization abstraction.
+
+Test Structure
+  - 33 test files, ~2065 lines total.
+  - 8 unit files (~780 lines), 5 integration, 3 e2e, 4 desktop.
+  - testid_reference.md for DOM test attribute inventory.
+
+Documentation
+  - Excellent: CLAUDE.md, SECURITY.md, CHANGELOG.md.
+  - Module docstrings present.
+  - Google-style function docstrings.
+  - Missing: CONTRIBUTING.md, architecture diagram, API docs beyond Swagger.
+
+Dependency Management
+  - Clean minimal dependency tree.
+  - Pydantic v2 throughout.
+  - No lock file (>= constraints only).
+
+Configuration
+  - Single Settings class with environment variable overrides.
+  - Desktop override via Settings subclass.
+  - No runtime settings API.
+
+Naming Conventions
+  - verb-noun routes.
+  - _private helpers.
+  - UPPER_CASE constants.
+  - Comprehensive type hints (Python 3.10+ union syntax).
+
+Definition Extensibility
+  - Vendor-agnostic YAML schema.
+  - Two collector strategies (netmiko, paramiko_shell).
+  - No plugin system for adding collectors without code changes.
+
+Risk Summary
+  MEDIUM: Validation duplication risk of divergence, no coverage metrics.
+  LOW: Unimplemented prompts.trailing, collector extensibility requires code changes.
+
+
+================================================================================
+ 5. PERFORMANCE
+================================================================================
+
+Async / Sync Boundaries
+  - Routes correctly declared as async.
+  - asyncio.to_thread() used for blocking SSH operations.
+  - create_backup() is sync (should be async def).
+  - Default ThreadPoolExecutor (~5 workers per core).
+
+SSH Session Management
+  - Fresh connection per backup (no connection pooling).
+  - Context managers guarantee cleanup.
+  - Netmiko operations are blocking.
+  - Paramiko has hardcoded time.sleep() totaling ~7s+ per device.
+
+File I/O
+  - list_configs() uses rglob("*") on every call — O(n) disk I/O with no caching.
+  - Collision checking via O(n) exists() loop.
+  - Migration check runs every store instantiation.
+
+In-Memory Data
+  - O(1) dict lookups for stores.
+  - No eviction policy for any store.
+  - 36,500 jobs/year (100/day) = ~1GB in memory.
+  - Job records only added, never removed.
+
+Background Task Throughput
+  - Devices within a job processed sequentially (backups.py:157 for loop).
+  - 10 devices x 30s timeout = 300s minimum per job.
+  - No parallel device collection.
+
+Startup
+  - Sequential loading of all stores.
+  - Definitions loaded once.
+  - Scheduler re-registration O(n) on number of schedules.
+
+Encryption
+  - Fernet lazy initialization, cached globally.
+  - Keyring access 100-500ms on first access (one-time cost).
+
+Template Rendering
+  - Full data context passed per request (all definitions, all jobs, all profiles).
+  - No pagination for any listing.
+  - profiles_safe embedded directly in DOM.
+
+Frontend
+  - CSS inline (no external stylesheet requests).
+  - JS minimal and inline.
+  - No external frontend dependencies.
+
+Risk Summary
+  HIGH: Sequential device backup, unbounded job history, O(n) list_configs.
+  MEDIUM: Full template context per request, Paramiko sleep delays, sync create_backup.
+
+
+================================================================================
+ 6. DATA INTEGRITY
+================================================================================
+
+Atomicity
+  - NO atomic writes anywhere.
+  - All stores use Path.write_text() directly.
+  - No write-to-temp-then-rename pattern.
+  - Crash during write = truncated/corrupt file.
+
+Concurrent Access
+  - CRITICAL: No locking mechanism.
+  - Shared store instances across threads.
+  - Two concurrent job_store.save() calls could corrupt JSON.
+  - No threading.RLock() or file-level locking.
+
+Filename Collision
+  - Good collision safety with numeric suffixes (_1, _2, ...).
+  - TOCTOU race window between path.exists() and write_text().
+
+Data Validation
+  - Pydantic on input (strong).
+  - model_validate() on load from disk.
+  - Corrupt files logged and silently skipped.
+
+Migration Safety
+  - decrypt_field() detects plaintext and migrates.
+  - No atomic migration transaction.
+  - Plaintext exposure if crash occurs during migration.
+  - No version marker on migrated data.
+
+Config Content Integrity
+  - NO checksums, CRCs, or any integrity verification.
+  - Silent corruption would go undetected.
+
+Job Result Consistency
+  - In-memory updates during execution.
+  - Disk persistence only after all devices complete.
+  - Crash mid-job = results lost entirely.
+
+Data Loss Scenarios
+  - Config write truncated on crash -> unrecoverable.
+  - Profile migration interrupted -> corrupt JSON.
+  - Job crash -> results lost, orphaned config files.
+
+Risk Summary
+  CRITICAL: No atomic writes (data loss on crash), no concurrent access locking.
+  HIGH: Sidecar metadata atomicity, credential exposure during migration.
+  MEDIUM: No checksums, job state divergence on crash.
+
+
+================================================================================
+ 7. CORRECTNESS
+================================================================================
+
+Core Logic
+  - Backup worker correct: status transitions, per-device isolation, wall-clock timing.
+  - Schedule execution correct: async/sync bridge, target resolution,
+    last_run_at update after completion.
+
+Filename Edge Cases
+  - Encoding correct: dots/colons replaced with hyphens.
+  - Collision counter correct (_1, _2, ...).
+  - _FILENAME_RE non-greedy parsing handles underscores in device types.
+
+Pydantic Validation
+  - BackupSchedule validates interval_minutes >= 1.
+  - at_least_one_target custom validator.
+  - GAP: target_type_keys not validated against loaded definitions at creation time.
+
+Schedule Timing
+  - All UTC consistently (datetime.now(timezone.utc)).
+  - APScheduler IntervalTrigger used.
+  - misfire_grace_time default 1s (not configurable).
+
+YAML Parsing
+  - Two-pass design (load then validate).
+  - Priority sorting for definition precedence.
+  - yaml.safe_load() — no arbitrary code execution.
+  - Graceful skip on corrupt YAML files.
+
+API Contracts
+  - 202 for POST /backups (accepted, async processing).
+  - 201 for POST /schedules (created).
+  - 422 for validation errors.
+  - 404 with detail message for missing resources.
+  - All correct per HTTP specification.
+
+Test Assertions
+  - Targeted assertions (security properties, validation bounds, model invariants).
+  - Cover file round-trips.
+  - GAP: No test for partial batch failure (1 of 2 devices fails).
+
+Known Bugs
+  - IPv6 host reconstruction is lossy:
+    file_store.py:280 — safe_host.replace("-", ".") incorrect for IPv6 addresses.
+  - Schedule silently produces zero targets if referenced profile is deleted.
+  - APScheduler grace time not configurable — missed runs silently skipped.
+
+Risk Summary
+  LOW: IPv6 reconstruction cosmetic bug.
+  MEDIUM: Silent empty schedule targets, APScheduler missed schedule handling.
+
+
+================================================================================
+ 8. RESILIENCE
+================================================================================
+
+SSH Failures
+  - Caught per-device in try-except block.
+  - No retry logic.
+  - Hardcoded timeouts: 30s connect, 120s read.
+
+Keyring Unavailability
+  - CRITICAL GAP: _get_fernet() has no try-except around keyring calls.
+  - Fatal crash on headless systems or when OS credential store is inaccessible.
+
+Storage Directory
+  - mkdir(parents=True, exist_ok=True) at init.
+  - write_text OSError caught in backup handler.
+  - No disk space pre-check.
+  - Partial writes leave truncated JSON.
+
+Scheduler Recovery
+  - Schedules reload from disk on startup.
+  - No APScheduler persistent job store.
+  - Missed runs during downtime are not caught up.
+
+Corrupt JSON Handling
+  - Skip-on-corrupt pattern (log warning, continue with valid entries).
+  - Silent profile/schedule loss — user not notified.
+
+Network Timeout
+  - Hardcoded 30s connect, 120s read.
+  - Not configurable per device or at runtime.
+
+Partial Batch Failures
+  - Well-handled. Each device independent.
+  - All devices attempted regardless of individual failures.
+
+Desktop App Crash
+  - Server crash leaves WebView hanging.
+  - No health check / heartbeat mechanism.
+  - Daemon thread cleanup uncertain on abnormal exit.
+
+Dependency Unavailability
+  - Dynamic imports in _get_fernet().
+  - No startup validation of required dependencies.
+  - Fail at runtime, not at startup.
+
+Risk Summary
+  CRITICAL: Keyring unavailability is fatal (no graceful degradation).
+  HIGH: No startup dependency validation.
+  MEDIUM: Scheduler state lost on crash, no health check.
+
+
+================================================================================
+ 9. COMPLIANCE
+================================================================================
+
+License Compatibility
+  - BSD-3 / MIT / Apache / LGPL-2.1 — all permissive and compatible.
+  - cryptography: dual Apache-2.0 / BSD-3-Clause.
+  - No copyleft conflicts.
+
+Hardcoded Credentials
+  - CLEAN. Test fixtures use placeholder values.
+  - .env file gitignored.
+
+.gitignore Coverage
+  - EXCELLENT. devices/, schedules/, jobs/, configs/ all excluded.
+  - No risk of committing operational data.
+
+Log Sanitisation
+  - SecretStr prevents repr/str leakage.
+  - SSH logs include username but not password.
+  - CAUTION: exception text from SSH libraries could contain partial credentials
+    via str(exc).
+
+Data Retention
+  - NO automatic purge policy.
+  - Indefinite accumulation of configs, jobs, and backups.
+  - Manual deletion via individual DELETE endpoints only.
+
+Audit Trail
+  - Good INFO logging for CRUD operations with context.
+  - No user identity in logs (single-user assumption).
+
+GDPR Considerations
+  - SSH credentials stored persistently.
+  - No bulk export or bulk deletion API.
+  - Manual DPA/DPIA assessment needed.
+  - Right to erasure requires manual deletion across multiple stores.
+
+Export Controls
+  - cryptography library: ECCN 5D002.
+  - Generally Available exemption applies (EAR Part 740.13).
+  - No special action needed for distribution.
+
+Risk Summary
+  HIGH: No data retention/purge policy.
+  MEDIUM: No user identity in audit logs, no bulk deletion, GDPR manual work needed.
+
+
+================================================================================
+ 10. COST CONTROL
+================================================================================
+
+Disk Space Growth
+  - No retention policy — configs accumulate indefinitely.
+  - rglob O(n) listing on every request.
+  - Manual deletion only (no auto-purge).
+  - Sidecar .meta.json files double I/O per config.
+
+Memory Footprint
+  - Full directory load into memory at startup.
+  - No eviction or LRU policy on any store.
+  - 10K jobs = significant RAM consumption.
+  - Plaintext credentials held in memory indefinitely (no zeroing).
+
+CPU Usage
+  - APScheduler per-schedule triggers.
+  - No job coalescing or batching.
+  - SSH connect-collect-disconnect cycle per device.
+
+SSH Efficiency
+  - No connection pooling or reuse.
+  - Sequential per-device processing.
+  - Paramiko fixed sleep delays totaling 7s+ per device.
+  - recv(65536) fixed chunk size for large configs.
+
+Background Workers
+  - Sequential devices within each job.
+  - DefaultExecutor limited by CPU cores.
+  - 3 concurrent jobs x 10 devices = 30 blocked threads.
+
+Startup Cost
+  - Sequential loading (definitions, jobs, profiles, schedules).
+  - Keyring 100-500ms on first credential access.
+
+Build / Package Size
+  - PySide6 ~50MB + FastAPI deps ~100-150MB = ~200MB MSI estimate.
+  - No size tracking in CI.
+
+Operational Overhead
+  - Schedules automate backup triggers but config retention is fully manual.
+  - No bulk operations for cleanup.
+  - No templates or presets for common configurations.
+
+Risk Summary
+  HIGH: Disk growth without retention policy, O(n) list_configs on every request.
+  MEDIUM: Memory growth (unbounded job store), SSH per-device overhead.
+  LOW: Build size reasonable for a desktop application.
+
+
+================================================================================
+ 11. OBSERVABILITY
+================================================================================
+
+Logging Configuration
+  - Centralized configure_logging() in logging_config.py.
+  - Idempotent setup (safe to call multiple times).
+  - Rotating files: 5MB max, 3 backup rotations.
+  - Format: %(asctime)s %(levelname)-8s %(name)-40s %(message)s
+
+Structured vs Unstructured
+  - Python standard logging (unstructured).
+  - No structlog or json-logger integration.
+  - Job IDs and hostnames embedded in message strings (not structured fields).
+
+Credential Sanitisation
+  - SecretStr prevents repr leakage.
+  - SSH logs include username but not password.
+  - test_logging_config.py validates sanitisation.
+  - GAP: str(exc) in error paths could leak authentication details.
+
+Job Status Tracking
+  - BackupJob model with full lifecycle tracking.
+  - FileJobStore for persistence.
+  - Per-device BackupResult with status, error, duration, config record.
+
+Error Visibility
+  - Per-device error captured in BackupResult.
+  - exc_info=True for full tracebacks in logs.
+  - 404 responses include human-readable detail messages.
+
+Metrics
+  - NONE. No Prometheus, StatsD, or OpenTelemetry integration.
+  - No request latency, success rate, or queue depth metrics.
+
+Debug Tooling
+  - DEBUG level available via logging configuration.
+  - SSH lifecycle logged (connect, commands, output progress, close).
+  - No request or correlation IDs.
+
+Scheduler Health
+  - Schedules log at INFO level.
+  - APScheduler internal logger not controlled.
+  - No explicit health check endpoint.
+
+SSH Tracing
+  - Full session lifecycle logged (connect, commands, output progress, close).
+  - No session or trace IDs for correlating multi-device backups.
+
+Log Tests
+  - test_logging_config.py covers handler setup, file creation, third-party suppression.
+  - Missing: credential redaction validation in error paths.
+
+Risk Summary
+  HIGH: No metrics/instrumentation, unbounded job log files.
+  MEDIUM: No correlation IDs, unstructured logging, APScheduler health invisible.
+
+
+================================================================================
+ 12. DISTRIBUTION
+================================================================================
+
+Packaging
+  - cx_Freeze 7.0.0+ for MSI generation.
+  - bdist_msi build command.
+  - Win32GUI base (no console window).
+  - Start Menu shortcut included.
+  - Immutable upgrade code: {A3F2C1B0-7E4D-4A9F-8B3C-2D5E6F7A8B9C}.
+
+Dependency Bundling
+  - Static packages list in setup_desktop.py (fragile to dynamic imports).
+  - include_files for definitions/ directory.
+  - Large test/dev packages excluded.
+
+Update Mechanism
+  - NONE. Manual MSI download and reinstall only.
+  - No delta updates.
+  - No in-app version check.
+  - No /version endpoint.
+
+Cross-Platform
+  - Windows-only desktop application.
+  - PySide6/pystray installed on all platforms but only functional on Windows.
+  - No macOS .app or Linux .deb packaging.
+
+Installation Footprint
+  - ~200MB estimated.
+  - optimize=1 for .pyc compression.
+  - No size tracking in CI.
+
+Version Management
+  - Duplicated in pyproject.toml (line 7) and setup_desktop.py (line 161).
+  - No __version__ attribute in code.
+  - No /version or /health endpoint.
+
+Config Migration
+  - %APPDATA%\NetConfig survives reinstall.
+  - No schema versioning on persisted data.
+  - No migration hooks.
+  - Silent failure if model changes break stored data.
+
+Web vs Desktop
+  - Clean separation via Settings subclass and sys.frozen detection.
+  - desktop_settings() sets open_in_editor=True.
+  - Misconfiguration risk if detection logic changes.
+
+CI/CD
+  - Tests present (33 files).
+  - No .github/workflows or CI configuration.
+  - No automated build/release pipeline.
+  - Manual CHANGELOG maintenance.
+
+Risk Summary
+  HIGH: No update mechanism, version skew between pyproject.toml/setup_desktop.py,
+        no CI/CD pipeline, Windows-only desktop.
+  MEDIUM: Fragile dependency discovery, no runtime version endpoint,
+          misconfiguration risk.
+
+
+================================================================================
+                           END OF REPORT
+================================================================================

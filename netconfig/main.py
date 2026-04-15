@@ -245,12 +245,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for c in configs:
             if c.device_profile_id:
                 configs_by_profile[c.device_profile_id].append(c)
+        # Strip credentials before embedding profiles in the DOM.
+        _CRED_FIELDS = {"password", "enable_password"}
+        profiles_safe = {
+            p.id: {k: v for k, v in p.model_dump().items() if k not in _CRED_FIELDS}
+            for p in profiles
+        }
         return templates.TemplateResponse(
             request,
             "devices.html",
             {
                 "active_page": "devices",
                 "device_profiles": profiles,
+                "profiles_safe": profiles_safe,
                 "definitions": request.app.state.definitions,
                 "configs_by_profile": dict(configs_by_profile),
             },

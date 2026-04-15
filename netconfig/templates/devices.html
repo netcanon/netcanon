@@ -90,7 +90,7 @@
   {% for profile in device_profiles %}
   <div class="device-card" data-testid="device-card"
        data-device-id="{{ profile.id }}"
-       data-profile="{{ profile | tojson }}">
+       data-profile="{{ profiles_safe[profile.id] | tojson }}">
 
     <div class="device-card-header" data-testid="device-card-header"
          onclick="toggleDevice(this)">
@@ -218,15 +218,15 @@
           </td>
           <td data-testid="device-config-size">{{ config.size_bytes | filesizeformat }}</td>
           <td style="white-space:nowrap">
-            <a href="/api/v1/configs/{{ config.filename }}" target="_blank"
-               class="btn-secondary"
-               data-testid="device-config-view-link"
-               style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block">View</a>
-            <a href="/api/v1/configs/{{ config.filename }}" download="{{ config.filename }}"
-               class="btn-secondary"
-               data-testid="device-config-download-btn"
-               style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block;margin-left:.3rem"
-               title="Download {{ config.filename }}">&#8595;</a>
+            <button onclick="viewConfig('{{ config.filename }}')"
+                    class="btn-secondary"
+                    data-testid="device-config-view-link"
+                    style="font-size:.8rem;padding:.3rem .6rem">View</button>
+            <button onclick="downloadConfig('{{ config.filename }}')"
+                    class="btn-secondary"
+                    data-testid="device-config-download-btn"
+                    style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+                    title="Download {{ config.filename }}">&#8595;</button>
           </td>
         </tr>
         {% endfor %}
@@ -333,17 +333,20 @@ deviceForm.addEventListener('submit', async function(e) {
 
 /* ── Run backup now for a single profile ── */
 async function runDeviceBackup(profileId) {
-  var card = document.querySelector('[data-device-id="' + profileId + '"]');
-  var profile;
+  /* Fetch the full profile (including credentials) from the API rather than
+     reading from a DOM attribute, so passwords are never embedded in the page. */
+  var fullProfile;
   try {
-    profile = JSON.parse(card.dataset.profile);
-  } catch (_) {
-    showToast('Could not read profile data.', 'error');
+    var pr = await fetch('/api/v1/devices/' + encodeURIComponent(profileId));
+    if (!pr.ok) { showToast('Could not load device credentials.', 'error'); return; }
+    fullProfile = await pr.json();
+  } catch (e) {
+    showToast('Network error: ' + e.message, 'error');
     return;
   }
 
-  var credentials = { username: profile.username, password: profile.password };
-  if (profile.enable_password) credentials.enable_password = profile.enable_password;
+  var credentials = { username: fullProfile.username, password: fullProfile.password };
+  if (fullProfile.enable_password) credentials.enable_password = fullProfile.enable_password;
 
   try {
     var res = await fetch('/api/v1/backups', {
@@ -351,11 +354,11 @@ async function runDeviceBackup(profileId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         devices: [{
-          type_key: profile.type_key,
-          host:     profile.host,
-          port:     profile.port,
+          type_key: fullProfile.type_key,
+          host:     fullProfile.host,
+          port:     fullProfile.port,
           credentials: credentials,
-          device_profile_id: profile.id,
+          device_profile_id: fullProfile.id,
         }],
       }),
     });

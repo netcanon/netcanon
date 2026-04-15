@@ -43,6 +43,12 @@
     pre { background: #1e1e1e; color: #d4d4d4; padding: 1rem; border-radius: 6px; overflow: auto; font-size: .85rem; line-height: 1.5; }
     .alert { padding: .75rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
     .alert-info { background: #d1ecf1; color: #0c5460; }
+    /* Config viewer modal */
+    #_config-viewer { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000; align-items:center; justify-content:center; }
+    #_config-viewer-box { background:#fff; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,.3); width:min(800px,94vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+    #_config-viewer-header { display:flex; align-items:center; padding:.65rem 1rem; background:#1a1a2e; color:#eee; gap:.75rem; }
+    #_config-viewer-title { flex:1; font-family:monospace; font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #_config-viewer-box pre { flex:1; overflow:auto; margin:0; border-radius:0; white-space:pre; }
   </style>
 </head>
 <body>
@@ -59,6 +65,19 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  <!-- Config viewer modal -->
+  <div id="_config-viewer" onclick="if(event.target===this)closeConfigViewer()">
+    <div id="_config-viewer-box">
+      <div id="_config-viewer-header">
+        <span id="_config-viewer-title"></span>
+        <button onclick="closeConfigViewer()"
+                style="background:transparent;color:#eee;font-size:1.1rem;padding:.2rem .5rem;
+                       border:1px solid #555;border-radius:4px;cursor:pointer;font-weight:normal">&#10005;</button>
+      </div>
+      <pre id="_config-viewer-pre">Loading&#8230;</pre>
+    </div>
+  </div>
 
   <!-- Toast notification -->
   <div id="_toast" data-testid="toast"
@@ -92,6 +111,42 @@
     toast.style.display = '';
     clearTimeout(toast._t);
     toast._t = setTimeout(function() { toast.style.display = 'none'; }, 4000);
+  }
+  /* ── Config viewer modal ── */
+  async function viewConfig(filename) {
+    var modal = document.getElementById('_config-viewer');
+    var pre   = document.getElementById('_config-viewer-pre');
+    var title = document.getElementById('_config-viewer-title');
+    title.textContent = filename;
+    pre.textContent   = 'Loading\u2026';
+    modal.style.display = 'flex';
+    try {
+      var res = await fetch('/api/v1/configs/' + encodeURIComponent(filename));
+      if (!res.ok) { pre.textContent = 'Error ' + res.status + ': ' + res.statusText; return; }
+      pre.textContent = await res.text();
+    } catch(e) { pre.textContent = 'Network error: ' + e.message; }
+  }
+
+  function closeConfigViewer() {
+    document.getElementById('_config-viewer').style.display = 'none';
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeConfigViewer();
+  });
+
+  /* ── Config downloader (WebView-safe blob approach) ── */
+  async function downloadConfig(filename) {
+    try {
+      var res = await fetch('/api/v1/configs/' + encodeURIComponent(filename));
+      if (!res.ok) { showToast('Download failed: ' + res.statusText, 'error'); return; }
+      var blob = new Blob([await res.text()], { type: 'text/plain' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href = url; a.download = filename; a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    } catch(e) { showToast('Download error: ' + e.message, 'error'); }
   }
   </script>
   {% block scripts %}{% endblock %}

@@ -6,7 +6,30 @@ They are accepted as request bodies from API callers and the interactive
 web form, never persisted to disk (credentials are in-memory only).
 """
 
-from pydantic import BaseModel, Field, SecretStr
+import ipaddress
+import re
+
+from pydantic import BaseModel, Field, SecretStr, field_validator
+
+# RFC-1123 hostname: labels of 1–63 alphanumeric/hyphen chars, not starting
+# or ending with a hyphen, separated by dots.
+_HOSTNAME_RE = re.compile(
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
+    r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
+)
+
+
+def _validate_host(v: str) -> str:
+    """Accept a valid IPv4, IPv6, or RFC-1123 hostname; reject everything else."""
+    v = v.strip()
+    try:
+        ipaddress.ip_address(v)
+        return v
+    except ValueError:
+        pass
+    if _HOSTNAME_RE.match(v):
+        return v
+    raise ValueError(f"Invalid hostname or IP address: {v!r}")
 
 
 class DeviceCredentials(BaseModel):
@@ -33,7 +56,7 @@ class DeviceTarget(BaseModel):
     Attributes:
         type_key: Must match the ``type_key`` field of a loaded device
             definition (e.g. ``"Cisco"``, ``"Fortigate"``).
-        host: Hostname or IP address.
+        host: Hostname or IP address (IPv4, IPv6, or RFC-1123 hostname).
         port: SSH port number.  Defaults to 22.
         credentials: Login credentials.
         device_profile_id: UUID of the linked DeviceProfile, or None for
@@ -44,7 +67,12 @@ class DeviceTarget(BaseModel):
     host: str
     port: int = Field(22, ge=1, le=65535)
     credentials: DeviceCredentials
-    device_profile_id: str | None = None  # UUID of the linked DeviceProfile, or None for ad-hoc backups.
+    device_profile_id: str | None = None
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        return _validate_host(v)
 
 
 class BackupRequest(BaseModel):

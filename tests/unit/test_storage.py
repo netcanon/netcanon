@@ -325,3 +325,49 @@ class TestFileConfigStoreDelete:
         remaining = store.list_configs()
         assert len(remaining) == 1
         assert remaining[0].filename == r2.filename
+
+
+# ---------------------------------------------------------------------------
+# resolve_path() — path traversal protection (security)
+# ---------------------------------------------------------------------------
+
+
+class TestResolvePathSecurity:
+    """resolve_path() must reject any filename that could escape the storage root."""
+
+    def test_dotdot_sequence_raises(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path("../../etc/passwd")
+
+    def test_dotdot_with_valid_suffix_raises(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path("../../etc/passwd.cfg")
+
+    def test_bare_relative_path_raises(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path("subdir/file.cfg")
+
+    def test_absolute_path_raises(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path("/etc/passwd")
+
+    def test_empty_string_raises(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        with pytest.raises(FileNotFoundError):
+            store.resolve_path("")
+
+    def test_valid_filename_resolves(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "content")
+        path = store.resolve_path(record.filename)
+        assert path.exists()
+
+    def test_resolved_path_inside_storage_root(self, tmp_path: Path):
+        store = FileConfigStore(tmp_path)
+        record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "content")
+        path = store.resolve_path(record.filename)
+        assert path.resolve().is_relative_to(tmp_path.resolve())

@@ -161,6 +161,118 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+### Security
+
+- **Credential encryption at rest** (`netconfig/security/credentials.py`) —
+  Device passwords and enable passwords are now encrypted with Fernet
+  symmetric encryption before being written to disk.  The key is stored in
+  the OS secure credential store (Windows Credential Manager / macOS Keychain
+  / Linux SecretService) via the `keyring` library.  Existing plaintext
+  profiles and schedule device lists are automatically migrated to encrypted
+  storage on first load.  In-memory model objects always hold plaintext;
+  encryption is a storage-layer concern only.
+- **Path traversal protection** (`netconfig/storage/file_store.py`) —
+  `resolve_path()` now rejects any filename that does not match the expected
+  naming convention regex before touching the filesystem.  Both the
+  subdirectory and flat-fallback paths are verified to lie inside the storage
+  root via `Path.resolve().is_relative_to()`.
+- **Open-in-editor extension whitelist** (`netconfig/api/routes/configs.py`) —
+  `POST /api/v1/configs/{filename}/open` now checks the file extension against
+  an explicit allowlist (`{.cfg, .conf, .txt, .xml, .log}`) and returns 400
+  for any other type, preventing the OS handler from being invoked on
+  executables or other unintended file types.
+- **Host field validation** (`netconfig/models/device.py`,
+  `netconfig/models/device_profile.py`) — `DeviceTarget.host`,
+  `DeviceProfileCreate.host`, and `DeviceProfileUpdate.host` now validate
+  against `ipaddress.ip_address()` or an RFC-1123 hostname regex.  Shell
+  metacharacters, path separators, and other invalid values are rejected
+  with HTTP 422.
+- **Passwords removed from HTML DOM** — `data-password` /
+  `data-enable-password` attributes removed from the Dashboard
+  `<option>` elements (`index.html`).  Credentials are fetched via
+  `GET /api/v1/devices/{id}` when a saved device is selected.  The
+  `data-profile` attribute on Devices page cards (`devices.html`) no
+  longer includes credential fields; `runDeviceBackup()` fetches the full
+  profile from the API on demand.
+- **Data directories added to `.gitignore`** — `devices/`, `schedules/`,
+  `jobs/`, and `configs/` are now excluded from version control to prevent
+  credential-bearing files from being committed.
+- **`cryptography>=41.0.0` and `keyring>=24.0.0`** added to
+  `requirements.txt` and `pyproject.toml` dependencies.
+- **`SECURITY.md`** — new document describing the security architecture,
+  threat model, implemented controls, and known limitations.  Must be kept
+  up-to-date with any security-relevant change.
+
+### Tests (security)
+
+- `tests/unit/test_credentials.py` — 18 tests covering key initialisation
+  (first run, cached reload, idempotent), `encrypt`/`decrypt` round-trip
+  (empty string, unicode, uniqueness per call), `InvalidToken` on garbage
+  input, and `decrypt_field()` migration helper (encrypted→True,
+  plaintext→False, empty→False).
+- `tests/unit/test_storage.py` → `TestResolvePathSecurity` — 7 tests
+  covering `../` traversal, `.cfg`-suffixed traversal, absolute paths,
+  subdir-relative paths, empty string, and a positive case asserting the
+  resolved path stays inside the storage root.
+- `tests/unit/test_models.py` → `TestDeviceTarget` — 7 host validation tests:
+  IPv4, IPv6, hostname accepted; `../`, `/`, space, semicolon rejected.
+- `tests/integration/test_configs_api.py` → `TestOpenConfig` — 2 new tests
+  for extension whitelist (`.exe`, `.zip` → 400).
+- `tests/integration/test_configs_api.py` → `TestPathTraversal` — 4 new
+  tests: `../../etc/passwd` GET/DELETE → 404, `.cfg`-suffixed traversal →
+  404, absolute path → 404.
+
+### Added (device profiles)
+
+- **`DeviceProfile` model** (`netconfig/models/device_profile.py`) — stores
+  profile metadata: `id` (UUID), `name`, `type_key`, `host`, `port`, `username`,
+  `password`, `enable_password` (optional), `notes` (optional), `created_at`.
+  `DeviceProfileCreate` and `DeviceProfileUpdate` companion models.
+- **`FileDeviceProfileStore`** (`netconfig/storage/device_profile_store.py`) —
+  persists profiles as JSON under `{data_root}/devices/{id}.json`.
+- **`GET/POST /api/v1/devices/`** and **`GET/PUT/DELETE /api/v1/devices/{id}`** —
+  full CRUD for device profiles.
+- **`GET /devices`** — Devices page listing all profiles as collapsible cards.
+  Each card shows name, type badge, host, backup count, and actions (▶ Backup /
+  Edit / Delete).  Expanding the card reveals a per-config history table.
+  Inline edit panel (`device-edit-panel`) allows credential updates without
+  leaving the page.
+- **Dashboard — saved device select** (`data-testid="device-profile-select"`) —
+  selecting a saved profile pre-fills all form fields.  Optional "Save as Profile"
+  name input (`data-testid="device-profile-name-input"`) creates or links a profile
+  when the backup form is submitted.
+- **`ConfigRecord.device_profile_id`** — new optional field linking a stored
+  config to the device profile that produced it.  Persisted as a sidecar
+  `{filename}.meta.json` alongside each config file; sidecar is cleaned up on
+  delete.  `list_configs()` reads sidecars to populate the field.
+- **`BackupSchedule` — two-pronged targeting** — `target_type_keys: list[str]`
+  (back up all profiles of matching types) and `target_device_ids: list[str]`
+  (back up specific profile UUIDs); mix is permitted.  Inline `devices` list
+  retained for backward compatibility.  `ScheduleCreate` validates that at least
+  one target field is non-empty.
+- **`GET /devices` nav link** added between Dashboard and Jobs.
+  Order: Dashboard | Devices | Jobs | Schedules | Configs | Definitions | API Docs.
+
+### Fixed (View / Download buttons — WebView compatibility)
+
+- **`base.html`** — Added shared `viewConfig(filename)` function (fetches config
+  and displays it in a new inline modal), `downloadConfig(filename)` function
+  (blob-based download, works in Qt WebEngine where `<a download>` is unreliable),
+  and `closeConfigViewer()`.  New config viewer modal (`#_config-viewer`) added to
+  the base layout; closes on backdrop click or Escape key.
+- **`configs.html`** — View (`config-view-link`) and Download (`config-download-btn`)
+  changed from `<a target="_blank">` / `<a download>` to `<button>` elements
+  calling `viewConfig()` / `downloadConfig()`.  Added `DOMContentLoaded` hash
+  handler: navigating to `/configs#{filename}` scrolls to the matching row,
+  briefly highlights it, and auto-opens the viewer modal.
+- **`jobs.html`** — View (`job-config-view-link`) changed from
+  `<a href="/api/v1/configs/…" target="_blank">` to `<a href="/configs#{filename}">`
+  so clicking View on a job result navigates to the Configs tab with the file
+  pre-selected.  Download (`job-config-download-btn`) changed from `<a download>`
+  to `<button onclick="downloadConfig(…)">`.
+- **`devices.html`** — Same View / Download fix as `configs.html` applied to the
+  per-device config history table.
+
 ### Fixed
 
 - **`configs.html`** — Post-delete empty-check used CSS selector `.config-row`

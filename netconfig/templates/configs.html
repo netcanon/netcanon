@@ -23,13 +23,13 @@
       {{ cfg.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
     <td data-testid="config-size">{{ cfg.size_bytes | filesizeformat }}</td>
     <td style="white-space:nowrap">
-      <a href="/api/v1/configs/{{ cfg.filename }}" target="_blank"
-         class="btn-secondary" data-testid="config-view-link"
-         style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block">View</a>
-      <a href="/api/v1/configs/{{ cfg.filename }}" download="{{ cfg.filename }}"
-         class="btn-secondary" data-testid="config-download-btn"
-         style="font-size:.8rem;padding:.3rem .6rem;text-decoration:none;display:inline-block;margin-left:.3rem"
-         title="Download {{ cfg.filename }}">&#8595;</a>
+      <button onclick="viewConfig('{{ cfg.filename }}')"
+              class="btn-secondary" data-testid="config-view-link"
+              style="font-size:.8rem;padding:.3rem .6rem">View</button>
+      <button onclick="downloadConfig('{{ cfg.filename }}')"
+              class="btn-secondary" data-testid="config-download-btn"
+              style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+              title="Download {{ cfg.filename }}">&#8595;</button>
       {% if open_in_editor %}
       <button class="btn-secondary"
               data-testid="config-open-btn"
@@ -108,6 +108,19 @@ function attachDeleteListener(btn) {
 
 document.querySelectorAll('[data-testid="config-delete-btn"]')
   .forEach(attachDeleteListener);
+
+/* ── Hash navigation: /configs#{filename} scrolls to row and opens viewer ── */
+document.addEventListener('DOMContentLoaded', function() {
+  var hash = decodeURIComponent(window.location.hash.replace('#', ''));
+  if (!hash) return;
+  var row = document.querySelector('[data-testid="config-row"][data-filename="' + CSS.escape(hash) + '"]');
+  if (!row) return;
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.style.outline = '2px solid #7eb8f7';
+  row.style.background = '#f0f7ff';
+  setTimeout(function() { row.style.outline = ''; row.style.background = ''; }, 3000);
+  viewConfig(hash);
+});
 
 {% if open_in_editor %}
 function attachOpenListener(btn) {

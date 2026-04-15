@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import sys
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
@@ -21,6 +22,9 @@ from ..deps import get_storage
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/configs", tags=["configs"])
+
+# Extensions permitted for the open-in-editor feature.
+_OPEN_ALLOWED_EXTENSIONS = frozenset({".cfg", ".conf", ".txt", ".xml", ".log"})
 
 
 @router.get(
@@ -119,6 +123,13 @@ def open_config(
         raise HTTPException(
             status_code=403,
             detail="open_in_editor is disabled on this server.",
+        )
+
+    # Extension whitelist — only open known config file types.
+    if Path(filename).suffix.lower() not in _OPEN_ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail="File type not permitted for editor access.",
         )
 
     try:

@@ -106,14 +106,12 @@
         </td>
         <td data-testid="job-result-file">
           {% if result.config_record %}
-            <a href="/api/v1/configs/{{ result.config_record.filename }}"
-               target="_blank"
+            <a href="/configs#{{ result.config_record.filename }}"
                data-testid="job-config-view-link"
                class="btn-link">View</a>
-            <a href="/api/v1/configs/{{ result.config_record.filename }}"
-               download="{{ result.config_record.filename }}"
-               data-testid="job-config-download-btn"
-               class="btn-link">Download</a>
+            <button onclick="downloadConfig('{{ result.config_record.filename }}')"
+                    data-testid="job-config-download-btn"
+                    class="btn-link-btn">Download</button>
             {% if open_in_editor %}
             <button onclick="openJobConfig('{{ result.config_record.filename }}')"
                     data-testid="job-config-open-btn"

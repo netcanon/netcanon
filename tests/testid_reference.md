@@ -70,8 +70,8 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `config-host`              | `<td>` | Source device host |
 | `config-timestamp`         | `<td>` | Capture time (localised by JS); also has `data-utc` |
 | `config-size`              | `<td>` | Human-readable file size |
-| `config-view-link`         | `<a>` | Opens raw config in new tab |
-| `config-download-btn`      | `<a download>` | Triggers browser file download |
+| `config-view-link`         | `<button>` | Opens config content in the shared modal viewer via `viewConfig()` |
+| `config-download-btn`      | `<button>` | Triggers browser file download via `downloadConfig()` (WebView-safe blob approach) |
 | `config-open-btn`          | `<button>` | Opens file in OS default editor via `POST …/open`; **only rendered when `open_in_editor=True`** (desktop app) |
 | `config-delete-btn`        | `<button>` | Shows inline confirm — does NOT call `confirm()` |
 | `config-delete-confirm-btn`| `<button>` | "Yes" — confirms deletion |
@@ -113,8 +113,8 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `job-result-host`         | `<td>`  | Device host / IP |
 | `job-result-status`       | `<span>`| Per-device status badge |
 | `job-result-file`         | `<td>`  | Config file cell — contains view/download/(open) links on success, or error message on failure |
-| `job-config-view-link`    | `<a>`   | Opens raw config in new tab |
-| `job-config-download-btn` | `<a download>` | Triggers browser file download |
+| `job-config-view-link`    | `<a>`   | Navigates to `/configs#{filename}` — lands on Configs page, highlights the row, and auto-opens the viewer modal |
+| `job-config-download-btn` | `<button>` | Triggers browser file download via `downloadConfig()` (WebView-safe blob approach) |
 | `job-config-open-btn`     | `<button>` | Opens file in OS default editor; **only rendered when `open_in_editor=True`** (desktop app) |
 | `job-result-error`        | `<span>`| Error text (≤100 chars, full text in `title` tooltip); shown when no config file exists |
 | `job-result-duration`     | `<td>`  | Per-device duration in seconds |
@@ -159,6 +159,65 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `schedule-delete-btn`          | `<button>` | Shows inline confirm — does NOT call `confirm()` |
 | `schedule-delete-confirm-btn`  | `<button>` | "Yes" — confirms deletion |
 | `schedule-delete-cancel-btn`   | `<button>` | "No" — cancels and restores Delete button |
+
+## Devices page (`devices.html`)
+
+### New device profile form
+
+| `data-testid`              | Element | Notes |
+|----------------------------|---------|-------|
+| `new-device-section`       | `<section>` | Wraps the new profile form |
+| `device-form`              | `<form>` | The form element |
+| `device-name-input`        | `<input>` | Profile name |
+| `device-type-select`       | `<select>` | Device type dropdown; options carry `data-needs-enable` |
+| `device-host-input`        | `<input>` | Host / IP field |
+| `device-username-input`    | `<input>` | Username field |
+| `device-password-input`    | `<input type="password">` | Password field |
+| `device-enable-input`      | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
+| `device-notes-input`       | `<input>` | Optional notes |
+| `device-port-input`        | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
+| `device-submit-btn`        | `<button type="submit">` | Create device profile |
+
+### Existing device profile cards
+
+| `data-testid`                  | Element | Notes |
+|-------------------------------|---------|-------|
+| `devices-section`              | `<section>` | Wraps all device cards |
+| `no-devices-msg`               | `<p>` | Shown when no profiles exist |
+| `device-card`                  | `<div>` | One collapsible card per profile; also has `data-device-id` and `data-profile` (JSON) |
+| `device-card-header`           | `<div>` | Clickable header; `toggleDevice()` to show/hide config history |
+| `device-name`                  | `<strong>` | Profile name |
+| `device-type`                  | `<span>` | Type key badge |
+| `device-host`                  | `<span>` | Host / IP |
+| `device-run-btn`               | `<button>` | Triggers an immediate backup for this profile |
+| `device-edit-btn`              | `<button>` | Shows/hides the inline edit panel |
+| `device-delete-btn`            | `<button>` | Shows inline confirm — does NOT call `confirm()` |
+| `device-delete-confirm-btn`    | `<button>` | "Yes" — confirms deletion |
+| `device-delete-cancel-btn`     | `<button>` | "No" — cancels and restores Delete button |
+| `device-card-body`             | `<div>` | Config history table; hidden by default |
+| `device-config-row`            | `<tr>` | One row per config backup |
+| `device-config-file`           | `<td>` | Config filename (monospace) |
+| `device-config-timestamp`      | `<td>` | Capture time (localised by JS); also has `data-utc` |
+| `device-config-size`           | `<td>` | Human-readable file size |
+| `device-config-view-link`      | `<button>` | Opens config content in the shared modal viewer via `viewConfig()` |
+| `device-config-download-btn`   | `<button>` | Triggers browser file download via `downloadConfig()` (WebView-safe blob approach) |
+
+### Inline edit panel
+
+| `data-testid`                  | Element | Notes |
+|-------------------------------|---------|-------|
+| `device-edit-panel`            | `<div>` | Inline edit form; hidden by default; also has `data-device-id` |
+| `device-edit-form`             | `<form>` | Edit form element |
+| `device-edit-name-input`       | `<input>` | Profile name |
+| `device-edit-type-select`      | `<select>` | Device type dropdown |
+| `device-edit-host-input`       | `<input>` | Host / IP |
+| `device-edit-username-input`   | `<input>` | Username |
+| `device-edit-password-input`   | `<input type="password">` | New password; leave blank to keep existing |
+| `device-edit-enable-input`     | `<input type="password">` | New enable password; leave blank to keep existing |
+| `device-edit-notes-input`      | `<input>` | Notes |
+| `device-edit-port-input`       | `<input type="number">` | SSH port (inside collapsed `<details>`) |
+| `device-edit-save-btn`         | `<button type="submit">` | Save changes |
+| `device-edit-cancel-btn`       | `<button type="button">` | Cancel and close edit panel |
 
 ## Playwright Selector Patterns
 

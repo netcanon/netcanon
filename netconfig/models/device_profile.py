@@ -5,14 +5,38 @@ A ``DeviceProfile`` is a persisted device configuration that stores
 connection details and credentials for a network device.  Profiles can be
 referenced by schedules and backup jobs so the same device does not need to
 have its credentials re-entered each time.
+
+Credentials are stored as plaintext strings in these model objects.
+Encryption/decryption is handled by :class:`~netconfig.storage.device_profile_store.FileDeviceProfileStore`
+so the in-memory representation is always ready to use.
 """
 
 from __future__ import annotations
 
+import ipaddress
+import re
 import uuid
 from datetime import datetime, timezone
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+_HOSTNAME_RE = re.compile(
+    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
+    r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
+)
+
+
+def _validate_host(v: str) -> str:
+    """Accept a valid IPv4, IPv6, or RFC-1123 hostname; reject everything else."""
+    v = v.strip()
+    try:
+        ipaddress.ip_address(v)
+        return v
+    except ValueError:
+        pass
+    if _HOSTNAME_RE.match(v):
+        return v
+    raise ValueError(f"Invalid hostname or IP address: {v!r}")
 
 
 class DeviceProfile(BaseModel):
@@ -22,10 +46,10 @@ class DeviceProfile(BaseModel):
         id: UUID4 string generated at creation.
         name: Human-readable label for the device (e.g. ``"Core Router"``).
         type_key: Must match the ``type_key`` of a loaded device definition.
-        host: Hostname or IP address.
+        host: Hostname or IP address (IPv4, IPv6, or RFC-1123 hostname).
         port: SSH port number.  Defaults to 22.
         username: SSH login name.
-        password: SSH login password (plain text for persistence).
+        password: SSH login password (plaintext in memory; encrypted on disk).
         enable_password: Privileged-exec password; ``None`` if not required.
         notes: Optional free-text notes about the device.
         created_at: UTC time the profile was created.
@@ -49,7 +73,7 @@ class DeviceProfileCreate(BaseModel):
     Attributes:
         name: Human-readable label.
         type_key: Must match a loaded definition ``type_key``.
-        host: Hostname or IP address.
+        host: Hostname or IP address (IPv4, IPv6, or RFC-1123 hostname).
         port: SSH port number.  Defaults to 22.
         username: SSH login name.
         password: SSH login password.
@@ -66,6 +90,11 @@ class DeviceProfileCreate(BaseModel):
     enable_password: str | None = None
     notes: str | None = None
 
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        return _validate_host(v)
+
 
 class DeviceProfileUpdate(BaseModel):
     """Request body for ``PUT /api/v1/devices/{profile_id}``.
@@ -75,7 +104,7 @@ class DeviceProfileUpdate(BaseModel):
     Attributes:
         name: New human-readable label.
         type_key: New definition ``type_key``.
-        host: New hostname or IP address.
+        host: New hostname or IP address (IPv4, IPv6, or RFC-1123 hostname).
         port: New SSH port number.
         username: New SSH login name.
         password: New SSH login password.
@@ -91,3 +120,10 @@ class DeviceProfileUpdate(BaseModel):
     password: str | None = None
     enable_password: str | None = None
     notes: str | None = None
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _validate_host(v)

@@ -20,9 +20,7 @@
                     data-type-key="{{ profile.type_key }}"
                     data-host="{{ profile.host }}"
                     data-port="{{ profile.port }}"
-                    data-username="{{ profile.username }}"
-                    data-password="{{ profile.password }}"
-                    data-enable-password="{{ profile.enable_password or '' }}">
+                    data-username="{{ profile.username }}">
               {{ profile.name }}
             </option>
             {% endfor %}
@@ -177,16 +175,25 @@ function initRow(row) {
      });
   var profileSel = row.querySelector('[name="device_profile_id"]');
   if (profileSel) {
-    profileSel.addEventListener('change', function() {
+    profileSel.addEventListener('change', async function() {
       var opt = profileSel.options[profileSel.selectedIndex];
       if (opt.value) {
-        row.querySelector('[name="type_key"]').value       = opt.dataset.typeKey || '';
-        row.querySelector('[name="host"]').value           = opt.dataset.host || '';
-        row.querySelector('[name="port"]').value           = opt.dataset.port || '22';
-        row.querySelector('[name="username"]').value       = opt.dataset.username || '';
-        row.querySelector('[name="password"]').value       = opt.dataset.password || '';
+        row.querySelector('[name="type_key"]').value   = opt.dataset.typeKey || '';
+        row.querySelector('[name="host"]').value       = opt.dataset.host || '';
+        row.querySelector('[name="port"]').value       = opt.dataset.port || '22';
+        row.querySelector('[name="username"]').value   = opt.dataset.username || '';
+        /* Clear credential fields while we fetch — never read from DOM */
+        row.querySelector('[name="password"]').value   = '';
         var ep = row.querySelector('[name="enable_password"]');
-        if (ep) ep.value = opt.dataset.enablePassword || '';
+        if (ep) ep.value = '';
+        try {
+          var r = await fetch('/api/v1/devices/' + encodeURIComponent(opt.value));
+          if (r.ok) {
+            var p = await r.json();
+            row.querySelector('[name="password"]').value = p.password || '';
+            if (ep) ep.value = p.enable_password || '';
+          }
+        } catch (_) { /* non-fatal: user can type credentials manually */ }
         var ng = row.querySelector('.profile-name-group');
         if (ng) ng.style.display = 'none';
       } else {

@@ -195,23 +195,35 @@ class FileConfigStore(BaseConfigStore):
     def resolve_path(self, filename: str) -> Path:
         """Return the absolute filesystem path for *filename*.
 
+        Only accepts filenames that match the expected naming convention
+        (path-traversal protection: any name containing ``..`` or path
+        separators will not match the regex and is rejected).
+
         Checks the canonical ``{device_type}/{safe_host}/{filename}`` location
         first, then falls back to a flat file at the storage root for files
-        that were not reached by the startup migration.
+        that pre-date the subdirectory migration.  Both resolved paths are
+        verified to lie inside the storage root (defence-in-depth against
+        symlink attacks).
 
         Raises:
-            FileNotFoundError: If the file is not found in either location.
+            FileNotFoundError: If the filename does not match the expected
+                pattern, or if the file is not found in either location.
         """
         m = _FILENAME_RE.match(filename)
-        if m:
-            candidate = (
-                self._dir / m.group("device_type") / m.group("safe_host") / filename
-            )
-            if candidate.exists():
-                return candidate
+        if not m:
+            raise FileNotFoundError(f"Config not found: {filename!r}")
 
+        storage_root = self._dir.resolve()
+
+        candidate = (
+            self._dir / m.group("device_type") / m.group("safe_host") / filename
+        )
+        if candidate.resolve().is_relative_to(storage_root) and candidate.exists():
+            return candidate
+
+        # Flat fallback for pre-migration files (same regex guard applies).
         flat = self._dir / filename
-        if flat.exists():
+        if flat.resolve().is_relative_to(storage_root) and flat.exists():
             return flat
 
         raise FileNotFoundError(f"Config not found: {filename!r}")

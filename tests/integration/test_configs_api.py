@@ -198,3 +198,35 @@ class TestOpenConfig:
             resp = open_client.post(f"/api/v1/configs/{filename}/open")
         assert resp.status_code == 500
         assert "access denied" in resp.json()["detail"]
+
+    def test_open_rejects_disallowed_extension(self, open_client):
+        """Executable and other non-config extensions must return 400."""
+        with patch("os.startfile"):
+            resp = open_client.post("/api/v1/configs/malware.exe/open")
+        assert resp.status_code == 400
+
+    def test_open_rejects_zip_extension(self, open_client):
+        with patch("os.startfile"):
+            resp = open_client.post("/api/v1/configs/archive.zip/open")
+        assert resp.status_code == 400
+
+
+class TestPathTraversal:
+    """GET and DELETE must not expose files outside the storage directory."""
+
+    def test_get_dotdot_returns_404(self, client):
+        resp = client.get("/api/v1/configs/../../etc/passwd")
+        assert resp.status_code == 404
+
+    def test_get_dotdot_cfg_returns_404(self, client):
+        """Even a .cfg suffix on a traversal path must be rejected."""
+        resp = client.get("/api/v1/configs/../../etc/shadow.cfg")
+        assert resp.status_code == 404
+
+    def test_delete_dotdot_returns_404(self, client):
+        resp = client.delete("/api/v1/configs/../../etc/passwd")
+        assert resp.status_code == 404
+
+    def test_get_absolute_path_returns_404(self, client):
+        resp = client.get("/api/v1/configs//etc/passwd")
+        assert resp.status_code == 404

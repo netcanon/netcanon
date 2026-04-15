@@ -108,6 +108,35 @@ class TestDeviceTarget:
                 credentials=DeviceCredentials(username="admin", password="pw"),
             )
 
+    # Host validation (security)
+    def test_ipv4_accepted(self):
+        t = self._make(host="10.0.0.1")
+        assert t.host == "10.0.0.1"
+
+    def test_ipv6_accepted(self):
+        t = self._make(host="::1")
+        assert t.host == "::1"
+
+    def test_hostname_accepted(self):
+        t = self._make(host="router.example.com")
+        assert t.host == "router.example.com"
+
+    def test_dotdot_host_rejected(self):
+        with pytest.raises(ValidationError):
+            self._make(host="../../etc/passwd")
+
+    def test_slash_host_rejected(self):
+        with pytest.raises(ValidationError):
+            self._make(host="/etc/passwd")
+
+    def test_space_in_host_rejected(self):
+        with pytest.raises(ValidationError):
+            self._make(host="host name")
+
+    def test_semicolon_host_rejected(self):
+        with pytest.raises(ValidationError):
+            self._make(host="host;rm -rf /")
+
 
 # ---------------------------------------------------------------------------
 # BackupRequest
