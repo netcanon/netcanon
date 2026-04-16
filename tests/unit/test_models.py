@@ -192,6 +192,9 @@ class TestJobStatus:
     def test_failed_value(self):
         assert JobStatus.failed == "failed"
 
+    def test_partial_value(self):
+        assert JobStatus.partial == "partial"
+
 
 # ---------------------------------------------------------------------------
 # ConfigRecord
@@ -269,6 +272,28 @@ class TestBackupResult:
                 status="unknown",  # type: ignore[arg-type]
                 duration_seconds=0.1,
             )
+
+    def test_queued_status_allowed(self):
+        """Intermediate lifecycle state: device waiting for its turn."""
+        r = BackupResult(
+            device_type="Cisco",
+            host="192.168.1.1",
+            status="queued",
+            duration_seconds=0.0,
+        )
+        assert r.status == "queued"
+        assert r.config_record is None
+        assert r.error is None
+
+    def test_running_status_allowed(self):
+        """Intermediate lifecycle state: collector actively working."""
+        r = BackupResult(
+            device_type="Cisco",
+            host="192.168.1.1",
+            status="running",
+            duration_seconds=0.0,
+        )
+        assert r.status == "running"
 
 
 # ---------------------------------------------------------------------------

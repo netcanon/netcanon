@@ -25,6 +25,7 @@
     .badge-running { background: #fff3cd; color: #856404; }
     .badge-pending { background: #e2e3e5; color: #383d41; }
     .badge-completed { background: #d4edda; color: #155724; }
+    .badge-partial { background: #ffeaa7; color: #7a5d00; }
     form { background: #fff; padding: 1.25rem; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
     .form-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: .75rem; }
     .form-group { display: flex; flex-direction: column; gap: .25rem; }
@@ -46,9 +47,29 @@
     /* Config viewer modal */
     #_config-viewer { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000; align-items:center; justify-content:center; }
     #_config-viewer-box { background:#fff; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,.3); width:min(800px,94vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
-    #_config-viewer-header { display:flex; align-items:center; padding:.65rem 1rem; background:#1a1a2e; color:#eee; gap:.75rem; }
-    #_config-viewer-title { flex:1; font-family:monospace; font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #_config-viewer-header { display:flex; align-items:center; padding:.5rem 1rem; background:#1a1a2e; color:#eee; gap:.5rem; flex-wrap:wrap; }
+    #_config-viewer-title { flex:1 1 180px; font-family:monospace; font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #_config-viewer-search { background:#2c2c44; color:#eee; border:1px solid #555; border-radius:3px;
+                             padding:.2rem .45rem; font-size:.8rem; width:150px; }
+    #_config-viewer-search:focus { outline:1px solid #7eb8f7; border-color:#7eb8f7; }
+    #_config-viewer-search-count { font-size:.75rem; color:#bbb; min-width:4.5rem; text-align:center;
+                                   font-family:monospace; }
+    .cv-nav-btn { background:transparent; color:#eee; font-size:.85rem; padding:.15rem .4rem;
+                  border:1px solid #555; border-radius:3px; cursor:pointer; font-weight:normal; }
+    .cv-nav-btn:hover:not(:disabled) { background:#333; }
+    .cv-nav-btn:disabled { opacity:.4; cursor:not-allowed; }
     #_config-viewer-box pre { flex:1; overflow:auto; margin:0; border-radius:0; white-space:pre; }
+    /* Syntax highlighting — VS Code "Dark+" inspired palette */
+    #_config-viewer-pre .tok-comment { color:#6a9955; font-style:italic; }
+    #_config-viewer-pre .tok-keyword { color:#569cd6; font-weight:600; }
+    #_config-viewer-pre .tok-string  { color:#ce9178; }
+    #_config-viewer-pre .tok-ip      { color:#b5cea8; }
+    #_config-viewer-pre .tok-number  { color:#b5cea8; }
+    #_config-viewer-pre .tok-tag     { color:#569cd6; }
+    #_config-viewer-pre .tok-attr    { color:#9cdcfe; }
+    /* Search highlighting */
+    #_config-viewer-pre mark         { background:#665a00; color:#fff3b0; border-radius:2px; padding:0 1px; }
+    #_config-viewer-pre mark.current { background:#d4a017; color:#1e1e1e; outline:1px solid #ffe066; }
   </style>
 </head>
 <body>
@@ -67,20 +88,122 @@
   </main>
 
   <!-- Config viewer modal -->
-  <div id="_config-viewer" onclick="if(event.target===this)closeConfigViewer()">
+  <div id="_config-viewer" data-testid="config-viewer"
+       role="dialog" aria-labelledby="_config-viewer-title" aria-modal="true"
+       onclick="if(event.target===this)closeConfigViewer()">
     <div id="_config-viewer-box">
       <div id="_config-viewer-header">
-        <span id="_config-viewer-title"></span>
-        <button onclick="closeConfigViewer()"
-                style="background:transparent;color:#eee;font-size:1.1rem;padding:.2rem .5rem;
-                       border:1px solid #555;border-radius:4px;cursor:pointer;font-weight:normal">&#10005;</button>
+        <span id="_config-viewer-title" data-testid="config-viewer-title"></span>
+        <input type="search" id="_config-viewer-search"
+               data-testid="config-viewer-search"
+               placeholder="Search…" aria-label="Search within config"
+               autocomplete="off" spellcheck="false">
+        <span id="_config-viewer-search-count"
+              data-testid="config-viewer-search-count"
+              aria-live="polite"></span>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-search-prev"
+                onclick="configViewerNav(-1)" aria-label="Previous match"
+                title="Previous match (Shift+Enter)">&#9650;</button>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-search-next"
+                onclick="configViewerNav(1)" aria-label="Next match"
+                title="Next match (Enter)">&#9660;</button>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-close"
+                onclick="closeConfigViewer()" aria-label="Close"
+                style="font-size:1.1rem">&#10005;</button>
       </div>
-      <pre id="_config-viewer-pre">Loading&#8230;</pre>
+      <pre id="_config-viewer-pre" data-testid="config-viewer-content">Loading&#8230;</pre>
+    </div>
+  </div>
+
+  <!-- Job progress panel (global — persists across navigation & reloads) -->
+  <style>
+    #_job-progress {
+      position:fixed; bottom:1rem; right:1rem; width:min(420px,92vw);
+      z-index:9998; background:#fff; border-radius:8px;
+      box-shadow:0 4px 18px rgba(0,0,0,.25); font-size:.85rem;
+      overflow:hidden; border:1px solid #d0d4e0;
+      /* Default display is driven by inline style on the element +
+         JS — don't set display:none here, it defeats .style.display=''. */
+    }
+    #_job-progress-header {
+      display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem;
+      background:#1a1a2e; color:#eee; cursor:pointer; user-select:none;
+    }
+    #_job-progress-header:hover { background:#2a2a4e; }
+    #_job-progress-summary { flex:1; font-family:monospace; font-size:.82rem; }
+    #_job-progress-chevron { font-size:.7rem; transition:transform .15s; }
+    #_job-progress-chevron.open { transform:rotate(180deg); }
+    #_job-progress-body {
+      max-height:40vh; overflow:auto; padding:.25rem 0;
+    }
+    .jp-row {
+      display:flex; align-items:center; gap:.5rem; padding:.3rem .75rem;
+      border-top:1px solid #f0f0f0; font-size:.82rem;
+    }
+    .jp-row:first-child { border-top:none; }
+    .jp-icon {
+      width:1rem; flex:0 0 1rem; text-align:center; font-weight:700;
+      font-family:monospace;
+    }
+    .jp-icon-queued   { color:#888; }
+    .jp-icon-running  { color:#856404; animation:jp-spin 1.2s linear infinite; }
+    .jp-icon-success  { color:#155724; }
+    .jp-icon-failed   { color:#721c24; }
+    @keyframes jp-spin { to { transform:rotate(360deg); } }
+    .jp-host { flex:1; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .jp-state { color:#666; font-size:.75rem; text-transform:uppercase; letter-spacing:.03em; }
+    .jp-duration { color:#aaa; font-size:.72rem; font-family:monospace; }
+    .jp-error {
+      font-size:.72rem; color:#721c24; padding:.1rem .75rem .3rem 2.25rem;
+      font-family:monospace; overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    #_job-progress-footer {
+      display:none; padding:.4rem .75rem; background:#f5f5f8;
+      border-top:1px solid #e0e0e8; gap:.5rem; align-items:center;
+      justify-content:flex-end; font-size:.8rem;
+    }
+    #_job-progress-footer a { color:#1a1a2e; text-decoration:none; margin-right:auto; }
+    #_job-progress-footer a:hover { text-decoration:underline; }
+  </style>
+  <div id="_job-progress"
+       data-testid="job-progress-panel"
+       role="region" aria-label="Backup job progress"
+       aria-live="polite"
+       style="display:none">
+    <div id="_job-progress-header"
+         data-testid="job-progress-header"
+         onclick="toggleJobProgress()">
+      <strong id="_job-progress-job-id"
+              data-testid="job-id-display"></strong>
+      <span id="_job-progress-summary"
+            data-testid="job-progress-summary"
+            aria-label="Job progress summary"></span>
+      <span id="_job-progress-status"
+            data-testid="job-status-display"
+            style="display:none"></span>
+      <span id="_job-progress-chevron"
+            data-testid="job-progress-toggle"
+            aria-hidden="true">&#9660;</span>
+    </div>
+    <div id="_job-progress-body"
+         data-testid="job-progress-body"></div>
+    <div id="_job-progress-footer"
+         data-testid="job-progress-footer">
+      <a href="#" id="_job-progress-view-link"
+         data-testid="job-progress-view-link">View full job details</a>
+      <button type="button" class="btn-secondary"
+              data-testid="job-progress-dismiss"
+              onclick="dismissJobProgress()"
+              style="padding:.2rem .7rem;font-size:.78rem">Dismiss</button>
     </div>
   </div>
 
   <!-- Toast notification -->
-  <div id="_toast" data-testid="toast"
+  <div id="_toast" data-testid="toast" role="status" aria-live="polite" aria-atomic="true"
        style="position:fixed;bottom:1.5rem;right:1.5rem;max-width:360px;z-index:9999;display:none;
               padding:.75rem 1rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);
               font-size:.9rem;line-height:1.4">
@@ -112,28 +235,584 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(function() { toast.style.display = 'none'; }, 4000);
   }
-  /* ── Config viewer modal ── */
+  /* ── Config viewer modal ──
+   * Features:
+   *   - Syntax highlighting (Cisco / Fortigate / Mikrotik / OPNsense XML)
+   *     inferred from the file extension; unknown extensions fall back to
+   *     escaped plain text.
+   *   - In-modal incremental search with match counter and prev/next
+   *     navigation (Enter / Shift+Enter, or the ▲ / ▼ buttons).
+   *   - The raw config text is preserved between renders so the search can
+   *     be re-applied without another network round trip.
+   */
+  var _cvRawText = '';           // raw (unescaped) content of the current config
+  var _cvExt = '';               // lowercased file extension for highlighting
+  // One entry per LOGICAL match; each is a group of <mark> elements
+  // because a single match may span syntax-highlight boundaries and thus
+  // produce multiple adjacent <mark> nodes in the DOM.
+  //   [{ marks: [HTMLMarkElement, ...], first: HTMLMarkElement }, ...]
+  var _cvMatches = [];
+  var _cvIdx = -1;               // index of the currently highlighted match
+
+  /**
+   * Open the viewer modal, fetch the named config, apply syntax highlighting,
+   * and focus the search input so the keyboard is immediately useful.
+   *
+   * @param {string} filename - Bare filename returned by GET /api/v1/configs/.
+   */
   async function viewConfig(filename) {
-    var modal = document.getElementById('_config-viewer');
-    var pre   = document.getElementById('_config-viewer-pre');
-    var title = document.getElementById('_config-viewer-title');
+    var modal  = document.getElementById('_config-viewer');
+    var pre    = document.getElementById('_config-viewer-pre');
+    var title  = document.getElementById('_config-viewer-title');
+    var search = document.getElementById('_config-viewer-search');
     title.textContent = filename;
     pre.textContent   = 'Loading\u2026';
+    _cvRawText = '';
+    _cvMatches = [];
+    _cvIdx = -1;
+    search.value = '';
+    _cvUpdateCount();
     modal.style.display = 'flex';
     try {
       var res = await fetch('/api/v1/configs/' + encodeURIComponent(filename));
       if (!res.ok) { pre.textContent = 'Error ' + res.status + ': ' + res.statusText; return; }
-      pre.textContent = await res.text();
+      _cvRawText = await res.text();
+      _cvExt = (filename.split('.').pop() || '').toLowerCase();
+      pre.innerHTML = _cvRenderHighlighted(_cvRawText, _cvExt);
+      search.focus();
     } catch(e) { pre.textContent = 'Network error: ' + e.message; }
   }
 
+  /**
+   * Hide the modal and release any cached state.  Safe to call twice.
+   */
   function closeConfigViewer() {
     document.getElementById('_config-viewer').style.display = 'none';
+    _cvRawText = '';
+    _cvMatches = [];
+    _cvIdx = -1;
   }
 
-  document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeConfigViewer();
+  /**
+   * Escape characters that are significant in HTML so user data can be
+   * safely concatenated into innerHTML.
+   *
+   * @param {string} s
+   * @returns {string}
+   */
+  function _cvEscape(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /**
+   * Syntax-highlight *text* based on *ext* and return an HTML string.
+   * Dispatches to a language-specific tokenizer; unknown extensions are
+   * returned as escaped plain text with no colouring.
+   *
+   * @param {string} text - Raw config content.
+   * @param {string} ext  - Lowercased file extension (e.g. "cfg", "xml").
+   * @returns {string} HTML with <span class="tok-*"> markup.
+   */
+  function _cvRenderHighlighted(text, ext) {
+    if (ext === 'xml') return _cvHighlightXml(text);
+    if (ext === 'cfg' || ext === 'conf' || ext === 'txt' || ext === 'log') {
+      return _cvHighlightConfig(text);
+    }
+    return _cvEscape(text);
+  }
+
+  /* ── Token regexes ────────────────────────────────────────────────────
+   * Each language uses one combined regex with alternation so the scan is
+   * a single pass — this avoids nested-span bugs you get when you chain
+   * multiple .replace() calls.
+   * ──────────────────────────────────────────────────────────────────── */
+
+  /* Cfg/conf/txt (Cisco, Fortigate, Mikrotik superset) */
+  var _CV_CONFIG_TOKEN = new RegExp([
+    '("[^"\\n]*")',                                       // 1: string
+    '\\b(\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}(?:/\\d+)?)\\b',  // 2: IPv4 / CIDR
+    '\\b(interface|hostname|ip|ipv6|router|vlan|version|enable|no|' +
+      'config|set|edit|end|next|unset|crypto|access-list|access-group|' +
+      'permit|deny|line|username|password|service|boot|route|' +
+      'bgp|ospf|eigrp|rip|description|shutdown|duplex|speed|mtu)\\b',  // 3: keyword
+    '\\b(\\d+)\\b'                                        // 4: bare number
+  ].join('|'), 'g');
+
+  /* XML */
+  var _CV_XML_TOKEN = new RegExp([
+    '(<!--[\\s\\S]*?-->)',                                // 1: comment
+    '(</?[\\w\\-:]+)',                                    // 2: tag open/close
+    '(\\b[\\w\\-:]+)(?==")',                              // 3: attribute name (lookahead)
+    '("[^"\\n]*")'                                        // 4: attribute value
+  ].join('|'), 'g');
+
+  /**
+   * Tokenize a config-style file (Cisco / Fortigate / Mikrotik).  Comment
+   * lines (``!`` or ``#``) are handled line-by-line so keywords inside
+   * them don't get re-coloured.
+   */
+  function _cvHighlightConfig(text) {
+    return text.split('\n').map(function(line) {
+      if (/^\s*[!#]/.test(line)) {
+        return '<span class="tok-comment">' + _cvEscape(line) + '</span>';
+      }
+      return _cvTokenize(line, _CV_CONFIG_TOKEN, _cvConfigWrap);
+    }).join('\n');
+  }
+
+  /** Wrap a config-line regex match group into the right span. */
+  function _cvConfigWrap(m) {
+    if (m[1]) return '<span class="tok-string">'  + _cvEscape(m[1]) + '</span>';
+    if (m[2]) return '<span class="tok-ip">'      + _cvEscape(m[2]) + '</span>';
+    if (m[3]) return '<span class="tok-keyword">' + _cvEscape(m[3]) + '</span>';
+    if (m[4]) return '<span class="tok-number">'  + _cvEscape(m[4]) + '</span>';
+    return _cvEscape(m[0]);
+  }
+
+  /** Tokenize XML. */
+  function _cvHighlightXml(text) {
+    return _cvTokenize(text, _CV_XML_TOKEN, function(m) {
+      if (m[1]) return '<span class="tok-comment">' + _cvEscape(m[1]) + '</span>';
+      if (m[2]) return '<span class="tok-tag">'     + _cvEscape(m[2]) + '</span>';
+      if (m[3]) return '<span class="tok-attr">'    + _cvEscape(m[3]) + '</span>';
+      if (m[4]) return '<span class="tok-string">'  + _cvEscape(m[4]) + '</span>';
+      return _cvEscape(m[0]);
+    });
+  }
+
+  /**
+   * Shared single-pass tokenizer.  Walks *text* with *re* and lets *wrap*
+   * decide how to render each match; content between matches is HTML-escaped.
+   */
+  function _cvTokenize(text, re, wrap) {
+    re.lastIndex = 0;
+    var out = '', last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) out += _cvEscape(text.slice(last, m.index));
+      out += wrap(m);
+      last = m.index + m[0].length;
+    }
+    if (last < text.length) out += _cvEscape(text.slice(last));
+    return out;
+  }
+
+  /* ── Search ─────────────────────────────────────────────────────────── */
+
+  /**
+   * Scan the rendered <pre> for *query* (case-insensitive) and wrap every
+   * occurrence in one or more ``<mark>`` elements.
+   *
+   * CROSS-NODE MATCHING: the syntax highlighter fragments the original
+   * text into many text nodes interleaved with ``<span class="tok-*">``
+   * elements, so a query like ``64:ff9b`` or ``hostname Router`` spans
+   * DOM boundaries and a naive per-text-node search misses it.  This
+   * implementation flattens the entire <pre> into a single string (with
+   * a segment map back to the original text nodes), finds matches in the
+   * flat string, and wraps each match across whatever boundaries it
+   * crosses — producing one ``<mark>`` element per affected text-node
+   * slice, grouped as a single logical match for navigation.
+   *
+   * Matches are processed in REVERSE document order so the splits of
+   * later matches don't invalidate the segment offsets for earlier ones.
+   *
+   * Previously-inserted marks are unwrapped first so the function is
+   * idempotent.  The first match becomes the "current" match and is
+   * scrolled into view.
+   *
+   * @param {string} query - User-entered search term; empty clears marks.
+   */
+  function _cvSearch(query) {
+    var pre = document.getElementById('_config-viewer-pre');
+    _cvClearMarks(pre);
+    _cvMatches = [];
+    _cvIdx = -1;
+    if (!query) { _cvUpdateCount(); return; }
+
+    // Flatten all text nodes into one string; remember each node + its
+    // absolute start offset so we can map matches back to the DOM.
+    var walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT, null);
+    var segs = [];  // [{ node, start }]
+    var flat = '';
+    while (walker.nextNode()) {
+      var n = walker.currentNode;
+      segs.push({ node: n, start: flat.length });
+      flat += n.nodeValue;
+    }
+
+    // Collect absolute [start, end) spans for every occurrence of query.
+    var qLower = query.toLowerCase();
+    var flatLower = flat.toLowerCase();
+    var hits = [];
+    var idx = flatLower.indexOf(qLower);
+    while (idx >= 0) {
+      hits.push({ start: idx, end: idx + qLower.length });
+      idx = flatLower.indexOf(qLower, idx + qLower.length);
+    }
+
+    // Wrap in reverse so earlier offsets stay valid after splitText calls
+    // on later-in-document matches.  After wrapping, prepend to
+    // _cvMatches so the final list is in document order.
+    for (var hi = hits.length - 1; hi >= 0; hi--) {
+      var marks = _cvWrapSpan(segs, hits[hi].start, hits[hi].end);
+      if (marks.length) {
+        _cvMatches.unshift({ marks: marks, first: marks[0] });
+      }
+    }
+
+    if (_cvMatches.length > 0) configViewerNav(1);
+    _cvUpdateCount();
+  }
+
+  /**
+   * Wrap every text-node slice intersecting [*absStart*, *absEnd*) in a
+   * ``<mark>`` element and return the list of mark elements (in document
+   * order).  Handles single-node matches, matches starting mid-node,
+   * ending mid-node, and spans that cover multiple whole nodes.
+   *
+   * @param {Array} segs   - Segment map from _cvSearch.
+   * @param {number} absStart - Absolute offset in the flat text (inclusive).
+   * @param {number} absEnd   - Absolute offset in the flat text (exclusive).
+   * @returns {HTMLMarkElement[]} All wraps produced for this one match.
+   */
+  function _cvWrapSpan(segs, absStart, absEnd) {
+    var marks = [];
+    for (var si = 0; si < segs.length; si++) {
+      var seg = segs[si];
+      var segStart = seg.start;
+      var nodeLen = seg.node.nodeValue.length;
+      var segEnd = segStart + nodeLen;
+      if (segEnd <= absStart) continue;       // segment is entirely before the match
+      if (segStart >= absEnd) break;          // segment (and all later ones) are after
+      var localStart = Math.max(absStart, segStart) - segStart;
+      var localEnd   = Math.min(absEnd,   segEnd)   - segStart;
+      var node = seg.node;
+      // Chop the tail (characters after the match) into a new sibling first
+      // so the subsequent splitText index still makes sense on the retained
+      // prefix+match portion.
+      if (localEnd < node.nodeValue.length) {
+        node.splitText(localEnd);
+      }
+      var middle;
+      if (localStart > 0) {
+        middle = node.splitText(localStart);
+      } else {
+        middle = node;
+      }
+      var mark = document.createElement('mark');
+      middle.parentNode.replaceChild(mark, middle);
+      mark.appendChild(middle);
+      marks.push(mark);
+    }
+    return marks;
+  }
+
+  /**
+   * Remove every ``<mark>`` under *root*, merging the split text nodes back
+   * together so the DOM ends up in the same shape it had before the search.
+   */
+  function _cvClearMarks(root) {
+    var marks = root.querySelectorAll('mark');
+    for (var i = 0; i < marks.length; i++) {
+      var m = marks[i], p = m.parentNode;
+      while (m.firstChild) p.insertBefore(m.firstChild, m);
+      p.removeChild(m);
+      p.normalize();
+    }
+  }
+
+  /**
+   * Move to the next / previous search match.  Wraps around at either end.
+   * A logical match may be multiple ``<mark>`` elements (cross-span
+   * matches), so the ``current`` class is toggled on every element in the
+   * group and scrollIntoView targets the first.
+   *
+   * @param {number} dir - ``+1`` for next, ``-1`` for previous.
+   */
+  function configViewerNav(dir) {
+    if (_cvMatches.length === 0) return;
+    var prev = _cvMatches[_cvIdx];
+    if (prev) prev.marks.forEach(function(m) { m.classList.remove('current'); });
+    _cvIdx = (_cvIdx + dir + _cvMatches.length) % _cvMatches.length;
+    var curr = _cvMatches[_cvIdx];
+    curr.marks.forEach(function(m) { m.classList.add('current'); });
+    curr.first.scrollIntoView({ block: 'center' });
+    _cvUpdateCount();
+  }
+
+  /** Refresh the "N / M" match counter and enable/disable nav buttons. */
+  function _cvUpdateCount() {
+    var el     = document.getElementById('_config-viewer-search-count');
+    var search = document.getElementById('_config-viewer-search');
+    var prev   = document.querySelector('[data-testid="config-viewer-search-prev"]');
+    var next   = document.querySelector('[data-testid="config-viewer-search-next"]');
+    var total  = _cvMatches.length;
+    if (!search.value) {
+      el.textContent = '';
+    } else if (total === 0) {
+      el.textContent = 'No matches';
+    } else {
+      el.textContent = (_cvIdx + 1) + ' / ' + total;
+    }
+    prev.disabled = total === 0;
+    next.disabled = total === 0;
+  }
+
+  document.addEventListener('DOMContentLoaded', function() {
+    var search = document.getElementById('_config-viewer-search');
+    if (!search) return;
+    search.addEventListener('input', function(e) { _cvSearch(e.target.value); });
+    search.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        configViewerNav(e.shiftKey ? -1 : 1);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        if (e.target.value) { e.target.value = ''; _cvSearch(''); }
+        else closeConfigViewer();
+      }
+    });
   });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      // Don't double-close if the search input already handled it.
+      var active = document.activeElement;
+      if (active && active.id === '_config-viewer-search') return;
+      closeConfigViewer();
+    }
+  });
+
+  /* ── Job progress panel ────────────────────────────────────────────────
+   * Global floating widget anchored in base.html so it survives page
+   * navigation AND full page reloads (active job ID is persisted to
+   * localStorage; on DOMContentLoaded we resume polling if the stored
+   * job is still non-terminal).
+   *
+   * Per-device status levels (SOP):
+   *    queued  — in the job but collector not yet called
+   *    running — collector active on this device
+   *    success — config saved
+   *    failed  — error caught
+   *
+   * Events dispatched on document (listen from page-level scripts):
+   *    netconfig:job-started   { detail: {jobId} }
+   *    netconfig:job-progress  { detail: {job}   }   (each poll)
+   *    netconfig:job-complete  { detail: {job}   }   (terminal state)
+   *    netconfig:job-dismissed { detail: {jobId} }
+   * ────────────────────────────────────────────────────────────────── */
+  (function() {
+    var STORAGE_KEY = 'netconfig.activeJob';
+    var POLL_MS = 1500;
+    var MAX_ERRORS = 3;
+    var pollTimer = null;
+    var pollErrors = 0;
+    var currentJobId = null;
+
+    /** Return true for any terminal job status. */
+    function isTerminal(status) {
+      return status === 'completed' || status === 'partial' || status === 'failed';
+    }
+
+    /** Icon glyph per device status. */
+    function deviceIcon(status) {
+      switch (status) {
+        case 'success':  return '\u2713';  // ✓
+        case 'failed':   return '\u2717';  // ✗
+        case 'running':  return '\u27F3';  // ⟳
+        case 'queued':   return '\u25CB';  // ○
+        default:         return '\u2022';  // •
+      }
+    }
+
+    /** Human-readable counts for the header summary. */
+    function buildSummary(job) {
+      var counts = { queued:0, running:0, success:0, failed:0 };
+      (job.results || []).forEach(function(r) {
+        if (counts[r.status] !== undefined) counts[r.status] += 1;
+      });
+      var done = counts.success + counts.failed;
+      if (isTerminal(job.status)) {
+        if (job.status === 'completed') return done + '/' + job.total_devices + ' succeeded';
+        if (job.status === 'partial')   return counts.success + '/' + job.total_devices + ' succeeded (partial)';
+        return counts.success + '/' + job.total_devices + ' succeeded';  // failed
+      }
+      return done + '/' + job.total_devices + ' complete'
+           + (counts.running ? ' \u2014 running: ' + counts.running : '')
+           + (counts.queued  ? ' \u2014 queued: '  + counts.queued  : '');
+    }
+
+    /** Render a single device row. */
+    function renderDeviceRow(result) {
+      var row = document.createElement('div');
+      row.className = 'jp-row';
+      row.setAttribute('data-testid', 'job-progress-device-row');
+      row.setAttribute('data-host', result.host);
+      row.setAttribute('data-status', result.status);
+      var secs = result.duration_seconds;
+      var dur = (secs && secs > 0) ? secs.toFixed(1) + 's' : '';
+      row.innerHTML =
+        '<span class="jp-icon jp-icon-' + result.status + '"'
+          + ' data-testid="job-progress-device-status">'
+          + deviceIcon(result.status) + '</span>'
+        + '<span class="jp-host" data-testid="job-progress-device-host">'
+          + _jpEscape(result.device_type) + ' '
+          + _jpEscape(result.host) + '</span>'
+        + '<span class="jp-state">' + result.status + '</span>'
+        + '<span class="jp-duration" data-testid="job-progress-device-duration">'
+          + dur + '</span>';
+      if (result.status === 'failed' && result.error) {
+        var err = document.createElement('div');
+        err.className = 'jp-error';
+        err.setAttribute('data-testid', 'job-progress-device-error');
+        err.setAttribute('title', result.error);
+        err.textContent = result.error.length > 120
+          ? result.error.slice(0, 120) + '\u2026' : result.error;
+        row.appendChild(err);
+      }
+      return row;
+    }
+
+    /** Minimal HTML escape for safe concatenation. */
+    function _jpEscape(s) {
+      return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    /** Replace the panel's contents with a fresh render of *job*. */
+    function renderPanel(job) {
+      var panel   = document.getElementById('_job-progress');
+      var idEl    = document.getElementById('_job-progress-job-id');
+      var sumEl   = document.getElementById('_job-progress-summary');
+      var statEl  = document.getElementById('_job-progress-status');
+      var bodyEl  = document.getElementById('_job-progress-body');
+      var footEl  = document.getElementById('_job-progress-footer');
+      var viewEl  = document.getElementById('_job-progress-view-link');
+      if (!panel) return;
+
+      idEl.textContent   = job.id.substring(0, 8) + '\u2026';
+      sumEl.textContent  = buildSummary(job);
+      statEl.textContent = job.status;  // back-compat: existing E2E tests read this
+      panel.setAttribute('data-job-status', job.status);
+      panel.style.display = '';
+
+      bodyEl.innerHTML = '';
+      (job.results || []).forEach(function(r) {
+        bodyEl.appendChild(renderDeviceRow(r));
+      });
+
+      if (isTerminal(job.status)) {
+        footEl.style.display = 'flex';
+        viewEl.href = '/jobs#' + job.id.substring(0, 8);
+      } else {
+        footEl.style.display = 'none';
+      }
+    }
+
+    /** Expand/collapse the body section. */
+    window.toggleJobProgress = function() {
+      var body    = document.getElementById('_job-progress-body');
+      var foot    = document.getElementById('_job-progress-footer');
+      var chevron = document.getElementById('_job-progress-chevron');
+      var open = body.style.display === 'none';
+      body.style.display = open ? '' : 'none';
+      // Footer visibility is status-driven; don't show if body is collapsed
+      // AND job is mid-flight (just hide both).
+      if (!open) foot.style.display = 'none';
+      else if (foot.getAttribute('data-should-show') === '1') foot.style.display = 'flex';
+      chevron.classList.toggle('open', open);
+    };
+
+    /** Dismiss the panel; clears persisted state. */
+    window.dismissJobProgress = function() {
+      var panel = document.getElementById('_job-progress');
+      panel.style.display = 'none';
+      try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+      document.dispatchEvent(new CustomEvent('netconfig:job-dismissed',
+        { detail: { jobId: currentJobId } }));
+      currentJobId = null;
+      _stopPoll();
+    };
+
+    function _stopPoll() {
+      if (pollTimer !== null) { clearInterval(pollTimer); pollTimer = null; }
+      pollErrors = 0;
+    }
+
+    async function _tick() {
+      if (!currentJobId) { _stopPoll(); return; }
+      try {
+        var r = await fetch('/api/v1/backups/' + currentJobId);
+        if (r.status === 404) {
+          // Job no longer exists (purged/restart before persist). Stop quietly.
+          dismissJobProgress();
+          return;
+        }
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var job = await r.json();
+        pollErrors = 0;
+        renderPanel(job);
+        document.dispatchEvent(new CustomEvent('netconfig:job-progress',
+          { detail: { job: job } }));
+        if (isTerminal(job.status)) {
+          _stopPoll();
+          // Footer gets a sticky "should-show" flag so collapse-then-expand
+          // restores it without re-polling.
+          document.getElementById('_job-progress-footer')
+            .setAttribute('data-should-show', '1');
+          document.dispatchEvent(new CustomEvent('netconfig:job-complete',
+            { detail: { job: job } }));
+        }
+      } catch (err) {
+        if (++pollErrors >= MAX_ERRORS) {
+          _stopPoll();
+          var sumEl = document.getElementById('_job-progress-summary');
+          if (sumEl) sumEl.textContent = 'Lost contact with server';
+        }
+      }
+    }
+
+    /** Public entry point: start tracking a new job in the panel. */
+    window.startJobProgress = function(jobId) {
+      _stopPoll();
+      currentJobId = jobId;
+      try { localStorage.setItem(STORAGE_KEY, jobId); } catch (_) {}
+      // Seed minimal render so the panel appears immediately; poll fills it in.
+      renderPanel({ id: jobId, status: 'pending', total_devices: 0, results: [] });
+      document.dispatchEvent(new CustomEvent('netconfig:job-started',
+        { detail: { jobId: jobId } }));
+      _tick();  // immediate first poll
+      pollTimer = setInterval(_tick, POLL_MS);
+    };
+
+    /** Resume the panel on page load if localStorage holds a non-terminal job. */
+    function _resume() {
+      var jobId = null;
+      try { jobId = localStorage.getItem(STORAGE_KEY); } catch (_) {}
+      if (!jobId) return;
+      currentJobId = jobId;
+      // Do a synchronous-ish probe before showing: if the job is already
+      // terminal we still render (so the user sees the result once), and
+      // if it 404s we clear silently.
+      fetch('/api/v1/backups/' + jobId).then(function(r) {
+        if (r.status === 404) {
+          try { localStorage.removeItem(STORAGE_KEY); } catch (_) {}
+          currentJobId = null;
+          return;
+        }
+        return r.json().then(function(job) {
+          renderPanel(job);
+          if (isTerminal(job.status)) {
+            document.getElementById('_job-progress-footer')
+              .setAttribute('data-should-show', '1');
+          } else {
+            _tick();
+            pollTimer = setInterval(_tick, POLL_MS);
+          }
+        });
+      }).catch(function() { /* network glitch on reload — just stay hidden */ });
+    }
+
+    document.addEventListener('DOMContentLoaded', _resume);
+  })();
 
   /* ── Config downloader (WebView-safe blob approach) ── */
   async function downloadConfig(filename) {

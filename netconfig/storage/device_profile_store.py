@@ -22,7 +22,8 @@ import logging
 from pathlib import Path
 
 from ..models.device_profile import DeviceProfile
-from ..security.credentials import decrypt_field, encrypt
+from ..security.credentials import encrypt
+from ..security.migration import migrate_credential_fields
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,14 @@ class FileDeviceProfileStore:
         if profile.enable_password is not None:
             data["enable_password"] = encrypt(profile.enable_password)
         path = self._dir / f"{profile.id}.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        # Atomic write: write to temp then rename to prevent corruption.
+        tmp = path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as exc:
+            logger.error("Failed to persist device profile '%s': %s", profile.name, exc)
+            raise
         logger.debug("Persisted device profile '%s' (credentials encrypted)", profile.name)
 
     def delete(self, profile_id: str) -> None:
@@ -76,29 +84,25 @@ class FileDeviceProfileStore:
             try:
                 data = json.loads(path.read_text(encoding="utf-8"))
 
-                # Decrypt password; detect & migrate legacy plaintext.
-                pwd_plain, pwd_enc = decrypt_field(data.get("password", ""))
-                data["password"] = pwd_plain
-
-                ep_needs_enc = False
-                if data.get("enable_password"):
-                    ep_plain, ep_enc = decrypt_field(data["enable_password"])
-                    data["enable_password"] = ep_plain
-                    ep_needs_enc = not ep_enc
+                # Decrypt credentials; detect & migrate legacy plaintext.
+                needs_resave = migrate_credential_fields(
+                    data, ["password", "enable_password"]
+                )
 
                 p = DeviceProfile.model_validate(data)
 
-                if not pwd_enc or ep_needs_enc:
+                if needs_resave:
                     self.save(p)
                     logger.info(
-                        "Migrated plaintext credentials for profile '%s' to encrypted storage",
+                        "Migrated plaintext credentials for profile '%s' (id=%s) to encrypted storage",
                         p.name,
+                        p.id[:8],
                     )
 
                 profiles[p.id] = p
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Skipping corrupt device profile file %s: %s", path.name, exc
+                logger.error(
+                    "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
                 )
         logger.info("Loaded %d device profile(s)", len(profiles))
         return profiles

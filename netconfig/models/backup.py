@@ -18,11 +18,17 @@ class JobStatus(str, Enum):
     """Lifecycle states of a backup job.
 
     Values are also used as display strings in the web UI.
+
+    Terminal-state semantics for a job with multiple devices:
+        * ``completed`` — every device succeeded.
+        * ``partial``   — at least one device succeeded AND at least one failed.
+        * ``failed``    — every device failed (zero successes).
     """
 
     pending = "pending"
     running = "running"
     completed = "completed"
+    partial = "partial"
     failed = "failed"
 
 
@@ -53,18 +59,26 @@ class ConfigRecord(BaseModel):
 class BackupResult(BaseModel):
     """Outcome of a single device backup attempt within a job.
 
+    Status follows a monotonic lifecycle:
+        ``queued`` -> ``running`` -> ``success`` | ``failed``
+    A result is created in ``queued`` state when the job starts and the
+    backup runner mutates it in place as execution proceeds.  Once a
+    terminal state (``success`` / ``failed``) is reached the result is
+    never mutated again.  Polling clients can safely snapshot the list.
+
     Attributes:
         device_type: Source definition ``type_key``.
         host: Device address.
-        status: ``"success"`` or ``"failed"``.
-        config_record: Populated on success; ``None`` on failure.
-        error: Human-readable error message on failure; ``None`` on success.
-        duration_seconds: Wall-clock time for the collection attempt.
+        status: Current lifecycle state — see above.
+        config_record: Populated on ``success``; ``None`` otherwise.
+        error: Human-readable error message on ``failed``; ``None`` otherwise.
+        duration_seconds: Wall-clock time for the collection attempt;
+            ``0.0`` while the device is still ``queued`` or ``running``.
     """
 
     device_type: str
     host: str
-    status: Literal["success", "failed"]
+    status: Literal["queued", "running", "success", "failed"]
     config_record: ConfigRecord | None = None
     error: str | None = None
     duration_seconds: float

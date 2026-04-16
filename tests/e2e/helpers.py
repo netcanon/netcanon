@@ -83,10 +83,21 @@ class BackupFormPage:
 
     @property
     def status_banner(self):
-        return self._page.locator('[data-testid="job-status-banner"]')
+        """Backward-compat alias — points at the new floating panel.
+
+        Older tests call this ``status_banner``; the current implementation
+        is the global ``job-progress-panel`` in base.html (the inline banner
+        was removed when the panel was introduced).
+        """
+        return self._page.locator('[data-testid="job-progress-panel"]')
 
     @property
     def job_status_display(self):
+        """Aggregated job status text embedded in the panel header.
+
+        Still exposed under the legacy ``job-status-display`` testid so the
+        existing ``submit_and_wait`` helper keeps working.
+        """
         return self._page.locator('[data-testid="job-status-display"]')
 
     def device_entries(self):
@@ -166,6 +177,145 @@ class ConfigsPage:
 
     def delete_buttons(self):
         return self._page.locator('[data-testid="config-delete-btn"]')
+
+
+# ---------------------------------------------------------------------------
+# Job progress panel (global — floating widget injected by base.html)
+# ---------------------------------------------------------------------------
+
+
+class JobProgressPanel:
+    """Helpers for the persistent floating backup-progress panel.
+
+    The panel is rendered in ``base.html`` so it's available from every page
+    and survives both navigation and full page reloads (the active job ID
+    is held in ``localStorage`` under ``netconfig.activeJob``).
+
+    Per-device rows carry ``data-host`` and ``data-status`` attributes so
+    tests can assert specific devices reach specific states without poking
+    at the DOM structure.
+    """
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def panel(self):
+        return self._page.locator('[data-testid="job-progress-panel"]')
+
+    @property
+    def header(self):
+        return self._page.locator('[data-testid="job-progress-header"]')
+
+    @property
+    def summary(self):
+        return self._page.locator('[data-testid="job-progress-summary"]')
+
+    @property
+    def body(self):
+        return self._page.locator('[data-testid="job-progress-body"]')
+
+    @property
+    def footer(self):
+        return self._page.locator('[data-testid="job-progress-footer"]')
+
+    @property
+    def dismiss_btn(self):
+        return self._page.locator('[data-testid="job-progress-dismiss"]')
+
+    @property
+    def view_link(self):
+        return self._page.locator('[data-testid="job-progress-view-link"]')
+
+    def device_rows(self):
+        return self._page.locator('[data-testid="job-progress-device-row"]')
+
+    def row_for(self, host: str):
+        return self._page.locator(
+            f'[data-testid="job-progress-device-row"][data-host="{host}"]'
+        )
+
+    def status_of(self, host: str) -> str:
+        """Return the current per-device status string (queued/running/success/failed)."""
+        return self.row_for(host).get_attribute("data-status") or ""
+
+    def clear_storage(self) -> None:
+        """Remove any persisted active-job key from localStorage."""
+        self._page.evaluate(
+            "() => { try { localStorage.removeItem('netconfig.activeJob'); } catch(_) {} }"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Config viewer modal (global — available from any page)
+# ---------------------------------------------------------------------------
+
+
+class ConfigViewer:
+    """Helpers for the config viewer modal injected by ``base.html``.
+
+    The modal is rendered on every page and is opened by clicking any
+    ``[data-testid="config-view-link"]`` / ``[data-testid="job-config-view-link"]``
+    element (or by calling ``viewConfig(filename)`` directly in JS).
+
+    Attributes:
+        modal: The outer modal container.
+        title: Displayed filename in the header.
+        content: The ``<pre>`` holding the highlighted config text.
+        search: The in-modal search input.
+        count: "N / M" match counter (empty when no query).
+        prev_btn / next_btn: Previous / next match buttons.
+        close_btn: The ``×`` close button.
+    """
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def modal(self):
+        return self._page.locator('[data-testid="config-viewer"]')
+
+    @property
+    def title(self):
+        return self._page.locator('[data-testid="config-viewer-title"]')
+
+    @property
+    def content(self):
+        return self._page.locator('[data-testid="config-viewer-content"]')
+
+    @property
+    def search(self):
+        return self._page.locator('[data-testid="config-viewer-search"]')
+
+    @property
+    def count(self):
+        return self._page.locator('[data-testid="config-viewer-search-count"]')
+
+    @property
+    def prev_btn(self):
+        return self._page.locator('[data-testid="config-viewer-search-prev"]')
+
+    @property
+    def next_btn(self):
+        return self._page.locator('[data-testid="config-viewer-search-next"]')
+
+    @property
+    def close_btn(self):
+        return self._page.locator('[data-testid="config-viewer-close"]')
+
+    def open_for(self, filename: str) -> None:
+        """Programmatically open the viewer for *filename* via JS.
+
+        Faster and more deterministic in tests than clicking the View link.
+        """
+        self._page.evaluate(f"viewConfig({filename!r})")
+
+    def current_matches(self):
+        """Return the live list of current/highlighted match elements."""
+        return self.content.locator("mark")
+
+    def close(self) -> None:
+        self.close_btn.click()
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,577 @@
+# NETCONFIG — YANG + TEMPLATE MIGRATION SYSTEM — PLAN
+# Format: dense, grep-friendly, code-first. Written for Claude, not humans.
+# Generated: 2026-04-16
+
+=====================================================================
+## 0. PROBLEM, SCOPE, NON-GOALS
+=====================================================================
+
+PROBLEM
+  Extend NetConfig (currently a multi-vendor backup tool) into a config
+  migration engine: read source device config (any vendor), transform
+  into a canonical intent tree, emit config for a different target
+  vendor, report semantic loss, optionally deploy.
+
+SCOPE (IN)
+  - Canonical intent model = YANG (OpenConfig + NetConfig extensions).
+  - Per-vendor adapters with parse(raw)->YANG and render(YANG)->raw.
+  - Capability matrices drive pre-flight loss reports.
+  - Reuse existing collectors (SSH) for ingest.
+  - FastAPI surface + Jinja UI parity (web + desktop per CLAUDE.md).
+
+SCOPE (OUT — explicitly non-goals for v1)
+  - Live network-state migration (BGP sessions, IPsec SAs, ARP tables).
+  - Licensed-feature translation (Cisco DNA, FortiGuard, Panorama).
+  - Policy-intent synthesis (i.e. "draw me a ZTP plan from nothing").
+  - Cross-vendor routing-protocol convergence guarantees.
+
+HARD CONSTRAINTS
+  - Desktop + web feature parity (CLAUDE.md rule).
+  - data-testid on every new interactive UI element (CLAUDE.md rule).
+  - No terminal length 0 for Cisco (CLAUDE.md rule — collector layer).
+  - Mock get_collector in tests, never ConnectHandler (CLAUDE.md rule).
+  - Atomic file writes pattern already adopted; reuse for snapshots.
+
+=====================================================================
+## 1. YANG VENDOR REALITY — FROZEN REFERENCE TABLE
+=====================================================================
+#  Do not re-research. Treat as authoritative for planning. Revisit only
+#  if a specific vendor release note changes support.
+
+| vendor            | native_yang | canonical                          | notes                                         |
+|-------------------|-------------|------------------------------------|-----------------------------------------------|
+| cisco_iosxr       | yes         | Cisco-IOS-XR-* + openconfig        | first-class netconf/restconf                  |
+| cisco_iosxe       | yes (16.3+) | Cisco-IOS-XE-* + partial oc        | older CLI features lag YANG                   |
+| cisco_nxos        | partial     | Cisco-NX-OS-*                      | uneven CLI parity                             |
+| juniper_junos     | yes         | junos-conf-*                       | comprehensive via RPCs                        |
+| arista_eos        | yes         | openconfig + arista-*              | best OC fidelity                              |
+| nokia_sros        | yes         | nokia-conf-*                       |                                               |
+| huawei_vrp        | yes         | huawei-* + partial oc              |                                               |
+| aruba_cx          | yes         | aruba-* + REST                     |                                               |
+| f5_bigip          | partial     | F5-bigip-*                         | iControl REST is primary                      |
+| fortigate         | NO          | CLI (config/set/edit/next/end)     | REST JSON secondary                           |
+| mikrotik_routeros | NO          | /export text + REST                | no YANG exists                                |
+| opnsense/pfsense  | NO          | XML config.xml                     | BSD; PHP+shell underneath                     |
+| palo_alto_panos   | NO          | XML API                            |                                               |
+| checkpoint        | NO          | mgmt API (JSON)                    |                                               |
+| sonicwall         | NO          | CLI + REST                         |                                               |
+| extreme_exos      | partial     | extreme-*                          |                                               |
+
+NETCONFIG CURRENT SUPPORT (definitions/*.yaml):
+  cisco_iosxe, fortigate, mikrotik_routeros, opnsense
+  => only 1 of 4 is YANG-native. Architecture must bridge the rest.
+
+OPENCONFIG COVERAGE: ~60-70% of typical enterprise feature surface on
+  YANG-native vendors. Zero coverage on non-YANG vendors.
+
+=====================================================================
+## 2. LAYERED ARCHITECTURE
+=====================================================================
+
+  ┌────────────────────────────────────────────────────────────┐
+  │ MIGRATION ENGINE                                            │
+  │   collect → parse → transform → validate → render → diff   │
+  │                                             → deploy → snap │
+  └──────────────┬────────────────────────────┬───────────────┘
+                 │                            │
+                 ▼                            ▼
+  ┌──────────────────────────┐  ┌────────────────────────────┐
+  │ Canonical Intent Tree    │  │ Capability Matrix          │
+  │ openconfig + netconfig-  │◀─┤ per-adapter YAML           │
+  │ ext YANG modules         │  │ supported/lossy/unsupported│
+  └─────┬──────────┬─────────┘  └────────────────────────────┘
+        ▲          │
+  parse │          │ render
+        │          ▼
+  ┌─────┴────────────────────────────────────────────────────┐
+  │ VENDOR ADAPTER LAYER                                      │
+  │   yang-native | text/cli | xml/json                       │
+  │   all expose: Adapter.parse, Adapter.render, .capabilities│
+  └──────▲───────────────────────────────────────┬───────────┘
+         │ collect (reuse)                       │ deploy (new)
+         │                                       ▼
+    SOURCE DEVICE                            TARGET DEVICE
+
+=====================================================================
+## 3. CANONICAL INTENT MODEL (CIM)
+=====================================================================
+
+BASE: openconfig/public master @ pinned commit
+  - openconfig-interfaces
+  - openconfig-vlan
+  - openconfig-network-instance
+  - openconfig-bgp, openconfig-ospf, openconfig-isis
+  - openconfig-access-control-list
+  - openconfig-if-ethernet, -if-ip, -if-aggregate
+
+EXTENSION: netconfig-ext.yang (in-repo)
+  - firewall/rule (ordered-by user, stateful session model)
+  - nat/source, nat/destination
+  - captive-portal/*
+  - dashboard-widget/* (opnsense)
+  - license-tag (opaque string blob for non-migratable licensed config)
+
+TOOLING
+  python_libs:
+    - libyang       # validation
+    - pyangbind     # python class bindings from YANG
+    - ncclient      # NETCONF transport (phase 2+)
+    - lxml          # XML parsing (opnsense, pan-os)
+  cli:
+    - pyang         # schema linting in CI
+
+RULE: every tree produced by an adapter OR transform MUST pass
+      libyang validation before it leaves its function boundary.
+      This is the top-level invariant; enforce with a decorator.
+
+=====================================================================
+## 4. PACKAGE STRUCTURE
+=====================================================================
+
+netconfig/
+  migration/
+    __init__.py
+    canonical/
+      loader.py              # libyang ctx singleton; loads modules once
+      schema/                # openconfig/public pinned + netconfig-ext
+        openconfig-*.yang
+        netconfig-ext.yang
+      validate.py            # @validates_yang decorator
+    adapters/
+      base.py                # AdapterBase, CapabilityMatrix, exceptions
+      registry.py            # entry-point discovery
+      cisco_iosxe/
+        __init__.py          # register(Adapter)
+        parser.py            # NETCONF get-config OR CLI state machine
+        renderer.py          # NETCONF edit-config OR Jinja
+        capabilities.yaml
+        templates/           # only if CLI-emitting path used
+      fortigate/
+        __init__.py
+        parser.py            # CLI state machine (TextFSM or PEG)
+        renderer.py           # Jinja-only
+        capabilities.yaml
+        templates/
+          interfaces.j2
+          vlans.j2
+          firewall.j2
+          routing/{bgp,ospf,static}.j2
+      mikrotik/
+        # parser: /export line tokenizer; renderer: Jinja
+      opnsense/
+        # parser: lxml of config.xml; renderer: lxml builder or Jinja
+    engine/
+      pipeline.py            # stages orchestrator; pure functions
+      diff.py                # tree-level + text-level diff
+      deploy.py              # netconf/ssh/rest deployers
+      snapshot.py            # atomic pre-deploy backup via FileConfigStore
+      validate.py            # capability-matrix driven ValidationReport
+    transforms/
+      __init__.py            # register(transform_fn)
+      rename_interfaces.py
+      remap_vlans.py
+      rebase_ip_network.py
+      scrub_credentials.py
+      strip_unsupported.py
+    api/
+      routes.py              # /api/v1/migration/*
+    models.py                # pydantic: MigrationJob, Transform, Report
+
+tests/
+  unit/
+    migration/
+      test_canonical_loader.py
+      test_adapters_{iosxe,fortigate,mikrotik,opnsense}.py
+      test_transforms_*.py
+      test_validate.py
+  integration/
+    test_migration_api.py
+    test_roundtrip_*.py       # parse(render(tree)) == tree
+  fixtures/
+    canonical/                # seed YANG trees (JSON) per feature
+    raw/                      # sample vendor configs (sanitized)
+
+=====================================================================
+## 5. ADAPTER CONTRACT
+=====================================================================
+
+# base.py
+from abc import ABC, abstractmethod
+from pathlib import Path
+from pydantic import BaseModel
+
+class CapabilityMatrix(BaseModel):
+    adapter: str
+    version_range: str
+    supported: list[str]            # YANG xpath expressions
+    lossy: list[LossyPath]
+    unsupported: list[UnsupportedPath]
+
+    def classify(self, xpath: str) -> Literal["supported","lossy","unsupported"]: ...
+    def diff(self, tree) -> CapabilityDiff: ...
+
+class AdapterBase(ABC):
+    name: str                       # e.g. "cisco_iosxe"
+    version_hint: str | None        # for version-aware parsing
+
+    @property
+    @abstractmethod
+    def capabilities(self) -> CapabilityMatrix: ...
+
+    @abstractmethod
+    def parse(self, raw: str) -> "YangTree": ...     # raises ParseError
+                                                     # MUST validate before return
+
+    @abstractmethod
+    def render(self, tree: "YangTree") -> str: ...   # raises RenderError
+                                                     # MUST accept validated tree only
+
+    # Optional: only YANG-native adapters override
+    def deploy(self, device, rendered: str) -> DeployResult: ...
+    def collect_native(self, device) -> "YangTree": ...   # bypass parse()
+
+DISCOVERY
+  # pyproject.toml
+  [project.entry-points."netconfig.migration.adapters"]
+  cisco_iosxe = "netconfig.migration.adapters.cisco_iosxe:Adapter"
+  fortigate   = "netconfig.migration.adapters.fortigate:Adapter"
+  mikrotik    = "netconfig.migration.adapters.mikrotik:Adapter"
+  opnsense    = "netconfig.migration.adapters.opnsense:Adapter"
+
+=====================================================================
+## 6. CAPABILITY MATRIX SCHEMA (YAML)
+=====================================================================
+
+# adapters/<vendor>/capabilities.yaml
+adapter: opnsense
+version_range: ">=25.1,<27"
+supported:
+  - openconfig-interfaces:/interfaces/interface
+  - openconfig-vlan:/vlans/vlan
+  - netconfig-ext:/firewall/rule
+  - openconfig-if-ip:/.../ipv4/addresses
+lossy:
+  - path: openconfig-network-instance:/.../bgp
+    reason: "FRR package required; no route-reflector support"
+    severity: warn                  # warn | error
+  - path: openconfig-if-ethernet:/.../config/auto-negotiate
+    reason: "set via pfctl script; not round-tripped in config.xml"
+    severity: warn
+unsupported:
+  - path: openconfig-mpls:/mpls
+    reason: "BSD kernel lacks MPLS data plane"
+  - path: openconfig-network-instance:/.../protocols/isis
+
+severity semantics:
+  warn  -> ValidationReport lists; user confirms to proceed
+  error -> migration refuses unless --force
+
+=====================================================================
+## 7. PIPELINE STAGES — I/O CONTRACTS
+=====================================================================
+
+1. collect(device, credentials) -> raw_text: str
+   # reuses existing netconfig.collectors; no changes
+
+2. parse(raw_text, source_adapter) -> YangTree
+   # validation: libyang before return
+   # errors: ParseError(path, line, snippet)
+
+3. transform(tree, transforms: list[TransformSpec]) -> YangTree
+   # each transform: fn(tree, **kwargs) -> tree
+   # ordered application; each output re-validated
+
+4. validate(tree, target_adapter) -> ValidationReport
+   # ValidationReport:
+   #   supported_paths: list[str]
+   #   lossy_paths: list[(path, reason, severity)]
+   #   unsupported_paths: list[(path, reason)]
+   #   blocked: bool
+   # never mutates tree
+
+5. render(tree, target_adapter) -> raw_text: str
+   # precondition: validated tree; capability-filtered if strip_unsupported ran
+   # errors: RenderError(yang_path, reason)
+
+6. diff(src_raw, tgt_raw, src_tree, tgt_tree) -> DiffReport
+   # DiffReport:
+   #   tree_diff: semantic diff (added/removed/changed xpaths)
+   #   text_diff: unified diff of raw strings
+   #   risk_flags: e.g. "firewall rule order changed"
+
+7. deploy(target_device, rendered) -> DeployResult
+   # three strategies, chosen by adapter:
+   #   netconf  -> ncclient <edit-config>
+   #   ssh_cli  -> netmiko send_config_set
+   #   rest     -> httpx POST/PUT
+   # precondition: snapshot taken (stage 8 runs BEFORE this)
+
+8. snapshot(target_device, pre_config) -> ConfigRecord
+   # reuses FileConfigStore; filename: "<device>_pre-migrate_<ts>.<ext>"
+   # atomic write (already implemented)
+
+ORCHESTRATOR
+  MigrationJob state machine (reuse BackupJob pattern):
+    pending -> parsing -> transforming -> validating
+            -> rendering -> diffing -> (awaiting_approval?)
+            -> snapshotting -> deploying -> (completed | failed | partial)
+  Enforce via property setter (same lesson as JobStatus partial work).
+
+=====================================================================
+## 8. TRANSFORMS — BUILT-INS
+=====================================================================
+
+signature: fn(tree: YangTree, **kwargs) -> YangTree
+contract:  pure; idempotent when inputs identical; re-validated after
+
+built-ins (netconfig/migration/transforms/*):
+  rename_interfaces(mapping: dict[str,str])
+    # "Gi0/1" -> "ether2", etc. Updates name refs across tree
+    # (L3 config, ACLs, VLAN memberships, LAG members).
+
+  remap_vlans(mapping: dict[int,int])
+    # bulk renumber. Enforces uniqueness post-remap.
+
+  rebase_ip_network(old_cidr, new_cidr)
+    # shifts all addresses in old_cidr into new_cidr preserving host bits.
+    # Rejects if new_cidr too small.
+
+  scrub_credentials()
+    # replaces password/pre-shared-key/community with $PLACEHOLDER$.
+    # used for diff-safe rendering in PRs.
+
+  strip_unsupported(target_adapter)
+    # auto-removes every path marked unsupported in target caps.
+    # emits a log + report entry per stripped path.
+
+discovery: entry-point "netconfig.migration.transforms"
+
+=====================================================================
+## 9. TEMPLATE AUTHORING RULES (Jinja2)
+=====================================================================
+
+Templates only exist for CLI/XML targets. YANG-native targets use
+NETCONF <edit-config> generated directly from the tree.
+
+RULES (enforce in code review + template linter):
+  1. PURE: no I/O, no network, no datetime.now(), no randomness.
+  2. DETERMINISTIC ORDER: sort all iterables by a stable key.
+  3. ONE FEATURE PER FILE: interfaces.j2, vlans.j2, bgp.j2, ...
+  4. NO SILENT TRUNCATION: explicit `| truncate(N, True, '')`; not
+     implicit.
+  5. NO INLINE BUSINESS LOGIC: push logic into filters registered
+     in renderer.py.
+  6. VENDOR FILTERS: per-adapter filter library
+     (e.g. fortigate_netmask, cisco_ifname).
+  7. TEST: each template has a fixture pair (tree.json -> expected.txt).
+
+EXAMPLE SKELETON (fortigate/interfaces.j2):
+  config system interface
+  {%- for iface in tree.interfaces.interface | sort(attribute='name') %}
+      edit "{{ iface.name }}"
+          set vdom "{{ iface.config.vdom | default('root') }}"
+          {%- if iface | has_ipv4 %}
+          set ip {{ iface | primary_ipv4 | netmask_form }}
+          {%- endif %}
+          {%- if iface.config.description %}
+          set alias "{{ iface.config.description | truncate(25, True, '') }}"
+          {%- endif %}
+      next
+  {%- endfor %}
+  end
+
+=====================================================================
+## 10. HARD PROBLEMS — KNOWN, DO NOT REDISCOVER
+=====================================================================
+
+SEMANTIC-NOT-STRUCTURAL EQUIVALENCE
+  ACLs / policies / pf rules express similar intent but with different
+  primitives (address objects, zones, sessions). Canonical model picks
+  ONE lane (netconfig-ext:/firewall) and each adapter commits to a
+  best-effort mapping. Expect `lossy` entries in capabilities.
+
+RULE ORDERING
+  Firewall rules and route-maps are ORDERED. YANG `ordered-by user`
+  only preserves order if the whole transport chain preserves it.
+  JSON and some XML libs silently re-sort. TEST ordering explicitly
+  in every adapter's roundtrip suite.
+
+INTERFACE NAMING
+  No canonical name exists — "GigabitEthernet0/0/1", "ge-0/0/1",
+  "ether1", "em0", "port1" all refer to "port with a role".
+  Model uses opaque role IDs + per-adapter name tables.
+  rename_interfaces transform bridges names.
+
+STATEFUL / DYNAMIC STATE
+  BGP peer state, IPsec SAs, HA sync, license keys — not migratable.
+  Capability matrix MUST flag these as unsupported. No silent drop.
+
+LICENSED FEATURES
+  FortiGate SD-WAN profiles, Palo URL categories, Cisco DNA tags.
+  Mark unsupported with severity=warn (render as comment stub) or
+  error (block).
+
+ROUND-TRIP INVARIANT
+  parse(render(tree)) == tree  for the supported subset.
+  This is THE most valuable test. Build it first per adapter.
+
+RUNTIME VS CONFIG
+  NetConfig backs up config, not runtime. Migration similarly operates
+  on config-intent only. Do not try to infer runtime from config.
+
+=====================================================================
+## 11. HTTP API SURFACE
+=====================================================================
+
+GET  /api/v1/migration/adapters
+  -> list of {name, version_range, native_yang, template_count}
+
+GET  /api/v1/migration/adapters/{name}/capabilities
+  -> full CapabilityMatrix
+
+POST /api/v1/migration/plan
+  body: {source_device_id, target_adapter, transforms: []}
+  runs: collect -> parse -> transform -> validate
+  -> ValidationReport (no render, no deploy)
+
+POST /api/v1/migration/render
+  body: same as /plan
+  runs: ...+ render
+  -> {rendered_config: str, validation_report, diff: optional}
+
+POST /api/v1/migration/deploy
+  body: {migration_job_id, confirm: true}
+  precondition: a prior /render produced a job in awaiting_approval
+  runs: snapshot -> deploy
+  -> DeployResult
+
+GET  /api/v1/migration/jobs
+GET  /api/v1/migration/jobs/{id}
+  # reuse BackupJob persistence pattern (FileJobStore sibling)
+
+UI (/migrate page):
+  1. Pick source device profile.
+  2. Pick target (device profile OR "download only").
+  3. Add transforms (rename/remap wizards).
+  4. Preview ValidationReport with supported/lossy/unsupported buckets.
+  5. Render -> side-by-side diff viewer (reuse config viewer highlighter).
+  6. Confirm deploy (disabled if validation blocked, or for
+     "download only").
+
+TESTIDs (follow project convention; add to testid_reference.md):
+  migrate-source-select, migrate-target-select,
+  migrate-transforms-list, migrate-add-transform-btn,
+  migrate-validation-report, migrate-lossy-item, migrate-unsupported-item,
+  migrate-render-btn, migrate-diff-viewer,
+  migrate-deploy-btn, migrate-confirm-deploy-btn
+
+=====================================================================
+## 12. PHASED ROADMAP
+=====================================================================
+
+PHASE 0 — PROVE THE SHAPE
+  goal:       one adapter end-to-end, roundtrip clean
+  adapters:   cisco_iosxe (NETCONF path)
+  stages:     collect -> parse -> validate -> render
+  deliverables:
+    - libyang ctx + schema loader
+    - AdapterBase + CapabilityMatrix
+    - cisco_iosxe/parser.py + renderer.py (NETCONF)
+    - pipeline.py skeleton (no transforms, no deploy, no diff)
+    - unit tests: roundtrip invariant for interfaces + vlans
+  new_deps:  libyang, pyangbind, openconfig/public@pinned
+  duration:  baseline
+
+PHASE 1 — CROSS-VENDOR MVP
+  goal:      non-YANG adapter on each side
+  adapters:  + opnsense (parse), + fortigate (render)
+  stages:    + transforms + diff (tree-level)
+  deliverables:
+    - opnsense parser (lxml of config.xml -> openconfig-interfaces,
+      netconfig-ext:/firewall)
+    - fortigate renderer (Jinja templates: interfaces, vlans, firewall)
+    - transforms: rename_interfaces, remap_vlans, strip_unsupported
+    - diff.py (tree-level)
+    - ValidationReport pydantic model
+    - integration test: real opnsense sample -> canonical -> fortigate
+  new_deps:  lxml (likely already present)
+
+PHASE 2 — PRODUCTIONIZE
+  goal:      deploy path + UI + snapshot/rollback
+  adapters:  + mikrotik (both directions)
+  stages:    + deploy, + snapshot
+  deliverables:
+    - mikrotik parser (/export tokenizer) + renderer (Jinja)
+    - engine/deploy.py (netconf + ssh + rest strategies)
+    - engine/snapshot.py (reuse FileConfigStore)
+    - /api/v1/migration/* routes
+    - /migrate UI page (Jinja + testids)
+    - desktop parity check (embedded server route table)
+    - E2E test: plan -> render -> diff -> deploy-to-sandbox
+  new_deps:  ncclient
+
+PHASE 3 — SCALE OUT
+  goal:      community adapters via entry points
+  adapters:  junos, arista_eos, pan_os, aruba_cx (start)
+  deliverables:
+    - adapter plugin docs
+    - reference "hello-world" adapter template
+    - capability-matrix linter CLI
+  new_deps:  none mandatory
+
+=====================================================================
+## 13. QUICK-REFERENCE CHECKLIST WHEN ADDING A NEW ADAPTER
+=====================================================================
+
+[ ] netconfig/migration/adapters/<vendor>/ directory with:
+    __init__.py, parser.py, renderer.py, capabilities.yaml,
+    templates/ (if CLI/XML target)
+[ ] Entry point registered in pyproject.toml
+[ ] capabilities.yaml passes the linter (tooling lives under
+    scripts/lint_caps.py in phase 3)
+[ ] Unit test: parser handles malformed input without crashing
+[ ] Unit test: renderer handles empty tree gracefully
+[ ] Unit test: parse(render(tree)) == tree for supported paths
+[ ] Unit test: capability classification correct for every OC path
+    in openconfig-interfaces (at minimum)
+[ ] Ordering test: firewall rule order preserved across roundtrip
+[ ] Integration test: real-world sample config -> validate -> render
+    -> diff; assert DiffReport has zero unexpected deltas
+[ ] testid_reference.md updated if any UI added
+[ ] CHANGELOG.md entry under Unreleased
+[ ] Desktop parity verified (embedded server includes new routes)
+
+=====================================================================
+## 14. HONEST LIMITATIONS — DO NOT PROMISE IN MARKETING
+=====================================================================
+
+- Non-YANG adapters are reverse-engineering config semantics; lossy.
+- OpenConfig models are incomplete (~60-70%); expect extensions.
+- License keys, cryptographic material, and runtime state don't migrate.
+- Semantic equivalence across vendors is best-effort; validate in staging.
+- Roundtrip invariant is for SUPPORTED subset only; unsupported paths
+  by definition can't roundtrip.
+- Deploy path can brick a device; snapshot + rollback are required
+  defaults, not opt-in.
+
+=====================================================================
+## 15. ANSWER SUMMARY (for status pings)
+=====================================================================
+
+Q: Are YANG templates available for all major network vendors?
+A: No. Cisco XR/XE, Juniper, Arista, Nokia, Aruba CX, Huawei, and
+   partially F5 have native YANG. FortiGate, MikroTik, OPNsense,
+   Palo Alto, Check Point, SonicWall do NOT. Any "full YANG" claim
+   either narrows vendor scope or uses YANG as internal IR with
+   per-vendor parsers (this plan's approach).
+
+Q: What's the architecture?
+A: Six-stage pipeline (collect -> parse -> transform -> validate ->
+   render -> deploy) over an OpenConfig + netconfig-ext YANG canonical
+   tree. Pluggable per-vendor adapters implement parse/render with
+   Jinja templates for CLI/XML targets and NETCONF edit-config for
+   YANG-native targets. Capability matrices drive pre-flight
+   ValidationReports. Sits on top of NetConfig's existing collector
+   and storage layers.
+
+# END

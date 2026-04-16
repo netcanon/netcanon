@@ -19,6 +19,7 @@ Uvicorn::
 from __future__ import annotations
 
 import logging
+import heapq
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -93,8 +94,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ).load_all()
         _app.state.storage = FileConfigStore(settings.configs_dir)
 
-        # Job persistence — sibling directory to configs_dir
+        # Verify storage directories are writable before proceeding.
         data_root = settings.configs_dir.parent
+        for check_dir in [settings.configs_dir, data_root]:
+            try:
+                check_dir.mkdir(parents=True, exist_ok=True)
+                probe = check_dir / ".write_test"
+                probe.write_text("ok", encoding="utf-8")
+                probe.unlink()
+            except OSError as exc:
+                logger.warning(
+                    "Storage directory %s may not be writable: %s", check_dir, exc
+                )
+
+        # Job persistence — sibling directory to configs_dir
         _app.state.job_store = FileJobStore(data_root / "jobs")
         _app.state.jobs = _app.state.job_store.load_all()
 
@@ -107,17 +120,46 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         _app.state.device_profiles = _app.state.device_profile_store.load_all()
 
         # APScheduler — purely in-memory; schedules are persisted separately
-        scheduler = AsyncIOScheduler(timezone="UTC")
+        scheduler = AsyncIOScheduler(
+            timezone="UTC",
+            job_defaults={
+                "coalesce": True,
+                "max_instances": 1,
+                "misfire_grace_time": 300,
+            },
+        )
         _app.state.scheduler = scheduler
+
+        # Log APScheduler errors so a single job failure doesn't go unnoticed.
+        from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
+
+        def _on_job_event(event):
+            if hasattr(event, "exception") and event.exception:
+                logger.error(
+                    "Scheduled job %s failed: %s",
+                    event.job_id,
+                    event.exception,
+                    exc_info=event.traceback is not None,
+                )
+            else:
+                logger.warning("Scheduled job %s missed its fire time", event.job_id)
+
+        scheduler.add_listener(_on_job_event, EVENT_JOB_ERROR | EVENT_JOB_MISSED)
 
         # Re-register all enabled schedules
         for schedule in _app.state.schedules.values():
             if schedule.enabled:
-                register_schedule_job(scheduler, schedule, _app)
-                ap_job = scheduler.get_job(schedule.id)
-                if ap_job and ap_job.next_run_time:
-                    schedule.next_run_at = ap_job.next_run_time
-                    _app.state.schedule_store.save(schedule)
+                try:
+                    register_schedule_job(scheduler, schedule, _app)
+                    ap_job = scheduler.get_job(schedule.id)
+                    if ap_job and ap_job.next_run_time:
+                        schedule.next_run_at = ap_job.next_run_time
+                        _app.state.schedule_store.save(schedule)
+                except Exception as exc:
+                    logger.error(
+                        "Failed to register schedule '%s': %s",
+                        schedule.name, exc,
+                    )
 
         scheduler.start()
         logger.info(
@@ -139,13 +181,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ),
         version="0.1.0",
         lifespan=lifespan,
-        docs_url=None,   # we serve a nav-wrapped version at /docs below
-        redoc_url=None,  # not surfaced in the UI
+        docs_url=None,                      # we serve a nav-wrapped version at /docs below
+        redoc_url=None,                     # not surfaced in the UI
+        openapi_url="/api/v1/openapi.json", # non-default path; not at well-known /openapi.json
     )
 
     # ------------------------------------------------------------------
     # API routes
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Security headers middleware
+    # ------------------------------------------------------------------
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        return response
+
     app.include_router(defs_router.router, prefix="/api/v1")
     app.include_router(configs_router.router, prefix="/api/v1")
     app.include_router(backups_router.router, prefix="/api/v1")
@@ -161,10 +214,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/", response_class=HTMLResponse, include_in_schema=False)
     async def index(request: Request) -> HTMLResponse:
         """Dashboard: recent jobs summary and backup form."""
-        jobs = sorted(
+        jobs = heapq.nlargest(
+            10,
             request.app.state.jobs.values(),
             key=lambda j: j.created_at,
-            reverse=True,
         )
         return templates.TemplateResponse(
             request,
@@ -172,7 +225,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {
                 "active_page": "home",
                 "definitions": request.app.state.definitions,
-                "recent_jobs": jobs[:10],
+                "recent_jobs": jobs,
                 "device_profiles": sorted(
                     request.app.state.device_profiles.values(), key=lambda p: p.name
                 ),
@@ -248,7 +301,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         # Strip credentials before embedding profiles in the DOM.
         _CRED_FIELDS = {"password", "enable_password"}
         profiles_safe = {
-            p.id: {k: v for k, v in p.model_dump().items() if k not in _CRED_FIELDS}
+            p.id: {k: v for k, v in p.model_dump(mode="json").items() if k not in _CRED_FIELDS}
             for p in profiles
         }
         return templates.TemplateResponse(
@@ -279,7 +332,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def swagger_ui() -> HTMLResponse:
         """Swagger UI wrapped in the NetConfig nav bar."""
         base = get_swagger_ui_html(
-            openapi_url="/openapi.json",
+            openapi_url="/api/v1/openapi.json",
             title="NetConfig — API Docs",
         )
         html = base.body.decode("utf-8")
@@ -342,8 +395,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         html = html.replace("</body>", f"{nav_css}</body>", 1)
         return HTMLResponse(content=html)
 
+    # ------------------------------------------------------------------
+    # Health endpoint
+    # ------------------------------------------------------------------
+    @app.get("/health", include_in_schema=False)
+    async def health(request: Request):
+        """Basic health check for readiness probes."""
+        return {
+            "status": "ok",
+            "definitions": len(request.app.state.definitions),
+            "schedules": len(request.app.state.schedules),
+            "profiles": len(request.app.state.device_profiles),
+            "jobs": len(request.app.state.jobs),
+        }
+
     return app
 
 
 # Production application instance — used by ``uvicorn netconfig.main:app``
-app = create_app()
+try:
+    app = create_app()
+except Exception as _exc:
+    import sys
+
+    print(f"NetConfig failed to start: {_exc}", file=sys.stderr)
+    raise SystemExit(1) from _exc

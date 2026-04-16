@@ -60,8 +60,10 @@
       {{ success_count }}/{{ job.total_devices }}
       {% if success_count == job.total_devices and job.total_devices > 0 %}
         <span style="color:#155724">&#10003;</span>
-      {% elif success_count < job.total_devices %}
+      {% elif success_count == 0 and job.total_devices > 0 %}
         <span style="color:#721c24">&#10007;</span>
+      {% elif success_count < job.total_devices %}
+        <span style="color:#7a5d00">&#9888;</span>
       {% endif %}
     </span>
 

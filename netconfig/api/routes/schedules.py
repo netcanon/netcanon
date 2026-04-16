@@ -63,6 +63,17 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
     (blocking SSH must not run on the event loop), persists the job, and
     updates the schedule's ``last_run_at`` / ``next_run_at``.
     """
+    try:
+        await _run_scheduled_backup_inner(schedule_id, app)
+    except Exception as exc:
+        logger.error(
+            "Scheduled backup for schedule %s failed: %s",
+            schedule_id, exc, exc_info=True,
+        )
+
+
+async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
+    """Inner implementation of scheduled backup (wrapped by error handler)."""
     # Local imports to avoid circular dependency at module load time
     from pydantic import SecretStr
 
@@ -77,11 +88,17 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
 
     device_profiles: dict[str, DeviceProfile] = app.state.device_profiles
 
-    # Resolve target devices (new-style: profile-based)
+    # Resolve target devices (new-style: profile-based).
+    # Build a type_key index for O(n) instead of O(n*m) resolution.
     target: dict[str, DeviceProfile] = {}
-    for type_key in schedule.target_type_keys:
+    if schedule.target_type_keys:
+        from collections import defaultdict
+
+        by_type: dict[str, list[tuple[str, DeviceProfile]]] = defaultdict(list)
         for pid, p in device_profiles.items():
-            if p.type_key == type_key:
+            by_type[p.type_key].append((pid, p))
+        for type_key in schedule.target_type_keys:
+            for pid, p in by_type.get(type_key, []):
                 target[pid] = p
     for device_id in schedule.target_device_ids:
         if device_id in device_profiles:
@@ -139,13 +156,15 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
     )
     app.state.jobs[job.id] = job
     logger.info(
-        "Schedule '%s' triggered job %s (%d device(s))",
+        "Schedule '%s' triggered job %s (%d device(s)): %s",
         schedule.name,
-        job.id[:8],
+        job.id,
         len(devices),
+        [d.host for d in devices],
     )
 
     job_store: FileJobStore = app.state.job_store
+    max_workers = getattr(app.state.settings, "backup_concurrency", 10)
     await asyncio.to_thread(
         _run_backup_job,
         job,
@@ -153,6 +172,7 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
         app.state.definitions,
         app.state.storage,
         job_store,
+        max_workers,
     )
 
     schedule.last_run_at = datetime.now(timezone.utc)
@@ -197,6 +217,11 @@ def create_schedule(
     scheduler=Depends(get_scheduler),
 ) -> BackupSchedule:
     """Create a new recurring backup schedule and register it immediately."""
+    if len(schedules) >= 200:
+        raise HTTPException(
+            status_code=409,
+            detail="Maximum schedule limit reached (200). Delete unused schedules first.",
+        )
     schedule = BackupSchedule(**body.model_dump())
     schedules[schedule.id] = schedule
     schedule_store.save(schedule)
@@ -238,7 +263,7 @@ def delete_schedule(
     schedule_store.delete(schedule_id)
     if scheduler.get_job(schedule_id):
         scheduler.remove_job(schedule_id)
-    logger.info("Deleted schedule %s", schedule_id[:8])
+    logger.info("Deleted schedule %s", schedule_id)
 
 
 @router.post(

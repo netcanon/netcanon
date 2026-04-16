@@ -7,6 +7,129 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (config viewer search misses queries that cross syntax-highlight spans)
+
+- **Cross-span search now works.** The syntax highlighter splits the
+  config text into many text nodes interleaved with ``<span class="tok-*">``
+  elements.  The previous per-text-node ``indexOf`` loop couldn't see a
+  match that straddled a span boundary, so queries like ``64:ff9b``
+  (FortiGate IPv6 NAT prefix — ``64`` is a ``tok-number`` span, ``:ff9b``
+  is plain text in the next node) or ``hostname Router`` (keyword span
+  followed by plain text) silently returned zero matches even when the
+  substring was clearly present.
+- **Fix:** ``_cvSearch`` in ``base.html`` now flattens the ``<pre>`` into
+  a single string while building a ``(node, absolute_offset)`` segment
+  map, finds matches in the flat text, and wraps each match across
+  whatever boundaries it crosses.  Matches are processed in reverse
+  document order so earlier offsets stay valid as later ones mutate
+  the DOM.  A single logical match becomes a *group* of ``<mark>``
+  elements; ``configViewerNav`` toggles the ``.current`` class on every
+  element in the group and scrolls to the first.
+- **New E2E tests** in ``tests/e2e/test_backup_flow.py``:
+  - ``test_cross_span_query_finds_match`` — asserts ``"hostname Router"``
+    (straddles the ``tok-keyword`` span) now matches.
+  - ``test_cross_span_match_current_class_applied_to_all_pieces`` —
+    asserts every ``<mark>`` in the group gets ``.current``.
+
+### Added (parallel backup execution within a job)
+
+- **Per-job parallelism** — `_run_backup_job` now dispatches device work
+  to a bounded `ThreadPoolExecutor`.  Up to `backup_concurrency` devices
+  run simultaneously; additional devices wait in the executor's FIFO
+  queue and start as slots free up.  A 30-device job with 30 s per
+  device now completes in ~3 × the per-device latency instead of 30 ×.
+- **`Settings.backup_concurrency`** — new configurable, range `[1, 10]`,
+  default `10`.  Hard-capped at `MAX_BACKUP_CONCURRENCY = 10` in
+  `netconfig/config.py` to protect target SSH servers (most vendor caps
+  are 5–16) and bound server thread count.  Override via
+  `NETCONFIG_BACKUP_CONCURRENCY`; see `.env.example`.
+- **Serial fast-path** — jobs with a single device (or deployments
+  pinned to `backup_concurrency=1`) skip the thread pool entirely;
+  traces and error paths stay unchanged for those callers.
+- **Thread-safety contract** documented in the `_run_backup_job`
+  docstring: results list is pre-populated and never resized, each
+  worker mutates exactly one index, and `FileConfigStore` atomic writes
+  handle storage concurrency.
+- Tests default to serial execution (`test_settings` sets
+  `backup_concurrency=1`) so the existing observation test and all
+  ordering-sensitive assertions remain deterministic.  Explicit parallel
+  tests in `TestBackupConcurrency` exercise the pool via `Barrier(n)`.
+
+### Added (persistent backup-progress panel + per-device lifecycle states)
+
+- **`BackupResult.status` lifecycle** — new intermediate values `queued`
+  and `running` alongside the existing terminal `success` / `failed`.
+  `_run_backup_job` now pre-populates one `BackupResult` per device in
+  `queued` state, flips each to `running` when its collector is invoked,
+  and sets the terminal state on completion.  Polling clients can snapshot
+  the results list at any point and see exactly which device the engine is
+  working on.
+- **Floating job-progress panel** (`base.html` — global):
+  - Bottom-right floating widget, present on every page.
+  - Collapsible header showing aggregated job status + live summary
+    (`2/5 complete — running: 1 — queued: 2` or `5/5 succeeded`).
+  - One row per device with status icon (`○` queued, `⟳` running, `✓`
+    success, `✗` failed), host label, per-device duration, and truncated
+    error on failure.
+  - **Persists across full page reloads** — the active job ID is stored
+    in `localStorage["netconfig.activeJob"]`; on `DOMContentLoaded` the
+    panel resumes polling if the stored job is still non-terminal, and
+    renders the final state otherwise.
+  - Explicit `Dismiss` button (no auto-dismiss) clears the panel AND the
+    localStorage key.  A "View full job details" deep link jumps to the
+    corresponding card on `/jobs`.
+  - Dispatches `netconfig:job-started`, `netconfig:job-progress`,
+    `netconfig:job-complete`, and `netconfig:job-dismissed` `CustomEvent`s
+    on `document` so page-level code (e.g. the dashboard row injector)
+    can react without re-polling.
+- **New `data-testid`s:** `job-progress-panel`, `job-progress-header`,
+  `job-progress-summary`, `job-progress-toggle`, `job-progress-body`,
+  `job-progress-device-row`, `job-progress-device-status`,
+  `job-progress-device-host`, `job-progress-device-duration`,
+  `job-progress-device-error`, `job-progress-footer`,
+  `job-progress-view-link`, `job-progress-dismiss`.  The legacy
+  `job-status-banner`, `job-id-display`, and `job-status-display` testids
+  are aliased onto the new panel for backward compatibility.
+
+### Removed
+
+- **Inline job status banner** on `index.html` — replaced by the global
+  floating progress panel (above).  The dashboard's submit handler now
+  delegates to `startJobProgress(jobId)` and listens for the
+  `netconfig:job-complete` event for the "inject a row into the recent
+  jobs table" step.
+
+### Added (config viewer: syntax highlighting + in-modal search)
+
+- **Syntax highlighting** in the shared config viewer modal (`viewConfig()`):
+  comments, keywords, strings, IP addresses, and numbers for Cisco / Fortigate /
+  Mikrotik `.cfg` output, plus tags and attributes for OPNsense XML.  Unknown
+  extensions fall back to escaped plain text.  Palette is VS Code "Dark+"
+  inspired; all tokens are rendered as `<span class="tok-*">` so E2E tests and
+  custom themes can target them.
+- **In-modal search** with live match counter, previous / next navigation
+  (▲ / ▼ buttons), keyboard shortcuts (Enter = next, Shift+Enter = previous,
+  Escape = clear or close), and wrap-around.  Matches are wrapped in `<mark>`
+  elements; the currently-selected match gets `mark.current` for a distinct
+  highlight colour and is auto-scrolled into view.
+- **New `data-testid`s** for the viewer: `config-viewer`, `config-viewer-title`,
+  `config-viewer-content`, `config-viewer-search`, `config-viewer-search-count`,
+  `config-viewer-search-prev`, `config-viewer-search-next`, `config-viewer-close`.
+  Full reference in `tests/testid_reference.md`.
+
+### Changed (job status reflects per-device outcomes)
+
+- **`JobStatus.partial`** — new terminal state for backup jobs where at least
+  one device succeeded AND at least one failed.  Terminal-state semantics are
+  now:
+  - `completed` — every device succeeded.
+  - `partial`   — mixed result (≥1 success, ≥1 failure).
+  - `failed`    — zero successes (every device failed).
+
+  Previously a job was marked `completed` regardless of per-device outcomes;
+  users had to look at the success/total column to notice failures.  The UI
+  now shows an amber `badge-partial` and a ⚠ indicator for mixed runs.
+
 ### Added (backup jobs page + recurring schedules)
 
 - **Job persistence** — `FileJobStore` writes one JSON file per completed backup

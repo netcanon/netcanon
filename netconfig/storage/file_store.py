@@ -95,7 +95,15 @@ class FileConfigStore(BaseConfigStore):
         ``{filename}.meta.json`` is written alongside the config file
         containing ``{"device_profile_id": "..."}``.
         """
-        safe_host = re.sub(r"[.:]", "-", host)
+        # Encode dots as single hyphens, colons (IPv6) as double hyphens
+        # so the reconstruction in _parse_filename is lossless.
+        MAX_CONFIG_SIZE = 50 * 1024 * 1024  # 50 MB
+        if len(content) > MAX_CONFIG_SIZE:
+            raise ValueError(
+                f"Config content exceeds max size "
+                f"({len(content):,} bytes > {MAX_CONFIG_SIZE:,} bytes)"
+            )
+        safe_host = host.replace(":", "--").replace(".", "-")
         ts_str = timestamp.strftime(_TS_FORMAT)
         stem = f"{device_type}_{safe_host}_{ts_str}"
         filename = f"{stem}.{extension}"
@@ -114,16 +122,21 @@ class FileConfigStore(BaseConfigStore):
                 "Filename collision: renamed to %r (counter=%d)", filename, counter
             )
 
-        path.write_text(content, encoding="utf-8")
+        # Atomic write: write to temp then rename to prevent corruption.
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(content, encoding="utf-8")
+        tmp.replace(path)
         size = path.stat().st_size
         logger.info("Saved config %r (%d bytes) → %s", filename, size, subdir)
 
         if device_profile_id is not None:
             meta_path = subdir / f"{filename}.meta.json"
-            meta_path.write_text(
+            meta_tmp = meta_path.with_suffix(".tmp")
+            meta_tmp.write_text(
                 json.dumps({"device_profile_id": device_profile_id}),
                 encoding="utf-8",
             )
+            meta_tmp.replace(meta_path)
             logger.debug("Wrote sidecar metadata %s", meta_path.name)
 
         return ConfigRecord(
@@ -185,12 +198,13 @@ class FileConfigStore(BaseConfigStore):
             FileNotFoundError: If the file does not exist.
         """
         path = self.resolve_path(filename)
-        path.unlink()
-        logger.info("Deleted config %r from %s", filename, path.parent)
+        # Delete sidecar first so it isn't orphaned if main file delete fails.
         meta_path = path.parent / f"{path.name}.meta.json"
         if meta_path.exists():
             meta_path.unlink()
             logger.debug("Deleted sidecar metadata %s", meta_path.name)
+        path.unlink()
+        logger.info("Deleted config %r from %s", filename, path.parent)
 
     def resolve_path(self, filename: str) -> Path:
         """Return the absolute filesystem path for *filename*.
@@ -277,7 +291,9 @@ class FileConfigStore(BaseConfigStore):
         except ValueError:
             return None
         safe_host = m.group("safe_host")
-        host = safe_host.replace("-", ".")  # best-effort reconstruction
+            # Best-effort host reconstruction: dots were encoded as single
+        # hyphens and colons (IPv6) as double hyphens.
+        host = safe_host.replace("--", ":").replace("-", ".")
         return ConfigRecord(
             device_type=m.group("device_type"),
             host=host,

@@ -6,30 +6,9 @@ They are accepted as request bodies from API callers and the interactive
 web form, never persisted to disk (credentials are in-memory only).
 """
 
-import ipaddress
-import re
-
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
-# RFC-1123 hostname: labels of 1–63 alphanumeric/hyphen chars, not starting
-# or ending with a hyphen, separated by dots.
-_HOSTNAME_RE = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
-    r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
-)
-
-
-def _validate_host(v: str) -> str:
-    """Accept a valid IPv4, IPv6, or RFC-1123 hostname; reject everything else."""
-    v = v.strip()
-    try:
-        ipaddress.ip_address(v)
-        return v
-    except ValueError:
-        pass
-    if _HOSTNAME_RE.match(v):
-        return v
-    raise ValueError(f"Invalid hostname or IP address: {v!r}")
+from .validators import validate_host as _validate_host
 
 
 class DeviceCredentials(BaseModel):
@@ -83,4 +62,4 @@ class BackupRequest(BaseModel):
             devices are processed; individual failures do not abort the job.
     """
 
-    devices: list[DeviceTarget] = Field(..., min_length=1)
+    devices: list[DeviceTarget] = Field(..., min_length=1, max_length=500)

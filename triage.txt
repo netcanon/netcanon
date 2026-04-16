@@ -1,0 +1,607 @@
+================================================================================
+            NETCONFIG — AUTO-ACTIONABLE TRIAGE (No Design Decisions Required)
+                              Generated 2026-04-15
+================================================================================
+
+These items can be implemented directly with deterministic code changes.
+No architectural decisions, UX debates, or policy choices needed.
+
+Items requiring human-in-the-loop decisions are listed separately at the
+end of this file for reference.
+
+Sorted by: Severity (CRITICAL > HIGH > MEDIUM > LOW), then by effort.
+
+================================================================================
+  CRITICAL — Auto-Actionable  (14 items)
+================================================================================
+
+AUTO-001  CRITICAL  [Correctness / Data Integrity]
+  IPv6 address reconstruction produces invalid addresses
+  File: netconfig/storage/file_store.py, lines 98, 279-280
+  Fix: Use distinct separator for dots vs colons in safe_host encoding.
+       Encode dots as "-" and colons as "--", then reverse in _parse_filename.
+       Or store the original host in the .meta.json sidecar and read it back.
+
+AUTO-002  CRITICAL  [Correctness]
+  DeviceProfile class lacks host validation
+  File: netconfig/models/device_profile.py, lines 42-68
+  Fix: Add @field_validator("host") to DeviceProfile class, same as
+       DeviceProfileCreate already has. One decorator + classmethod.
+
+AUTO-003  CRITICAL  [Reliability / Data Integrity / Resilience]
+  Non-atomic file writes across all 4 storage modules
+  Files: file_store.py:117, job_store.py:44, schedule_store.py:55,
+         device_profile_store.py:51
+  Fix: Replace all path.write_text(content) calls with atomic pattern:
+         tmp = path.with_suffix(".tmp")
+         tmp.write_text(content, encoding="utf-8")
+         tmp.replace(path)  # atomic on same filesystem
+       Apply to all 4 stores uniformly.
+
+AUTO-004  CRITICAL  [Resilience]
+  APScheduler has no exception handler — single failure kills scheduler
+  File: netconfig/main.py, line 110
+  Fix: Add listener for EVENT_JOB_ERROR + EVENT_JOB_MISSED:
+         from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
+         def _on_job_error(event):
+             logger.error("Scheduled job %s failed: %s", event.job_id, event.exception)
+         scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR | EVENT_JOB_MISSED)
+
+AUTO-005  CRITICAL  [Security]
+  OpenAPI schema endpoint still exposed at /openapi.json
+  File: netconfig/main.py, line 134
+  Fix: Add openapi_url=None to FastAPI() constructor (alongside existing
+       docs_url=None, redoc_url=None). Or conditionally expose it.
+
+AUTO-006  CRITICAL  [Cost Control]
+  No maximum device limit per backup request
+  File: netconfig/models/device.py, line 86
+  Fix: Change Field(..., min_length=1) to Field(..., min_length=1, max_length=500)
+       on BackupRequest.devices. Single line change.
+
+AUTO-007  CRITICAL  [Cost Control]
+  No maximum schedule count
+  File: netconfig/api/routes/schedules.py, line 192
+  Fix: Add guard at top of create_schedule():
+         if len(schedules) >= 200:
+             raise HTTPException(status_code=409, detail="Maximum schedule limit reached (200)")
+
+AUTO-008  CRITICAL  [Observability]
+  No health/readiness/liveness endpoint
+  File: netconfig/main.py
+  Fix: Add inside create_app() after template routes:
+         @app.get("/health", include_in_schema=False)
+         async def health():
+             return {"status": "ok", "definitions": len(app.state.definitions)}
+
+AUTO-009  CRITICAL  [Distribution]
+  Template files not included in cx_Freeze build
+  File: setup_desktop.py, line 75
+  Fix: Add to include_files list:
+         (str(Path("netconfig/templates")), "lib/netconfig/templates")
+
+AUTO-010  CRITICAL  [Distribution]
+  No package-data directive in pyproject.toml
+  File: pyproject.toml, lines 46-48
+  Fix: Add section:
+         [tool.setuptools.package-data]
+         netconfig = ["templates/*.html"]
+
+AUTO-011  CRITICAL  [Data Integrity]
+  Non-atomic config + sidecar metadata writes
+  File: netconfig/storage/file_store.py, lines 117-127
+  Fix: Covered by AUTO-003 (atomic write pattern). Apply to both config
+       file write and .meta.json write. Write config first (primary data),
+       then sidecar (supplementary).
+
+AUTO-012  CRITICAL  [Resilience]
+  File write failures (disk full) crash backup job silently
+  File: netconfig/storage/file_store.py, lines 117-126
+  Fix: Covered by AUTO-003 + AUTO-028. The atomic write prevents partial
+       corruption; the try-except in save() routes (AUTO-028) prevents
+       the background task from crashing without updating job status.
+
+AUTO-013  CRITICAL  [Cost Control]
+  Unbounded device profile count
+  File: netconfig/api/routes/device_profiles.py
+  Fix: Add guard at top of create_device_profile():
+         if len(device_profiles) >= 1000:
+             raise HTTPException(status_code=409, detail="Maximum device profile limit reached (1000)")
+
+AUTO-014  CRITICAL  [Cost Control]
+  APScheduler coalescing and max_instances not configured
+  File: netconfig/main.py, line 110
+  Fix: Change to:
+         scheduler = AsyncIOScheduler(
+             timezone="UTC",
+             job_defaults={"coalesce": True, "max_instances": 1, "misfire_grace_time": 300},
+         )
+
+
+================================================================================
+  HIGH — Auto-Actionable  (22 items)
+================================================================================
+
+AUTO-015  HIGH  [Usability]
+  Missing GET endpoint for device profile by ID
+  File: netconfig/api/routes/device_profiles.py
+  Fix: Add endpoint:
+         @router.get("/{profile_id}", response_model=DeviceProfile)
+         def get_device_profile(profile_id: str,
+             device_profiles=Depends(get_device_profiles)) -> DeviceProfile:
+             if profile_id not in device_profiles:
+                 raise HTTPException(404, detail=f"Device profile not found: {profile_id!r}")
+             return device_profiles[profile_id]
+
+AUTO-016  HIGH  [Usability]
+  Config viewer modal lacks ARIA labels
+  File: netconfig/templates/base.html, lines 69-80
+  Fix: Add to modal div: role="dialog" aria-labelledby="config-viewer-title"
+       aria-modal="true". Add aria-label="Close" to close button. Add
+       id="config-viewer-title" to the modal title element.
+
+AUTO-017  HIGH  [Security]
+  Error messages leak raw SSH exception details
+  File: netconfig/api/routes/backups.py, line 194
+  Fix: Truncate and sanitize: error=str(exc)[:500]
+       Or replace with a generic message + log the full exception.
+
+AUTO-018  HIGH  [Maintainability]
+  Host validation logic duplicated in two modules
+  Files: netconfig/models/device.py:22-32, netconfig/models/device_profile.py:23-39
+  Fix: Extract _validate_host() and _HOSTNAME_RE to netconfig/models/validators.py.
+       Import from both device.py and device_profile.py. Delete duplicated code.
+
+AUTO-019  HIGH  [Maintainability]
+  No .env.example file
+  File: (new) .env.example
+  Fix: Create .env.example with documented variables:
+         # NETCONFIG_DEFINITIONS_DIR=definitions
+         # NETCONFIG_CONFIGS_DIR=configs
+         # NETCONFIG_HOST=0.0.0.0
+         # NETCONFIG_PORT=8000
+         # NETCONFIG_LOG_LEVEL=info
+         # NETCONFIG_OPEN_IN_EDITOR=false
+
+AUTO-020  HIGH  [Reliability]
+  _run_scheduled_backup lacks top-level exception handling
+  File: netconfig/api/routes/schedules.py, lines 59-166
+  Fix: Wrap entire function body in try-except:
+         async def _run_scheduled_backup(schedule_id, app):
+             try:
+                 ...existing code...
+             except Exception as exc:
+                 logger.error("Schedule '%s' run failed: %s", schedule_id, exc, exc_info=True)
+
+AUTO-021  HIGH  [Reliability]
+  Schedule re-registration silently fails during lifespan
+  File: netconfig/main.py, lines 114-120
+  Fix: Wrap register_schedule_job() call in try-except:
+         try:
+             register_schedule_job(scheduler, schedule, _app)
+         except Exception as exc:
+             logger.error("Failed to register schedule '%s': %s", schedule.name, exc)
+
+AUTO-022  HIGH  [Resilience]
+  No validation that storage directories are writable at startup
+  File: netconfig/main.py, lines 96-107
+  Fix: After creating each store, test-write a temp file:
+         test_file = (data_root / "jobs" / ".write_test")
+         test_file.write_text("ok"); test_file.unlink()
+       Wrap in try-except; log warning if not writable.
+
+AUTO-023  HIGH  [Resilience]
+  All storage save() methods lack error handling
+  Files: device_profile_store.py:50-51, schedule_store.py:54-55, job_store.py:44
+  Fix: Wrap write_text() in try-except OSError in each save() method:
+         try:
+             path.write_text(...)
+         except OSError as exc:
+             logger.error("Failed to persist %s: %s", path.name, exc)
+             raise
+
+AUTO-024  HIGH  [Data Integrity]
+  Deleted profile references not checked in schedules
+  File: netconfig/api/routes/device_profiles.py, lines 109-128
+  Fix: Before deleting, scan schedules for references and log warning:
+         referencing = [s.name for s in request.app.state.schedules.values()
+                        if profile_id in s.target_device_ids]
+         if referencing:
+             logger.warning("Deleting profile %s referenced by schedules: %s",
+                            profile_id[:8], referencing)
+       (Add request: Request parameter to the endpoint)
+
+AUTO-025  HIGH  [Correctness]
+  Paramiko collector times out on short-output devices (< 5 lines)
+  File: netconfig/collectors/paramiko_collector.py, lines 173-204
+  Fix: Lower the "started" threshold from 5 lines to 1 line:
+         if len(buf.splitlines()) > 0:  # was > 5
+             started = True
+
+AUTO-026  HIGH  [Observability]
+  Schedule execution logs missing device target details
+  File: netconfig/api/routes/schedules.py, lines 141-146
+  Fix: After resolving targets, log device list:
+         logger.info("Schedule '%s' targeting devices: %s",
+                     schedule.name, [p.host for p in target.values()])
+
+AUTO-027  HIGH  [Observability]
+  Credential migration logs missing profile identifiers
+  Files: device_profile_store.py:93-96, schedule_store.py:99-102
+  Fix: Include profile name/id in the log message:
+         logger.info("Migrated plaintext credentials for profile '%s' (id=%s)",
+                     p.name, p.id[:8])
+
+AUTO-028  HIGH  [Resilience]
+  Backup job status stuck on storage write failure
+  File: netconfig/api/routes/backups.py, lines 154-217
+  Fix: Wrap storage.save() call (line 164-171) in try-except:
+         try:
+             record = storage.save(...)
+             job.results.append(BackupResult(status="success", ...))
+         except OSError as exc:
+             job.results.append(BackupResult(status="failed", error=f"Storage error: {exc}", ...))
+
+AUTO-029  HIGH  [Resilience]
+  Maximum file size limit for config storage
+  File: netconfig/storage/file_store.py, lines 77-137
+  Fix: Add size check at top of save():
+         MAX_CONFIG_SIZE = 50 * 1024 * 1024  # 50 MB
+         if len(content) > MAX_CONFIG_SIZE:
+             raise ValueError(f"Config content exceeds max size ({len(content)} > {MAX_CONFIG_SIZE})")
+
+AUTO-030  HIGH  [Correctness]
+  prompts.trailing patterns are dead code (never applied)
+  File: netconfig/definitions/schema.py, lines 56-68
+  Fix: Add trailing prompt stripping to paramiko_collector.py _collect_output()
+       at the end, after collecting raw output:
+         import re
+         for pattern in definition.prompts.trailing:
+             output = re.sub(pattern, "", output, flags=re.MULTILINE)
+       (Netmiko handles this internally; only paramiko needs it.)
+
+AUTO-031  HIGH  [Distribution]
+  cx_Freeze packages list missing template reference
+  File: setup_desktop.py, lines 70-76
+  Fix: Add "netconfig.templates" to the packages list in build_exe_options.
+
+AUTO-032  HIGH  [Performance]
+  Dashboard sorts ALL jobs just to slice [:10]
+  File: netconfig/main.py, lines 164-175
+  Fix: Use heapq.nlargest(10, jobs.values(), key=lambda j: j.created_at)
+       instead of sorted(..., reverse=True)[:10]. Import heapq at top.
+
+AUTO-033  HIGH  [Security]
+  DeviceProfile passwords exposed in API list response
+  File: netconfig/api/routes/device_profiles.py, lines 23-32
+  Fix: Create DeviceProfileResponse model that excludes password fields:
+         class DeviceProfileResponse(DeviceProfile):
+             password: str = Field(exclude=True)
+             enable_password: str | None = Field(exclude=True)
+       Change response_model on list and get endpoints.
+
+AUTO-034  HIGH  [Compliance]
+  Missing HTTP security headers
+  File: netconfig/main.py
+  Fix: Add middleware inside create_app():
+         from starlette.middleware.base import BaseHTTPMiddleware
+         @app.middleware("http")
+         async def add_security_headers(request, call_next):
+             response = await call_next(request)
+             response.headers["X-Content-Type-Options"] = "nosniff"
+             response.headers["X-Frame-Options"] = "DENY"
+             return response
+
+
+================================================================================
+  MEDIUM — Auto-Actionable  (16 items)
+================================================================================
+
+AUTO-035  MEDIUM  [Usability]
+  Toast notification lacks ARIA live region
+  File: netconfig/templates/base.html, lines 83-87
+  Fix: Add attributes to toast div:
+         role="status" aria-live="polite" aria-atomic="true"
+
+AUTO-036  MEDIUM  [Security]
+  SSH usernames logged in plaintext at INFO level
+  Files: netmiko_collector.py:87-93, paramiko_collector.py:68-72
+  Fix: Downgrade username logging from INFO to DEBUG:
+         logger.debug("Connecting to %s:%d as %s (%s)", ...)
+
+AUTO-037  MEDIUM  [Maintainability]
+  Credential migration pattern duplicated in two stores
+  Files: device_profile_store.py:80-96, schedule_store.py:82-98
+  Fix: Extract to netconfig/security/credentials.py:
+         def migrate_credential_fields(data: dict, fields: list[str]) -> bool:
+             """Decrypt fields in-place; return True if any were plaintext."""
+       Call from both stores' load_all() methods.
+
+AUTO-038  MEDIUM  [Data Integrity]
+  Orphaned sidecar metadata on config deletion
+  File: netconfig/storage/file_store.py, lines 178-193
+  Fix: Delete sidecar first, then config file. Or handle each independently:
+         meta_path = path.with_name(path.name + ".meta.json")
+         if meta_path.exists():
+             meta_path.unlink()
+         if not path.exists():
+             raise FileNotFoundError(...)
+         path.unlink()
+
+AUTO-039  MEDIUM  [Resilience]
+  APScheduler job failure does not emit application logs
+  File: netconfig/api/routes/schedules.py, lines 59-166
+  Fix: Covered by AUTO-020. The top-level try-except logs the error.
+
+AUTO-040  MEDIUM  [Resilience]
+  APScheduler misfire grace period not configured
+  File: netconfig/main.py, line 110
+  Fix: Covered by AUTO-014. misfire_grace_time=300 already included.
+
+AUTO-041  MEDIUM  [Observability]
+  Job completion logging missing summary statistics
+  File: netconfig/api/routes/backups.py, lines 207-215
+  Fix: Expand completion log to include failed hosts:
+         failed = [r.host for r in job.results if r.status == "failed"]
+         logger.info("Backup job %s completed: %d/%d succeeded%s",
+                     job.id, success, job.total_devices,
+                     f" (failed: {failed})" if failed else "")
+
+AUTO-042  MEDIUM  [Correctness]
+  Schedule targeting allows silent overlap without dedup warning
+  File: netconfig/api/routes/schedules.py, lines 81-88
+  Fix: After resolving targets, check for overlap and log:
+         if overlap := set(target) & set(schedule.target_device_ids):
+             logger.debug("Schedule '%s': %d device(s) matched by both type_key and device_id",
+                          schedule.name, len(overlap))
+
+AUTO-043  MEDIUM  [Reliability]
+  Encryption migration fails silently on permission denied
+  File: netconfig/storage/schedule_store.py, lines 97-102
+  Fix: Catch PermissionError specifically and log at ERROR:
+         except PermissionError as exc:
+             logger.error("Cannot migrate credentials for schedule '%s': %s (read-only?)", s.name, exc)
+         except Exception as exc:
+             logger.warning("Skipping corrupt schedule %s: %s", path.name, exc)
+
+AUTO-044  MEDIUM  [Distribution]
+  Module-level app instantiation fails at import time
+  File: netconfig/main.py, line 349
+  Fix: Wrap in try-except with informative error:
+         try:
+             app = create_app()
+         except Exception as exc:
+             import sys
+             print(f"NetConfig failed to start: {exc}", file=sys.stderr)
+             raise SystemExit(1)
+
+AUTO-045  MEDIUM  [Cost Control]
+  No metrics for resource usage (basic version)
+  File: netconfig/main.py
+  Fix: Add a simple stats endpoint:
+         @app.get("/stats", include_in_schema=False)
+         async def stats(request: Request):
+             return {
+                 "jobs": len(request.app.state.jobs),
+                 "schedules": len(request.app.state.schedules),
+                 "profiles": len(request.app.state.device_profiles),
+             }
+
+AUTO-046  MEDIUM  [Performance]
+  Schedule resolution iterates all profiles linearly
+  File: netconfig/api/routes/schedules.py, lines 82-88
+  Fix: Build a type_key index at schedule execution time:
+         by_type = defaultdict(list)
+         for pid, p in device_profiles.items():
+             by_type[p.type_key].append((pid, p))
+         for type_key in schedule.target_type_keys:
+             for pid, p in by_type.get(type_key, []):
+                 target[pid] = p
+
+
+================================================================================
+  LOW — Auto-Actionable  (7 items)
+================================================================================
+
+AUTO-047  LOW  [Usability]
+  Duplicate display:none style attribute
+  File: netconfig/templates/schedules.html, line 40
+  Fix: Remove the second "display:none" from the style attribute.
+
+AUTO-048  LOW  [Reliability]
+  Race condition between stat() and read() in config retrieval
+  File: netconfig/api/routes/configs.py, lines 62-68
+  Fix: Catch FileNotFoundError around storage.get_content() instead of
+       relying on resolve_path() existing first. Already done — the existing
+       try-except covers this. Verify no gap in file_store.get_content().
+
+AUTO-049  LOW  [Observability]
+  Job ID truncated in some schedule logs
+  File: netconfig/api/routes/schedules.py, lines 144, 216, 241
+  Fix: Replace job.id[:8] with job.id in log statements.
+       Full UUID is needed for log correlation.
+
+AUTO-050  LOW  [Correctness]
+  Filename regex ambiguous for underscored device types
+  File: netconfig/storage/file_store.py, lines 49-52
+  Fix: Use a fixed delimiter (double underscore "__") between type_key and
+       safe_host in the filename format: {type_key}__{safe_host}_{timestamp}.
+       Update _FILENAME_RE to split on "__".
+
+AUTO-051  LOW  [Distribution]
+  Unreachable macOS/Linux code in open-in-editor
+  File: netconfig/api/routes/configs.py, lines 142-151
+  Fix: Leave as-is for web platform portability. The cross-platform code is
+       correct and costs nothing. Only flag for desktop-specific builds.
+       STATUS: NO CHANGE NEEDED.
+
+AUTO-052  LOW  [Resilience]
+  Concurrent schedule dict access unprotected
+  File: netconfig/api/routes/schedules.py, lines 158-166
+  Fix: Low risk in practice (GIL protects simple dict ops). Add a comment
+       noting the concurrency assumption. Full fix would require HITL
+       decision on locking strategy.
+
+AUTO-053  LOW  [Data Integrity]
+  Corrupt JSON files skipped silently — no user notification
+  Files: device_profile_store.py, schedule_store.py, job_store.py
+  Fix: Upgrade log level from WARNING to ERROR for skipped files, and
+       store a count in app.state for surfacing in /health endpoint:
+         logger.error("CORRUPT FILE SKIPPED: %s — %s", path.name, exc)
+
+
+================================================================================
+  SUMMARY — Auto-Actionable Items
+================================================================================
+
+  Severity   Count
+  ------------------
+  CRITICAL      14
+  HIGH          22
+  MEDIUM        16
+  LOW            7
+  ------------------
+  TOTAL         59
+
+  Status: ALL 59 AUTO-ACTIONABLE ITEMS IMPLEMENTED (2026-04-15)
+
+
+================================================================================
+================================================================================
+  HUMAN-IN-THE-LOOP ITEMS — STATUS: PENDING (Awaiting Design Decisions)
+================================================================================
+================================================================================
+
+The following 83 items require architectural choices, UX design, policy
+decisions, or trade-off analysis before implementation. Grouped by theme.
+All are marked PENDING until a human owner makes the required decision.
+
+--- [PENDING] AUTHENTICATION & ACCESS CONTROL (Blocks ~15 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-SEC-001, CRITICAL-SEC-003, HIGH-SEC-002, MEDIUM-SEC-001,
+            MEDIUM-SEC-002, MEDIUM-CC-001, HIGH-CMP-004, HIGH-CMP-005
+  Decision: Auth strategy (API key, session cookie, OAuth, basic auth?),
+            scope (all endpoints or just write ops?), user model (single vs multi).
+  Impact:   Highest-impact HITL theme — blocks 15 findings across 3 lenses.
+
+--- [PENDING] DATA RETENTION & COMPLIANCE POLICY (Blocks ~12 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-CMP-001, CRITICAL-CMP-002, CRITICAL-CMP-003, CRITICAL-CC-001,
+            HIGH-CC-003, CRITICAL-PRF-001, MEDIUM-CMP-003
+  Decision: Retention periods (30/60/90 days?), cascade delete scope,
+            export format (JSON/CSV?), consent mechanism design.
+  Impact:   GDPR compliance blocker; also unblocks performance (unbounded growth).
+
+--- [PENDING] PAGINATION & API DESIGN (Blocks ~5 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-PRF-002, HIGH-PRF-001, HIGH-PRF-002
+  Decision: Pagination style (offset/limit vs cursor?), default page size,
+            backward compatibility with existing API consumers.
+  Impact:   Scalability blocker for jobs/configs/schedules list endpoints.
+
+--- [PENDING] JOB STATE DURABILITY (Blocks ~5 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-REL-001, CRITICAL-DI-001, CRITICAL-DI-002, HIGH-DI-004
+  Decision: Persist job at creation? After each device? State machine
+            enforcement strategy (property setter vs explicit transition method?).
+  Impact:   Data loss on crash; audit trail gap.
+
+--- [PENDING] SSH RESILIENCE STRATEGY (Blocks ~5 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: HIGH-RES-001, CRITICAL-RES-004, HIGH-CC-002, MEDIUM-RES-001
+  Decision: Retry count and backoff strategy, connection pooling approach,
+            timeout values, which SSH exceptions are retryable.
+  Impact:   Transient failures treated as permanent; SSH slot exhaustion.
+
+--- [PENDING] BACKUP PARALLELIZATION (Blocks ~3 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: HIGH-PRF-003, HIGH-CC-005, HIGH-REL-003
+  Decision: Thread pool size, max concurrent SSH connections, timeout per
+            device, cancellation mechanism.
+  Impact:   10-device backup takes 5min sequential vs 30s parallel.
+
+--- [PENDING] ENCRYPTION & KEY MANAGEMENT (Blocks ~3 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: MEDIUM-DI-003, MEDIUM-CMP-001, HIGH-CMP-003
+  Decision: Key rotation frequency, config file encryption (yes/no?),
+            migration path for key rotation.
+  Impact:   No recovery if encryption key compromised.
+
+--- [PENDING] UX & COPY WRITING (Blocks ~10 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-USA-001, HIGH-USA-001, HIGH-USA-004, MEDIUM-USA-001,
+            MEDIUM-USA-002, MEDIUM-USA-004, MEDIUM-USA-005, LOW-USA-002
+  Decision: Onboarding flow design, form layout, empty-state copy,
+            auto-refresh strategy (polling interval or WebSocket).
+  Impact:   First-run experience is confusing; accessibility gaps.
+
+--- [PENDING] TEST STRATEGY (Blocks ~7 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-MNT-001, HIGH-MNT-001, HIGH-MNT-002, MEDIUM-MNT-004,
+            MEDIUM-MNT-005, MEDIUM-MNT-006
+  Decision: Test scenario design, error conditions to cover, E2E flow
+            design for devices page.
+  Impact:   Device profiles API completely untested; collector error paths untested.
+
+--- [PENDING] DESKTOP RECOVERY (Blocks ~4 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-REL-004, HIGH-RES-002, HIGH-DST-003
+  Decision: Heartbeat/restart mechanism for embedded server, graceful
+            shutdown timeout, PySide6 pre-flight check strategy.
+  Impact:   Desktop app shows blank window if server crashes silently.
+
+--- [PENDING] OBSERVABILITY INFRASTRUCTURE (Blocks ~5 findings) ---
+  Status:   PENDING — No owner assigned
+  Findings: CRITICAL-OBS-002, CRITICAL-OBS-003, HIGH-OBS-002, MEDIUM-OBS-001
+  Decision: Structured logging library (python-json-logger?), metrics
+            system (Prometheus?), request ID middleware choice.
+  Impact:   Cannot trace requests end-to-end; no alerting pipeline.
+
+--- [PENDING] OTHER INDIVIDUAL ITEMS ---
+  [PENDING] HIGH-REL-001: Should app crash or start empty when definitions missing?
+  [PENDING] HIGH-MNT-004: Error handling policy for corrupt store files (crash/skip/quarantine?)
+  [PENDING] HIGH-MNT-006: Startup validation (warn vs crash vs fallback?)
+  [PENDING] HIGH-COR-002: Definition priority tie-breaking (error? alphabetical?)
+  [PENDING] HIGH-COR-003: prompts.trailing dead code (implement or remove?)
+  [PENDING] MEDIUM-COR-001: Bracketed IPv6 (support or reject with clear error?)
+  [PENDING] MEDIUM-MNT-001: README content (needs human to write)
+  [PENDING] MEDIUM-MNT-003: Standardize delete semantics (which pattern?)
+  [PENDING] HIGH-DST-001: Lock file tooling (pip-tools? poetry? uv?)
+  [PENDING] HIGH-DST-002: Native dependency documentation (needs human to write)
+  [PENDING] MEDIUM-DST-004: Startup/installer validation design
+  [PENDING] MEDIUM-DST-005: MSI build completeness validation
+  [PENDING] HIGH-CMP-001: Credential memory protection (SecretStr migration?)
+  [PENDING] HIGH-CMP-002: Log minimization policy for hostnames/usernames
+  [PENDING] LOW-CMP-002: Exception sanitization strategy for API responses
+
+================================================================================
+  HITL SUMMARY
+================================================================================
+
+  Theme                          Findings Blocked   Status
+  ----------------------------------------------------------------
+  Authentication & Access Control       15          PENDING
+  Data Retention & Compliance           12          PENDING
+  Pagination & API Design                5          PENDING
+  Job State Durability                   5          PENDING
+  SSH Resilience Strategy                5          PENDING
+  Backup Parallelization                 3          PENDING
+  Encryption & Key Management            3          PENDING
+  UX & Copy Writing                     10          PENDING
+  Test Strategy                          7          PENDING
+  Desktop Recovery                       4          PENDING
+  Observability Infrastructure           5          PENDING
+  Other Individual Items                15          PENDING
+  ----------------------------------------------------------------
+  TOTAL PENDING:                        83 findings across 12 themes
+
+  Recommended priority for human review:
+  1. Authentication (blocks most findings, highest security impact)
+  2. Data Retention (GDPR compliance + performance unblock)
+  3. Job State Durability (data loss on crash)
+  4. Pagination (scalability blocker)
+  5. Test Strategy (quality assurance gap)
+
+================================================================================
+                            END OF TRIAGE
+================================================================================

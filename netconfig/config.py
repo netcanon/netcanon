@@ -11,7 +11,13 @@ Pydantic-settings automatically reads ``.env`` files if present.
 
 from pathlib import Path
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Hard ceiling on per-job parallel device workers.  Chosen conservatively
+#: to protect the SSH target devices (most vendors cap concurrent sessions
+#: between 5 and 16) and to bound thread count on the backup server.
+MAX_BACKUP_CONCURRENCY: int = 10
 
 
 class Settings(BaseSettings):
@@ -35,6 +41,11 @@ class Settings(BaseSettings):
             ``netconfig_desktop/settings.py``; can also be enabled for a
             local web deployment via the ``NETCONFIG_OPEN_IN_EDITOR=true``
             environment variable.
+        backup_concurrency: Maximum number of devices a single backup job
+            processes in parallel.  Devices beyond this limit wait in a
+            FIFO queue and start as earlier slots free up.  Capped at
+            ``MAX_BACKUP_CONCURRENCY`` (10) to protect the SSH target
+            devices and bound thread count on the backup server.
     """
 
     definitions_dir: Path = Path("definitions")
@@ -43,6 +54,8 @@ class Settings(BaseSettings):
     port: int = 8000
     log_level: str = "info"
     open_in_editor: bool = False
+    backup_concurrency: int = Field(default=MAX_BACKUP_CONCURRENCY,
+                                    ge=1, le=MAX_BACKUP_CONCURRENCY)
 
     model_config = SettingsConfigDict(
         env_prefix="NETCONFIG_",

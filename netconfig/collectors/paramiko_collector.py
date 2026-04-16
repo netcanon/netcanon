@@ -65,8 +65,9 @@ class ParamikoShellCollector(BaseCollector):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        logger.info(
-            "Connecting (Paramiko shell) to %s:%d as %s",
+        logger.info("Connecting (Paramiko shell) to %s:%d", device.host, device.port)
+        logger.debug(
+            "SSH user for %s:%d: %s",
             device.host,
             device.port,
             device.credentials.username,
@@ -181,7 +182,7 @@ class ParamikoShellCollector(BaseCollector):
                 chunk = shell.recv(65536).decode("utf-8", errors="replace")
                 buf += chunk
                 idle_count = 0
-                if len(buf.splitlines()) > 5:
+                if len(buf.splitlines()) > 0:
                     started = True
                 if len(buf) % (100 * 80) < 160:
                     logger.debug(

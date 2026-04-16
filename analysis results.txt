@@ -1,0 +1,923 @@
+================================================================================
+                    NETCONFIG — 12-LENS ARCHITECTURAL ANALYSIS
+                              Generated 2026-04-15
+================================================================================
+
+Table of Contents:
+  1.  Security
+  2.  Reliability
+  3.  Usability
+  4.  Maintainability
+  5.  Performance
+  6.  Data Integrity
+  7.  Correctness
+  8.  Resilience
+  9.  Compliance
+  10. Cost Control
+  11. Observability
+  12. Distribution
+
+================================================================================
+1. SECURITY
+   PII protection, input validation, injection vectors, secrets management
+================================================================================
+
+CRITICAL-SEC-001: Unauthenticated API Endpoints Expose Plaintext Passwords
+  File: netconfig/api/routes/device_profiles.py, lines 23-128
+  All /api/v1/devices endpoints (GET, POST, PUT, DELETE) are completely
+  unauthenticated and return full DeviceProfile objects including plaintext
+  passwords in JSON responses. There is no authentication mechanism (no API
+  key, no session, no OAuth, no bearer token) on any endpoint. Any attacker
+  with network access can enumerate all saved device credentials.
+
+CRITICAL-SEC-002: OpenAPI Schema Endpoint Not Disabled
+  File: netconfig/main.py, line 282
+  Only docs_url=None and redoc_url=None disable the HTML UI — the schema at
+  /openapi.json is still exposed. Any attacker can access the schema to
+  understand the API structure and discover that credentials are stored and
+  returned in plaintext.
+
+CRITICAL-SEC-003: Zero Authentication on Entire API Surface
+  Files: All route files under netconfig/api/routes/
+  No authentication/authorization exists on any endpoint. All routes use
+  Depends() only for dependency injection (storage, jobs, definitions), never
+  for authentication. Anyone with network access can list all backups, delete
+  configs, create/modify/delete device profiles, trigger backups, and modify
+  schedules.
+
+HIGH-SEC-001: Error Messages Leak SSH Exception Details
+  File: netconfig/api/routes/backups.py, line 194
+  BackupResult.error = str(exc) captures raw exception messages from SSH
+  libraries which may contain SSH banner information, device error messages
+  revealing OS version, credential validation errors, or full stack traces.
+
+HIGH-SEC-002: Device Credentials Exposed in Frontend JavaScript
+  File: netconfig/templates/devices.html, lines 348-349
+  JavaScript fetches device profiles via unauthenticated GET endpoint to
+  populate the backup form, placing plaintext passwords in browser memory,
+  DevTools, and potentially browser history/cache.
+
+MEDIUM-SEC-001: Unauthenticated Config File Access and Deletion
+  File: netconfig/api/routes/configs.py, lines 30-94
+  GET /api/v1/configs/ lists all backed-up configs, GET /{filename} reads any
+  config file content, DELETE /{filename} deletes any config file — all without
+  authentication. Config files may contain sensitive network device settings.
+
+MEDIUM-SEC-002: Open-in-Editor Endpoint Lacks Rate Limiting
+  File: netconfig/api/routes/configs.py, lines 96-162
+  POST /api/v1/configs/{filename}/open has no rate limiting and is
+  unauthenticated. Attackers can spam requests to open hundreds of files
+  causing resource exhaustion on the desktop app.
+
+MEDIUM-SEC-003: SSH Usernames Logged in Plaintext at INFO Level
+  Files: netconfig/collectors/netmiko_collector.py:87-93,
+         netconfig/collectors/paramiko_collector.py:68-72
+  Username is logged in plaintext at INFO level. While passwords are not
+  logged, username + host + timestamp can be correlated. At DEBUG level,
+  Paramiko logs SSH key-exchange internals which could include crypto details.
+
+LOW-SEC-001: No HTTPS/TLS Enforcement
+  File: netconfig/config.py
+  FastAPI app has no built-in TLS/HTTPS enforcement. For web deployments,
+  HTTPS should be enforced at reverse proxy level. Desktop app mitigates this
+  by binding to 127.0.0.1.
+
+LOW-SEC-002: No CSRF Protection (Mitigated by Same-Origin Policy)
+  Files: All POST/PUT/DELETE routes
+  No CSRF tokens on forms. Mitigated by JSON Content-Type requirement and
+  browser SOP. Desktop app is local-only.
+
+INFO-SEC-001: DeviceProfile Uses Plain str Instead of SecretStr
+  File: netconfig/models/device_profile.py, lines 64-65
+  DeviceProfile.password and enable_password are plain str, not SecretStr.
+  Can appear in repr() and debug logs. Contrast with DeviceCredentials
+  (device.py:49) which correctly uses SecretStr.
+
+INFO-SEC-002: Jinja2 Autoescape Enabled (Secure)
+  Templates use Jinja2's default autoescape on .html files. All user data is
+  properly escaped. XSS via template injection is not a concern.
+
+
+================================================================================
+2. RELIABILITY
+   Error handling, crash recovery, data corruption prevention, graceful
+   degradation
+================================================================================
+
+CRITICAL-REL-001: Job Stuck in "running" State on Process Crash
+  File: netconfig/api/routes/backups.py, lines 154-207
+  If the process crashes during _run_backup_job(), the job remains in
+  JobStatus.running forever. On-disk persistence only happens after completion
+  (line 217). On restart, the job either reloads as stale "running" from disk
+  or is lost entirely.
+
+CRITICAL-REL-002: APScheduler State Lost on Crash
+  File: netconfig/main.py, line 110
+  APScheduler instance is purely in-memory. If the process crashes, next run
+  times for all schedules are lost. No idempotency check prevents duplicate
+  execution on recovery.
+
+CRITICAL-REL-003: Non-Atomic File Writes Across All Storage
+  Files: netconfig/storage/file_store.py:117-125,
+         netconfig/storage/job_store.py:44,
+         netconfig/storage/schedule_store.py:55,
+         netconfig/storage/device_profile_store.py:51
+  All stores use path.write_text() directly without atomic guarantees
+  (no write-to-temp-then-rename pattern). A crash mid-write produces truncated
+  JSON files. On restart, corrupt files are silently skipped, losing data.
+
+CRITICAL-REL-004: No Recovery If Embedded Uvicorn Fails (Desktop)
+  File: netconfig_desktop/server.py, lines 149-150
+  If Uvicorn crashes after initial port binding, the WebView window opens to a
+  non-responding server. No heartbeat or crash detection exists; the main thread
+  and tray keep running with a dead backend.
+
+HIGH-REL-001: App Startup Crashes If definitions_dir Missing or Empty
+  File: netconfig/main.py, lines 88-93
+  DefinitionLoader.load_all() raises FileNotFoundError if directory doesn't
+  exist, or RuntimeError if no valid .yaml files found. Crashes the entire app.
+
+HIGH-REL-002: No Error Recovery in Scheduled Backup
+  File: netconfig/api/routes/schedules.py, lines 59-166
+  If _run_scheduled_backup() raises an unhandled exception between job creation
+  and persistence, the job stays in "pending" status forever. Schedule's
+  last_run_at and next_run_at are never updated.
+
+HIGH-REL-003: No Timeout on Scheduled Backup in Thread Pool
+  File: netconfig/api/routes/schedules.py, lines 148-156
+  asyncio.to_thread(_run_backup_job, ...) has no timeout. A job that hangs on
+  SSH blocks the thread pool indefinitely. Multiple hanged jobs exhaust the
+  pool, preventing future scheduled runs.
+
+MEDIUM-REL-001: Schedule Re-registration Silently Fails
+  File: netconfig/main.py, lines 109-120
+  If register_schedule_job() raises an exception, the schedule exists in
+  memory and disk but is never registered with APScheduler. It never fires
+  with no indication to the user.
+
+MEDIUM-REL-002: Config Listing Walks Full Directory Tree Every Call
+  File: netconfig/storage/file_store.py, lines 151-165
+  list_configs() calls self._dir.rglob("*") every invocation. On a large
+  config tree this is slow and can fail mid-walk if a file is deleted. No
+  caching or pagination.
+
+MEDIUM-REL-003: Encryption Migration Fails Silently on Permission Denied
+  File: netconfig/storage/schedule_store.py, lines 97-102
+  If self.save() raises PermissionError on a read-only filesystem, the
+  exception is caught and the file is skipped. Plaintext credentials are
+  never migrated.
+
+LOW-REL-001: Race Condition Between stat() and read() in Config Retrieval
+  File: netconfig/api/routes/configs.py, lines 62-68
+  Between resolve_path() stat check and read_text(), the file could be
+  deleted. Returns 500 instead of 404.
+
+
+================================================================================
+3. USABILITY
+   First-run experience, error message clarity, workflow friction, accessibility
+================================================================================
+
+CRITICAL-USA-001: No Empty-State Guidance for New Users
+  File: netconfig/main.py, lines 123-127
+  When app starts with no definitions, no devices, no configs, no jobs, user
+  lands on dashboard with blank form and confusing field labels. No onboarding
+  banner explaining concepts like type_key, host, or credentials.
+
+HIGH-USA-001: Vague Form Field Labels
+  File: netconfig/templates/index.html, lines 30-59
+  Labels "Type", "Host / IP", "Enable Password", "Port" lack context. No
+  placeholder text or aria-label explaining what type_key means or where to
+  find valid values.
+
+HIGH-USA-002: Missing GET Endpoint for Device Profile by ID
+  File: netconfig/api/routes/device_profiles.py
+  JavaScript at index.html:190 calls fetch('/api/v1/devices/{profile_id}')
+  but no GET-by-ID endpoint exists. Only POST, PUT, DELETE, and LIST. The
+  credential auto-fill feature fails silently for all users.
+
+HIGH-USA-003: Config Viewer Modal Lacks ARIA Labels
+  File: netconfig/templates/base.html, lines 69-80
+  Modal has no role="dialog", no aria-labelledby, no focus trap. Close button
+  has no accessible label (uses Unicode cross with no text).
+
+HIGH-USA-004: Profile Saving Buried in Form
+  File: netconfig/templates/index.html, lines 68-72
+  "Save as Profile" field is at the bottom of form with small gray text
+  "(optional)". Users won't discover it; must fill form twice to save/reuse.
+
+MEDIUM-USA-001: No Auto-Refresh on Jobs Page
+  File: netconfig/templates/jobs.html
+  Jobs page displays static job cards. If user opens it while a job is
+  running, they must manually refresh to see updates. No polling or WebSocket.
+
+MEDIUM-USA-002: Schedule Creation Shows No Target Preview
+  File: netconfig/templates/schedules.html, lines 50-88
+  User checks boxes for device types and specific devices but there is no
+  preview of "will back up N devices" or list of matched profiles.
+
+MEDIUM-USA-003: Toast Notification Lacks ARIA Live Region
+  File: netconfig/templates/base.html, lines 83-87
+  Toast div has no role="status", aria-live="polite", or aria-atomic="true".
+  Screen reader users won't be notified of async messages.
+
+MEDIUM-USA-004: Color-Only Status Indicators
+  File: netconfig/templates/base.html, lines 23-27
+  Badges use color alone (red/green) without text patterns for colorblind
+  users. Text labels exist but should be verified in all states.
+
+MEDIUM-USA-005: Empty-State Messages Not Actionable
+  Files: netconfig/templates/configs.html:50-53,
+         netconfig/templates/devices.html:85-87,
+         netconfig/templates/schedules.html:102-104
+  Empty states tell users to fill forms but don't explain WHY they'd save
+  profiles or what schedules are.
+
+LOW-USA-001: Duplicate display:none Style Attribute
+  File: netconfig/templates/schedules.html, line 40
+  <div id="sched-custom-wrap" style="display:none;...;display:none"> has
+  display:none twice.
+
+LOW-USA-002: Enable Password Label Says "optional" When It May Be Required
+  File: netconfig/templates/index.html, lines 56-59
+  Placeholder "optional" but field is required for Cisco devices. Should say
+  "(required for this device type)" when shown.
+
+
+================================================================================
+4. MAINTAINABILITY
+   Code documentation, test coverage, consistent patterns, onboarding friction
+================================================================================
+
+CRITICAL-MNT-001: Missing Integration Tests for Device Profiles API
+  File: netconfig/api/routes/device_profiles.py (all endpoints)
+  No test file tests/integration/test_device_profiles_api.py exists. The route
+  has 4 endpoints (GET list, POST, PUT, DELETE) with ZERO integration tests.
+
+HIGH-MNT-001: No E2E Tests for Devices Page
+  File: tests/e2e/
+  Only test_backup_flow.py and test_jobs_schedules.py exist. No
+  test_devices_page.py. The /devices UI is untested end-to-end.
+
+HIGH-MNT-002: No Error-Path Tests for Collectors
+  Files: tests/
+  No tests verify that collectors raise appropriate exceptions on auth failure,
+  timeout, or invalid device type. Only happy-path collection is mocked.
+
+HIGH-MNT-003: Host Validation Logic Duplicated
+  Files: netconfig/models/device.py:22-32,
+         netconfig/models/device_profile.py:23-39
+  Identical _validate_host() and _HOSTNAME_RE exist in both files. Changes to
+  validation logic must be made in both places or they silently diverge.
+
+HIGH-MNT-004: Inconsistent Error Handling in Storage Loaders
+  Files: device_profile_store.py:99-102, schedule_store.py:105-109,
+         job_store.py:64-68
+  All three stores catch Exception and silently skip corrupt files with a
+  WARNING log. No consistent error policy; operators unaware records vanished.
+
+HIGH-MNT-005: No .env.example File
+  File: netconfig/config.py
+  Documents NETCONFIG_* environment variables but there is no .env.example in
+  the repo. New developers must read the config Python file to understand
+  available variables.
+
+HIGH-MNT-006: No Configuration Validation on Startup
+  File: netconfig/config.py
+  Settings accepts any Path for definitions_dir and configs_dir but does not
+  validate they exist or are writable. Errors appear only on first file access.
+
+MEDIUM-MNT-001: README Missing from Project Root
+  No top-level README.md. CLAUDE.md covers development rules but not how to
+  run the app. A new developer has no "Getting Started" guide.
+
+MEDIUM-MNT-002: Credential Migration Pattern Repeated
+  Files: device_profile_store.py:80-96, schedule_store.py:82-98
+  Identical plaintext-to-encrypted migration logic duplicated. No shared
+  helper function. If encryption key derivation changes, both must be updated.
+
+MEDIUM-MNT-003: Inconsistent Delete Semantics Across Routes
+  Config deletion only hits storage (no in-memory registry). Profile deletion
+  hits both in-memory registry and storage. Pattern inconsistency makes it
+  hard to reason about what deletion does.
+
+MEDIUM-MNT-004: Schedule Trigger Logic Not Tested
+  File: tests/integration/test_schedules_api.py
+  Tests cover CRUD but not _run_scheduled_backup() logic. Device profile
+  resolution and backward-compatible inline device handling are untested.
+
+MEDIUM-MNT-005: Definition Loader Priority Resolution Not Fully Tested
+  File: tests/unit/test_loader.py
+  No test verifies that a higher-priority definition correctly overrides a
+  lower-priority one with the same type_key.
+
+MEDIUM-MNT-006: testid_reference.md May Drift
+  File: tests/testid_reference.md
+  No automated verification that every interactive element has a corresponding
+  entry. If a template changes, the reference must be manually updated.
+
+
+================================================================================
+5. PERFORMANCE
+   Page load times, I/O efficiency, memory usage, API response sizes
+================================================================================
+
+CRITICAL-PRF-001: Unbounded Job History in Memory
+  File: netconfig/main.py, line 99
+  app.state.jobs loads ALL jobs from disk on startup with no eviction or
+  pagination. After thousands of backup jobs, this grows without bound. All
+  jobs are sorted and rendered server-side in templates.
+
+CRITICAL-PRF-002: No Pagination on List API Endpoints
+  Files: backups.py:100-104, configs.py:35-41, schedules.py:179-183
+  GET /api/v1/backups, GET /api/v1/configs, and GET /api/v1/schedules all
+  return every record without limit, offset, or cursor pagination. With 10,000
+  configs the response is 2-3 MB JSON.
+
+HIGH-PRF-001: Full Directory Scan on Every list_configs() Call
+  File: netconfig/storage/file_store.py, lines 139-168
+  list_configs() walks the entire directory tree with rglob("*") on every
+  invocation. Each file requires stat() and optional sidecar JSON read. No
+  caching; called by dashboard, /configs, and /devices pages.
+
+HIGH-PRF-002: Jobs Page Renders ALL Jobs Without Pagination
+  File: netconfig/main.py, lines 182-198
+  /jobs route passes the entire sorted jobs list to the template. Each job
+  card includes a collapsible results table. With 10,000 jobs x 5 devices
+  each = 50,000 rows in a single page.
+
+HIGH-PRF-003: Devices Processed Sequentially in Backup Jobs
+  File: netconfig/api/routes/backups.py, lines 157-205
+  _run_backup_job() iterates devices in a for-loop. Each device connection is
+  blocking SSH. A 10-device backup with 30s per device = 300s wall time.
+  Could be parallelized with asyncio.gather() or thread pool for 10x speedup.
+
+HIGH-PRF-004: Dashboard Sorts ALL Jobs Just to Slice [:10]
+  File: netconfig/main.py, lines 164-175
+  Index route sorts ALL jobs in-memory on every dashboard load just to take
+  the first 10. Sorting 10,000 jobs every page load is wasteful.
+
+HIGH-PRF-005: All Device Profiles Decrypted and Cached at Startup
+  File: netconfig/storage/device_profile_store.py, lines 65-104
+  load_all() reads every profile JSON and decrypts credentials at startup.
+  Plaintext credentials remain in memory indefinitely. No lazy loading.
+
+HIGH-PRF-006: Startup Performs Four Full Disk Scans
+  File: netconfig/main.py, lines 82-127
+  Lifespan loads definitions, jobs, schedules, and device profiles from disk
+  sequentially. With 5,000 jobs, 200 schedules, 500 profiles: startup can
+  take 5-30 seconds.
+
+MEDIUM-PRF-001: Schedule Resolution Iterates All Profiles Linearly
+  File: netconfig/api/routes/schedules.py, lines 82-88
+  _run_scheduled_backup() does nested loop to find target profiles in O(n*m).
+  No index or lookup table; scales poorly with profile count.
+
+MEDIUM-PRF-002: Background Task Has No Timeout or Cancellation
+  File: netconfig/api/routes/backups.py, lines 84-92
+  _run_backup_job added to BackgroundTasks with no timeout. If SSH hangs, the
+  job never completes. No mechanism to kill hung backups.
+
+
+================================================================================
+6. DATA INTEGRITY
+   Schema evolution, backup/restore, state machine enforcement, dedup
+================================================================================
+
+CRITICAL-DI-001: Race Condition in Job State Persistence
+  File: netconfig/api/routes/backups.py, lines 77-92, 154-217
+  Jobs exist in app.state.jobs (memory) AND job_store (disk). The job is added
+  to memory at line 83, but job_store.save() is only called at line 217 after
+  all devices complete. If the app crashes during execution, job history is
+  lost entirely.
+
+CRITICAL-DI-002: Job Status State Machine Not Enforced
+  File: netconfig/models/backup.py, line 89
+  BackupJob.status is a plain enum field with no setter validation. No
+  enforcement of valid transitions. A job could go from completed back to
+  running with no check.
+
+CRITICAL-DI-003: Non-Atomic Config + Metadata Writes
+  File: netconfig/storage/file_store.py, lines 117-127
+  Config file and .meta.json sidecar are written separately and
+  non-atomically. If the process crashes between these two writes, the
+  device_profile_id linkage is lost forever.
+
+HIGH-DI-001: Schedule-Profile Referential Integrity Violation
+  File: netconfig/api/routes/schedules.py, lines 80-88
+  When a device profile is deleted, schedules that reference it via
+  target_device_ids silently skip that device. The schedule's
+  target_device_ids still contains the dead ID. No error or warning.
+
+HIGH-DI-002: Credential Migration Risk During Concurrent Load
+  File: netconfig/storage/device_profile_store.py, lines 77-103
+  On startup, load_all() detects plaintext credentials and immediately
+  re-saves with encryption. If migration write fails, exception is caught and
+  the profile is skipped, silently losing data.
+
+HIGH-DI-003: No Validation of Deleted Profile References in Schedules
+  File: netconfig/api/routes/device_profiles.py, lines 109-128
+  Deleting a device profile does not check if any schedules reference it.
+  Orphaned schedule references fail silently at backup time.
+
+HIGH-DI-004: Job Persistence Window Vulnerability
+  File: netconfig/api/routes/backups.py, lines 77-92, 216-217
+  A job is added to memory immediately but not persisted until completion.
+  The window spans the entire execution duration (minutes to hours). Crash
+  during this window = total loss of that job's state.
+
+MEDIUM-DI-001: Orphaned Sidecar Metadata on Config Deletion
+  File: netconfig/storage/file_store.py, lines 178-193
+  If config file is already deleted when delete is called, FileNotFoundError
+  is raised before sidecar cleanup, leaving orphaned .meta.json files.
+
+MEDIUM-DI-002: Schedule Timestamp Updates Not Persisted Atomically
+  File: netconfig/api/routes/schedules.py, lines 158-166
+  After scheduled backup, last_run_at, last_job_id, next_run_at are updated
+  in memory then persisted. If save fails, in-memory and disk state diverge.
+
+MEDIUM-DI-003: No Encryption Key Rotation Support
+  File: netconfig/security/credentials.py, lines 33-56
+  No mechanism to rotate the encryption key, migrate data to a new key, or
+  detect key compromise. Key rotation is impossible without manual work.
+
+LOW-DI-001: Corrupt JSON Files Skipped Silently at Startup
+  Files: device_profile_store.py, schedule_store.py, job_store.py
+  All three stores catch Exception on load and silently skip corrupt files.
+  Users are never notified that records were lost.
+
+INFO-DI-001: IPv6 Address Reconstruction Is Lossy
+  File: netconfig/storage/file_store.py, lines 279-280
+  IPv6 addresses like 2001:db8::1 become 2001-db8--1 in filenames, then
+  reconstruct as 2001.db8..1. Roundtrip breaks IPv6 addresses.
+
+
+================================================================================
+7. CORRECTNESS
+   Does the logic actually do what it claims?
+================================================================================
+
+CRITICAL-COR-001: IPv6 Address Reconstruction Produces Invalid Addresses
+  File: netconfig/storage/file_store.py, lines 279-280
+  safe_host.replace("-", ".") replaces ALL dashes with dots but the original
+  encoding used dashes for both dots AND colons. IPv6 addresses are corrupted
+  in ConfigRecord metadata.
+
+CRITICAL-COR-002: DeviceProfile Lacks Host Validation
+  File: netconfig/models/device_profile.py, lines 42-68
+  DeviceProfile class itself has no @field_validator for host, unlike
+  DeviceProfileCreate and DeviceProfileUpdate. Invalid hosts can be loaded
+  from disk without validation, causing silent SSH failures.
+
+HIGH-COR-001: Paramiko Collector Times Out on Short-Output Devices
+  File: netconfig/collectors/paramiko_collector.py, lines 173-204
+  The "started" flag only becomes True when buffer exceeds 5 lines. Devices
+  returning 2-3 lines will experience maximum 120-second timeout because
+  early termination requires started=True.
+
+HIGH-COR-002: Definition Loader Priority Tie-Breaking Is Fragile
+  File: netconfig/definitions/loader.py, lines 99-107
+  When two definitions have identical type_key and priority, the last one in
+  lexicographic path order wins. Behavior is stable but not explicitly
+  documented and depends on filesystem ordering.
+
+HIGH-COR-003: prompts.trailing Patterns Are Dead Code
+  File: netconfig/definitions/schema.py, lines 56-68
+  The trailing prompt patterns are defined in the schema but NEVER used in
+  either collector. Netmiko relies on its internal prompt stripping; Paramiko
+  applies no stripping. The feature is silently ignored.
+
+MEDIUM-COR-001: Bracketed IPv6 Addresses Rejected
+  File: netconfig/models/device.py, lines 22-32
+  IPv6 with brackets [2001:db8::1] (common in URLs and connection strings)
+  fails validation. Only raw ip_address() format accepted.
+
+MEDIUM-COR-002: Schedule Targeting Allows Silent Overlap
+  File: netconfig/api/routes/schedules.py, lines 81-88
+  If target_type_keys and target_device_ids overlap (same device matched by
+  both), Python dict deduplicates by key. The overlap is silently masked.
+
+LOW-COR-001: Filename Regex Ambiguous for Underscored Device Types
+  File: netconfig/storage/file_store.py, lines 49-52
+  Non-greedy .+? in _FILENAME_RE matches the shortest device_type. A type
+  named "Cisco_IOS" would be parsed as type="Cisco", host="IOS_[rest]".
+
+LOW-COR-002: _format_interval Boundary Conditions
+  File: netconfig/main.py, lines 48-59
+  Verified CORRECT. All boundary conditions (59, 60, 1439, 1440, 10079,
+  10080 minutes) produce correct output.
+
+
+================================================================================
+8. RESILIENCE
+   Network failures, SSH timeouts, disk full, concurrent access
+================================================================================
+
+CRITICAL-RES-001: File Write Failures Not Handled (Disk Full)
+  File: netconfig/storage/file_store.py, lines 117-126
+  save() calls path.write_text() without exception handling. If disk is full,
+  the exception crashes _run_backup_job(). The job status never transitions to
+  "completed" and remains stuck in "running" forever.
+
+CRITICAL-RES-002: APScheduler Has No Exception Handler
+  File: netconfig/main.py, line 110
+  AsyncIOScheduler instantiated with no error callback. APScheduler's default
+  behavior stops the entire scheduler if a job raises an unhandled exception.
+  A single device backup failure can disable ALL future scheduled backups.
+
+CRITICAL-RES-003: Job State Dictionary Not Thread-Safe
+  File: netconfig/api/routes/backups.py, line 83
+  jobs[job.id] = job is a direct dict write with no locking. Concurrent POST
+  /api/v1/backups requests can write to app.state.jobs simultaneously. Python
+  dicts are not atomic for concurrent read-modify-write.
+
+CRITICAL-RES-004: SSH Connection Cleanup Uncertain on Timeout
+  File: netconfig/collectors/netmiko_collector.py, lines 95-123
+  Uses ConnectHandler context manager, but Netmiko may not fully clean up SSH
+  sockets on timeout exceptions (known issue in some versions). Repeated
+  timeout failures can deplete SSH connection slots on target devices.
+
+HIGH-RES-001: No Retry Logic for SSH Connections
+  Files: netmiko_collector.py:80-124, paramiko_collector.py:74-83
+  No retry logic anywhere. A transient network blip (brief SSH timeout,
+  temporary host unreachable) causes immediate permanent failure. No
+  exponential backoff, no retry mechanism.
+
+HIGH-RES-002: scheduler.shutdown(wait=False) Leaves Jobs Running
+  File: netconfig/main.py, line 131
+  Does not wait for running jobs to complete. In-flight asyncio.to_thread()
+  tasks may still be running in the thread pool. Job state is never persisted;
+  in-memory dict is discarded.
+
+HIGH-RES-003: No Validation That Storage Directories Are Writable
+  File: netconfig/main.py, lines 96-107
+  Storage directories are created but write permissions are never validated.
+  If read-only, save() calls fail silently during normal operations, leading
+  to configuration loss.
+
+HIGH-RES-004: All Storage save() Methods Lack Error Handling
+  Files: device_profile_store.py:50-51, schedule_store.py:54-55,
+         job_store.py:44
+  All stores call write_text() without try-catch. If disk I/O fails, in-memory
+  state is updated but file write fails. Changes are lost on restart.
+
+MEDIUM-RES-001: Paramiko Collector Uses Hardcoded Sleep Delays
+  File: netconfig/collectors/paramiko_collector.py, lines 86-116
+  Multiple time.sleep() calls (2s, 3s, 1s) are fixed delays, not based on
+  actual output arrival. Slow devices may not produce output in time.
+
+MEDIUM-RES-002: No Maximum File Size Limit for Config Storage
+  File: netconfig/storage/file_store.py, lines 77-137
+  save() writes entire content with no size check. A device returning multi-GB
+  output (due to bug or runaway output) fills the disk, failing all backups.
+
+MEDIUM-RES-003: APScheduler Job Failure Does Not Emit Application Logs
+  File: netconfig/api/routes/schedules.py, lines 59-166
+  _run_scheduled_backup() has no top-level try-catch. Exceptions are logged
+  by APScheduler but not by the application, making debugging difficult.
+
+LOW-RES-001: APScheduler Misfire Grace Period Not Configured
+  File: netconfig/main.py, line 110
+  No misfire_grace_time parameter. Default 30s grace means jobs missed due to
+  server overload or pause are silently skipped.
+
+LOW-RES-002: Concurrent Schedule Dict Access Unprotected
+  File: netconfig/api/routes/schedules.py, lines 158-166
+  _run_scheduled_backup() reads and modifies schedule fields without locking.
+  A concurrent DELETE API call can race with the scheduled job update.
+
+
+================================================================================
+9. COMPLIANCE
+   GDPR/CCPA for PII, data retention, regulatory considerations
+================================================================================
+
+CRITICAL-CMP-001: No Data Retention Policy or Purge Mechanism
+  Files: netconfig/storage/job_store.py, netconfig/storage/file_store.py
+  Jobs and config files accumulate indefinitely with no cleanup mechanism.
+  No retention policy configuration exists. GDPR Article 5(1)(e) requires
+  limiting data retention to necessary periods.
+
+CRITICAL-CMP-002: Incomplete Right to Erasure (GDPR Article 17)
+  File: netconfig/api/routes/device_profiles.py, lines 104-128
+  Deleting a device profile does NOT delete associated configuration files or
+  job history referencing that device. Config files with device_profile_id
+  remain in storage. Jobs containing device information persist indefinitely.
+  Users cannot achieve full data erasure.
+
+CRITICAL-CMP-003: No Data Export/Portability Mechanism (GDPR Article 20)
+  No API endpoint or mechanism exists to export all personal data associated
+  with a device profile or user in a standard format. Users cannot exercise
+  right to data portability.
+
+HIGH-CMP-001: Plaintext Credential Storage in Memory
+  File: netconfig/models/device_profile.py, lines 64-65
+  Passwords stored as plain Python strings in memory (not SecretStr).
+  Vulnerable to memory dumps, process inspection, and core dumps.
+
+HIGH-CMP-002: Logging of Hostnames and Usernames
+  Files: paramiko_collector.py:68-72, netmiko_collector.py:87-93
+  User-provided hostname and SSH username logged at INFO level. Hostnames can
+  be PII in some contexts. GDPR requires data minimization.
+
+HIGH-CMP-003: Configuration Files Stored Unencrypted
+  File: netconfig/storage/file_store.py, lines 117-127
+  Configuration files are plaintext on disk. May contain PII, network topology,
+  software versions, and secrets. Only credentials are encrypted; configs are
+  not.
+
+HIGH-CMP-004: No Audit Logging of Access to Sensitive Data
+  File: netconfig/api/routes/device_profiles.py
+  Reading, creating, updating, or deleting device profiles logged minimally
+  without user identity. No audit trail showing WHO accessed WHAT WHEN.
+
+HIGH-CMP-005: No Access Control for Credential Data
+  File: netconfig/main.py, lines 106-107
+  All device profiles (including plaintext passwords) loaded into app.state
+  at startup and accessible to all route handlers without authentication.
+
+MEDIUM-CMP-001: No Encryption Key Rotation Mechanism
+  File: netconfig/security/credentials.py, lines 33-56
+  Key stored in OS keyring once and never rotated. No rotation API, no
+  expiration policy. If compromised, all persisted credentials at risk.
+
+MEDIUM-CMP-002: Configuration File Metadata Leakage
+  File: netconfig/storage/file_store.py, lines 121-127
+  Sidecar .meta.json files and directory structure reveal device types and
+  hostnames. Filesystem timestamps enable activity profiling.
+
+MEDIUM-CMP-003: No CCPA/GDPR Opt-Out or Consent Mechanism
+  No UI or API to disable data collection (logging, job history, backups).
+  No privacy policy link or consent banner.
+
+LOW-CMP-001: Missing HTTP Security Headers
+  File: netconfig/main.py
+  No X-Content-Type-Options, X-Frame-Options, Strict-Transport-Security, or
+  Content-Security-Policy headers. Not GDPR-specific but affects overall
+  security posture.
+
+LOW-CMP-002: Exception Messages May Leak Sensitive Information
+  File: netconfig/api/routes/backups.py, lines 198-205
+  Full stack trace (exc_info=True) may contain device details in logs.
+
+INFO-CMP-001: No Third-Party Data Sharing Detected
+  No external API calls, telemetry, or analytics imports found. Application
+  operates entirely locally.
+
+
+================================================================================
+10. COST CONTROL
+    Runaway resource consumption, unbounded loops, silent cost growth
+================================================================================
+
+CRITICAL-CC-001: Unbounded Job Accumulation in Memory + Disk
+  File: netconfig/main.py:99, netconfig/api/routes/backups.py:83
+  Jobs are never cleaned, never purged, never evicted. After months of
+  operation with frequent backups, app.state.jobs grows monotonically.
+  Every completed job persisted to a new .json file and never deleted.
+
+CRITICAL-CC-002: No Maximum Device Limit Per Request
+  File: netconfig/models/device.py, line 86
+  BackupRequest defines min_length=1 with NO maximum. A single API call can
+  submit 100,000 devices, triggering 100K sequential SSH connections.
+
+CRITICAL-CC-003: No Maximum Schedule Count
+  File: netconfig/api/routes/schedules.py, line 192
+  No limit on schedule creation. A user can create 1,000 schedules each with
+  interval_minutes: 1, generating 1,440,000 jobs per day.
+
+HIGH-CC-001: APScheduler Coalescing Not Configured
+  File: netconfig/main.py, line 110
+  AsyncIOScheduler uses default settings without coalescing. If a backup takes
+  longer than the interval, jobs pile up. No max_instances configured.
+
+HIGH-CC-002: No Connection Reuse for SSH
+  Files: netmiko_collector.py:95, paramiko_collector.py:65
+  Each collect() opens a new SSH connection. No pooling or reuse. For 100
+  devices, that's 100 SSH key exchange handshakes.
+
+HIGH-CC-003: Configuration File Accumulation — No Rotation
+  File: netconfig/storage/file_store.py, lines 77-137
+  Every backup creates a new file forever. No rotation, expiry, or cleanup.
+  A 1MB config backed up daily on 100 devices = 36.5 GB/year.
+
+HIGH-CC-004: No Request Size Limits or Middleware Guards
+  File: netconfig/main.py, line 134
+  No middleware to limit request body size, JSON depth, or payload count.
+  Attacker can POST a 100MB backup request.
+
+HIGH-CC-005: Thread Pool Unbounded for Background Tasks
+  Files: schedules.py:149, backups.py:84
+  asyncio.to_thread() and BackgroundTasks do not limit thread pool size. If
+  100 scheduled backups fire simultaneously, 100 threads spawn for blocking
+  SSH work. OS resource exhaustion.
+
+MEDIUM-CC-001: No Admin Controls or Rate Limits
+  File: netconfig/main.py
+  No authentication, authorization, or rate limiting middleware. Any endpoint
+  can be called unlimited times by any client.
+
+MEDIUM-CC-002: Device Profile Count Unbounded
+  File: netconfig/api/routes/device_profiles.py
+  No limit on how many device profiles can be created. Memory and disk grow
+  unbounded; startup time increases.
+
+MEDIUM-CC-003: No Metrics for Resource Usage
+  No logging, metrics, or alerts for memory usage, job queue depth, thread
+  pool size, or disk consumption. Cost growth is silent.
+
+
+================================================================================
+11. OBSERVABILITY
+    Logging quality, error traceability, diagnosing issues from logs
+================================================================================
+
+CRITICAL-OBS-001: No Health/Readiness/Liveness Endpoints
+  File: netconfig/main.py
+  No /health, /ready, or /live endpoints. Container orchestration platforms
+  cannot automatically detect service failures or degradation.
+
+CRITICAL-OBS-002: No Request Tracing or Correlation IDs
+  Files: All route files under netconfig/api/routes/
+  No middleware to generate/propagate request IDs (X-Request-ID). A backup job
+  spawns multiple operations (HTTP -> background task -> SSH -> file storage)
+  but logs cannot be correlated.
+
+CRITICAL-OBS-003: No Structured Logging Format
+  File: netconfig/logging_config.py, lines 35-36
+  Uses plain text format "%(asctime)s %(levelname)-8s %(name)-40s %(message)s".
+  No JSON, no machine-parseable output. Breaks log aggregation systems (ELK,
+  Splunk, CloudWatch).
+
+HIGH-OBS-001: Missing Schedule Execution Details in Logs
+  File: netconfig/api/routes/schedules.py, line 141-146
+  Schedule trigger logs only "Schedule 'name' triggered job X (N devices)"
+  but not which devices were targeted, how targets were resolved, or the
+  final success rate.
+
+HIGH-OBS-002: No Metrics or Instrumentation Endpoint
+  File: netconfig/main.py
+  No /metrics endpoint for Prometheus. No counters/gauges for jobs, errors,
+  schedule execution, SSH failures. Only way to measure success rate is to
+  parse job records from disk.
+
+HIGH-OBS-003: Credential Migration Not Audited with Details
+  Files: device_profile_store.py:93-96, schedule_store.py:99-102
+  Logs "Migrated plaintext credentials..." but not which profiles were
+  migrated, old vs new values (sanitized), or whether migration partially
+  failed.
+
+MEDIUM-OBS-001: Log Rotation Lacks Date-Based Filenames
+  File: netconfig/logging_config.py, lines 93-98
+  RotatingFileHandler produces netconfig.log.1, .2, .3 without timestamps.
+  Cannot quickly identify which log file covers a specific date.
+
+MEDIUM-OBS-002: Job Completion Logging Missing Summary Statistics
+  File: netconfig/api/routes/backups.py, lines 207-215
+  Logs "Y/Z succeeded" but not total bytes, failed device hostnames, or
+  device-level error messages. Must read job JSON for details.
+
+MEDIUM-OBS-003: Desktop Log File Location Not Documented in UI
+  File: netconfig_desktop/__main__.py, lines 42-48
+  Logs to %APPDATA%\NetConfig\netconfig.log on Windows but not exposed in UI.
+  Users cannot easily find logs for troubleshooting.
+
+LOW-OBS-001: Job ID Truncated in Some Logs
+  File: netconfig/api/routes/schedules.py, lines 144, 216
+  Logs print job.id[:8] for brevity, making it harder to search logs for
+  the full UUID.
+
+LOW-OBS-002: Third-Party Logger Suppression Not Logged
+  File: netconfig/logging_config.py, lines 40-45
+  Paramiko, uvicorn.access, multipart, asyncio suppressed to WARNING with no
+  confirmation message. Operators may think logging is broken.
+
+INFO-OBS-001: Positive Patterns Found
+  - 75 log statements across routes, collectors, and storage
+  - Exception tracebacks included (4 locations use exc_info=True)
+  - No passwords/secrets found in log statements
+  - Encryption logging safe (no plaintext exposed)
+  - Log rotation configured for desktop (5MB max, 3 backups)
+
+
+================================================================================
+12. DISTRIBUTION
+    Installer, dependencies, clean-machine install, auto-update
+================================================================================
+
+CRITICAL-DST-001: Template Files Not Included in cx_Freeze Build
+  File: setup_desktop.py, line 75
+  include_files list does not include netconfig/templates/. The 7 HTML template
+  files will NOT be included in the frozen MSI installer, causing runtime
+  failures when the desktop app tries to render pages.
+
+CRITICAL-DST-002: No package-data Directive in pyproject.toml
+  File: pyproject.toml, lines 46-48
+  No [tool.setuptools.package-data] to include templates. pip install . may
+  not include template files, breaking the web server.
+
+HIGH-DST-001: Dependencies Use Floor Specifiers With No Lock File
+  Files: pyproject.toml, requirements.txt
+  All dependencies use >= with no upper bounds or lock file. fastapi>=0.115.0
+  could install 0.120+ with breaking changes. No requirements.lock, poetry.lock,
+  or Pipfile.lock for reproducible installations.
+
+HIGH-DST-002: Native Dependencies May Fail on Clean Windows
+  File: netconfig/collectors/paramiko_collector.py
+  Paramiko requires OpenSSL libraries. Installation on clean Windows machines
+  may fail silently if system libraries are missing.
+
+HIGH-DST-003: PySide6 Import Error Only at Runtime
+  File: netconfig_desktop/window.py, lines 82-87
+  PySide6 import inside create() method means failures (missing Qt5/OpenGL)
+  only appear after DesktopApp starts, not at installation time. Unhelpful
+  error on fresh Windows installs without Qt runtime.
+
+MEDIUM-DST-001: cx_Freeze Packages List Missing Template Reference
+  File: setup_desktop.py, lines 70-76
+  cx_Freeze packages list does not include netconfig.templates. Even if
+  setuptools includes them, cx_Freeze may not copy them into the frozen bundle.
+
+MEDIUM-DST-002: APPDATA Fallback Path Untested
+  File: netconfig_desktop/settings.py, line 63
+  Fallback to Path.home() / "AppData" / "Roaming" if APPDATA unset is
+  defensive but untested. Violates Windows conventions in edge cases.
+
+MEDIUM-DST-003: Missing Definitions Crash App at Startup
+  File: netconfig/definitions/loader.py, lines 74-83
+  If definitions/ directory is missing or empty after installation, the app
+  crashes with RuntimeError. No validation that definitions were deployed.
+
+MEDIUM-DST-004: Module-Level App Instantiation Fails at Import Time
+  File: netconfig/main.py, line 349
+  app = create_app() at module level means if definitions fail to load, the
+  import itself fails before FastAPI handles it. Breaks uvicorn startup with
+  unhelpful errors.
+
+MEDIUM-DST-005: MSI Installer Does Not Validate Build Completeness
+  File: setup_desktop.py, lines 93-117
+  If cx_Freeze fails to bundle required files, the MSI is still created and
+  can be installed, leading to broken installations.
+
+LOW-DST-001: Desktop Error Display Platform-Locked
+  File: netconfig_desktop/__main__.py, lines 51-64
+  _fatal() uses ctypes.windll.user32.MessageBoxW which only works on Windows.
+  Falls back to stderr but exception context may be lost.
+
+LOW-DST-002: Unreachable Cross-Platform Code in Open-in-Editor
+  File: netconfig/api/routes/configs.py, lines 142-151
+  subprocess calls for macOS (open) and Linux (xdg-open) are reachable code
+  that will never be called in the Windows-only desktop binary.
+
+INFO-DST-001: No Auto-Update Mechanism
+  Neither web nor desktop variant checks for updates, downloads new versions,
+  or upgrades in place. Desktop MSI relies on manual re-installation.
+
+INFO-DST-002: PowerShell Scripts Undocumented
+  Files: Get-NetworkConfigs.ps1, Test-NetworkConfigs.ps1
+  Standalone PowerShell collection tools duplicate Python collector logic.
+  Require separate Posh-SSH and powershell-yaml modules. No documentation
+  clarifies when to use these vs. the Python app.
+
+INFO-DST-003: Web Platform Is Cross-Platform; Desktop Is Windows-Only
+  netconfig/ works on Linux/macOS (no platform-specific code except
+  open-in-editor). netconfig_desktop/ and setup_desktop.py are Windows-only.
+  Intentional per CLAUDE.md but creates distribution asymmetry.
+
+
+================================================================================
+                              AGGREGATE SUMMARY
+================================================================================
+
+  Lens              CRITICAL  HIGH  MEDIUM  LOW  INFO   Total
+  ---------------------------------------------------------------
+  Security               3     2      3     2    2       12
+  Reliability            4     3      3     1    0       11
+  Usability              1     4      5     2    0       12
+  Maintainability        1     6      6     0    0       13
+  Performance            2     6      2     0    0       10
+  Data Integrity         3     4      3     1    1       12
+  Correctness            2     3      2     2    0        9
+  Resilience             4     4      3     2    0       13
+  Compliance             3     5      3     2    1       14
+  Cost Control           3     5      3     0    0       11
+  Observability          3     3      3     2    1       12
+  Distribution           2     3      5     2    3       15
+  ---------------------------------------------------------------
+  TOTALS:               31    48     41    14    8      142
+
+  Top 5 Cross-Cutting Themes:
+  1. NO AUTHENTICATION — Entire API surface is unauthenticated (Security,
+     Compliance, Cost Control)
+  2. UNBOUNDED ACCUMULATION — Jobs, configs, profiles, schedules grow forever
+     with no retention or pagination (Performance, Cost Control, Compliance)
+  3. NON-ATOMIC PERSISTENCE — All file writes use path.write_text() with no
+     atomic rename pattern (Reliability, Data Integrity, Resilience)
+  4. NO OBSERVABILITY INFRASTRUCTURE — No health checks, no structured logging,
+     no metrics, no request tracing (Observability, Resilience)
+  5. MISSING DISTRIBUTION PACKAGING — Templates not bundled in installer,
+     no dependency lock file (Distribution)
+
+================================================================================
+                              END OF REPORT
+================================================================================

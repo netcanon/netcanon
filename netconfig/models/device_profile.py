@@ -13,30 +13,12 @@ so the in-memory representation is always ready to use.
 
 from __future__ import annotations
 
-import ipaddress
-import re
 import uuid
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field, field_validator
 
-_HOSTNAME_RE = re.compile(
-    r"^(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*"
-    r"[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?$"
-)
-
-
-def _validate_host(v: str) -> str:
-    """Accept a valid IPv4, IPv6, or RFC-1123 hostname; reject everything else."""
-    v = v.strip()
-    try:
-        ipaddress.ip_address(v)
-        return v
-    except ValueError:
-        pass
-    if _HOSTNAME_RE.match(v):
-        return v
-    raise ValueError(f"Invalid hostname or IP address: {v!r}")
+from .validators import validate_host as _validate_host
 
 
 class DeviceProfile(BaseModel):
@@ -65,6 +47,11 @@ class DeviceProfile(BaseModel):
     enable_password: str | None = None
     notes: str | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    @field_validator("host")
+    @classmethod
+    def validate_host(cls, v: str) -> str:
+        return _validate_host(v)
 
 
 class DeviceProfileCreate(BaseModel):

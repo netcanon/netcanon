@@ -145,14 +145,20 @@ def sample_definitions_dir(tmp_path: Path) -> Path:
 def test_settings(sample_definitions_dir: Path, tmp_path: Path) -> Settings:
     """``Settings`` instance wired to test-only tmp directories.
 
-    * ``definitions_dir`` → ``<tmp>/definitions/`` (two test definitions)
-    * ``configs_dir``     → ``<tmp>/configs/``      (empty initially)
+    * ``definitions_dir``   → ``<tmp>/definitions/`` (two test definitions)
+    * ``configs_dir``       → ``<tmp>/configs/``      (empty initially)
+    * ``backup_concurrency`` → ``1`` — tests default to serial execution
+      so device status transitions are deterministic and ordering-sensitive
+      assertions stay stable.  Override per-test via
+      ``test_settings.model_copy(update={"backup_concurrency": N})`` when
+      you explicitly want to exercise the thread pool.
     """
     configs_dir = tmp_path / "configs"
     configs_dir.mkdir()
     return Settings(
         definitions_dir=sample_definitions_dir,
         configs_dir=configs_dir,
+        backup_concurrency=1,
     )
 
 

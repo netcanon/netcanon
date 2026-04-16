@@ -49,6 +49,7 @@ build_exe_options: dict = {
     # static import analysis (dynamic imports, conditional imports, etc.)
     "packages": [
         "netconfig",
+        "netconfig.templates",
         "netconfig_desktop",
         "uvicorn",
         "fastapi",
@@ -72,7 +73,8 @@ build_exe_options: dict = {
         # Ship device definitions next to the EXE so desktop_settings()
         # finds them when sys.frozen is True.
         (str(DEFINITIONS_DIR), "definitions"),
-        # Jinja2 templates and static files bundled with the netconfig package.
+        # Jinja2 templates bundled with the netconfig package.
+        (str(HERE / "netconfig" / "templates"), "lib/netconfig/templates"),
     ],
     # Exclude large packages that are not needed at runtime to keep the
     # installer size reasonable.

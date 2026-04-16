@@ -88,13 +88,8 @@
   </form>
 </section>
 
-<!-- ── Job status / results banner (shown after form submit) ────── -->
-<div id="job-status-banner" data-testid="job-status-banner" style="display:none;margin-top:1rem">
-  <div class="alert alert-info" id="job-status-inner">
-    Job <strong id="job-id-display" data-testid="job-id-display"></strong>:
-    <span id="job-status-display" data-testid="job-status-display">pending</span>
-  </div>
-</div>
+<!-- The global floating job-progress panel is defined in base.html;
+     it receives job updates via the startJobProgress() / events API. -->
 
 <!-- ── Recent jobs table ─────────────────────────────────────────── -->
 <!-- Always present in DOM so JS can inject rows without a page reload -->
@@ -138,10 +133,6 @@ const deviceList   = document.getElementById('device-list');
 const addBtn       = document.getElementById('add-device-btn');
 const submitBtn    = document.getElementById('submit-btn');
 const form         = document.getElementById('backup-form');
-const banner       = document.getElementById('job-status-banner');
-const jobIdEl      = document.getElementById('job-id-display');
-const jobStatusEl  = document.getElementById('job-status-display');
-const jobsInner    = document.getElementById('job-status-inner');
 const jobsTbody    = document.getElementById('jobs-tbody');
 const jobsTable    = document.getElementById('jobs-table');
 const noJobsMsg    = document.getElementById('no-jobs-msg');
@@ -315,62 +306,29 @@ form.addEventListener('submit', async function(e) {
     }
   }
 
-  jobIdEl.textContent  = job.id.substring(0, 8) + '\u2026';
-  jobStatusEl.textContent = job.status;
-  banner.style.display = '';
-
-  /* ── Poll until terminal state ── */
-  var pollErrors = 0;
-  var MAX_ERRORS = 3;
-  var poll = setInterval(async function() {
-    try {
-      var r = await fetch('/api/v1/backups/' + job.id);
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-      var j = await r.json();
-      jobStatusEl.textContent = j.status;
-      pollErrors = 0;
-
-      if (j.status === 'completed' || j.status === 'failed') {
-        clearInterval(poll);
-        renderInlineResults(j);
-        injectJobRow(j);
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Start Backup';
-      }
-    } catch (_) {
-      if (++pollErrors >= MAX_ERRORS) {
-        clearInterval(poll);
-        showToast('Lost contact with server while polling job status.', 'error');
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Start Backup';
-      }
-    }
-  }, 1500);
+  // Hand off to the global progress panel; it will poll and dispatch
+  // netconfig:job-complete when the job reaches a terminal state.
+  startJobProgress(job.id);
 });
 
-/* ── Render per-device results inside the banner ── */
-function renderInlineResults(j) {
-  var ok = j.results.filter(function(r) { return r.status === 'success'; }).length;
-  var html = '<strong>' + j.id.substring(0, 8) + '\u2026</strong>: ';
-  html += j.status === 'completed'
-    ? '<span style="color:#155724">&#10003; ' + ok + '/' + j.total_devices + ' succeeded</span>'
-    : '<span style="color:#721c24">&#10007; ' + ok + '/' + j.total_devices + ' succeeded</span>';
-  if (j.results.length) {
-    html += '<table style="width:100%;margin-top:.5rem;border-collapse:collapse;font-size:.85rem">';
-    j.results.forEach(function(r) {
-      var pass = r.status === 'success';
-      html += '<tr>'
-        + '<td style="padding:.15rem .4rem;color:' + (pass ? '#155724' : '#721c24') + ';font-weight:700">'
-        +   (pass ? '&#10003;' : '&#10007;') + '</td>'
-        + '<td style="padding:.15rem .4rem"><strong>' + r.device_type + '</strong> ' + r.host + '</td>'
-        + '<td style="padding:.15rem .4rem;color:#555;font-size:.8rem">'
-        +   (pass ? 'saved' : (r.error || 'failed')) + '</td>'
-        + '</tr>';
-    });
-    html += '</table>';
-  }
-  jobsInner.innerHTML = html;
-}
+/* ── Listen for terminal-state events from the global panel ──
+ * Fires exactly once per job (the panel guards this internally), so we
+ * can safely re-enable the submit button and inject the new row without
+ * worrying about duplicates.
+ */
+document.addEventListener('netconfig:job-complete', function(e) {
+  injectJobRow(e.detail.job);
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Start Backup';
+});
+
+/* When the user dismisses a stale panel after reload, make sure the
+ * submit button is unlocked (edge case: reload happened mid-job, submit
+ * button was never restored by netconfig:job-complete). */
+document.addEventListener('netconfig:job-dismissed', function() {
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Start Backup';
+});
 
 /* ── Inject a new row into the jobs table without a page reload ── */
 function injectJobRow(j) {

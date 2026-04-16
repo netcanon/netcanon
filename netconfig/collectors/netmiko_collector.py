@@ -84,12 +84,12 @@ class NetmikoCollector(BaseCollector):
                 device.credentials.enable_password.get_secret_value()
             )
 
-        logger.info(
-            "Connecting to %s:%d as %s (%s)",
+        logger.info("Connecting to %s:%d (%s)", device.host, device.port, device_type)
+        logger.debug(
+            "SSH user for %s:%d: %s",
             device.host,
             device.port,
             device.credentials.username,
-            device_type,
         )
 
         with ConnectHandler(**params) as conn:

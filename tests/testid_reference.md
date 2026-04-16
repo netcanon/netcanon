@@ -38,13 +38,19 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `add-device-btn`        | `<button>` | Add a new device row |
 | `submit-backup-btn`     | `<button type="submit">` | Start the backup job; disabled while job is in flight |
 
-### Job status / results banner
+### Job status / results (now driven by the global Job progress panel)
+
+The inline "banner" on the dashboard was replaced by a global floating
+progress panel defined in `base.html` — see the **Job progress panel**
+section below.  The legacy testids (`job-status-banner`, `job-id-display`,
+`job-status-display`) are still exposed on the panel for backward
+compatibility with existing E2E tests and helpers.
 
 | `data-testid`          | Element | Notes |
 |------------------------|---------|-------|
-| `job-status-banner`    | `<div>` | Shown after form submit; hidden initially |
-| `job-id-display`       | `<strong>` | First 8 chars of job UUID + "…" |
-| `job-status-display`   | `<span>` | Live status: `pending` → `running` → `completed`/`failed`; replaced by per-device results table on completion |
+| `job-status-banner`    | `<div>` | **Alias** of `job-progress-panel` — the floating widget |
+| `job-id-display`       | `<strong>` | First 8 chars of job UUID + "…" in the panel header |
+| `job-status-display`   | `<span>` | Aggregated job status: `pending` / `running` / `completed` / `partial` / `failed`; hidden visually but readable for tests |
 
 ### Recent jobs table
 
@@ -78,6 +84,77 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `config-delete-cancel-btn` | `<button>` | "No" — cancels and restores Delete button |
 | `no-configs-msg`           | `<p>` | Shown when no configs exist |
 
+## Job progress panel (`base.html` — global, persistent)
+
+Floating bottom-right widget rendered on every page.  Receives job updates
+via `startJobProgress(jobId)` and survives full page reloads — the active
+job ID is stored in `localStorage["netconfig.activeJob"]`.  The panel
+dispatches `CustomEvent`s on `document` that page-level code can listen for:
+
+| Event                          | Detail              | When |
+|--------------------------------|---------------------|------|
+| `netconfig:job-started`        | `{ jobId }`         | `startJobProgress()` called |
+| `netconfig:job-progress`       | `{ job }`           | Each poll tick |
+| `netconfig:job-complete`       | `{ job }`           | Job reached terminal state |
+| `netconfig:job-dismissed`      | `{ jobId }`         | User clicked dismiss OR manual clear |
+
+### Per-device status SOP (values of `data-status` on a device row)
+
+| value     | meaning                                            | icon  |
+|-----------|----------------------------------------------------|-------|
+| `queued`  | in the job but collector not yet called             | ○     |
+| `running` | collector actively working on this device          | ⟳     |
+| `success` | config saved to disk (terminal)                    | ✓     |
+| `failed`  | error caught (terminal)                            | ✗     |
+
+### Testids
+
+| `data-testid`                    | Element    | Notes |
+|----------------------------------|------------|-------|
+| `job-progress-panel`             | `<div>`    | Outer panel; `aria-live="polite"`, `role="region"`. Also carries `data-job-status` attr for tests |
+| `job-progress-header`            | `<div>`    | Clickable; toggles `job-progress-body` |
+| `job-progress-summary`           | `<span>`   | "N/M complete — running: X — queued: Y" or final counts |
+| `job-progress-toggle`            | `<span>`   | Chevron; gains `.open` when expanded |
+| `job-progress-body`              | `<div>`    | Scrollable container for per-device rows |
+| `job-progress-device-row`        | `<div>`    | One per device; carries `data-host`, `data-status` |
+| `job-progress-device-status`     | `<span>`   | Status icon span with `.jp-icon-<status>` class |
+| `job-progress-device-host`       | `<span>`   | "{device_type} {host}" label |
+| `job-progress-device-duration`   | `<span>`   | "N.Ns" once device reaches terminal state |
+| `job-progress-device-error`      | `<div>`    | Only rendered when `data-status="failed"`; truncated error with `title` |
+| `job-progress-footer`            | `<div>`    | Appears only after job reaches terminal state |
+| `job-progress-view-link`         | `<a>`      | Deep link to `/jobs#<job-id-short>` |
+| `job-progress-dismiss`           | `<button>` | Hides panel AND clears the localStorage key |
+
+## Config viewer modal (`base.html` — global)
+
+Injected at the bottom of every page and opened by `viewConfig(filename)` (called
+by every `config-view-link`, `job-config-view-link`, or `device-config-view-link`
+button).  Carries in-modal search + syntax highlighting.
+
+| `data-testid`                     | Element    | Notes |
+|-----------------------------------|------------|-------|
+| `config-viewer`                   | `<div>`    | Outer modal container; `display:none` when closed. `role="dialog"`, `aria-modal="true"` |
+| `config-viewer-title`             | `<span>`   | Filename of the config currently displayed |
+| `config-viewer-content`           | `<pre>`    | Rendered config with `.tok-*` syntax-highlight spans and `<mark>` search highlights |
+| `config-viewer-search`            | `<input>`  | Incremental search input; Enter = next match, Shift+Enter = prev, Escape = clear / close |
+| `config-viewer-search-count`      | `<span>`   | Live match counter: empty / "N / M" / "No matches" (aria-live="polite") |
+| `config-viewer-search-prev`       | `<button>` | Jump to previous match (wraps); disabled when no matches |
+| `config-viewer-search-next`       | `<button>` | Jump to next match (wraps); disabled when no matches |
+| `config-viewer-close`             | `<button>` | `×` — closes the modal |
+
+Syntax-highlight CSS classes applied by the tokenizer (not `data-testid`s but
+useful for E2E assertions):
+
+| Class          | Meaning |
+|----------------|---------|
+| `tok-comment`  | `!` / `#` comment lines (cfg) or `<!-- … -->` blocks (xml) |
+| `tok-keyword`  | Vendor-agnostic keywords: `interface`, `hostname`, `ip`, `set`, `config`, … |
+| `tok-string`   | Double-quoted strings |
+| `tok-ip`       | IPv4 address (optionally with CIDR suffix) |
+| `tok-number`   | Bare numeric token (non-IP) |
+| `tok-tag`      | XML tag name (`<foo`, `</foo`) |
+| `tok-attr`     | XML attribute name |
+
 ## Definitions page (`definitions.html`)
 
 | `data-testid`          | Element | Notes |
@@ -102,8 +179,8 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `job-card`                | `<div>` | One collapsible card per job; also has `data-job-id` and `id="job-{id[:8]}"` for anchor linking |
 | `job-card-header`         | `<div>` | Clickable header row; calls `toggleJob()` to expand/collapse body |
 | `job-id-text`             | `<span>`| First 8 chars of job UUID + "…" |
-| `job-status`              | `<span>`| Status badge (`pending`, `running`, `completed`, `failed`) |
-| `job-success-count`       | `<span>`| `success / total` with ✓ or ✗ indicator |
+| `job-status`              | `<span>`| Status badge (`pending`, `running`, `completed`, `partial`, `failed`) |
+| `job-success-count`       | `<span>`| `success / total` with ✓ (all-success), ⚠ (partial) or ✗ (all-fail) indicator |
 | `job-created`             | `<span>`| Creation timestamp (localised by JS); also has `data-utc` |
 | `job-duration`            | `<span>`| Total job duration in seconds; absent until job completes |
 | `job-trigger`             | `<span>`| Schedule name (with calendar icon) or "Manual" for ad-hoc runs |

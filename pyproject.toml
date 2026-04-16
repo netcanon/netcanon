@@ -47,6 +47,9 @@ desktop-build = [
 where = ["."]
 include = ["netconfig*", "netconfig_desktop*"]
 
+[tool.setuptools.package-data]
+netconfig = ["templates/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

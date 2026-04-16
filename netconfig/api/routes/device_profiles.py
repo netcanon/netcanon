@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...models.device_profile import DeviceProfile, DeviceProfileCreate, DeviceProfileUpdate
 from ...storage.device_profile_store import FileDeviceProfileStore
@@ -32,6 +32,30 @@ def list_device_profiles(
     return sorted(device_profiles.values(), key=lambda p: p.created_at, reverse=True)
 
 
+@router.get(
+    "/{profile_id}",
+    response_model=DeviceProfile,
+    summary="Get a device profile by ID",
+)
+def get_device_profile(
+    profile_id: str,
+    device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
+) -> DeviceProfile:
+    """Return a single device profile.
+
+    Args:
+        profile_id: UUID of the profile.
+
+    Raises:
+        HTTPException 404: If no profile with *profile_id* exists.
+    """
+    if profile_id not in device_profiles:
+        raise HTTPException(
+            status_code=404, detail=f"Device profile not found: {profile_id!r}"
+        )
+    return device_profiles[profile_id]
+
+
 @router.post(
     "/",
     status_code=201,
@@ -51,6 +75,11 @@ def create_device_profile(
     Returns:
         The newly created ``DeviceProfile``.
     """
+    if len(device_profiles) >= 1000:
+        raise HTTPException(
+            status_code=409,
+            detail="Maximum device profile limit reached (1000). Delete unused profiles first.",
+        )
     profile = DeviceProfile(**body.model_dump())
     device_profiles[profile.id] = profile
     device_profile_store.save(profile)
@@ -108,10 +137,13 @@ def update_device_profile(
 )
 def delete_device_profile(
     profile_id: str,
+    request: Request,
     device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
     device_profile_store: FileDeviceProfileStore = Depends(get_device_profile_store),
 ) -> None:
     """Delete a device profile.
+
+    Logs a warning if any schedules reference the deleted profile.
 
     Args:
         profile_id: UUID of the profile to delete.
@@ -122,6 +154,18 @@ def delete_device_profile(
     if profile_id not in device_profiles:
         raise HTTPException(
             status_code=404, detail=f"Device profile not found: {profile_id!r}"
+        )
+    # Warn if any schedules reference this profile.
+    referencing = [
+        s.name
+        for s in request.app.state.schedules.values()
+        if profile_id in s.target_device_ids
+    ]
+    if referencing:
+        logger.warning(
+            "Deleting profile %s which is referenced by schedules: %s",
+            profile_id[:8],
+            referencing,
         )
     del device_profiles[profile_id]
     device_profile_store.delete(profile_id)

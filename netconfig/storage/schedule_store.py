@@ -21,7 +21,8 @@ import logging
 from pathlib import Path
 
 from ..models.schedule import BackupSchedule
-from ..security.credentials import decrypt_field, encrypt
+from ..security.credentials import encrypt
+from ..security.migration import migrate_credential_fields
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +53,14 @@ class FileScheduleStore:
             if dev.get("enable_password"):
                 dev["enable_password"] = encrypt(dev["enable_password"])
         path = self._dir / f"{schedule.id}.json"
-        path.write_text(json.dumps(data), encoding="utf-8")
+        # Atomic write: write to temp then rename to prevent corruption.
+        tmp = path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps(data), encoding="utf-8")
+            tmp.replace(path)
+        except OSError as exc:
+            logger.error("Failed to persist schedule '%s': %s", schedule.name, exc)
+            raise
         logger.debug("Persisted schedule '%s'", schedule.name)
 
     def delete(self, schedule_id: str) -> None:
@@ -81,16 +89,8 @@ class FileScheduleStore:
 
                 needs_resave = False
                 for dev in data.get("devices", []):
-                    if dev.get("password"):
-                        plain, was_enc = decrypt_field(dev["password"])
-                        dev["password"] = plain
-                        if not was_enc:
-                            needs_resave = True
-                    if dev.get("enable_password"):
-                        plain, was_enc = decrypt_field(dev["enable_password"])
-                        dev["enable_password"] = plain
-                        if not was_enc:
-                            needs_resave = True
+                    if migrate_credential_fields(dev, ["password", "enable_password"]):
+                        needs_resave = True
 
                 s = BackupSchedule.model_validate(data)
 
@@ -102,9 +102,14 @@ class FileScheduleStore:
                     )
 
                 schedules[s.id] = s
+            except PermissionError as exc:
+                logger.error(
+                    "Cannot read/migrate schedule file %s: %s (read-only?)",
+                    path.name, exc,
+                )
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Skipping corrupt schedule file %s: %s", path.name, exc
+                logger.error(
+                    "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
                 )
         logger.info("Loaded %d schedule(s)", len(schedules))
         return schedules

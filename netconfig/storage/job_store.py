@@ -41,8 +41,11 @@ class FileJobStore:
         safe to call after status updates).
         """
         path = self._dir / f"{job.id}.json"
-        path.write_text(job.model_dump_json(), encoding="utf-8")
-        logger.debug("Persisted job %s", job.id[:8])
+        # Atomic write: write to temp then rename to prevent corruption.
+        tmp = path.with_suffix(".tmp")
+        tmp.write_text(job.model_dump_json(), encoding="utf-8")
+        tmp.replace(path)
+        logger.debug("Persisted job %s", job.id)
 
     def load_all(self) -> dict[str, BackupJob]:
         """Load all job records from disk.
@@ -62,8 +65,8 @@ class FileJobStore:
                 )
                 jobs[job.id] = job
             except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "Skipping corrupt job file %s: %s", path.name, exc
+                logger.error(
+                    "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
                 )
         logger.info(
             "Loaded %d persisted job(s) from %s", len(jobs), self._dir
