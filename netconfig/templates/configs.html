@@ -30,6 +30,13 @@
               class="btn-secondary" data-testid="config-download-btn"
               style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
               title="Download {{ cfg.filename }}">&#8595;</button>
+      <button class="btn-secondary compare-btn"
+              data-testid="config-compare-btn"
+              data-filename="{{ cfg.filename }}"
+              data-type-key="{{ cfg.device_type }}"
+              data-ext="{{ cfg.file_extension }}"
+              style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+              title="Compare this config with another">&#8644;</button>
       {% if open_in_editor %}
       <button class="btn-secondary"
               data-testid="config-open-btn"
@@ -52,6 +59,60 @@
   <a href="/">Dashboard</a> to capture your first config.
 </p>
 {% endif %}
+
+<!-- Compare target picker (modal) -->
+<style>
+  #compare-picker {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.55);
+    z-index:10000; align-items:center; justify-content:center;
+  }
+  #compare-picker-box {
+    background:#fff; border-radius:8px; box-shadow:0 4px 24px rgba(0,0,0,.3);
+    width:min(560px,94vw); max-height:80vh; display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  #compare-picker-header {
+    display:flex; align-items:center; padding:.65rem 1rem;
+    background:#1a1a2e; color:#eee; gap:.75rem;
+  }
+  #compare-picker-title { flex:1; font-size:.9rem; font-family:monospace; }
+  #compare-picker-body  { overflow:auto; padding:.5rem; }
+  .compare-option {
+    display:flex; align-items:center; gap:.5rem; padding:.4rem .6rem;
+    border-bottom:1px solid #eee; cursor:pointer; font-size:.85rem;
+    text-decoration:none; color:#222;
+  }
+  .compare-option:hover { background:#f5f5fb; }
+  .compare-option .type-chip {
+    display:inline-block; padding:.05rem .4rem; border-radius:3px;
+    background:#e8e8f0; color:#1a1a2e; font-size:.72rem; font-family:monospace;
+  }
+  .compare-option .fname { flex:1; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .compare-option.cross-vendor { opacity:.7; }
+  .compare-empty { color:#888; padding:.75rem; text-align:center; font-style:italic; }
+</style>
+<div id="compare-picker" data-testid="compare-picker" role="dialog"
+     aria-modal="true" aria-labelledby="compare-picker-title"
+     onclick="if(event.target===this)closeComparePicker()">
+  <div id="compare-picker-box">
+    <div id="compare-picker-header">
+      <span id="compare-picker-title"
+            data-testid="compare-picker-title">Compare with&hellip;</span>
+      <label style="font-size:.78rem;display:flex;align-items:center;gap:.25rem;cursor:pointer">
+        <input type="checkbox" id="compare-picker-show-all"
+               data-testid="compare-picker-show-all"
+               style="vertical-align:middle">
+        <span>Show cross-vendor</span>
+      </label>
+      <button type="button" onclick="closeComparePicker()"
+              data-testid="compare-picker-close"
+              aria-label="Close"
+              style="background:transparent;color:#eee;font-size:1.1rem;padding:.2rem .5rem;
+                     border:1px solid #555;border-radius:4px;cursor:pointer">&#10005;</button>
+    </div>
+    <div id="compare-picker-body" data-testid="compare-picker-body"></div>
+  </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -108,6 +169,99 @@ function attachDeleteListener(btn) {
 
 document.querySelectorAll('[data-testid="config-delete-btn"]')
   .forEach(attachDeleteListener);
+
+/* ── Compare picker ─────────────────────────────────────────────────
+ * Button on each row opens a modal listing all other configs that
+ * have the same type_key + extension (the compatibility anchors).
+ * "Show cross-vendor" checkbox reveals the rest, dimmed, so the user
+ * can still force-compare a cross-vendor pair if they really want to.
+ */
+function _compareGatherAll() {
+  var rows = document.querySelectorAll('[data-testid="config-row"]');
+  return Array.from(rows).map(function(tr) {
+    var btn = tr.querySelector('[data-testid="config-compare-btn"]');
+    return {
+      filename: tr.dataset.filename,
+      typeKey:  btn ? btn.dataset.typeKey : '',
+      ext:      btn ? btn.dataset.ext : '',
+      host:     tr.querySelector('[data-testid="config-host"]').textContent.trim(),
+    };
+  });
+}
+
+function openComparePicker(sourceFilename, sourceTypeKey, sourceExt) {
+  var picker = document.getElementById('compare-picker');
+  var body   = document.getElementById('compare-picker-body');
+  var title  = document.getElementById('compare-picker-title');
+  var showAll = document.getElementById('compare-picker-show-all');
+  title.textContent = 'Compare ' + sourceFilename + ' with\u2026';
+  showAll.checked = false;
+  renderCompareOptions(body, sourceFilename, sourceTypeKey, sourceExt, false);
+  showAll.onchange = function() {
+    renderCompareOptions(body, sourceFilename, sourceTypeKey, sourceExt, showAll.checked);
+  };
+  picker.style.display = 'flex';
+}
+
+function closeComparePicker() {
+  document.getElementById('compare-picker').style.display = 'none';
+}
+
+function renderCompareOptions(body, sourceFilename, sourceTypeKey, sourceExt, showAll) {
+  var all = _compareGatherAll().filter(function(r) { return r.filename !== sourceFilename; });
+  var compat = all.filter(function(r) { return r.typeKey === sourceTypeKey && r.ext === sourceExt; });
+  var cross  = all.filter(function(r) { return !(r.typeKey === sourceTypeKey && r.ext === sourceExt); });
+
+  body.innerHTML = '';
+  if (compat.length === 0 && !showAll) {
+    body.innerHTML = '<p class="compare-empty" data-testid="compare-picker-empty">'
+      + 'No other configs with type_key <code>' + sourceTypeKey + '</code>.</p>';
+    return;
+  }
+  compat.forEach(function(r) {
+    body.appendChild(_compareOption(r, sourceFilename, false));
+  });
+  if (showAll && cross.length > 0) {
+    var sep = document.createElement('div');
+    sep.style.cssText = 'padding:.35rem .6rem;font-size:.72rem;color:#888;text-transform:uppercase;letter-spacing:.05em';
+    sep.textContent = 'Cross-vendor (forced textual diff)';
+    body.appendChild(sep);
+    cross.forEach(function(r) {
+      body.appendChild(_compareOption(r, sourceFilename, true));
+    });
+  }
+}
+
+function _compareOption(record, sourceFilename, crossVendor) {
+  var a = document.createElement('a');
+  a.className = 'compare-option' + (crossVendor ? ' cross-vendor' : '');
+  a.setAttribute('data-testid', crossVendor ? 'compare-option-cross-vendor' : 'compare-option');
+  a.setAttribute('data-filename', record.filename);
+  var url = '/configs/' + encodeURIComponent(sourceFilename)
+          + '/vs/'     + encodeURIComponent(record.filename)
+          + (crossVendor ? '?force=true' : '');
+  a.href = url;
+  a.innerHTML =
+    '<span class="type-chip">' + record.typeKey + '</span>'
+    + '<span class="fname">' + record.filename + '</span>'
+    + '<span style="color:#888;font-size:.75rem">' + record.host + '</span>';
+  return a;
+}
+
+document.querySelectorAll('[data-testid="config-compare-btn"]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    openComparePicker(
+      btn.dataset.filename, btn.dataset.typeKey, btn.dataset.ext
+    );
+  });
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    var picker = document.getElementById('compare-picker');
+    if (picker && picker.style.display === 'flex') closeComparePicker();
+  }
+});
 
 /* ── Hash navigation: /configs#{filename} scrolls to row and opens viewer ── */
 document.addEventListener('DOMContentLoaded', function() {

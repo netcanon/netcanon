@@ -7,6 +7,108 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (diff page: directional paradigm — `FROM → TO`)
+
+- **"Sides" paradigm replaced with a temporally-neutral direction.**
+  The unified diff layout has directionality (`+N` added / `-M`
+  removed going from one file to another), not sides.  The UI now
+  surfaces that explicitly with `FROM` and `TO` role labels:
+  - Each filename chip is preceded by a role badge: `FROM` (dark)
+    next to the left chip, `TO` (green) next to the right chip.
+  - A directional arrow (`→`) replaces the neutral "vs".
+  - The stats strip is prefixed `from → to:` so `+12 / −3` reads
+    naturally ("12 added, 3 removed going from the left file to the
+    right file").
+  - The `⇄ Swap sides` button becomes `⇋ Reverse direction`; its
+    tooltip explains that the click swaps FROM/TO.
+- **Why `from`/`to` instead of `baseline`/`current`?**  `current`
+  implied one of the configs was from "now", which is wrong when you
+  diff two old configs against each other.  `from`/`to` encodes only
+  direction, not time — perfect for any pairwise comparison whether
+  both configs are historical, both are fresh, or mixed.
+- **Testid renames:**
+  - `diff-swap-sides-btn` → `diff-reverse-btn`
+  - New testids: `diff-from-label`, `diff-to-label`
+- **Helper / test updates:** `DiffPage.swap_sides_btn` →
+  `DiffPage.reverse_btn`; `test_swap_sides_link_reverses_url` →
+  `test_reverse_direction_link_reverses_url`; new assertion
+  `test_from_and_to_role_labels_visible`.
+
+### Added (diff: collapsed-context folding for large configs)
+
+- **Context folding** on `/configs/{left}/vs/{right}`.  Long runs of
+  equal lines far from any change are squashed into a single expandable
+  "… N unchanged lines …" marker, matching the convention used by git,
+  GitHub, GitLab and VS Code.  Drops a real-world FortiGate vs
+  FortiGate comparison from **35,422 rendered `<div>`s** to **~900** —
+  a ~32× reduction in browser layout cost.
+- **Zero-round-trip expansion.**  Every collapsed marker ships a
+  sibling `<template>` element carrying the hidden lines as
+  pre-rendered markup.  Clicking the marker clones the fragment into
+  the DOM in place of the marker, applies syntax highlighting to the
+  new lines, and removes the marker + template.  No network call, no
+  flash of unstyled content.
+- Keyboard-accessible: markers are `<button>`s so Tab / Enter / Space
+  all work.
+- **New model:** `netconfig.models.diff.DiffGroup` — `{kind, lines}`
+  where ``kind`` is the per-line classification or the new
+  ``"collapsed"`` group.
+- **New service:** `netconfig.services.diff.fold_context(lines,
+  context=3)` — pure, two-sweep Manhattan-style distance-to-change
+  computation.  Default context (`3` lines) matches unified-diff
+  convention.
+- **New testids:** `diff-line-collapsed`, `diff-collapsed-template`.
+- **Tests:** 9 new unit tests in `tests/unit/test_diff_service.py`
+  exercising the folding algorithm (boundaries, adjacent changes,
+  context=0, default=3, negative rejected, order preservation).
+  3 new E2E tests in `TestDiffContextFolding` covering marker
+  visibility, count attribute, and click-to-expand behaviour.
+
+### Added (config diff — Tier 1 textual line diff with compatibility guardrails)
+
+- **`POST /api/v1/configs/diff`** — line-level unified diff between two
+  stored configurations.  Body: `{left, right, force?}`.  Returns a
+  `DiffReport` containing the per-line breakdown, aggregate stats
+  (`{added, removed, equal}`), and a compatibility report.  Uses
+  stdlib `difflib.SequenceMatcher`; no new runtime dependencies.
+- **Compatibility guardrails (defence in depth).**  Two configs are
+  considered diff-compatible when `type_key` (`device_type`) AND
+  `file_extension` match on both records.  Mismatches:
+  - API refuses with **HTTP 422** unless the caller explicitly passes
+    `force=true` in the body.
+  - UI: the "Compare" button on `/configs` opens a target picker that
+    lists only matching configs by default; cross-vendor options are
+    hidden behind a "Show cross-vendor" toggle and dimmed.
+  - `/configs/{left}/vs/{right}` page always renders, but an
+    incompatible pair without `?force=true` gets a red block banner
+    and a "Compare anyway" override button in place of the diff body.
+  - With `force=true` the diff is computed anyway; a red banner warns
+    semantic equivalence is not guaranteed.
+- **Deep-linkable diff URL** at `/configs/{left}/vs/{right}` (with
+  optional `?force=true`).  Reuses the config viewer's syntax
+  highlighter client-side — each diff line's `<span>` goes through
+  `_cvRenderHighlighted(text, ext)` post-render so cfg/xml colouring
+  stays consistent between the viewer and the diff view.
+- **Compare button** on every row of `/configs`; lightweight modal
+  picker keyed on `type_key` + `file_extension`.
+- **New models:** `netconfig.models.diff.{DiffLine, CompatibilityReport,
+  DiffRequest, DiffReport}`.  **New service:**
+  `netconfig.services.diff.{check_compatibility, compute_diff}` — pure,
+  no I/O, easily testable.
+- **New tests:**
+  - `tests/unit/test_diff_service.py` (12 tests): pure-function tests
+    for compat logic, add/remove/replace, force annotation, empty input,
+    trailing-newline handling.
+  - `tests/integration/test_configs_api.py::TestDiffCompatibility` +
+    `::TestDiffOutput` (8 tests): same-type OK, cross-vendor 422,
+    force override, 404 on missing filename, line-number monotonicity.
+  - `tests/e2e/test_backup_flow.py::TestDiffApi` +
+    `::TestDiffPageUI` + `::TestDiffPageContent` (13 tests): live-API
+    wiring, Compare button and picker, cross-vendor hide/show, banner
+    severity, force override, swap-sides link.
+- **New testids** for Compare picker and the diff page; see
+  `tests/testid_reference.md`.
+
 ### Fixed (config viewer search misses queries that cross syntax-highlight spans)
 
 - **Cross-span search now works.** The syntax highlighter splits the

@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+{% block title %}Diff — NetConfig{% endblock %}
+
+{% block content %}
+<style>
+  .diff-header {
+    display:flex; align-items:baseline; gap:1rem; flex-wrap:wrap;
+    margin-bottom:1rem;
+  }
+  .diff-header h1 { margin:0; font-size:1.25rem; }
+  .diff-chip {
+    display:inline-block; padding:.1rem .5rem; border-radius:4px;
+    font-size:.8rem; font-weight:600; background:#e8e8f0; color:#1a1a2e;
+    font-family:monospace;
+  }
+  .diff-toolbar {
+    display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
+    margin-bottom:.75rem; font-size:.85rem;
+  }
+  .diff-role-label {
+    display:inline-block; padding:.08rem .45rem; border-radius:3px;
+    font-size:.68rem; font-weight:700; letter-spacing:.05em;
+    text-transform:uppercase; background:#1a1a2e; color:#eee;
+  }
+  .diff-role-label.to { background:#0b6e37; }  /* green — the destination of the diff */
+  .diff-direction-arrow { color:#7eb8f7; font-size:1.1rem; font-weight:700; user-select:none; }
+  .diff-stats { font-family:monospace; color:#555; }
+  .diff-stats-lead { color:#555; margin-right:.25rem; }
+  .diff-stats .stat-add    { color:#155724; font-weight:700; }
+  .diff-stats .stat-remove { color:#721c24; font-weight:700; }
+  .diff-stats .stat-equal  { color:#888; }
+  .diff-banner {
+    padding:.65rem 1rem; border-radius:6px; font-size:.88rem;
+    margin-bottom:1rem; display:flex; align-items:center; gap:.75rem;
+  }
+  .diff-banner-ok     { background:#d4edda; color:#155724; }
+  .diff-banner-warn   { background:#ffeaa7; color:#7a5d00; }
+  .diff-banner-block  { background:#f8d7da; color:#721c24; }
+  .diff-body {
+    background:#1e1e1e; color:#d4d4d4; border-radius:6px;
+    overflow:auto; font-family:monospace; font-size:.85rem;
+    line-height:1.45; padding:.35rem 0;
+  }
+  .diff-line {
+    display:grid; grid-template-columns:3.5rem 3.5rem 1.2rem 1fr;
+    column-gap:.4rem; padding:0 .75rem; white-space:pre;
+  }
+  .diff-line-num {
+    color:#555; text-align:right; user-select:none;
+    font-size:.78rem; padding-top:.05rem;
+  }
+  .diff-line-marker {
+    user-select:none; font-weight:700; text-align:center;
+  }
+  .diff-line-text { overflow:visible; }
+  .diff-line-add    { background:rgba(35,134,54,.18); }
+  .diff-line-add    .diff-line-marker { color:#7ee787; }
+  .diff-line-remove { background:rgba(248,81,73,.20); }
+  .diff-line-remove .diff-line-marker { color:#ff7b72; }
+  .diff-line-equal  .diff-line-marker { color:#555; }
+  .diff-line-collapsed {
+    display:flex; align-items:center; gap:.5rem;
+    padding:.35rem .75rem; background:#2a2a3e; color:#b5cea8;
+    cursor:pointer; user-select:none; font-size:.8rem; border:none;
+    width:100%; text-align:left; font-family:inherit;
+  }
+  .diff-line-collapsed:hover      { background:#37374d; color:#d4d4d4; }
+  .diff-line-collapsed:focus      { outline:1px solid #7eb8f7; outline-offset:-1px; }
+  .diff-line-collapsed .expand-icon { color:#7eb8f7; font-weight:700; }
+  .diff-line-collapsed .expand-text { flex:1; font-style:italic; }
+  .diff-line-collapsed .expand-range{ color:#777; font-size:.72rem; }
+  /* Reuse the viewer's syntax-highlight palette (tok-* classes from base.html) */
+  .diff-line-text .tok-comment { color:#6a9955; font-style:italic; }
+  .diff-line-text .tok-keyword { color:#569cd6; font-weight:600; }
+  .diff-line-text .tok-string  { color:#ce9178; }
+  .diff-line-text .tok-ip      { color:#b5cea8; }
+  .diff-line-text .tok-number  { color:#b5cea8; }
+  .diff-line-text .tok-tag     { color:#569cd6; }
+  .diff-line-text .tok-attr    { color:#9cdcfe; }
+</style>
+
+<div class="diff-header">
+  <h1>Diff</h1>
+  <a href="/configs" class="btn-secondary"
+     data-testid="diff-back-link"
+     style="font-size:.8rem;padding:.3rem .7rem;text-decoration:none">&#8592; Configs</a>
+</div>
+
+<div class="diff-toolbar" aria-label="Compared files">
+  <span class="diff-role-label"
+        data-testid="diff-from-label"
+        title="Starting point of the diff">from</span>
+  <span class="diff-chip" data-testid="diff-left-filename">{{ left_filename }}</span>
+  <span class="diff-direction-arrow" aria-hidden="true">&rarr;</span>
+  <span class="diff-role-label to"
+        data-testid="diff-to-label"
+        title="Destination of the diff — changes are measured FROM the left file TO this one">to</span>
+  <span class="diff-chip" data-testid="diff-right-filename">{{ right_filename }}</span>
+  <a href="/configs/{{ right_filename | urlencode }}/vs/{{ left_filename | urlencode }}{% if force %}?force=true{% endif %}"
+     class="btn-secondary"
+     data-testid="diff-reverse-btn"
+     title="Reverse: measure changes from {{ right_filename }} to {{ left_filename }} instead"
+     style="font-size:.78rem;padding:.2rem .5rem;text-decoration:none">&#8646; Reverse direction</a>
+</div>
+
+{% if error %}
+<div class="diff-banner diff-banner-block"
+     data-testid="diff-compatibility-banner"
+     data-severity="block">
+  <strong>Not found:</strong>&nbsp;{{ error }}
+</div>
+{% elif compatibility.severity == 'block' and not force %}
+<div class="diff-banner diff-banner-block"
+     data-testid="diff-compatibility-banner"
+     data-severity="block">
+  <div style="flex:1">
+    <strong>Incompatible configs.</strong>
+    These files cannot be diffed as text:
+    <ul style="margin:.25rem 0 .25rem 1.25rem;padding:0">
+    {% for reason in compatibility.reasons %}
+      <li>{{ reason }}</li>
+    {% endfor %}
+    </ul>
+    Textual diffs across vendors are noise (different syntax, different semantics).
+  </div>
+  <a href="/configs/{{ left_filename | urlencode }}/vs/{{ right_filename | urlencode }}?force=true"
+     class="btn-secondary"
+     data-testid="diff-force-override-btn"
+     style="font-size:.8rem;padding:.35rem .7rem;text-decoration:none">
+    Compare anyway
+  </a>
+</div>
+{% elif compatibility.severity == 'block' and force %}
+<div class="diff-banner diff-banner-block"
+     data-testid="diff-compatibility-banner"
+     data-severity="block">
+  <strong>Cross-vendor diff — semantic equivalence is NOT guaranteed.</strong>
+  Changes shown are textual only.
+  {% for reason in compatibility.reasons %}
+    <div style="font-size:.78rem;opacity:.85">{{ reason }}</div>
+  {% endfor %}
+</div>
+{% elif compatibility.severity == 'warn' %}
+<div class="diff-banner diff-banner-warn"
+     data-testid="diff-compatibility-banner"
+     data-severity="warn">
+  {% for reason in compatibility.reasons %}<div>{{ reason }}</div>{% endfor %}
+</div>
+{% else %}
+<div class="diff-banner diff-banner-ok"
+     data-testid="diff-compatibility-banner"
+     data-severity="ok">
+  &#10003; Same device_type (<code>{{ left.device_type }}</code>) and file extension.
+</div>
+{% endif %}
+
+{% if report %}
+<div class="diff-toolbar">
+  <span class="diff-stats">
+    <span class="diff-stats-lead">from &rarr; to:</span>
+    <span class="stat-add"    data-testid="diff-stats-added">+{{ report.stats.added }}</span>
+    &nbsp;/&nbsp;
+    <span class="stat-remove" data-testid="diff-stats-removed">&minus;{{ report.stats.removed }}</span>
+    &nbsp;/&nbsp;
+    <span class="stat-equal"  data-testid="diff-stats-equal">{{ report.stats.equal }} equal</span>
+  </span>
+</div>
+
+{#- Reusable macro: render one visible diff line. -#}
+{%- macro render_line(line) -%}
+<div class="diff-line diff-line-{{ line.kind }}"
+     data-testid="diff-line"
+     data-kind="{{ line.kind }}"
+     {% if line.left_no %}data-left-no="{{ line.left_no }}"{% endif %}
+     {% if line.right_no %}data-right-no="{{ line.right_no }}"{% endif %}><span
+  class="diff-line-num" data-testid="diff-line-number-left">{{ line.left_no  or '' }}</span><span
+  class="diff-line-num" data-testid="diff-line-number-right">{{ line.right_no or '' }}</span><span
+  class="diff-line-marker" data-testid="diff-line-marker">{% if line.kind == 'add' %}+{% elif line.kind == 'remove' %}&minus;{% else %}&nbsp;{% endif %}</span><span
+  class="diff-line-text" data-testid="diff-line-text">{{ line.text }}</span></div>
+{%- endmacro -%}
+
+<div class="diff-body" data-testid="diff-body"
+     data-file-extension="{{ left.file_extension }}">
+{% for group in groups -%}
+{%- if group.kind == 'collapsed' -%}
+{%- set first = group.lines[0] -%}
+{%- set last  = group.lines[-1] -%}
+<button type="button" class="diff-line-collapsed"
+        data-testid="diff-line-collapsed"
+        data-count="{{ group.lines | length }}"
+        aria-expanded="false"
+        aria-label="Expand {{ group.lines | length }} unchanged lines">
+  <span class="expand-icon" aria-hidden="true">&#x25BC;</span>
+  <span class="expand-text">&hellip; {{ group.lines | length }} unchanged line{{ 's' if group.lines | length != 1 else '' }} &hellip;</span>
+  <span class="expand-range">
+    {%- if first.left_no and last.left_no -%}
+      L {{ first.left_no }}&ndash;{{ last.left_no }}
+      {% if first.right_no and last.right_no %}/ R {{ first.right_no }}&ndash;{{ last.right_no }}{% endif %}
+    {%- endif -%}
+  </span>
+</button>
+<template data-testid="diff-collapsed-template">
+{% for line in group.lines %}{{ render_line(line) }}{% endfor %}
+</template>
+{%- else -%}
+{{ render_line(group.lines[0]) }}
+{%- endif -%}
+{%- endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* Diff page client code.
+ *
+ * Two jobs:
+ *   1. Syntax-highlight each visible diff line using the shared
+ *      `_cvRenderHighlighted` helper from the config viewer (base.html).
+ *   2. Wire click-to-expand on collapsed-context markers.  Each marker
+ *      has a <template> sibling holding the hidden diff lines already
+ *      rendered as full-fidelity markup — clicking swaps the template's
+ *      fragment in place of the marker and highlights the new lines.
+ *
+ * If `_cvRenderHighlighted` is absent (viewer removed from base.html)
+ * we silently skip highlighting; diff colouring still works.
+ */
+(function() {
+  var body = document.querySelector('[data-testid="diff-body"]');
+  if (!body) return;
+  var ext = body.dataset.fileExtension || '';
+
+  /** Apply syntax highlighting to every diff-line-text under *root*. */
+  function highlightRange(root) {
+    if (typeof _cvRenderHighlighted !== 'function') return;
+    var nodes = root.querySelectorAll('[data-testid="diff-line-text"]');
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      // Skip nodes that already have child <span>s (already highlighted).
+      if (el.querySelector('span')) continue;
+      var text = el.textContent;
+      if (!text) continue;
+      el.innerHTML = _cvRenderHighlighted(text, ext);
+    }
+  }
+
+  /** Expand a single collapsed marker: swap in its <template> content. */
+  function expandCollapsed(marker) {
+    var tpl = marker.nextElementSibling;
+    if (!tpl || tpl.tagName !== 'TEMPLATE') return;
+    var frag = tpl.content.cloneNode(true);
+    var parent = marker.parentNode;
+    parent.insertBefore(frag, marker);
+    // The fragment's contents are now our newly inserted elements; find
+    // them by walking BACK from the marker to highlight just that slice.
+    var newEnd = marker.previousElementSibling;
+    // Highlight each newly inserted line (traverse via previousElementSibling
+    // back until we hit the previous boundary, but simpler: highlight the
+    // whole body — idempotent because highlightRange skips already-done nodes).
+    highlightRange(body);
+    parent.removeChild(marker);
+    parent.removeChild(tpl);
+  }
+
+  // Initial pass — highlight everything visible in the first render.
+  highlightRange(body);
+
+  // Event delegation on the body so markers added in the future (if we
+  // ever partially re-render) still respond.
+  body.addEventListener('click', function(e) {
+    var marker = e.target.closest('[data-testid="diff-line-collapsed"]');
+    if (marker) expandCollapsed(marker);
+  });
+
+  // Keyboard a11y: Enter/Space on a focused marker expands it (button's
+  // default keyboard behaviour also fires click, so this is belt-and-braces).
+  body.addEventListener('keydown', function(e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var marker = e.target.closest('[data-testid="diff-line-collapsed"]');
+    if (marker) { e.preventDefault(); expandCollapsed(marker); }
+  });
+})();
+</script>
+{% endblock %}

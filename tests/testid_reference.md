@@ -83,6 +83,61 @@ compatibility with existing E2E tests and helpers.
 | `config-delete-confirm-btn`| `<button>` | "Yes" — confirms deletion |
 | `config-delete-cancel-btn` | `<button>` | "No" — cancels and restores Delete button |
 | `no-configs-msg`           | `<p>` | Shown when no configs exist |
+| `config-compare-btn`       | `<button>` | Opens the compare target-picker for that row; carries `data-filename`, `data-type-key`, `data-ext` |
+
+### Compare target picker (modal on `/configs`)
+
+Lightweight picker opened by `config-compare-btn`.  By default lists only
+configs with matching `type_key` + `file_extension` (the compat anchors);
+the "Show cross-vendor" toggle reveals the rest, dimmed.  Picking an
+option navigates to `/configs/{source}/vs/{target}` (adding `?force=true`
+for cross-vendor picks).
+
+| `data-testid`                        | Element    | Notes |
+|--------------------------------------|------------|-------|
+| `compare-picker`                     | `<div>`    | Outer modal, `role="dialog"`, `aria-modal="true"` |
+| `compare-picker-title`               | `<span>`   | "Compare {filename} with…" |
+| `compare-picker-body`                | `<div>`    | Scrollable list of options |
+| `compare-picker-show-all`            | `<input type="checkbox">` | Reveals cross-vendor options |
+| `compare-picker-close`               | `<button>` | × — closes the modal |
+| `compare-picker-empty`               | `<p>`      | Shown when no compatible options exist and cross-vendor is hidden |
+| `compare-option`                     | `<a>`      | Compatible option (same `type_key` + ext); carries `data-filename` |
+| `compare-option-cross-vendor`        | `<a>`      | Dimmed cross-vendor option; href includes `?force=true` |
+
+### Diff page (`/configs/{left}/vs/{right}`)
+
+Deep-linkable textual line-diff view.  The compatibility banner encodes
+its severity via `data-severity="ok"|"warn"|"block"`.  Diff lines carry
+`data-kind="equal"|"add"|"remove"` and `data-left-no` / `data-right-no`.
+
+**Directional paradigm.** The URL's `left` is labelled "from" (the
+starting point); `right` is "to" (the destination).  `+N` / `-M` in the
+stats strip mean "added / removed going from the left file to the right
+file".  The labels are temporally neutral — you might be comparing two
+old configs, or yesterday's vs today's; the diff's direction holds either
+way.  The "Reverse direction" button swaps the two.
+
+| `data-testid`                     | Element    | Notes |
+|-----------------------------------|------------|-------|
+| `diff-back-link`                  | `<a>`      | ← Configs |
+| `diff-from-label`                 | `<span>`   | "FROM" badge next to the left chip |
+| `diff-left-filename`              | `<span>`   | Left file chip (monospace) — the "from" file |
+| `diff-to-label`                   | `<span>`   | "TO" badge next to the right chip |
+| `diff-right-filename`             | `<span>`   | Right file chip (monospace) — the "to" file |
+| `diff-reverse-btn`                | `<a>`      | ⇋ Reverse direction — swaps FROM/TO by navigating to the URL with the two filenames swapped |
+| `diff-compatibility-banner`       | `<div>`    | Carries `data-severity`; text + reasons |
+| `diff-force-override-btn`         | `<a>`      | "Compare anyway" — only rendered for block + force=false |
+| `diff-stats-added`                | `<span>`   | "+N" |
+| `diff-stats-removed`              | `<span>`   | "−M" |
+| `diff-stats-equal`                | `<span>`   | "N equal" |
+| `diff-body`                       | `<div>`    | Dark container for the diff; carries `data-file-extension` for the syntax highlighter |
+| `diff-line`                       | `<div>`    | One per diff line; carries `data-kind`, `data-left-no`, `data-right-no` |
+| `diff-line-number-left`           | `<span>`   | Left-side line number (empty for `add`) |
+| `diff-line-number-right`          | `<span>`   | Right-side line number (empty for `remove`) |
+| `diff-line-marker`                | `<span>`   | `+`, `−`, or space |
+| `diff-line-text`                  | `<span>`   | Line body; post-render, gets `.tok-*` syntax spans via `_cvRenderHighlighted` |
+| `diff-line-collapsed`             | `<button>` | Expandable marker for a folded run of equal context; carries `data-count` (hidden line count) and `aria-expanded="false"`. Click / Enter / Space swaps in the hidden lines and removes the marker |
+| `diff-collapsed-template`         | `<template>` | Immediate sibling of each `diff-line-collapsed` holding the hidden diff-line rows; content is inert until the marker is clicked |
 
 ## Job progress panel (`base.html` — global, persistent)
 

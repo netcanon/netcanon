@@ -17,6 +17,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import PlainTextResponse
 
 from ...models.backup import ConfigRecord
+from ...models.diff import DiffReport, DiffRequest
+from ...services.diff import compute_diff
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
 
@@ -160,3 +162,99 @@ def open_config(
             status_code=500,
             detail=f"Could not open file: {exc}",
         )
+
+
+# ---------------------------------------------------------------------------
+# Diff endpoint (Tier 1 — textual line diff)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_record(
+    storage: BaseConfigStore, filename: str, side: str
+) -> ConfigRecord:
+    """Find the ``ConfigRecord`` for *filename* or raise a 404.
+
+    The config list is authoritative — ``resolve_path`` only proves the
+    bytes exist on disk, but the metadata (``device_type``,
+    ``file_extension``) is what the compatibility check relies on.  A
+    missing entry here means the filename was never produced by the
+    backup engine, so a 404 is honest.
+    """
+    for record in storage.list_configs():
+        if record.filename == filename:
+            return record
+    raise HTTPException(
+        status_code=404,
+        detail=f"{side.capitalize()} config not found: {filename!r}",
+    )
+
+
+@router.post(
+    "/diff",
+    response_model=DiffReport,
+    summary="Diff two stored configuration files",
+    responses={
+        404: {"description": "Either referenced config file does not exist"},
+        422: {
+            "description": (
+                "Configs are incompatible for textual diff "
+                "(different device_type or file_extension). "
+                "Pass ``force=true`` to override."
+            )
+        },
+    },
+)
+def diff_configs(
+    body: DiffRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> DiffReport:
+    """Return a line-level textual diff between two stored configurations.
+
+    Compatibility is checked first — two configs are only diffed freely
+    when their ``type_key`` (``device_type``) and file extension match.
+    Mismatches produce HTTP 422 unless the caller sets ``force=true`` in
+    the request body, in which case the diff is still computed and the
+    response's ``compatibility.severity`` is ``block`` so the UI can
+    render a warning banner.
+
+    Args:
+        body: Request payload with ``left``, ``right``, and optional
+            ``force`` flag.
+
+    Raises:
+        HTTPException 404: If either filename is not known to the store.
+        HTTPException 422: If the two configs are incompatible and
+            ``force`` is not set.
+    """
+    left_rec = _resolve_record(storage, body.left, side="left")
+    right_rec = _resolve_record(storage, body.right, side="right")
+
+    # Short-circuit the expensive read if we're going to reject anyway.
+    from ...services.diff import check_compatibility
+
+    compat = check_compatibility(left_rec, right_rec)
+    if not compat.compatible and not body.force:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Configs are incompatible for textual diff.",
+                "reasons": compat.reasons,
+                "hint": "Pass force=true to override (cross-vendor diffs are noisy).",
+            },
+        )
+
+    left_text = storage.get_content(body.left)
+    right_text = storage.get_content(body.right)
+    report = compute_diff(
+        left_rec, left_text, right_rec, right_text, force=body.force
+    )
+    logger.info(
+        "Diff %s vs %s: +%d / -%d (compat=%s, force=%s)",
+        body.left,
+        body.right,
+        report.stats["added"],
+        report.stats["removed"],
+        report.compatibility.severity,
+        body.force,
+    )
+    return report

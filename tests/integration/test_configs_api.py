@@ -230,3 +230,133 @@ class TestPathTraversal:
     def test_get_absolute_path_returns_404(self, client):
         resp = client.get("/api/v1/configs//etc/passwd")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/configs/diff  (Tier 1 — textual line diff)
+# ---------------------------------------------------------------------------
+
+
+def _seed_config_of_type(client, type_key: str, host: str) -> str:
+    """Same as ``_seed_config`` but parametrised on ``type_key``."""
+    post_resp = client.post(
+        "/api/v1/backups",
+        json={
+            "devices": [
+                {
+                    "type_key": type_key,
+                    "host": host,
+                    "credentials": {"username": "admin", "password": "pw"},
+                }
+            ]
+        },
+    )
+    assert post_resp.status_code == 202
+    job = client.get(f"/api/v1/backups/{post_resp.json()['id']}").json()
+    assert job["status"] == "completed"
+    return job["results"][0]["config_record"]["filename"]
+
+
+class TestDiffCompatibility:
+    """The API must refuse textually-diffing configs with different type_key
+    or file_extension unless the caller explicitly passes ``force=true``."""
+
+    def test_same_type_returns_200(self, client):
+        a = _seed_config_of_type(client, "Cisco", "10.1.1.1")
+        b = _seed_config_of_type(client, "Cisco", "10.1.1.2")
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": a, "right": b}
+        )
+        assert resp.status_code == 200
+        report = resp.json()
+        assert report["compatibility"]["severity"] == "ok"
+        assert report["compatibility"]["compatible"] is True
+
+    def test_cross_vendor_without_force_returns_422(self, client):
+        cisco = _seed_config_of_type(client, "Cisco", "10.2.2.1")
+        opn = _seed_config_of_type(client, "OPNsense", "10.2.2.2")
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": cisco, "right": opn}
+        )
+        assert resp.status_code == 422
+        body = resp.json()
+        # Fastapi nests custom dicts under "detail"; verify the reasons surfaced.
+        detail = body["detail"]
+        assert isinstance(detail, dict)
+        reasons = detail["reasons"]
+        assert any("type_key" in r for r in reasons)
+        assert any("file_extension" in r for r in reasons)
+
+    def test_cross_vendor_with_force_returns_200_with_block_banner(self, client):
+        cisco = _seed_config_of_type(client, "Cisco", "10.3.3.1")
+        opn = _seed_config_of_type(client, "OPNsense", "10.3.3.2")
+        resp = client.post(
+            "/api/v1/configs/diff",
+            json={"left": cisco, "right": opn, "force": True},
+        )
+        assert resp.status_code == 200
+        compat = resp.json()["compatibility"]
+        assert compat["severity"] == "block"
+        assert compat["compatible"] is False
+        # Force override is remembered so the UI can show a red banner.
+        assert any("force=true" in r for r in compat["reasons"])
+
+    def test_left_missing_returns_404(self, client):
+        b = _seed_config_of_type(client, "Cisco", "10.4.4.1")
+        resp = client.post(
+            "/api/v1/configs/diff",
+            json={
+                "left": "Cisco_0-0-0-0_20000101_000000.cfg",
+                "right": b,
+            },
+        )
+        assert resp.status_code == 404
+
+    def test_right_missing_returns_404(self, client):
+        a = _seed_config_of_type(client, "Cisco", "10.4.4.2")
+        resp = client.post(
+            "/api/v1/configs/diff",
+            json={
+                "left": a,
+                "right": "Cisco_0-0-0-0_20000101_000000.cfg",
+            },
+        )
+        assert resp.status_code == 404
+
+
+class TestDiffOutput:
+    """Structural checks on the diff body — stats, line kinds, numbers."""
+
+    def test_same_file_diff_has_all_equal_lines(self, client):
+        a = _seed_config_of_type(client, "Cisco", "10.5.5.1")
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": a, "right": a}
+        )
+        assert resp.status_code == 200
+        report = resp.json()
+        assert report["stats"]["added"] == 0
+        assert report["stats"]["removed"] == 0
+        assert report["stats"]["equal"] > 0
+        assert all(line["kind"] == "equal" for line in report["lines"])
+
+    def test_equal_lines_have_both_line_numbers(self, client):
+        a = _seed_config_of_type(client, "Cisco", "10.5.5.2")
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": a, "right": a}
+        )
+        for line in resp.json()["lines"]:
+            assert line["left_no"] is not None
+            assert line["right_no"] is not None
+
+    def test_diff_line_numbers_monotonic(self, client):
+        """For any add/equal line the right_no strictly increases;
+        for any remove/equal line the left_no strictly increases."""
+        a = _seed_config_of_type(client, "Cisco", "10.5.5.3")
+        resp = client.post(
+            "/api/v1/configs/diff", json={"left": a, "right": a}
+        )
+        lines = resp.json()["lines"]
+        lefts = [L["left_no"] for L in lines if L["left_no"] is not None]
+        rights = [L["right_no"] for L in lines if L["right_no"] is not None]
+        assert lefts == sorted(lefts)
+        assert rights == sorted(rights)

@@ -178,6 +178,101 @@ class ConfigsPage:
     def delete_buttons(self):
         return self._page.locator('[data-testid="config-delete-btn"]')
 
+    def compare_buttons(self):
+        return self._page.locator('[data-testid="config-compare-btn"]')
+
+    def open_compare_for(self, filename: str):
+        """Click the Compare button on the row with *filename*."""
+        self._page.locator(
+            f'[data-testid="config-row"][data-filename="{filename}"] '
+            f'[data-testid="config-compare-btn"]'
+        ).click()
+
+
+class ComparePicker:
+    """Helpers for the Compare target-picker modal on the configs page."""
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def modal(self):
+        return self._page.locator('[data-testid="compare-picker"]')
+
+    @property
+    def title(self):
+        return self._page.locator('[data-testid="compare-picker-title"]')
+
+    @property
+    def body(self):
+        return self._page.locator('[data-testid="compare-picker-body"]')
+
+    @property
+    def show_all(self):
+        return self._page.locator('[data-testid="compare-picker-show-all"]')
+
+    @property
+    def close_btn(self):
+        return self._page.locator('[data-testid="compare-picker-close"]')
+
+    def options(self):
+        """Compatible (same type_key + ext) options."""
+        return self._page.locator('[data-testid="compare-option"]')
+
+    def cross_vendor_options(self):
+        return self._page.locator('[data-testid="compare-option-cross-vendor"]')
+
+
+class DiffPage:
+    """Helpers for the ``/configs/{left}/vs/{right}`` diff page."""
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    @property
+    def banner(self):
+        return self._page.locator('[data-testid="diff-compatibility-banner"]')
+
+    def banner_severity(self) -> str:
+        """Return ``ok`` / ``warn`` / ``block`` from the banner's attr."""
+        return self.banner.get_attribute("data-severity") or ""
+
+    @property
+    def left_chip(self):
+        return self._page.locator('[data-testid="diff-left-filename"]')
+
+    @property
+    def right_chip(self):
+        return self._page.locator('[data-testid="diff-right-filename"]')
+
+    @property
+    def stats_added(self):
+        return self._page.locator('[data-testid="diff-stats-added"]')
+
+    @property
+    def stats_removed(self):
+        return self._page.locator('[data-testid="diff-stats-removed"]')
+
+    @property
+    def force_override_btn(self):
+        return self._page.locator('[data-testid="diff-force-override-btn"]')
+
+    @property
+    def reverse_btn(self):
+        """The "Reverse direction" link — makes ``right`` the new baseline.
+
+        (Previously named ``swap_sides_btn`` / ``diff-swap-sides-btn`` back
+        when the button was framed as "Swap sides".  The unified-diff layout
+        has directionality — baseline → current — not sides.)
+        """
+        return self._page.locator('[data-testid="diff-reverse-btn"]')
+
+    def lines(self):
+        return self._page.locator('[data-testid="diff-line"]')
+
+    def collapsed_markers(self):
+        return self._page.locator('[data-testid="diff-line-collapsed"]')
+
 
 # ---------------------------------------------------------------------------
 # Job progress panel (global — floating widget injected by base.html)

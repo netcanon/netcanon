@@ -285,6 +285,98 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             },
         )
 
+    @app.get(
+        "/configs/{left}/vs/{right}",
+        response_class=HTMLResponse,
+        include_in_schema=False,
+    )
+    async def diff_page(
+        left: str, right: str, request: Request, force: bool = False
+    ) -> HTMLResponse:
+        """Render a line-level textual diff between two stored configs.
+
+        Path params double as a deep-linkable URL — copying the address
+        bar reproduces the exact comparison.  The ``force`` query flag
+        (``?force=true``) carries the same semantics as the API: it
+        overrides an incompatible ``type_key`` / extension block and
+        causes the template to surface a red banner above the diff.
+
+        Unlike the API, this view never returns 404 or 422 — we always
+        render the page so the user sees WHY the diff was blocked and
+        can click the "Compare anyway" override button if appropriate.
+        """
+        from .services.diff import check_compatibility, compute_diff, fold_context
+        from .models.diff import CompatibilityReport, DiffReport
+
+        storage = request.app.state.storage
+        records_by_name = {r.filename: r for r in storage.list_configs()}
+        left_rec = records_by_name.get(left)
+        right_rec = records_by_name.get(right)
+
+        # Error view: one or both filenames unknown.
+        if left_rec is None or right_rec is None:
+            missing = [
+                name
+                for name, rec in (("left", left_rec), ("right", right_rec))
+                if rec is None
+            ]
+            return templates.TemplateResponse(
+                request,
+                "diff.html",
+                {
+                    "active_page": "configs",
+                    "left_filename": left,
+                    "right_filename": right,
+                    "error": f"Config(s) not found: {', '.join(missing)}",
+                    "force": force,
+                    "report": None,
+                },
+                status_code=404,
+            )
+
+        compat = check_compatibility(left_rec, right_rec)
+        if not compat.compatible and not force:
+            # Render the page with the block banner but no diff body —
+            # the user can click "Compare anyway" to re-issue with force.
+            return templates.TemplateResponse(
+                request,
+                "diff.html",
+                {
+                    "active_page": "configs",
+                    "left_filename": left,
+                    "right_filename": right,
+                    "left": left_rec,
+                    "right": right_rec,
+                    "compatibility": compat,
+                    "force": False,
+                    "report": None,
+                },
+            )
+
+        left_text = storage.get_content(left)
+        right_text = storage.get_content(right)
+        report: DiffReport = compute_diff(
+            left_rec, left_text, right_rec, right_text, force=force
+        )
+        # Fold long runs of equal context so large FortiGate / Junos
+        # configs don't render tens of thousands of DOM rows up front.
+        groups = fold_context(report.lines, context=3)
+        return templates.TemplateResponse(
+            request,
+            "diff.html",
+            {
+                "active_page": "configs",
+                "left_filename": left,
+                "right_filename": right,
+                "left": left_rec,
+                "right": right_rec,
+                "compatibility": report.compatibility,
+                "force": force,
+                "report": report,
+                "groups": groups,
+            },
+        )
+
     @app.get("/devices", response_class=HTMLResponse, include_in_schema=False)
     async def devices_page(request: Request) -> HTMLResponse:
         """Device profile manager: create and manage persistent device profiles."""
