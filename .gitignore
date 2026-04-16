@@ -51,3 +51,5 @@ env/
 # Environment files
 .env
 .env.*
+# ...but DO track the example file so new contributors know which vars exist
+!.env.example
