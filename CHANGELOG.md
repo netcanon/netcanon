@@ -7,6 +7,274 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (translator Phase 1 — OPNsense adapter + write endpoints)
+
+- **Second real adapter: `OPNsenseAdapter`** under
+  `netconfig/migration/adapters/opnsense/`.  Parses/renders OPNsense
+  `config.xml`.  Scope: system hostname/domain and interfaces
+  (zone, `if`, descr, enable-flag, ipaddr, subnet).  Declares
+  `device_classes=[firewall, router]`.
+- **OPNsense zone-keyed interface idiom flattened** at parse time:
+  native `<wan>…</wan><lan>…</lan>` children become a list of dicts
+  with a synthetic `zone` key, so `iter_xpaths` can emit OpenConfig-
+  style schema paths (no list keys).  The render step reverses the
+  transformation.  Round-trip invariant `parse(render(tree)) == tree`
+  is tested with sanitised 3-interface fixture.
+- **Cross-vendor guardrail shown working:** OPNsense ∩ IOS-XE =
+  `{router}`, so the class guard permits the migration; the per-
+  xpath capability matrices then honestly flag firewall rules
+  (`/filter/rule`, `/nat/outbound`) as unsupported by IOS-XE.
+  The intended layering — class guard for coarse "is this meaningful
+  at all?", capability matrix for fine "which features translate?".
+
+- **New write endpoints:**
+  - `POST /api/v1/migration/plan` — runs the full pipeline
+    (class-guard → parse → transforms → validate → render) on a
+    raw config payload.  Returns the `MigrationJob` as JSON, even
+    on parse failure (the error is in `job.error`, not an HTTP
+    status).  Callers inspect `job.status` for the outcome.
+  - `POST /api/v1/migration/render` — currently an alias for
+    `/plan`; kept as a separate route so Phase 2 can split plan
+    (no side effects) from render (pre-deploy snapshot + diff URL)
+    without another API rev.
+  - Input mode toggle: request body supplies EITHER `raw_text` OR
+    `source_filename` (which loads from the existing backup store).
+    Exactly one MUST be set — otherwise 422.  Source-filename
+    shorthand means you can migrate any stored config without
+    shipping the bytes through HTTP.
+  - `force=true` in the body skips the device-class guard.
+- **New model:** `MigrationPlanRequest` in
+  `netconfig.models.migration` — documented, tested, ready for a
+  Phase 2 UI to reuse.
+
+- **Manual testing now possible** end-to-end via curl:
+
+      curl -X POST http://127.0.0.1:8000/api/v1/migration/plan \
+           -H 'Content-Type: application/json' \
+           -d '{"source":"cisco_iosxe","target":"cisco_iosxe",
+                "raw_text":"<interfaces xmlns=\"http://openconfig.net/yang/interfaces\">…"}'
+
+- **Tests (+32):**
+  - `tests/unit/migration/test_opnsense.py` (21): parse, errors,
+    render determinism, round-trip invariant (inline + fixture),
+    iter_xpaths coverage, capability declarations, cross-adapter
+    class-intersection, registry.
+  - `tests/integration/test_migration_api.py` (+11): plan endpoint
+    happy path, 422 variants (unknown source, unknown target,
+    neither/both input modes), 404 for missing filename, parse
+    failure returns 200 with failed job, force flag round-trip,
+    render is alias, end-to-end integration with backup store.
+  - `tests/fixtures/opnsense/config_simple.xml` — sanitised sample.
+
+- **Total suite:** 567 passing (was 535, +32).  Migration suite
+  alone: 184 tests (was 140, +44 across OPNsense + API integration).
+
+### Added (translator: adversarial-input hardening + cross-adapter tests)
+
+- **Strict YANG boolean parsing.** `CiscoIOSXEAdapter` used to silently
+  coerce any `<enabled>` text other than literal `true` to `False` —
+  meaning `<enabled>yes</enabled>` would ship a DISABLED interface.
+  The parser now rejects every non-RFC-7950 spelling (`yes`, `no`,
+  `1`, `0`, `on`, `off`, empty string, …) with a `ParseError` that
+  names the exact xpath.
+- **IPv4 prefix-length range check.** Previously values like `99`
+  or `-1` were accepted silently and round-tripped into the rendered
+  NETCONF payload, where the device would reject the edit at deploy
+  time.  The parser now enforces the YANG `inet:ipv4-prefix` range
+  (`0..32`).
+- **Interface-index error paths.** Empty or missing `<name>` elements
+  now raise a `ParseError` whose `path` includes the zero-based
+  `interface[N]` index and whose `snippet` contains the offending
+  element serialised to XML (capped at 200 chars).  A device
+  returning ten interfaces with one malformed entry is now locatable
+  in ~5 seconds instead of "open the XML and scroll".
+- **UTF-8 BOM tolerance.** Some devices (and some editors) prepend a
+  BOM to their XML declaration.  Test lock-in so this stays working.
+- **Cross-adapter pipeline tests** (`tests/unit/migration/
+  test_cross_adapter_pipeline.py`): prove stage transitions, error
+  routing, and type boundaries that no single-adapter test touches:
+  - IOS-XE → mock: class guard permits, nested walker reaches leaves,
+    render produces JSON despite type-shape mismatch.
+  - Mock → IOS-XE: render mismatch caught as `failed` with useful
+    error; validation still ran first; `completed_at` is always set.
+  - Partial-status routing: a validation `block` with a successful
+    render correctly lands in `partial`, not `completed` or `failed`.
+  - Stage ordering: class guard runs at stage 0, before parse — a
+    disjoint-class pair with broken XML fails with the class-guard
+    error, not a parser error.
+- **Tests (+22)**:
+  - `test_cisco_iosxe.py`: 10 new adversarial-input tests covering
+    the four hardening items above.
+  - `test_cross_adapter_pipeline.py`: 11 new pipeline scenarios.
+  - Full migration suite now 140 tests (was 97 before this hardening
+    pass, 77 before Phase 0.5's round-trip work, 30 at end of Phase 0).
+- Full project suite: **535 passing** (was 513).  Zero regressions.
+
+### Added (translator Phase 0.5 — Cisco IOS-XE adapter)
+
+- **First real adapter: `CiscoIOSXEAdapter`** under
+  `netconfig/migration/adapters/cisco_iosxe/`.  Scope:
+  `openconfig-interfaces` + `openconfig-if-ip` subset (name,
+  description, enabled, type, IPv4 address + prefix-length on
+  subinterfaces).  Enough to prove the adapter contract against
+  real OpenConfig NETCONF payloads.
+- **Internal tree shape:** nested dict mirroring the OpenConfig XML
+  structure, namespace-stripped for readability.  Canonical namespaces
+  are re-attached on render.  Operates against captured NETCONF
+  `<get-config>` responses today; live `ncclient` transport is
+  Phase 1's responsibility (same split as the existing
+  collectors-vs-collector-consumers layout).
+- **Stdlib only** — `xml.etree.ElementTree` for parse/render.  No new
+  runtime dependencies; libyang canonical validation is deferred to
+  Phase 0.7 behind a "validates if installed" seam.
+- **Round-trip invariant enforced:** `parse(render(tree)) == tree`
+  for every supported tree.  Tested over inline samples and a real
+  sanitised 3-interface fixture under `tests/fixtures/iosxe/`.
+- **Capability matrix declares:**
+  - 9 supported paths (name, config.name, config.description,
+    config.enabled, config.type, subinterface.index, address.ip,
+    address.config.ip, address.config.prefix-length).
+  - Lossy: `/interfaces/interface/config/mtu` — YANG model doesn't
+    round-trip every platform-specific MTU tweak.
+  - Unsupported: IPv6 subtree (Phase 1 work).
+  - `device_classes=[router, switch]` — IOS-XE platforms routinely
+    fulfil both roles.
+
+### Changed (translator: adapter-driven tree walker)
+
+- **`AdapterBase` gets `iter_xpaths(tree)`** — non-abstract, defaults
+  to the flat `dict[str, str]` walker so the mock adapter and any
+  existing callers keep working.  Adapters with nested tree shapes
+  (the new `CiscoIOSXEAdapter`) override to yield schema xpaths
+  (no list-key predicates) that match their declared capability
+  matrix.
+- **`validate_against(tree, target)` gains an optional
+  `source` adapter parameter.**  When supplied, the validator uses
+  `source.iter_xpaths` to walk the tree — required for adapters
+  whose internal tree shape isn't a flat dict.  Backward-compatible:
+  omitting `source` keeps the Phase 0 behaviour.
+- **`run_plan` threads `source` through to `validate_against`**
+  automatically, so all pipeline callers get adapter-aware walking
+  for free.
+
+### Tests (+41 over Phase 0 baseline)
+
+- `tests/unit/migration/test_cisco_iosxe.py` (30): parse (bare +
+  envelope), parse errors (malformed XML, missing interfaces,
+  non-integer prefix-length, interface without name), render
+  determinism, round-trip invariant (inline + fixture), iter_xpaths
+  predicate-freedom + matrix alignment, capability declarations,
+  pipeline integration, registry.
+- `tests/integration/test_migration_api.py`: new assertions that
+  `cisco_iosxe` appears in the list endpoint, declares the expected
+  device_classes, and exposes its full capability matrix (lossy
+  MTU + unsupported IPv6) via the detail endpoint.
+- `tests/fixtures/iosxe/get_config_simple.xml` — sanitised 3-interface
+  NETCONF `<get-config>` response (RFC 5737 documentation IPs).
+
+### Added (translator: cross-device-class guardrail)
+
+- **Coarse-grained device-class compatibility check** prevents
+  nonsensical migrations (e.g. trying to render a Layer-2 switch
+  config through a firewall adapter).  Adapters declare one or more
+  ``DeviceClass`` values on their ``CapabilityMatrix``; the pipeline
+  refuses a pair with no class in common unless ``force=True``.
+- **New `DeviceClass` enum** in `netconfig.models.migration`:
+  ``switch``, ``router``, ``firewall``, ``load_balancer``,
+  ``wireless_controller``, ``access_point``, ``waf``.  Taxonomy is
+  flat and additive; multi-class devices (L3 switches, UTM
+  appliances) declare multiple values.
+- **`CapabilityMatrix.device_classes: list[DeviceClass]`** — empty
+  default is "uncommitted" and produces a ``warn`` (not block) so
+  adapters can be developed before their class declarations are
+  finalised.
+- **`check_class_compat(source, target) -> CompatibilityReport`** in
+  `netconfig.services.migration_validate`.  Reuses the
+  `CompatibilityReport` shape from the diff models so UIs can render
+  both class-mismatch and xpath-mismatch banners with the same
+  component.  Severity branches: same/overlapping class → `ok`;
+  either side undeclared → `warn`; both declared but disjoint → `block`.
+- **`run_plan` stage-0 guard**: the class check runs BEFORE parse,
+  so mismatched adapters fail instantly with a clear
+  ``"Device-class guard refused migration: …"`` error.  A new
+  ``force: bool = False`` parameter on `run_plan` skips the guard
+  for deliberate cross-class experiments (same idiom as the diff
+  page's `?force=true` override).
+- **API surface**: `AdapterInfo.device_classes` is now returned on
+  ``GET /api/v1/migration/adapters`` so UIs can filter the target
+  picker to compatible adapters before the user commits.  The
+  detailed ``CapabilityMatrix`` response also surfaces the field.
+- **Tests (+20)**: `tests/unit/migration/test_device_class.py`
+  covers the enum shape, pydantic coercion of string values (for
+  capabilities.yaml loading in Phase 1), every `check_class_compat`
+  severity branch, and the `run_plan` stage-0 guard (default
+  behaviour + `force=True` override + no-op when already
+  compatible).  Integration test added for the new
+  `device_classes` field on the list endpoint.
+
+### Added (translator Phase 0 — adapter contract + pipeline skeleton)
+
+- **Phase 0 of the translator / migration engine landed.**  Scope per
+  `translator-plans.txt` §12: prove the shape end-to-end with a
+  reference adapter, no real YANG tooling required yet.
+- **New pydantic models** in `netconfig.models.migration`:
+  `CapabilityMatrix` (with a `classify()` resolver using
+  "strictest-wins" semantics — unsupported > lossy > supported),
+  `LossyPath`, `UnsupportedPath`, `ValidationReport`, `XPathDelta`,
+  `TransformSpec`, `MigrationJob`, `MigrationJobStatus`, `AdapterInfo`.
+  Shape deliberately mirrors `CompatibilityReport` + `BackupJob` so UI
+  banners and lifecycle conventions stay consistent.
+- **`netconfig.migration` package**:
+  - `adapters/base.py` — `AdapterBase` ABC + `ParseError` / `RenderError`.
+  - `adapters/registry.py` — in-memory `register` / `get_adapter` /
+    `list_adapters` with name-collision and missing-name guards.
+  - `adapters/_mock/` — reference adapter that round-trips a flat
+    `dict[str, str]` via JSON; exercises every `classify()` branch
+    (supported, lossy, unsupported).
+  - `canonical/loader.py` — Phase 0.5 stub; `NotImplementedError`
+    with clear roadmap pointer.  `PLANNED_MODULES` tuple documents
+    the OpenConfig + `netconfig-ext` modules that will be pinned
+    once libyang lands.
+- **New services**:
+  - `services/migration_validate.py` — walks a tree's xpaths,
+    classifies each against the target's `CapabilityMatrix`, returns
+    a `ValidationReport` with `ok` / `warn` / `block` severity.
+  - `services/migration_pipeline.py` — `run_plan(source, target,
+    raw_text, transforms)` orchestrator covering stages
+    parse → transform → validate → render.  Each failure class
+    (`ParseError`, `RenderError`, generic `Exception`) yields a
+    terminal `failed` job with a `.error` summary.  A successful
+    render against a `block`-severity validation yields `partial`
+    (output available for review, not safe to auto-deploy).
+- **New API endpoints** (read-only Phase 0):
+  - `GET /api/v1/migration/adapters` — list registered adapters
+    with summary counts.
+  - `GET /api/v1/migration/adapters/{name}/capabilities` — full
+    `CapabilityMatrix`; 404 for unknown adapters.
+- **Tests (+77)**:
+  - `tests/unit/migration/test_models.py` (20) — every pydantic
+    type + `classify` resolution rules.
+  - `tests/unit/migration/test_registry.py` (10) — decorator
+    contract, collision detection, idempotent re-registration,
+    LookupError on unknown names, mock always registered.
+  - `tests/unit/migration/test_mock_adapter.py` (14) — round-trip
+    invariant over 5 sample trees, deterministic output, parse
+    error paths, capability-matrix shape.
+  - `tests/unit/migration/test_validate.py` (11) — every severity
+    branch including `error`-level lossy escalation, mixed
+    unsupported+lossy, empty tree, non-dict tree.
+  - `tests/unit/migration/test_pipeline.py` (9) — happy path,
+    transform ordering + failure, parse failure, validation
+    block → partial status, failed-job timing.
+  - `tests/unit/migration/test_canonical_loader.py` (4) — stubs
+    raise `NotImplementedError` with roadmap pointer.
+  - `tests/integration/test_migration_api.py` (9) — list + detail
+    endpoints, 404 for unknown adapter, summary/detail consistency.
+- **No UI in this phase.**  testids for the migration UI are
+  queued for Phase 2 (`migrate-source-select`, etc. — see
+  `translator-plans.txt` §11); the config diff page already
+  handles rendered-output review so no second viewer is needed.
+
 ### Changed (diff page: directional paradigm — `FROM → TO`)
 
 - **"Sides" paradigm replaced with a temporally-neutral direction.**

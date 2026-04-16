@@ -370,3 +370,29 @@ page.locator('[data-testid="definition-row"]').all()
 page.locator('[data-testid="config-delete-btn"]').first.click()
 page.locator('[data-testid="config-delete-confirm-btn"]').click()
 ```
+
+## Migration / translator UI — RESERVED for Phase 2
+
+Phase 0 of the translator engine ships back-end only (adapter contract,
+registry, pipeline skeleton, read-only API endpoints).  **No migration UI
+exists yet**, but the following testid names are reserved so Phase 2
+contributors land on a consistent scheme.  See `translator-plans.txt` §11.
+
+| `data-testid` (planned)               | Element  | Purpose |
+|---------------------------------------|----------|---------|
+| `migrate-source-select`               | `<select>` | Pick source device profile |
+| `migrate-target-select`               | `<select>` | Pick target adapter (or "download only") |
+| `migrate-transforms-list`             | `<div>`  | Container for applied transforms |
+| `migrate-add-transform-btn`           | `<button>` | Open transform wizard |
+| `migrate-validation-report`           | `<div>`  | Banner fed by `ValidationReport.severity` (ok/warn/block) — reuses the `diff-banner-*` styles from diff.html |
+| `migrate-lossy-item`                  | `<li>`   | One row per `LossyPath` in the report |
+| `migrate-unsupported-item`            | `<li>`   | One row per `UnsupportedPath` in the report |
+| `migrate-render-btn`                  | `<button>` | Run render stage |
+| `migrate-semantic-delta-banner`       | `<div>`  | Summary of `XPathDelta` list above the textual diff |
+| `migrate-semantic-delta-item`         | `<li>`   | One row per `XPathDelta` |
+| `migrate-deploy-btn`                  | `<button>` | Initiate deploy (disabled while validation is blocked) |
+| `migrate-confirm-deploy-btn`          | `<button>` | Inline "Yes, deploy now" confirmation |
+
+Note: the rendered-output review step reuses the existing `/configs/{L}/vs/{R}`
+diff page — no `migrate-diff-viewer` testid is needed.
+

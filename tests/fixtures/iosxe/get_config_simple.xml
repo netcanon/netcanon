@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="101">
+  <data>
+    <interfaces xmlns="http://openconfig.net/yang/interfaces">
+      <interface>
+        <name>GigabitEthernet0/0/0</name>
+        <config>
+          <name>GigabitEthernet0/0/0</name>
+          <description>WAN uplink</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>198.51.100.1</ip>
+                  <config>
+                    <ip>198.51.100.1</ip>
+                    <prefix-length>30</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+      <interface>
+        <name>GigabitEthernet0/0/1</name>
+        <config>
+          <name>GigabitEthernet0/0/1</name>
+          <description>LAN downlink</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.0.10.1</ip>
+                  <config>
+                    <ip>10.0.10.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+      <interface>
+        <name>Loopback0</name>
+        <config>
+          <name>Loopback0</name>
+          <description>Router ID</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:softwareLoopback</type>
+        </config>
+      </interface>
+    </interfaces>
+  </data>
+</rpc-reply>

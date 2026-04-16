@@ -34,7 +34,10 @@ from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
 from .api.routes import device_profiles as device_profiles_router
+from .api.routes import migration as migration_router
 from .api.routes import schedules as schedules_router
+# Side-effect import — registers all built-in migration adapters.
+from . import migration as _migration_pkg  # noqa: F401
 from .config import Settings
 from .definitions.loader import DefinitionLoader
 from .storage.device_profile_store import FileDeviceProfileStore
@@ -204,6 +207,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(backups_router.router, prefix="/api/v1")
     app.include_router(schedules_router.router, prefix="/api/v1")
     app.include_router(device_profiles_router.router, prefix="/api/v1")
+    app.include_router(migration_router.router, prefix="/api/v1")
 
     # ------------------------------------------------------------------
     # UI routes (Jinja2 server-rendered HTML)

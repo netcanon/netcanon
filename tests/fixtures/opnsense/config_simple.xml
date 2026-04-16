@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<opnsense>
+  <system>
+    <hostname>fw01</hostname>
+    <domain>lab.example.com</domain>
+  </system>
+  <interfaces>
+    <wan>
+      <if>em0</if>
+      <descr>Upstream ISP</descr>
+      <enable/>
+      <ipaddr>198.51.100.2</ipaddr>
+      <subnet>30</subnet>
+    </wan>
+    <lan>
+      <if>em1</if>
+      <descr>Internal LAN</descr>
+      <enable/>
+      <ipaddr>10.0.10.1</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+    <opt1>
+      <if>em2</if>
+      <descr>Management</descr>
+      <enable/>
+      <ipaddr>192.168.99.1</ipaddr>
+      <subnet>24</subnet>
+    </opt1>
+  </interfaces>
+</opnsense>

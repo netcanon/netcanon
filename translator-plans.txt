@@ -1,6 +1,88 @@
 # NETCONFIG — YANG + TEMPLATE MIGRATION SYSTEM — PLAN
 # Format: dense, grep-friendly, code-first. Written for Claude, not humans.
 # Generated: 2026-04-16
+# Last revised: 2026-04-16 (post-diff-system + triage work)
+
+=====================================================================
+## UPDATES SINCE INITIAL PLANNING  (read first)
+=====================================================================
+# Several capabilities the plan assumed would need to be built now already
+# exist in the repo.  Reuse, don't rebuild.  Summary in priority order:
+
+EXISTING, REUSE DIRECTLY (do not reinvent):
+  * netconfig/services/diff.py
+      - check_compatibility(left, right) -> CompatibilityReport
+      - compute_diff(left, left_text, right, right_text) -> DiffReport
+      - fold_context(lines, context=3) -> list[DiffGroup]  (collapsed runs)
+    Pipeline stage 6 (`diff`) MUST call compute_diff for the text side.
+    Tree-level semantic diff is the NEW thing to add; text diff is solved.
+  * netconfig/models/diff.py
+      - DiffLine, DiffGroup, CompatibilityReport, DiffReport, DiffRequest
+    ValidationReport shape planned for migration should mirror
+    CompatibilityReport's (compatible/severity/reasons) — same pattern.
+  * netconfig/services/ package
+      - Convention established: stateless, no I/O, pure functions.
+      - Put migration engine stages HERE, not in netconfig/migration/engine/.
+      - Revised package layout is below (§4 updated).
+  * netconfig/security/migration.py
+      - migrate_credential_fields() — shared helper for detect-legacy-plaintext.
+      - Reuse for any future credential migration in adapter code.
+  * netconfig/templates/base.html — client helpers
+      - _cvRenderHighlighted(text, ext) — language-aware syntax highlighter
+        (.tok-keyword, .tok-string, .tok-ip, .tok-number, .tok-tag,
+         .tok-attr, .tok-comment classes).  Migration UI diff viewer
+        reuses this verbatim — do NOT ship a second highlighter.
+      - Toast system: window.showToast(msg, 'info'|'error'|'success').
+      - startJobProgress(jobId) + netconfig:job-{started,progress,
+        complete,dismissed} CustomEvents — the migration UI should adopt
+        the same pattern for MigrationJob progress.
+      - Config viewer modal with in-modal cross-span search (see
+        _cvSearch / _cvWrapSpan).  Can be reused to preview rendered
+        output before deploy.
+  * netconfig/templates/diff.html + /configs/{left}/vs/{right} route
+      - Already uses FROM→TO directional paradigm (not "sides").
+      - Context folding via <template> sibling + click-to-expand.
+      - Migration stage 6 UI should LINK into this URL with
+        left=<snapshot>, right=<rendered> rather than ship a second
+        diff viewer.
+  * Storage layer
+      - All 4 stores (file, job, schedule, device_profile) now do atomic
+        write (temp+rename).  Snapshot stage 8 gets this for free.
+      - FileConfigStore.resolve_path has path-traversal + symlink
+        defences.  Pre-deploy snapshots reuse the existing store.
+  * JobStatus enum now has `partial` terminal state (plan already
+    anticipated this lesson — confirmed and in production).
+  * Settings.backup_concurrency (int in [1,10], default 10, thread-pool
+    backed).  MigrationJob's parallel-collect should follow the same
+    idiom: new setting, capped, pool-backed, pinned to 1 in tests.
+  * data-testid discipline + tests/testid_reference.md
+      - Migration UI testids MUST be added to the reference on landing,
+        per CLAUDE.md rules.
+
+NEW INTERACTIONS (plan needs to wire these in):
+  * Phase 0 now starts against a codebase where pydantic + FastAPI +
+    storage + testing patterns are fully settled.  Adapter contract
+    (§5) should import BaseModel and mirror DiffReport's style.
+  * Pipeline stage 8 (snapshot) precondition updated: FileConfigStore
+    already atomic; the remaining concern is filename collision with
+    same-second backups, which the existing collision-counter handles.
+  * Diff stage (6) now has TWO layers: textual (reuse services/diff.py)
+    and semantic (new: tree-level xpath diff over the YANG canonical).
+    Keep them as SEPARATE functions in services/migration_diff.py so
+    the text-level view never depends on YANG being parseable.
+  * NEW PIPELINE STAGE 0 — device-class guard.  CapabilityMatrix now
+    has a device_classes: list[DeviceClass] field (enum: switch,
+    router, firewall, load_balancer, wireless_controller, access_point,
+    waf).  services.migration_validate.check_class_compat enforces
+    non-empty-intersection; run_plan refuses mismatched pairs before
+    parse unless force=True.  An "uncommitted" adapter (no classes
+    declared) gets warn severity, not block.  Update the Phase 1
+    adapter onboarding checklist: every new adapter MUST declare its
+    device_classes in capabilities.yaml.
+
+ABANDONED / DEFERRED FROM ORIGINAL PLAN:
+  * No changes to abandoned items.  PHASED ROADMAP (§12) still stands;
+    phase 0 scope slightly narrowed (see §12 update below).
 
 =====================================================================
 ## 0. PROBLEM, SCOPE, NON-GOALS
@@ -125,31 +207,40 @@ RULE: every tree produced by an adapter OR transform MUST pass
       This is the top-level invariant; enforce with a decorator.
 
 =====================================================================
-## 4. PACKAGE STRUCTURE
+## 4. PACKAGE STRUCTURE  (revised to match existing conventions)
 =====================================================================
+# Convention now established in the repo:
+#   netconfig/models/          — pydantic request/response/domain types
+#   netconfig/services/        — stateless pure-function engines (I/O-free)
+#   netconfig/api/routes/      — thin HTTP adapters around services
+#   netconfig/templates/       — Jinja2, share helpers via base.html
+# Migration work follows the same split.  Adapters + canonical schemas
+# ARE an ecosystem of their own, so those live under netconfig/migration/
+# (filesystem-scoped), but the engine stages live under netconfig/services/
+# alongside diff.py to keep the rule "services/ = pure Python" consistent.
 
 netconfig/
-  migration/
+  migration/                   # ecosystem-of-adapters-and-schemas namespace
     __init__.py
     canonical/
-      loader.py              # libyang ctx singleton; loads modules once
-      schema/                # openconfig/public pinned + netconfig-ext
+      loader.py                # libyang ctx singleton; loads modules once
+      schema/                  # openconfig/public pinned + netconfig-ext
         openconfig-*.yang
         netconfig-ext.yang
-      validate.py            # @validates_yang decorator
+      validate.py              # @validates_yang decorator
     adapters/
-      base.py                # AdapterBase, CapabilityMatrix, exceptions
-      registry.py            # entry-point discovery
+      base.py                  # AdapterBase, CapabilityMatrix, exceptions
+      registry.py              # entry-point discovery
       cisco_iosxe/
-        __init__.py          # register(Adapter)
-        parser.py            # NETCONF get-config OR CLI state machine
-        renderer.py          # NETCONF edit-config OR Jinja
+        __init__.py            # register(Adapter)
+        parser.py              # NETCONF get-config OR CLI state machine
+        renderer.py            # NETCONF edit-config OR Jinja
         capabilities.yaml
-        templates/           # only if CLI-emitting path used
+        templates/             # only if CLI-emitting path used
       fortigate/
         __init__.py
-        parser.py            # CLI state machine (TextFSM or PEG)
-        renderer.py           # Jinja-only
+        parser.py              # CLI state machine (TextFSM or PEG)
+        renderer.py             # Jinja-only
         capabilities.yaml
         templates/
           interfaces.j2
@@ -160,36 +251,43 @@ netconfig/
         # parser: /export line tokenizer; renderer: Jinja
       opnsense/
         # parser: lxml of config.xml; renderer: lxml builder or Jinja
-    engine/
-      pipeline.py            # stages orchestrator; pure functions
-      diff.py                # tree-level + text-level diff
-      deploy.py              # netconf/ssh/rest deployers
-      snapshot.py            # atomic pre-deploy backup via FileConfigStore
-      validate.py            # capability-matrix driven ValidationReport
     transforms/
-      __init__.py            # register(transform_fn)
+      __init__.py              # register(transform_fn); entry-point discovery
       rename_interfaces.py
       remap_vlans.py
       rebase_ip_network.py
       scrub_credentials.py
       strip_unsupported.py
-    api/
-      routes.py              # /api/v1/migration/*
-    models.py                # pydantic: MigrationJob, Transform, Report
+  services/                    # PURE functions — already established by diff.py
+    diff.py                    # EXISTING — textual diff (reused by stage 6)
+    migration_pipeline.py      # NEW: stages orchestrator
+    migration_diff.py          # NEW: TREE-level (semantic) xpath diff only;
+                               #       text diff comes from services/diff.py
+    migration_deploy.py        # NEW: netconf/ssh/rest deploy strategies
+    migration_snapshot.py      # NEW: wraps existing FileConfigStore.save()
+    migration_validate.py      # NEW: capability-matrix -> ValidationReport
+  models/
+    diff.py                    # EXISTING — DiffLine, DiffGroup, etc.
+    migration.py               # NEW: MigrationJob, MigrationJobStatus,
+                               #       TransformSpec, ValidationReport
+  api/
+    routes/
+      migration.py             # NEW: /api/v1/migration/*
 
 tests/
   unit/
-    migration/
-      test_canonical_loader.py
-      test_adapters_{iosxe,fortigate,mikrotik,opnsense}.py
-      test_transforms_*.py
-      test_validate.py
+    test_canonical_loader.py
+    test_adapters_{iosxe,fortigate,mikrotik,opnsense}.py
+    test_transforms_*.py
+    test_migration_validate.py
+    test_migration_pipeline.py # stage-by-stage contracts
+    test_migration_diff.py     # tree-level diff only (text diff already covered)
   integration/
     test_migration_api.py
-    test_roundtrip_*.py       # parse(render(tree)) == tree
+    test_roundtrip_*.py        # parse(render(tree)) == tree
   fixtures/
-    canonical/                # seed YANG trees (JSON) per feature
-    raw/                      # sample vendor configs (sanitized)
+    canonical/                 # seed YANG trees (JSON) per feature
+    raw/                       # sample vendor configs (sanitized)
 
 =====================================================================
 ## 5. ADAPTER CONTRACT
@@ -293,11 +391,21 @@ severity semantics:
    # precondition: validated tree; capability-filtered if strip_unsupported ran
    # errors: RenderError(yang_path, reason)
 
-6. diff(src_raw, tgt_raw, src_tree, tgt_tree) -> DiffReport
-   # DiffReport:
-   #   tree_diff: semantic diff (added/removed/changed xpaths)
-   #   text_diff: unified diff of raw strings
-   #   risk_flags: e.g. "firewall rule order changed"
+6. diff(src_raw, tgt_raw, src_tree, tgt_tree) -> MigrationDiffReport
+   # Two layers, independent:
+   #   TEXTUAL: reuse netconfig.services.diff.compute_diff(src_raw,
+   #            tgt_raw). Already handles CompatibilityReport,
+   #            context folding via fold_context(), and the FROM/TO
+   #            directional paradigm.
+   #   SEMANTIC: new netconfig.services.migration_diff.tree_diff(
+   #            src_tree, tgt_tree) -> list[XPathDelta].
+   #            Returns {added, removed, changed} xpath lists plus
+   #            risk_flags (e.g. "firewall rule order changed",
+   #            "interface renamed across IP / ACL / LAG references").
+   # MigrationDiffReport composes both:
+   #   {textual: DiffReport, semantic: list[XPathDelta], risk_flags: list[str]}
+   # UI hook: link into /configs/{snapshot}/vs/{rendered} for the
+   #          textual view (already implemented, DON'T build a second).
 
 7. deploy(target_device, rendered) -> DeployResult
    # three strategies, chosen by adapter:
@@ -307,8 +415,13 @@ severity semantics:
    # precondition: snapshot taken (stage 8 runs BEFORE this)
 
 8. snapshot(target_device, pre_config) -> ConfigRecord
-   # reuses FileConfigStore; filename: "<device>_pre-migrate_<ts>.<ext>"
-   # atomic write (already implemented)
+   # Reuses FileConfigStore.save() which is now atomic (temp+rename,
+   # see netconfig/storage/file_store.py).  Collision-counter handles
+   # the same-second-same-host case.  Filename convention:
+   #   "<device_type>_<safe_host>_<YYYYMMDD_HHMMSS>.<ext>"
+   # Same pattern as backups so both coexist in configs/ and the
+   # diff UI can compare pre- and post-migrate snapshots with zero
+   # extra plumbing.
 
 ORCHESTRATOR
   MigrationJob state machine (reuse BackupJob pattern):
@@ -454,33 +567,100 @@ UI (/migrate page):
   2. Pick target (device profile OR "download only").
   3. Add transforms (rename/remap wizards).
   4. Preview ValidationReport with supported/lossy/unsupported buckets.
-  5. Render -> side-by-side diff viewer (reuse config viewer highlighter).
+     Reuse CompatibilityReport's severity pattern (ok/warn/block) +
+     banner styling from diff.html.
+  5. Render → snapshot pre-deploy target → redirect to
+     /configs/{pre-deploy}/vs/{rendered} for review.  This REUSES the
+     existing diff page (FROM=snapshot, TO=rendered output) verbatim;
+     no second viewer needed.  Semantic-diff deltas appear as a
+     separate banner above the textual diff (new block in diff.html
+     under conditional `{% if migration_delta %}`).
   6. Confirm deploy (disabled if validation blocked, or for
      "download only").
+
+PROGRESS PANEL:
+  Reuse the existing startJobProgress(jobId) pattern from base.html
+  for MigrationJob lifecycle.  Emit netconfig:migration-{started,
+  stage-changed,complete,failed} CustomEvents so page-level code can
+  react without re-polling.  Panel rendering can be forked from the
+  existing one if stage-level detail is needed, or reused as-is if
+  a simple % complete suffices for MVP.
 
 TESTIDs (follow project convention; add to testid_reference.md):
   migrate-source-select, migrate-target-select,
   migrate-transforms-list, migrate-add-transform-btn,
   migrate-validation-report, migrate-lossy-item, migrate-unsupported-item,
-  migrate-render-btn, migrate-diff-viewer,
+  migrate-render-btn,
+  # migrate-diff-viewer NOT NEEDED — the /configs/{L}/vs/{R} route owns this.
+  # Add these instead if a summary overlay is introduced:
+  migrate-semantic-delta-banner, migrate-semantic-delta-item,
   migrate-deploy-btn, migrate-confirm-deploy-btn
 
 =====================================================================
 ## 12. PHASED ROADMAP
 =====================================================================
 
-PHASE 0 — PROVE THE SHAPE
-  goal:       one adapter end-to-end, roundtrip clean
-  adapters:   cisco_iosxe (NETCONF path)
-  stages:     collect -> parse -> validate -> render
+PHASE 0 — PROVE THE SHAPE  (SHIPPED)
+  goal:       adapter contract + mock reference round-trip
+  deliverables shipped:
+    - AdapterBase + CapabilityMatrix (netconfig/migration/adapters/base.py)
+    - Adapter registry (netconfig/migration/adapters/registry.py)
+    - MockAdapter reference (exercises every classify() branch)
+    - netconfig/services/migration_pipeline.py skeleton
+    - netconfig/services/migration_validate.py (severity aggregation)
+    - netconfig/models/migration.py: full type set
+    - DeviceClass enum + cross-class guard (stage 0)
+    - GET /api/v1/migration/adapters + /capabilities (read-only)
+  deferred from original Phase 0 scope:
+    - libyang ctx loader (now Phase 0.7; stub in place)
+    - Real Cisco IOS-XE adapter (split into its own phase 0.5)
+
+PHASE 0.5 — FIRST REAL ADAPTER  (SHIPPED)
+  goal:       real OpenConfig NETCONF round-trip against captured payloads
+  deliverables shipped:
+    - CiscoIOSXEAdapter (netconfig/migration/adapters/cisco_iosxe/)
+    - AdapterBase.iter_xpaths (non-abstract, dict-default, override-ready)
+    - validate_against gains optional `source` param for adapter-aware walking
+    - Sample NETCONF fixture (tests/fixtures/iosxe/get_config_simple.xml)
+    - Scope: openconfig-interfaces + openconfig-if-ip (IPv4 only)
+    - Round-trip invariant proven
+  scope deliberately NOT in this phase:
+    - libyang canonical validation (Phase 0.7)
+    - Live ncclient transport (Phase 1 — reuses existing collector pattern)
+    - IPv6 subtree (currently declared unsupported in matrix)
+    - BGP, OSPF, ACLs, VLANs (Phase 1+)
+  new_deps:  none — stdlib xml.etree.ElementTree
+
+PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (PARTIALLY SHIPPED)
+  goal:       API-driven manual testing; proof of multi-adapter architecture
+  deliverables shipped:
+    - OPNsenseAdapter (netconfig/migration/adapters/opnsense/)
+      * Scope: system + interfaces (zone, if, descr, enable, ipaddr, subnet)
+      * Declares [firewall, router]; flattens zone-keyed XML to list shape
+    - POST /api/v1/migration/plan
+    - POST /api/v1/migration/render (alias of /plan for now; split in Phase 2)
+    - source_filename shorthand loads from existing FileConfigStore
+    - MigrationPlanRequest pydantic model
+  deliverables DEFERRED to later phases:
+    - Live ncclient/SSH transport for deploy (still manual input-text only)
+    - Firewall rules / NAT in OPNsense scope (needs netconfig-ext YANG; Phase 2)
+    - Transform registry wired to /plan (Phase 2)
+    - Snapshot + deploy endpoints (Phase 2)
+    - UI /migrate page (Phase 2)
+  new_deps:  none — stdlib xml.etree.ElementTree
+
+PHASE 0.7 — LIBYANG CANONICAL VALIDATION  (pending)
+  goal:       optional validates-if-available seam for stricter trees
   deliverables:
-    - libyang ctx + schema loader
-    - AdapterBase + CapabilityMatrix
-    - cisco_iosxe/parser.py + renderer.py (NETCONF)
-    - pipeline.py skeleton (no transforms, no deploy, no diff)
-    - unit tests: roundtrip invariant for interfaces + vlans
-  new_deps:  libyang, pyangbind, openconfig/public@pinned
-  duration:  baseline
+    - libyang ctx loader (netconfig/migration/canonical/loader.py)
+    - Vendored or submoduled openconfig/public modules
+    - AdapterBase adapters opt-in to canonical validation via
+      a method that returns their YANG module names
+    - Pipeline: validate stage runs libyang checks AFTER adapter
+      classification if the ctx loader is available; warns-rather-
+      than-blocks if libyang is missing (keeps the repo installable
+      without C toolchains on Windows devs)
+  new_deps:  libyang (optional extra), pyangbind (build-time only)
 
 PHASE 1 — CROSS-VENDOR MVP
   goal:      non-YANG adapter on each side
@@ -527,6 +707,10 @@ PHASE 3 — SCALE OUT
     __init__.py, parser.py, renderer.py, capabilities.yaml,
     templates/ (if CLI/XML target)
 [ ] Entry point registered in pyproject.toml
+[ ] capabilities.yaml DECLARES device_classes (at least one of
+    switch/router/firewall/load_balancer/wireless_controller/
+    access_point/waf; multi-class devices declare all that apply).
+    Undeclared adapters are legal but will surface a warn banner.
 [ ] capabilities.yaml passes the linter (tooling lives under
     scripts/lint_caps.py in phase 3)
 [ ] Unit test: parser handles malformed input without crashing
