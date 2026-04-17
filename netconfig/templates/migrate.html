@@ -184,13 +184,21 @@
 
   <div class="mig-result-section" id="mig-output-section"
        data-testid="migrate-output-section" style="display:none">
-    <div style="display:flex;align-items:baseline;justify-content:space-between;
-                margin-bottom:.5rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem">
       <h2 style="margin:0;font-size:1rem">Rendered output</h2>
-      <button type="button" class="btn-secondary"
-              data-testid="migrate-copy-output-btn"
-              onclick="copyMigrateOutput()"
-              style="font-size:.78rem;padding:.25rem .6rem">Copy</button>
+      <div style="display:flex;gap:.4rem">
+        <button type="button" class="btn-secondary"
+                data-testid="migrate-copy-output-btn"
+                onclick="copyMigrateOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem"
+                title="Copy to clipboard">&#128203; Copy</button>
+        <button type="button" class="btn-secondary"
+                data-testid="migrate-download-output-btn"
+                onclick="downloadMigrateOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem"
+                title="Download as file">&#8595; Download</button>
+      </div>
     </div>
     <pre class="mig-output" id="mig-output"
          data-testid="migrate-output"></pre>
@@ -756,6 +764,7 @@
   }
 
   /** Copy the rendered output to clipboard (global so onclick can reach it). */
+  /** Copy the rendered output text to clipboard. */
   window.copyMigrateOutput = async function() {
     try {
       await navigator.clipboard.writeText(output.textContent || '');
@@ -763,6 +772,29 @@
     } catch (err) {
       showToast('Copy failed: ' + err.message, 'error');
     }
+  };
+
+  /** Download the rendered output as a file.  Uses the same
+   *  WebView-safe blob approach as the config downloader. */
+  window.downloadMigrateOutput = function() {
+    var text = output.textContent || '';
+    if (!text) { showToast('No output to download.', 'error'); return; }
+    // Pick a sensible filename + extension from the target codec.
+    var tgt = adapters.find(function(a) { return a.name === targetSel.value; });
+    var ext = 'txt';
+    if (tgt) {
+      var fmt = tgt.input_format || '';
+      if (fmt.indexOf('xml') !== -1) ext = 'xml';
+      else if (fmt === 'json-flat') ext = 'json';
+      else if (fmt.indexOf('cli') !== -1) ext = 'cfg';
+    }
+    var fname = 'migration-output.' + ext;
+    var blob = new Blob([text], { type: 'text/plain' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = fname; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   };
 
   // Event wiring

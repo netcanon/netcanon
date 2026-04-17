@@ -1,0 +1,344 @@
+# VENDOR CONFIG RESEARCH — CROSS-VENDOR FEATURE MATRIX
+# Based on real-world config samples from vendor docs, GitHub repos,
+# community forums, and certification lab materials.
+# Generated: 2026-04-16
+# Purpose: scope the canonical intent dict for the translation engine.
+
+=====================================================================
+## 1. CONFIG COMPLEXITY IN THE REAL WORLD
+=====================================================================
+
+| Vendor          | Typical prod lines | Format           | Nesting depth |
+|-----------------|--------------------|------------------|---------------|
+| Cisco IOS-XE    | 800-2000           | CLI indented     | 2 (router bgp > address-family) |
+| FortiGate 7.x   | 5000-50000         | config/set/edit  | 3 (config > edit > config sub-table > edit) |
+| OPNsense 25.x   | 2000-10000         | XML              | 5+ (opnsense > filter > rule > source > ...) |
+| MikroTik 7.x    | 100-600            | /section + add   | 1 (flat, section-then-commands) |
+| Aruba AOS-S 16.x| 100-500            | CLI indented     | 1 (vlan block, interface block) |
+
+Key insight: FortiGate configs are MASSIVE because they include
+replacement message templates, internet-service-name definitions,
+and default security profiles.  A "real" config is 10-50K lines but
+~80% of that is vendor boilerplate.  The translatable surface (the
+parts an operator wrote) is closer to 500-2000 lines.
+
+=====================================================================
+## 2. CROSS-VENDOR FEATURE MATRIX
+=====================================================================
+
+Features categorised by translatability:
+
+  GREEN  = semantically identical across vendors, clean 1:1 mapping
+  YELLOW = same concept but structurally different, needs mapping logic
+  RED    = vendor-specific semantics, lossy or impossible to translate
+  GREY   = vendor doesn't have this feature at all
+
+### 2a. SYSTEM / MANAGEMENT (low-risk, high-value)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| Hostname             | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| Domain name          | GREEN       | YELLOW      | GREEN       | YELLOW      | GREY        |
+| DNS servers          | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| NTP servers          | GREEN       | GREEN       | GREEN       | GREEN       | YELLOW(sntp)|
+| Timezone             | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| Banner/MOTD          | YELLOW(delim)| YELLOW     | GREY        | GREY        | YELLOW      |
+| SNMP community       | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| SNMP traps           | YELLOW      | YELLOW      | YELLOW      | YELLOW      | YELLOW      |
+| Syslog servers       | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| Local users          | YELLOW      | YELLOW      | YELLOW      | YELLOW      | YELLOW(mgr/op)|
+| RADIUS servers       | YELLOW      | YELLOW      | GREEN       | GREEN       | YELLOW      |
+| TACACS+ servers      | GREEN       | GREEN       | GREY        | GREY        | GREEN       |
+
+### 2b. INTERFACES (high-value, moderate complexity)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| Physical interface   | GREEN       | GREEN       | GREEN       | GREEN       | YELLOW(nums)|
+| Interface description| GREEN       | GREEN(alias)| GREEN(descr)| GREEN       | GREEN       |
+| Admin up/down        | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| IPv4 address + mask  | GREEN       | GREEN       | GREEN       | GREEN       | GREEN(CIDR) |
+| IPv4 secondary       | GREEN       | YELLOW      | YELLOW      | GREEN       | YELLOW      |
+| DHCP client          | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| MTU                  | GREEN       | GREEN       | GREEN       | GREEN       | YELLOW(jumbo)|
+| Speed/duplex         | GREEN       | GREEN       | GREY        | GREEN       | GREEN       |
+| Interface naming     | Complex*    | portN       | emN/igbN    | etherN      | bare numbers|
+
+* IOS-XE naming: GigabitEthernet0/0/0, TenGigabitEthernet1/0/1, etc.
+  Each vendor has a completely different naming scheme.  The canonical
+  dict must use opaque interface IDs, not vendor names.
+
+### 2c. VLANs (high-value, structural differences)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| VLAN definition      | GREEN       | YELLOW*     | GREEN       | GREEN       | GREEN       |
+| VLAN name            | GREEN       | YELLOW*     | GREEN       | GREEN       | GREEN       |
+| Access port assign   | per-intf    | per-intf    | per-intf    | bridge-vlan | per-VLAN**  |
+| Trunk port assign    | per-intf    | per-intf    | per-intf    | bridge-vlan | per-VLAN**  |
+| Native/untagged VLAN | per-intf    | per-intf    | per-intf    | pvid=N      | per-VLAN**  |
+| Voice VLAN           | per-intf    | GREY        | GREY        | GREY        | per-VLAN    |
+| SVI / VLAN interface | Vlan10 intf | vlanXX intf | VLAN intf   | /ip address | VLAN block  |
+
+* FortiGate VLANs are created as sub-interfaces: `config system interface` →
+  `edit "vlan10"` → `set vlanid 10` → `set interface "port1"`.  There's no
+  separate VLAN database like IOS or AOS-S.
+** Aruba AOS-S assigns ports to VLANs INSIDE the VLAN block:
+  `vlan 10` → `untagged 1-24` → `tagged 25-26`.  This is the inverse of
+  Cisco's per-interface `switchport access vlan 10`.
+
+CANONICAL DICT IMPLICATION: the dict must store VLAN membership as a
+VLAN-centric list (which ports are in this VLAN) rather than a port-
+centric list (which VLANs are on this port).  The Aruba/OPNsense model
+is the natural canonical form; IOS-XE/FortiGate per-interface assignment
+gets transposed on parse.
+
+### 2d. LAYER 2 (moderate value)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| STP mode             | YELLOW(rpvst)| GREY       | GREY        | YELLOW(rstp)| YELLOW(mstp)|
+| STP per-port edge    | per-intf    | GREY        | GREY        | GREY        | port-range  |
+| BPDU guard           | per-intf    | GREY        | GREY        | GREY        | port-range  |
+| LAG / port-channel   | YELLOW      | YELLOW      | YELLOW(lagg)| YELLOW(bond)| YELLOW(trk) |
+| LLDP                 | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| DHCP snooping        | GREEN       | GREY        | GREY        | YELLOW      | GREEN       |
+| ARP inspection       | GREEN       | GREY        | GREY        | GREY        | GREEN       |
+
+### 2e. LAYER 3 ROUTING (moderate-high value)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| Static routes        | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| Default route        | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| OSPF basic           | YELLOW      | YELLOW      | YELLOW(FRR) | YELLOW      | YELLOW      |
+| BGP basic            | YELLOW      | YELLOW      | YELLOW(FRR) | YELLOW      | GREY        |
+| Route-maps           | RED         | RED         | RED         | RED         | RED         |
+| Prefix-lists         | RED         | RED         | RED         | RED         | RED         |
+| PBR                  | RED         | RED         | RED         | RED         | RED         |
+| VRF                  | RED         | YELLOW(vdom)| GREY        | YELLOW(table)| GREY       |
+
+Route-maps, prefix-lists, and PBR are RED because the syntax and
+semantics differ enough across vendors that a "rough facsimile" would
+be dangerous — these control traffic flow and getting them wrong can
+cause outages.  They need human review, not auto-translation.
+
+### 2f. SECURITY / FIREWALL (low translatability)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| ACL / filter rules   | RED         | RED         | RED         | RED         | RED         |
+| NAT (SNAT)           | RED         | RED         | RED         | RED         | GREY        |
+| NAT (DNAT/VIP)       | RED         | RED         | RED         | RED         | GREY        |
+| Address objects       | YELLOW      | YELLOW      | YELLOW      | YELLOW      | GREY        |
+| Service objects       | YELLOW      | YELLOW      | YELLOW      | GREY        | GREY        |
+| Zone-based firewall   | RED         | RED         | RED         | GREY        | GREY        |
+| 802.1X               | RED         | GREY        | GREY        | GREY        | RED         |
+
+ALL firewall/ACL features are RED because rule ordering, match
+semantics (first-match vs last-match), action semantics (accept/deny
+vs accept/drop/reject), and object model (address groups vs inline
+subnets) differ fundamentally across vendors.
+
+### 2g. VPN (low translatability)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| IPsec site-to-site   | RED         | RED         | RED         | RED         | GREY        |
+| SSL VPN              | GREY        | RED         | RED         | GREY        | GREY        |
+| WireGuard            | GREY        | GREY        | GREEN       | GREEN       | GREY        |
+| GRE tunnels          | YELLOW      | GREY        | YELLOW      | YELLOW      | GREY        |
+
+### 2h. SERVICES (moderate value, easy mapping)
+
+| Feature              | IOS-XE      | FortiGate   | OPNsense    | MikroTik    | Aruba AOS-S |
+|----------------------|-------------|-------------|-------------|-------------|-------------|
+| DHCP server          | YELLOW      | YELLOW      | YELLOW      | YELLOW      | GREY        |
+| DHCP relay           | GREEN       | GREEN       | GREEN       | GREEN       | GREEN       |
+| DNS forwarder        | GREY        | YELLOW      | GREEN       | GREEN       | GREY        |
+
+=====================================================================
+## 3. CANONICAL DICT — RECOMMENDED SCOPE
+=====================================================================
+
+Based on the matrix above, the canonical dict should cover features
+that are GREEN or YELLOW (translatable with mapping logic).  RED
+features are explicitly OUT of scope for auto-translation.
+
+TIER 1 — SHIP FIRST (all GREEN, clean mapping):
+  hostname, domain, dns_servers, ntp_servers, timezone, syslog_servers
+  interfaces: name, description, enabled, ipv4_addresses, mtu
+  vlans: id, name, membership (tagged/untagged per port)
+  static_routes: destination, gateway, interface, metric
+
+TIER 2 — SHIP SECOND (YELLOW, needs mapping logic per vendor):
+  dhcp_server: interface, pool_start, pool_end, gateway, dns, lease_time
+  dhcp_relay: interface, server_addresses
+  snmp: community, location, contact, trap_hosts
+  lag/port_channels: id, members, mode (lacp/static)
+  stp: mode, per-port edge/guard settings
+  local_users: name, privilege_level, hashed_password
+  radius_servers: host, key, port
+
+TIER 3 — INFORMATIONAL ONLY (RED, human review required):
+  acls/firewall_rules: parsed + displayed but NOT auto-translated
+  nat_rules: parsed + displayed for reference
+  routing_protocols: ospf/bgp config parsed for awareness but NOT rendered
+  vpn: parsed for documentation but NOT translated
+
+The canonical dict carries Tier 3 data as "informational" sections
+that the UI shows with a prominent "MANUAL REVIEW REQUIRED" banner.
+The pipeline NEVER auto-renders these to a target vendor's format.
+
+=====================================================================
+## 4. PARSER STRUCTURAL PATTERNS PER VENDOR
+=====================================================================
+
+Each parser needs to handle these format-specific patterns:
+
+CISCO IOS-XE:
+  - Line-oriented, indentation-significant
+  - `!` as stanza delimiter (NOT a comment — it's structural)
+  - `interface X` → indented sub-commands → `!`
+  - `router ospf 1` → `address-family ipv4` → nested
+  - `banner motd ^C ... ^C` (arbitrary delimiter character)
+  - `crypto pki certificate chain` → base64 blob (50+ lines)
+  - `no` prefix as semantic negation
+  - Ordered lists (ACLs)
+  Pattern: state-machine with indent tracking
+
+FORTIGATE:
+  - 5 keywords: config, edit, set, next, end
+  - 3 patterns: singleton, table, nested sub-table
+  - Max nesting: 3 levels (config > edit > config > edit > next > end > next > end)
+  - `edit` IDs are integers OR quoted strings
+  - Values: quoted strings, integers, IP/mask pairs, space-separated lists
+  - Order matters for policies
+  - Multi-VDOM wrapping: config vdom > edit "root" > ... > next > end
+  Pattern: recursive descent parser tracking config/edit nesting depth
+
+OPNSENSE:
+  - Standard XML (config.xml)
+  - Root element: <opnsense>
+  - Zone-keyed interfaces: <wan>, <lan>, <opt1> (not a list)
+  - Firewall rules: <filter><rule> with sequential ordering
+  - VLANs: <vlans><vlan> list
+  - Deeply nested: <opnsense><filter><rule><source><network>...
+  Pattern: lxml/ElementTree, handle zone-keyed interfaces as special case
+
+MIKROTIK:
+  - Line-oriented command script
+  - `/section path` sets context, then `add`/`set` commands
+  - `\` line continuation
+  - `set [ find default-name=X ]` for modifying defaults
+  - Properties: key=value, space-separated, quoted if spaces
+  - Comments: `#` for line comments, `comment="..."` for properties
+  - Order matters for firewall filter rules
+  Pattern: section-context scanner, join continuations first
+
+ARUBA AOS-S:
+  - CLI similar to IOS but structurally different
+  - `;` comment character (not `!`)
+  - VLANs are VLAN-centric: `vlan 10` → `untagged 1-24` → `tagged 25-26`
+  - Port names: bare numbers (1, 1/1, A1, Trk1)
+  - `routing` keyword enables L3 on a port (replaces `no switchport`)
+  - IP addressing supports CIDR notation (`10.0.0.1/24`)
+  - `password manager` / `password operator` (not enable secret)
+  - STP/802.1X applied to port ranges globally, not per-interface
+  Pattern: state-machine similar to IOS but with port-range commands
+
+=====================================================================
+## 5. REALISTIC PARSER EFFORT ESTIMATES (revised)
+=====================================================================
+
+Based on real config complexity, not synthetic samples:
+
+| Codec                  | Parse effort | Render effort | Round-trip? |
+|------------------------|-------------|---------------|-------------|
+| cisco_iosxe_cli        | 500 LOC*    | 800 LOC       | Lossy       |
+| fortigate_cli          | 400 LOC**   | 600 LOC       | Lossy       |
+| opnsense_xml           | 300 LOC     | 300 LOC       | Clean***    |
+| mikrotik_export        | 350 LOC     | 350 LOC       | Clean       |
+| aruba_aoss_cli         | 400 LOC     | 500 LOC       | Lossy       |
+
+* Current cisco_iosxe_cli is ~200 LOC but only handles interfaces.
+  Full Tier 1+2 coverage adds VLANs, static routes, DHCP, SNMP,
+  hostname — roughly doubles the parser.
+** FortiGate's recursive config/edit/next/end grammar is well-defined
+  but the sheer number of config paths (~400) means the parser needs
+  a generic recursive handler + feature-specific extractors.
+*** OPNsense and MikroTik configs are structured enough (XML and
+  section-oriented respectively) that round-trip is near-lossless
+  for the features we parse.
+
+TOTAL ESTIMATED EFFORT for Tier 1 canonical bridge + 5 vendors:
+  Canonical dict definition:           100 LOC
+  5 parsers (Tier 1 scope):          2,000 LOC
+  4 renderers (excl IOS CLI):        1,750 LOC
+  Mapping functions (5 × 2):           500 LOC
+  Tests (round-trip + cross-vendor): 1,500 LOC
+  ─────────────────────────────────────────────
+  TOTAL:                             ~5,850 LOC across ~8-10 sessions
+
+=====================================================================
+## 6. SAMPLE CONFIG SOURCES (verified URLs from research agents)
+=====================================================================
+
+CISCO IOS-XE:
+  - Batfish test configs: github.com/batfish/batfish (comprehensive)
+  - NTC-Templates test data: github.com/networktocode/ntc-templates
+  - Cisco DevNet Sandbox: developer.cisco.com/docs/sandbox/ (live SSH)
+  - Cisco config guides: cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/
+
+FORTIGATE:
+  - Full 7.6.6 config: github.com/KevinGuenay/fortinet-resources (14K lines!)
+  - SD-WAN + IPSec: github.com/40net-cloud/fortinet-azure-solutions
+  - AWS HA bootstrap: github.com/fortinet/fortigate-terraform-deploy
+  - CLI reference: docs.fortinet.com/document/fortigate/7.6.6/cli-reference/
+  - BCcampus textbook: pressbooks.bccampus.ca/fortigatefirewall/
+  - Existing parsers: github.com/Fatal-Halt/FortiGate-Config-Parser (Python)
+  - ANTLR grammar: github.com/acidjunk/fortigate-config-parser
+
+OPNSENSE:
+  - Source defaults: github.com/opnsense/core (config.xml template)
+  - Plugin schemas: github.com/opnsense/plugins
+  - Forum configs: forum.opnsense.org (search "config.xml backup")
+
+MIKROTIK:
+  - Wiki examples: wiki.mikrotik.com (firewall, VLANs, WireGuard)
+  - Community configs: github.com search "mikrotik export routeros 7"
+  - Forum: forum.mikrotik.com (search "share your firewall rules")
+
+ARUBA AOS-S:
+  - Central templates: github.com/aruba/central-sample-bulk-configurations
+  - Airheads forums: airheads.hpe.com (RADIUS, OSPF, 802.1X examples)
+  - Config guides: arubanetworking.hpe.com/techdocs/AOS-Switch/16.11/
+  - CLI crossref: CLI Reference Guide for ArubaOS-CX, AOS-Switch, Comware, Cisco
+
+=====================================================================
+## 7. HONEST LIMITS — WHAT NOT TO PROMISE
+=====================================================================
+
+DO NOT auto-translate:
+  - Firewall rules / ACLs (semantics differ fundamentally)
+  - NAT rules (stateful vs stateless, inside/outside vs zone)
+  - VPN configs (crypto proposals, IKE, certificates)
+  - Route-maps / prefix-lists / PBR (traffic engineering)
+  - 802.1X / AAA (vendor-specific RADIUS attributes)
+  - QoS / traffic shaping (completely different models)
+
+DO auto-translate (Tier 1, safe):
+  - Hostname + domain + DNS + NTP + timezone + syslog
+  - Interfaces: name, description, enabled, IPv4
+  - VLANs: id, name, port membership
+  - Static routes: destination, gateway, metric
+
+DO auto-translate with warnings (Tier 2, needs review):
+  - DHCP server pools
+  - SNMP configuration
+  - LAG/port-channel membership
+  - STP settings
+  - Local user accounts
+  - RADIUS server definitions
+
+# END

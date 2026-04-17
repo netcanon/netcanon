@@ -223,7 +223,16 @@ class CiscoIOSXECodec(CodecBase):
         # add the xmlns declaration manually so the serialised form is
         # human-readable.
         ET.register_namespace("", _NS_IF)
-        return ET.tostring(root, encoding="unicode")
+        ET.register_namespace("oc-ip", _NS_IP)
+        raw_xml = ET.tostring(root, encoding="unicode")
+        # Pretty-print so the output viewer is human-readable.
+        from xml.dom.minidom import parseString
+        pretty = parseString(raw_xml).toprettyxml(indent="  ")
+        # minidom adds an XML declaration; strip it for a clean fragment.
+        lines = pretty.splitlines()
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(line for line in lines if line.strip()) + "\n"
 
     # -----------------------------------------------------------------
     # iter_xpaths — schema paths, no list-key predicates

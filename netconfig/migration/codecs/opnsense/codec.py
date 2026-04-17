@@ -195,7 +195,13 @@ class OPNsenseCodec(CodecBase):
 
         # Match the real OPNsense output format: no XML declaration, just
         # the top-level element.  Consumers that need one can prepend it.
-        return ET.tostring(root, encoding="unicode")
+        raw_xml = ET.tostring(root, encoding="unicode")
+        from xml.dom.minidom import parseString
+        pretty = parseString(raw_xml).toprettyxml(indent="  ")
+        lines = pretty.splitlines()
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(line for line in lines if line.strip()) + "\n"
 
     # -----------------------------------------------------------------
     # iter_xpaths
