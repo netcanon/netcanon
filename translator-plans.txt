@@ -248,6 +248,69 @@ LAYER 4 — TRANSPORT
   │ "this actually works on production configs."                   │
   └────────────────────────────────────────────────────────────────┘
 
+  ┌────────────────────────────────────────────────────────────────┐
+  │ KNOWN DATA-LOSS BUGS  (exposed by real-config dogfooding)      │
+  ├────────────────────────────────────────────────────────────────┤
+  │ Surfaced while the user ran a real Cisco 9300 switch config    │
+  │ through cisco_iosxe_cli -> aruba_aoss.  Both bugs silently     │
+  │ drop data — no warning, just missing sections in the render.   │
+  │                                                                │
+  │ BUG 1 — VLAN SVI dropped on IOS-XE CLI parse.                  │
+  │   Symptom: `interface Vlan11 / ip address 192.168.11.252 ...`  │
+  │            produces a CanonicalInterface(name="Vlan11", ...)   │
+  │            but NO matching CanonicalVlan(id=11).  Aruba's      │
+  │            renderer unconditionally skips interfaces named     │
+  │            "Vlan*" (expecting the vlan stanza to absorb the    │
+  │            SVI IP), so with no vlan record the SVI + its IP    │
+  │            are lost entirely.                                  │
+  │   Fix:    In cisco_iosxe_cli parser, when `interface Vlan<N>`  │
+  │            is seen, auto-synthesize CanonicalVlan(id=N) and    │
+  │            attach the SVI's ipv4_addresses to it (in addition  │
+  │            to keeping the interface record).  Merge on top     │
+  │            of any existing `vlan N / name X` stanza.           │
+  │   Effort: ~15 lines + tests.  Also add a cross-codec matrix    │
+  │            invariant: "sum of ipv4 addresses in source tree    │
+  │            == sum in target tree for any bidirectional pair"   │
+  │            to catch silent-drop regressions in CI.             │
+  │                                                                │
+  │ BUG 2 — LAG/port-channel member associations dropped.          │
+  │   Symptom: Cisco `interface Port-channel1 / description TRUNK` │
+  │            makes it to Aruba as `interface Port-channel1 /     │
+  │            name "TRUNK"`, but the member ports (Cisco's        │
+  │            per-port `channel-group 1 mode active`) are lost.   │
+  │            Aruba receives the LAG name but no knowledge of     │
+  │            which physical ports belong to it.  Aruba would     │
+  │            need to emit `trunk 1-2 trk1 lacp` to bundle.       │
+  │   Root:   The canonical dict already defines `CanonicalLAG`    │
+  │            (name, members[], mode) and `CanonicalInterface.    │
+  │            lag_member_of` — but NO codec populates or consumes │
+  │            them.  Declared in Session 1, never wired.          │
+  │   Fix:    Wire LAGs across all 5 codecs, same shape as the     │
+  │            SNMP work in Session E:                             │
+  │              * cisco_iosxe_cli: `interface Port-channelN` ->   │
+  │                CanonicalLAG(name="Port-channelN").  `channel-  │
+  │                group N mode active` on a member -> set         │
+  │                lag_member_of="Port-channelN" on that iface     │
+  │                AND append the member to the LAG's members[].   │
+  │              * aruba_aoss: emit `trunk <ports> trk<N> lacp` at │
+  │                top-level for each CanonicalLAG.  Parse the     │
+  │                same syntax back.                               │
+  │              * fortigate_cli: `config system interface / edit  │
+  │                "agg1" / set type aggregate / set member ...`.  │
+  │              * mikrotik: `/interface bonding add slaves=...`   │
+  │              * opnsense: `<laggs><lagg>` elements              │
+  │            Update each codec's capability matrix with the new  │
+  │            xpaths (/lags/lag/name, /lags/lag/member,           │
+  │            /lags/lag/mode).  Cross-codec matrix will catch     │
+  │            cross-vendor regressions automatically.             │
+  │   Effort: 1 session (parallels Session E's SNMP wire-through). │
+  │                                                                │
+  │ Both fixes should land BEFORE real-capture validation          │
+  │ (URGENT NEXT above) graduates any codec to `certified` — both  │
+  │ gaps are guaranteed to surface in real captures and would      │
+  │ otherwise be logged as "configs drop silently" regressions.    │
+  └────────────────────────────────────────────────────────────────┘
+
   R1  Rename adapter → codec everywhere.  Add vendor_id to the
       capability matrix.  Back-compat shims.  1 session.  No
       behaviour change.  STATUS: SHIPPED.
