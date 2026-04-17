@@ -52,9 +52,9 @@ _MIN = """<?xml version="1.0"?>
 class TestParse:
     def test_basic_parse(self):
         tree = OPNsenseCodec().parse(_MIN)
-        assert tree["system"]["hostname"] == "fw01"
-        assert tree["system"]["domain"] == "example.com"
-        assert len(tree["interfaces"]["interface"]) == 1
+        assert tree.hostname == "fw01"
+        assert tree.domain == "example.com"
+        assert len(tree.interfaces) == 1
 
     def test_zone_interfaces_flatten_to_list(self):
         """OPNsense's native XML has <wan>, <lan>, <opt1> keyed by role.
@@ -62,19 +62,19 @@ class TestParse:
         so iter_xpaths can emit list-key-free schema paths."""
         xml = FIXTURES.joinpath("config_simple.xml").read_text()
         tree = OPNsenseCodec().parse(xml)
-        ifaces = tree["interfaces"]["interface"]
-        zones = [i["zone"] for i in ifaces]
+        ifaces = tree.interfaces
+        zones = [i.name for i in ifaces]
         assert zones == ["wan", "lan", "opt1"]
 
     def test_enable_flag_element_becomes_python_true(self):
         """<enable/> is a flag — empty element means enabled."""
         tree = OPNsenseCodec().parse(_MIN)
-        assert tree["interfaces"]["interface"][0]["enable"] is True
+        assert tree.interfaces[0].enabled is True
 
     def test_subnet_coerced_to_int(self):
         tree = OPNsenseCodec().parse(_MIN)
-        assert tree["interfaces"]["interface"][0]["subnet"] == 30
-        assert isinstance(tree["interfaces"]["interface"][0]["subnet"], int)
+        assert tree.interfaces[0].ipv4_addresses[0].prefix_length == 30
+        assert isinstance(tree.interfaces[0].ipv4_addresses[0].prefix_length, int)
 
     def test_empty_zone_skipped(self):
         """Empty zone stubs aren't worth carrying through the tree."""
@@ -82,7 +82,7 @@ class TestParse:
 <opnsense><interfaces><opt9/></interfaces></opnsense>"""
         tree = OPNsenseCodec().parse(raw)
         # opt9 had no content → not in the interface list.
-        assert tree["interfaces"]["interface"] == []
+        assert tree.interfaces == []
 
 
 class TestParseErrors:
@@ -117,8 +117,8 @@ class TestRender:
         b = OPNsenseCodec().render(tree)
         assert a == b
 
-    def test_render_rejects_non_dict(self):
-        with pytest.raises(RenderError, match="tree must be a dict"):
+    def test_render_rejects_non_dict_or_intent(self):
+        with pytest.raises(RenderError, match="CanonicalIntent or dict"):
             OPNsenseCodec().render("not a tree")  # type: ignore[arg-type]
 
     def test_render_rejects_interface_without_zone(self):
@@ -165,11 +165,10 @@ class TestIterXpaths:
             assert x in declared, f"walker emitted undeclared xpath: {x!r}"
 
     def test_list_wrapper_unwrapped(self):
-        """/interfaces is a wrapper; its items get the singular path
-        /interfaces/interface (no list indices)."""
+        """Canonical walker emits schema-style paths without list indices."""
         tree = OPNsenseCodec().parse(_MIN)
         xs = list(OPNsenseCodec().iter_xpaths(tree))
-        assert "/interfaces/interface/zone" in xs
+        assert "/interfaces/interface/name" in xs
         assert not any(
             "[" in x for x in xs
         ), f"list-key predicate leaked: {xs}"
@@ -178,8 +177,8 @@ class TestIterXpaths:
         xml = FIXTURES.joinpath("config_simple.xml").read_text()
         tree = OPNsenseCodec().parse(xml)
         xs = list(OPNsenseCodec().iter_xpaths(tree))
-        # Three interfaces each with a descr → three occurrences.
-        assert xs.count("/interfaces/interface/descr") == 3
+        # Three interfaces each with a description → three occurrences.
+        assert xs.count("/interfaces/interface/config/description") == 3
 
 
 # ---------------------------------------------------------------------------

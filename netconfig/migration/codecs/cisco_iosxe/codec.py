@@ -210,6 +210,10 @@ class CiscoIOSXECodec(CodecBase):
             RenderError: If *tree* doesn't have the expected top-level
                 ``interfaces.interface`` shape.
         """
+        # Accept CanonicalIntent (new canonical shape) or legacy dict.
+        from ...canonical.intent import CanonicalIntent
+        if isinstance(tree, CanonicalIntent):
+            return self._render_canonical(tree)
         if not isinstance(tree, dict) or "interfaces" not in tree:
             raise RenderError(
                 "cisco_iosxe: tree missing top-level 'interfaces' key",
@@ -229,6 +233,43 @@ class CiscoIOSXECodec(CodecBase):
         from xml.dom.minidom import parseString
         pretty = parseString(raw_xml).toprettyxml(indent="  ")
         # minidom adds an XML declaration; strip it for a clean fragment.
+        lines = pretty.splitlines()
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(line for line in lines if line.strip()) + "\n"
+
+    def _render_canonical(self, intent) -> str:
+        """Render a CanonicalIntent to OpenConfig NETCONF XML."""
+        root = ET.Element(f"{{{_NS_IF}}}interfaces")
+        for iface in intent.interfaces:
+            iface_el = ET.SubElement(root, f"{{{_NS_IF}}}interface")
+            ET.SubElement(iface_el, f"{{{_NS_IF}}}name").text = iface.name
+            cfg_el = ET.SubElement(iface_el, f"{{{_NS_IF}}}config")
+            ET.SubElement(cfg_el, f"{{{_NS_IF}}}name").text = iface.name
+            if iface.description:
+                ET.SubElement(cfg_el, f"{{{_NS_IF}}}description").text = iface.description
+            ET.SubElement(cfg_el, f"{{{_NS_IF}}}enabled").text = (
+                "true" if iface.enabled else "false"
+            )
+            if iface.interface_type:
+                ET.SubElement(cfg_el, f"{{{_NS_IF}}}type").text = iface.interface_type
+            if iface.ipv4_addresses:
+                subs_el = ET.SubElement(iface_el, f"{{{_NS_IF}}}subinterfaces")
+                si_el = ET.SubElement(subs_el, f"{{{_NS_IF}}}subinterface")
+                ET.SubElement(si_el, f"{{{_NS_IF}}}index").text = "0"
+                ipv4_el = ET.SubElement(si_el, f"{{{_NS_IP}}}ipv4")
+                addrs_el = ET.SubElement(ipv4_el, f"{{{_NS_IP}}}addresses")
+                for addr in iface.ipv4_addresses:
+                    a_el = ET.SubElement(addrs_el, f"{{{_NS_IP}}}address")
+                    ET.SubElement(a_el, f"{{{_NS_IP}}}ip").text = addr.ip
+                    ac_el = ET.SubElement(a_el, f"{{{_NS_IP}}}config")
+                    ET.SubElement(ac_el, f"{{{_NS_IP}}}ip").text = addr.ip
+                    ET.SubElement(ac_el, f"{{{_NS_IP}}}prefix-length").text = str(addr.prefix_length)
+        ET.register_namespace("", _NS_IF)
+        ET.register_namespace("oc-ip", _NS_IP)
+        raw_xml = ET.tostring(root, encoding="unicode")
+        from xml.dom.minidom import parseString
+        pretty = parseString(raw_xml).toprettyxml(indent="  ")
         lines = pretty.splitlines()
         if lines and lines[0].startswith("<?xml"):
             lines = lines[1:]

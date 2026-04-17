@@ -7,6 +7,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (canonical intent dict — cross-vendor translation bridge)
+
+- **``CanonicalIntent``** pydantic model in
+  ``netconfig/migration/canonical/intent.py`` — the shared tree shape
+  every codec's ``parse()`` emits and ``render()`` consumes.  Defines
+  Tier 1 (auto-translatable: hostname, interfaces, VLANs, static
+  routes), Tier 2 (review-required: DHCP, SNMP, LAGs, users, RADIUS),
+  and Tier 3 (informational-only: firewall, NAT, VPN stored as
+  raw_sections for display, never auto-rendered).
+- **VLAN-centric membership model**: VLANs carry their port lists
+  (tagged/untagged), not the reverse — Aruba AOS-S and OPNsense work
+  this way natively; Cisco's per-interface switchport is transposed
+  on parse.
+- **Cisco IOS-XE CLI codec refactored** to emit ``CanonicalIntent``:
+  now parses hostname, VLANs (``vlan <id>`` / ``name`` stanzas),
+  static routes (``ip route``), and switchport config
+  (``switchport mode``, ``access vlan``, ``trunk allowed vlan``,
+  ``trunk native vlan``) in addition to interfaces.
+- **OPNsense codec refactored** to emit/consume ``CanonicalIntent``:
+  new ``_render_canonical()`` method renders OPNsense config.xml from
+  any canonical intent (including those parsed from Cisco CLI).
+- **Cisco IOS-XE NETCONF codec** gains ``_render_canonical()`` to
+  produce OpenConfig XML from any ``CanonicalIntent``.
+- **Cross-vendor translation proven**: ``cisco_iosxe_cli`` (source) →
+  ``opnsense`` (target) completes successfully through the pipeline.
+  First time in the project's history that a stored backup config
+  from one vendor renders as another vendor's config format.
+- **740 tests pass** — zero regressions.  All existing tests updated
+  to assert against canonical model attributes instead of raw dicts.
+
 ### Added (R3+R4: codec direction/certainty fields + first CLI codec)
 
 - **R3: three new fields on ``CodecBase``:**

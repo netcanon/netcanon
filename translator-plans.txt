@@ -225,6 +225,21 @@ LAYER 4 — TRANSPORT
       first multi-codec-per-vendor usage.  Proves the architecture.
       2-3 sessions.  STATUS: SHIPPED.
 
+  CANONICAL BRIDGE — Session 1 of vendor-config-research plan.
+      STATUS: SHIPPED.  Defined CanonicalIntent pydantic model
+      (netconfig/migration/canonical/intent.py) with Tier-1 fields
+      (hostname, domain, dns/ntp/syslog servers, interfaces, vlans,
+      static_routes), Tier-2 (dhcp, snmp, lags, local_users, radius),
+      and Tier-3 (raw_sections opaque blob).  Refactored
+      cisco_iosxe_cli, opnsense, and cisco_iosxe codecs to emit/consume
+      CanonicalIntent directly — the tree shape is now shared across
+      all three.  First successful cross-vendor translation proven
+      end-to-end: IOS-XE `show running-config` → CanonicalIntent →
+      OPNsense config.xml, with hostname, interfaces, descriptions,
+      enabled flags, and IPv4 addresses all transferring.  Legacy
+      dict-shape acceptance kept in render() paths for back-compat.
+      740 tests passing; no regressions.
+
   R5  Auto-detection from stored-config bytes.  Removes a UX step.
       1 session.
 

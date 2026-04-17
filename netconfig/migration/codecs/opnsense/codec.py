@@ -46,6 +46,12 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
+from ...canonical.intent import (
+    CanonicalIPv4Address,
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalVlan,
+)
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 
@@ -74,16 +80,19 @@ class OPNsenseCodec(CodecBase):
         supported=[
             "/system/hostname",
             "/system/domain",
-            "/interfaces/interface/zone",
-            "/interfaces/interface/if",
-            "/interfaces/interface/descr",
-            "/interfaces/interface/enable",
-            "/interfaces/interface/ipaddr",
-            "/interfaces/interface/subnet",
+            "/system/dns-server",
+            "/system/ntp-server",
+            "/interfaces/interface/name",
+            "/interfaces/interface/config/description",
+            "/interfaces/interface/config/enabled",
+            "/interfaces/interface/ipv4/address/ip",
+            "/interfaces/interface/ipv4/address/prefix-length",
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
         ],
         lossy=[
             LossyPath(
-                path="/interfaces/interface/descr",
+                path="/interfaces/interface/config/description",
                 reason=(
                     "OPNsense imposes no length limit on description text; "
                     "other vendors (Cisco 240 chars, Juniper 900) may "
@@ -118,8 +127,9 @@ class OPNsenseCodec(CodecBase):
     # Parse
     # -----------------------------------------------------------------
 
-    def parse(self, raw: str) -> dict[str, Any]:
-        """Parse an OPNsense ``config.xml`` document.
+    def parse(self, raw: str) -> CanonicalIntent:
+        """Parse an OPNsense ``config.xml`` document into a
+        :class:`CanonicalIntent`.
 
         Raises:
             ParseError: On malformed XML or missing ``<opnsense>`` root.
@@ -139,49 +149,101 @@ class OPNsenseCodec(CodecBase):
                 snippet=raw[:120],
             )
 
-        tree: dict[str, Any] = {}
+        intent = CanonicalIntent(
+            source_vendor="opnsense",
+            source_format="xml-opnsense",
+        )
 
         # ----- <system> block -----
         sys_el = root.find("system")
         if sys_el is not None:
-            system: dict[str, Any] = {}
-            for field in ("hostname", "domain"):
-                child = sys_el.find(field)
-                if child is not None and child.text:
-                    system[field] = child.text.strip()
-            if system:
-                tree["system"] = system
+            hn = sys_el.find("hostname")
+            if hn is not None and hn.text:
+                intent.hostname = hn.text.strip()
+            dm = sys_el.find("domain")
+            if dm is not None and dm.text:
+                intent.domain = dm.text.strip()
 
         # ----- <interfaces> block — flatten into list -----
         iface_parent = root.find("interfaces")
         if iface_parent is not None:
-            ifaces: list[dict[str, Any]] = []
-            # OPNsense uses <wan>, <lan>, <optN> children keyed by zone.
             for zone_el in iface_parent:
-                iface = _parse_interface_zone(zone_el)
+                iface = _parse_interface_zone_canonical(zone_el)
                 if iface is not None:
-                    ifaces.append(iface)
-            tree["interfaces"] = {"interface": ifaces}
+                    intent.interfaces.append(iface)
 
-        return tree
+        # ----- <vlans> block -----
+        vlans_el = root.find("vlans")
+        if vlans_el is not None:
+            for vlan_el in vlans_el.findall("vlan"):
+                tag_el = vlan_el.find("tag")
+                if tag_el is not None and tag_el.text:
+                    vid = int(tag_el.text.strip())
+                    descr_el = vlan_el.find("descr")
+                    intent.vlans.append(CanonicalVlan(
+                        id=vid,
+                        name=(descr_el.text or "").strip() if descr_el is not None else "",
+                    ))
+
+        return intent
 
     # -----------------------------------------------------------------
     # Render
     # -----------------------------------------------------------------
 
-    def render(self, tree: dict[str, Any]) -> str:
-        """Render the tree back to OPNsense-style ``config.xml`` text."""
-        if not isinstance(tree, dict):
-            raise RenderError(
-                "opnsense: tree must be a dict",
-                yang_path="/",
-            )
+    def render(self, tree: Any) -> str:
+        """Render a :class:`CanonicalIntent` to OPNsense config.xml."""
+        # Accept both CanonicalIntent and legacy dict for back-compat.
+        if isinstance(tree, CanonicalIntent):
+            return self._render_canonical(tree)
+        if isinstance(tree, dict):
+            return self._render_legacy(tree)
+        raise RenderError("opnsense: tree must be a CanonicalIntent or dict", yang_path="/")
+
+    def _render_canonical(self, intent: CanonicalIntent) -> str:
+        """Render from the canonical intent shape."""
+        root = ET.Element("opnsense")
+
+        # System
+        if intent.hostname or intent.domain:
+            sys_el = ET.SubElement(root, "system")
+            if intent.hostname:
+                ET.SubElement(sys_el, "hostname").text = intent.hostname
+            if intent.domain:
+                ET.SubElement(sys_el, "domain").text = intent.domain
+
+        # Interfaces — render as zone-keyed elements.
+        # For canonical intents from OTHER vendors we need to assign zone
+        # names.  Use the interface name as the zone if it looks like an
+        # OPNsense zone (wan/lan/optN), otherwise use the name as-is.
+        if intent.interfaces:
+            ifaces_el = ET.SubElement(root, "interfaces")
+            for iface in intent.interfaces:
+                zone_name = iface.name if iface.name in ("wan", "lan") or iface.name.startswith("opt") else iface.name.lower().replace("/", "_").replace(" ", "_")
+                zone_el = ET.SubElement(ifaces_el, zone_name)
+                if iface.description:
+                    ET.SubElement(zone_el, "descr").text = iface.description
+                if iface.enabled:
+                    ET.SubElement(zone_el, "enable")
+                if iface.ipv4_addresses:
+                    ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
+                    ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+
+        raw_xml = ET.tostring(root, encoding="unicode")
+        from xml.dom.minidom import parseString
+        pretty = parseString(raw_xml).toprettyxml(indent="  ")
+        lines = pretty.splitlines()
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(line for line in lines if line.strip()) + "\n"
+
+    def _render_legacy(self, tree: dict[str, Any]) -> str:
+        """Render from the old dict shape (back-compat for existing tests)."""
         root = ET.Element("opnsense")
 
         system = tree.get("system")
         if system is not None:
             sys_el = ET.SubElement(root, "system")
-            # Deterministic order for stable textual diffs.
             if "hostname" in system:
                 ET.SubElement(sys_el, "hostname").text = system["hostname"]
             if "domain" in system:
@@ -208,13 +270,12 @@ class OPNsenseCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths for every leaf in *tree*.
-
-        Same conventions as :class:`CiscoIOSXECodec.iter_xpaths` —
-        OpenConfig schema paths, no list-key predicates.  Hand-walks
-        the two known structural wrappers (``/interfaces/interface``
-        is a list); every other dict nests naturally.
-        """
+        """Yield schema xpaths from a :class:`CanonicalIntent` or legacy dict."""
+        if isinstance(tree, CanonicalIntent):
+            # Reuse the CLI codec's canonical walker.
+            from ..cisco_iosxe_cli.codec import _walk_canonical
+            yield from _walk_canonical(tree)
+            return
         if not isinstance(tree, dict):
             return
         for key, val in tree.items():
@@ -224,6 +285,39 @@ class OPNsenseCodec(CodecBase):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None:
+    """Parse one ``<wan>``/``<lan>``/``<optN>`` element into a
+    :class:`CanonicalInterface`.  Returns ``None`` for empty stubs."""
+    # Zone name = element tag (wan, lan, opt1, etc.)
+    zone = el.tag
+    if_el = el.find("if")
+    if if_el is None or not (if_el.text or "").strip():
+        # No physical interface assigned — skip this zone.
+        if len(list(el)) == 0:
+            return None
+    iface = CanonicalInterface(name=zone)
+    descr_el = el.find("descr")
+    if descr_el is not None and descr_el.text:
+        iface.description = descr_el.text.strip()
+    enable_el = el.find("enable")
+    iface.enabled = enable_el is not None
+    ipaddr_el = el.find("ipaddr")
+    subnet_el = el.find("subnet")
+    if ipaddr_el is not None and ipaddr_el.text and subnet_el is not None and subnet_el.text:
+        try:
+            iface.ipv4_addresses.append(CanonicalIPv4Address(
+                ip=ipaddr_el.text.strip(),
+                prefix_length=int(subnet_el.text.strip()),
+            ))
+        except ValueError:
+            raise ParseError(
+                f"opnsense: non-integer <subnet> {subnet_el.text!r}",
+                path=f"/interfaces/{el.tag}/subnet",
+                snippet=(subnet_el.text or "")[:120],
+            )
+    return iface
 
 
 def _parse_interface_zone(el: ET.Element) -> dict[str, Any] | None:

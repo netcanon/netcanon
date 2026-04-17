@@ -41,6 +41,13 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
+from ...canonical.intent import (
+    CanonicalIPv4Address,
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+)
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 
@@ -102,8 +109,9 @@ class CiscoIOSXECLICodec(CodecBase):
     # Parse
     # -----------------------------------------------------------------
 
-    def parse(self, raw: str) -> dict[str, Any]:
-        """Parse IOS-XE ``show running-config`` output.
+    def parse(self, raw: str) -> CanonicalIntent:
+        """Parse IOS-XE ``show running-config`` output into a
+        :class:`CanonicalIntent`.
 
         Raises:
             ParseError: If the input doesn't look like IOS config at all
@@ -123,8 +131,24 @@ class CiscoIOSXECLICodec(CodecBase):
                 snippet=stripped[:120],
             )
 
-        interfaces = _parse_interfaces(raw)
-        return {"interfaces": {"interface": interfaces}}
+        intent = CanonicalIntent(
+            source_vendor="cisco_iosxe",
+            source_format="cli-ios",
+        )
+
+        # System-level fields
+        intent.hostname = _extract_hostname(raw)
+
+        # Interfaces
+        intent.interfaces = _parse_interfaces(raw)
+
+        # VLANs
+        intent.vlans = _parse_vlans(raw)
+
+        # Static routes
+        intent.static_routes = _parse_static_routes(raw)
+
+        return intent
 
     # -----------------------------------------------------------------
     # Render — NOT IMPLEMENTED (parse_only codec)
@@ -148,12 +172,13 @@ class CiscoIOSXECLICodec(CodecBase):
     # -----------------------------------------------------------------
 
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
-        """Yield schema xpaths — delegates to the NETCONF codec's walker
-        since the tree shapes are identical."""
-        from ..cisco_iosxe.codec import _walk
-        if not isinstance(tree, dict):
-            return
-        yield from _walk(tree, "")
+        """Yield schema xpaths from a :class:`CanonicalIntent`."""
+        if isinstance(tree, CanonicalIntent):
+            yield from _walk_canonical(tree)
+        elif isinstance(tree, dict):
+            # Back-compat fallback for old-shape trees.
+            from ..cisco_iosxe.codec import _walk
+            yield from _walk(tree, "")
 
 
 # ---------------------------------------------------------------------------
@@ -216,51 +241,76 @@ def _mask_to_prefix(mask_str: str) -> int:
     return bits.count("1")
 
 
-def _parse_interfaces(raw: str) -> list[dict[str, Any]]:
+_HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+_VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
+_VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
+_STATIC_ROUTE_RE = re.compile(
+    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)",
+    re.IGNORECASE,
+)
+_SWITCHPORT_ACCESS_RE = re.compile(
+    r"^\s+switchport\s+access\s+vlan\s+(\d+)", re.IGNORECASE
+)
+_SWITCHPORT_TRUNK_ALLOWED_RE = re.compile(
+    r"^\s+switchport\s+trunk\s+allowed\s+vlan\s+(.+)", re.IGNORECASE
+)
+_SWITCHPORT_TRUNK_NATIVE_RE = re.compile(
+    r"^\s+switchport\s+trunk\s+native\s+vlan\s+(\d+)", re.IGNORECASE
+)
+_SWITCHPORT_MODE_RE = re.compile(
+    r"^\s+switchport\s+mode\s+(\S+)", re.IGNORECASE
+)
+
+
+def _extract_hostname(raw: str) -> str:
+    m = _HOSTNAME_RE.search(raw)
+    return m.group(1) if m else ""
+
+
+def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     """Extract interface stanzas from IOS config text."""
     lines = raw.splitlines()
-    interfaces: list[dict[str, Any]] = []
+    interfaces: list[CanonicalInterface] = []
     current: dict[str, Any] | None = None
 
     for line in lines:
-        # Start of a new interface stanza?
         m = _IFACE_RE.match(line)
         if m:
             if current is not None:
-                interfaces.append(current)
+                interfaces.append(_build_canonical_interface(current))
             iface_name = m.group(1)
             current = {
                 "name": iface_name,
-                "config": {
-                    "name": iface_name,
-                    "enabled": True,  # default; overridden by `shutdown`
-                    "type": _infer_type(iface_name),
-                },
+                "description": "",
+                "enabled": True,
+                "type": _infer_type(iface_name),
+                "ipv4": [],
+                "switchport_mode": None,
+                "access_vlan": None,
+                "trunk_allowed": [],
+                "trunk_native": None,
             }
             continue
 
-        # Are we inside an interface stanza?
         if current is None:
             continue
 
-        # End of stanza?
         if line.startswith("!") or (line and not line[0].isspace()):
-            interfaces.append(current)
+            interfaces.append(_build_canonical_interface(current))
             current = None
             continue
 
-        # Sub-commands within the stanza.
         dm = _DESC_RE.match(line)
         if dm:
-            current["config"]["description"] = dm.group(1).strip()
+            current["description"] = dm.group(1).strip()
             continue
 
         if _SHUTDOWN_RE.match(line):
-            current["config"]["enabled"] = False
+            current["enabled"] = False
             continue
 
         if _NO_SHUTDOWN_RE.match(line):
-            current["config"]["enabled"] = True
+            current["enabled"] = True
             continue
 
         im = _IP_RE.match(line)
@@ -268,32 +318,150 @@ def _parse_interfaces(raw: str) -> list[dict[str, Any]]:
             ip_str = im.group(1)
             mask_str = im.group(2)
             prefix_len = _mask_to_prefix(mask_str)
-            current.setdefault("subinterfaces", {
-                "subinterface": [{
-                    "index": 0,
-                    "ipv4": {
-                        "addresses": {
-                            "address": []
-                        }
-                    },
-                }]
-            })
-            addr_list = (
-                current["subinterfaces"]["subinterface"][0]
-                ["ipv4"]["addresses"]["address"]
-            )
-            # Only take the first (primary) address.
-            if not addr_list:
-                addr_list.append({
-                    "ip": ip_str,
-                    "config": {
-                        "ip": ip_str,
-                        "prefix-length": prefix_len,
-                    },
-                })
+            if not current["ipv4"]:  # primary only
+                current["ipv4"].append({"ip": ip_str, "prefix_length": prefix_len})
+            continue
 
-    # Don't forget the last stanza if there's no trailing '!'.
+        sm = _SWITCHPORT_MODE_RE.match(line)
+        if sm:
+            current["switchport_mode"] = sm.group(1).lower()
+            continue
+
+        am = _SWITCHPORT_ACCESS_RE.match(line)
+        if am:
+            current["access_vlan"] = int(am.group(1))
+            continue
+
+        tm = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
+        if tm:
+            current["trunk_allowed"] = _parse_vlan_list(tm.group(1).strip())
+            continue
+
+        nm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
+        if nm:
+            current["trunk_native"] = int(nm.group(1))
+            continue
+
     if current is not None:
-        interfaces.append(current)
+        interfaces.append(_build_canonical_interface(current))
 
     return interfaces
+
+
+def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
+    """Convert the parse-time dict into a CanonicalInterface."""
+    return CanonicalInterface(
+        name=raw["name"],
+        description=raw.get("description", ""),
+        enabled=raw.get("enabled", True),
+        interface_type=raw.get("type", ""),
+        ipv4_addresses=[
+            CanonicalIPv4Address(ip=a["ip"], prefix_length=a["prefix_length"])
+            for a in raw.get("ipv4", [])
+        ],
+        switchport_mode=raw.get("switchport_mode"),
+        access_vlan=raw.get("access_vlan"),
+        trunk_allowed_vlans=raw.get("trunk_allowed", []),
+        trunk_native_vlan=raw.get("trunk_native"),
+    )
+
+
+def _parse_vlan_list(text: str) -> list[int]:
+    """Parse a Cisco VLAN list like '10,20,30-40' into a flat list of ints."""
+    result: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            result.extend(range(int(lo.strip()), int(hi.strip()) + 1))
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
+
+def _parse_vlans(raw: str) -> list[CanonicalVlan]:
+    """Extract VLAN definitions from IOS config text.
+
+    Looks for ``vlan <id>`` stanzas followed by indented ``name``
+    sub-commands.
+    """
+    lines = raw.splitlines()
+    vlans: list[CanonicalVlan] = []
+    current_id: int | None = None
+    current_name: str = ""
+
+    for line in lines:
+        vm = _VLAN_RE.match(line)
+        if vm:
+            if current_id is not None:
+                vlans.append(CanonicalVlan(id=current_id, name=current_name))
+            current_id = int(vm.group(1))
+            current_name = ""
+            continue
+
+        if current_id is not None:
+            nm = _VLAN_NAME_RE.match(line)
+            if nm:
+                current_name = nm.group(1).strip()
+                continue
+            if line.startswith("!") or (line and not line[0].isspace()):
+                vlans.append(CanonicalVlan(id=current_id, name=current_name))
+                current_id = None
+                current_name = ""
+
+    if current_id is not None:
+        vlans.append(CanonicalVlan(id=current_id, name=current_name))
+
+    return vlans
+
+
+def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+    """Extract ``ip route`` lines from IOS config text."""
+    routes: list[CanonicalStaticRoute] = []
+    for line in raw.splitlines():
+        m = _STATIC_ROUTE_RE.match(line)
+        if m:
+            dest_ip = m.group(1)
+            mask = m.group(2)
+            gw_or_iface = m.group(3)
+            prefix_len = _mask_to_prefix(mask)
+            dest = f"{dest_ip}/{prefix_len}"
+            # Gateway could be an IP or an interface name.
+            gateway = ""
+            iface = ""
+            try:
+                ipaddress.IPv4Address(gw_or_iface)
+                gateway = gw_or_iface
+            except ipaddress.AddressValueError:
+                iface = gw_or_iface
+            routes.append(CanonicalStaticRoute(
+                destination=dest,
+                gateway=gateway,
+                interface=iface,
+            ))
+    return routes
+
+
+def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
+    """Yield schema xpaths from a CanonicalIntent for validation."""
+    if intent.hostname:
+        yield "/system/hostname"
+    for _ in intent.dns_servers:
+        yield "/system/dns-server"
+    for _ in intent.ntp_servers:
+        yield "/system/ntp-server"
+    for iface in intent.interfaces:
+        yield "/interfaces/interface/name"
+        if iface.description:
+            yield "/interfaces/interface/config/description"
+        yield "/interfaces/interface/config/enabled"
+        if iface.interface_type:
+            yield "/interfaces/interface/config/type"
+        for _ in iface.ipv4_addresses:
+            yield "/interfaces/interface/ipv4/address/ip"
+            yield "/interfaces/interface/ipv4/address/prefix-length"
+    for _ in intent.vlans:
+        yield "/vlans/vlan/id"
+        yield "/vlans/vlan/name"
+    for _ in intent.static_routes:
+        yield "/routing/static-route"

@@ -78,26 +78,24 @@ class TestR3Fields:
 class TestParseCLI:
     def test_minimal_cli(self):
         tree = CiscoIOSXECLICodec().parse(_MINIMAL_CLI)
-        ifaces = tree["interfaces"]["interface"]
+        ifaces = tree.interfaces
         assert len(ifaces) == 1
-        assert ifaces[0]["name"] == "GigabitEthernet0/0/0"
-        assert ifaces[0]["config"]["description"] == "test link"
-        assert ifaces[0]["config"]["enabled"] is True
+        assert ifaces[0].name == "GigabitEthernet0/0/0"
+        assert ifaces[0].description == "test link"
+        assert ifaces[0].enabled is True
 
     def test_ip_address_parsed(self):
         tree = CiscoIOSXECLICodec().parse(_MINIMAL_CLI)
-        addrs = tree["interfaces"]["interface"][0]["subinterfaces"][
-            "subinterface"
-        ][0]["ipv4"]["addresses"]["address"]
-        assert addrs[0]["ip"] == "10.0.0.1"
-        assert addrs[0]["config"]["prefix-length"] == 24
+        addrs = tree.interfaces[0].ipv4_addresses
+        assert addrs[0].ip == "10.0.0.1"
+        assert addrs[0].prefix_length == 24
 
     def test_fixture_parses_four_interfaces(self):
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         tree = CiscoIOSXECLICodec().parse(raw)
-        ifaces = tree["interfaces"]["interface"]
+        ifaces = tree.interfaces
         assert len(ifaces) == 4
-        names = [i["name"] for i in ifaces]
+        names = [i.name for i in ifaces]
         assert names == [
             "GigabitEthernet0/0/0",
             "GigabitEthernet0/0/1",
@@ -109,25 +107,24 @@ class TestParseCLI:
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         tree = CiscoIOSXECLICodec().parse(raw)
         # GigabitEthernet0/0/2 has "shutdown"
-        gi2 = tree["interfaces"]["interface"][3]
-        assert gi2["name"] == "GigabitEthernet0/0/2"
-        assert gi2["config"]["enabled"] is False
+        gi2 = tree.interfaces[3]
+        assert gi2.name == "GigabitEthernet0/0/2"
+        assert gi2.enabled is False
 
     def test_loopback_has_host_mask(self):
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         tree = CiscoIOSXECLICodec().parse(raw)
-        lo = tree["interfaces"]["interface"][2]
-        addrs = lo["subinterfaces"]["subinterface"][0]["ipv4"]["addresses"]["address"]
-        assert addrs[0]["config"]["prefix-length"] == 32
+        lo = tree.interfaces[2]
+        assert lo.ipv4_addresses[0].prefix_length == 32
 
     def test_interface_type_inferred(self):
         tree = CiscoIOSXECLICodec().parse(_MINIMAL_CLI)
-        assert tree["interfaces"]["interface"][0]["config"]["type"] == "ianaift:ethernetCsmacd"
+        assert tree.interfaces[0].interface_type == "ianaift:ethernetCsmacd"
 
     def test_loopback_type_inferred(self):
         raw = "interface Loopback99\n!\nend\n"
         tree = CiscoIOSXECLICodec().parse(raw)
-        assert tree["interfaces"]["interface"][0]["config"]["type"] == "ianaift:softwareLoopback"
+        assert tree.interfaces[0].interface_type == "ianaift:softwareLoopback"
 
 
 # ---------------------------------------------------------------------------
