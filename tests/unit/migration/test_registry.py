@@ -141,3 +141,36 @@ class TestListAdapters:
         """The package __init__ pre-registers the reference mock adapter."""
         import netconfig.migration  # noqa: F401 — ensure import
         assert "mock" in list_codecs()
+
+
+class TestAutoDiscovery:
+    """The migration package auto-discovers codec sub-packages; adding
+    a new codec should require no edit to netconfig/migration/__init__.py."""
+
+    def test_all_built_in_codecs_discovered(self):
+        """Every sub-package under netconfig/migration/codecs/ registers
+        via auto-discovery at package import time."""
+        import netconfig.migration  # noqa: F401 — ensure discovery ran
+        registered = set(list_codecs())
+        expected = {
+            "mock",
+            "cisco_iosxe",
+            "cisco_iosxe_cli",
+            "opnsense",
+            "mikrotik_routeros",
+        }
+        assert expected.issubset(registered), (
+            f"missing: {expected - registered}"
+        )
+
+    def test_discovery_is_idempotent(self):
+        """Re-importing the package must not duplicate or reject registrations."""
+        import importlib
+        import netconfig.migration
+        before = set(list_codecs())
+        importlib.reload(netconfig.migration)
+        after = set(list_codecs())
+        assert before == after, (
+            f"registry drifted across reload: "
+            f"lost={before - after} gained={after - before}"
+        )

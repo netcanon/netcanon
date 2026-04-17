@@ -7,6 +7,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (auto-discover codec packages — zero-bookkeeping vendor add)
+
+- **``netconfig/migration/__init__.py``** now auto-discovers every
+  codec sub-package under ``netconfig/migration/codecs/`` using
+  ``pkgutil.iter_modules``.  Each package's module-level
+  ``@register`` decorator fires on import, populating the registry.
+- Adding a new vendor is now a true drop-in: create the codec
+  package directory + drop a vendor YAML — the translator picks
+  both up at next import with **zero edits to any shared file**.
+  (The ``INPUT_FORMATS`` frozenset and per-codec probe signatures
+  remain in the codec's own module, so they're also vendor-local.)
+- Broken codec packages log the failure and are skipped —
+  robustness test pins that behaviour.
+- 2 new unit tests: auto-discovery finds every expected codec;
+  importing the package is idempotent across reloads.  **710 passing.**
+
 ### Changed (UI metadata migration — close the R5 client-side leak)
 
 - **CodecBase gains three UI-metadata ClassVars**: ``description``,
