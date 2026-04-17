@@ -424,6 +424,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             {"active_page": "definitions", "definitions": defs},
         )
 
+    @app.get("/migrate", response_class=HTMLResponse, include_in_schema=False)
+    async def migrate_page(request: Request) -> HTMLResponse:
+        """Translator workbench: pick source + target adapters, paste or
+        select a config, submit to ``POST /api/v1/migration/plan``, and
+        review the validation report + rendered output in-page.
+
+        Server-side does almost nothing — the page is a thin form over
+        the already-shipped migration API.  All adapter data is fetched
+        client-side via ``GET /api/v1/migration/adapters`` so the UI
+        picks up newly-registered adapters without a template redeploy.
+        """
+        configs = request.app.state.storage.list_configs()
+        return templates.TemplateResponse(
+            request,
+            "migrate.html",
+            {
+                "active_page": "migrate",
+                "configs": configs,
+            },
+        )
+
     @app.get("/docs", include_in_schema=False)
     async def swagger_ui() -> HTMLResponse:
         """Swagger UI wrapped in the NetConfig nav bar."""

@@ -78,6 +78,21 @@ class RenderError(AdapterError):
         self.yang_path = yang_path
 
 
+#: Canonical catalogue of adapter input formats.  Short strings so they
+#: can be used as HTML ``data-*`` attribute values; the UI maps them to
+#: human-readable descriptions.  Add new values sparingly.
+INPUT_FORMATS = frozenset({
+    "xml-netconf",      # OpenConfig NETCONF <get-config> payload (Cisco IOS-XE)
+    "xml-opnsense",     # OPNsense config.xml
+    "xml-panos",        # Palo Alto PAN-OS XML (reserved — no adapter yet)
+    "cli-ios",          # `show running-config` text (reserved — no adapter yet)
+    "cli-fortigate",    # FortiGate CLI `config` blocks (reserved)
+    "cli-mikrotik",     # MikroTik `/export` text (reserved)
+    "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
+    "unknown",          # experimental adapter with no declared format
+})
+
+
 class AdapterBase(ABC):
     """Abstract base class all vendor adapters subclass.
 
@@ -92,6 +107,13 @@ class AdapterBase(ABC):
         version_hint: Optional vendor OS version this adapter targets
             (e.g. ``"17.x"`` for Cisco IOS-XE 17.x).  Informational;
             version gating lives in the :class:`CapabilityMatrix`.
+        input_format: Short catalogue tag describing what ``parse()``
+            expects.  Used by the UI to (a) show a human-readable hint
+            on the /migrate page, (b) provide a matching placeholder,
+            and (c) filter the stored-config dropdown to files the
+            source adapter can actually parse.  Must be one of
+            :data:`INPUT_FORMATS`; default is ``"unknown"`` so adapters
+            under development don't break the UI.
     """
 
     #: Unique registry key.  Subclasses MUST override.
@@ -99,6 +121,9 @@ class AdapterBase(ABC):
 
     #: Optional human-readable OS version hint for UI display.
     version_hint: ClassVar[str | None] = None
+
+    #: Catalogue tag for the input format ``parse()`` accepts.
+    input_format: ClassVar[str] = "unknown"
 
     @property
     @abstractmethod

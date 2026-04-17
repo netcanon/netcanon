@@ -523,3 +523,123 @@ class SchedulesPage:
         (No) to complete the interaction.
         """
         self._page.locator('[data-testid="schedule-delete-btn"]').first.click()
+
+
+# ---------------------------------------------------------------------------
+# Migrate page
+# ---------------------------------------------------------------------------
+
+
+class MigratePage:
+    """Helpers for the ``/migrate`` translator workbench.
+
+    The page is a thin form over ``POST /api/v1/migration/plan``; every
+    interactive element has a stable ``migrate-*`` testid.  See
+    ``tests/testid_reference.md`` for the full inventory.
+    """
+
+    def __init__(self, page: Page) -> None:
+        self._page = page
+
+    # ---- Form ----
+
+    @property
+    def form(self):
+        return self._page.locator('[data-testid="migrate-form"]')
+
+    @property
+    def source_select(self):
+        return self._page.locator('[data-testid="migrate-source-select"]')
+
+    @property
+    def target_select(self):
+        return self._page.locator('[data-testid="migrate-target-select"]')
+
+    @property
+    def adapter_info(self):
+        return self._page.locator('[data-testid="migrate-adapter-info"]')
+
+    @property
+    def raw_input(self):
+        return self._page.locator('[data-testid="migrate-raw-input"]')
+
+    @property
+    def submit_btn(self):
+        return self._page.locator('[data-testid="migrate-submit-btn"]')
+
+    @property
+    def force_checkbox(self):
+        return self._page.locator('[data-testid="migrate-force-checkbox"]')
+
+    def pick_source(self, name: str) -> None:
+        self.source_select.select_option(value=name)
+
+    def pick_target(self, name: str) -> None:
+        self.target_select.select_option(value=name)
+
+    def fill_raw(self, text: str) -> None:
+        self.raw_input.fill(text)
+
+    # ---- Results ----
+
+    @property
+    def result(self):
+        return self._page.locator('[data-testid="migrate-result"]')
+
+    @property
+    def banner(self):
+        return self._page.locator(
+            '[data-testid="migrate-compatibility-banner"]'
+        )
+
+    @property
+    def output(self):
+        return self._page.locator('[data-testid="migrate-output"]')
+
+    @property
+    def status_summary(self):
+        return self._page.locator('[data-testid="migrate-status-summary"]')
+
+    def banner_severity_class(self) -> str:
+        """Return the ``mig-banner-*`` modifier class on the banner.
+
+        Parses the class attribute rather than a dedicated data-severity
+        attr — the template applies ``mig-banner-<severity>`` directly.
+        """
+        classes = (self.banner.get_attribute("class") or "").split()
+        for c in classes:
+            if c.startswith("mig-banner-"):
+                return c.replace("mig-banner-", "")
+        return ""
+
+    def submit_and_wait(self) -> None:
+        """Submit the form and wait for the results region to render."""
+        self.submit_btn.click()
+        self.result.wait_for(state="visible", timeout=5_000)
+
+    # ---- Format-hint + sample-loader (Phase 2 polish) ----
+
+    @property
+    def format_hint(self):
+        return self._page.locator('[data-testid="migrate-format-hint"]')
+
+    @property
+    def load_sample_btn(self):
+        return self._page.locator('[data-testid="migrate-load-sample-btn"]')
+
+    @property
+    def filename_compat_warn(self):
+        return self._page.locator(
+            '[data-testid="migrate-filename-compat-warn"]'
+        )
+
+    def format_hint_format(self) -> str:
+        """Return the adapter's declared input_format via the hint banner's
+        ``data-input-format`` attribute."""
+        return self.format_hint.get_attribute("data-input-format") or ""
+
+    def banner_severity_attr(self) -> str:
+        """Read the banner's ``data-severity`` attribute (the authoritative
+        source — set by the severity-rules logic, not derivable from
+        class strings alone after the #10b fix)."""
+        return self.banner.get_attribute("data-severity") or ""

@@ -46,6 +46,24 @@ class TestListMigrationAdapters:
         assert "switch" in info["device_classes"]
         assert "router" in info["device_classes"]
 
+    def test_input_format_surfaces_on_list_endpoint(self, client):
+        """Every entry exposes ``input_format`` so the /migrate UI can
+        pick a matching sample + filter stored files."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            assert "input_format" in entry
+            assert isinstance(entry["input_format"], str)
+
+    def test_cisco_iosxe_input_format_is_xml_netconf(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
+        assert info["input_format"] == "xml-netconf"
+
+    def test_opnsense_input_format_is_xml_opnsense(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "opnsense")
+        assert info["input_format"] == "xml-opnsense"
+
     def test_cisco_iosxe_adapter_registered(self, client):
         """Phase 0.5's first real adapter must appear in the list once
         the migration package is imported (which FastAPI's create_app

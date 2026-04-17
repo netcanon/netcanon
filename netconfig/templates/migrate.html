@@ -1,0 +1,748 @@
+{% extends "base.html" %}
+{% block title %}Migrate — NetConfig{% endblock %}
+
+{% block content %}
+<style>
+  /* Reuse the diff page's banner palette so the UI reads as one family. */
+  .mig-banner {
+    padding:.65rem 1rem; border-radius:6px; font-size:.88rem;
+    margin-top:1rem; display:flex; align-items:flex-start; gap:.75rem;
+  }
+  .mig-banner-ok     { background:#d4edda; color:#155724; }
+  .mig-banner-warn   { background:#ffeaa7; color:#7a5d00; }
+  .mig-banner-block  { background:#f8d7da; color:#721c24; }
+  .mig-banner-info   { background:#d1ecf1; color:#0c5460; }
+  .mig-banner ul     { margin:.25rem 0 0 1.25rem; padding:0; }
+  .mig-chip {
+    display:inline-block; padding:.08rem .5rem; border-radius:3px;
+    font-size:.7rem; font-weight:700; letter-spacing:.05em;
+    text-transform:uppercase; background:#1a1a2e; color:#eee;
+    font-family:monospace;
+  }
+  .mig-chip.class-switch          { background:#0c5460; }
+  .mig-chip.class-router          { background:#155724; }
+  .mig-chip.class-firewall        { background:#721c24; }
+  .mig-chip.class-load_balancer   { background:#7a5d00; }
+  .mig-chip.class-wireless_controller { background:#3d195a; }
+  .mig-chip.class-access_point    { background:#44085a; }
+  .mig-chip.class-waf             { background:#6a1f0b; }
+
+  .mig-form { background:#fff; padding:1.25rem; border-radius:6px;
+              box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .mig-pair-row { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem;
+                  align-items:center; margin-bottom:.75rem; }
+  .mig-arrow { color:#7eb8f7; font-size:1.4rem; font-weight:700;
+               text-align:center; user-select:none; }
+
+  .mig-input-mode { display:flex; gap:1rem; margin:1rem 0 .5rem; }
+  .mig-input-mode label { font-weight:600; font-size:.88rem; cursor:pointer; }
+
+  textarea.mig-raw {
+    width:100%; min-height:180px; font-family:monospace; font-size:.82rem;
+    padding:.5rem .75rem; border:1px solid #ccc; border-radius:4px;
+    resize:vertical;
+  }
+  textarea.mig-raw:focus { outline:2px solid #7eb8f7; border-color:transparent; }
+
+  #mig-result { margin-top:1rem; }
+  #mig-result.hidden { display:none; }
+  .mig-result-section {
+    background:#fff; padding:1rem 1.25rem; border-radius:6px;
+    box-shadow:0 1px 3px rgba(0,0,0,.1); margin-top:.75rem;
+  }
+  .mig-stats { font-family:monospace; font-size:.85rem; color:#555; }
+  .mig-stats .mig-stat-label { color:#888; }
+
+  pre.mig-output {
+    background:#1e1e1e; color:#d4d4d4; padding:.75rem; border-radius:6px;
+    overflow:auto; font-size:.82rem; line-height:1.4; margin:0;
+    max-height:55vh;
+  }
+
+  /* Reuse the diff page's tok-* colours verbatim so the rendered
+     output uses the same syntax palette. */
+  pre.mig-output .tok-comment { color:#6a9955; font-style:italic; }
+  pre.mig-output .tok-keyword { color:#569cd6; font-weight:600; }
+  pre.mig-output .tok-string  { color:#ce9178; }
+  pre.mig-output .tok-ip      { color:#b5cea8; }
+  pre.mig-output .tok-number  { color:#b5cea8; }
+  pre.mig-output .tok-tag     { color:#569cd6; }
+  pre.mig-output .tok-attr    { color:#9cdcfe; }
+
+  .mig-path-list { font-family:monospace; font-size:.78rem; max-height:16vh;
+                   overflow:auto; border:1px solid #eee; border-radius:4px;
+                   padding:.35rem .5rem; background:#fafafa; }
+  .mig-path-list code { background:transparent; }
+</style>
+
+<h1>Migrate</h1>
+<p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
+  Parse a source config through one adapter, validate it against a target
+  adapter's capability matrix, and render the result.  Backed by
+  <code>POST /api/v1/migration/plan</code>.
+</p>
+
+<form id="mig-form" class="mig-form" data-testid="migrate-form">
+  <div class="mig-pair-row">
+    <div class="form-group">
+      <label for="mig-source">Source adapter</label>
+      <select id="mig-source" name="source"
+              data-testid="migrate-source-select" required></select>
+    </div>
+    <span class="mig-arrow" aria-hidden="true">&rarr;</span>
+    <div class="form-group">
+      <label for="mig-target">Target adapter</label>
+      <select id="mig-target" name="target"
+              data-testid="migrate-target-select" required></select>
+    </div>
+  </div>
+
+  <div data-testid="migrate-adapter-info"
+       id="mig-adapter-info"
+       style="display:none; font-size:.78rem; color:#555;
+              margin-bottom:.75rem; display:flex; gap:1.5rem;
+              flex-wrap:wrap"></div>
+
+  <div class="mig-input-mode" data-testid="migrate-input-mode">
+    <label><input type="radio" name="input_mode" value="raw" checked
+                  data-testid="migrate-input-mode-raw"> Paste raw text</label>
+    <label><input type="radio" name="input_mode" value="filename"
+                  data-testid="migrate-input-mode-filename"> Pick a stored config</label>
+  </div>
+
+  <!-- Format hint — populated by JS from the source adapter's
+       input_format.  Explains what the textarea / dropdown expects,
+       so users don't paste CLI text into an adapter that wants XML. -->
+  <div id="mig-format-hint" data-testid="migrate-format-hint"
+       class="mig-banner mig-banner-info"
+       style="display:none; font-size:.82rem; margin-top:.5rem; margin-bottom:.5rem"></div>
+
+  <div id="mig-raw-wrap" data-testid="migrate-raw-wrap">
+    <textarea class="mig-raw" id="mig-raw" name="raw_text"
+              data-testid="migrate-raw-input"
+              spellcheck="false"
+              placeholder="Pick a source adapter above and a matching sample will appear here."></textarea>
+    <div style="display:flex;gap:.5rem;margin-top:.35rem">
+      <button type="button" class="btn-secondary"
+              data-testid="migrate-load-sample-btn"
+              onclick="loadSampleForSourceAdapter()"
+              style="font-size:.75rem;padding:.2rem .6rem">
+        Load sample for source adapter
+      </button>
+      <span style="font-size:.72rem;color:#888;align-self:center">
+        overwrites the textarea
+      </span>
+    </div>
+  </div>
+
+  <div id="mig-filename-wrap" data-testid="migrate-filename-wrap"
+       style="display:none">
+    <div class="form-group">
+      <label for="mig-filename">Stored config</label>
+      <select id="mig-filename" name="source_filename"
+              data-testid="migrate-filename-select">
+        <option value="">— pick one —</option>
+        {% for cfg in configs %}
+        <option value="{{ cfg.filename }}"
+                data-type-key="{{ cfg.device_type }}"
+                data-ext="{{ cfg.file_extension }}">
+          {{ cfg.filename }} ({{ cfg.device_type }})
+        </option>
+        {% endfor %}
+      </select>
+      <div id="mig-filename-compat-warn"
+           data-testid="migrate-filename-compat-warn"
+           class="mig-banner mig-banner-block"
+           style="display:none; font-size:.8rem; margin-top:.5rem"></div>
+    </div>
+  </div>
+
+  <div class="form-row" style="margin-top:1rem;align-items:center;gap:1rem">
+    <label style="font-size:.82rem;color:#555;display:flex;align-items:center;gap:.35rem">
+      <input type="checkbox" id="mig-force" name="force"
+             data-testid="migrate-force-checkbox">
+      <span title="Skip the device-class guard (NOT recommended)">Force cross-class</span>
+    </label>
+    <button type="submit" class="btn-primary"
+            id="mig-submit-btn"
+            data-testid="migrate-submit-btn">Translate</button>
+  </div>
+</form>
+
+<!-- Results region -->
+<div id="mig-result" data-testid="migrate-result" class="hidden">
+  <div class="mig-result-section">
+    <div id="mig-status-summary" data-testid="migrate-status-summary"
+         style="font-family:monospace;font-size:.88rem"></div>
+
+    <div id="mig-banner" data-testid="migrate-compatibility-banner"
+         class="mig-banner mig-banner-info" style="display:none"></div>
+
+    <div id="mig-stats" class="mig-stats"
+         data-testid="migrate-stats" style="margin-top:.5rem"></div>
+  </div>
+
+  <div class="mig-result-section" id="mig-output-section"
+       data-testid="migrate-output-section" style="display:none">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;
+                margin-bottom:.5rem">
+      <h2 style="margin:0;font-size:1rem">Rendered output</h2>
+      <button type="button" class="btn-secondary"
+              data-testid="migrate-copy-output-btn"
+              onclick="copyMigrateOutput()"
+              style="font-size:.78rem;padding:.25rem .6rem">Copy</button>
+    </div>
+    <pre class="mig-output" id="mig-output"
+         data-testid="migrate-output"></pre>
+  </div>
+
+  <div class="mig-result-section" id="mig-paths-section"
+       data-testid="migrate-paths-section" style="display:none">
+    <details>
+      <summary style="cursor:pointer;font-weight:600;font-size:.88rem">
+        Validation details (supported / lossy / unsupported paths)
+      </summary>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-supported-heading">Supported</strong>
+        (<span data-testid="migrate-paths-supported-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-supported"></div>
+      </div>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-lossy-heading">Lossy</strong>
+        (<span data-testid="migrate-paths-lossy-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-lossy"></div>
+      </div>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-unsupported-heading">Unsupported</strong>
+        (<span data-testid="migrate-paths-unsupported-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-unsupported"></div>
+      </div>
+    </details>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Migrate workbench client ──
+ * Thin wiring over the already-shipped migration API.  Zero custom
+ * widgets: validation banner reuses the diff-page palette, rendered
+ * output reuses the config-viewer's _cvRenderHighlighted highlighter.
+ */
+(function() {
+  var sourceSel  = document.getElementById('mig-source');
+  var targetSel  = document.getElementById('mig-target');
+  var infoEl     = document.getElementById('mig-adapter-info');
+  var rawWrap    = document.getElementById('mig-raw-wrap');
+  var fileWrap   = document.getElementById('mig-filename-wrap');
+  var form       = document.getElementById('mig-form');
+  var submitBtn  = document.getElementById('mig-submit-btn');
+  var result     = document.getElementById('mig-result');
+  var summary    = document.getElementById('mig-status-summary');
+  var banner     = document.getElementById('mig-banner');
+  var stats      = document.getElementById('mig-stats');
+  var outputSec  = document.getElementById('mig-output-section');
+  var output     = document.getElementById('mig-output');
+  var pathsSec   = document.getElementById('mig-paths-section');
+
+  var adapters = [];  // cache — fetched once per page load
+
+  /* ── Input-format catalogue ──
+   * Mirrors netconfig.migration.adapters.base.INPUT_FORMATS.
+   * `label`   — human-readable format name for the hint banner.
+   * `desc`    — one-line explanation of what to paste.
+   * `sample`  — minimal working sample for the "Load sample" button.
+   * `exts`    — file extensions from the backup store that are
+   *             plausibly parseable by an adapter of this format.
+   *             Empty list means "we can't load any stored file".
+   */
+  var FORMAT_CATALOGUE = {
+    'xml-netconf': {
+      label: 'OpenConfig NETCONF XML',
+      desc: (
+        'Paste an OpenConfig <interfaces> fragment or a full NETCONF ' +
+        '<rpc-reply><data>… response.  This is the MACHINE-READABLE ' +
+        'format returned by a device\'s `netconf get-config`; it is ' +
+        'NOT the same as `show running-config`.'
+      ),
+      sample: (
+        '<?xml version="1.0"?>\n' +
+        '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n' +
+        '  <interface>\n' +
+        '    <name>GigabitEthernet0/0/0</name>\n' +
+        '    <config>\n' +
+        '      <name>GigabitEthernet0/0/0</name>\n' +
+        '      <description>WAN uplink</description>\n' +
+        '      <enabled>true</enabled>\n' +
+        '    </config>\n' +
+        '    <subinterfaces>\n' +
+        '      <subinterface>\n' +
+        '        <index>0</index>\n' +
+        '        <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">\n' +
+        '          <addresses><address>\n' +
+        '            <ip>198.51.100.1</ip>\n' +
+        '            <config><ip>198.51.100.1</ip><prefix-length>30</prefix-length></config>\n' +
+        '          </address></addresses>\n' +
+        '        </ipv4>\n' +
+        '      </subinterface>\n' +
+        '    </subinterfaces>\n' +
+        '  </interface>\n' +
+        '</interfaces>\n'
+      ),
+      exts: ['xml'],
+    },
+    'xml-opnsense': {
+      label: 'OPNsense config.xml',
+      desc: 'Paste the contents of an OPNsense config.xml (root element <opnsense>).',
+      sample: (
+        '<?xml version="1.0"?>\n' +
+        '<opnsense>\n' +
+        '  <system>\n' +
+        '    <hostname>fw01</hostname>\n' +
+        '    <domain>example.com</domain>\n' +
+        '  </system>\n' +
+        '  <interfaces>\n' +
+        '    <wan>\n' +
+        '      <if>em0</if>\n' +
+        '      <descr>Upstream</descr>\n' +
+        '      <enable/>\n' +
+        '      <ipaddr>198.51.100.2</ipaddr>\n' +
+        '      <subnet>30</subnet>\n' +
+        '    </wan>\n' +
+        '  </interfaces>\n' +
+        '</opnsense>\n'
+      ),
+      exts: ['xml'],
+    },
+    'json-flat': {
+      label: 'Flat JSON xpath map',
+      desc: (
+        'Paste a JSON object mapping xpath strings to values — the ' +
+        'reference mock adapter\'s format.  Not meaningful for any ' +
+        'real device; useful for exercising the pipeline.'
+      ),
+      sample: (
+        '{\n' +
+        '  "/interfaces/eth0/ip": "10.0.0.1",\n' +
+        '  "/interfaces/eth0/description": "mock interface"\n' +
+        '}\n'
+      ),
+      exts: [],
+    },
+    'unknown': {
+      label: 'Unknown format',
+      desc: (
+        'This adapter did not declare an input format.  Check the ' +
+        'adapter\'s docstring for what parse() expects.'
+      ),
+      sample: '',
+      exts: [],
+    },
+  };
+
+  /* Fallback entries for adapters that declare a format the catalogue
+   * doesn't know yet — treat as unknown so the page still works. */
+  function formatEntry(fmt) {
+    return FORMAT_CATALOGUE[fmt] || FORMAT_CATALOGUE['unknown'];
+  }
+
+  /** Populate both dropdowns from ``GET /api/v1/migration/adapters``. */
+  async function loadAdapters() {
+    try {
+      var resp = await fetch('/api/v1/migration/adapters');
+      if (!resp.ok) {
+        showToast('Failed to load adapters: HTTP ' + resp.status, 'error');
+        return;
+      }
+      adapters = await resp.json();
+      [sourceSel, targetSel].forEach(function(sel) {
+        sel.innerHTML = adapters.map(function(a) {
+          return '<option value="' + escapeHtml(a.name) + '">'
+               + escapeHtml(a.name)
+               + ' (' + a.device_classes.join(', ') + ')'
+               + '</option>';
+        }).join('');
+      });
+      renderAdapterInfo();
+    } catch (err) {
+      showToast('Network error loading adapters: ' + err.message, 'error');
+    }
+  }
+
+  /** Render the tiny info row under the two dropdowns. */
+  function renderAdapterInfo() {
+    if (!adapters.length) return;
+    var s = adapters.find(function(a) { return a.name === sourceSel.value; });
+    var t = adapters.find(function(a) { return a.name === targetSel.value; });
+    if (!s || !t) {
+      infoEl.style.display = 'none';
+      document.getElementById('mig-format-hint').style.display = 'none';
+      return;
+    }
+    infoEl.style.display = 'flex';
+    infoEl.innerHTML =
+      adapterSummary('Source', s)
+      + adapterSummary('Target', t)
+      + classGuardHint(s, t);
+    renderFormatHint();
+  }
+
+  function adapterSummary(label, a) {
+    var chips = a.device_classes.map(function(c) {
+      return '<span class="mig-chip class-' + c + '">' + c + '</span>';
+    }).join(' ');
+    return '<div><strong>' + label + ':</strong> '
+         + chips + '&nbsp; '
+         + '<span style="color:#888">'
+         + a.supported_count + ' supported, '
+         + a.lossy_count + ' lossy, '
+         + a.unsupported_count + ' unsupported'
+         + '</span></div>';
+  }
+
+  /** Quick UX hint when classes are disjoint — warn BEFORE submit. */
+  function classGuardHint(s, t) {
+    var common = s.device_classes.filter(function(c) {
+      return t.device_classes.indexOf(c) !== -1;
+    });
+    if (common.length > 0) return '';
+    return '<div data-testid="migrate-class-hint" '
+         + 'style="color:#721c24;font-weight:600">'
+         + '⚠ No shared device class — guard will block unless '
+         + '"Force cross-class" is ticked.</div>';
+  }
+
+  /** Render the "what does this adapter's parser expect?" hint. */
+  function renderFormatHint() {
+    var hintEl = document.getElementById('mig-format-hint');
+    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
+    if (!src) { hintEl.style.display = 'none'; return; }
+    var entry = formatEntry(src.input_format);
+    hintEl.setAttribute('data-input-format', src.input_format);
+    hintEl.style.display = '';
+    hintEl.innerHTML =
+      '<div style="flex:1">'
+      + '<strong>Source expects:</strong> ' + escapeHtml(entry.label)
+      + ' <span class="mig-chip" style="margin-left:.4rem">'
+      + escapeHtml(src.input_format) + '</span>'
+      + '<div style="margin-top:.25rem;color:inherit;opacity:.85">'
+      + escapeHtml(entry.desc) + '</div>'
+      + '</div>';
+    applyPlaceholder(entry);
+    refreshFilenameCompatWarn();
+  }
+
+  /** Set a format-appropriate placeholder on the raw textarea. */
+  function applyPlaceholder(entry) {
+    var ta = document.getElementById('mig-raw');
+    ta.placeholder = entry.sample
+      ? 'Sample for this source adapter — click "Load sample" below to populate.'
+      : 'No sample available for this input format.';
+  }
+
+  /** Global so the template's onclick can reach it. */
+  window.loadSampleForSourceAdapter = function() {
+    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
+    if (!src) return;
+    var entry = formatEntry(src.input_format);
+    if (!entry.sample) {
+      showToast('No sample available for ' + src.input_format, 'error');
+      return;
+    }
+    document.getElementById('mig-raw').value = entry.sample;
+    showToast('Loaded ' + entry.label + ' sample.', 'success');
+  };
+
+  /** Warn when the selected stored file's extension doesn't match
+      the source adapter's declared input format. */
+  function refreshFilenameCompatWarn() {
+    var warnEl = document.getElementById('mig-filename-compat-warn');
+    var fileSel = document.getElementById('mig-filename');
+    warnEl.style.display = 'none';
+    if (!fileSel.value) return;
+    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
+    if (!src) return;
+    var entry = formatEntry(src.input_format);
+    var opt = fileSel.options[fileSel.selectedIndex];
+    var ext = (opt && opt.dataset.ext) || '';
+    if (entry.exts.length === 0) {
+      warnEl.style.display = '';
+      warnEl.innerHTML =
+        '⚠ Source adapter <code>' + escapeHtml(src.name)
+        + '</code> does not read files from the backup store. Pasting '
+        + 'via the textarea is likely to work better.';
+      return;
+    }
+    if (entry.exts.indexOf(ext) === -1) {
+      warnEl.style.display = '';
+      warnEl.innerHTML =
+        '⚠ <code>' + escapeHtml(opt.value) + '</code> has extension '
+        + '<code>.' + escapeHtml(ext) + '</code> but '
+        + '<code>' + escapeHtml(src.name) + '</code> expects '
+        + '<strong>' + escapeHtml(entry.label) + '</strong> '
+        + '(' + entry.exts.map(function(e) { return '.' + e; }).join(', ')
+        + '). Translate will almost certainly fail.';
+    }
+  }
+
+  /** Toggle textarea vs. stored-config dropdown. */
+  function onInputModeChange() {
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    rawWrap.style.display  = (mode === 'raw')      ? '' : 'none';
+    fileWrap.style.display = (mode === 'filename') ? '' : 'none';
+    if (mode === 'filename') refreshFilenameCompatWarn();
+  }
+
+  /** Submit the form → POST /api/v1/migration/plan → render result. */
+  async function onSubmit(e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    var origText = submitBtn.textContent;
+    submitBtn.textContent = 'Translating…';
+
+    var body = {
+      source: sourceSel.value,
+      target: targetSel.value,
+      force: document.getElementById('mig-force').checked,
+    };
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    if (mode === 'raw') {
+      body.raw_text = document.getElementById('mig-raw').value;
+    } else {
+      var fname = document.getElementById('mig-filename').value;
+      if (!fname) {
+        showToast('Pick a stored config first.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = origText;
+        return;
+      }
+      body.source_filename = fname;
+    }
+
+    try {
+      var resp = await fetch('/api/v1/migration/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      // The endpoint returns 200 even on parse failures (error is in
+      // the job body); HTTP 4xx means a REQUEST shape problem.
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        var detail = typeof err.detail === 'string'
+          ? err.detail
+          : JSON.stringify(err.detail || err);
+        showToast('Request rejected: ' + detail, 'error');
+        return;
+      }
+      var job = await resp.json();
+      renderResult(job);
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = origText;
+    }
+  }
+
+  /** Populate every result panel from a MigrationJob payload. */
+  function renderResult(job) {
+    result.classList.remove('hidden');
+
+    // Top summary line.
+    summary.textContent =
+      'Job ' + job.id.substring(0, 8) + '…  —  status: ' + job.status;
+
+    // Banner severity rules (strictest wins, so the banner's colour
+    // never contradicts the message it carries):
+    //   1. job.error present        → block (red)   — overrides everything
+    //   2. job.status is 'failed'   → block (red)
+    //   3. job.status is 'partial'  → block (red)   — output exists but unsafe
+    //   4. validation.severity set  → mirror it (ok|warn|block)
+    //   5. otherwise                → info (neutral blue)
+    var severity;
+    if (job.error || job.status === 'failed' || job.status === 'partial') {
+      severity = 'block';
+    } else if (job.validation && job.validation.severity) {
+      severity = job.validation.severity;
+    } else {
+      severity = 'info';
+    }
+    banner.className = 'mig-banner mig-banner-' + severity;
+    banner.setAttribute('data-severity', severity);
+    banner.style.display = '';
+    banner.innerHTML = renderBannerContents(job);
+
+    // Counts strip.
+    if (job.validation) {
+      var v = job.validation;
+      stats.innerHTML =
+        '<span class="mig-stat-label">Supported</span> '
+        + '<strong data-testid="migrate-stat-supported">'
+        + v.supported_paths.length + '</strong>'
+        + '  |  <span class="mig-stat-label">Lossy</span> '
+        + '<strong data-testid="migrate-stat-lossy">'
+        + v.lossy_paths.length + '</strong>'
+        + '  |  <span class="mig-stat-label">Unsupported</span> '
+        + '<strong data-testid="migrate-stat-unsupported">'
+        + v.unsupported_paths.length + '</strong>';
+    } else {
+      stats.innerHTML = '';
+    }
+
+    // Rendered output panel (syntax-highlighted via the viewer helper).
+    if (job.rendered) {
+      outputSec.style.display = '';
+      var ext = guessExtension(job);
+      if (typeof _cvRenderHighlighted === 'function') {
+        output.innerHTML = _cvRenderHighlighted(job.rendered, ext);
+      } else {
+        output.textContent = job.rendered;
+      }
+    } else {
+      outputSec.style.display = 'none';
+    }
+
+    // Expandable path list (all three buckets).
+    if (job.validation) {
+      pathsSec.style.display = '';
+      fillPathList(
+        'migrate-paths-supported',
+        'migrate-paths-supported-count',
+        job.validation.supported_paths.map(function(p) { return { path: p }; })
+      );
+      fillPathList(
+        'migrate-paths-lossy',
+        'migrate-paths-lossy-count',
+        job.validation.lossy_paths
+      );
+      fillPathList(
+        'migrate-paths-unsupported',
+        'migrate-paths-unsupported-count',
+        job.validation.unsupported_paths
+      );
+    } else {
+      pathsSec.style.display = 'none';
+    }
+
+    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** Pick appropriate syntax-highlight language from source adapter. */
+  function guessExtension(job) {
+    // Adapter-name → file extension mapping.  Mirrors the config
+    // viewer's extension logic without requiring the pipeline to
+    // declare one explicitly.
+    var name = job.target_adapter || '';
+    if (name.indexOf('iosxe') !== -1 || name === 'opnsense') return 'xml';
+    return 'cfg';
+  }
+
+  function renderBannerContents(job) {
+    if (job.error) {
+      return '<div><strong>Error:</strong> '
+           + escapeHtml(job.error) + '</div>';
+    }
+    var v = job.validation;
+    if (!v) return '<em>No validation report.</em>';
+    if (v.severity === 'ok') {
+      return '<div>&#10003; Validation OK — every path round-trips cleanly.</div>';
+    }
+    var lines = v.reasons.map(function(r) {
+      return '<li>' + escapeHtml(r) + '</li>';
+    }).join('');
+    return '<div style="flex:1"><strong>'
+         + (v.severity === 'block' ? '&#10007; Blocked' : '&#9888; Warning')
+         + '</strong><ul>' + lines + '</ul></div>';
+  }
+
+  /** Render a bucket of validation findings.
+   *
+   * Total count (header) is the raw item count — that number matches
+   * the top stats strip and reflects per-leaf impact (3 interfaces
+   * each with a description = 3 occurrences of that xpath).
+   *
+   * The rendered LIST, however, is de-duplicated on (path, reason):
+   * showing "/interfaces/interface/config/description" three times
+   * is visual noise.  We coalesce duplicates into one entry with a
+   * trailing "×3" badge when there are more than one.
+   */
+  function fillPathList(listTestid, countTestid, items) {
+    var list = document.querySelector('[data-testid="' + listTestid + '"]');
+    var count = document.querySelector('[data-testid="' + countTestid + '"]');
+    count.textContent = String(items.length);
+    if (items.length === 0) {
+      list.innerHTML = '<em style="color:#888">(none)</em>';
+      return;
+    }
+    // Coalesce by (path, reason, severity) in discovery order.
+    var order = [];
+    var byKey = {};
+    items.forEach(function(it) {
+      var key = (it.path || '') + '||' + (it.reason || '')
+              + '||' + (it.severity || '');
+      if (byKey[key]) {
+        byKey[key].count += 1;
+      } else {
+        var entry = {
+          path: it.path, reason: it.reason, severity: it.severity,
+          count: 1,
+        };
+        byKey[key] = entry;
+        order.push(entry);
+      }
+    });
+    list.innerHTML = order.map(function(it) {
+      var line = '<code>' + escapeHtml(it.path || '') + '</code>';
+      if (it.reason) {
+        line += ' <span style="color:#888">— ' + escapeHtml(it.reason) + '</span>';
+      }
+      if (it.severity) {
+        line += ' <span class="mig-chip">' + escapeHtml(it.severity) + '</span>';
+      }
+      if (it.count > 1) {
+        line += ' <span class="mig-chip" title="occurrences">&times;'
+             + it.count + '</span>';
+      }
+      return '<div data-testid="migrate-path-entry">' + line + '</div>';
+    }).join('');
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+  }
+
+  /** Copy the rendered output to clipboard (global so onclick can reach it). */
+  window.copyMigrateOutput = async function() {
+    try {
+      await navigator.clipboard.writeText(output.textContent || '');
+      showToast('Copied rendered output.', 'success');
+    } catch (err) {
+      showToast('Copy failed: ' + err.message, 'error');
+    }
+  };
+
+  // Event wiring
+  sourceSel.addEventListener('change', renderAdapterInfo);
+  targetSel.addEventListener('change', renderAdapterInfo);
+  form.querySelectorAll('input[name="input_mode"]').forEach(function(el) {
+    el.addEventListener('change', onInputModeChange);
+  });
+  var fileSel = document.getElementById('mig-filename');
+  if (fileSel) fileSel.addEventListener('change', refreshFilenameCompatWarn);
+  form.addEventListener('submit', onSubmit);
+
+  // Initial load
+  loadAdapters();
+})();
+</script>
+{% endblock %}

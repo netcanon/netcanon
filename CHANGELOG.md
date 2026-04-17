@@ -7,6 +7,117 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed + Added (translator `/migrate` UX after manual QA pass)
+
+Five findings from a hands-on walk-through of the page — one real UX
+bug, three workflow gaps, one display issue.
+
+- **Fixed: banner severity out-of-sync with job outcome** (manual
+  QA #10b).  Previously a parse-OK / render-failed job rendered the
+  GREEN "validation OK" banner because validation ran fine before
+  render blew up.  Now the banner's severity follows a strict
+  priority: `job.error` present → block, `failed`/`partial` status →
+  block, else `validation.severity`, else `info`.  Colour can no
+  longer contradict the message.  Banner also carries a
+  `data-severity` attribute now so tests can assert on it
+  unambiguously.
+- **Added: `AdapterBase.input_format`** (str, defaults to
+  `"unknown"`).  Each adapter declares what its `parse()` accepts:
+  - `cisco_iosxe` → `xml-netconf` (OpenConfig NETCONF payload)
+  - `opnsense` → `xml-opnsense` (`config.xml`)
+  - `mock` → `json-flat`
+  - reserved: `xml-panos`, `cli-ios`, `cli-fortigate`, `cli-mikrotik`
+  Catalogued in `netconfig.migration.adapters.base.INPUT_FORMATS`
+  (frozenset).  `AdapterInfo` now exposes the field so the UI can
+  read it from `GET /api/v1/migration/adapters`.
+- **Added: format-hint banner on `/migrate`** — explains in-line
+  what the source adapter expects (e.g. "OpenConfig NETCONF —
+  machine-readable payload from `netconf get-config`, NOT `show
+  running-config`").  Addresses manual QA #4 (user confusion about
+  paste-box contents).
+- **Added: "Load sample for source adapter" button** with a
+  working minimal payload per format.  The iosxe sample round-trips
+  cleanly; the opnsense sample is a minimal `<opnsense>` tree.
+- **Added: stored-config compatibility warning** — when the picked
+  stored config's extension doesn't match the source adapter's
+  declared `input_format`, a red in-place warn appears BEFORE submit
+  ("`Fortigate_*.cfg` has extension `.cfg` but `cisco_iosxe`
+  expects OpenConfig NETCONF XML — translate will almost certainly
+  fail").  Addresses manual QA #12, #13.
+- **Fixed: path-list de-duplication** (manual QA #11).  Three
+  interfaces each with a description used to produce three visually-
+  identical rows in the Supported list.  Now collapses to one row
+  with an `×3` count badge.  Top stats count still reflects per-leaf
+  impact (unchanged).
+
+**Tests (+23):**
+
+- `tests/unit/migration/test_input_format.py` (13) — catalogue
+  immutability, base-class default, concrete adapter declarations,
+  "every registered adapter declares a KNOWN format" guard.
+- `tests/integration/test_migration_api.py` (+3) — `input_format`
+  surfaces on the list endpoint for every adapter.
+- `tests/e2e/test_migrate_page.py` (+10) — banner severity
+  regression for failed/partial/ok jobs, format-hint visibility +
+  auto-update, Load-sample button, stored-config compat warn,
+  path-list coalescing.
+
+Full project suite: **674 passing** (was 651).  Pre-existing
+unrelated failure in `test_jobs_schedules.py` schedule form — same
+drift flagged in earlier sessions, untouched here.
+
+### Added (translator Phase 2, part 1 — `/migrate` workbench UI)
+
+- **New HTML page at `/migrate`** — translator workbench.  Pick source
+  + target adapter, paste raw text OR pick a stored config, optionally
+  tick "Force cross-class", hit Translate.  Backed entirely by the
+  already-shipped `POST /api/v1/migration/plan` endpoint.
+- **Nav link:** "Migrate" after "Definitions".  Active highlighting
+  via the same `active_page` convention as every other page.
+- **Client-side adapter hydration**: the two dropdowns fetch
+  `GET /api/v1/migration/adapters` on page load, so newly-registered
+  adapters appear without a template redeploy.  Each option carries
+  the adapter's device classes; the info strip below shows chip
+  badges (colour-coded per class) plus supported/lossy/unsupported
+  counts.  A class-guard hint renders in red BEFORE submit when the
+  picked pair has no common class — user knows it'll be blocked.
+- **Result surface** reuses existing components so visual language
+  stays consistent across the app:
+  - Banner palette mirrors the diff page (`mig-banner-ok` / `warn`
+    / `block` / `info`) — user's eye already knows what those mean.
+  - Rendered-output pane uses the config viewer's
+    `_cvRenderHighlighted(text, ext)` helper for syntax highlighting
+    — same `.tok-*` colours as every other code surface.
+  - Toast notifications via `window.showToast`.
+- **Paths drill-down** (collapsed by default): three buckets
+  (supported / lossy / unsupported) with counts, full xpath lists,
+  adapter-provided reasons, and severity chips.  Users can see every
+  finding the ValidationReport carries without another request.
+- **Copy button** for the rendered output — one-click clipboard
+  without leaving the page.
+- **Parse failures are surfaced as results, not errors.** The
+  pipeline returns HTTP 200 with a `failed` job on adapter errors;
+  the page renders the failure banner + status summary instead of a
+  toast.  Genuine 4xx responses (unknown adapter, missing filename)
+  DO toast.
+
+- **Testids:** 29 new `migrate-*` testids promoted from reserved
+  status in `tests/testid_reference.md` (nav, form, dropdowns, input
+  mode toggle, result region, banner, stats, output, paths buckets).
+  The reserved list for Phase 2 "transforms + deploy" remains
+  (`migrate-transforms-list`, `migrate-deploy-btn`, etc.).
+
+- **E2E tests (+13):** `tests/e2e/test_migrate_page.py` covers nav
+  link, page structure, result-region hidden-on-load, adapter
+  dropdown hydration, adapter-info update on change, input-mode
+  toggle, iosxe round-trip happy path (ok banner), rendered-output
+  panel appearance, parse-failure rendering, validation-block
+  rendering (partial status).  `MigratePage` helper added to
+  `tests/e2e/helpers.py` following the existing page-object pattern.
+
+- **Total suite: 651 passing** (was 567 immediately after Phase 1
+  backend).  Zero regressions; no new runtime dependencies.
+
 ### Added (translator Phase 1 — OPNsense adapter + write endpoints)
 
 - **Second real adapter: `OPNsenseAdapter`** under

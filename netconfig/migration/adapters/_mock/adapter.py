@@ -39,6 +39,7 @@ class MockAdapter(AdapterBase):
 
     name: ClassVar[str] = "mock"
     version_hint: ClassVar[str | None] = "1.0"
+    input_format: ClassVar[str] = "json-flat"
 
     #: Class-level capability matrix — constant across instances.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(

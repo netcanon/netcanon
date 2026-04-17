@@ -96,6 +96,7 @@ class CiscoIOSXEAdapter(AdapterBase):
 
     name: ClassVar[str] = "cisco_iosxe"
     version_hint: ClassVar[str | None] = "17.x"
+    input_format: ClassVar[str] = "xml-netconf"
 
     #: Declared capability matrix.  Paths are OpenConfig schema paths
     #: WITHOUT list-key predicates — matches what

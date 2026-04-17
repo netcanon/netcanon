@@ -1,10 +1,256 @@
 # NETCONFIG — YANG + TEMPLATE MIGRATION SYSTEM — PLAN
 # Format: dense, grep-friendly, code-first. Written for Claude, not humans.
 # Generated: 2026-04-16
-# Last revised: 2026-04-16 (post-diff-system + triage work)
+# Last revised: 2026-04-16
 
 =====================================================================
-## UPDATES SINCE INITIAL PLANNING  (read first)
+## LONG-TERM ARCHITECTURE  (read first — supersedes the Phase 0-era shape)
+=====================================================================
+# Written after Phase 0 → 0.5 → 1 → Phase 2 UI shipped and manual QA
+# revealed structural gaps.  The previous architecture conflated three
+# independent concerns ("what device", "what format", "what transport")
+# into a single "adapter" class.  This section defines the target
+# architecture that separates them.  All existing code is forward-
+# compatible; migration path is phased (see R1–R7 at the bottom).
+
+--- FOUR-LAYER MODEL ---
+
+  ┌─────────────────────────┐  ┌──────────────────────────┐
+  │  Vendor Definition      │  │  Canonical Intent Model  │
+  │  (what device is this?) │  │  (what is the tree?)     │
+  └──────────┬──────────────┘  └─────────────┬────────────┘
+             │                                │
+             ▼                                ▼
+  ┌─────────────────────────┐  ┌──────────────────────────┐
+  │  Format Codec           │─▶│  Schema Validator        │
+  │  (CLI/XML/JSON ↔ tree)  │  │  (strictness policy)     │
+  └──────────┬──────────────┘  └──────────────────────────┘
+             │
+             ▼
+  ┌─────────────────────────┐
+  │  Transport              │
+  │  (how to get bytes      │
+  │   in/out of device)     │
+  └─────────────────────────┘
+
+LAYER 1 — VENDOR DEFINITION
+  A small declarative struct: {name, device_classes, cli_prompt_hints,
+  default_timeout}.  YAML-loaded.  No code.  Shared with the existing
+  definitions/ YAML used by the backup collector (type_key).
+  Purpose:
+    * UX grouping ("Show me all FortiGate codecs")
+    * Default device_class declaration
+    * Taxonomy anchor shared with backup/storage layer
+
+LAYER 2 — FORMAT CODEC  (renames today's "adapter")
+  A codec translates between a WIRE FORMAT and the CANONICAL TREE.
+  Key change: a codec declares BOTH a format AND a vendor, so the
+  same vendor can have multiple codecs:
+
+    cisco_iosxe_netconf_openconfig   — IOS-XE NETCONF OpenConfig subset
+    cisco_iosxe_cli_running_config   — show running-config text parser
+    fortigate_cli_config_blocks      — FortiOS CLI config/set/edit/next/end
+    fortigate_rest_json              — FortiOS REST API JSON
+    opnsense_xml_config              — config.xml
+    mikrotik_cli_export              — /export text
+
+  Each codec declares:
+    vendor:           str          # points at a Vendor YAML
+    format:           str          # machine-readable format tag
+    direction:        enum         # parse_only | render_only | bidirectional
+    canonical_model:  str          # which CIM it speaks (see layer 3)
+    capability_matrix: CapabilityMatrix
+    certainty:        enum         # certified | best_effort | experimental
+    transports:       list[str]    # which Transport ids can deliver this format
+    input_sample:     str | None   # working sample for the UI "Load sample" button
+
+  Direction is critical: many CLI parsers are PARSE-ONLY because
+  rendering clean CLI is harder than parsing it.  Separating direction
+  means you can ship a parse-only codec that reads `show running-config`
+  without also having to emit it.  The migration UI shows parse-only
+  codecs only as SOURCE options, render-only codecs only as TARGET.
+
+LAYER 3 — CANONICAL INTENT MODEL (pluggable CIMs)
+  Today there is an implicit single CIM ("OpenConfig-ish xpaths").
+  This fails for:
+    * Firewalls (OpenConfig has no firewall model)
+    * Wireless controllers
+    * Load balancers
+    * Any vendor with features OC doesn't cover
+
+  Fix: named CIMs, each a set of YANG modules (or hand-authored xpath
+  inventories until libyang lands):
+
+    openconfig-lite           — the subset we actually support
+    openconfig-full           — future: full OC when libyang lands
+    netconfig-firewall-ext    — firewall rules, NAT, IPS/IDS
+    netconfig-wireless-ext    — WLC, AP, SSID, radio profiles
+    netconfig-loadbalancer    — VIPs, pools, monitors
+
+  A codec declares which CIM(s) it emits.  A migration between two
+  codecs that share at least one CIM can proceed directly.  Cross-CIM
+  migration (rare) invokes a ModelProjector that maps between CIMs;
+  this is a separable concern and a future piece of work.
+
+  Most codecs (90%+ of real work) target one CIM.  Cross-CIM
+  translation is an edge case handled by a small module when it arises.
+
+LAYER 4 — TRANSPORT
+  Separate from "how to parse bytes" is "how to get those bytes off
+  a device."  Today NetConfig's backup collectors handle this
+  (SSH+Netmiko for CLI, Paramiko for shell).  The translator ignores
+  transport entirely — you hand it a text blob.
+
+  Future: transports are first-class.  A Transport knows how to talk
+  to a device type:
+
+    ssh_cli            — existing backup path (Netmiko / Paramiko)
+    netconf_ssh_830    — new, needs ncclient
+    restconf_https     — Cisco/Huawei RESTCONF
+    panos_xmlapi_https — Palo Alto XML-API
+    fortigate_rest     — Fortinet's REST API
+    snmp_get           — ancient but real for some state queries
+    manual             — no transport; bytes supplied by the user
+
+  Transports are selected by the combination of vendor × format
+  capability on the device.  A codec declares which transports can
+  deliver its format, and the collector picks the best available.
+  Manual-input mode (paste into textarea) is just "manual transport."
+
+--- CERTAINTY MODEL (per-codec) ---
+
+  certified      — round-trip invariant tested against ≥3 real device
+                   captures from ≥2 OS versions.  Deploy-ready.
+  best_effort    — round-trip invariant tested against synthetic
+                   samples only.  Expected to work; needs human review.
+  experimental   — parse-only, or incomplete render.  Output is a
+                   starting point for review, not deploy-ready.
+
+  UI shows a chip on each codec.  Migration to best_effort or
+  experimental auto-raises severity to warn.  Deploy (Phase 2+) is
+  disabled unless both source AND target are certified.
+
+--- AUTO-DETECTION (eliminates the "pick the right format" step) ---
+
+  Stored configs carry their bytes.  The first few lines are usually
+  diagnostic:
+    * Starts with `<?xml` or `<opnsense>` → XML variant
+    * Starts with `Building configuration` or `!` → IOS CLI
+    * Starts with `#config-version=` → FortiGate CLI
+    * Starts with `#` + `/` commands → MikroTik export
+    * Starts with `{` → JSON (mock or REST capture)
+
+  A probing function walks registered codecs, tests each against the
+  first ~500 bytes, and returns a ranked list of compatible codecs.
+  The UI uses this to pre-select the source codec when the user picks
+  a stored config — eliminating the "pick the right adapter" step
+  entirely for stored files.  Manual paste still shows the format-hint.
+
+--- DECLARATIVE CODEC SPEC (target on-disk layout) ---
+
+  netconfig/migration/codecs/<codec_id>/
+    codec.yaml            # all declarative fields (see above)
+    parse.py              # optional — if parse_only or bidirectional
+    render.py             # optional — if render_only or bidirectional
+    templates/*.j2        # for CLI-emitting codecs
+    fixtures/*.{xml,cfg}  # sanitised samples for tests
+    test_roundtrip.py     # required; must pass for codec to register
+
+  codec.yaml example:
+
+    id: cisco_iosxe_cli_running_config
+    vendor: cisco_iosxe
+    format: cli-ios-running-config
+    direction: parse_only
+    canonical_model: openconfig-lite
+    certainty: best_effort
+    transports: [ssh_cli, manual]
+    input_sample_file: fixtures/show_run_sample.txt
+    capabilities:
+      supported_paths:
+        - /interfaces/interface/config/name
+        - /interfaces/interface/config/description
+        ...
+      lossy_paths: [...]
+      unsupported_paths: [...]
+
+--- CONTRIBUTION PATHWAY (new vendor onboarding) ---
+
+  1. Add a vendor YAML (netconfig/migration/vendors/<name>.yaml) — 30s.
+  2. Pick a CIM (usually openconfig-lite for L2/L3; netconfig-firewall-ext
+     for firewalls).  New CIM = harder; requires architectural review.
+  3. Write the codec.  Parse is the hard work; render is optional for
+     Phase-1 "I just want to READ configs from this vendor."
+  4. Declare transports.  Usually ssh_cli for CLI codecs.
+  5. Ship round-trip tests using the standard pattern.
+  6. Declare certainty (start at experimental; graduate to best_effort
+     after synthetic samples pass; to certified after real captures).
+
+  ~200-500 lines of code per codec.  The scaffolding handles
+  registration, validation, UI surface, testing, and documentation.
+
+--- WHAT THIS RESOLVES (current pain points → future fix) ---
+
+  "Paste box only takes XML"
+    → CLI codecs + auto-detection → any text works.
+
+  "Stored configs can't be migrated through the translator"
+    → Stored configs carry format metadata; auto-detection offers
+      compatible codecs automatically.
+
+  "OPNsense firewall rules are unsupported against Cisco"
+    → Different CIMs.  The model projector decides what's
+      translatable (or refuses: "firewall rules have no target
+      CIM in openconfig-lite").
+
+  "IOS-XE CLI vs NETCONF both valid"
+    → Two codecs, one vendor.  User (or auto-detection) picks.
+
+  "Adding a new vendor is too much code"
+    → One vendor YAML + one or more codecs + standard test pattern.
+
+--- MIGRATION PATH FROM CURRENT CODE (R1–R7) ---
+
+  R1  Rename adapter → codec everywhere.  Add vendor_id to the
+      capability matrix.  Back-compat shims.  1 session.  No
+      behaviour change.
+
+  R2  Extract vendor declarations to YAML files.  Load at startup.
+      1 session.
+
+  R3  Add direction + canonical_model + transports + certainty
+      fields.  Wire into validation.  1 session.
+
+  R4  First CLI codec: cisco_iosxe_cli_running_config.  First
+      multi-codec-per-vendor usage.  Proves the architecture.
+      2-3 sessions.  THIS IS THE HIGHEST-VALUE STEP — it's the
+      first time the translator works against configs NetConfig
+      has actually captured.
+
+  R5  Auto-detection from stored-config bytes.  Removes a UX step.
+      1 session.
+
+  R6  Named CIMs with netconfig-firewall-ext as the first non-OC
+      CIM.  ModelProjector between CIMs.  3-4 sessions.
+
+  R7  Transport layer extraction, NETCONF transport, migration-
+      aware collector.  Unlocks live device round-trips.
+      3-4 sessions.
+
+  RECOMMENDATION: ship R1–R4 first (5-7 sessions total).  Stop.
+  Let real codecs accumulate.  Revisit R5-R7 once the ecosystem
+  tells you which parts are load-bearing and which are speculative.
+
+--- HONEST WORRY ---
+
+  Premature modelling.  We have 3 adapters.  Four-layer architecture
+  for 3 adapters is overkill.  The biggest risk isn't the design
+  being wrong — it's landing the whole thing before we know which
+  parts are load-bearing.  Ship R1-R4, let real adapters accumulate,
+  then decide whether R5-R7 earn their complexity.
+
+=====================================================================
+## UPDATES SINCE INITIAL PLANNING
 =====================================================================
 # Several capabilities the plan assumed would need to be built now already
 # exist in the repo.  Reuse, don't rebuild.  Summary in priority order:
@@ -631,7 +877,7 @@ PHASE 0.5 — FIRST REAL ADAPTER  (SHIPPED)
     - BGP, OSPF, ACLs, VLANs (Phase 1+)
   new_deps:  none — stdlib xml.etree.ElementTree
 
-PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (PARTIALLY SHIPPED)
+PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (SHIPPED)
   goal:       API-driven manual testing; proof of multi-adapter architecture
   deliverables shipped:
     - OPNsenseAdapter (netconfig/migration/adapters/opnsense/)
@@ -646,8 +892,26 @@ PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (PARTIALLY SHIPPED)
     - Firewall rules / NAT in OPNsense scope (needs netconfig-ext YANG; Phase 2)
     - Transform registry wired to /plan (Phase 2)
     - Snapshot + deploy endpoints (Phase 2)
-    - UI /migrate page (Phase 2)
   new_deps:  none — stdlib xml.etree.ElementTree
+
+PHASE 2 (part 1) — /MIGRATE WORKBENCH UI  (SHIPPED)
+  goal:       browser-driven manual testing of the translator
+  deliverables shipped:
+    - GET /migrate page (netconfig/templates/migrate.html)
+    - Source + target adapter dropdowns hydrated from
+      GET /api/v1/migration/adapters on load
+    - Paste-raw-text OR pick-stored-config input modes
+    - Force-cross-class checkbox
+    - Result surface with banner (reuses diff palette),
+      rendered-output panel (reuses config viewer's syntax highlighter),
+      and expandable paths drill-down (supported / lossy / unsupported)
+    - Copy-output button
+    - 13 E2E tests; 29 new migrate-* testids
+  deliverables STILL PENDING for Phase 2:
+    - Transform wizard (rename_interfaces, remap_vlans, …)
+    - Deploy endpoint + pre-deploy snapshot + diff link
+    - "Open diff with source" button that deep-links into /configs/{L}/vs/{R}
+  new_deps:  none — all reuse
 
 PHASE 0.7 — LIBYANG CANONICAL VALIDATION  (pending)
   goal:       optional validates-if-available seam for stricter trees

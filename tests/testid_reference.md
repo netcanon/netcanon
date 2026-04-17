@@ -371,27 +371,65 @@ page.locator('[data-testid="config-delete-btn"]').first.click()
 page.locator('[data-testid="config-delete-confirm-btn"]').click()
 ```
 
-## Migration / translator UI — RESERVED for Phase 2
+## Migrate page (`/migrate`)
 
-Phase 0 of the translator engine ships back-end only (adapter contract,
-registry, pipeline skeleton, read-only API endpoints).  **No migration UI
-exists yet**, but the following testid names are reserved so Phase 2
-contributors land on a consistent scheme.  See `translator-plans.txt` §11.
+Translator workbench.  Pick a source and target adapter, paste or pick a
+config, submit to `POST /api/v1/migration/plan`, review the validation
+banner + rendered output in-place.  Reuses the config viewer's syntax-
+highlight palette (via `_cvRenderHighlighted` from `base.html`) and the
+diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 
-| `data-testid` (planned)               | Element  | Purpose |
-|---------------------------------------|----------|---------|
-| `migrate-source-select`               | `<select>` | Pick source device profile |
-| `migrate-target-select`               | `<select>` | Pick target adapter (or "download only") |
-| `migrate-transforms-list`             | `<div>`  | Container for applied transforms |
-| `migrate-add-transform-btn`           | `<button>` | Open transform wizard |
-| `migrate-validation-report`           | `<div>`  | Banner fed by `ValidationReport.severity` (ok/warn/block) — reuses the `diff-banner-*` styles from diff.html |
-| `migrate-lossy-item`                  | `<li>`   | One row per `LossyPath` in the report |
-| `migrate-unsupported-item`            | `<li>`   | One row per `UnsupportedPath` in the report |
-| `migrate-render-btn`                  | `<button>` | Run render stage |
-| `migrate-semantic-delta-banner`       | `<div>`  | Summary of `XPathDelta` list above the textual diff |
-| `migrate-semantic-delta-item`         | `<li>`   | One row per `XPathDelta` |
-| `migrate-deploy-btn`                  | `<button>` | Initiate deploy (disabled while validation is blocked) |
-| `migrate-confirm-deploy-btn`          | `<button>` | Inline "Yes, deploy now" confirmation |
+### Shipped testids (Phase 2, part 1 — form + results)
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `nav-migrate`                         | `<a>`      | Top-nav link, `active` when on `/migrate` |
+| `migrate-form`                        | `<form>`   | Outer form; submit triggers `POST /plan` |
+| `migrate-source-select`               | `<select>` | Source adapter; populated from `GET /adapters` |
+| `migrate-target-select`               | `<select>` | Target adapter |
+| `migrate-adapter-info`                | `<div>`    | Info strip: device-class chips + supported/lossy/unsupported counts for both adapters |
+| `migrate-class-hint`                  | `<div>`    | Warning row rendered ONLY when source + target classes are disjoint (the class-guard would block) |
+| `migrate-input-mode`                  | `<div>`    | Radio-group container |
+| `migrate-input-mode-raw`              | `<input type="radio">` | Radio: paste raw text |
+| `migrate-input-mode-filename`         | `<input type="radio">` | Radio: pick a stored config |
+| `migrate-raw-wrap`                    | `<div>`    | Wrapper around the textarea; hidden when filename mode is active |
+| `migrate-raw-input`                   | `<textarea>` | Config text input |
+| `migrate-filename-wrap`               | `<div>`    | Wrapper around the stored-config dropdown |
+| `migrate-filename-select`             | `<select>` | Options are existing ConfigRecord filenames |
+| `migrate-force-checkbox`              | `<input type="checkbox">` | `force=true` skips the class guard |
+| `migrate-submit-btn`                  | `<button type="submit">` | Runs the pipeline |
+| `migrate-format-hint`                 | `<div>`    | Banner explaining what `parse()` expects for the picked source adapter; carries `data-input-format` attribute |
+| `migrate-load-sample-btn`             | `<button>` | Populates the textarea with a known-good sample for the source adapter |
+| `migrate-filename-compat-warn`        | `<div>`    | Visible only when the picked stored config's extension is unlikely to parse under the source adapter's `input_format` |
+| `migrate-path-entry`                  | `<div>`    | One row inside any `migrate-paths-*` bucket; duplicate paths coalesce into a single entry with an `×N` count chip |
+| `migrate-result`                      | `<div>`    | Hidden container for everything below; revealed after first result |
+| `migrate-status-summary`              | `<div>`    | "Job {id}… — status: completed/partial/failed" |
+| `migrate-compatibility-banner`        | `<div>`    | Severity-coloured banner mirroring `ValidationReport.severity` |
+| `migrate-stats`                       | `<div>`    | Supported/lossy/unsupported path counts |
+| `migrate-stat-supported`              | `<strong>` | Count number |
+| `migrate-stat-lossy`                  | `<strong>` | Count number |
+| `migrate-stat-unsupported`            | `<strong>` | Count number |
+| `migrate-output-section`              | `<div>`    | Wrapper for the rendered-output block |
+| `migrate-output`                      | `<pre>`    | Syntax-highlighted rendered text (`.tok-*` spans) |
+| `migrate-copy-output-btn`             | `<button>` | Copies the plain rendered text to clipboard |
+| `migrate-paths-section`               | `<div>`    | Expandable validation-details `<details>` |
+| `migrate-paths-supported`             | `<div>`    | Path list for supported bucket |
+| `migrate-paths-supported-count`       | `<span>`   | Count next to the heading |
+| `migrate-paths-lossy`                 | `<div>`    | Path list for lossy bucket |
+| `migrate-paths-lossy-count`           | `<span>`   | Count |
+| `migrate-paths-unsupported`           | `<div>`    | Path list for unsupported bucket |
+| `migrate-paths-unsupported-count`     | `<span>`   | Count |
+
+### RESERVED for Phase 2 (transforms + deploy)
+
+| `data-testid` (planned)               | Purpose |
+|---------------------------------------|---------|
+| `migrate-transforms-list`             | Container for applied transforms |
+| `migrate-add-transform-btn`           | Open transform wizard |
+| `migrate-semantic-delta-banner`       | Summary of `XPathDelta` list above the textual diff |
+| `migrate-semantic-delta-item`         | One row per `XPathDelta` |
+| `migrate-deploy-btn`                  | Initiate deploy (disabled while validation is blocked) |
+| `migrate-confirm-deploy-btn`          | Inline "Yes, deploy now" confirmation |
 
 Note: the rendered-output review step reuses the existing `/configs/{L}/vs/{R}`
 diff page — no `migrate-diff-viewer` testid is needed.

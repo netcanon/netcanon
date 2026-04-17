@@ -101,6 +101,7 @@ def list_migration_adapters() -> list[AdapterInfo]:
                 name=caps.adapter,
                 version_range=caps.version_range,
                 device_classes=list(caps.device_classes),
+                input_format=getattr(adapter, "input_format", "unknown"),
                 supported_count=len(caps.supported),
                 lossy_count=len(caps.lossy),
                 unsupported_count=len(caps.unsupported),

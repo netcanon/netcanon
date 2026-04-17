@@ -351,12 +351,20 @@ class AdapterInfo(BaseModel):
     ``GET /api/v1/migration/adapters/{name}/capabilities``.  Exposes
     ``device_classes`` so UIs can filter the target-picker to
     compatible adapters before the user commits (same idea as the
-    config-diff Compare picker's same-``type_key`` filter).
+    config-diff Compare picker's same-``type_key`` filter), and
+    ``input_format`` so the /migrate UI can set a matching
+    placeholder + compatible stored-config list.
+
+    Attributes:
+        input_format: Short catalogue tag from
+            :data:`netconfig.migration.adapters.base.INPUT_FORMATS`
+            describing what the adapter's ``parse()`` expects.
     """
 
     name: str
     version_range: str
     device_classes: list[DeviceClass] = Field(default_factory=list)
+    input_format: str = "unknown"
     supported_count: int
     lossy_count: int
     unsupported_count: int

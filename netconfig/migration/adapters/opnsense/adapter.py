@@ -61,6 +61,7 @@ class OPNsenseAdapter(AdapterBase):
 
     name: ClassVar[str] = "opnsense"
     version_hint: ClassVar[str | None] = "25.x"
+    input_format: ClassVar[str] = "xml-opnsense"
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
