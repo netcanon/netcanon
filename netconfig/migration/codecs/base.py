@@ -197,3 +197,38 @@ class CodecBase(ABC):
             for key in tree:
                 if isinstance(key, str):
                     yield key
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Inspect *raw_prefix* and return a confidence score if the
+        codec's :meth:`parse` is likely to succeed on the full input.
+
+        This is the auto-detection hook (R5).  Each codec overrides
+        this to emit a confidence score in ``[0, 100]`` along with a
+        short human-readable reason explaining the match.  Returning
+        ``None`` means "I have no opinion" — the codec does not
+        participate in detection ranking.
+
+        Args:
+            raw_prefix: First ~500 bytes of the input config.  The
+                detection service truncates for speed; codecs should
+                NOT assume the full input.
+
+        Returns:
+            ``(confidence, reason)`` where confidence is 0-100, or
+            ``None`` if the prefix does not match this codec's
+            expected format.
+
+        Scoring convention:
+            * 95-100 — unique unambiguous marker (e.g. ``<opnsense>``
+              root, ``/system identity`` MikroTik section header)
+            * 75-94  — format-specific features (e.g. NETCONF XML
+              namespace, FortiGate ``#config-version=`` banner)
+            * 40-74  — structural shape only (e.g. leading ``<``,
+              ``{``, ``!``) when no stronger signal is available
+            * 0-39   — reserved for negative-signal fallbacks
+
+        The default implementation returns ``None`` — it is safe for
+        codecs that haven't been wired into auto-detection yet.
+        """
+        return None

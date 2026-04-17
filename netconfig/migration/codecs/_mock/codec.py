@@ -113,3 +113,21 @@ class MockCodec(CodecBase):
         round-trip invariant and by the textual diff stage downstream.
         """
         return json.dumps(tree, indent=2, sort_keys=True) + "\n"
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Weak match: JSON shape.  MockCodec is a test-only codec so
+        we score it conservatively — any real JSON input is more
+        likely to belong to a future REST-API codec."""
+        stripped = raw_prefix.lstrip()
+        if not stripped.startswith("{"):
+            return None
+        # Try a cheap JSON parse on the prefix — if it's valid JSON
+        # that happens to be an object, we're a plausible candidate.
+        try:
+            # Many real JSON configs exceed 500 bytes so the prefix
+            # will be truncated / invalid JSON.  Accept the shape alone.
+            json.loads(stripped)
+            return (55, "input is valid JSON and looks like an object")
+        except json.JSONDecodeError:
+            return (40, "input starts with '{' (possibly JSON)")

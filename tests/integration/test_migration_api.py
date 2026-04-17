@@ -344,3 +344,150 @@ class TestSourceFilenameIntegration:
         # Parse failed because the FakeCollector output isn't XML.
         assert job["status"] == "failed"
         assert "parse failed" in (job["error"] or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/migration/detect (R5 — auto-detection)
+# ---------------------------------------------------------------------------
+
+
+class TestDetectEndpoint:
+    def test_detect_opnsense_xml(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": "<opnsense><system><hostname>x</hostname></system></opnsense>",
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["codec"] == "opnsense"
+        assert body[0]["confidence"] >= 95
+        assert "reason" in body[0]
+
+    def test_detect_mikrotik_export(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "# by RouterOS 7.13\n"
+                    "/system identity\nset name=r1\n"
+                ),
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body[0]["codec"] == "mikrotik_routeros"
+
+    def test_detect_ios_cli(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "!\ninterface GigabitEthernet0/0/0\n"
+                    " ip address 10.0.0.1 255.255.255.0\n"
+                    " no shutdown\n!\n"
+                ),
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body[0]["codec"] == "cisco_iosxe_cli"
+
+    def test_detect_empty_input(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": ""},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_detect_both_fields_set_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "x", "source_filename": "foo"},
+        )
+        assert resp.status_code == 422
+
+    def test_detect_neither_field_set_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={},
+        )
+        assert resp.status_code == 422
+
+    def test_detect_missing_stored_file_returns_404(self, client):
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"source_filename": "does_not_exist.xml"},
+        )
+        assert resp.status_code == 404
+
+    def test_detect_sorted_descending_by_confidence(self, client):
+        """When multiple codecs match, API must return them sorted."""
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={
+                "raw_text": (
+                    "hostname r1\n!\ninterface Loopback0\n"
+                    " ip address 1.1.1.1 255.255.255.255\n!\n"
+                ),
+            },
+        )
+        body = resp.json()
+        confidences = [c["confidence"] for c in body]
+        assert confidences == sorted(confidences, reverse=True)
+
+    def test_detect_min_confidence_filters(self, client):
+        """Passing min_confidence=80 should drop weak matches."""
+        weak = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "hostname r1\n!\n", "min_confidence": 1},
+        ).json()
+        strict = client.post(
+            "/api/v1/migration/detect",
+            json={"raw_text": "hostname r1\n!\n", "min_confidence": 80},
+        ).json()
+        # Weak threshold gets the hostname+! low-confidence match;
+        # strict threshold drops it.
+        assert len(weak) >= 1
+        assert all(c["confidence"] >= 80 for c in strict)
+
+    def test_detect_stored_config_end_to_end(self, client):
+        """User-flow: backup an OPNsense config, then /detect on the
+        filename — should return opnsense as the top candidate."""
+        # Step 1: run a backup to produce a stored config.
+        # The integration test harness has a FakeCollector keyed by
+        # type_key; use the opnsense type to get XML output.
+        devices = [
+            {
+                "type_key": "OPNsense",
+                "host": "10.88.88.88",
+                "credentials": {"username": "admin", "password": "x"},
+            }
+        ]
+        backup_resp = client.post(
+            "/api/v1/backups", json={"devices": devices}
+        )
+        if backup_resp.status_code != 200:
+            pytest.skip("FakeCollector doesn't handle OPNsense here")
+        configs = client.get("/api/v1/configs/").json()
+        if not configs:
+            pytest.skip("no stored configs produced by FakeCollector")
+        # Pick an opnsense-ish filename.
+        opn_cfg = next(
+            (c for c in configs if "opnsense" in c["filename"].lower()),
+            None,
+        )
+        if opn_cfg is None:
+            pytest.skip("no opnsense-prefixed config in store")
+        resp = client.post(
+            "/api/v1/migration/detect",
+            json={"source_filename": opn_cfg["filename"]},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) >= 1
+        # The FakeCollector's OPNsense fixture is valid config.xml.
+        assert body[0]["codec"] == "opnsense"

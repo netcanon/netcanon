@@ -255,8 +255,30 @@ LAYER 4 — TRANSPORT
       OPNsense.  Vendor-pair combinatorial surface grew from 6 to 24.
       659 tests passing; no regressions (38 new, 1 updated).
 
-  R5  Auto-detection from stored-config bytes.  Removes a UX step.
-      1 session.
+  R5  Auto-detection from stored-config bytes.  STATUS: SHIPPED.
+      Added CodecBase.probe(raw_prefix) classmethod hook; each of the
+      four real codecs (cisco_iosxe, cisco_iosxe_cli, opnsense,
+      mikrotik_routeros) overrides it with a format-specific signature
+      test returning (confidence, reason).  New service
+      netconfig/services/migration_detect.py walks the registry,
+      returns ranked list.  New endpoint POST /api/v1/migration/detect.
+      /migrate UI gained a debounced auto-detection banner with
+      "Use this source" button; banner goes green when the user has
+      already picked the detected codec.  Also patched the MikroTik
+      FORMAT_CATALOGUE gap (sample + exts) and generalized
+      guessExtension to read input_format from /adapters instead of
+      hard-coding vendor names.  705 tests passing; no regressions.
+
+  UI METADATA MIGRATION — queued standalone session.
+      Known client-side vendor-metadata leak: netconfig/templates/
+      migrate.html's FORMAT_CATALOGUE JS object duplicates codec
+      metadata (label, desc, sample, exts) that should live on the
+      codec class server-side.  Scope: add sample_input + description
+      + output_extension ClassVar attributes to CodecBase, surface them
+      on CodecInfo via /api/v1/migration/adapters, then delete
+      FORMAT_CATALOGUE and wire the JS call sites to read from the
+      adapters array.  1 session.  Moderate-risk refactor — 6 JS
+      call sites to rewire, API response gains 3 fields.
 
   R6  Named CIMs with netconfig-firewall-ext as the first non-OC
       CIM.  ModelProjector between CIMs.  3-4 sessions.

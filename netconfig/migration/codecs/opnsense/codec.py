@@ -281,6 +281,21 @@ class OPNsenseCodec(CodecBase):
         for key, val in tree.items():
             yield from _walk(val, f"/{key}")
 
+    # -----------------------------------------------------------------
+    # Auto-detection probe (R5)
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Detect OPNsense config.xml by its unique ``<opnsense>`` root."""
+        lowered = raw_prefix.lower()
+        # The <opnsense> tag is nearly unique to this vendor — only
+        # false-positive would be a doc about OPNsense, which won't
+        # survive the actual parse() anyway.
+        if "<opnsense>" in lowered or "<opnsense " in lowered:
+            return (98, "root element <opnsense> matches OPNsense config.xml")
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Helpers

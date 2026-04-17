@@ -180,6 +180,56 @@ class CiscoIOSXECLICodec(CodecBase):
             from ..cisco_iosxe.codec import _walk
             yield from _walk(tree, "")
 
+    # -----------------------------------------------------------------
+    # Auto-detection probe (R5)
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Detect Cisco IOS CLI ``show running-config`` text.
+
+        Strong signals: ``Building configuration...`` banner,
+        ``interface GigabitEthernet``, ``ip address X Y`` (dotted-
+        decimal mask), ``no shutdown``.  Weaker signals: ``!``
+        stanza delimiter, leading ``hostname``.
+        """
+        lowered = raw_prefix.lower()
+        # XML or JSON - not IOS CLI.
+        stripped = raw_prefix.lstrip()
+        if stripped.startswith("<") or stripped.startswith("{"):
+            return None
+        # MikroTik or Fortigate sections share `!` but the signals
+        # below distinguish IOS.
+        if "building configuration" in lowered:
+            return (98, "'Building configuration...' banner is IOS-specific")
+        if "show running-config" in lowered:
+            return (95, "'show running-config' header present")
+        # Strong IOS-shape markers (one enough for high confidence).
+        strong_hits = 0
+        if re.search(r"^interface\s+(gigabit|fastether|tengigabit|"
+                     r"loopback|vlan|port-channel|tunnel|serial)",
+                     raw_prefix, re.IGNORECASE | re.MULTILINE):
+            strong_hits += 1
+        if re.search(r"^\s+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.",
+                     raw_prefix, re.IGNORECASE | re.MULTILINE):
+            strong_hits += 1
+        if re.search(r"^\s+(no\s+)?shutdown\s*$",
+                     raw_prefix, re.IGNORECASE | re.MULTILINE):
+            strong_hits += 1
+        if re.search(r"^\s+switchport\s+",
+                     raw_prefix, re.IGNORECASE | re.MULTILINE):
+            strong_hits += 1
+        if strong_hits >= 2:
+            return (90, f"{strong_hits} strong IOS CLI markers present")
+        if strong_hits == 1:
+            return (70, "one IOS CLI marker present")
+        # Weakest fallback — `hostname` + `!` is plausible IOS but also
+        # plausible many other CLI dialects.  Keep the score low.
+        if (re.search(r"^hostname\s+\S+", raw_prefix, re.IGNORECASE | re.MULTILINE)
+                and "!" in raw_prefix):
+            return (45, "leading 'hostname' + '!' delimiters — possible IOS")
+        return None
+
 
 # ---------------------------------------------------------------------------
 # CLI parser internals

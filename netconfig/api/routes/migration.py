@@ -19,6 +19,8 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from pydantic import BaseModel, Field
+
 from ...migration.codecs.registry import get_codec, list_codecs
 from ...models.migration import (
     CodecInfo,
@@ -26,9 +28,23 @@ from ...models.migration import (
     MigrationJob,
     MigrationPlanRequest,
 )
+from ...services.migration_detect import DetectCandidate, detect_codec
 from ...services.migration_pipeline import run_plan
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
+
+
+class MigrationDetectRequest(BaseModel):
+    """Body for ``POST /api/v1/migration/detect``.
+
+    Exactly one of ``raw_text`` / ``source_filename`` is required,
+    mirroring :class:`MigrationPlanRequest`.  Keeps the UI's two
+    input modes (paste vs. stored-config) on a single endpoint.
+    """
+
+    raw_text: str | None = None
+    source_filename: str | None = None
+    min_confidence: int = Field(default=1, ge=0, le=100)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/migration", tags=["migration"])
@@ -203,3 +219,51 @@ def render_migration(
     because the pipeline runs all stages unless it fails.
     """
     return plan_migration(body, storage)
+
+
+@router.post(
+    "/detect",
+    response_model=list[DetectCandidate],
+    summary="Auto-detect compatible source codecs for a raw config",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid input specification"},
+    },
+)
+def detect_source_codec(
+    body: MigrationDetectRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> list[DetectCandidate]:
+    """Return a ranked list of codecs that can plausibly parse the input.
+
+    Each candidate includes a confidence score (0-100) and a short
+    reason.  The UI uses this to pre-select the source codec when
+    the user pastes text or picks a stored config, eliminating the
+    "which format is this?" step for known vendors.
+
+    Exactly one of ``raw_text`` / ``source_filename`` must be set —
+    same contract as ``/plan``.  Pass ``min_confidence`` to drop
+    weak matches (default 1 keeps everything that scored).
+
+    An empty list means no codec recognised the input.
+    """
+    has_text = body.raw_text is not None
+    has_file = body.source_filename is not None
+    if has_text == has_file:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "Exactly one of `raw_text` or `source_filename` is required."
+            ),
+        )
+    if has_text:
+        raw = body.raw_text or ""
+    else:
+        try:
+            raw = storage.get_content(body.source_filename or "")
+        except FileNotFoundError:
+            raise HTTPException(
+                status_code=404,
+                detail=f"source_filename not found: {body.source_filename!r}",
+            )
+    return detect_codec(raw, min_confidence=body.min_confidence)

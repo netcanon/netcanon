@@ -351,6 +351,50 @@ class MikroTikRouterOSCodec(CodecBase):
             from ..cisco_iosxe_cli.codec import _walk_canonical
             yield from _walk_canonical(tree)
 
+    # -----------------------------------------------------------------
+    # Auto-detection probe (R5)
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Detect MikroTik RouterOS ``/export`` text.
+
+        Unique markers: ``/system identity``, ``/interface ethernet``
+        section headers, RouterOS banner ``# ... by RouterOS``, or
+        the ``set [ find default-name=`` idiom.
+        """
+        # XML or JSON - not RouterOS.
+        stripped = raw_prefix.lstrip()
+        if stripped.startswith("<") or stripped.startswith("{"):
+            return None
+        # Banner comment from /export is the single strongest signal.
+        if re.search(r"^#\s*.*by RouterOS", raw_prefix, re.MULTILINE):
+            return (98, "'# ... by RouterOS' banner header present")
+
+        # Gather all weaker signals, pick the strongest.  Two+ section
+        # headers AND the find-default-name idiom together is a very
+        # strong signal; either alone is medium-strong.
+        section_hits = 0
+        if re.search(r"^/system identity", raw_prefix, re.MULTILINE):
+            section_hits += 1
+        if re.search(r"^/interface (ethernet|vlan|bridge|wireless)",
+                     raw_prefix, re.MULTILINE):
+            section_hits += 1
+        if re.search(r"^/ip (address|route|dns)",
+                     raw_prefix, re.MULTILINE):
+            section_hits += 1
+        has_find_idiom = "[ find default-name=" in raw_prefix
+
+        if section_hits >= 2 and has_find_idiom:
+            return (97, "multiple RouterOS sections + find-default-name idiom")
+        if section_hits >= 2:
+            return (95, f"{section_hits} RouterOS section headers present")
+        if has_find_idiom:
+            return (90, "RouterOS 'set [ find default-name=...]' idiom present")
+        if section_hits == 1:
+            return (80, "one RouterOS section header present")
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Parser helpers

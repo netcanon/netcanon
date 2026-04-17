@@ -420,6 +420,13 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-paths-unsupported`           | `<div>`    | Path list for unsupported bucket |
 | `migrate-paths-unsupported-count`     | `<span>`   | Count |
 
+### Auto-detection (R5 — source codec suggestion)
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-detect-banner`               | `<div>`    | Shown after `POST /api/v1/migration/detect` returns a candidate.  Carries `data-detected-codec` + `data-detected-confidence` attrs.  Green when the user has already picked the detected codec; blue when a switch is offered |
+| `migrate-detect-use-btn`              | `<button>` | "Use this source" — clicking sets `migrate-source-select` to the detected codec.  Only rendered when the currently-selected source differs from the detected one |
+
 ### RESERVED for Phase 2 (transforms + deploy)
 
 | `data-testid` (planned)               | Purpose |

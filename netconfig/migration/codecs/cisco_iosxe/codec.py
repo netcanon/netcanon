@@ -290,6 +290,29 @@ class CiscoIOSXECodec(CodecBase):
             return
         yield from _walk(tree, "")
 
+    # -----------------------------------------------------------------
+    # Auto-detection probe (R5)
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Detect OpenConfig NETCONF XML by its namespace signature."""
+        lowered = raw_prefix.lower()
+        if "openconfig.net/yang" in lowered:
+            return (
+                95,
+                "OpenConfig YANG namespace found — NETCONF payload",
+            )
+        # <rpc-reply> is the NETCONF envelope; almost always contains
+        # openconfig in practice but we rank it lower just in case.
+        if "<rpc-reply" in lowered or "<data>" in lowered:
+            return (70, "NETCONF envelope tag present")
+        # Bare OpenConfig-shaped <interfaces> with XML namespace.
+        if ("<interfaces" in lowered and "xmlns" in lowered
+                and "<interface>" in lowered):
+            return (75, "OpenConfig-shaped <interfaces> XML fragment")
+        return None
+
 
 # ---------------------------------------------------------------------------
 # Helpers — parsing, rendering, walking.  Kept at module level (not

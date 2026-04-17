@@ -7,6 +7,57 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (R5 — auto-detection of source codec from raw bytes)
+
+- **`CodecBase.probe(raw_prefix)`** classmethod — new auto-detection
+  hook.  Each codec overrides it to return a ``(confidence, reason)``
+  tuple if the first ~500 bytes match its format, or ``None`` if it
+  has no opinion.  Default base implementation returns ``None`` so
+  codecs without a probe still load cleanly.
+- **Per-codec probe signatures** on all four real codecs:
+  - ``opnsense`` — matches ``<opnsense>`` root (98% confidence)
+  - ``cisco_iosxe`` — matches OpenConfig YANG namespace (95%),
+    ``<rpc-reply>`` envelope (70%), OpenConfig-shaped XML (75%)
+  - ``cisco_iosxe_cli`` — matches ``Building configuration…`` banner
+    (98%), strong CLI markers like ``interface Giga`` + ``ip address
+    X.X.X.X Y.Y.Y.Y`` + ``no shutdown`` (90% for ≥2 hits), weaker
+    fallbacks
+  - ``mikrotik_routeros`` — matches ``# ... by RouterOS`` banner
+    (98%), multiple ``/section`` headers + find-default-name idiom
+    (97%), individual sections / idioms (80-95%)
+  - ``mock`` — weak JSON-shape detection (40-55%)
+- **`netconfig/services/migration_detect.py`** — pure-function
+  detection service.  ``detect_codec(raw)`` walks every registered
+  codec's ``.probe()``, filters by ``min_confidence``, and returns a
+  ranked list.  ``best_codec(raw)`` is a convenience wrapper that
+  returns only the top candidate (default strict threshold 50).
+- **`POST /api/v1/migration/detect`** — new API endpoint.  Body
+  accepts ``raw_text`` OR ``source_filename`` (same contract as
+  ``/plan``) plus optional ``min_confidence``.  Returns
+  ``list[DetectCandidate]`` sorted by descending confidence.
+- **/migrate UI auto-detection** — debounced 350ms on textarea
+  input, fires on stored-config selection, and on source-codec
+  change.  Banner shows "Detected: \<vendor\> (\<confidence\>%)"
+  with a "Use this source" button.  When the user has already
+  picked the detected codec the banner goes green (confirmation).
+- **MikroTik sample + format hint** — client-side
+  ``FORMAT_CATALOGUE`` now has a ``cli-mikrotik`` entry (label,
+  desc, sample, ``exts=['rsc']``) so the "Load sample" button and
+  stored-config compatibility warning work for MikroTik too.  The
+  ``guessExtension`` function was refactored to read
+  ``adapter.input_format`` from the /adapters response instead of
+  hard-coding vendor names — partial closure of a known client-side
+  vendor-metadata leak.  Full structural fix (moving all codec
+  metadata out of JS and onto the codec class) is queued as a
+  standalone UI-metadata-migration session.
+- **46 new tests**: 37 unit tests (per-codec probe signatures +
+  detection service + robustness) + 9 integration tests (endpoint
+  contract, sorting, min-confidence filtering, both-fields 422,
+  missing-file 404).  Total suite: 705 passing.
+- **Testid additions**: ``migrate-detect-banner`` (with
+  ``data-detected-codec`` and ``data-detected-confidence`` attrs),
+  ``migrate-detect-use-btn``.
+
 ### Added (MikroTik RouterOS codec — third canonical-bridged vendor)
 
 - **``MikroTikRouterOSCodec``** in

@@ -117,6 +117,13 @@
        class="mig-banner mig-banner-info"
        style="display:none; font-size:.82rem; margin-top:.5rem; margin-bottom:.5rem"></div>
 
+  <!-- Auto-detection banner (R5) — appears when POST /detect finds a
+       compatible source codec for the pasted text or picked stored
+       config.  Clicking "Use this" swaps the source dropdown. -->
+  <div id="mig-detect-banner" data-testid="migrate-detect-banner"
+       class="mig-banner mig-banner-info"
+       style="display:none; font-size:.82rem; margin-top:.5rem; margin-bottom:.5rem"></div>
+
   <div id="mig-raw-wrap" data-testid="migrate-raw-wrap">
     <textarea class="mig-raw" id="mig-raw" name="raw_text"
               data-testid="migrate-raw-input"
@@ -365,6 +372,29 @@
       ),
       exts: ['cfg'],
     },
+    'cli-mikrotik': {
+      label: 'MikroTik RouterOS (/export verbose)',
+      desc: (
+        'Paste the output of `/export verbose` on RouterOS.  The codec ' +
+        'parses the section/add/set grammar (/system identity, ' +
+        '/interface ethernet, /ip address, etc).'
+      ),
+      sample: (
+        '# by RouterOS 7.13\n' +
+        '/system identity\n' +
+        'set name=router1\n' +
+        '\n' +
+        '/interface ethernet\n' +
+        'set [ find default-name=ether1 ] comment="WAN uplink" disabled=no\n' +
+        '\n' +
+        '/ip address\n' +
+        'add address=198.51.100.2/30 interface=ether1\n' +
+        '\n' +
+        '/ip route\n' +
+        'add dst-address=0.0.0.0/0 gateway=198.51.100.1\n'
+      ),
+      exts: ['rsc'],
+    },
     'unknown': {
       label: 'Unknown format',
       desc: (
@@ -538,7 +568,131 @@
     rawWrap.style.display  = (mode === 'raw')      ? '' : 'none';
     fileWrap.style.display = (mode === 'filename') ? '' : 'none';
     if (mode === 'filename') refreshFilenameCompatWarn();
+    // New input mode → re-run detection (or clear stale banner).
+    runAutoDetect();
   }
+
+  /* ── Auto-detection (R5) ──
+   * POST /api/v1/migration/detect with the current input and show
+   * a banner with the top candidate.  Clicking "Use this" swaps
+   * the source dropdown.
+   */
+  var detectBanner = document.getElementById('mig-detect-banner');
+  var detectTimer  = null;
+  var lastProbed   = '';     // de-dupe identical probes
+
+  /** Debounced trigger; called on every textarea keystroke. */
+  function scheduleAutoDetect() {
+    if (detectTimer) clearTimeout(detectTimer);
+    detectTimer = setTimeout(runAutoDetect, 350);
+  }
+
+  /** Call /detect with whatever the user has selected/pasted now. */
+  async function runAutoDetect() {
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    var body = null;
+    if (mode === 'raw') {
+      var text = document.getElementById('mig-raw').value;
+      if (!text || text.length < 10) {
+        clearDetectBanner();
+        return;
+      }
+      body = { raw_text: text, min_confidence: 40 };
+    } else {
+      var fname = document.getElementById('mig-filename').value;
+      if (!fname) {
+        clearDetectBanner();
+        return;
+      }
+      body = { source_filename: fname, min_confidence: 40 };
+    }
+    // De-dupe: same payload → skip the network round-trip.
+    var key = JSON.stringify(body);
+    if (key === lastProbed) return;
+    lastProbed = key;
+
+    try {
+      var resp = await fetch('/api/v1/migration/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        clearDetectBanner();
+        return;
+      }
+      var candidates = await resp.json();
+      renderDetectBanner(candidates);
+    } catch (err) {
+      // Silent fail — detection is a nice-to-have, not a blocker.
+      clearDetectBanner();
+    }
+  }
+
+  function clearDetectBanner() {
+    detectBanner.style.display = 'none';
+    detectBanner.innerHTML = '';
+  }
+
+  /** Show the top-ranked candidate with a "Use this" button. */
+  function renderDetectBanner(candidates) {
+    if (!candidates || candidates.length === 0) {
+      clearDetectBanner();
+      return;
+    }
+    var top = candidates[0];
+    var currentSource = sourceSel.value;
+    // If the user has already picked the right codec, show a green
+    // confirmation instead of an action prompt.
+    var alreadyCorrect = (top.codec === currentSource);
+    detectBanner.className =
+      'mig-banner ' + (alreadyCorrect ? 'mig-banner-ok' : 'mig-banner-info');
+    detectBanner.setAttribute('data-detected-codec', top.codec);
+    detectBanner.setAttribute('data-detected-confidence', String(top.confidence));
+    detectBanner.style.display = '';
+
+    // Find the human-readable vendor name for display.
+    var a = adapters.find(function(x) { return x.name === top.codec; });
+    var vendorLabel = a ? (a.vendor_display_name || a.name) : top.codec;
+    if (alreadyCorrect) {
+      detectBanner.innerHTML =
+        '<div style="flex:1">'
+        + '&#10003; <strong>Auto-detected:</strong> '
+        + escapeHtml(vendorLabel)
+        + ' <span class="mig-chip" style="margin-left:.35rem">'
+        + top.confidence + '% confidence</span>'
+        + '<div style="margin-top:.15rem;opacity:.8">'
+        + escapeHtml(top.reason) + '</div>'
+        + '</div>';
+    } else {
+      detectBanner.innerHTML =
+        '<div style="flex:1">'
+        + '<strong>Detected:</strong> '
+        + escapeHtml(vendorLabel)
+        + ' <span class="mig-chip" style="margin-left:.35rem">'
+        + top.confidence + '% confidence</span>'
+        + '<div style="margin-top:.15rem;opacity:.8">'
+        + escapeHtml(top.reason) + '</div>'
+        + '</div>'
+        + '<button type="button" class="btn-secondary" '
+        + 'data-testid="migrate-detect-use-btn" '
+        + 'onclick="useDetectedSource()" '
+        + 'style="font-size:.78rem;padding:.25rem .6rem;align-self:center">'
+        + 'Use this source</button>';
+    }
+  }
+
+  /** Global handler: apply the detected codec to the source dropdown. */
+  window.useDetectedSource = function() {
+    var codec = detectBanner.getAttribute('data-detected-codec');
+    if (!codec) return;
+    sourceSel.value = codec;
+    renderAdapterInfo();
+    runAutoDetect();  // refresh banner to ok-state
+    showToast('Source adapter set to ' + codec, 'success');
+  };
 
   /** Submit the form → POST /api/v1/migration/plan → render result. */
   async function onSubmit(e) {
@@ -677,13 +831,21 @@
     result.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /** Pick appropriate syntax-highlight language from source adapter. */
+  /** Pick appropriate syntax-highlight language from target adapter.
+   *
+   * Reads from the adapters array (populated by /api/v1/migration/adapters)
+   * instead of hard-coding vendor names — closes part of the client-side
+   * metadata leak.  Full structural fix (metadata living on the codec
+   * server-side) is queued for the next session.
+   */
   function guessExtension(job) {
-    // Adapter-name → file extension mapping.  Mirrors the config
-    // viewer's extension logic without requiring the pipeline to
-    // declare one explicitly.
     var name = job.target_adapter || '';
-    if (name.indexOf('iosxe') !== -1 || name === 'opnsense') return 'xml';
+    var target = adapters.find(function(a) { return a.name === name; });
+    if (!target) return 'cfg';
+    var fmt = target.input_format || '';
+    if (fmt.indexOf('xml') !== -1) return 'xml';
+    if (fmt === 'json-flat') return 'json';
+    if (fmt === 'cli-mikrotik') return 'rsc';
     return 'cfg';
   }
 
@@ -798,13 +960,26 @@
   };
 
   // Event wiring
-  sourceSel.addEventListener('change', renderAdapterInfo);
+  sourceSel.addEventListener('change', function() {
+    renderAdapterInfo();
+    // Re-render detection banner (switch from "use this?" to "ok" state).
+    runAutoDetect();
+  });
   targetSel.addEventListener('change', renderAdapterInfo);
   form.querySelectorAll('input[name="input_mode"]').forEach(function(el) {
     el.addEventListener('change', onInputModeChange);
   });
   var fileSel = document.getElementById('mig-filename');
-  if (fileSel) fileSel.addEventListener('change', refreshFilenameCompatWarn);
+  if (fileSel) {
+    fileSel.addEventListener('change', function() {
+      refreshFilenameCompatWarn();
+      runAutoDetect();
+    });
+  }
+  var rawInput = document.getElementById('mig-raw');
+  if (rawInput) {
+    rawInput.addEventListener('input', scheduleAutoDetect);
+  }
   form.addEventListener('submit', onSubmit);
 
   // Initial load
