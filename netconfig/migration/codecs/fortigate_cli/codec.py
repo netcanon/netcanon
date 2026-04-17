@@ -21,6 +21,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -83,6 +84,11 @@ class FortiGateCLICodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            # Tier 2 — SNMP
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -164,6 +170,10 @@ class FortiGateCLICodec(CodecBase):
                 _apply_system_interface(block, intent)
             elif path == "router static":
                 _apply_router_static(block, intent)
+            elif path == "system snmp sysinfo":
+                _apply_snmp_sysinfo(block, intent)
+            elif path == "system snmp community":
+                _apply_snmp_community(block, intent)
             # Other config paths silently ignored (Tier 3 / out of scope).
 
         return intent
@@ -238,6 +248,32 @@ class FortiGateCLICodec(CodecBase):
                     out.append("        set status down")
                 out.append("    next")
             out.append("end")
+
+        # --- system snmp (Tier 2) ---
+        if tree.snmp is not None and (
+            tree.snmp.community or tree.snmp.location
+            or tree.snmp.contact or tree.snmp.trap_hosts
+        ):
+            out.append("config system snmp sysinfo")
+            out.append("    set status enable")
+            if tree.snmp.location:
+                out.append(f'    set location "{tree.snmp.location}"')
+            if tree.snmp.contact:
+                out.append(f'    set contact-info "{tree.snmp.contact}"')
+            out.append("end")
+            if tree.snmp.community:
+                out.append("config system snmp community")
+                out.append("    edit 1")
+                out.append(f'        set name "{tree.snmp.community}"')
+                if tree.snmp.trap_hosts:
+                    out.append("        config hosts")
+                    for idx, host in enumerate(tree.snmp.trap_hosts, start=1):
+                        out.append(f"            edit {idx}")
+                        out.append(f'                set ip "{host} 255.255.255.255"')
+                        out.append("            next")
+                    out.append("        end")
+                out.append("    next")
+                out.append("end")
 
         # --- router static ---
         if tree.static_routes:
@@ -495,6 +531,49 @@ def _apply_system_interface(
             iface.interface_type = _infer_iface_type(name)
 
         intent.interfaces.append(iface)
+
+
+def _apply_snmp_sysinfo(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config system snmp sysinfo`` — contact + location + desc."""
+    contact = block.settings.get("contact-info")
+    location = block.settings.get("location")
+    if contact or location:
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        if contact:
+            intent.snmp.contact = contact[0]
+        if location:
+            intent.snmp.location = location[0]
+
+
+def _apply_snmp_community(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config system snmp community`` — community strings +
+    trap host sub-tables."""
+    for edit in block.edits:
+        name = edit.settings.get("name")
+        if not name:
+            continue
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        if not intent.snmp.community:
+            intent.snmp.community = name[0]
+        # Nested hosts sub-block records trap targets.
+        for sub in edit.sub_blocks:
+            if sub.config_path != "hosts":
+                continue
+            for host_edit in sub.edits:
+                ip_tokens = host_edit.settings.get("ip")
+                if not ip_tokens:
+                    continue
+                # FortiOS writes `set ip "1.2.3.4 255.255.255.255"`
+                # as a single quoted string — shlex keeps it together.
+                # Split on whitespace to pull out just the IP.
+                first_token = ip_tokens[0].split()[0]
+                intent.snmp.trap_hosts.append(first_token)
 
 
 def _apply_router_static(

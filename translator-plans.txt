@@ -269,6 +269,25 @@ LAYER 4 — TRANSPORT
       guessExtension to read input_format from /adapters instead of
       hard-coding vendor names.  705 tests passing; no regressions.
 
+  TIER 2 — SNMP — STATUS: SHIPPED.
+      First Tier 2 feature wired end-to-end across all 5 real codecs
+      (cisco_iosxe_cli, opnsense, mikrotik_routeros, aruba_aoss,
+      fortigate_cli).  Parse + render + roundtrip + cross-vendor.
+      Per-codec grammars:
+        * Cisco IOS CLI: `snmp-server community/location/contact/host`
+        * OPNsense:      `<snmpd>` plugin element with rocommunity,
+                         syslocation, syscontact, traphost
+        * MikroTik:      `/snmp set` (sysinfo) + `/snmp community set`
+        * Aruba AOS-S:   `snmp-server community/location/contact/host`
+        * FortiGate:     `config system snmp sysinfo` +
+                         `config system snmp community` with nested
+                         `config hosts` sub-table
+      Canonical xpath paths declared in every codec's capability
+      matrix.  24 new unit tests (11 per-codec parse/render/roundtrip
+      + 4+4 parametrized universal-render + universal-roundtrip).
+      852 tests passing.  Paves the way for local_users, LAGs,
+      RADIUS servers, DHCP server pools — same shape of work.
+
   FORTIGATE CLI CODEC — STATUS: SHIPPED.
       Fifth real codec.  netconfig/migration/codecs/fortigate_cli/
       parses and renders FortiOS 7.x CLI (`config/edit/set/next/end`

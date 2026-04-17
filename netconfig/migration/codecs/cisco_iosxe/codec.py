@@ -154,6 +154,14 @@ class CiscoIOSXECodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            # Tier 2 — SNMP (carried through from canonical; NETCONF
+            # renderer ignores on emit but the xpath is declared here
+            # so translations INTO this codec don't see the paths
+            # classified as unsupported).
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(

@@ -45,6 +45,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -95,14 +96,21 @@ class CiscoIOSXECLICodec(CodecBase):
         version_range="15.x+",
         device_classes=[DeviceClass.router, DeviceClass.switch],
         supported=[
+            "/system/hostname",
             "/interfaces/interface/name",
             "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
-            "/interfaces/interface/subinterfaces/subinterface/index",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/ip",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/ip",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/prefix-length",
+            "/interfaces/interface/ipv4/address/ip",
+            "/interfaces/interface/ipv4/address/prefix-length",
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
+            "/routing/static-route",
+            # Tier 2 — SNMP
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -169,6 +177,9 @@ class CiscoIOSXECLICodec(CodecBase):
 
         # Static routes
         intent.static_routes = _parse_static_routes(raw)
+
+        # SNMP (Tier 2)
+        intent.snmp = _parse_snmp(raw)
 
         return intent
 
@@ -537,3 +548,53 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         yield "/vlans/vlan/name"
     for _ in intent.static_routes:
         yield "/routing/static-route"
+    # Tier 2 — emit only what's populated
+    if intent.snmp is not None:
+        if intent.snmp.community:
+            yield "/snmp/community"
+        if intent.snmp.location:
+            yield "/snmp/location"
+        if intent.snmp.contact:
+            yield "/snmp/contact"
+        for _ in intent.snmp.trap_hosts:
+            yield "/snmp/trap-host"
+
+
+# -- SNMP parse helpers (shared via re-export for sibling codecs if needed)
+
+_SNMP_COMMUNITY_RE = re.compile(
+    r'^snmp-server\s+community\s+(\S+)', re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_LOCATION_RE = re.compile(
+    r'^snmp-server\s+location\s+(.+)$', re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_CONTACT_RE = re.compile(
+    r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_HOST_RE = re.compile(
+    r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)',
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _parse_snmp(raw: str) -> CanonicalSNMP | None:
+    """Extract SNMP server config from IOS CLI text.
+
+    Returns None when no snmp-server lines are present so the
+    downstream canonical tree doesn't carry an empty stub.
+    """
+    community_m = _SNMP_COMMUNITY_RE.search(raw)
+    location_m = _SNMP_LOCATION_RE.search(raw)
+    contact_m = _SNMP_CONTACT_RE.search(raw)
+    hosts = _SNMP_HOST_RE.findall(raw)
+    if not (community_m or location_m or contact_m or hosts):
+        return None
+    snmp = CanonicalSNMP()
+    if community_m:
+        snmp.community = community_m.group(1).strip()
+    if location_m:
+        snmp.location = location_m.group(1).strip().strip('"')
+    if contact_m:
+        snmp.contact = contact_m.group(1).strip().strip('"')
+    snmp.trap_hosts = list(hosts)
+    return snmp

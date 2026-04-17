@@ -50,6 +50,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalSNMP,
     CanonicalVlan,
 )
 from ..base import CodecBase, ParseError, RenderError
@@ -112,6 +113,11 @@ class OPNsenseCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
+            # Tier 2 — SNMP (OPNsense snmpd plugin)
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -208,6 +214,26 @@ class OPNsenseCodec(CodecBase):
                         name=(descr_el.text or "").strip() if descr_el is not None else "",
                     ))
 
+        # ----- <snmpd> block (Tier 2) -----
+        snmpd_el = root.find("snmpd")
+        if snmpd_el is not None:
+            snmp = CanonicalSNMP()
+            ro_el = snmpd_el.find("rocommunity")
+            if ro_el is not None and ro_el.text:
+                snmp.community = ro_el.text.strip()
+            loc_el = snmpd_el.find("syslocation")
+            if loc_el is not None and loc_el.text:
+                snmp.location = loc_el.text.strip()
+            contact_el = snmpd_el.find("syscontact")
+            if contact_el is not None and contact_el.text:
+                snmp.contact = contact_el.text.strip()
+            for host_el in snmpd_el.findall("traphost"):
+                if host_el.text and host_el.text.strip():
+                    snmp.trap_hosts.append(host_el.text.strip())
+            if (snmp.community or snmp.location or snmp.contact
+                    or snmp.trap_hosts):
+                intent.snmp = snmp
+
         return intent
 
     # -----------------------------------------------------------------
@@ -252,6 +278,21 @@ class OPNsenseCodec(CodecBase):
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+
+        # SNMP (Tier 2) — OPNsense snmpd plugin element.
+        if intent.snmp is not None and (
+            intent.snmp.community or intent.snmp.location
+            or intent.snmp.contact or intent.snmp.trap_hosts
+        ):
+            snmpd = ET.SubElement(root, "snmpd")
+            if intent.snmp.community:
+                ET.SubElement(snmpd, "rocommunity").text = intent.snmp.community
+            if intent.snmp.location:
+                ET.SubElement(snmpd, "syslocation").text = intent.snmp.location
+            if intent.snmp.contact:
+                ET.SubElement(snmpd, "syscontact").text = intent.snmp.contact
+            for host in intent.snmp.trap_hosts:
+                ET.SubElement(snmpd, "traphost").text = host
 
         raw_xml = ET.tostring(root, encoding="unicode")
         from xml.dom.minidom import parseString

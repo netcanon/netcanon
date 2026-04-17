@@ -61,6 +61,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -122,6 +123,11 @@ class MikroTikRouterOSCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            # Tier 2 — SNMP
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -228,6 +234,10 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_ip_address(lines, iface_by_name)
             elif section == "/ip route":
                 _parse_ip_route(lines, intent)
+            elif section == "/snmp":
+                _parse_snmp_root(lines, intent)
+            elif section == "/snmp community":
+                _parse_snmp_community(lines, intent)
             # Other sections silently ignored — not in scope yet.
 
         # Order interfaces deterministically: ethernet ports first
@@ -339,6 +349,30 @@ class MikroTikRouterOSCodec(CodecBase):
                     parts.append(f"gateway={route.interface}")
                 lines.append(" ".join(parts))
             lines.append("")
+
+        # ----- /snmp (Tier 2) -----
+        if tree.snmp is not None and (
+            tree.snmp.community or tree.snmp.location
+            or tree.snmp.contact or tree.snmp.trap_hosts
+        ):
+            lines.append("/snmp")
+            parts = ["set", "enabled=yes"]
+            if tree.snmp.contact:
+                parts.append(f'contact="{_escape(tree.snmp.contact)}"')
+            if tree.snmp.location:
+                parts.append(f'location="{_escape(tree.snmp.location)}"')
+            if tree.snmp.trap_hosts:
+                parts.append(
+                    f'trap-target={",".join(tree.snmp.trap_hosts)}'
+                )
+            lines.append(" ".join(parts))
+            lines.append("")
+            if tree.snmp.community:
+                lines.append("/snmp community")
+                lines.append(
+                    f"set [ find default=yes ] name={tree.snmp.community}"
+                )
+                lines.append("")
 
         # ----- /system dns -----
         if tree.dns_servers:
@@ -659,6 +693,49 @@ def _parse_ip_address(
             ip=ip_str.strip(),
             prefix_length=prefix_len,
         ))
+
+
+def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/snmp set enabled=yes contact=X location=Y`` (Tier 2).
+
+    Sets global SNMP agent properties (contact + location).  The
+    community strings live under ``/snmp community`` and are handled
+    by :func:`_parse_snmp_community`.
+    """
+    for line in lines:
+        if not line.startswith("set"):
+            continue
+        kv = _parse_kv(line)
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        if "contact" in kv:
+            intent.snmp.contact = kv["contact"]
+        if "location" in kv:
+            intent.snmp.location = kv["location"]
+        if "trap-target" in kv:
+            for host in kv["trap-target"].split(","):
+                h = host.strip()
+                if h:
+                    intent.snmp.trap_hosts.append(h)
+
+
+def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/snmp community set [ find default=yes ] name=X``
+    + ``add name=Y`` lines.
+
+    RouterOS supports multiple community entries; we record the first
+    one as the canonical community (CanonicalSNMP has a single
+    community field — full multi-community is a Tier 2.5 refinement).
+    """
+    for line in lines:
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        if not intent.snmp.community:
+            intent.snmp.community = name
 
 
 def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:

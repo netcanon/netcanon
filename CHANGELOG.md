@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Tier 2 — SNMP parse/render across all 5 real codecs)
+
+- First Tier 2 feature wired end-to-end through every real codec:
+  **SNMP** (community, location, contact, trap_hosts).  Previously
+  the ``CanonicalSNMP`` model existed but no codec consumed or
+  produced it.
+- **Per-codec grammar coverage:**
+  - ``cisco_iosxe_cli``: ``snmp-server community/location/contact/host``
+  - ``opnsense``: ``<snmpd>`` plugin element (``<rocommunity>``,
+    ``<syslocation>``, ``<syscontact>``, ``<traphost>``)
+  - ``mikrotik_routeros``: ``/snmp set`` (sysinfo) + ``/snmp community
+    set`` (community strings)
+  - ``aruba_aoss``: ``snmp-server community/location/contact/host``
+  - ``fortigate_cli``: ``config system snmp sysinfo`` + ``config
+    system snmp community`` with nested ``config hosts`` sub-table
+- Each codec's capability matrix now declares ``/snmp/community``,
+  ``/snmp/location``, ``/snmp/contact``, ``/snmp/trap-host``.
+- ``_walk_canonical`` emits SNMP xpaths only when populated, so
+  codecs that don't carry SNMP produce no false xpath occurrences.
+- 24 new unit tests in ``tests/unit/migration/test_tier2_snmp.py``:
+  per-codec parse/render/round-trip + parametrized universal-render
+  + universal-roundtrip across every real codec.  **852 passing.**
+- Paves the way for the remaining Tier 2 features (local_users,
+  LAGs, RADIUS servers, DHCP server pools) — identical shape of
+  work, just different grammars.
+
 ### Added (FortiGate CLI codec — 5th real vendor, recursive grammar)
 
 - **``FortiGateCLICodec``** in

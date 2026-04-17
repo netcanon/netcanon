@@ -20,6 +20,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -90,6 +91,11 @@ class ArubaAOSSCodec(CodecBase):
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
             "/routing/static-route",
+            # Tier 2 — SNMP
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -169,12 +175,36 @@ class ArubaAOSSCodec(CodecBase):
                 i += 1
                 continue
 
-            snmp = _SNMP_COMMUNITY_RE.match(stripped_line)
-            if snmp:
-                # We capture the community but don't model it at Tier 1;
-                # it lands in raw_sections for future Tier 2 plumbing.
-                intent.raw_sections.setdefault("snmp", "")
-                intent.raw_sections["snmp"] += stripped_line + "\n"
+            comm = _SNMP_COMMUNITY_LINE_RE.match(stripped_line)
+            if comm:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                if not intent.snmp.community:
+                    intent.snmp.community = comm.group(1)
+                i += 1
+                continue
+
+            loc = _SNMP_LOCATION_RE.match(stripped_line)
+            if loc:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                intent.snmp.location = loc.group(1).strip().strip('"')
+                i += 1
+                continue
+
+            contact = _SNMP_CONTACT_RE.match(stripped_line)
+            if contact:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                intent.snmp.contact = contact.group(1).strip().strip('"')
+                i += 1
+                continue
+
+            snmp_host = _SNMP_HOST_RE.match(stripped_line)
+            if snmp_host:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                intent.snmp.trap_hosts.append(snmp_host.group(1))
                 i += 1
                 continue
 
@@ -270,6 +300,25 @@ class ArubaAOSSCodec(CodecBase):
 
         for server in tree.ntp_servers:
             lines.append(f"sntp server priority 1 {server}")
+
+        # SNMP (Tier 2)
+        if tree.snmp is not None and (
+            tree.snmp.community or tree.snmp.location
+            or tree.snmp.contact or tree.snmp.trap_hosts
+        ):
+            if tree.snmp.community:
+                lines.append(
+                    f'snmp-server community "{tree.snmp.community}" Operator'
+                )
+            if tree.snmp.location:
+                lines.append(f'snmp-server location "{tree.snmp.location}"')
+            if tree.snmp.contact:
+                lines.append(f'snmp-server contact "{tree.snmp.contact}"')
+            for host in tree.snmp.trap_hosts:
+                comm = tree.snmp.community or "public"
+                lines.append(
+                    f'snmp-server host {host} community "{comm}"'
+                )
 
         # VLANs — the architecturally interesting part.  AOS-S's
         # VLAN-centric port membership is our canonical model's
@@ -410,7 +459,19 @@ class ArubaAOSSCodec(CodecBase):
 
 
 _HOSTNAME_RE = re.compile(r'^hostname\s+"?([^"\n]+)"?', re.IGNORECASE)
-_SNMP_COMMUNITY_RE = re.compile(r"^snmp-server\s+community\b", re.IGNORECASE)
+# Capture the quoted community token.  AOS-S: `snmp-server community "public" Operator`
+_SNMP_COMMUNITY_LINE_RE = re.compile(
+    r'^snmp-server\s+community\s+"?([^"\s]+)"?', re.IGNORECASE,
+)
+_SNMP_LOCATION_RE = re.compile(
+    r'^snmp-server\s+location\s+(.+)$', re.IGNORECASE,
+)
+_SNMP_CONTACT_RE = re.compile(
+    r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE,
+)
+_SNMP_HOST_RE = re.compile(
+    r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)', re.IGNORECASE,
+)
 _DNS_SERVER_RE = re.compile(
     r"^ip\s+dns\s+server-address\s+priority\s+\d+\s+(\S+)",
     re.IGNORECASE,
