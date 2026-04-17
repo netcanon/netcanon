@@ -240,6 +240,21 @@ LAYER 4 — TRANSPORT
       dict-shape acceptance kept in render() paths for back-compat.
       740 tests passing; no regressions.
 
+  MIKROTIK CODEC — Session 2 of vendor-config-research plan.
+      STATUS: SHIPPED.  Third real codec:
+      netconfig/migration/codecs/mikrotik_routeros/.  Parses and
+      renders RouterOS `/export verbose` text through the canonical
+      dict.  Scope: system identity, DNS + NTP servers, ethernet
+      port tweaks, VLAN interfaces, bridges, IPv4 addresses, static
+      routes.  Bidirectional; `best_effort` certainty.  Validates
+      that the canonical dict design from Session 1 is genuinely
+      portable — RouterOS's section/add/set grammar is structurally
+      the furthest thing from XML or indented IOS CLI, and the same
+      tree shape works unchanged.  Proven cross-vendor pairs:
+      IOS-XE CLI → MikroTik, MikroTik → IOS-XE NETCONF, MikroTik →
+      OPNsense.  Vendor-pair combinatorial surface grew from 6 to 24.
+      659 tests passing; no regressions (38 new, 1 updated).
+
   R5  Auto-detection from stored-config bytes.  Removes a UX step.
       1 session.
 

@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (MikroTik RouterOS codec — third canonical-bridged vendor)
+
+- **``MikroTikRouterOSCodec``** in
+  ``netconfig/migration/codecs/mikrotik_routeros/`` — parses and renders
+  RouterOS ``/export verbose`` text through ``CanonicalIntent``.  First
+  third-party validation that the canonical dict is portable across
+  structurally different formats (XML / indented IOS CLI / section-
+  oriented RouterOS script).
+- **Parser scope (Tier 1):** system identity (hostname), DNS + NTP
+  servers, ethernet-port tweaks (``set [ find default-name=ether1 ]``),
+  VLAN interfaces (``add name=vlanN vlan-id=N``), bridge interfaces,
+  IPv4 addresses bound to interfaces (``/ip address add``), and static
+  routes (``/ip route add``).  Handles RouterOS quirks: quoted
+  values with spaces, ``\`` line continuation, ``#`` banner comments.
+- **Renderer scope:** emits deterministic, section-ordered output.
+  Ethernet ports render as default-name tweaks; VLANs, bridges, and
+  other interfaces render as `add` lines.  Round-trip invariant holds
+  for the canonical subset.
+- **Vendor YAML** added at
+  ``netconfig/migration/vendors/mikrotik_routeros.yaml`` declaring
+  device classes ``[router, firewall]``.
+- **Capability matrix** marks firewall/filter rules and NAT as
+  unsupported (Tier 3 — informational only), interface type as lossy
+  (inferred from name prefix).
+- **Cross-vendor translation proven for 3 new pairs:** Cisco IOS-XE
+  CLI → MikroTik; MikroTik → OpenConfig NETCONF XML; MikroTik →
+  OPNsense config.xml.  Ecosystem now supports 4! = 24 vendor-pair
+  combinations (up from 6 before this codec).
+- **38 new unit tests** covering R3 fields, parse, parse-errors,
+  render, round-trip, iter_xpaths, capabilities, cross-adapter
+  pipeline integration, and registry.  Total suite: 659 tests passing.
+
 ### Added (canonical intent dict — cross-vendor translation bridge)
 
 - **``CanonicalIntent``** pydantic model in

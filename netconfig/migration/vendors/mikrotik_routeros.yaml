@@ -1,0 +1,13 @@
+# MikroTik RouterOS 7.x — SOHO/prosumer routers + CCR carrier gear.
+# Codecs: mikrotik_routeros (/export verbose text).
+id: mikrotik_routeros
+display_name: "MikroTik RouterOS"
+device_classes:
+  - router
+  - firewall
+default_timeout: 20
+notes: >
+  RouterOS exports its full config via `/export verbose`.  The codec
+  parses the section/add/set grammar into a CanonicalIntent.  No NETCONF
+  support — the CLI export is the only source of truth.  Firewall rules
+  and NAT are Tier 3 (informational) under the current scope.

@@ -27,9 +27,10 @@ pytestmark = pytest.mark.unit
 
 
 class TestBuiltInVendors:
-    def test_loads_three_vendors(self):
+    def test_loads_four_vendors(self):
+        """Cisco IOS-XE, OPNsense, MikroTik RouterOS, plus the mock."""
         vendors = load_vendors()
-        assert len(vendors) == 3
+        assert len(vendors) == 4
 
     def test_cisco_iosxe_present(self):
         v = load_vendors()
@@ -41,6 +42,11 @@ class TestBuiltInVendors:
         assert "opnsense" in v
         assert v["opnsense"].display_name == "OPNsense"
 
+    def test_mikrotik_routeros_present(self):
+        v = load_vendors()
+        assert "mikrotik_routeros" in v
+        assert v["mikrotik_routeros"].display_name == "MikroTik RouterOS"
+
     def test_mock_present(self):
         v = load_vendors()
         assert "mock" in v
@@ -50,6 +56,8 @@ class TestBuiltInVendors:
         assert DeviceClass.router in v["cisco_iosxe"].device_classes
         assert DeviceClass.switch in v["cisco_iosxe"].device_classes
         assert DeviceClass.firewall in v["opnsense"].device_classes
+        assert DeviceClass.router in v["mikrotik_routeros"].device_classes
+        assert DeviceClass.firewall in v["mikrotik_routeros"].device_classes
 
     def test_default_timeout_is_int(self):
         for vendor in load_vendors().values():
