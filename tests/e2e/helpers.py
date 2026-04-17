@@ -1,5 +1,5 @@
 """
-Page-object helpers for E2E tests.
+Page-object helpers and test utilities for E2E tests.
 
 Each helper wraps a group of related Playwright ``Locator`` calls behind a
 semantic API.  Using ``data-testid`` attributes (set on every interactive
@@ -643,3 +643,59 @@ class MigratePage:
         source — set by the severity-rules logic, not derivable from
         class strings alone after the #10b fix)."""
         return self.banner.get_attribute("data-severity") or ""
+
+
+# ---------------------------------------------------------------------------
+# Shared test utilities — seed configs via the live API
+# ---------------------------------------------------------------------------
+
+
+def ensure_cisco_config(page: Page) -> str:
+    """Make sure at least one Cisco config exists, then return its filename.
+
+    Posts a backup via the API (FakeCollector returns canned Cisco output).
+    """
+    page.request.post(
+        "/api/v1/backups/",
+        data={
+            "devices": [
+                {
+                    "type_key": "Cisco",
+                    "host": "192.168.77.77",
+                    "credentials": {"username": "admin", "password": "pw"},
+                }
+            ]
+        },
+    )
+    resp = page.request.get("/api/v1/configs/")
+    assert resp.ok
+    records = resp.json()
+    cisco = [r for r in records if r["device_type"] == "Cisco"]
+    assert cisco, "expected at least one Cisco config after POST /backups"
+    return cisco[0]["filename"]
+
+
+def ensure_n_configs_of_type(
+    page: Page, type_key: str, count: int
+) -> list[str]:
+    """Create *count* configs of the given type via the live API and
+    return their filenames (newest-first)."""
+    for i in range(count):
+        page.request.post(
+            "/api/v1/backups/",
+            data={
+                "devices": [
+                    {
+                        "type_key": type_key,
+                        "host": f"10.88.{i + 1}.1",
+                        "credentials": {"username": "admin", "password": "pw"},
+                    }
+                ]
+            },
+        )
+    records = page.request.get("/api/v1/configs/").json()
+    files = [
+        r["filename"] for r in records if r["device_type"] == type_key
+    ]
+    assert len(files) >= count, f"Seeded configs didn't appear: got {len(files)}"
+    return files

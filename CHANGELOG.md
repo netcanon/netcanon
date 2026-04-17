@@ -7,6 +7,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Refactored (god-file cleanup — zero behaviour change)
+
+Three files identified as god-files during a structural audit;
+all three refactored with zero behaviour change (674 tests pass
+before and after, same count).
+
+- **`netconfig/main.py` (539 → 208 lines).**  All 12 UI route
+  handlers (``/``, ``/jobs``, ``/schedules``, ``/configs``,
+  ``/configs/{L}/vs/{R}``, ``/devices``, ``/definitions``,
+  ``/migrate``, ``/docs``, ``/health``) extracted to a new
+  ``netconfig/api/routes/ui.py`` (406 lines).  ``_format_interval``
+  and the Jinja2 ``templates`` instance moved with them.
+  ``create_app`` now only wires routers and configures the lifespan.
+
+- **`netconfig/templates/base.html` (834 → 262 lines).**  Two
+  self-contained JS widgets extracted to Jinja ``{% include %}``
+  partials (no ``StaticFiles`` mount needed):
+  - ``_partials/config-viewer.js`` (346 lines) — syntax highlighter,
+    tokenizer, cross-span search.
+  - ``_partials/job-progress.js`` (231 lines) — floating progress
+    panel, localStorage persistence, CustomEvent dispatch.
+  Toast + timestamp localiser + config downloader remain inline
+  (~80 lines; not worth a separate file at that size).
+
+- **``tests/e2e/test_backup_flow.py`` (805 lines, 13 classes)
+  split into 6 focused files:**
+  - ``test_navigation.py`` (60 lines) — nav smoke tests.
+  - ``test_backup_form.py`` (129 lines) — dashboard structure +
+    multi-device form + backup submission.
+  - ``test_pages.py`` (72 lines) — definitions + configs pages.
+  - ``test_config_viewer.py`` (178 lines) — syntax highlighting +
+    cross-span search.
+  - ``test_progress_panel.py`` (153 lines) — floating panel
+    visibility, persistence, dismiss.
+  - ``test_diff.py`` (226 lines) — diff API, UI, content, context
+    folding.
+  Shared helpers ``ensure_cisco_config`` and
+  ``ensure_n_configs_of_type`` promoted from private functions in
+  the old monolith to public utilities in ``tests/e2e/helpers.py``.
+  Old ``test_backup_flow.py`` deleted.
+
+- **Import fix:** ``tests/unit/test_schedule_models.py`` updated to
+  import ``_format_interval`` from its new home in
+  ``netconfig.api.routes.ui`` instead of ``netconfig.main``.
+
 ### Fixed + Added (translator `/migrate` UX after manual QA pass)
 
 Five findings from a hands-on walk-through of the page — one real UX
