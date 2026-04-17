@@ -21,7 +21,7 @@ adapter.py``)::
 from __future__ import annotations
 
 import json
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from ....models.migration import (
     CapabilityMatrix,
@@ -118,12 +118,20 @@ class MockCodec(CodecBase):
                 )
         return data
 
-    def render(self, tree: dict[str, str]) -> str:
+    def render(self, tree: Any) -> str:
         """Render *tree* back into pretty JSON.
+
+        Accepts either the native flat dict shape or a
+        :class:`CanonicalIntent` — the latter gets dumped via its
+        pydantic ``model_dump()`` so cross-vendor translation into
+        the mock codec doesn't choke on non-serialisable attrs.
 
         The sort key ensures deterministic output — required by the
         round-trip invariant and by the textual diff stage downstream.
         """
+        from ...canonical.intent import CanonicalIntent
+        if isinstance(tree, CanonicalIntent):
+            return json.dumps(tree.model_dump(), indent=2, sort_keys=True) + "\n"
         return json.dumps(tree, indent=2, sort_keys=True) + "\n"
 
     @classmethod

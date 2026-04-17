@@ -269,6 +269,27 @@ LAYER 4 — TRANSPORT
       guessExtension to read input_format from /adapters instead of
       hard-coding vendor names.  705 tests passing; no regressions.
 
+  FORTIGATE CLI CODEC — STATUS: SHIPPED.
+      Fifth real codec.  netconfig/migration/codecs/fortigate_cli/
+      parses and renders FortiOS 7.x CLI (`config/edit/set/next/end`
+      grammar) via a recursive block model.  Handles: hostname,
+      DNS (primary/secondary), NTP (nested ntpserver subtable),
+      interfaces (physical + VLAN sub-interfaces via `set type vlan`
+      + `set vlanid`), static routes with dst + gateway + device.
+      Quoted values with spaces, multi-token set values, integer +
+      quoted edit IDs.  Auto-detection probe matches the `#config-
+      version=` banner (98%) and the 5-keyword grammar presence.
+      Best_effort certainty; 41 new unit tests.  Also landed the
+      FULL-MESH CROSS-CODEC MATRIX test (tests/unit/migration/
+      test_cross_codec_matrix.py) which auto-enumerates every
+      (source, target) pair where the two codecs share a device
+      class and runs each source's sample_input through the pipeline.
+      26 real cross-vendor pairs now covered; 2 pre-existing latent
+      bugs exposed and fixed on first run (MockCodec couldn't
+      serialize CanonicalIntent; cisco_iosxe NETCONF parse() still
+      returned the legacy nested dict — migrated to CanonicalIntent).
+      828 tests passing.
+
   ARUBA AOS-S CODEC — STATUS: SHIPPED.
       Fourth real codec.  netconfig/migration/codecs/aruba_aoss/
       parses and renders ArubaOS-Switch (ProCurve) 16.x

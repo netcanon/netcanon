@@ -132,24 +132,28 @@ class CiscoIOSXECodec(CodecBase):
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
 
-    #: Declared capability matrix.  Paths are OpenConfig schema paths
-    #: WITHOUT list-key predicates — matches what
-    #: :meth:`iter_xpaths` yields.
+    #: Declared capability matrix.  Paths are canonical schema paths
+    #: matching what :meth:`iter_xpaths` yields on a ``CanonicalIntent``
+    #: tree.  (After the canonical-bridge migration the NETCONF codec
+    #: emits the same tree shape as the CLI codec.)
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe",
         vendor_id="cisco_iosxe",
         version_range="16.3+",
         device_classes=[DeviceClass.router, DeviceClass.switch],
         supported=[
+            "/system/hostname",
+            "/system/dns-server",
+            "/system/ntp-server",
             "/interfaces/interface/name",
-            "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/config/type",
-            "/interfaces/interface/subinterfaces/subinterface/index",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/ip",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/ip",
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/prefix-length",
+            "/interfaces/interface/ipv4/address/ip",
+            "/interfaces/interface/ipv4/address/prefix-length",
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
+            "/routing/static-route",
         ],
         lossy=[
             LossyPath(
@@ -164,7 +168,7 @@ class CiscoIOSXECodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
-                path="/interfaces/interface/subinterfaces/subinterface/ipv6",
+                path="/interfaces/interface/ipv6",
                 reason=(
                     "Phase 0.5 covers IPv4 only — IPv6 support is queued "
                     "for Phase 1 once BGP/OSPF models land."
@@ -181,9 +185,9 @@ class CiscoIOSXECodec(CodecBase):
     # Parse
     # -----------------------------------------------------------------
 
-    def parse(self, raw: str) -> dict[str, Any]:
+    def parse(self, raw: str) -> "CanonicalIntent":
         """Parse a NETCONF ``<get-config>`` response (or bare openconfig
-        ``<interfaces>`` fragment) into the internal tree shape.
+        ``<interfaces>`` fragment) into a :class:`CanonicalIntent`.
 
         Accepts two input shapes:
 
@@ -199,6 +203,11 @@ class CiscoIOSXECodec(CodecBase):
             ParseError: If the XML is malformed or the ``<interfaces>``
                 root isn't findable.
         """
+        from ...canonical.intent import (
+            CanonicalIPv4Address,
+            CanonicalIntent,
+            CanonicalInterface,
+        )
         try:
             root = ET.fromstring(raw)
         except ET.ParseError as exc:
@@ -216,12 +225,14 @@ class CiscoIOSXECodec(CodecBase):
                 snippet=raw[:120],
             )
 
-        tree: dict[str, Any] = {"interfaces": {"interface": []}}
+        intent = CanonicalIntent(
+            source_vendor="cisco_iosxe",
+            source_format="xml-netconf",
+        )
         for idx, iface_el in enumerate(interfaces_el.findall(_q("interface"))):
-            tree["interfaces"]["interface"].append(
-                _parse_interface(iface_el, idx=idx)
-            )
-        return tree
+            raw_iface = _parse_interface(iface_el, idx=idx)
+            intent.interfaces.append(_iface_dict_to_canonical(raw_iface))
+        return intent
 
     # -----------------------------------------------------------------
     # Render
@@ -313,10 +324,16 @@ class CiscoIOSXECodec(CodecBase):
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield schema xpaths for every leaf in *tree*.
 
-        Walks the nested dict and emits OpenConfig schema paths (no
-        predicates) so the strings match what's declared in the
-        capability matrix.
+        Accepts both :class:`CanonicalIntent` (what ``parse()`` returns
+        after the canonical-bridge migration) and the legacy nested
+        dict shape (for back-compat with callers still handing us
+        pre-canonical trees).
         """
+        from ...canonical.intent import CanonicalIntent
+        if isinstance(tree, CanonicalIntent):
+            from ..cisco_iosxe_cli.codec import _walk_canonical
+            yield from _walk_canonical(tree)
+            return
         if not isinstance(tree, dict):
             return
         yield from _walk(tree, "")
@@ -638,6 +655,39 @@ _LIST_WRAPPERS = {
     "subinterfaces": "subinterface",
     "addresses": "address",
 }
+
+
+def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
+    """Convert one parsed-interface dict into a :class:`CanonicalInterface`.
+
+    The NETCONF parser builds a nested dict matching the OpenConfig
+    tree shape; the canonical bridge needs a flat :class:`CanonicalInterface`.
+    Lives here as a helper so the public ``parse()`` call remains a
+    one-liner.
+    """
+    from ...canonical.intent import CanonicalIPv4Address, CanonicalInterface
+    cfg = raw.get("config", {})
+    iface = CanonicalInterface(
+        name=raw.get("name", ""),
+        description=cfg.get("description", ""),
+        enabled=bool(cfg.get("enabled", True)),
+        interface_type=cfg.get("type", ""),
+    )
+    subifs = raw.get("subinterfaces", {}).get("subinterface", [])
+    for subif in subifs:
+        ipv4 = subif.get("ipv4", {})
+        addresses = ipv4.get("addresses", {}).get("address", [])
+        for addr in addresses:
+            addr_cfg = addr.get("config", {})
+            ip = addr_cfg.get("ip") or addr.get("ip")
+            prefix = addr_cfg.get("prefix-length")
+            if ip is None or prefix is None:
+                continue
+            iface.ipv4_addresses.append(CanonicalIPv4Address(
+                ip=ip,
+                prefix_length=int(prefix),
+            ))
+    return iface
 
 
 def _walk(node: Any, prefix: str) -> Iterable[str]:

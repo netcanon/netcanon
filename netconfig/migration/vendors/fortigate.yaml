@@ -1,0 +1,15 @@
+# Fortinet FortiGate — FortiOS 7.x+ firewall/router/UTM appliances.
+# Codecs: fortigate_cli (config/edit/set/next/end CLI text).
+id: fortigate
+display_name: "Fortinet FortiGate"
+device_classes:
+  - firewall
+  - router
+default_timeout: 30
+notes: >
+  FortiOS uses a recursive CLI grammar: `config <path>` opens a block,
+  `edit <id>` opens a sub-block, `set <key> <value>` assigns, `next`
+  closes an edit, `end` closes a config.  Nesting depth of 3 is common
+  (config > edit > config-subtable > edit).  Real production configs
+  are large (5K-50K lines) but 80% is vendor boilerplate; the
+  translatable surface is closer to 500-2K lines.

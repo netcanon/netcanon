@@ -7,6 +7,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (FortiGate CLI codec — 5th real vendor, recursive grammar)
+
+- **``FortiGateCLICodec``** in
+  ``netconfig/migration/codecs/fortigate_cli/`` — parses and renders
+  FortiOS 7.x CLI (``config/edit/set/next/end`` 5-keyword grammar).
+  Recursive block model handles arbitrary nesting including nested
+  ``config`` inside ``config`` (NTP ntpserver sub-table).
+- **Parser scope:** ``system global`` (hostname), ``system dns``
+  (primary/secondary), ``system ntp`` (ntpserver sub-table),
+  ``system interface`` (physical + VLAN sub-interfaces via ``set
+  type vlan`` + ``set vlanid`` + parent ``set interface``),
+  ``router static`` (dst + gateway + device).
+- **Structural handling:** quoted values with spaces, multi-token
+  set values (``set allowaccess ping https ssh``), integer ``edit``
+  IDs for routes + quoted ``edit`` IDs for interfaces, dotted-
+  decimal mask form for IPs.
+- **Capability matrix:** firewall policies + NAT rules marked
+  unsupported (Tier 3); alias 25-char truncation marked lossy.
+- **Auto-detection probe:** ``#config-version=`` banner (98%),
+  5-keyword grammar markers (75-92%).
+- **Vendor YAML** at ``netconfig/migration/vendors/fortigate.yaml``
+  declaring ``[firewall, router]``.
+
+### Added (full-mesh cross-codec matrix test)
+
+- **``tests/unit/migration/test_cross_codec_matrix.py``** — parametrized
+  pytest that auto-enumerates every ``(source, target)`` codec pair,
+  filters to those sharing a ``DeviceClass``, runs each source's
+  ``sample_input`` through ``run_plan``, and asserts the job
+  completes.  Answers the user's question: yes, we now have
+  full-mesh cross-vendor testing built into every codec addition.
+  26 real pairs covered today; grows automatically with each new
+  codec.
+- **Latent bugs exposed + fixed on first matrix run:**
+  - ``MockCodec.render()`` couldn't JSON-serialise ``CanonicalIntent``
+    — now detects the type and uses pydantic's ``model_dump()``.
+  - ``CiscoIOSXECodec.parse()`` still returned the legacy nested
+    dict shape (never migrated during the canonical bridge work).
+    Now returns ``CanonicalIntent`` like every other codec; 8 test
+    assertions updated to use the canonical attribute access.
+    Capability matrix updated to declare canonical xpaths.
+
 ### Added (Aruba AOS-S codec — 4th real vendor, VLAN-centric)
 
 - **``ArubaAOSSCodec``** in ``netconfig/migration/codecs/aruba_aoss/``

@@ -84,19 +84,17 @@ _WITH_SUBIF = """\
 class TestParse:
     def test_bare_fragment(self):
         tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
-        ifaces = tree["interfaces"]["interface"]
-        assert len(ifaces) == 1
-        assert ifaces[0]["name"] == "Gi0/0/0"
-        assert ifaces[0]["config"]["description"] == "test link"
-        assert ifaces[0]["config"]["enabled"] is True
+        assert len(tree.interfaces) == 1
+        assert tree.interfaces[0].name == "Gi0/0/0"
+        assert tree.interfaces[0].description == "test link"
+        assert tree.interfaces[0].enabled is True
 
     def test_netconf_envelope_is_unwrapped(self):
         """Parser walks through <rpc-reply><data> envelopes."""
         xml = FIXTURES.joinpath("get_config_simple.xml").read_text()
         tree = CiscoIOSXECodec().parse(xml)
-        ifaces = tree["interfaces"]["interface"]
-        assert len(ifaces) == 3
-        names = [i["name"] for i in ifaces]
+        assert len(tree.interfaces) == 3
+        names = [i.name for i in tree.interfaces]
         assert names == [
             "GigabitEthernet0/0/0",
             "GigabitEthernet0/0/1",
@@ -105,30 +103,22 @@ class TestParse:
 
     def test_parse_captures_ipv4_subinterface(self):
         tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
-        iface = tree["interfaces"]["interface"][0]
-        addrs = iface["subinterfaces"]["subinterface"][0]["ipv4"]["addresses"][
-            "address"
-        ]
-        assert addrs == [
-            {
-                "ip": "10.0.0.1",
-                "config": {"ip": "10.0.0.1", "prefix-length": 24},
-            }
-        ]
+        addrs = tree.interfaces[0].ipv4_addresses
+        assert len(addrs) == 1
+        assert addrs[0].ip == "10.0.0.1"
+        assert addrs[0].prefix_length == 24
 
     def test_parse_integer_prefix_length(self):
         """prefix-length must arrive as an int, not a string."""
         tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
-        pl = tree["interfaces"]["interface"][0]["subinterfaces"][
-            "subinterface"
-        ][0]["ipv4"]["addresses"]["address"][0]["config"]["prefix-length"]
+        pl = tree.interfaces[0].ipv4_addresses[0].prefix_length
         assert pl == 24
         assert isinstance(pl, int)
 
     def test_parse_boolean_enabled(self):
         """enabled must arrive as a Python bool — not the literal 'true'."""
         tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
-        assert tree["interfaces"]["interface"][0]["config"]["enabled"] is True
+        assert tree.interfaces[0].enabled is True
 
 
 class TestParseErrors:
@@ -157,7 +147,7 @@ class TestParseErrors:
   <interface><name>x</name><config><enabled>TRUE</enabled></config></interface>
 </interfaces>"""
         tree = CiscoIOSXECodec().parse(raw)
-        assert tree["interfaces"]["interface"][0]["config"]["enabled"] is True
+        assert tree.interfaces[0].enabled is True
 
     def test_enabled_non_boolean_text_is_strict_error(self):
         """`<enabled>yes</enabled>` must NOT silently coerce — it's the
@@ -221,9 +211,7 @@ class TestParseErrors:
   </interface>
 </interfaces>"""
             tree = CiscoIOSXECodec().parse(raw)
-            pl = tree["interfaces"]["interface"][0]["subinterfaces"][
-                "subinterface"
-            ][0]["ipv4"]["addresses"]["address"][0]["config"]["prefix-length"]
+            pl = tree.interfaces[0].ipv4_addresses[0].prefix_length
             assert pl == int(valid)
 
     def test_empty_interface_error_includes_index(self):
@@ -268,7 +256,7 @@ class TestParseErrors:
             "<interface><name>x</name></interface></interfaces>"
         )
         tree = CiscoIOSXECodec().parse(raw)
-        assert tree["interfaces"]["interface"][0]["name"] == "x"
+        assert tree.interfaces[0].name == "x"
 
     def test_parse_error_snippet_carries_offending_text(self):
         """ParseError.snippet must contain a useful fragment so the UI
@@ -392,12 +380,13 @@ class TestIterXpaths:
             ), f"walker emitted undeclared xpath: {x!r}"
 
     def test_subinterface_xpaths_include_ipv4(self):
+        """After the canonical-bridge migration, the codec emits
+        canonical xpaths (shared across every vendor) instead of the
+        NETCONF-specific nested OpenConfig paths."""
         tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
         xs = list(CiscoIOSXECodec().iter_xpaths(tree))
-        assert (
-            "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/prefix-length"
-            in xs
-        )
+        assert "/interfaces/interface/ipv4/address/ip" in xs
+        assert "/interfaces/interface/ipv4/address/prefix-length" in xs
 
     def test_multiple_interfaces_yield_same_path_per_leaf(self):
         """Three interfaces each with a description yields the path
@@ -505,8 +494,9 @@ class TestPipelineIntegration:
         supported, lossy, unsupp = classify_tree(
             tree, src.capabilities, source=src
         )
-        # Three interfaces, each has /interfaces/interface/config/name.
-        assert supported.count("/interfaces/interface/config/name") == 3
+        # Three interfaces, each emits /interfaces/interface/name in the
+        # canonical schema.
+        assert supported.count("/interfaces/interface/name") == 3
 
 
 # ---------------------------------------------------------------------------
