@@ -1,0 +1,12 @@
+# Cisco IOS-XE — ISR, Catalyst 9K, ASR 1K.
+# Codecs: cisco_iosxe (NETCONF OpenConfig), cisco_iosxe_cli (future R4).
+id: cisco_iosxe
+display_name: "Cisco IOS-XE"
+device_classes:
+  - router
+  - switch
+default_timeout: 30
+notes: >
+  IOS-XE platforms support NETCONF (16.3+) and CLI.  The NETCONF codec
+  uses OpenConfig YANG models; the CLI codec (R4, future) will parse
+  `show running-config` text.

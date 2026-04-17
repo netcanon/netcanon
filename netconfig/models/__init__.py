@@ -14,6 +14,7 @@ from .migration import (
     TransformSpec,
     UnsupportedPath,
     ValidationReport,
+    VendorInfo,
     XPathDelta,
 )
 
@@ -41,5 +42,6 @@ __all__ = [
     "TransformSpec",
     "UnsupportedPath",
     "ValidationReport",
+    "VendorInfo",
     "XPathDelta",
 ]

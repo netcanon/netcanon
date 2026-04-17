@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (R2: declarative vendor YAML)
+
+- **Vendor declarations** extracted to YAML files under
+  ``netconfig/migration/vendors/``.  Three shipped: ``mock.yaml``,
+  ``cisco_iosxe.yaml``, ``opnsense.yaml``.  Each declares ``id``,
+  ``display_name``, ``device_classes``, ``default_timeout``, ``notes``.
+  No Python code — adding a new vendor is a 30-second YAML-copy
+  operation.
+- **``VendorInfo``** pydantic model in ``netconfig.models.migration``.
+- **``load_vendors()``** function in ``netconfig.migration.vendors``
+  scans the directory at startup, validates against the model, skips
+  corrupt files with a log.  Loaded into ``app.state.vendors``.
+- **``CodecInfo``** now carries ``vendor_id`` and
+  ``vendor_display_name`` so the UI can group codecs by vendor without
+  a second request.  ``vendor_display_name`` is resolved from the
+  loaded YAML at response time.
+- **Codec ↔ vendor linkage test:** a dedicated unit test asserts that
+  every shipped codec's ``vendor_id`` resolves to a loaded vendor — a
+  build-time guard against orphaned references.
+- **Tests (+17):** ``test_vendors.py`` (14 unit — built-in loading,
+  model shape, error resilience, corrupt/missing/duplicate YAML,
+  codec linkage guard) + 3 integration (API surfaces ``vendor_id``
+  and ``vendor_display_name`` for each codec).
+- Full suite: **717 passing** (was 700).
+
 ### Refactored (R1: rename adapter → codec + add vendor_id)
 
 - **`AdapterBase` → `CodecBase`** — "codec" accurately describes the

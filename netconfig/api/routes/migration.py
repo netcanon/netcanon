@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...migration.codecs.registry import get_codec, list_codecs
 from ...models.migration import (
@@ -83,25 +83,29 @@ def _resolve_input_text(
 @router.get(
     "/adapters",
     response_model=list[CodecInfo],
-    summary="List registered migration adapters",
+    summary="List registered migration codecs",
 )
-def list_migration_adapters() -> list[CodecInfo]:
-    """Return one ``CodecInfo`` per registered adapter.
+def list_migration_adapters(request: Request) -> list[CodecInfo]:
+    """Return one ``CodecInfo`` per registered codec.
 
-    The list is sorted by adapter name for deterministic UI ordering
-    and is safe to cache client-side — adapter registration is static
-    per-process.
+    Each entry includes the linked vendor's ``display_name`` (resolved
+    from ``app.state.vendors``) so the UI can group codecs by vendor
+    without a second round-trip.
     """
+    vendors = getattr(request.app.state, "vendors", {})
     result: list[CodecInfo] = []
     for name in list_codecs():
-        adapter = get_codec(name)
-        caps = adapter.capabilities
+        codec = get_codec(name)
+        caps = codec.capabilities
+        vendor = vendors.get(caps.vendor_id)
         result.append(
             CodecInfo(
                 name=caps.adapter,
+                vendor_id=caps.vendor_id,
+                vendor_display_name=vendor.display_name if vendor else "",
                 version_range=caps.version_range,
                 device_classes=list(caps.device_classes),
-                input_format=getattr(adapter, "input_format", "unknown"),
+                input_format=getattr(codec, "input_format", "unknown"),
                 supported_count=len(caps.supported),
                 lossy_count=len(caps.lossy),
                 unsupported_count=len(caps.unsupported),

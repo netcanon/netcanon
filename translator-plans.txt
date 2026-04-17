@@ -216,7 +216,7 @@ LAYER 4 — TRANSPORT
       behaviour change.  STATUS: SHIPPED.
 
   R2  Extract vendor declarations to YAML files.  Load at startup.
-      1 session.
+      1 session.  STATUS: SHIPPED.
 
   R3  Add direction + canonical_model + transports + certainty
       fields.  Wire into validation.  1 session.

@@ -82,6 +82,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         ).load_all()
         _app.state.storage = FileConfigStore(settings.configs_dir)
 
+        # Load vendor declarations from YAML files.
+        from .migration.vendors import load_vendors
+        _app.state.vendors = load_vendors()
+
         # Verify storage directories are writable before proceeding.
         data_root = settings.configs_dir.parent
         for check_dir in [settings.configs_dir, data_root]:

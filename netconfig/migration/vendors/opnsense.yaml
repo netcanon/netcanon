@@ -1,0 +1,13 @@
+# OPNsense — BSD-based firewall/router appliance.
+# Codecs: opnsense (config.xml parser/renderer).
+id: opnsense
+display_name: "OPNsense"
+device_classes:
+  - firewall
+  - router
+default_timeout: 15
+notes: >
+  OPNsense stores its running config in a single config.xml file.
+  No NETCONF support; the codec parses/renders the XML directly.
+  Firewall rules and NAT require the netconfig-ext YANG module
+  (Phase 2) and are currently declared unsupported.

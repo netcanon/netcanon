@@ -1,0 +1,10 @@
+# Reference vendor for the mock codec — exercises the loader without
+# any real device semantics.
+id: mock
+display_name: "Mock (reference)"
+device_classes:
+  - switch
+  - router
+default_timeout: 5
+notes: >
+  Reference vendor for testing.  Not associated with any real device.

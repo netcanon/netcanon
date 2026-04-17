@@ -46,6 +46,25 @@ class TestListMigrationAdapters:
         assert "switch" in info["device_classes"]
         assert "router" in info["device_classes"]
 
+    def test_vendor_id_surfaces_on_list_endpoint(self, client):
+        """Every codec carries vendor_id so the UI can group by vendor."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            assert "vendor_id" in entry
+            assert isinstance(entry["vendor_id"], str)
+            assert entry["vendor_id"] != "", f"{entry['name']} has empty vendor_id"
+
+    def test_vendor_display_name_resolved(self, client):
+        """vendor_display_name is resolved from the vendor YAML at startup."""
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
+        assert info["vendor_display_name"] == "Cisco IOS-XE"
+
+    def test_opnsense_vendor_display_name(self, client):
+        resp = client.get("/api/v1/migration/adapters")
+        info = next(a for a in resp.json() if a["name"] == "opnsense")
+        assert info["vendor_display_name"] == "OPNsense"
+
     def test_input_format_surfaces_on_list_endpoint(self, client):
         """Every entry exposes ``input_format`` so the /migrate UI can
         pick a matching sample + filter stored files."""

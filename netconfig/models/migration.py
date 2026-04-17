@@ -79,6 +79,40 @@ class DeviceClass(str, Enum):
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Vendor declaration
+# ---------------------------------------------------------------------------
+
+
+class VendorInfo(BaseModel):
+    """Declarative vendor identity loaded from YAML at startup.
+
+    A vendor is NOT code — it's a small struct that groups codecs,
+    provides UX labels, and carries defaults for device-class
+    declarations.  Codecs link to their vendor via
+    ``CapabilityMatrix.vendor_id``.
+
+    Attributes:
+        id: Unique identifier matching ``CapabilityMatrix.vendor_id``
+            on each codec.  Stable across releases.  Lowercase,
+            underscored (e.g. ``cisco_iosxe``).
+        display_name: Human-readable label for the UI (e.g.
+            ``"Cisco IOS-XE"``).
+        device_classes: Default device classes for codecs that inherit
+            from this vendor.  Individual codecs can override.
+        default_timeout: SSH/transport timeout in seconds.
+            Informational for Phase R7 (transports); carried here
+            so vendor YAML is the single source of truth.
+        notes: Free-text for the definitions page / tooltip.
+    """
+
+    id: str
+    display_name: str
+    device_classes: list[DeviceClass] = Field(default_factory=list)
+    default_timeout: int = 30
+    notes: str = ""
+
+
 class LossyPath(BaseModel):
     """A YANG path the target adapter can partially represent.
 
@@ -363,6 +397,8 @@ class CodecInfo(BaseModel):
     """
 
     name: str
+    vendor_id: str = ""
+    vendor_display_name: str = ""
     version_range: str
     device_classes: list[DeviceClass] = Field(default_factory=list)
     input_format: str = "unknown"

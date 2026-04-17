@@ -21,8 +21,12 @@ Importing this package auto-registers the built-in adapters via their
 own module-level ``@register`` decorators.
 """
 
-# Import built-in adapters so their @register decorators fire.
-# New adapters should add themselves here when they land.
+# Import built-in codecs so their @register decorators fire.
+# New codecs should add themselves here when they land.
 from .codecs import _mock  # noqa: F401 — side-effect import (register)
 from .codecs import cisco_iosxe  # noqa: F401 — side-effect import (register)
 from .codecs import opnsense  # noqa: F401 — side-effect import (register)
+
+# Vendor declarations are loaded lazily via load_vendors() at app startup,
+# NOT at import time — so tests can run without the YAML files.
+from .vendors import load_vendors  # noqa: F401 — re-exported for convenience
