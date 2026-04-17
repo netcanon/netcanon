@@ -97,6 +97,37 @@ class CiscoIOSXECodec(CodecBase):
     name: ClassVar[str] = "cisco_iosxe"
     version_hint: ClassVar[str | None] = "17.x"
     input_format: ClassVar[str] = "xml-netconf"
+    description: ClassVar[str] = (
+        "Paste an OpenConfig <interfaces> fragment or a full NETCONF "
+        "<rpc-reply><data>… response.  This is the MACHINE-READABLE "
+        "format returned by a device's `netconf get-config`; it is "
+        "NOT the same as `show running-config`."
+    )
+    sample_input: ClassVar[str] = (
+        '<?xml version="1.0"?>\n'
+        '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n'
+        '  <interface>\n'
+        '    <name>GigabitEthernet0/0/0</name>\n'
+        '    <config>\n'
+        '      <name>GigabitEthernet0/0/0</name>\n'
+        '      <description>WAN uplink</description>\n'
+        '      <enabled>true</enabled>\n'
+        '    </config>\n'
+        '    <subinterfaces>\n'
+        '      <subinterface>\n'
+        '        <index>0</index>\n'
+        '        <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">\n'
+        '          <addresses><address>\n'
+        '            <ip>198.51.100.1</ip>\n'
+        '            <config><ip>198.51.100.1</ip><prefix-length>30</prefix-length></config>\n'
+        '          </address></addresses>\n'
+        '        </ipv4>\n'
+        '      </subinterface>\n'
+        '    </subinterfaces>\n'
+        '  </interface>\n'
+        '</interfaces>\n'
+    )
+    output_extension: ClassVar[str] = "xml"
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"

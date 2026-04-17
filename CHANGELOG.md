@@ -7,6 +7,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (UI metadata migration — close the R5 client-side leak)
+
+- **CodecBase gains three UI-metadata ClassVars**: ``description``,
+  ``sample_input``, ``output_extension``.  Each codec class is now
+  the single source of truth for its own presentation strings.
+- **``CodecInfo`` pydantic model grew three fields** (same names)
+  and ``GET /api/v1/migration/adapters`` surfaces them so the client
+  can render format hints / load samples / pick download extensions
+  without any vendor-specific JS.
+- **`migrate.html` lost its 130-line ``FORMAT_CATALOGUE`` dict** and
+  all six call sites that read from it.  New ``adapterEntry()`` and
+  ``compatibleExtensions()`` helpers read server-provided metadata
+  off the ``adapters`` array.  ``guessExtension`` and
+  ``downloadMigrateOutput`` likewise delegate to
+  ``target.output_extension``.
+- **Adding a new codec no longer requires editing the template** —
+  the codec class ships its own description + sample + download
+  extension, which the UI picks up automatically.
+- Every real codec (cisco_iosxe, cisco_iosxe_cli, opnsense,
+  mikrotik_routeros, mock) now declares all three metadata fields.
+- 3 new integration-test assertions confirm the surface
+  (``test_ui_metadata_fields_surface``,
+  ``test_real_codecs_have_sample_input``,
+  ``test_real_codecs_have_output_extension``).  **708 passing.**
+
 ### Added (R5 — auto-detection of source codec from raw bytes)
 
 - **`CodecBase.probe(raw_prefix)`** classmethod — new auto-detection

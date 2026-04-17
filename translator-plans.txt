@@ -269,16 +269,18 @@ LAYER 4 — TRANSPORT
       guessExtension to read input_format from /adapters instead of
       hard-coding vendor names.  705 tests passing; no regressions.
 
-  UI METADATA MIGRATION — queued standalone session.
-      Known client-side vendor-metadata leak: netconfig/templates/
-      migrate.html's FORMAT_CATALOGUE JS object duplicates codec
-      metadata (label, desc, sample, exts) that should live on the
-      codec class server-side.  Scope: add sample_input + description
-      + output_extension ClassVar attributes to CodecBase, surface them
-      on CodecInfo via /api/v1/migration/adapters, then delete
-      FORMAT_CATALOGUE and wire the JS call sites to read from the
-      adapters array.  1 session.  Moderate-risk refactor — 6 JS
-      call sites to rewire, API response gains 3 fields.
+  UI METADATA MIGRATION — STATUS: SHIPPED.
+      CodecBase gained description / sample_input / output_extension
+      ClassVars; each codec is now the single source of truth for its
+      own UI-presentation strings.  CodecInfo pydantic model +
+      /api/v1/migration/adapters response both grew three fields.
+      migrate.html lost the 130-line FORMAT_CATALOGUE dict; all six
+      call sites (renderFormatHint, applyPlaceholder,
+      loadSampleForSourceAdapter, refreshFilenameCompatWarn,
+      guessExtension, downloadMigrateOutput) now read from the
+      adapters array via new adapterEntry() / compatibleExtensions()
+      helpers.  Adding a new codec no longer requires editing the
+      template.  708 tests passing; zero regressions.
 
   R6  Named CIMs with netconfig-firewall-ext as the first non-OC
       CIM.  ModelProjector between CIMs.  3-4 sessions.

@@ -84,6 +84,26 @@ class MikroTikRouterOSCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    description: ClassVar[str] = (
+        "Paste the output of `/export verbose` on RouterOS.  The codec "
+        "parses the section/add/set grammar (/system identity, "
+        "/interface ethernet, /ip address, etc)."
+    )
+    sample_input: ClassVar[str] = (
+        '# by RouterOS 7.13\n'
+        '/system identity\n'
+        'set name=router1\n'
+        '\n'
+        '/interface ethernet\n'
+        'set [ find default-name=ether1 ] comment="WAN uplink" disabled=no\n'
+        '\n'
+        '/ip address\n'
+        'add address=198.51.100.2/30 interface=ether1\n'
+        '\n'
+        '/ip route\n'
+        'add dst-address=0.0.0.0/0 gateway=198.51.100.1\n'
+    )
+    output_extension: ClassVar[str] = "rsc"
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="mikrotik_routeros",

@@ -43,6 +43,18 @@ class MockCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "experimental"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    description: ClassVar[str] = (
+        "Paste a JSON object mapping xpath strings to values — the "
+        "reference mock adapter's format.  Not meaningful for any "
+        "real device; useful for exercising the pipeline."
+    )
+    sample_input: ClassVar[str] = (
+        '{\n'
+        '  "/interfaces/eth0/ip": "10.0.0.1",\n'
+        '  "/interfaces/eth0/description": "mock interface"\n'
+        '}\n'
+    )
+    output_extension: ClassVar[str] = "json"
 
     #: Class-level capability matrix — constant across instances.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(

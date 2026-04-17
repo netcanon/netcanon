@@ -73,6 +73,44 @@ class TestListMigrationAdapters:
             assert "input_format" in entry
             assert isinstance(entry["input_format"], str)
 
+    def test_ui_metadata_fields_surface(self, client):
+        """R5 follow-up (UI metadata migration): every entry exposes
+        description + sample_input + output_extension so the client
+        side has no need to hard-code per-vendor metadata."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            for field in ("description", "sample_input", "output_extension"):
+                assert field in entry, f"{entry['name']} missing {field}"
+                assert isinstance(entry[field], str)
+
+    def test_real_codecs_have_sample_input(self, client):
+        """Every real codec (cisco_iosxe*, opnsense, mikrotik_routeros)
+        should provide a non-empty sample_input for the UI's 'Load sample'
+        button."""
+        resp = client.get("/api/v1/migration/adapters")
+        for entry in resp.json():
+            if entry["name"] in ("cisco_iosxe", "cisco_iosxe_cli",
+                                 "opnsense", "mikrotik_routeros", "mock"):
+                assert entry["sample_input"], (
+                    f"{entry['name']} has no sample_input"
+                )
+
+    def test_real_codecs_have_output_extension(self, client):
+        """Every real codec declares an output_extension for downloads."""
+        resp = client.get("/api/v1/migration/adapters")
+        expected = {
+            "cisco_iosxe": "xml",
+            "cisco_iosxe_cli": "cfg",
+            "opnsense": "xml",
+            "mikrotik_routeros": "rsc",
+            "mock": "json",
+        }
+        for entry in resp.json():
+            if entry["name"] in expected:
+                assert entry["output_extension"] == expected[entry["name"]], (
+                    f"{entry['name']} output_extension mismatch"
+                )
+
     def test_cisco_iosxe_input_format_is_xml_netconf(self, client):
         resp = client.get("/api/v1/migration/adapters")
         info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")

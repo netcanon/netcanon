@@ -66,6 +66,28 @@ class CiscoIOSXECLICodec(CodecBase):
     direction: ClassVar[str] = "parse_only"
     certainty: ClassVar[str] = "experimental"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    description: ClassVar[str] = (
+        "Paste the output of `show running-config`.  This is the text "
+        "your existing backup collector already captures — you can also "
+        "pick a stored Cisco config from the dropdown."
+    )
+    sample_input: ClassVar[str] = (
+        '!\n'
+        'version 17.9\n'
+        'hostname Router\n'
+        '!\n'
+        'interface GigabitEthernet0/0/0\n'
+        ' description WAN uplink\n'
+        ' ip address 198.51.100.1 255.255.255.252\n'
+        ' no shutdown\n'
+        '!\n'
+        'interface Loopback0\n'
+        ' description Router-ID\n'
+        ' ip address 10.255.0.1 255.255.255.255\n'
+        '!\n'
+        'end\n'
+    )
+    output_extension: ClassVar[str] = "cfg"
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe_cli",

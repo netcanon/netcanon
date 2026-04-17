@@ -142,6 +142,24 @@ class CodecBase(ABC):
     #: firewall codecs will declare ``"netconfig-firewall-ext"`` etc.
     canonical_model: ClassVar[str] = "openconfig-lite"
 
+    #: Human-readable description of what :meth:`parse` expects.  Shown
+    #: in the /migrate UI's format-hint banner.  One short paragraph,
+    #: no line breaks — the UI wraps as needed.  Empty string means
+    #: "fall back to generic help text".
+    description: ClassVar[str] = ""
+
+    #: Minimal working sample of this codec's input format.  Used by
+    #: the /migrate UI's "Load sample" button to populate the textarea.
+    #: Empty string means "no sample available" (button becomes inert).
+    #: Keep samples small and sanitised — no real IPs, credentials,
+    #: or identifiable device serials.
+    sample_input: ClassVar[str] = ""
+
+    #: File extension (without the dot) to offer when the UI downloads
+    #: this codec's rendered output.  Empty string defaults to ``"cfg"``
+    #: at the UI layer.  Examples: ``"xml"``, ``"rsc"``, ``"json"``.
+    output_extension: ClassVar[str] = ""
+
     @property
     @abstractmethod
     def capabilities(self) -> CapabilityMatrix:

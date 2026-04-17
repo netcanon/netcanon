@@ -128,6 +128,9 @@ def list_migration_adapters(request: Request) -> list[CodecInfo]:
                 supported_count=len(caps.supported),
                 lossy_count=len(caps.lossy),
                 unsupported_count=len(caps.unsupported),
+                description=getattr(codec, "description", ""),
+                sample_input=getattr(codec, "sample_input", ""),
+                output_extension=getattr(codec, "output_extension", ""),
             )
         )
     return result

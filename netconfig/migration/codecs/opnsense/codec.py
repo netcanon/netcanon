@@ -71,6 +71,29 @@ class OPNsenseCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    description: ClassVar[str] = (
+        "Paste the contents of an OPNsense config.xml "
+        "(root element <opnsense>)."
+    )
+    sample_input: ClassVar[str] = (
+        '<?xml version="1.0"?>\n'
+        '<opnsense>\n'
+        '  <system>\n'
+        '    <hostname>fw01</hostname>\n'
+        '    <domain>example.com</domain>\n'
+        '  </system>\n'
+        '  <interfaces>\n'
+        '    <wan>\n'
+        '      <if>em0</if>\n'
+        '      <descr>Upstream</descr>\n'
+        '      <enable/>\n'
+        '      <ipaddr>198.51.100.2</ipaddr>\n'
+        '      <subnet>30</subnet>\n'
+        '    </wan>\n'
+        '  </interfaces>\n'
+        '</opnsense>\n'
+    )
+    output_extension: ClassVar[str] = "xml"
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",

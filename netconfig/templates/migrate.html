@@ -265,151 +265,44 @@
 
   var adapters = [];  // cache — fetched once per page load
 
-  /* ── Input-format catalogue ──
-   * Mirrors netconfig.migration.adapters.base.INPUT_FORMATS.
-   * `label`   — human-readable format name for the hint banner.
-   * `desc`    — one-line explanation of what to paste.
-   * `sample`  — minimal working sample for the "Load sample" button.
-   * `exts`    — file extensions from the backup store that are
-   *             plausibly parseable by an adapter of this format.
-   *             Empty list means "we can't load any stored file".
+  /* ── Codec UI metadata ──
+   * All codec-presentation strings (description, sample_input,
+   * output_extension) are served by the /api/v1/migration/adapters
+   * endpoint.  The codec class is the single source of truth — see
+   * CodecBase.description / .sample_input / .output_extension.
+   *
+   * This helper returns the adapter entry + a presentation-ready
+   * "label" (vendor display name + input-format tag) so call sites
+   * can render the hint banner without caring where the data lives.
    */
-  var FORMAT_CATALOGUE = {
-    'xml-netconf': {
-      label: 'OpenConfig NETCONF XML',
-      desc: (
-        'Paste an OpenConfig <interfaces> fragment or a full NETCONF ' +
-        '<rpc-reply><data>… response.  This is the MACHINE-READABLE ' +
-        'format returned by a device\'s `netconf get-config`; it is ' +
-        'NOT the same as `show running-config`.'
+  function adapterEntry(codecName) {
+    var a = adapters.find(function(x) { return x.name === codecName; });
+    if (!a) return null;
+    return {
+      codec:  a.name,
+      label:  (a.vendor_display_name || a.name)
+              + ' (' + (a.input_format || 'unknown') + ')',
+      desc:   a.description || (
+        'This adapter did not declare a description.  Check its '
+        + 'docstring for what parse() expects.'
       ),
-      sample: (
-        '<?xml version="1.0"?>\n' +
-        '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n' +
-        '  <interface>\n' +
-        '    <name>GigabitEthernet0/0/0</name>\n' +
-        '    <config>\n' +
-        '      <name>GigabitEthernet0/0/0</name>\n' +
-        '      <description>WAN uplink</description>\n' +
-        '      <enabled>true</enabled>\n' +
-        '    </config>\n' +
-        '    <subinterfaces>\n' +
-        '      <subinterface>\n' +
-        '        <index>0</index>\n' +
-        '        <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">\n' +
-        '          <addresses><address>\n' +
-        '            <ip>198.51.100.1</ip>\n' +
-        '            <config><ip>198.51.100.1</ip><prefix-length>30</prefix-length></config>\n' +
-        '          </address></addresses>\n' +
-        '        </ipv4>\n' +
-        '      </subinterface>\n' +
-        '    </subinterfaces>\n' +
-        '  </interface>\n' +
-        '</interfaces>\n'
-      ),
-      exts: ['xml'],
-    },
-    'xml-opnsense': {
-      label: 'OPNsense config.xml',
-      desc: 'Paste the contents of an OPNsense config.xml (root element <opnsense>).',
-      sample: (
-        '<?xml version="1.0"?>\n' +
-        '<opnsense>\n' +
-        '  <system>\n' +
-        '    <hostname>fw01</hostname>\n' +
-        '    <domain>example.com</domain>\n' +
-        '  </system>\n' +
-        '  <interfaces>\n' +
-        '    <wan>\n' +
-        '      <if>em0</if>\n' +
-        '      <descr>Upstream</descr>\n' +
-        '      <enable/>\n' +
-        '      <ipaddr>198.51.100.2</ipaddr>\n' +
-        '      <subnet>30</subnet>\n' +
-        '    </wan>\n' +
-        '  </interfaces>\n' +
-        '</opnsense>\n'
-      ),
-      exts: ['xml'],
-    },
-    'json-flat': {
-      label: 'Flat JSON xpath map',
-      desc: (
-        'Paste a JSON object mapping xpath strings to values — the ' +
-        'reference mock adapter\'s format.  Not meaningful for any ' +
-        'real device; useful for exercising the pipeline.'
-      ),
-      sample: (
-        '{\n' +
-        '  "/interfaces/eth0/ip": "10.0.0.1",\n' +
-        '  "/interfaces/eth0/description": "mock interface"\n' +
-        '}\n'
-      ),
-      exts: [],
-    },
-    'cli-ios': {
-      label: 'Cisco IOS CLI (show running-config)',
-      desc: (
-        'Paste the output of `show running-config`.  This is the text ' +
-        'your existing backup collector already captures — you can also ' +
-        'pick a stored Cisco config from the dropdown.'
-      ),
-      sample: (
-        '!\n' +
-        'version 17.9\n' +
-        'hostname Router\n' +
-        '!\n' +
-        'interface GigabitEthernet0/0/0\n' +
-        ' description WAN uplink\n' +
-        ' ip address 198.51.100.1 255.255.255.252\n' +
-        ' no shutdown\n' +
-        '!\n' +
-        'interface Loopback0\n' +
-        ' description Router-ID\n' +
-        ' ip address 10.255.0.1 255.255.255.255\n' +
-        '!\n' +
-        'end\n'
-      ),
-      exts: ['cfg'],
-    },
-    'cli-mikrotik': {
-      label: 'MikroTik RouterOS (/export verbose)',
-      desc: (
-        'Paste the output of `/export verbose` on RouterOS.  The codec ' +
-        'parses the section/add/set grammar (/system identity, ' +
-        '/interface ethernet, /ip address, etc).'
-      ),
-      sample: (
-        '# by RouterOS 7.13\n' +
-        '/system identity\n' +
-        'set name=router1\n' +
-        '\n' +
-        '/interface ethernet\n' +
-        'set [ find default-name=ether1 ] comment="WAN uplink" disabled=no\n' +
-        '\n' +
-        '/ip address\n' +
-        'add address=198.51.100.2/30 interface=ether1\n' +
-        '\n' +
-        '/ip route\n' +
-        'add dst-address=0.0.0.0/0 gateway=198.51.100.1\n'
-      ),
-      exts: ['rsc'],
-    },
-    'unknown': {
-      label: 'Unknown format',
-      desc: (
-        'This adapter did not declare an input format.  Check the ' +
-        'adapter\'s docstring for what parse() expects.'
-      ),
-      sample: '',
-      exts: [],
-    },
-  };
+      sample: a.sample_input || '',
+      ext:    a.output_extension || 'cfg',
+      inputFormat: a.input_format || 'unknown',
+    };
+  }
 
-  /* Fallback entries for adapters that declare a format the catalogue
-   * doesn't know yet — treat as unknown so the page still works. */
-  function formatEntry(fmt) {
-    return FORMAT_CATALOGUE[fmt] || FORMAT_CATALOGUE['unknown'];
+  /* Backup-store-extension compatibility: which file extensions from
+   * the backups directory are this codec's parse() likely to accept?
+   * Most codecs that declare an output_extension also accept files
+   * with that extension as input (OPNsense .xml, MikroTik .rsc, etc).
+   * Codecs without an output_extension (mock) accept nothing from
+   * the store, which matches the old FORMAT_CATALOGUE behaviour. */
+  function compatibleExtensions(codecName) {
+    var a = adapters.find(function(x) { return x.name === codecName; });
+    if (!a) return [];
+    if (!a.output_extension) return [];
+    return [a.output_extension];
   }
 
   /** Populate both dropdowns from ``GET /api/v1/migration/adapters``. */
@@ -487,19 +380,21 @@
          + '"Force cross-class" is ticked.</div>';
   }
 
-  /** Render the "what does this adapter's parser expect?" hint. */
+  /** Render the "what does this adapter's parser expect?" hint.
+   *
+   * Reads description + sample_input from the adapters array
+   * (server-side codec metadata).  If the codec hasn't declared
+   * them, falls back to the generic help strings from adapterEntry().
+   */
   function renderFormatHint() {
     var hintEl = document.getElementById('mig-format-hint');
-    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
-    if (!src) { hintEl.style.display = 'none'; return; }
-    var entry = formatEntry(src.input_format);
-    hintEl.setAttribute('data-input-format', src.input_format);
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) { hintEl.style.display = 'none'; return; }
+    hintEl.setAttribute('data-input-format', entry.inputFormat);
     hintEl.style.display = '';
     hintEl.innerHTML =
       '<div style="flex:1">'
       + '<strong>Source expects:</strong> ' + escapeHtml(entry.label)
-      + ' <span class="mig-chip" style="margin-left:.4rem">'
-      + escapeHtml(src.input_format) + '</span>'
       + '<div style="margin-top:.25rem;color:inherit;opacity:.85">'
       + escapeHtml(entry.desc) + '</div>'
       + '</div>';
@@ -517,11 +412,10 @@
 
   /** Global so the template's onclick can reach it. */
   window.loadSampleForSourceAdapter = function() {
-    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
-    if (!src) return;
-    var entry = formatEntry(src.input_format);
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) return;
     if (!entry.sample) {
-      showToast('No sample available for ' + src.input_format, 'error');
+      showToast('No sample available for ' + entry.codec, 'error');
       return;
     }
     document.getElementById('mig-raw').value = entry.sample;
@@ -535,27 +429,27 @@
     var fileSel = document.getElementById('mig-filename');
     warnEl.style.display = 'none';
     if (!fileSel.value) return;
-    var src = adapters.find(function(a) { return a.name === sourceSel.value; });
-    if (!src) return;
-    var entry = formatEntry(src.input_format);
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) return;
+    var compatExts = compatibleExtensions(entry.codec);
     var opt = fileSel.options[fileSel.selectedIndex];
     var ext = (opt && opt.dataset.ext) || '';
-    if (entry.exts.length === 0) {
+    if (compatExts.length === 0) {
       warnEl.style.display = '';
       warnEl.innerHTML =
-        '⚠ Source adapter <code>' + escapeHtml(src.name)
+        '⚠ Source adapter <code>' + escapeHtml(entry.codec)
         + '</code> does not read files from the backup store. Pasting '
         + 'via the textarea is likely to work better.';
       return;
     }
-    if (entry.exts.indexOf(ext) === -1) {
+    if (compatExts.indexOf(ext) === -1) {
       warnEl.style.display = '';
       warnEl.innerHTML =
         '⚠ <code>' + escapeHtml(opt.value) + '</code> has extension '
         + '<code>.' + escapeHtml(ext) + '</code> but '
-        + '<code>' + escapeHtml(src.name) + '</code> expects '
+        + '<code>' + escapeHtml(entry.codec) + '</code> expects '
         + '<strong>' + escapeHtml(entry.label) + '</strong> '
-        + '(' + entry.exts.map(function(e) { return '.' + e; }).join(', ')
+        + '(' + compatExts.map(function(e) { return '.' + e; }).join(', ')
         + '). Translate will almost certainly fail.';
     }
   }
@@ -831,22 +725,13 @@
     result.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  /** Pick appropriate syntax-highlight language from target adapter.
-   *
-   * Reads from the adapters array (populated by /api/v1/migration/adapters)
-   * instead of hard-coding vendor names — closes part of the client-side
-   * metadata leak.  Full structural fix (metadata living on the codec
-   * server-side) is queued for the next session.
-   */
+  /** Pick file extension for download + syntax highlighting from the
+   *  target codec's declared output_extension.  Server-side codec
+   *  metadata is the single source of truth (R5 follow-up closed the
+   *  previous client-side leak). */
   function guessExtension(job) {
-    var name = job.target_adapter || '';
-    var target = adapters.find(function(a) { return a.name === name; });
-    if (!target) return 'cfg';
-    var fmt = target.input_format || '';
-    if (fmt.indexOf('xml') !== -1) return 'xml';
-    if (fmt === 'json-flat') return 'json';
-    if (fmt === 'cli-mikrotik') return 'rsc';
-    return 'cfg';
+    var entry = adapterEntry(job.target_adapter || '');
+    return (entry && entry.ext) ? entry.ext : 'cfg';
   }
 
   function renderBannerContents(job) {
@@ -937,19 +822,13 @@
   };
 
   /** Download the rendered output as a file.  Uses the same
-   *  WebView-safe blob approach as the config downloader. */
+   *  WebView-safe blob approach as the config downloader.  File
+   *  extension comes from the target codec's output_extension. */
   window.downloadMigrateOutput = function() {
     var text = output.textContent || '';
     if (!text) { showToast('No output to download.', 'error'); return; }
-    // Pick a sensible filename + extension from the target codec.
-    var tgt = adapters.find(function(a) { return a.name === targetSel.value; });
-    var ext = 'txt';
-    if (tgt) {
-      var fmt = tgt.input_format || '';
-      if (fmt.indexOf('xml') !== -1) ext = 'xml';
-      else if (fmt === 'json-flat') ext = 'json';
-      else if (fmt.indexOf('cli') !== -1) ext = 'cfg';
-    }
+    var tgt = adapterEntry(targetSel.value);
+    var ext = (tgt && tgt.ext) ? tgt.ext : 'txt';
     var fname = 'migration-output.' + ext;
     var blob = new Blob([text], { type: 'text/plain' });
     var url  = URL.createObjectURL(blob);

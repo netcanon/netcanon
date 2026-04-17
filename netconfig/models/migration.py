@@ -408,3 +408,11 @@ class CodecInfo(BaseModel):
     supported_count: int
     lossy_count: int
     unsupported_count: int
+
+    # UI-metadata fields (R5 follow-up — UI Metadata Migration session).
+    # These replace the client-side FORMAT_CATALOGUE that previously
+    # duplicated codec metadata in migrate.html.  Each codec class is
+    # the single source of truth for its own presentation strings.
+    description: str = ""
+    sample_input: str = ""
+    output_extension: str = ""
