@@ -211,6 +211,43 @@ LAYER 4 — TRANSPORT
 
 --- MIGRATION PATH FROM CURRENT CODE (R1–R7) ---
 
+  ┌────────────────────────────────────────────────────────────────┐
+  │ URGENT NEXT — REAL-CAPTURE VALIDATION  (before any new codec)  │
+  ├────────────────────────────────────────────────────────────────┤
+  │ STATUS: pending.  Every codec currently ships at best_effort   │
+  │ certainty because fixtures are hand-crafted from grammars I    │
+  │ know, NOT from real device output.  Per the certification      │
+  │ definition below ("certified = round-trip tested against >=3   │
+  │ real captures from >=2 OS versions") no codec is certified.    │
+  │                                                                │
+  │ Scope:                                                         │
+  │   1. Fetch captures from the URLs in vendor-config-research.   │
+  │      txt §6 — at minimum:                                      │
+  │        * Batfish test configs (Cisco IOS)                      │
+  │        * NTC-Templates test data                               │
+  │        * KevinGuenay/fortinet-resources 14K-line FortiOS 7.6.6 │
+  │        * opnsense/core default config.xml                      │
+  │        * MikroTik community /export samples                    │
+  │        * aruba/central-sample-bulk-configurations              │
+  │   2. Per codec: run parse() -- assert no crash; run            │
+  │      parse->render->parse -- assert round-trip invariant on    │
+  │      the supported subset.                                     │
+  │   3. Spot-check what drops.  Expected (Tier 3 firewall/NAT) -> │
+  │      document in capability matrix.  Unexpected -> fix parser  │
+  │      OR extend the matrix's unsupported list with a reason.    │
+  │   4. Add sanitised real captures as fixtures in                │
+  │      tests/fixtures/<vendor>/real_*.{txt,xml,conf,rsc} so CI   │
+  │      catches regressions on real data.                         │
+  │   5. Graduate best_effort -> certified per codec where ≥3      │
+  │      captures from ≥2 OS versions round-trip cleanly.          │
+  │                                                                │
+  │ Effort: 1-2 sessions.  The cross-codec matrix catches shape    │
+  │ regressions but NOT grammar-coverage gaps — real configs       │
+  │ reliably expose parser assumptions the synthetic fixtures      │
+  │ don't hit.  This work is a precondition for any claim of       │
+  │ "this actually works on production configs."                   │
+  └────────────────────────────────────────────────────────────────┘
+
   R1  Rename adapter → codec everywhere.  Add vendor_id to the
       capability matrix.  Back-compat shims.  1 session.  No
       behaviour change.  STATUS: SHIPPED.
