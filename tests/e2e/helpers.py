@@ -490,19 +490,31 @@ class SchedulesPage:
     def rows(self):
         return self._page.locator('[data-testid="schedule-row"]')
 
-    def fill_form(self, name: str, interval_value: str = "1440") -> None:
-        """Fill the schedule name input and select the interval.
+    def fill_form(
+        self,
+        name: str,
+        interval_value: str = "1440",
+        check_first_type_key: bool = True,
+    ) -> None:
+        """Fill the schedule form with a name, interval, and target.
 
         ``interval_value`` is the ``<option value>`` of the interval select.
-        Use ``"custom"`` (or any non-preset value) to trigger the custom input,
-        then supply the numeric minutes string.  For the standard presets
-        (``"60"``, ``"360"``, ``"720"``, ``"1440"``, ``"10080"``) no custom
-        field will appear.
+
+        ``check_first_type_key`` (default ``True``) ticks the first
+        type-key checkbox so the ``ScheduleCreate`` body passes
+        validation (at least one target is required).  Set to ``False``
+        if you want to test the validation error path.
         """
         self._page.locator('[data-testid="sched-name-input"]').fill(name)
         self._page.locator('[data-testid="sched-interval-select"]').select_option(
             value=interval_value
         )
+        if check_first_type_key:
+            checkbox = self._page.locator(
+                '[data-testid="sched-type-key-checkbox"]'
+            ).first
+            if not checkbox.is_checked():
+                checkbox.check()
 
     def submit_form(self) -> None:
         """Click the submit button and wait for the page to finish loading."""

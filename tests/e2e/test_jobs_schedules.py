@@ -170,18 +170,21 @@ class TestSchedulesPageStructure:
         page.goto("/schedules")
         expect(page.locator('[data-testid="sched-interval-select"]')).to_be_visible()
 
-    def test_sched_add_device_btn_visible(self, page: Page, base_url: str):
+    def test_sched_type_keys_section_visible(self, page: Page, base_url: str):
+        """The 'Target by Device Type' checkbox section must be visible."""
         page.goto("/schedules")
-        expect(page.locator('[data-testid="sched-add-device-btn"]')).to_be_visible()
+        expect(page.locator('[data-testid="sched-type-keys-section"]')).to_be_visible()
 
     def test_sched_submit_btn_visible(self, page: Page, base_url: str):
         page.goto("/schedules")
         expect(page.locator('[data-testid="sched-submit-btn"]')).to_be_visible()
 
-    def test_sched_device_list_has_one_entry_on_load(self, page: Page, base_url: str):
+    def test_sched_type_key_checkboxes_match_definitions(self, page: Page, base_url: str):
+        """One checkbox per loaded definition type_key."""
         page.goto("/schedules")
-        entries = page.locator('[data-testid="sched-device-entry"]')
-        expect(entries).to_have_count(1)
+        checkboxes = page.locator('[data-testid="sched-type-key-checkbox"]')
+        # The E2E conftest loads Cisco + OPNsense definitions.
+        assert checkboxes.count() >= 2
 
     def test_custom_interval_input_hidden_by_default(self, page: Page, base_url: str):
         page.goto("/schedules")
@@ -209,35 +212,16 @@ class TestScheduleCreateAndDelete:
         """Creating a schedule causes a new row to appear in the schedules table."""
         page.goto("/schedules")
         sched = SchedulesPage(page)
-
-        # Fill the schedule form
         sched.fill_form(name="Test E2E Schedule", interval_value="1440")
-
-        # Fill the device entry (required fields)
-        entry = page.locator('[data-testid="sched-device-entry"]').first
-        entry.locator('[data-testid="sched-device-host-input"]').fill("192.168.1.1")
-        entry.locator('[data-testid="sched-device-username-input"]').fill("admin")
-        entry.locator('[data-testid="sched-device-password-input"]').fill("testpass")
-
         sched.submit_form()
-
-        # New row should now exist in the table
         expect(sched.rows().first).to_be_visible(timeout=5_000)
 
     def test_created_schedule_name_cell(self, page: Page, base_url: str):
         """The schedule-name cell of the created row contains the schedule name."""
         page.goto("/schedules")
         sched = SchedulesPage(page)
-
         sched.fill_form(name="Test E2E Schedule", interval_value="1440")
-
-        entry = page.locator('[data-testid="sched-device-entry"]').first
-        entry.locator('[data-testid="sched-device-host-input"]').fill("192.168.1.1")
-        entry.locator('[data-testid="sched-device-username-input"]').fill("admin")
-        entry.locator('[data-testid="sched-device-password-input"]').fill("testpass")
-
         sched.submit_form()
-
         name_cell = sched.rows().first.locator('[data-testid="schedule-name"]')
         expect(name_cell).to_contain_text("Test E2E Schedule")
 
@@ -245,16 +229,8 @@ class TestScheduleCreateAndDelete:
         """The toggle button on a freshly created schedule reads "Enabled"."""
         page.goto("/schedules")
         sched = SchedulesPage(page)
-
         sched.fill_form(name="Test E2E Schedule", interval_value="1440")
-
-        entry = page.locator('[data-testid="sched-device-entry"]').first
-        entry.locator('[data-testid="sched-device-host-input"]').fill("192.168.1.1")
-        entry.locator('[data-testid="sched-device-username-input"]').fill("admin")
-        entry.locator('[data-testid="sched-device-password-input"]').fill("testpass")
-
         sched.submit_form()
-
         toggle_btn = sched.rows().first.locator('[data-testid="schedule-toggle-btn"]')
         expect(toggle_btn).to_contain_text("Enabled")
 
@@ -262,13 +238,7 @@ class TestScheduleCreateAndDelete:
         """Clicking No on the confirm dialog hides confirm and restores the delete button."""
         page.goto("/schedules")
         sched = SchedulesPage(page)
-
-        # Ensure at least one schedule exists
         sched.fill_form(name="Test E2E Schedule", interval_value="1440")
-        entry = page.locator('[data-testid="sched-device-entry"]').first
-        entry.locator('[data-testid="sched-device-host-input"]').fill("192.168.1.1")
-        entry.locator('[data-testid="sched-device-username-input"]').fill("admin")
-        entry.locator('[data-testid="sched-device-password-input"]').fill("testpass")
         sched.submit_form()
 
         # Click delete — inline confirm should appear
@@ -287,13 +257,7 @@ class TestScheduleCreateAndDelete:
         """Clicking Yes on the confirm dialog removes the schedule row."""
         page.goto("/schedules")
         sched = SchedulesPage(page)
-
-        # Create the schedule to delete
         sched.fill_form(name="Test E2E Schedule", interval_value="1440")
-        entry = page.locator('[data-testid="sched-device-entry"]').first
-        entry.locator('[data-testid="sched-device-host-input"]').fill("192.168.1.1")
-        entry.locator('[data-testid="sched-device-username-input"]').fill("admin")
-        entry.locator('[data-testid="sched-device-password-input"]').fill("testpass")
         sched.submit_form()
 
         rows_before = sched.rows().count()
