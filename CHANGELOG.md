@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Aruba AOS-S codec — 4th real vendor, VLAN-centric)
+
+- **``ArubaAOSSCodec``** in ``netconfig/migration/codecs/aruba_aoss/``
+  — parses and renders Aruba AOS-S (ProCurve / ArubaOS-Switch 16.x)
+  ``show running-config`` text.  Architecturally the first codec
+  where VLAN port membership lives naturally on the VLAN object
+  (``vlan 10`` → ``untagged 1-24`` / ``tagged 25-26``), validating
+  the canonical VLAN-centric design decision.
+- **Parser scope (Tier 1):** hostname, VLANs (id, name, untagged/
+  tagged port lists, SVI IPs), interfaces (name, enable/disable,
+  routing keyword, per-port IP), static routes (``ip route`` +
+  ``ip default-gateway``), SNMP community, DNS / NTP servers.
+- **Structural quirks handled:**
+  - ``;`` as comment character (not ``!``)
+  - Stanza delimiter is ``exit`` or an un-indented line
+  - Port names: bare numerics + alpha-numeric (``1``, ``A1``, ``Trk1``)
+  - Port-range expansion (``1-24``) + compression on render
+  - IP accepts both ``A.B.C.D/N`` and ``A.B.C.D M.M.M.M``
+  - Default gateway ↔ ``0.0.0.0/0`` static route round-trip
+  - ``no untagged 1-24`` port-list subtraction
+- **Vendor YAML** at ``netconfig/migration/vendors/aruba_aoss.yaml``
+  declaring ``[switch, router]``.
+- **OPNsense renderer hardened**: bare-numeric interface names
+  (legal on Aruba, invalid as XML element tags) now sanitise via
+  ``_zone_tag_for()`` — ``1`` becomes ``if_1``, etc.  Closes a
+  cross-vendor regression exposed by the Aruba→OPNsense pipeline.
+- **Auto-detection probe** with three confidence tiers: ProCurve
+  banner (98%), combined structural markers + ``;`` comment (95%),
+  individual structural hits (70-88%).
+- 49 new unit tests.  **760 passing, zero regressions.**
+
 ### Changed (auto-discover codec packages — zero-bookkeeping vendor add)
 
 - **``netconfig/migration/__init__.py``** now auto-discovers every

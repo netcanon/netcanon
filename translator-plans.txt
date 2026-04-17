@@ -269,6 +269,24 @@ LAYER 4 — TRANSPORT
       guessExtension to read input_format from /adapters instead of
       hard-coding vendor names.  705 tests passing; no regressions.
 
+  ARUBA AOS-S CODEC — STATUS: SHIPPED.
+      Fourth real codec.  netconfig/migration/codecs/aruba_aoss/
+      parses and renders ArubaOS-Switch (ProCurve) 16.x
+      `show running-config` text.  Architecturally the most important
+      codec so far: it's the first one where VLAN port membership
+      naturally lives on the VLAN object (Aruba's `vlan 10` ->
+      `untagged 1-24` / `tagged 25-26` grammar), which validates
+      the canonical VLAN-centric design decision.
+      Handles: hostname, VLANs with port lists + SVI IPs, physical
+      interfaces with `enable`/`disable`/`routing`/IP, static routes
+      with `ip route` + `ip default-gateway` -> 0.0.0.0/0 conversion,
+      port-range expansion (`1-24` / `A1-A4`) and compression,
+      `;` comment character (vs Cisco's `!`), CIDR + dotted-decimal
+      mask forms.  Best_effort certainty; 49 new unit tests.
+      Also fixed an OPNsense renderer bug exposed by cross-vendor
+      use: bare-numeric interface names (`1`, `25` — legal on Aruba)
+      now sanitise to valid XML element tags.  760 tests passing.
+
   UI METADATA MIGRATION — STATUS: SHIPPED.
       CodecBase gained description / sample_input / output_extension
       ClassVars; each codec is now the single source of truth for its

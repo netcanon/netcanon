@@ -85,9 +85,10 @@ INPUT_FORMATS = frozenset({
     "xml-netconf",      # OpenConfig NETCONF <get-config> payload (Cisco IOS-XE)
     "xml-opnsense",     # OPNsense config.xml
     "xml-panos",        # Palo Alto PAN-OS XML (reserved — no adapter yet)
-    "cli-ios",          # `show running-config` text (reserved — no adapter yet)
-    "cli-fortigate",    # FortiGate CLI `config` blocks (reserved)
-    "cli-mikrotik",     # MikroTik `/export` text (reserved)
+    "cli-ios",          # `show running-config` text — Cisco IOS-XE
+    "cli-aruba-aoss",   # ArubaOS-Switch `show running-config` text
+    "cli-fortigate",    # FortiGate CLI `config` blocks
+    "cli-mikrotik",     # MikroTik `/export` text
     "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
     "unknown",          # experimental adapter with no declared format
 })

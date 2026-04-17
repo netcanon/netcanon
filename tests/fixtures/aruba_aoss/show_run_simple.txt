@@ -1,0 +1,42 @@
+; J9729A Configuration Editor; Created on release #WC.16.11.0005
+; Ver #0a:f8.04.52.5a.f3.ff.37.2f.ef:d3
+
+hostname "sw-edge-01"
+module 1 type J9729A
+snmp-server community "public" Operator
+
+vlan 1
+   name "DEFAULT_VLAN"
+   no untagged 1-24
+   untagged 25-26,A1
+   no ip address
+   exit
+vlan 10
+   name "USERS"
+   untagged 1-24
+   tagged 25-26
+   ip address 192.168.10.1/24
+   exit
+vlan 20
+   name "GUESTS"
+   untagged 25-26
+   ip address 192.168.20.1 255.255.255.0
+   exit
+
+interface 1
+   name "Desk phone 1"
+   enable
+   exit
+interface 25
+   name "Uplink trunk"
+   enable
+   exit
+interface A1
+   name "Router uplink"
+   routing
+   ip address 10.0.0.2/30
+   enable
+   exit
+
+ip default-gateway 10.0.0.1
+ip route 192.168.99.0/24 10.0.0.254

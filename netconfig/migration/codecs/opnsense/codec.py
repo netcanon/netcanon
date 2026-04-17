@@ -238,11 +238,12 @@ class OPNsenseCodec(CodecBase):
         # Interfaces — render as zone-keyed elements.
         # For canonical intents from OTHER vendors we need to assign zone
         # names.  Use the interface name as the zone if it looks like an
-        # OPNsense zone (wan/lan/optN), otherwise use the name as-is.
+        # OPNsense zone (wan/lan/optN), otherwise sanitise the name into
+        # a valid XML tag (must start with a letter; no slashes/spaces).
         if intent.interfaces:
             ifaces_el = ET.SubElement(root, "interfaces")
             for iface in intent.interfaces:
-                zone_name = iface.name if iface.name in ("wan", "lan") or iface.name.startswith("opt") else iface.name.lower().replace("/", "_").replace(" ", "_")
+                zone_name = _zone_tag_for(iface.name)
                 zone_el = ET.SubElement(ifaces_el, zone_name)
                 if iface.description:
                     ET.SubElement(zone_el, "descr").text = iface.description
@@ -436,6 +437,30 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+def _zone_tag_for(name: str) -> str:
+    """Derive a valid XML element tag from a vendor-native interface name.
+
+    OPNsense's config.xml uses the interface zone ("wan", "lan",
+    "opt1") as an element tag, which means the name must be a valid
+    XML NCName (start with a letter or ``_``; no slashes, spaces, or
+    leading digits).  Foreign interface names like ``GigabitEthernet0/0/0``,
+    ``A1``, or plain numerics (``1``, ``25`` — legal on Aruba) violate
+    this.  We lowercase, replace invalid characters with ``_``, and
+    prepend ``if_`` when the first character would be a digit.
+    """
+    if name in ("wan", "lan") or name.startswith("opt"):
+        return name
+    sanitised = "".join(
+        c.lower() if (c.isalnum() or c == "_") else "_"
+        for c in name
+    )
+    if not sanitised:
+        return "if_unnamed"
+    if not (sanitised[0].isalpha() or sanitised[0] == "_"):
+        sanitised = "if_" + sanitised
+    return sanitised
 
 
 def _walk(node: Any, prefix: str) -> Iterable[str]:

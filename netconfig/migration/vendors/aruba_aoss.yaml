@@ -1,0 +1,14 @@
+# Aruba AOS-S (ProCurve / ArubaOS-Switch) — 16.x firmware family.
+# Codecs: aruba_aoss (show running-config text).
+id: aruba_aoss
+display_name: "Aruba AOS-S"
+device_classes:
+  - switch
+  - router
+default_timeout: 25
+notes: >
+  AOS-S is the ProCurve / ArubaOS-Switch CLI (16.x on 2530/2540/2930
+  platforms, not AOS-CX).  VLAN-centric port membership (`vlan 10` ->
+  `untagged 1-24` -> `tagged 25-26`) — the canonical-intent design's
+  natural fit.  Uses `;` for comments (unlike Cisco's `!`) and CIDR
+  notation for IP addresses.

@@ -27,10 +27,15 @@ pytestmark = pytest.mark.unit
 
 
 class TestBuiltInVendors:
-    def test_loads_four_vendors(self):
-        """Cisco IOS-XE, OPNsense, MikroTik RouterOS, plus the mock."""
+    def test_loads_five_vendors(self):
+        """Cisco IOS-XE, OPNsense, MikroTik RouterOS, Aruba AOS-S, + the mock."""
         vendors = load_vendors()
-        assert len(vendors) == 4
+        assert len(vendors) == 5
+
+    def test_aruba_aoss_present(self):
+        v = load_vendors()
+        assert "aruba_aoss" in v
+        assert v["aruba_aoss"].display_name == "Aruba AOS-S"
 
     def test_cisco_iosxe_present(self):
         v = load_vendors()
