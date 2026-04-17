@@ -54,7 +54,7 @@
 
     <span class="job-id" data-testid="job-id-text">{{ job.id[:8] }}&hellip;</span>
 
-    <span class="badge badge-{{ job.status }}" data-testid="job-status">{{ job.status }}</span>
+    <span class="badge badge-{{ job.status.value }}" data-testid="job-status">{{ job.status.value }}</span>
 
     <span data-testid="job-success-count">
       {{ success_count }}/{{ job.total_devices }}

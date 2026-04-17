@@ -106,8 +106,8 @@
     {% for job in recent_jobs %}
     <tr data-testid="job-row" data-job-id="{{ job.id }}">
       <td data-testid="job-id-text">{{ job.id[:8] }}&hellip;</td>
-      <td><span class="badge badge-{{ job.status }}"
-               data-testid="job-status">{{ job.status }}</span></td>
+      <td><span class="badge badge-{{ job.status.value }}"
+               data-testid="job-status">{{ job.status.value }}</span></td>
       <td data-testid="job-success-count">
         {{ job.results | selectattr('status','eq','success') | list | length }}
         / {{ job.total_devices }}
