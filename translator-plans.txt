@@ -255,23 +255,30 @@ LAYER 4 — TRANSPORT
   │ through cisco_iosxe_cli -> aruba_aoss.  Both bugs silently     │
   │ drop data — no warning, just missing sections in the render.   │
   │                                                                │
-  │ BUG 1 — VLAN SVI dropped on IOS-XE CLI parse.                  │
-  │   Symptom: `interface Vlan11 / ip address 192.168.11.252 ...`  │
-  │            produces a CanonicalInterface(name="Vlan11", ...)   │
-  │            but NO matching CanonicalVlan(id=11).  Aruba's      │
-  │            renderer unconditionally skips interfaces named     │
-  │            "Vlan*" (expecting the vlan stanza to absorb the    │
-  │            SVI IP), so with no vlan record the SVI + its IP    │
-  │            are lost entirely.                                  │
-  │   Fix:    In cisco_iosxe_cli parser, when `interface Vlan<N>`  │
-  │            is seen, auto-synthesize CanonicalVlan(id=N) and    │
-  │            attach the SVI's ipv4_addresses to it (in addition  │
-  │            to keeping the interface record).  Merge on top     │
-  │            of any existing `vlan N / name X` stanza.           │
-  │   Effort: ~15 lines + tests.  Also add a cross-codec matrix    │
-  │            invariant: "sum of ipv4 addresses in source tree    │
-  │            == sum in target tree for any bidirectional pair"   │
-  │            to catch silent-drop regressions in CI.             │
+  │ BUG 1 — VLAN SVI dropped on IOS-XE CLI parse.  STATUS: FIXED.  │
+  │   Symptom was: `interface Vlan11 / ip address 192.168.11.252`  │
+  │   produced a CanonicalInterface but NO matching CanonicalVlan, │
+  │   so Aruba's renderer (which skips Vlan* interfaces expecting  │
+  │   the vlan stanza to absorb them) dropped the SVI + IP.        │
+  │                                                                │
+  │   Fix shipped: cisco_iosxe_cli parser's new                    │
+  │   _synthesize_vlans_from_svis() post-pass derives a            │
+  │   CanonicalVlan(id=N) from each `interface Vlan<N>` stanza,    │
+  │   attaches the SVI's ipv4_addresses, and merges with any       │
+  │   existing top-level `vlan N / name X` record (keeping the     │
+  │   explicit name as authoritative).  SVI description falls back │
+  │   as the VLAN name when no stanza is present.                  │
+  │                                                                │
+  │   Also shipped: a cross-codec matrix invariant                 │
+  │   (test_every_source_ip_appears_in_rendered_output) — every    │
+  │   IPv4 address in the parsed-source tree MUST appear as a      │
+  │   literal substring in the target codec's rendered output.     │
+  │   Substring-based rather than re-parse based so it doesn't     │
+  │   depend on the target accepting foreign interface names       │
+  │   (e.g. AOS-S's parser won't read `GigabitEthernet0/0/0`       │
+  │   but the IP still reaches the rendered text).  This guard     │
+  │   would have caught this bug on day one.  8 new unit tests +   │
+  │   25 parametrized invariant runs; 885 tests passing.           │
   │                                                                │
   │ BUG 2 — LAG/port-channel member associations dropped.          │
   │   Symptom: Cisco `interface Port-channel1 / description TRUNK` │

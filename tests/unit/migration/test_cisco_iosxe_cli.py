@@ -128,6 +128,143 @@ class TestParseCLI:
 
 
 # ---------------------------------------------------------------------------
+# SVI → VLAN synthesis (fix for Bug 1: silently-dropped SVI IPs)
+# ---------------------------------------------------------------------------
+
+
+class TestSVIVlanSynthesis:
+    """`interface Vlan<N>` stanzas must produce both a
+    :class:`CanonicalInterface` AND a :class:`CanonicalVlan` so VLAN-
+    centric downstream codecs (Aruba AOS-S, OPNsense) don't silently
+    drop the SVI's IP address.
+
+    Regression fixture exercised: a real Cisco 9300 user config that
+    rendered to Aruba with NO ``vlan`` stanzas when the bug was open.
+    """
+
+    def test_svi_with_ip_synthesises_vlan(self):
+        raw = (
+            "interface Vlan11\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        assert len(tree.vlans) == 1
+        vlan = tree.vlans[0]
+        assert vlan.id == 11
+        assert len(vlan.ipv4_addresses) == 1
+        assert vlan.ipv4_addresses[0].ip == "192.168.11.252"
+        assert vlan.ipv4_addresses[0].prefix_length == 24
+
+    def test_svi_also_appears_as_interface(self):
+        """The SVI interface record must also survive — it carries
+        L3 interface metadata (MTU, description) the bare VLAN record
+        doesn't model."""
+        raw = (
+            "interface Vlan11\n"
+            " description Corp users\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        names = [i.name for i in tree.interfaces]
+        assert "Vlan11" in names
+
+    def test_svi_no_ip_still_produces_vlan_record(self):
+        """`interface Vlan1 / no ip address` asserts the VLAN exists
+        even without L3 data.  The VLAN record must be preserved."""
+        raw = (
+            "interface Vlan1\n"
+            " no ip address\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        ids = [v.id for v in tree.vlans]
+        assert 1 in ids
+        # No IPs attached.
+        vlan = next(v for v in tree.vlans if v.id == 1)
+        assert vlan.ipv4_addresses == []
+
+    def test_svi_merges_with_top_level_vlan_stanza(self):
+        """If both `vlan 11 / name Users` AND `interface Vlan11 /
+        ip address ...` exist, the resulting VLAN record MUST keep
+        the explicit name (it's the authoritative L2 tag) and gain
+        the SVI's IP."""
+        raw = (
+            "vlan 11\n"
+            " name Users\n"
+            "!\n"
+            "interface Vlan11\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        vlan11 = next(v for v in tree.vlans if v.id == 11)
+        assert vlan11.name == "Users"
+        assert len(vlan11.ipv4_addresses) == 1
+        assert vlan11.ipv4_addresses[0].ip == "192.168.11.252"
+
+    def test_multiple_svis_all_synthesised(self):
+        """User's reported regression: `interface Vlan1` + `interface
+        Vlan11` both present.  Both must produce VLAN records."""
+        raw = (
+            "interface Vlan1\n"
+            " no ip address\n"
+            "!\n"
+            "interface Vlan11\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        ids = sorted(v.id for v in tree.vlans)
+        assert ids == [1, 11]
+
+    def test_svi_description_fills_name_when_no_stanza(self):
+        """When no top-level `vlan N / name X` exists, the SVI's
+        description is a reasonable fallback for the VLAN's name."""
+        raw = (
+            "interface Vlan11\n"
+            " description Corporate users\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        vlan = next(v for v in tree.vlans if v.id == 11)
+        assert vlan.name == "Corporate users"
+
+    def test_non_svi_interface_does_not_create_vlan(self):
+        """Only interfaces whose name matches `Vlan<digits>` exactly
+        should trigger synthesis.  GigabitEthernet0/0 must NOT create
+        a phantom VLAN."""
+        raw = (
+            "interface GigabitEthernet0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        assert tree.vlans == []
+
+    def test_svi_ip_reaches_aruba_render(self):
+        """End-to-end regression: the exact case from the user's
+        real config."""
+        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        raw = (
+            'hostname "Switch"\n'
+            "!\n"
+            "interface Vlan1\n"
+            " no ip address\n"
+            "!\n"
+            "interface Vlan11\n"
+            " ip address 192.168.11.252 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        rendered = ArubaAOSSCodec().render(tree)
+        assert "vlan 11" in rendered
+        assert "ip address 192.168.11.252/24" in rendered
+
+
+# ---------------------------------------------------------------------------
 # Parse errors
 # ---------------------------------------------------------------------------
 

@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (Bug 1: Cisco IOS-XE SVI dropped silently into Aruba render)
+
+- **Symptom** (found via real-config dogfooding): feeding a Cisco
+  9300 config containing ``interface Vlan11 / ip address
+  192.168.11.252 255.255.255.0`` through the
+  ``cisco_iosxe_cli -> aruba_aoss`` pipeline produced an Aruba render
+  with **no ``vlan 11`` stanza at all** — the SVI's IP address
+  silently vanished.
+- **Root cause**: the IOS-XE CLI parser only created ``CanonicalVlan``
+  records from explicit top-level ``vlan N / name X`` stanzas, not
+  from ``interface Vlan<N>`` SVIs.  Aruba's renderer unconditionally
+  skips interfaces named ``Vlan*`` (expecting the VLAN stanza to
+  absorb the SVI's IP), so with no VLAN record the SVI + its L3
+  data fell through the gap.
+- **Fix**: new ``_synthesize_vlans_from_svis()`` post-pass in the
+  Cisco IOS-XE CLI parser derives a ``CanonicalVlan(id=N)`` from
+  each ``interface Vlan<N>`` stanza, attaches the SVI's IPv4
+  addresses, and merges with any existing top-level ``vlan N``
+  record (explicit ``name`` stays authoritative; SVI description
+  falls back as the name when no stanza is present).
+- **New cross-codec invariant** in the full-mesh matrix:
+  ``test_every_source_ip_appears_in_rendered_output`` — every IP
+  in the parsed-source tree MUST appear as a literal substring in
+  the target codec's rendered output.  Substring-based so it
+  doesn't depend on target parsers accepting foreign interface
+  names (AOS-S can't re-parse ``GigabitEthernet0/0/0`` but the IP
+  still reaches the rendered text, which is what matters for
+  silent-drop detection).  This guard would have caught Bug 1 on
+  day one.
+- **8 new unit tests** (``TestSVIVlanSynthesis``) + 25 parametrized
+  invariant runs.  **885 passing**, zero regressions.
+
 ### Added (Tier 2 — SNMP parse/render across all 5 real codecs)
 
 - First Tier 2 feature wired end-to-end through every real codec:

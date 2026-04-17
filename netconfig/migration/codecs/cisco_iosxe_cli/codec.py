@@ -172,8 +172,15 @@ class CiscoIOSXECLICodec(CodecBase):
         # Interfaces
         intent.interfaces = _parse_interfaces(raw)
 
-        # VLANs
+        # VLANs (top-level `vlan N / name X` stanzas)
         intent.vlans = _parse_vlans(raw)
+
+        # Synthesize VLAN records for any `interface Vlan<N>` SVIs that
+        # didn't have a matching top-level stanza.  Without this, VLAN-
+        # centric downstream codecs (Aruba, OPNsense) can't find the
+        # SVI's IP and silently drop it.  See translator-plans.txt
+        # "KNOWN DATA-LOSS BUGS / BUG 1".
+        _synthesize_vlans_from_svis(intent)
 
         # Static routes
         intent.static_routes = _parse_static_routes(raw)
@@ -496,6 +503,65 @@ def _parse_vlans(raw: str) -> list[CanonicalVlan]:
         vlans.append(CanonicalVlan(id=current_id, name=current_name))
 
     return vlans
+
+
+_SVI_NAME_RE = re.compile(r"^Vlan(\d+)$", re.IGNORECASE)
+
+
+def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
+    """Post-parse pass that derives VLAN records from ``interface
+    Vlan<N>`` stanzas.
+
+    On Cisco IOS, a VLAN can exist two ways:
+
+    1. Explicit L2 database entry — ``vlan 11 / name Users``
+    2. Implicit, via the SVI alone — ``interface Vlan11 / ip address
+       X / description Users``
+
+    :func:`_parse_vlans` only catches form (1).  Without this helper
+    the L3 data attached to form (2) would get silently dropped by
+    any VLAN-centric downstream codec (Aruba, OPNsense) because its
+    renderer looks for the IP under ``tree.vlans``, not under the
+    ``Vlan<N>`` interface itself.
+
+    Behaviour:
+        * SVI with no existing VLAN record → create one with the
+          SVI's IPs attached.
+        * SVI with an existing VLAN record (matching id) → merge
+          the SVI's IPs in.  The top-level stanza's ``name`` wins
+          over the SVI's (they're semantically different — VLAN
+          name is an L2 tag, SVI description is an L3 interface
+          hint — but with no better info we keep whichever came
+          first).
+        * SVI with no IP (e.g. ``interface Vlan1 / no ip address``)
+          still creates/touches a VLAN record so "this VLAN exists"
+          is preserved end-to-end.
+    """
+    existing_by_id: dict[int, CanonicalVlan] = {
+        v.id: v for v in intent.vlans
+    }
+    for iface in intent.interfaces:
+        m = _SVI_NAME_RE.match(iface.name)
+        if not m:
+            continue
+        vid = int(m.group(1))
+        existing = existing_by_id.get(vid)
+        if existing is None:
+            synthesised = CanonicalVlan(
+                id=vid,
+                # SVI description is a reasonable fallback for the
+                # VLAN name when no explicit stanza was present.
+                name=iface.description,
+                ipv4_addresses=list(iface.ipv4_addresses),
+            )
+            intent.vlans.append(synthesised)
+            existing_by_id[vid] = synthesised
+            continue
+        # Merge SVI IPs into existing VLAN record.  De-dupe in case
+        # the same IP was declared both places.
+        for addr in iface.ipv4_addresses:
+            if addr not in existing.ipv4_addresses:
+                existing.ipv4_addresses.append(addr)
 
 
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:

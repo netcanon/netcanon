@@ -120,6 +120,91 @@ def test_cross_codec_translation_does_not_crash(
     )
 
 
+@pytest.mark.parametrize(
+    ("src_name", "tgt_name"),
+    _ALL_PAIRS,
+    ids=[_pair_id(s, t) for s, t in _ALL_PAIRS],
+)
+def test_every_source_ip_appears_in_rendered_output(
+    src_name: str, tgt_name: str,
+) -> None:
+    """Silent-drop invariant: every IPv4 address in the parsed-source
+    tree must appear as a literal substring in the target codec's
+    rendered output.  If an IP vanishes between parse and render, the
+    translator is losing data.
+
+    Historical context: added after a user reported that
+    `interface Vlan11 / ip address 192.168.11.252 ...` rendered to
+    Aruba AOS-S produced a valid-looking config with the SVI IP
+    entirely missing — the kind of silent data loss invisible
+    unless you diff the trees.  See translator-plans.txt "KNOWN
+    DATA-LOSS BUGS / BUG 1".
+
+    The invariant is substring-based rather than re-parse based so
+    it doesn't depend on the target's parser being able to consume
+    foreign-vendor interface names (e.g. AOS-S's parser does not
+    accept ``GigabitEthernet0/0/0`` because that's a Cisco-only name
+    shape — but the IP on that interface still reaches the rendered
+    text, which is what matters).
+
+    Skip conditions match the sibling crash test: self-pairs, mock,
+    parse-only targets, disjoint device classes, no sample IPs.
+    """
+    if src_name == tgt_name:
+        pytest.skip("self-pair covered by per-codec round-trip tests")
+    if src_name == "mock" or tgt_name == "mock":
+        pytest.skip("mock codec uses a non-canonical flat-dict tree")
+
+    src = get_codec(src_name)
+    tgt = get_codec(tgt_name)
+
+    sample = getattr(src, "sample_input", "")
+    if not sample:
+        pytest.skip(f"{src_name!r} has no sample_input")
+    if getattr(tgt, "direction", "bidirectional") == "parse_only":
+        pytest.skip(f"{tgt_name!r} is parse-only")
+
+    src_classes = set(src.capabilities.device_classes)
+    tgt_classes = set(tgt.capabilities.device_classes)
+    if not (src_classes & tgt_classes):
+        pytest.skip("no shared device class")
+
+    # Collect every IPv4 address from the canonical source tree —
+    # both on interfaces AND on VLAN SVI records.
+    src_tree = src.parse(sample)
+    source_ips = _collect_source_ips(src_tree)
+    if not source_ips:
+        pytest.skip(f"{src_name!r}'s sample has no IP addresses")
+
+    rendered = tgt.render(src_tree)
+
+    missing = [ip for ip in source_ips if ip not in rendered]
+    assert not missing, (
+        f"{_pair_id(src_name, tgt_name)}: translator silently dropped "
+        f"{len(missing)} IP(s) during render: {missing}.  "
+        f"Every IP from the source tree must appear in the rendered "
+        f"output, otherwise data is being lost."
+    )
+
+
+def _collect_source_ips(tree) -> list[str]:
+    """Every IP address in the canonical tree, de-duplicated.
+
+    Covers addresses on interfaces AND on VLAN SVI records (IOS-XE
+    CLI populates both when `interface Vlan<N>` has an IP).
+    """
+    seen: list[str] = []
+    for iface in tree.interfaces:
+        for addr in iface.ipv4_addresses:
+            if addr.ip not in seen:
+                seen.append(addr.ip)
+    for vlan in tree.vlans:
+        for addr in vlan.ipv4_addresses:
+            if addr.ip not in seen:
+                seen.append(addr.ip)
+    return seen
+
+
 def test_matrix_covers_at_least_fifteen_pairs():
     """Sanity check: once the ecosystem has 5+ real codecs, the
     compatible matrix should have at least 15 non-trivial pairs
