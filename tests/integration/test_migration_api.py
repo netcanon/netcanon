@@ -39,7 +39,7 @@ class TestListMigrationAdapters:
                 assert field in entry, f"missing {field} in {entry}"
 
     def test_mock_adapter_device_classes_surface(self, client):
-        """MockAdapter declares [switch, router] — both must come back via the
+        """MockCodec declares [switch, router] — both must come back via the
         API so frontend code can filter the target-picker to compatible adapters."""
         resp = client.get("/api/v1/migration/adapters")
         info = next(a for a in resp.json() if a["name"] == "mock")
@@ -164,7 +164,7 @@ class TestPlanEndpoint:
         assert job["rendered"] is not None
         assert job["validation"]["severity"] == "ok"
 
-    def test_422_for_unknown_source_adapter(self, client):
+    def test_422_for_unknown_source_codec(self, client):
         resp = client.post(
             "/api/v1/migration/plan",
             json={
@@ -176,7 +176,7 @@ class TestPlanEndpoint:
         assert resp.status_code == 422
         assert "source adapter" in resp.json()["detail"]
 
-    def test_422_for_unknown_target_adapter(self, client):
+    def test_422_for_unknown_target_codec(self, client):
         resp = client.post(
             "/api/v1/migration/plan",
             json={

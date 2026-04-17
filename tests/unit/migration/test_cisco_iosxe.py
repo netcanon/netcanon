@@ -1,5 +1,5 @@
 """
-Unit tests for the :class:`CiscoIOSXEAdapter` — Phase 0.5 first real adapter.
+Unit tests for the :class:`CiscoIOSXECodec` — Phase 0.5 first real adapter.
 
 Coverage:
     * Parse: bare OpenConfig fragment and full NETCONF envelope.
@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
-from netconfig.migration.adapters.base import ParseError, RenderError
-from netconfig.migration.adapters.cisco_iosxe import CiscoIOSXEAdapter
+from netconfig.migration.codecs._mock import MockCodec
+from netconfig.migration.codecs.base import ParseError, RenderError
+from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netconfig.models.migration import DeviceClass, MigrationJobStatus
 from netconfig.services.migration_pipeline import run_plan
 from netconfig.services.migration_validate import (
@@ -83,7 +83,7 @@ _WITH_SUBIF = """\
 
 class TestParse:
     def test_bare_fragment(self):
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
         ifaces = tree["interfaces"]["interface"]
         assert len(ifaces) == 1
         assert ifaces[0]["name"] == "Gi0/0/0"
@@ -93,7 +93,7 @@ class TestParse:
     def test_netconf_envelope_is_unwrapped(self):
         """Parser walks through <rpc-reply><data> envelopes."""
         xml = FIXTURES.joinpath("get_config_simple.xml").read_text()
-        tree = CiscoIOSXEAdapter().parse(xml)
+        tree = CiscoIOSXECodec().parse(xml)
         ifaces = tree["interfaces"]["interface"]
         assert len(ifaces) == 3
         names = [i["name"] for i in ifaces]
@@ -104,7 +104,7 @@ class TestParse:
         ]
 
     def test_parse_captures_ipv4_subinterface(self):
-        tree = CiscoIOSXEAdapter().parse(_WITH_SUBIF)
+        tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
         iface = tree["interfaces"]["interface"][0]
         addrs = iface["subinterfaces"]["subinterface"][0]["ipv4"]["addresses"][
             "address"
@@ -118,7 +118,7 @@ class TestParse:
 
     def test_parse_integer_prefix_length(self):
         """prefix-length must arrive as an int, not a string."""
-        tree = CiscoIOSXEAdapter().parse(_WITH_SUBIF)
+        tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
         pl = tree["interfaces"]["interface"][0]["subinterfaces"][
             "subinterface"
         ][0]["ipv4"]["addresses"]["address"][0]["config"]["prefix-length"]
@@ -127,19 +127,19 @@ class TestParse:
 
     def test_parse_boolean_enabled(self):
         """enabled must arrive as a Python bool — not the literal 'true'."""
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
         assert tree["interfaces"]["interface"][0]["config"]["enabled"] is True
 
 
 class TestParseErrors:
     def test_malformed_xml_raises_parse_error(self):
         with pytest.raises(ParseError, match="malformed XML"):
-            CiscoIOSXEAdapter().parse("<not>actually</xml")
+            CiscoIOSXECodec().parse("<not>actually</xml")
 
     def test_missing_interfaces_element_raises(self):
         raw = "<other xmlns='http://example.com'><foo/></other>"
         with pytest.raises(ParseError, match="no <interfaces>"):
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
 
     def test_interface_without_name_raises(self):
         raw = """<?xml version="1.0"?>
@@ -148,7 +148,7 @@ class TestParseErrors:
 </interfaces>
 """
         with pytest.raises(ParseError, match=r"missing required.*<name>"):
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
 
     def test_enabled_uppercase_true_is_accepted(self):
         """YANG boolean parsing is case-insensitive — TRUE == true."""
@@ -156,7 +156,7 @@ class TestParseErrors:
 <interfaces xmlns="http://openconfig.net/yang/interfaces">
   <interface><name>x</name><config><enabled>TRUE</enabled></config></interface>
 </interfaces>"""
-        tree = CiscoIOSXEAdapter().parse(raw)
+        tree = CiscoIOSXECodec().parse(raw)
         assert tree["interfaces"]["interface"][0]["config"]["enabled"] is True
 
     def test_enabled_non_boolean_text_is_strict_error(self):
@@ -169,7 +169,7 @@ class TestParseErrors:
   <interface><name>x</name><config><enabled>{bogus}</enabled></config></interface>
 </interfaces>"""
             with pytest.raises(ParseError, match="YANG boolean") as excinfo:
-                CiscoIOSXEAdapter().parse(raw)
+                CiscoIOSXECodec().parse(raw)
             # Error carries a useful path for UI surface-ing.
             assert "config/enabled" in (excinfo.value.path or "")
 
@@ -179,7 +179,7 @@ class TestParseErrors:
   <interface><name>x</name><config><enabled></enabled></config></interface>
 </interfaces>"""
         with pytest.raises(ParseError, match="YANG boolean"):
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
 
     def test_prefix_length_out_of_ipv4_range_raises(self):
         """Prefix-length 0..32 is the IPv4 range; anything else is a
@@ -200,7 +200,7 @@ class TestParseErrors:
   </interface>
 </interfaces>"""
             with pytest.raises(ParseError, match="out of range") as excinfo:
-                CiscoIOSXEAdapter().parse(raw)
+                CiscoIOSXECodec().parse(raw)
             assert "prefix-length" in (excinfo.value.path or "")
 
     def test_prefix_length_boundary_values_accepted(self):
@@ -220,7 +220,7 @@ class TestParseErrors:
     </subinterface></subinterfaces>
   </interface>
 </interfaces>"""
-            tree = CiscoIOSXEAdapter().parse(raw)
+            tree = CiscoIOSXECodec().parse(raw)
             pl = tree["interfaces"]["interface"][0]["subinterfaces"][
                 "subinterface"
             ][0]["ipv4"]["addresses"]["address"][0]["config"]["prefix-length"]
@@ -234,7 +234,7 @@ class TestParseErrors:
   <interface></interface>
 </interfaces>"""
         with pytest.raises(ParseError) as excinfo:
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
         assert "interface[0]" in (excinfo.value.path or "")
 
     def test_second_unnamed_interface_error_includes_index(self):
@@ -246,7 +246,7 @@ class TestParseErrors:
   <interface><config><description>no name!</description></config></interface>
 </interfaces>"""
         with pytest.raises(ParseError) as excinfo:
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
         assert "interface[1]" in (excinfo.value.path or "")
 
     def test_interface_with_whitespace_only_name_rejected(self):
@@ -256,7 +256,7 @@ class TestParseErrors:
   <interface><name>   </name></interface>
 </interfaces>"""
         with pytest.raises(ParseError, match="non-empty <name>"):
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
 
     def test_utf8_bom_at_start_is_accepted(self):
         """Some devices (and some text editors) emit a UTF-8 BOM ahead
@@ -267,7 +267,7 @@ class TestParseErrors:
             "<interfaces xmlns=\"http://openconfig.net/yang/interfaces\">"
             "<interface><name>x</name></interface></interfaces>"
         )
-        tree = CiscoIOSXEAdapter().parse(raw)
+        tree = CiscoIOSXECodec().parse(raw)
         assert tree["interfaces"]["interface"][0]["name"] == "x"
 
     def test_parse_error_snippet_carries_offending_text(self):
@@ -280,7 +280,7 @@ class TestParseErrors:
   <interface><name>x</name><config><enabled>maybe</enabled></config></interface>
 </interfaces>"""
         with pytest.raises(ParseError) as excinfo:
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
         assert excinfo.value.snippet  # non-empty
         assert "maybe" in excinfo.value.snippet
 
@@ -305,7 +305,7 @@ class TestParseErrors:
   </interface>
 </interfaces>"""
         with pytest.raises(ParseError, match="non-integer prefix-length"):
-            CiscoIOSXEAdapter().parse(raw)
+            CiscoIOSXECodec().parse(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -315,25 +315,25 @@ class TestParseErrors:
 
 class TestRender:
     def test_render_declares_openconfig_namespace(self):
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
-        out = CiscoIOSXEAdapter().render(tree)
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
+        out = CiscoIOSXECodec().render(tree)
         assert 'xmlns="http://openconfig.net/yang/interfaces"' in out
 
     def test_render_is_deterministic(self):
         """Same tree -> same bytes.  Required for the textual diff stage."""
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
-        a = CiscoIOSXEAdapter().render(tree)
-        b = CiscoIOSXEAdapter().render(tree)
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
+        a = CiscoIOSXECodec().render(tree)
+        b = CiscoIOSXECodec().render(tree)
         assert a == b
 
     def test_render_rejects_missing_interfaces_key(self):
         with pytest.raises(RenderError, match="missing top-level 'interfaces'"):
-            CiscoIOSXEAdapter().render({})
+            CiscoIOSXECodec().render({})
 
     def test_render_rejects_interface_without_name(self):
         bad = {"interfaces": {"interface": [{"config": {"description": "x"}}]}}
         with pytest.raises(RenderError, match="missing 'name'"):
-            CiscoIOSXEAdapter().render(bad)
+            CiscoIOSXECodec().render(bad)
 
 
 class TestRoundTrip:
@@ -349,14 +349,14 @@ class TestRoundTrip:
         ids=["min", "with-subinterface"],
     )
     def test_roundtrip_from_inline(self, raw):
-        a = CiscoIOSXEAdapter()
+        a = CiscoIOSXECodec()
         tree = a.parse(raw)
         re_rendered = a.render(tree)
         reparsed = a.parse(re_rendered)
         assert reparsed == tree
 
     def test_roundtrip_from_fixture(self):
-        a = CiscoIOSXEAdapter()
+        a = CiscoIOSXECodec()
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
         tree = a.parse(raw)
         re_rendered = a.render(tree)
@@ -372,8 +372,8 @@ class TestRoundTrip:
 class TestIterXpaths:
     def test_xpaths_have_no_predicates(self):
         """OpenConfig schema paths — no [name='...'] list keys."""
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
-        xs = list(CiscoIOSXEAdapter().iter_xpaths(tree))
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
+        xs = list(CiscoIOSXECodec().iter_xpaths(tree))
         for x in xs:
             assert "[" not in x, f"predicate leaked into {x!r}"
 
@@ -381,19 +381,19 @@ class TestIterXpaths:
         """Every xpath the walker emits must appear in the declared
         supported/lossy/unsupported set (strict: anything else would
         be a matrix drift bug)."""
-        caps = CiscoIOSXEAdapter().capabilities
+        caps = CiscoIOSXECodec().capabilities
         declared = set(caps.supported) | {lp.path for lp in caps.lossy} | {
             up.path for up in caps.unsupported
         }
-        tree = CiscoIOSXEAdapter().parse(_MIN_FRAGMENT)
-        for x in CiscoIOSXEAdapter().iter_xpaths(tree):
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
+        for x in CiscoIOSXECodec().iter_xpaths(tree):
             assert (
                 x in declared
             ), f"walker emitted undeclared xpath: {x!r}"
 
     def test_subinterface_xpaths_include_ipv4(self):
-        tree = CiscoIOSXEAdapter().parse(_WITH_SUBIF)
-        xs = list(CiscoIOSXEAdapter().iter_xpaths(tree))
+        tree = CiscoIOSXECodec().parse(_WITH_SUBIF)
+        xs = list(CiscoIOSXECodec().iter_xpaths(tree))
         assert (
             "/interfaces/interface/subinterfaces/subinterface/ipv4/addresses/address/config/prefix-length"
             in xs
@@ -402,10 +402,10 @@ class TestIterXpaths:
     def test_multiple_interfaces_yield_same_path_per_leaf(self):
         """Three interfaces each with a description yields the path
         three times — callers get impact counts for free."""
-        tree = CiscoIOSXEAdapter().parse(
+        tree = CiscoIOSXECodec().parse(
             FIXTURES.joinpath("get_config_simple.xml").read_text()
         )
-        xs = list(CiscoIOSXEAdapter().iter_xpaths(tree))
+        xs = list(CiscoIOSXECodec().iter_xpaths(tree))
         descr = "/interfaces/interface/config/description"
         assert xs.count(descr) == 3
 
@@ -417,22 +417,22 @@ class TestIterXpaths:
 
 class TestCapabilities:
     def test_adapter_name(self):
-        assert CiscoIOSXEAdapter().capabilities.adapter == "cisco_iosxe"
+        assert CiscoIOSXECodec().capabilities.adapter == "cisco_iosxe"
 
     def test_declares_router_and_switch_classes(self):
-        classes = CiscoIOSXEAdapter().capabilities.device_classes
+        classes = CiscoIOSXECodec().capabilities.device_classes
         assert DeviceClass.router in classes
         assert DeviceClass.switch in classes
 
     def test_declares_mtu_as_lossy(self):
         """MTU is in the lossy list because the YANG model can't round-trip
         every platform-specific MTU tweak."""
-        lossy_paths = [lp.path for lp in CiscoIOSXEAdapter().capabilities.lossy]
+        lossy_paths = [lp.path for lp in CiscoIOSXECodec().capabilities.lossy]
         assert "/interfaces/interface/config/mtu" in lossy_paths
 
     def test_declares_ipv6_as_unsupported(self):
         unsupp_paths = [
-            up.path for up in CiscoIOSXEAdapter().capabilities.unsupported
+            up.path for up in CiscoIOSXECodec().capabilities.unsupported
         ]
         assert any("ipv6" in p for p in unsupp_paths)
 
@@ -447,8 +447,8 @@ class TestPipelineIntegration:
         """cisco_iosxe -> cisco_iosxe is class-compatible (both declare
         router+switch) and round-trips cleanly."""
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
-        src = CiscoIOSXEAdapter()
-        tgt = CiscoIOSXEAdapter()
+        src = CiscoIOSXECodec()
+        tgt = CiscoIOSXECodec()
         job = run_plan(src, tgt, raw)
         assert job.status is MigrationJobStatus.completed
         assert job.validation is not None
@@ -464,9 +464,9 @@ class TestPipelineIntegration:
         that mock intersects iosxe, here we just prove the guard is
         wired in by checking the job reached a terminal success state
         when classes DO intersect."""
-        from netconfig.migration.adapters._mock import MockAdapter
-        src = CiscoIOSXEAdapter()
-        tgt = MockAdapter()
+        from netconfig.migration.codecs._mock import MockCodec
+        src = CiscoIOSXECodec()
+        tgt = MockCodec()
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
         job = run_plan(src, tgt, raw)
         # iosxe (router/switch) ∩ mock (switch/router) = both; not blocked.
@@ -482,9 +482,9 @@ class TestPipelineIntegration:
 
     def test_validate_against_uses_iosxe_walker(self):
         """validate_against must walk the nested iosxe tree (not the
-        dict[str,str] fallback) when source=CiscoIOSXEAdapter."""
+        dict[str,str] fallback) when source=CiscoIOSXECodec."""
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
-        src = CiscoIOSXEAdapter()
+        src = CiscoIOSXECodec()
         tree = src.parse(raw)
         report = validate_against(tree, src, source=src)
         # Three interfaces with descriptions ⇒ three occurrences of
@@ -500,7 +500,7 @@ class TestPipelineIntegration:
         """classify_tree preserves per-occurrence counts in the returned
         path lists, which is how stats counts get 'impact' right."""
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
-        src = CiscoIOSXEAdapter()
+        src = CiscoIOSXECodec()
         tree = src.parse(raw)
         supported, lossy, unsupp = classify_tree(
             tree, src.capabilities, source=src
@@ -517,10 +517,10 @@ class TestPipelineIntegration:
 class TestRegistry:
     def test_cisco_iosxe_in_registry(self):
         import netconfig.migration  # side-effect import
-        from netconfig.migration.adapters.registry import list_adapters
-        assert "cisco_iosxe" in list_adapters()
+        from netconfig.migration.codecs.registry import list_codecs
+        assert "cisco_iosxe" in list_codecs()
 
-    def test_get_adapter_returns_instance(self):
-        from netconfig.migration.adapters.registry import get_adapter
-        a = get_adapter("cisco_iosxe")
-        assert isinstance(a, CiscoIOSXEAdapter)
+    def test_get_codec_returns_instance(self):
+        from netconfig.migration.codecs.registry import get_codec
+        a = get_codec("cisco_iosxe")
+        assert isinstance(a, CiscoIOSXECodec)

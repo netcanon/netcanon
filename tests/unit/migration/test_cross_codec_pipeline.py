@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
-from netconfig.migration.adapters.cisco_iosxe import CiscoIOSXEAdapter
+from netconfig.migration.codecs._mock import MockCodec
+from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netconfig.models.migration import MigrationJobStatus
 from netconfig.services.migration_pipeline import run_plan
 
@@ -49,7 +49,7 @@ class TestSelfToSelf:
 
     def test_iosxe_to_iosxe_reaches_completed(self):
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), CiscoIOSXECodec(), raw)
         assert job.status is MigrationJobStatus.completed
         assert job.error is None
         assert job.rendered is not None
@@ -57,7 +57,7 @@ class TestSelfToSelf:
 
     def test_iosxe_to_iosxe_validation_is_ok(self):
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), CiscoIOSXECodec(), raw)
         assert job.validation is not None
         assert job.validation.severity == "ok"
         # Every supported path is populated (three interfaces, so ≥3).
@@ -65,7 +65,7 @@ class TestSelfToSelf:
 
     def test_mock_to_mock_reaches_completed(self):
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
-        job = run_plan(MockAdapter(), MockAdapter(), raw)
+        job = run_plan(MockCodec(), MockCodec(), raw)
         assert job.status is MigrationJobStatus.completed
 
 
@@ -86,7 +86,7 @@ class TestIosxeToMock:
         """IOS-XE declares [router, switch]; mock declares [switch, router].
         Non-empty intersection → not blocked by the class guard."""
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), MockAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), MockCodec(), raw)
         # Guard doesn't block → job doesn't contain the guard's error string.
         assert "Device-class guard" not in (job.error or "")
 
@@ -97,7 +97,7 @@ class TestIosxeToMock:
         is therefore "unknown" to mock — classified as supported by
         default (matrix only declares exceptions)."""
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), MockAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), MockCodec(), raw)
         assert job.validation is not None
         # All iosxe paths pass through mock as "supported" (mock doesn't
         # declare any of them as lossy or unsupported).
@@ -111,7 +111,7 @@ class TestIosxeToMock:
         serialised as a nested JSON document — not meaningful, but
         proves the pipeline doesn't crash on type mismatch."""
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), MockAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), MockCodec(), raw)
         assert job.status is MigrationJobStatus.completed
         assert job.rendered is not None
         # Output is JSON containing "interfaces".
@@ -130,7 +130,7 @@ class TestMockToIosxe:
 
     def test_mock_to_iosxe_render_failure_is_caught(self):
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
-        job = run_plan(MockAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(MockCodec(), CiscoIOSXECodec(), raw)
         assert job.status is MigrationJobStatus.failed
         assert "render failed" in (job.error or "").lower()
         assert "interfaces" in (job.error or "").lower()
@@ -141,7 +141,7 @@ class TestMockToIosxe:
         mock xpaths as supported, so validation.severity is ok.
         Job.validation should therefore be populated despite failure."""
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
-        job = run_plan(MockAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(MockCodec(), CiscoIOSXECodec(), raw)
         assert job.validation is not None  # validate ran
         assert job.rendered is None        # but render did NOT complete
 
@@ -149,7 +149,7 @@ class TestMockToIosxe:
         """Every terminal state — including failure — must set
         completed_at so the UI can show a duration."""
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
-        job = run_plan(MockAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(MockCodec(), CiscoIOSXECodec(), raw)
         assert job.completed_at is not None
 
 
@@ -168,7 +168,7 @@ class TestAdapterAwareWalkerThreading:
 
     def test_iosxe_walker_reaches_nested_leaves(self):
         raw = FIXTURE.read_text()
-        job = run_plan(CiscoIOSXEAdapter(), CiscoIOSXEAdapter(), raw)
+        job = run_plan(CiscoIOSXECodec(), CiscoIOSXECodec(), raw)
         assert job.validation is not None
         # Three interfaces, each with a description, prove the walker
         # descended into the list.  Flat-dict fallback would emit
@@ -193,7 +193,7 @@ class TestPartialRouting:
 
     def test_unsupported_path_in_mock_lands_partial(self):
         raw = json.dumps({"/unsafe/kernel_module": "badness"})
-        job = run_plan(MockAdapter(), MockAdapter(), raw)
+        job = run_plan(MockCodec(), MockCodec(), raw)
         assert job.status is MigrationJobStatus.partial
         assert job.rendered is not None  # still produced for review
         assert job.validation is not None

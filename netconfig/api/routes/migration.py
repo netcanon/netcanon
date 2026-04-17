@@ -4,7 +4,7 @@
 Phase 0 surfaces only read-only introspection:
 
     GET  /api/v1/migration/adapters
-        → list of AdapterInfo (one entry per registered adapter)
+        → list of CodecInfo (one entry per registered adapter)
 
     GET  /api/v1/migration/adapters/{name}/capabilities
         → the full CapabilityMatrix
@@ -19,9 +19,9 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ...migration.adapters.registry import get_adapter, list_adapters
+from ...migration.codecs.registry import get_codec, list_codecs
 from ...models.migration import (
-    AdapterInfo,
+    CodecInfo,
     CapabilityMatrix,
     MigrationJob,
     MigrationPlanRequest,
@@ -41,7 +41,7 @@ def _resolve_adapter_or_422(name: str, side: str):
     callers should fix their body, not their URL.
     """
     try:
-        return get_adapter(name)
+        return get_codec(name)
     except LookupError as exc:
         raise HTTPException(
             status_code=422,
@@ -82,22 +82,22 @@ def _resolve_input_text(
 
 @router.get(
     "/adapters",
-    response_model=list[AdapterInfo],
+    response_model=list[CodecInfo],
     summary="List registered migration adapters",
 )
-def list_migration_adapters() -> list[AdapterInfo]:
-    """Return one ``AdapterInfo`` per registered adapter.
+def list_migration_adapters() -> list[CodecInfo]:
+    """Return one ``CodecInfo`` per registered adapter.
 
     The list is sorted by adapter name for deterministic UI ordering
     and is safe to cache client-side — adapter registration is static
     per-process.
     """
-    result: list[AdapterInfo] = []
-    for name in list_adapters():
-        adapter = get_adapter(name)
+    result: list[CodecInfo] = []
+    for name in list_codecs():
+        adapter = get_codec(name)
         caps = adapter.capabilities
         result.append(
-            AdapterInfo(
+            CodecInfo(
                 name=caps.adapter,
                 version_range=caps.version_range,
                 device_classes=list(caps.device_classes),
@@ -116,14 +116,14 @@ def list_migration_adapters() -> list[AdapterInfo]:
     summary="Get the capability matrix for a migration adapter",
     responses={404: {"description": "No adapter registered under that name"}},
 )
-def get_adapter_capabilities(name: str) -> CapabilityMatrix:
+def get_codec_capabilities(name: str) -> CapabilityMatrix:
     """Return the full :class:`CapabilityMatrix` for *name*.
 
     Raises:
         HTTPException 404: If no adapter is registered under *name*.
     """
     try:
-        adapter = get_adapter(name)
+        adapter = get_codec(name)
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     return adapter.capabilities

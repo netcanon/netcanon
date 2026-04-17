@@ -1,5 +1,5 @@
 """
-Unit tests for the :attr:`AdapterBase.input_format` declaration.
+Unit tests for the :attr:`CodecBase.input_format` declaration.
 
 Introduced after a round of manual GUI testing surfaced that the
 /migrate paste box accepts MACHINE-READABLE input (XML/JSON), not
@@ -19,11 +19,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
-from netconfig.migration.adapters.base import INPUT_FORMATS, AdapterBase
-from netconfig.migration.adapters.cisco_iosxe import CiscoIOSXEAdapter
-from netconfig.migration.adapters.opnsense import OPNsenseAdapter
-from netconfig.migration.adapters.registry import list_adapters, get_adapter
+from netconfig.migration.codecs._mock import MockCodec
+from netconfig.migration.codecs.base import INPUT_FORMATS, CodecBase
+from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netconfig.migration.codecs.registry import list_codecs, get_codec
 from netconfig.models.migration import CapabilityMatrix
 
 pytestmark = pytest.mark.unit
@@ -57,11 +57,11 @@ class TestInputFormatCatalogue:
 # ---------------------------------------------------------------------------
 
 
-class TestAdapterBaseDefault:
+class TestCodecBaseDefault:
     def test_default_input_format_is_unknown(self):
         """Adapters under development inherit a safe default."""
 
-        class _StubAdapter(AdapterBase):
+        class _StubCodec(CodecBase):
             name = "_test_stub_default_fmt"
 
             @property
@@ -74,7 +74,7 @@ class TestAdapterBaseDefault:
             def render(self, tree):
                 return ""
 
-        assert _StubAdapter.input_format == "unknown"
+        assert _StubCodec.input_format == "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -84,13 +84,13 @@ class TestAdapterBaseDefault:
 
 class TestConcreteAdapterDeclarations:
     def test_cisco_iosxe_declares_xml_netconf(self):
-        assert CiscoIOSXEAdapter.input_format == "xml-netconf"
+        assert CiscoIOSXECodec.input_format == "xml-netconf"
 
     def test_opnsense_declares_xml_opnsense(self):
-        assert OPNsenseAdapter.input_format == "xml-opnsense"
+        assert OPNsenseCodec.input_format == "xml-opnsense"
 
     def test_mock_declares_json_flat(self):
-        assert MockAdapter.input_format == "json-flat"
+        assert MockCodec.input_format == "json-flat"
 
     def test_every_registered_adapter_declares_a_known_format(self):
         """Every shipped adapter's declared format must be in the catalogue.
@@ -100,8 +100,8 @@ class TestConcreteAdapterDeclarations:
         This test catches the typo at CI time."""
         import netconfig.migration  # side-effect: register all built-ins
 
-        for name in list_adapters():
-            adapter = get_adapter(name)
+        for name in list_codecs():
+            adapter = get_codec(name)
             fmt = getattr(adapter, "input_format", "unknown")
             assert (
                 fmt in INPUT_FORMATS
@@ -109,17 +109,17 @@ class TestConcreteAdapterDeclarations:
 
 
 # ---------------------------------------------------------------------------
-# API surface — AdapterInfo exposes input_format
+# API surface — CodecInfo exposes input_format
 # ---------------------------------------------------------------------------
 
 
-class TestAdapterInfoShape:
-    def test_adapter_info_model_has_input_format_field(self):
-        from netconfig.models.migration import AdapterInfo
+class TestCodecInfoShape:
+    def test_codec_info_model_has_input_format_field(self):
+        from netconfig.models.migration import CodecInfo
 
-        # The default is 'unknown' so a minimal AdapterInfo constructs cleanly
+        # The default is 'unknown' so a minimal CodecInfo constructs cleanly
         # even if the caller forgets to pass it.
-        info = AdapterInfo(
+        info = CodecInfo(
             name="t",
             version_range="*",
             supported_count=0,
@@ -128,10 +128,10 @@ class TestAdapterInfoShape:
         )
         assert info.input_format == "unknown"
 
-    def test_adapter_info_preserves_declared_format(self):
-        from netconfig.models.migration import AdapterInfo
+    def test_codec_info_preserves_declared_format(self):
+        from netconfig.models.migration import CodecInfo
 
-        info = AdapterInfo(
+        info = CodecInfo(
             name="cisco_iosxe",
             version_range="16.3+",
             input_format="xml-netconf",

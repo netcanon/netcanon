@@ -568,7 +568,7 @@ class MigratePage:
         return self._page.locator('[data-testid="migrate-target-select"]')
 
     @property
-    def adapter_info(self):
+    def codec_info(self):
         return self._page.locator('[data-testid="migrate-adapter-info"]')
 
     @property

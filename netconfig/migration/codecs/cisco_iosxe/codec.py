@@ -1,5 +1,5 @@
 """
-``CiscoIOSXEAdapter`` — first real adapter.
+``CiscoIOSXECodec`` — first real adapter.
 
 Tree shape
 ----------
@@ -69,7 +69,7 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
-from ..base import AdapterBase, ParseError, RenderError
+from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 
 
@@ -86,7 +86,7 @@ _NS_IP = "http://openconfig.net/yang/interfaces/ip"
 
 
 @register
-class CiscoIOSXEAdapter(AdapterBase):
+class CiscoIOSXECodec(CodecBase):
     """Adapter for Cisco IOS-XE 17.x OpenConfig NETCONF.
 
     Declares device_classes=[router, switch] — IOS-XE platforms
@@ -103,6 +103,7 @@ class CiscoIOSXEAdapter(AdapterBase):
     #: :meth:`iter_xpaths` yields.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe",
+        vendor_id="cisco_iosxe",
         version_range="16.3+",
         device_classes=[DeviceClass.router, DeviceClass.switch],
         supported=[

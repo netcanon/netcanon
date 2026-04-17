@@ -7,6 +7,25 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Refactored (R1: rename adapter → codec + add vendor_id)
+
+- **`AdapterBase` → `CodecBase`** — "codec" accurately describes the
+  class's job: translate between a wire format and the canonical tree.
+  All related types renamed: `AdapterInfo` → `CodecInfo`,
+  `AdapterError` → `CodecError`, `MockAdapter` → `MockCodec`,
+  `CiscoIOSXEAdapter` → `CiscoIOSXECodec`, `OPNsenseAdapter` →
+  `OPNsenseCodec`, `get_adapter` → `get_codec`, `list_adapters` →
+  `list_codecs`.
+- **Directory:** `netconfig/migration/adapters/` →
+  `netconfig/migration/codecs/`.  `adapter.py` → `codec.py`.
+- **Test files:** `test_mock_adapter.py` → `test_mock_codec.py`,
+  `test_cross_adapter_pipeline.py` → `test_cross_codec_pipeline.py`.
+- **`CapabilityMatrix.vendor_id: str`** — new field, links the codec
+  to a vendor YAML (R2).  Set on all 3 codecs.
+- **JSON back-compat:** `CapabilityMatrix.adapter` stays as the JSON
+  field name so API consumers don't break.
+- 700 tests pass — zero regressions.
+
 ### Refactored (god-file cleanup — zero behaviour change)
 
 Three files identified as god-files during a structural audit;

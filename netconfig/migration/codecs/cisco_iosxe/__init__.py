@@ -15,6 +15,6 @@ unsupported (explicit refusal) in the capability matrix.  Phase 1
 expands coverage to BGP, ACLs, and VLANs.
 """
 
-from .adapter import CiscoIOSXEAdapter
+from .codec import CiscoIOSXECodec
 
-__all__ = ["CiscoIOSXEAdapter"]
+__all__ = ["CiscoIOSXECodec"]

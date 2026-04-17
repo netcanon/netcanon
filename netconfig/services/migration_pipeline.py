@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Callable
 
-from ..migration.adapters.base import AdapterBase, ParseError, RenderError
+from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..models.migration import (
     MigrationJob,
     MigrationJobStatus,
@@ -32,8 +32,8 @@ TransformCallable = Callable[[Any], Any]
 
 
 def run_plan(
-    source: AdapterBase,
-    target: AdapterBase,
+    source: CodecBase,
+    target: CodecBase,
     raw_text: str,
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
@@ -72,8 +72,8 @@ def run_plan(
         A :class:`MigrationJob` in a terminal state.
     """
     job = MigrationJob(
-        source_adapter=source.name,
-        target_adapter=target.name,
+        source_codec=source.name,
+        target_codec=target.name,
         transforms=transform_specs or [],
     )
 
@@ -104,7 +104,7 @@ def run_plan(
         # Stage 4 — validate
         job.status = MigrationJobStatus.validating
         # Pass the source adapter so the validator can walk adapter-
-        # specific tree shapes via ``AdapterBase.iter_xpaths``.
+        # specific tree shapes via ``CodecBase.iter_xpaths``.
         job.validation = validate_against(tree, target, source=source)
 
         # Stage 5 — render

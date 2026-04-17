@@ -15,13 +15,13 @@ from __future__ import annotations
 
 from typing import TypeVar
 
-from .base import AdapterBase
+from .base import CodecBase
 
-#: Module-level registry keyed on ``AdapterBase.name``.  Never mutate
+#: Module-level registry keyed on ``CodecBase.name``.  Never mutate
 #: directly; always go through :func:`register`.
-_REGISTRY: dict[str, type[AdapterBase]] = {}
+_REGISTRY: dict[str, type[CodecBase]] = {}
 
-_T = TypeVar("_T", bound="type[AdapterBase]")
+_T = TypeVar("_T", bound="type[CodecBase]")
 
 
 def register(cls: _T) -> _T:
@@ -48,7 +48,7 @@ def register(cls: _T) -> _T:
     return cls
 
 
-def get_adapter(name: str) -> AdapterBase:
+def get_codec(name: str) -> CodecBase:
     """Instantiate and return the adapter registered under *name*.
 
     Raises:
@@ -62,6 +62,6 @@ def get_adapter(name: str) -> AdapterBase:
     return _REGISTRY[name]()
 
 
-def list_adapters() -> list[str]:
+def list_codecs() -> list[str]:
     """Return registered adapter names, sorted alphabetically."""
     return sorted(_REGISTRY)

@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.migration.adapters.registry``.
+Unit tests for ``netconfig.migration.codecs.registry``.
 
 The registry is a process-global singleton populated at import time,
 so these tests use a throwaway subclass registered under a unique
@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.adapters.base import AdapterBase
-from netconfig.migration.adapters.registry import (
+from netconfig.migration.codecs.base import CodecBase
+from netconfig.migration.codecs.registry import (
     _REGISTRY,
-    get_adapter,
-    list_adapters,
+    get_codec,
+    list_codecs,
     register,
 )
 from netconfig.models.migration import CapabilityMatrix
@@ -22,7 +22,7 @@ from netconfig.models.migration import CapabilityMatrix
 pytestmark = pytest.mark.unit
 
 
-class _DummyAdapter(AdapterBase):
+class _DummyAdapter(CodecBase):
     """Adapter subclass used only in these tests — name set per-test."""
 
     @property
@@ -57,7 +57,7 @@ class TestRegister:
             name = "_test_register_put"
         register(A)
         try:
-            assert "_test_register_put" in list_adapters()
+            assert "_test_register_put" in list_codecs()
         finally:
             _cleanup(A.name)
 
@@ -91,7 +91,7 @@ class TestRegister:
         register(A)
         register(A)  # must not raise
         try:
-            assert list_adapters().count("_test_idempotent") == 1
+            assert list_codecs().count("_test_idempotent") == 1
         finally:
             _cleanup(A.name)
 
@@ -102,19 +102,19 @@ class TestGetAdapter:
             name = "_test_get_instance"
         register(A)
         try:
-            result = get_adapter("_test_get_instance")
+            result = get_codec("_test_get_instance")
             assert isinstance(result, A)
         finally:
             _cleanup(A.name)
 
     def test_unknown_name_raises_lookuperror_not_keyerror(self):
         with pytest.raises(LookupError, match="No adapter registered"):
-            get_adapter("_definitely_not_registered")
+            get_codec("_definitely_not_registered")
 
     def test_lookup_message_lists_known_adapters(self):
         """Error message must help the caller discover valid names."""
         with pytest.raises(LookupError) as excinfo:
-            get_adapter("_nope")
+            get_codec("_nope")
         assert "Known adapters" in str(excinfo.value)
 
 
@@ -129,7 +129,7 @@ class TestListAdapters:
         register(Z)
         register(A)
         try:
-            result = list_adapters()
+            result = list_codecs()
             # Both registered names are in alphabetical order relative
             # to each other.
             assert result.index("_test_list_aaa") < result.index("_test_list_zzz")
@@ -140,4 +140,4 @@ class TestListAdapters:
     def test_mock_adapter_is_always_registered(self):
         """The package __init__ pre-registers the reference mock adapter."""
         import netconfig.migration  # noqa: F401 — ensure import
-        assert "mock" in list_adapters()
+        assert "mock" in list_codecs()

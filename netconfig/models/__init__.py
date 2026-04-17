@@ -4,7 +4,7 @@ from .backup import BackupJob, BackupResult, ConfigRecord, JobStatus
 from .device import BackupRequest, DeviceCredentials, DeviceTarget
 from .diff import CompatibilityReport, DiffGroup, DiffLine, DiffReport, DiffRequest
 from .migration import (
-    AdapterInfo,
+    CodecInfo,
     CapabilityMatrix,
     DeviceClass,
     LossyPath,
@@ -31,7 +31,7 @@ __all__ = [
     "DiffRequest",
     "JobStatus",
     # Migration models (Phase 0)
-    "AdapterInfo",
+    "CodecInfo",
     "CapabilityMatrix",
     "DeviceClass",
     "LossyPath",

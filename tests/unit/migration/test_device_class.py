@@ -3,7 +3,7 @@ Unit tests for the cross-device-class guardrail.
 
 Covers:
     * ``DeviceClass`` enum shape.
-    * ``CapabilityMatrix.device_classes`` field + MockAdapter declaration.
+    * ``CapabilityMatrix.device_classes`` field + MockCodec declaration.
     * ``check_class_compat`` service helper across every severity branch.
     * ``run_plan`` stage-0 guard (default behaviour + ``force=True`` override).
 """
@@ -14,8 +14,8 @@ import json
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
-from netconfig.migration.adapters.base import AdapterBase
+from netconfig.migration.codecs._mock import MockCodec
+from netconfig.migration.codecs.base import CodecBase
 from netconfig.models.migration import (
     CapabilityMatrix,
     DeviceClass,
@@ -32,7 +32,7 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-class _StubAdapter(AdapterBase):
+class _StubCodec(CodecBase):
     """Concrete stub adapter whose class set is supplied at construction.
 
     Implements every abstract method so the ABC can be instantiated;
@@ -59,9 +59,9 @@ class _StubAdapter(AdapterBase):
 
 def _make_adapter(
     name: str, classes: list[DeviceClass]
-) -> AdapterBase:
+) -> CodecBase:
     """Build a lightweight adapter for compat-check tests."""
-    a = _StubAdapter(name, classes)
+    a = _StubCodec(name, classes)
     # Bypass the class-level `name` ClassVar so `check_class_compat`
     # reads the instance-specific value through ``capabilities.adapter``
     # (which is what the compat check actually uses).
@@ -115,9 +115,9 @@ class TestCapabilityMatrixDeviceClasses:
         assert DeviceClass.router in m.device_classes
 
     def test_mock_adapter_declares_switch_and_router(self):
-        """MockAdapter is multi-class on purpose so tests can exercise
+        """MockCodec is multi-class on purpose so tests can exercise
         the intersection logic."""
-        caps = MockAdapter().capabilities
+        caps = MockCodec().capabilities
         assert DeviceClass.switch in caps.device_classes
         assert DeviceClass.router in caps.device_classes
 
@@ -192,7 +192,7 @@ class TestCheckClassCompat:
 class TestRunPlanClassGuard:
     def test_compatible_pair_proceeds_normally(self):
         """Mock adapter is multi-class (switch+router); self-pair is OK."""
-        job = run_plan(MockAdapter(), MockAdapter(), "{}")
+        job = run_plan(MockCodec(), MockCodec(), "{}")
         assert job.status is MigrationJobStatus.completed
         assert job.error is None
 
@@ -240,6 +240,6 @@ class TestRunPlanClassGuard:
     def test_force_flag_has_no_side_effects_when_already_compatible(self):
         """force=True on a pair that would have passed anyway is a no-op."""
         raw = json.dumps({"/interfaces/eth0/ip": "1.1.1.1"})
-        unforced = run_plan(MockAdapter(), MockAdapter(), raw, force=False)
-        forced = run_plan(MockAdapter(), MockAdapter(), raw, force=True)
+        unforced = run_plan(MockCodec(), MockCodec(), raw, force=False)
+        forced = run_plan(MockCodec(), MockCodec(), raw, force=True)
         assert unforced.status == forced.status == MigrationJobStatus.completed

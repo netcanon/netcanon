@@ -2,7 +2,7 @@
 Translator / migration engine — Phase 0.
 
 Scope (see ``translator-plans.txt`` §12):
-    * AdapterBase + CapabilityMatrix contract.
+    * CodecBase + CapabilityMatrix contract.
     * In-memory adapter registry.
     * One reference adapter (``_mock``) that round-trips a trivial
       dict-of-strings "tree" so the contract itself is testable
@@ -23,6 +23,6 @@ own module-level ``@register`` decorators.
 
 # Import built-in adapters so their @register decorators fire.
 # New adapters should add themselves here when they land.
-from .adapters import _mock  # noqa: F401 — side-effect import (register)
-from .adapters import cisco_iosxe  # noqa: F401 — side-effect import (register)
-from .adapters import opnsense  # noqa: F401 — side-effect import (register)
+from .codecs import _mock  # noqa: F401 — side-effect import (register)
+from .codecs import cisco_iosxe  # noqa: F401 — side-effect import (register)
+from .codecs import opnsense  # noqa: F401 — side-effect import (register)

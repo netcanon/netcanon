@@ -99,7 +99,7 @@ class TestAdapterDropdownsPopulate:
         assert "opnsense" in values
         assert "mock" in values
 
-    def test_adapter_info_updates_on_change(self, page: Page, base_url: str):
+    def test_codec_info_updates_on_change(self, page: Page, base_url: str):
         page.goto("/migrate")
         mig = MigratePage(page)
         page.wait_for_function(
@@ -109,9 +109,9 @@ class TestAdapterDropdownsPopulate:
         )
         mig.pick_source("cisco_iosxe")
         mig.pick_target("cisco_iosxe")
-        expect(mig.adapter_info).to_be_visible()
-        expect(mig.adapter_info).to_contain_text("Source")
-        expect(mig.adapter_info).to_contain_text("Target")
+        expect(mig.codec_info).to_be_visible()
+        expect(mig.codec_info).to_contain_text("Source")
+        expect(mig.codec_info).to_contain_text("Target")
 
 
 # ---------------------------------------------------------------------------

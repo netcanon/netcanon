@@ -1,5 +1,5 @@
 """
-``MockAdapter`` — reference adapter proving the AdapterBase contract.
+``MockCodec`` — reference adapter proving the CodecBase contract.
 
 Internal tree representation: ``dict[str, str]`` — a flat xpath-to-value
 map.  Serialisation format: a single JSON object.  Neither choice is
@@ -14,7 +14,7 @@ Round-trip invariant (enforced by ``tests/unit/migration/test_mock_
 adapter.py``)::
 
     for tree in example_trees:
-        adapter = MockAdapter()
+        adapter = MockCodec()
         assert adapter.parse(adapter.render(tree)) == tree
 """
 
@@ -29,12 +29,12 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
-from ..base import AdapterBase, ParseError
+from ..base import CodecBase, ParseError
 from ..registry import register
 
 
 @register
-class MockAdapter(AdapterBase):
+class MockCodec(CodecBase):
     """In-memory reference adapter.  Not wired to any real device."""
 
     name: ClassVar[str] = "mock"
@@ -44,6 +44,7 @@ class MockAdapter(AdapterBase):
     #: Class-level capability matrix — constant across instances.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="mock",
+        vendor_id="mock",
         version_range="1.x",
         # Multi-class so unit tests can exercise the "non-empty
         # intersection" path AND the "disjoint sets" path against

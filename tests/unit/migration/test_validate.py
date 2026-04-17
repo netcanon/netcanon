@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
+from netconfig.migration.codecs._mock import MockCodec
 from netconfig.models.migration import (
     CapabilityMatrix,
     LossyPath,
@@ -85,7 +85,7 @@ class TestValidateAgainst:
             "/interfaces/eth0/ip": "1",
             "/interfaces/eth0/description": "d",
         }
-        report = validate_against(tree, MockAdapter())
+        report = validate_against(tree, MockCodec())
         assert report.severity == "ok"
         assert report.compatible is True
         assert report.reasons == []
@@ -95,7 +95,7 @@ class TestValidateAgainst:
 
     def test_lossy_only_is_warn(self):
         tree = {"/legacy/deprecated": "v"}
-        report = validate_against(tree, MockAdapter())
+        report = validate_against(tree, MockCodec())
         assert report.severity == "warn"
         assert report.compatible is True
         assert len(report.lossy_paths) == 1
@@ -103,7 +103,7 @@ class TestValidateAgainst:
 
     def test_unsupported_is_block(self):
         tree = {"/unsafe/kernel_module": "v"}
-        report = validate_against(tree, MockAdapter())
+        report = validate_against(tree, MockCodec())
         assert report.severity == "block"
         assert report.compatible is False
         assert len(report.unsupported_paths) == 1
@@ -135,7 +135,7 @@ class TestValidateAgainst:
             "/legacy/deprecated": "v",
             "/unsafe/kernel_module": "v",
         }
-        report = validate_against(tree, MockAdapter())
+        report = validate_against(tree, MockCodec())
         assert report.severity == "block"
         assert len(report.unsupported_paths) == 1
         assert len(report.lossy_paths) == 1
@@ -143,6 +143,6 @@ class TestValidateAgainst:
         assert any("unsupported" in r for r in report.reasons)
 
     def test_empty_tree_is_ok_with_no_findings(self):
-        report = validate_against({}, MockAdapter())
+        report = validate_against({}, MockCodec())
         assert report.severity == "ok"
         assert report.supported_paths == []

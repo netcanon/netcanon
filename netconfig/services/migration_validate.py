@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Iterable
 
-from ..migration.adapters.base import AdapterBase
+from ..migration.codecs.base import CodecBase
 from ..models.diff import CompatibilityReport
 from ..models.migration import (
     CapabilityMatrix,
@@ -26,12 +26,12 @@ from ..models.migration import (
 
 
 def _enumerate_xpaths(
-    tree: object, source: AdapterBase | None = None
+    tree: object, source: CodecBase | None = None
 ) -> Iterable[str]:
     """Yield xpaths for every leaf in *tree*.
 
     When a *source* adapter is supplied we delegate to its
-    :meth:`AdapterBase.iter_xpaths` override — the adapter is the only
+    :meth:`CodecBase.iter_xpaths` override — the adapter is the only
     thing that knows how to walk its own tree shape.  Without *source*
     we fall back to the Phase 0 flat ``dict[str, str]`` walker so
     legacy callers (and the mock adapter in tests) keep working.
@@ -48,7 +48,7 @@ def _enumerate_xpaths(
 def classify_tree(
     tree: object,
     caps: CapabilityMatrix,
-    source: AdapterBase | None = None,
+    source: CodecBase | None = None,
 ) -> tuple[list[str], list[LossyPath], list[UnsupportedPath]]:
     """Classify every xpath in *tree* against *caps*.
 
@@ -90,8 +90,8 @@ def classify_tree(
 
 def validate_against(
     tree: object,
-    target: AdapterBase,
-    source: AdapterBase | None = None,
+    target: CodecBase,
+    source: CodecBase | None = None,
 ) -> ValidationReport:
     """Produce a :class:`ValidationReport` for *tree* against *target*.
 
@@ -112,7 +112,7 @@ def validate_against(
             matrix drives classification.
         source: Optional — adapter that produced *tree*.  Used to walk
             the tree when the source adapter uses a non-dict shape
-            (e.g. :class:`CiscoIOSXEAdapter`'s nested dict).  Omitted
+            (e.g. :class:`CiscoIOSXECodec`'s nested dict).  Omitted
             for legacy callers that still pass flat ``dict[str, str]``.
     """
     supported, lossy, unsupported = classify_tree(
@@ -159,7 +159,7 @@ def validate_against(
 
 
 def check_class_compat(
-    source: AdapterBase, target: AdapterBase
+    source: CodecBase, target: CodecBase
 ) -> CompatibilityReport:
     """Is it sensible to translate *source* config into *target* config?
 

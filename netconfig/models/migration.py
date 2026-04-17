@@ -126,7 +126,7 @@ class CapabilityMatrix(BaseModel):
     and classifies each against this matrix.
 
     Attributes:
-        adapter: Adapter name (matches ``AdapterBase.name``).
+        adapter: Adapter name (matches ``CodecBase.name``).
         version_range: PEP 440 / SemVer range this matrix applies to.
         supported: xpath patterns the adapter round-trips cleanly.
         lossy: xpath patterns that survive with known caveats.
@@ -137,9 +137,10 @@ class CapabilityMatrix(BaseModel):
     treats ``unsupported`` as the strictest rule and uses it to decide).
     """
 
-    adapter: str
+    adapter: str  # codec name (kept as "adapter" in JSON for back-compat)
+    vendor_id: str = ""  # e.g. "cisco_iosxe", "opnsense" — links to vendor YAML (R2)
     version_range: str = "*"
-    #: Device categories this adapter targets.  Used for cross-class
+    #: Device categories this codec targets.  Used for cross-class
     #: guard — see ``netconfig.services.migration_validate.check_class_compat``.
     #: Declaring zero classes means "uncommitted" and produces a warn-
     #: level banner rather than a block.
@@ -283,8 +284,8 @@ class MigrationJob(BaseModel):
     Attributes:
         id: UUID4 string, generated at creation.
         status: Current lifecycle state.
-        source_adapter: Name of the adapter used to parse input.
-        target_adapter: Name of the adapter used to render output.
+        source_codec: Name of the adapter used to parse input.
+        target_codec: Name of the adapter used to render output.
         transforms: Ordered list of transforms applied between
             parse and validate.
         created_at: UTC time of creation.
@@ -296,8 +297,8 @@ class MigrationJob(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     status: MigrationJobStatus = MigrationJobStatus.pending
-    source_adapter: str
-    target_adapter: str
+    source_codec: str
+    target_codec: str
     transforms: list[TransformSpec] = Field(default_factory=list)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
@@ -344,7 +345,7 @@ class MigrationPlanRequest(BaseModel):
     force: bool = False
 
 
-class AdapterInfo(BaseModel):
+class CodecInfo(BaseModel):
     """Summary surfaced by ``GET /api/v1/migration/adapters``.
 
     Lightweight on purpose — the full ``CapabilityMatrix`` lives at
@@ -357,7 +358,7 @@ class AdapterInfo(BaseModel):
 
     Attributes:
         input_format: Short catalogue tag from
-            :data:`netconfig.migration.adapters.base.INPUT_FORMATS`
+            :data:`netconfig.migration.codecs.base.INPUT_FORMATS`
             describing what the adapter's ``parse()`` expects.
     """
 

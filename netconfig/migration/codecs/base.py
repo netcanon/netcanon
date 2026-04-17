@@ -1,7 +1,7 @@
 """
-Adapter contract: :class:`AdapterBase` + :class:`CapabilityMatrix`.
+Adapter contract: :class:`CodecBase` + :class:`CapabilityMatrix`.
 
-Every vendor adapter subclasses :class:`AdapterBase` and ships:
+Every vendor adapter subclasses :class:`CodecBase` and ships:
 
     * ``name`` — unique, used as the adapter key in requests and URLs.
     * ``capabilities`` — a :class:`CapabilityMatrix` describing what
@@ -31,7 +31,7 @@ from typing import Any, ClassVar, Iterable
 from ...models.migration import CapabilityMatrix
 
 
-class AdapterError(Exception):
+class CodecError(Exception):
     """Base class for adapter-layer errors.
 
     Subclasses separate *parsing* failures (malformed input) from
@@ -41,8 +41,8 @@ class AdapterError(Exception):
     """
 
 
-class ParseError(AdapterError):
-    """Raised by ``AdapterBase.parse`` when the input cannot be understood.
+class ParseError(CodecError):
+    """Raised by ``CodecBase.parse`` when the input cannot be understood.
 
     Attributes:
         path: Adapter-scoped location of the failure (e.g. line number,
@@ -63,8 +63,8 @@ class ParseError(AdapterError):
         self.snippet = snippet
 
 
-class RenderError(AdapterError):
-    """Raised by ``AdapterBase.render`` when a tree cannot be emitted.
+class RenderError(CodecError):
+    """Raised by ``CodecBase.render`` when a tree cannot be emitted.
 
     Attributes:
         yang_path: xpath of the offending tree node; ``None`` when the
@@ -93,7 +93,7 @@ INPUT_FORMATS = frozenset({
 })
 
 
-class AdapterBase(ABC):
+class CodecBase(ABC):
     """Abstract base class all vendor adapters subclass.
 
     Minimal contract — subclasses may add helper methods freely.  The
@@ -172,7 +172,7 @@ class AdapterBase(ABC):
 
         The default implementation handles the flat ``dict[str, str]``
         shape used by the reference mock adapter.  Adapters with
-        nested tree shapes (e.g. :class:`CiscoIOSXEAdapter`, which
+        nested tree shapes (e.g. :class:`CiscoIOSXECodec`, which
         uses a nested dict mirroring the OpenConfig XML tree) MUST
         override.
         """

@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
+from netconfig.migration.codecs._mock import MockCodec
 from netconfig.models.migration import (
     MigrationJobStatus,
     TransformSpec,
@@ -23,8 +23,8 @@ pytestmark = pytest.mark.unit
 
 class TestRunPlanHappyPath:
     def test_minimal_roundtrip_reaches_completed(self):
-        src = MockAdapter()
-        tgt = MockAdapter()
+        src = MockCodec()
+        tgt = MockCodec()
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
         job = run_plan(src, tgt, raw)
         assert job.status is MigrationJobStatus.completed
@@ -36,8 +36,8 @@ class TestRunPlanHappyPath:
 
     def test_rendered_output_roundtrips_back_through_source(self):
         """render() output must be parseable by the same adapter."""
-        src = MockAdapter()
-        tgt = MockAdapter()
+        src = MockCodec()
+        tgt = MockCodec()
         raw = json.dumps({"/interfaces/eth0/ip": "10.0.0.1"})
         job = run_plan(src, tgt, raw)
         assert job.rendered is not None
@@ -45,9 +45,9 @@ class TestRunPlanHappyPath:
         assert reparsed == {"/interfaces/eth0/ip": "10.0.0.1"}
 
     def test_job_records_source_and_target_names(self):
-        job = run_plan(MockAdapter(), MockAdapter(), "{}")
-        assert job.source_adapter == "mock"
-        assert job.target_adapter == "mock"
+        job = run_plan(MockCodec(), MockCodec(), "{}")
+        assert job.source_codec == "mock"
+        assert job.target_codec == "mock"
 
 
 class TestRunPlanTransforms:
@@ -68,12 +68,12 @@ class TestRunPlanTransforms:
             return tree
 
         job = run_plan(
-            MockAdapter(), MockAdapter(), "{}",
+            MockCodec(), MockCodec(), "{}",
             transforms=[first, second],
         )
         assert call_order == ["first", "second"]
         # The final rendered tree contains both transform markers.
-        final = MockAdapter().parse(job.rendered or "")
+        final = MockCodec().parse(job.rendered or "")
         assert final == {"/seen_by_first": "yes", "/seen_by_second": "yes"}
 
     def test_transform_specs_recorded_on_job(self):
@@ -82,7 +82,7 @@ class TestRunPlanTransforms:
             TransformSpec(name="rename_interfaces", args={"eth0": "ether1"}),
         ]
         job = run_plan(
-            MockAdapter(), MockAdapter(), "{}",
+            MockCodec(), MockCodec(), "{}",
             transforms=[lambda t: t],
             transform_specs=specs,
         )
@@ -93,7 +93,7 @@ class TestRunPlanTransforms:
             raise RuntimeError("boom")
 
         job = run_plan(
-            MockAdapter(), MockAdapter(), "{}", transforms=[exploder]
+            MockCodec(), MockCodec(), "{}", transforms=[exploder]
         )
         assert job.status is MigrationJobStatus.failed
         assert "boom" in (job.error or "")
@@ -101,7 +101,7 @@ class TestRunPlanTransforms:
 
 class TestRunPlanFailures:
     def test_parse_error_marks_job_failed(self):
-        job = run_plan(MockAdapter(), MockAdapter(), "not valid json")
+        job = run_plan(MockCodec(), MockCodec(), "not valid json")
         assert job.status is MigrationJobStatus.failed
         assert "parse failed" in (job.error or "")
         # Validation + render never happened.
@@ -116,12 +116,12 @@ class TestRunPlanFailures:
         so downstream code won't auto-deploy it.
         """
         raw = json.dumps({"/unsafe/kernel_module": "rootkit.ko"})
-        job = run_plan(MockAdapter(), MockAdapter(), raw)
+        job = run_plan(MockCodec(), MockCodec(), raw)
         assert job.status is MigrationJobStatus.partial
         assert job.validation is not None
         assert job.validation.severity == "block"
         assert job.rendered is not None  # still produced for review
 
     def test_failed_job_still_has_completed_at(self):
-        job = run_plan(MockAdapter(), MockAdapter(), "not valid json")
+        job = run_plan(MockCodec(), MockCodec(), "not valid json")
         assert job.completed_at is not None

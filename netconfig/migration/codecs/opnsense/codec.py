@@ -1,5 +1,5 @@
 """
-``OPNsenseAdapter`` — second real adapter.
+``OPNsenseCodec`` — second real adapter.
 
 Tree shape
 ----------
@@ -46,12 +46,12 @@ from ....models.migration import (
     LossyPath,
     UnsupportedPath,
 )
-from ..base import AdapterBase, ParseError, RenderError
+from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 
 
 @register
-class OPNsenseAdapter(AdapterBase):
+class OPNsenseCodec(CodecBase):
     """Adapter for OPNsense ``config.xml`` (25.x).
 
     Declares ``device_classes=[firewall, router]`` — OPNsense's primary
@@ -65,6 +65,7 @@ class OPNsenseAdapter(AdapterBase):
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
+        vendor_id="opnsense",
         version_range="24.x+",
         device_classes=[DeviceClass.firewall, DeviceClass.router],
         supported=[
@@ -200,7 +201,7 @@ class OPNsenseAdapter(AdapterBase):
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         """Yield schema xpaths for every leaf in *tree*.
 
-        Same conventions as :class:`CiscoIOSXEAdapter.iter_xpaths` —
+        Same conventions as :class:`CiscoIOSXECodec.iter_xpaths` —
         OpenConfig schema paths, no list-key predicates.  Hand-walks
         the two known structural wrappers (``/interfaces/interface``
         is a list); every other dict nests naturally.

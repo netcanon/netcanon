@@ -213,7 +213,7 @@ LAYER 4 — TRANSPORT
 
   R1  Rename adapter → codec everywhere.  Add vendor_id to the
       capability matrix.  Back-compat shims.  1 session.  No
-      behaviour change.
+      behaviour change.  STATUS: SHIPPED.
 
   R2  Extract vendor declarations to YAML files.  Load at startup.
       1 session.

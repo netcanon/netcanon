@@ -1,5 +1,5 @@
 """
-Round-trip + contract tests for the reference ``MockAdapter``.
+Round-trip + contract tests for the reference ``MockCodec``.
 
 The round-trip invariant is THE most valuable test per
 ``translator-plans.txt`` §10 — every real adapter must satisfy it for
@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from netconfig.migration.adapters._mock import MockAdapter
-from netconfig.migration.adapters.base import ParseError
+from netconfig.migration.codecs._mock import MockCodec
+from netconfig.migration.codecs.base import ParseError
 
 pytestmark = pytest.mark.unit
 
@@ -37,11 +37,11 @@ SAMPLE_TREES: list[dict[str, str]] = [
 ]
 
 
-class TestMockAdapterRoundtrip:
+class TestMockCodecRoundtrip:
     @pytest.mark.parametrize("tree", SAMPLE_TREES)
     def test_parse_render_roundtrip(self, tree):
         """parse(render(tree)) == tree for every tree in the supported subset."""
-        adapter = MockAdapter()
+        adapter = MockCodec()
         rendered = adapter.render(tree)
         reparsed = adapter.parse(rendered)
         assert reparsed == tree
@@ -54,58 +54,58 @@ class TestMockAdapterRoundtrip:
         would produce spurious diffs.
         """
         tree = {"/b": "2", "/a": "1"}
-        a = MockAdapter().render(tree)
-        b = MockAdapter().render(tree)
+        a = MockCodec().render(tree)
+        b = MockCodec().render(tree)
         assert a == b
 
     def test_render_output_is_sorted(self):
         """Keys appear in sorted order so human reviewers and textual
         diffs see a stable layout regardless of dict insertion order."""
         tree = {"/z": "1", "/a": "2", "/m": "3"}
-        rendered = MockAdapter().render(tree)
+        rendered = MockCodec().render(tree)
         a_idx = rendered.index("/a")
         m_idx = rendered.index("/m")
         z_idx = rendered.index("/z")
         assert a_idx < m_idx < z_idx
 
 
-class TestMockAdapterParseErrors:
+class TestMockCodecParseErrors:
     def test_non_json_raises_parseerror(self):
         with pytest.raises(ParseError):
-            MockAdapter().parse("not json at all")
+            MockCodec().parse("not json at all")
 
     def test_json_list_rejected(self):
         with pytest.raises(ParseError, match="object at top level"):
-            MockAdapter().parse(json.dumps([1, 2, 3]))
+            MockCodec().parse(json.dumps([1, 2, 3]))
 
     def test_non_string_value_rejected(self):
         with pytest.raises(ParseError, match="string keys and string values"):
-            MockAdapter().parse(json.dumps({"/a": 42}))
+            MockCodec().parse(json.dumps({"/a": 42}))
 
     def test_parseerror_carries_snippet_for_ui(self):
         """The ParseError must include a snippet so the UI can surface
         a useful error banner."""
         raw = "this is not json"
         with pytest.raises(ParseError) as excinfo:
-            MockAdapter().parse(raw)
+            MockCodec().parse(raw)
         assert excinfo.value.snippet is not None
         assert raw in excinfo.value.snippet
 
 
-class TestMockAdapterCapabilities:
+class TestMockCodecCapabilities:
     def test_capabilities_adapter_name_matches(self):
-        assert MockAdapter().capabilities.adapter == "mock"
+        assert MockCodec().capabilities.adapter == "mock"
 
     def test_capabilities_has_each_classification(self):
         """The mock is deliberately set up to exercise every classify
         branch so pipeline tests can use it."""
-        caps = MockAdapter().capabilities
+        caps = MockCodec().capabilities
         assert len(caps.supported) >= 1
         assert len(caps.lossy) >= 1
         assert len(caps.unsupported) >= 1
 
     def test_capabilities_is_class_level_constant(self):
         """Two instances yield the same matrix object (cached on the class)."""
-        a = MockAdapter().capabilities
-        b = MockAdapter().capabilities
+        a = MockCodec().capabilities
+        b = MockCodec().capabilities
         assert a is b

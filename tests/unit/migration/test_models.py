@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from netconfig.models.migration import (
-    AdapterInfo,
+    CodecInfo,
     CapabilityMatrix,
     LossyPath,
     MigrationJob,
@@ -122,7 +122,7 @@ class TestXPathDelta:
 
 class TestMigrationJob:
     def test_defaults(self):
-        j = MigrationJob(source_adapter="src", target_adapter="tgt")
+        j = MigrationJob(source_codec="src", target_codec="tgt")
         assert j.status is MigrationJobStatus.pending
         assert j.transforms == []
         assert j.completed_at is None
@@ -132,8 +132,8 @@ class TestMigrationJob:
         assert len(j.id) == 36
 
     def test_unique_ids_across_instances(self):
-        a = MigrationJob(source_adapter="s", target_adapter="t")
-        b = MigrationJob(source_adapter="s", target_adapter="t")
+        a = MigrationJob(source_codec="s", target_codec="t")
+        b = MigrationJob(source_codec="s", target_codec="t")
         assert a.id != b.id
 
 
@@ -152,7 +152,7 @@ class TestMigrationJobStatus:
 
 
 # ---------------------------------------------------------------------------
-# TransformSpec + AdapterInfo shape
+# TransformSpec + CodecInfo shape
 # ---------------------------------------------------------------------------
 
 
@@ -166,9 +166,9 @@ class TestTransformSpec:
         assert t.args["10"] == 100
 
 
-class TestAdapterInfo:
+class TestCodecInfo:
     def test_counts_are_required(self):
-        info = AdapterInfo(
+        info = CodecInfo(
             name="mock",
             version_range="1.x",
             supported_count=4,
