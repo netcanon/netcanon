@@ -45,6 +45,18 @@ from .storage.file_store import FileConfigStore
 from .storage.job_store import FileJobStore
 from .storage.schedule_store import FileScheduleStore
 
+# Configure application-level logging once, at module import time.  The
+# ``configure_logging`` helper (netconfig/logging_config.py) is idempotent
+# and a no-op under uvicorn's own log config / under pytest's harness, so
+# calling it here gives ``logger.info(...)`` output everywhere except
+# environments that have already installed a root-logger config.  This
+# replaces the prior state where our app-level INFO logs (most visibly
+# the migration pipeline's "Migration plan X: src -> tgt = status" line)
+# were silently dropped by the default WARNING threshold.
+from .logging_config import configure_logging
+configure_logging(level="INFO")
+
+
 logger = logging.getLogger(__name__)
 
 

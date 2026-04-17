@@ -19,16 +19,34 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def reset_root_logger():
-    """Restore root logger state after each test."""
+    """Isolate root logger state before AND after each test.
+
+    Clearing non-pytest handlers at entry is what lets these tests
+    exercise :func:`configure_logging`'s "first call" code path — the
+    function short-circuits when the root already has application
+    handlers, so if an earlier module import (e.g. ``netconfig.main``)
+    installed a console handler, the tests would otherwise see a
+    no-op and assert against stale state.  The fixture restores the
+    original handler set afterwards so other test modules are
+    unaffected.
+    """
     root = logging.getLogger()
     handlers_before = list(root.handlers)
     level_before = root.level
+    # Clear non-_pytest handlers so configure_logging's guard is satisfied.
+    for h in list(root.handlers):
+        if not type(h).__module__.startswith("_pytest"):
+            root.removeHandler(h)
     yield
-    # Remove handlers added by this test.
+    # Remove anything this test added.
     for h in list(root.handlers):
         if h not in handlers_before:
             h.close()
             root.removeHandler(h)
+    # Re-attach anything we stripped at entry.
+    for h in handlers_before:
+        if h not in root.handlers:
+            root.addHandler(h)
     root.setLevel(level_before)
     # Reset noisy-logger overrides so other tests see NOTSET.
     for name in ("paramiko", "uvicorn.access", "multipart", "asyncio"):
