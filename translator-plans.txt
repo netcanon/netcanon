@@ -312,10 +312,111 @@ LAYER 4 — TRANSPORT
   │            cross-vendor regressions automatically.             │
   │   Effort: 1 session (parallels Session E's SNMP wire-through). │
   │                                                                │
-  │ Both fixes should land BEFORE real-capture validation          │
-  │ (URGENT NEXT above) graduates any codec to `certified` — both  │
-  │ gaps are guaranteed to surface in real captures and would      │
-  │ otherwise be logged as "configs drop silently" regressions.    │
+  │ BUG 3 — Cisco per-port switchport data never reaches target.   │
+  │   Symptom: `interface Ten1/0/5 / switchport access vlan 20 /   │
+  │            switchport trunk allowed vlan 11,20 / switchport    │
+  │            mode trunk` populates CanonicalInterface fields     │
+  │            (access_vlan, trunk_allowed_vlans, switchport_mode) │
+  │            -- but no render() reads them back.  Aruba's        │
+  │            render() emits `interface <N> / enable / exit` and  │
+  │            nothing about VLAN membership.  Cross-vendor        │
+  │            renders drop ALL L2 port assignments silently.      │
+  │   Root:   Design decision from the research doc: canonical     │
+  │            is VLAN-centric (membership lives on CanonicalVlan. │
+  │            tagged_ports + untagged_ports), not port-centric.   │
+  │            Cisco is port-centric, Aruba is VLAN-centric.  The  │
+  │            parser records per-port data but never transposes   │
+  │            it into VLAN-centric form, so VLAN-centric          │
+  │            renderers have nothing to emit.                     │
+  │   Fix:    Post-parse pass on CanonicalIntent that projects     │
+  │            per-interface switchport_mode / access_vlan /       │
+  │            trunk_allowed_vlans / trunk_native_vlan onto the    │
+  │            matching CanonicalVlan's tagged_ports and           │
+  │            untagged_ports lists.  Symmetric for render:        │
+  │            codecs that are port-centric (Cisco) read from      │
+  │            tagged/untagged_ports when emitting per-interface   │
+  │            switchport lines.  Lives as a shared transform in   │
+  │            netconfig/migration/canonical/, not per-codec.      │
+  │   Effort: 1 session.  The transpose is tricky for hybrid       │
+  │            interfaces (both access_vlan AND trunk_allowed set  │
+  │            -- Cisco allows but Aruba forbids).  Needs a        │
+  │            deterministic conflict-resolution rule documented   │
+  │            in capability matrix as lossy.                      │
+  │                                                                │
+  │ BUG 4 — `ip default-gateway` not parsed on Cisco IOS CLI.      │
+  │   Symptom: `ip default-gateway 192.168.11.1` is silently       │
+  │            dropped.  Common on L2-only switches (no routing;   │
+  │            the switch itself needs a mgmt gateway for its SVI  │
+  │            to reach upstream).                                 │
+  │   Root:   _STATIC_ROUTE_RE only matches `ip route X Y Z`.      │
+  │            `ip default-gateway X` uses different syntax.       │
+  │   Fix:    Add a dedicated regex; map to CanonicalStaticRoute   │
+  │            (destination="0.0.0.0/0", gateway=X) so it rides    │
+  │            through the standard static-route code path.  The   │
+  │            Aruba renderer already emits `ip default-gateway`   │
+  │            for 0.0.0.0/0 routes.                               │
+  │   Effort: ~10 lines + tests.                                   │
+  │                                                                │
+  │ All four fixes should land BEFORE real-capture validation      │
+  │ (URGENT NEXT above) graduates any codec to `certified` — all   │
+  │ four gaps are guaranteed to surface in real captures and       │
+  │ would otherwise be logged as "configs drop silently" regs.     │
+  └────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────┐
+  │ TIER 2 REMAINING  (after Bug 2 / BUG 3 ship)                   │
+  ├────────────────────────────────────────────────────────────────┤
+  │ Canonical model defines these but no codec wires them.  Same   │
+  │ shape of work as Session E's SNMP wire-through.  Each is one   │
+  │ session: model is already in canonical/intent.py, just needs   │
+  │ per-codec parse+render+tests and capability-matrix declaration.│
+  │                                                                │
+  │   * local_users  — Cisco `username X privilege N secret ...`,  │
+  │                    Aruba `password manager user-name ...`,     │
+  │                    FortiGate `config system admin`, MikroTik   │
+  │                    `/user add`, OPNsense `<system><user>`.     │
+  │   * RADIUS servers — every vendor has some flavour;            │
+  │                       CanonicalRADIUSServer already modelled.  │
+  │   * DHCP server pools — Cisco `ip dhcp pool`, OPNsense         │
+  │                         `<dhcpd>`, MikroTik `/ip dhcp-server`, │
+  │                         FortiGate `config system dhcp server`. │
+  │   * (LAGs is Bug 2 above — shares this same session shape.)    │
+  │                                                                │
+  │ Priority order: LAGs (Bug 2, already has urgency), then        │
+  │ local_users (security-sensitive, every real config has them),  │
+  │ then DHCP pools, then RADIUS.                                  │
+  └────────────────────────────────────────────────────────────────┘
+
+  ┌────────────────────────────────────────────────────────────────┐
+  │ FIDELITY POLISH  (low-priority, catch-all bucket)              │
+  ├────────────────────────────────────────────────────────────────┤
+  │ Small gaps surfaced by real-config dogfooding.  None are       │
+  │ blocking; all are honest "we don't carry this field" cases     │
+  │ that could be improved incrementally once the big data-loss    │
+  │ bugs are closed.                                                │
+  │                                                                │
+  │   * Per-interface MTU (`mtu 1500`) — CanonicalInterface has    │
+  │     the field; Cisco CLI parser doesn't populate it, no        │
+  │     render() emits it.                                          │
+  │   * Per-interface speed/duplex — not modelled at all.  Small   │
+  │     CanonicalInterface addition + per-codec wiring.            │
+  │   * Cisco negative commands (`no ip igmp snooping vlan 20`,    │
+  │     `no errdisable detect cause ...`) — silently ignored.      │
+  │     Decide: Tier 3 opaque-carry, or Tier 2 structured?         │
+  │   * Port admin-status default — bare `interface TenGigE1/1/1`  │
+  │     with no body currently defaults to enabled=True on parse,  │
+  │     which is correct for most Cisco platforms but not          │
+  │     universally.  Verify against real 9300 capture.            │
+  │   * Cisco `vrf definition <name>` and `vrf forwarding <name>`  │
+  │     on interfaces — currently dropped.  VRFs aren't in the     │
+  │     canonical model yet.                                       │
+  │   * Cisco `spanning-tree mode rapid-pvst` and related STP      │
+  │     globals — Tier 2 model exists for per-port settings only.  │
+  │   * Cisco `crypto pki certificate chain ...` multi-line blobs  │
+  │     — should land in Tier 3 raw_sections opaque carry-through  │
+  │     so they survive parse even if never auto-rendered.         │
+  │   * Cisco `privilege exec level <N>` aliases — Tier 3          │
+  │     informational; currently dropped.                          │
   └────────────────────────────────────────────────────────────────┘
 
   R1  Rename adapter → codec everywhere.  Add vendor_id to the
