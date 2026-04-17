@@ -1,0 +1,30 @@
+
+Building configuration...
+
+Current configuration : 2048 bytes
+!
+version 17.9
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+hostname TestRouter
+!
+interface GigabitEthernet0/0/0
+ description WAN uplink to ISP
+ ip address 198.51.100.1 255.255.255.252
+ no shutdown
+!
+interface GigabitEthernet0/0/1
+ description LAN segment
+ ip address 10.0.10.1 255.255.255.0
+ no shutdown
+!
+interface Loopback0
+ description Router ID
+ ip address 10.255.0.1 255.255.255.255
+!
+interface GigabitEthernet0/0/2
+ description Unused port
+ shutdown
+!
+end

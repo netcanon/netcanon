@@ -7,6 +7,55 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (R3+R4: codec direction/certainty fields + first CLI codec)
+
+- **R3: three new fields on ``CodecBase``:**
+  - ``direction`` — ``"bidirectional"`` (default), ``"parse_only"``, or
+    ``"render_only"``.  Parse-only codecs can only be SOURCE; the
+    ``/migrate`` UI now filters them out of the target dropdown.
+  - ``certainty`` — ``"certified"`` / ``"best_effort"`` /
+    ``"experimental"``.  Surfaced on the API and in the source
+    dropdown label so users know the trust level.
+  - ``canonical_model`` — which CIM the tree targets (default
+    ``"openconfig-lite"``).  Informational for now; becomes load-
+    bearing when cross-CIM translation lands.
+  All three fields exposed on ``CodecInfo`` via
+  ``GET /api/v1/migration/adapters``.
+
+- **R4: ``CiscoIOSXECLICodec``** — first ``parse_only`` codec, first
+  multi-codec-per-vendor instance.  Parses ``show running-config``
+  text — the format NetConfig's existing Netmiko backup collectors
+  already capture.  Shares ``vendor_id=cisco_iosxe`` with the
+  NETCONF codec; both produce the same tree shape so they're
+  interchangeable as pipeline SOURCEs.
+  - Direction: ``parse_only`` (render raises ``RenderError``).
+  - Certainty: ``experimental`` (synthetic samples only).
+  - Scope: interface stanzas — name, description, ``shutdown`` /
+    ``no shutdown``, ``ip address <ip> <mask>`` with mask→prefix-
+    length conversion.  Infers IANA ifType from the interface name
+    prefix (``GigabitEthernet`` → ``ethernetCsmacd``, ``Loopback`` →
+    ``softwareLoopback``, etc.).
+  - Rejects XML/JSON input with a clear error pointing at the
+    NETCONF codec.  Rejects non-contiguous subnet masks.
+  - ``/migrate`` page: CLI codec appears in the SOURCE dropdown
+    (with ``[experimental]`` badge) but NOT in the TARGET dropdown.
+    Format hint says "Paste the output of show running-config."
+    The "Load sample" button provides a working IOS CLI snippet.
+
+- **Pipeline proof:** ``cisco_iosxe_cli`` (source) → ``cisco_iosxe``
+  (target) completes successfully — the first time a stored backup
+  config can be translated to OpenConfig XML through the UI.
+
+- **Tests (+23):** ``tests/unit/migration/test_cisco_iosxe_cli.py``
+  covers R3 field declarations, parse (minimal, fixture, shutdown,
+  loopback /32, type inference), parse errors (empty, XML, JSON,
+  non-contiguous mask), render-raises, tree-shape compatibility with
+  the NETCONF codec's capability matrix, pipeline integration
+  (CLI→NETCONF succeeds, CLI-as-target fails with parse-only error),
+  and registry (two codecs for one vendor).
+
+- Full suite: **740 passing** (was 717).
+
 ### Added (R2: declarative vendor YAML)
 
 - **Vendor declarations** extracted to YAML files under

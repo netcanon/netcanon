@@ -25,6 +25,7 @@ own module-level ``@register`` decorators.
 # New codecs should add themselves here when they land.
 from .codecs import _mock  # noqa: F401 — side-effect import (register)
 from .codecs import cisco_iosxe  # noqa: F401 — side-effect import (register)
+from .codecs import cisco_iosxe_cli  # noqa: F401 — side-effect import (register)
 from .codecs import opnsense  # noqa: F401 — side-effect import (register)
 
 # Vendor declarations are loaded lazily via load_vendors() at app startup,

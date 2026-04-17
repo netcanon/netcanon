@@ -402,6 +402,9 @@ class CodecInfo(BaseModel):
     version_range: str
     device_classes: list[DeviceClass] = Field(default_factory=list)
     input_format: str = "unknown"
+    direction: str = "bidirectional"
+    certainty: str = "experimental"
+    canonical_model: str = "openconfig-lite"
     supported_count: int
     lossy_count: int
     unsupported_count: int

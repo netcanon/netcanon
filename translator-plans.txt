@@ -218,14 +218,12 @@ LAYER 4 — TRANSPORT
   R2  Extract vendor declarations to YAML files.  Load at startup.
       1 session.  STATUS: SHIPPED.
 
-  R3  Add direction + canonical_model + transports + certainty
-      fields.  Wire into validation.  1 session.
+  R3  Add direction + canonical_model + certainty fields.
+      Wire into validation + UI.  1 session.  STATUS: SHIPPED.
 
-  R4  First CLI codec: cisco_iosxe_cli_running_config.  First
-      multi-codec-per-vendor usage.  Proves the architecture.
-      2-3 sessions.  THIS IS THE HIGHEST-VALUE STEP — it's the
-      first time the translator works against configs NetConfig
-      has actually captured.
+  R4  First CLI codec: cisco_iosxe_cli.  First parse_only codec,
+      first multi-codec-per-vendor usage.  Proves the architecture.
+      2-3 sessions.  STATUS: SHIPPED.
 
   R5  Auto-detection from stored-config bytes.  Removes a UX step.
       1 session.

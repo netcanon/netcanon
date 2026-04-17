@@ -125,6 +125,23 @@ class CodecBase(ABC):
     #: Catalogue tag for the input format ``parse()`` accepts.
     input_format: ClassVar[str] = "unknown"
 
+    #: Direction capability.  ``"bidirectional"`` (default) means the
+    #: codec can both parse AND render.  ``"parse_only"`` means render()
+    #: raises NotImplementedError — the UI should only offer the codec as
+    #: a SOURCE, never as a TARGET.  ``"render_only"`` is the reverse.
+    direction: ClassVar[str] = "bidirectional"
+
+    #: Certainty tier (see translator-plans.txt "Certainty Model").
+    #:   ``"certified"``     — round-trip tested against ≥3 real captures.
+    #:   ``"best_effort"``   — tested against synthetic samples only.
+    #:   ``"experimental"``  — parse-only or incomplete; human review needed.
+    certainty: ClassVar[str] = "experimental"
+
+    #: Which canonical intent model this codec's tree shape targets.
+    #: Default ``"openconfig-lite"`` covers the L2/L3 subset we support;
+    #: firewall codecs will declare ``"netconfig-firewall-ext"`` etc.
+    canonical_model: ClassVar[str] = "openconfig-lite"
+
     @property
     @abstractmethod
     def capabilities(self) -> CapabilityMatrix:

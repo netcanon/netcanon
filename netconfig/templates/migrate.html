@@ -332,6 +332,31 @@
       ),
       exts: [],
     },
+    'cli-ios': {
+      label: 'Cisco IOS CLI (show running-config)',
+      desc: (
+        'Paste the output of `show running-config`.  This is the text ' +
+        'your existing backup collector already captures — you can also ' +
+        'pick a stored Cisco config from the dropdown.'
+      ),
+      sample: (
+        '!\n' +
+        'version 17.9\n' +
+        'hostname Router\n' +
+        '!\n' +
+        'interface GigabitEthernet0/0/0\n' +
+        ' description WAN uplink\n' +
+        ' ip address 198.51.100.1 255.255.255.252\n' +
+        ' no shutdown\n' +
+        '!\n' +
+        'interface Loopback0\n' +
+        ' description Router-ID\n' +
+        ' ip address 10.255.0.1 255.255.255.255\n' +
+        '!\n' +
+        'end\n'
+      ),
+      exts: ['cfg'],
+    },
     'unknown': {
       label: 'Unknown format',
       desc: (
@@ -358,14 +383,23 @@
         return;
       }
       adapters = await resp.json();
-      [sourceSel, targetSel].forEach(function(sel) {
-        sel.innerHTML = adapters.map(function(a) {
+      // Source dropdown: all codecs (parse_only + bidirectional).
+      // Target dropdown: only codecs that can render (bidirectional + render_only).
+      sourceSel.innerHTML = adapters.map(function(a) {
+        var cert = a.certainty !== 'experimental' ? '' : ' [experimental]';
+        return '<option value="' + escapeHtml(a.name) + '">'
+             + escapeHtml(a.vendor_display_name || a.name)
+             + ' — ' + escapeHtml(a.input_format)
+             + cert + '</option>';
+      }).join('');
+      targetSel.innerHTML = adapters
+        .filter(function(a) { return a.direction !== 'parse_only'; })
+        .map(function(a) {
           return '<option value="' + escapeHtml(a.name) + '">'
-               + escapeHtml(a.name)
+               + escapeHtml(a.vendor_display_name || a.name)
                + ' (' + a.device_classes.join(', ') + ')'
                + '</option>';
         }).join('');
-      });
       renderAdapterInfo();
     } catch (err) {
       showToast('Network error loading adapters: ' + err.message, 'error');

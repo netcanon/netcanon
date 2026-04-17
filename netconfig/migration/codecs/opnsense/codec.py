@@ -62,6 +62,9 @@ class OPNsenseCodec(CodecBase):
     name: ClassVar[str] = "opnsense"
     version_hint: ClassVar[str | None] = "25.x"
     input_format: ClassVar[str] = "xml-opnsense"
+    direction: ClassVar[str] = "bidirectional"
+    certainty: ClassVar[str] = "best_effort"
+    canonical_model: ClassVar[str] = "openconfig-lite"
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",

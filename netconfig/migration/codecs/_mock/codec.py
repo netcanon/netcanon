@@ -40,6 +40,9 @@ class MockCodec(CodecBase):
     name: ClassVar[str] = "mock"
     version_hint: ClassVar[str | None] = "1.0"
     input_format: ClassVar[str] = "json-flat"
+    direction: ClassVar[str] = "bidirectional"
+    certainty: ClassVar[str] = "experimental"
+    canonical_model: ClassVar[str] = "openconfig-lite"
 
     #: Class-level capability matrix — constant across instances.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
