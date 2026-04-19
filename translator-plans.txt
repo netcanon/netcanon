@@ -280,91 +280,76 @@ LAYER 4 — TRANSPORT
   │   would have caught this bug on day one.  8 new unit tests +   │
   │   25 parametrized invariant runs; 885 tests passing.           │
   │                                                                │
-  │ BUG 2 — LAG/port-channel member associations dropped.          │
-  │   Symptom: Cisco `interface Port-channel1 / description TRUNK` │
-  │            makes it to Aruba as `interface Port-channel1 /     │
-  │            name "TRUNK"`, but the member ports (Cisco's        │
-  │            per-port `channel-group 1 mode active`) are lost.   │
-  │            Aruba receives the LAG name but no knowledge of     │
-  │            which physical ports belong to it.  Aruba would     │
-  │            need to emit `trunk 1-2 trk1 lacp` to bundle.       │
-  │   Root:   The canonical dict already defines `CanonicalLAG`    │
-  │            (name, members[], mode) and `CanonicalInterface.    │
-  │            lag_member_of` — but NO codec populates or consumes │
-  │            them.  Declared in Session 1, never wired.          │
-  │   Fix:    Wire LAGs across all 5 codecs, same shape as the     │
-  │            SNMP work in Session E:                             │
-  │              * cisco_iosxe_cli: `interface Port-channelN` ->   │
-  │                CanonicalLAG(name="Port-channelN").  `channel-  │
-  │                group N mode active` on a member -> set         │
-  │                lag_member_of="Port-channelN" on that iface     │
-  │                AND append the member to the LAG's members[].   │
-  │              * aruba_aoss: emit `trunk <ports> trk<N> lacp` at │
-  │                top-level for each CanonicalLAG.  Parse the     │
-  │                same syntax back.                               │
-  │              * fortigate_cli: `config system interface / edit  │
-  │                "agg1" / set type aggregate / set member ...`.  │
-  │              * mikrotik: `/interface bonding add slaves=...`   │
-  │              * opnsense: `<laggs><lagg>` elements              │
-  │            Update each codec's capability matrix with the new  │
-  │            xpaths (/lags/lag/name, /lags/lag/member,           │
-  │            /lags/lag/mode).  Cross-codec matrix will catch     │
-  │            cross-vendor regressions automatically.             │
-  │   Effort: 1 session (parallels Session E's SNMP wire-through). │
+  │ BUG 2 — LAG/port-channel member associations dropped.  FIXED. │
+  │   Symptom was: Cisco `interface Port-channel1 / description    │
+  │   TRUNK` made it to Aruba as a LAG name with no member ports;  │
+  │   Cisco's per-port `channel-group 1 mode active` was lost.     │
+  │                                                                │
+  │   Fix shipped: CanonicalLAG wired across all 5 codecs.         │
+  │     * cisco_iosxe_cli: new _CHANNEL_GROUP_RE + _parse_lags()   │
+  │       derive LAGs from both `interface Port-channelN` and      │
+  │       per-member `channel-group N mode M`.  Cisco modes        │
+  │       (active/passive/on/auto/desirable) -> canonical via      │
+  │       _CISCO_LAG_MODE_MAP.  Members stamped lag_member_of.     │
+  │     * aruba_aoss: parse+render `trunk <ports> <name> <type>`;  │
+  │       non-native LAG names (Port-channel1, lagg0, bond1)       │
+  │       auto-translate to AOS-S trkN form.  lacp/dt-lacp <->     │
+  │       active; trunk/fec <-> static.  Empty LAGs become a       │
+  │       comment (no port list = no valid trunk line).            │
+  │     * fortigate_cli: parse+render `set type aggregate` +       │
+  │       `set member "p1" "p2"` with lacp-mode.  Render           │
+  │       synthesises missing LAG interfaces.  Two-pass            │
+  │       lag_member_of stamping handles out-of-order edits.       │
+  │     * mikrotik: parse+render /interface bonding with slaves=,  │
+  │       mode= (802.3ad <-> active, active-backup <-> static),    │
+  │       name=.                                                   │
+  │     * opnsense: parse+render <laggs>/<lagg> XML with           │
+  │       <laggif>/<members>/<proto> (lacp <-> active,             │
+  │       failover <-> static).                                    │
+  │   25 new tests: parse, render, round-trip, mode mapping,       │
+  │   naming translation, empty-LAG graceful handling, end-to-end  │
+  │   Cisco->Aruba flow.                                           │
   │                                                                │
   │ BUG 3 — Cisco per-port switchport data never reaches target.   │
-  │   Symptom: `interface Ten1/0/5 / switchport access vlan 20 /   │
-  │            switchport trunk allowed vlan 11,20 / switchport    │
-  │            mode trunk` populates CanonicalInterface fields     │
-  │            (access_vlan, trunk_allowed_vlans, switchport_mode) │
-  │            -- but no render() reads them back.  Aruba's        │
-  │            render() emits `interface <N> / enable / exit` and  │
-  │            nothing about VLAN membership.  Cross-vendor        │
-  │            renders drop ALL L2 port assignments silently.      │
-  │   Root:   Design decision from the research doc: canonical     │
-  │            is VLAN-centric (membership lives on CanonicalVlan. │
-  │            tagged_ports + untagged_ports), not port-centric.   │
-  │            Cisco is port-centric, Aruba is VLAN-centric.  The  │
-  │            parser records per-port data but never transposes   │
-  │            it into VLAN-centric form, so VLAN-centric          │
-  │            renderers have nothing to emit.                     │
-  │   Fix:    Post-parse pass on CanonicalIntent that projects     │
-  │            per-interface switchport_mode / access_vlan /       │
-  │            trunk_allowed_vlans / trunk_native_vlan onto the    │
-  │            matching CanonicalVlan's tagged_ports and           │
-  │            untagged_ports lists.  Symmetric for render:        │
-  │            codecs that are port-centric (Cisco) read from      │
-  │            tagged/untagged_ports when emitting per-interface   │
-  │            switchport lines.  Lives as a shared transform in   │
-  │            netconfig/migration/canonical/, not per-codec.      │
-  │   Effort: 1 session.  The transpose is tricky for hybrid       │
-  │            interfaces (both access_vlan AND trunk_allowed set  │
-  │            -- Cisco allows but Aruba forbids).  Needs a        │
-  │            deterministic conflict-resolution rule documented   │
-  │            in capability matrix as lossy.                      │
+  │   STATUS: FIXED.                                               │
+  │   Symptom was: `interface Ten1/0/5 / switchport access vlan 20 │
+  │   / switchport trunk allowed vlan 11,20 / switchport mode      │
+  │   trunk` populated CanonicalInterface fields -- but no VLAN-   │
+  │   centric render read them back.  Aruba emitted `interface N / │
+  │   enable / exit` and nothing about VLAN membership.            │
+  │                                                                │
+  │   Fix shipped: netconfig/migration/canonical/transforms.py     │
+  │   with two idempotent in-place bridges.                        │
+  │     * project_switchport_to_vlan (port -> VLAN-centric):       │
+  │       access port -> append iface to vlans[N].untagged_ports;  │
+  │       trunk port -> append iface to vlans[vid].tagged_ports    │
+  │       for each allowed vid; native VLAN demoted from           │
+  │       tagged_ports to untagged_ports (Cisco allows listing     │
+  │       native in allowed but it's still sent untagged).         │
+  │       Missing VLAN stanzas are synthesised so membership       │
+  │       isn't lost.  Wired into cisco_iosxe_cli.parse().         │
+  │     * project_vlan_to_switchport (inverse, dormant until a     │
+  │       port-centric renderer exists).                           │
+  │   22 new tests (16 transform-level, 2 Cisco->Aruba end-to-end, │
+  │   4 inverse).                                                  │
   │                                                                │
   │ BUG 4 — `ip default-gateway` not parsed on Cisco IOS CLI.      │
-  │   Symptom: `ip default-gateway 192.168.11.1` is silently       │
-  │            dropped.  Common on L2-only switches (no routing;   │
-  │            the switch itself needs a mgmt gateway for its SVI  │
-  │            to reach upstream).                                 │
-  │   Root:   _STATIC_ROUTE_RE only matches `ip route X Y Z`.      │
-  │            `ip default-gateway X` uses different syntax.       │
-  │   Fix:    Add a dedicated regex; map to CanonicalStaticRoute   │
-  │            (destination="0.0.0.0/0", gateway=X) so it rides    │
-  │            through the standard static-route code path.  The   │
-  │            Aruba renderer already emits `ip default-gateway`   │
-  │            for 0.0.0.0/0 routes.                               │
-  │   Effort: ~10 lines + tests.                                   │
+  │   STATUS: FIXED.  Added _DEFAULT_GATEWAY_RE and extended       │
+  │   _parse_static_routes to emit CanonicalStaticRoute(           │
+  │   destination="0.0.0.0/0", gateway=X).  Aruba's renderer       │
+  │   already collapses 0.0.0.0/0 routes back to the native        │
+  │   `ip default-gateway` form, so the round-trip is correct.     │
+  │   4 new tests: parse, coexistence with explicit ip route,      │
+  │   round-trip through Aruba, case-insensitivity.                │
   │                                                                │
-  │ All four fixes should land BEFORE real-capture validation      │
-  │ (URGENT NEXT above) graduates any codec to `certified` — all   │
-  │ four gaps are guaranteed to surface in real captures and       │
-  │ would otherwise be logged as "configs drop silently" regs.     │
+  │ All four bugs now closed.  Real-capture validation (URGENT     │
+  │ NEXT above) can now graduate codecs to `certified` with the    │
+  │ structural gaps closed.  987 tests passing (up from 885 at     │
+  │ start of this bugfix batch, +102 across the four fixes).       │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐
-  │ TIER 2 REMAINING  (after Bug 2 / BUG 3 ship)                   │
+  │ TIER 2 REMAINING  (Bugs 2/3/4 now shipped, unblocking queue)   │
   ├────────────────────────────────────────────────────────────────┤
   │ Canonical model defines these but no codec wires them.  Same   │
   │ shape of work as Session E's SNMP wire-through.  Each is one   │
@@ -380,11 +365,10 @@ LAYER 4 — TRANSPORT
   │   * DHCP server pools — Cisco `ip dhcp pool`, OPNsense         │
   │                         `<dhcpd>`, MikroTik `/ip dhcp-server`, │
   │                         FortiGate `config system dhcp server`. │
-  │   * (LAGs is Bug 2 above — shares this same session shape.)    │
+  │   * (LAGs shipped as Bug 2 — see KNOWN DATA-LOSS BUGS above.)  │
   │                                                                │
-  │ Priority order: LAGs (Bug 2, already has urgency), then        │
-  │ local_users (security-sensitive, every real config has them),  │
-  │ then DHCP pools, then RADIUS.                                  │
+  │ Priority order: local_users (security-sensitive, every real    │
+  │ config has them), then DHCP pools, then RADIUS.                │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐
