@@ -338,6 +338,15 @@ _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)",
     re.IGNORECASE,
 )
+# ``ip default-gateway X`` is the L2-switch form of a default route.
+# Common on Catalyst switches that have no routing enabled — the switch
+# itself still needs a gateway for its management SVI.  We map it to the
+# same CanonicalStaticRoute shape the Aruba renderer already uses for
+# 0.0.0.0/0 destinations.
+_DEFAULT_GATEWAY_RE = re.compile(
+    r"^ip\s+default-gateway\s+(\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
 _SWITCHPORT_ACCESS_RE = re.compile(
     r"^\s+switchport\s+access\s+vlan\s+(\d+)", re.IGNORECASE
 )
@@ -565,7 +574,7 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
 
 
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
-    """Extract ``ip route`` lines from IOS config text."""
+    """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text."""
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
         m = _STATIC_ROUTE_RE.match(line)
@@ -587,6 +596,16 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                 destination=dest,
                 gateway=gateway,
                 interface=iface,
+            ))
+            continue
+        m = _DEFAULT_GATEWAY_RE.match(line)
+        if m:
+            # ``ip default-gateway X`` -> 0.0.0.0/0 via X.  Aruba's
+            # renderer re-collapses this back to the native
+            # ``ip default-gateway`` form.
+            routes.append(CanonicalStaticRoute(
+                destination="0.0.0.0/0",
+                gateway=m.group(1),
             ))
     return routes
 

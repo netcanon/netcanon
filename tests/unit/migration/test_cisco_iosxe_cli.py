@@ -354,6 +354,51 @@ class TestPipelineWithCLICodec:
 
 
 # ---------------------------------------------------------------------------
+# Bug 4 — ip default-gateway
+# ---------------------------------------------------------------------------
+
+
+class TestDefaultGatewayParse:
+    """Cisco L2 switches use ``ip default-gateway X`` instead of
+    ``ip route 0.0.0.0 0.0.0.0 X``.  Ensure the parser picks it up and
+    maps it to a CanonicalStaticRoute(0.0.0.0/0, X)."""
+
+    def test_default_gateway_parsed_as_default_route(self):
+        raw = "hostname sw1\nip default-gateway 192.168.11.1\n"
+        intent = CiscoIOSXECLICodec().parse(raw)
+        assert len(intent.static_routes) == 1
+        r = intent.static_routes[0]
+        assert r.destination == "0.0.0.0/0"
+        assert r.gateway == "192.168.11.1"
+        assert r.interface == ""
+
+    def test_default_gateway_and_explicit_ip_route_coexist(self):
+        raw = (
+            "ip default-gateway 192.168.11.1\n"
+            "ip route 10.20.0.0 255.255.0.0 10.0.0.1\n"
+        )
+        intent = CiscoIOSXECLICodec().parse(raw)
+        dests = {r.destination: r for r in intent.static_routes}
+        assert dests["0.0.0.0/0"].gateway == "192.168.11.1"
+        assert dests["10.20.0.0/16"].gateway == "10.0.0.1"
+
+    def test_default_gateway_survives_aruba_round_trip(self):
+        """Cisco parse -> Aruba render should re-emit the native
+        ``ip default-gateway`` form (Aruba's renderer collapses
+        0.0.0.0/0 routes back to that syntax)."""
+        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        raw = "hostname sw1\nip default-gateway 192.168.11.1\n"
+        intent = CiscoIOSXECLICodec().parse(raw)
+        aruba_out = ArubaAOSSCodec().render(intent)
+        assert "ip default-gateway 192.168.11.1" in aruba_out
+
+    def test_default_gateway_case_insensitive(self):
+        raw = "IP DEFAULT-GATEWAY 10.0.0.254\n"
+        intent = CiscoIOSXECLICodec().parse(raw)
+        assert intent.static_routes[0].gateway == "10.0.0.254"
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
