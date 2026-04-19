@@ -50,6 +50,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalSNMP,
     CanonicalVlan,
 )
@@ -214,6 +215,33 @@ class OPNsenseCodec(CodecBase):
                         name=(descr_el.text or "").strip() if descr_el is not None else "",
                     ))
 
+        # ----- <laggs> block (Tier 2 LAGs) -----
+        laggs_el = root.find("laggs")
+        if laggs_el is not None:
+            for lagg_el in laggs_el.findall("lagg"):
+                laggif_el = lagg_el.find("laggif")
+                if laggif_el is None or not (laggif_el.text or "").strip():
+                    continue  # no name = useless record
+                name = laggif_el.text.strip()
+                members_el = lagg_el.find("members")
+                members: list[str] = []
+                if members_el is not None and members_el.text:
+                    members = [
+                        m.strip() for m in members_el.text.split(",") if m.strip()
+                    ]
+                proto_el = lagg_el.find("proto")
+                proto = (proto_el.text.strip().lower()
+                         if proto_el is not None and proto_el.text else "lacp")
+                mode = _OPNSENSE_PROTO_TO_CANONICAL.get(proto, "active")
+                intent.lags.append(CanonicalLAG(
+                    name=name, members=members, mode=mode,
+                ))
+                # Reverse-link members to this LAG.
+                for m in members:
+                    for iface in intent.interfaces:
+                        if iface.name == m and iface.lag_member_of is None:
+                            iface.lag_member_of = name
+
         # ----- <snmpd> block (Tier 2) -----
         snmpd_el = root.find("snmpd")
         if snmpd_el is not None:
@@ -278,6 +306,18 @@ class OPNsenseCodec(CodecBase):
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+
+        # LAGs (Tier 2) — <laggs> element with one <lagg> per LAG.
+        if intent.lags:
+            laggs_el = ET.SubElement(root, "laggs")
+            for lag in intent.lags:
+                lagg_el = ET.SubElement(laggs_el, "lagg")
+                ET.SubElement(lagg_el, "laggif").text = lag.name
+                if lag.members:
+                    ET.SubElement(lagg_el, "members").text = ",".join(lag.members)
+                ET.SubElement(lagg_el, "proto").text = (
+                    _CANONICAL_MODE_TO_OPNSENSE_PROTO.get(lag.mode, "lacp")
+                )
 
         # SNMP (Tier 2) — OPNsense snmpd plugin element.
         if intent.snmp is not None and (
@@ -478,6 +518,21 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+# OPNsense LAG proto values -> canonical CanonicalLAG.mode
+_OPNSENSE_PROTO_TO_CANONICAL = {
+    "lacp": "active",
+    "failover": "static",
+    "loadbalance": "static",
+    "roundrobin": "static",
+    "none": "static",
+}
+_CANONICAL_MODE_TO_OPNSENSE_PROTO = {
+    "active": "lacp",
+    "passive": "lacp",   # OPNsense doesn't distinguish active/passive at this layer
+    "static": "failover",
+}
 
 
 def _zone_tag_for(name: str) -> str:

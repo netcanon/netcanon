@@ -21,6 +21,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -220,16 +221,44 @@ class FortiGateCLICodec(CodecBase):
             out.append("end")
 
         # --- system interface ---
-        if tree.interfaces:
+        # Build a quick lookup: which interface names are LAG aggregates?
+        lag_by_name: dict[str, CanonicalLAG] = {
+            lag.name: lag for lag in tree.lags
+        }
+        # Also: which names aren't in intent.interfaces but ARE LAGs
+        # from intent.lags?  Synthesize interface edits for them so
+        # the FortiOS config is self-consistent.
+        existing_iface_names = {i.name for i in tree.interfaces}
+        synthetic_lag_ifaces = [
+            CanonicalInterface(
+                name=lag.name,
+                interface_type="ianaift:ieee8023adLag",
+                enabled=True,
+            )
+            for lag in tree.lags
+            if lag.name not in existing_iface_names
+        ]
+        all_ifaces = list(tree.interfaces) + synthetic_lag_ifaces
+        if all_ifaces:
             out.append("config system interface")
-            for iface in tree.interfaces:
+            for iface in all_ifaces:
                 out.append(f'    edit "{iface.name}"')
                 if iface.description:
                     # FortiOS alias caps at 25 chars per spec.
                     alias = iface.description[:25]
                     out.append(f'        set alias "{alias}"')
-                # VLAN interface marker.
-                if _looks_like_vlan_iface(iface.name):
+                # LAG aggregate marker takes precedence over VLAN.
+                lag = lag_by_name.get(iface.name)
+                if lag is not None:
+                    out.append("        set type aggregate")
+                    if lag.members:
+                        quoted = " ".join(f'"{m}"' for m in lag.members)
+                        out.append(f"        set member {quoted}")
+                    out.append(
+                        f"        set lacp-mode "
+                        f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
+                    )
+                elif _looks_like_vlan_iface(iface.name):
                     vid = _vlan_id_for(iface.name, tree.vlans)
                     parent = _parent_for_vlan_iface(iface.name, tree.interfaces)
                     if vid is not None:
@@ -514,10 +543,13 @@ def _apply_system_interface(
                 prefix_length=_mask_to_prefix(mask),
             ))
 
-        vlan_type = edit.settings.get("type")
+        iface_type = edit.settings.get("type")
         vlanid = edit.settings.get("vlanid")
         parent_iface = edit.settings.get("interface")
-        if vlan_type and vlan_type[0].lower() == "vlan" and vlanid:
+        member_tokens = edit.settings.get("member")
+        type_value = iface_type[0].lower() if iface_type else ""
+
+        if type_value == "vlan" and vlanid:
             iface.interface_type = "ianaift:l3ipvlan"
             try:
                 vid = int(vlanid[0])
@@ -527,10 +559,56 @@ def _apply_system_interface(
                 ))
             except ValueError:
                 pass
+        elif type_value == "aggregate":
+            # LAG / 802.3ad bundle.  Members arrive as a space-
+            # separated token list on the `set member` line.
+            iface.interface_type = "ianaift:ieee8023adLag"
+            members: list[str] = []
+            if member_tokens:
+                for tok in member_tokens:
+                    members.extend(m for m in tok.split() if m)
+            lacp_mode = edit.settings.get("lacp-mode")
+            mode = _FORTIGATE_LACP_TO_CANONICAL.get(
+                lacp_mode[0].lower() if lacp_mode else "active", "active"
+            )
+            intent.lags.append(CanonicalLAG(
+                name=name,
+                members=members,
+                mode=mode,
+            ))
+            # Reverse-link on members we already know about.  Members
+            # defined later in the same block will be wired up on the
+            # second-pass below.
+            for m in members:
+                for prev in intent.interfaces:
+                    if prev.name == m and prev.lag_member_of is None:
+                        prev.lag_member_of = name
         else:
             iface.interface_type = _infer_iface_type(name)
 
         intent.interfaces.append(iface)
+
+    # Second pass: interface-order independence — members defined after
+    # their aggregate edit still get their lag_member_of stamped.
+    lag_members: dict[str, str] = {}
+    for lag in intent.lags:
+        for m in lag.members:
+            lag_members.setdefault(m, lag.name)
+    for iface in intent.interfaces:
+        if iface.lag_member_of is None and iface.name in lag_members:
+            iface.lag_member_of = lag_members[iface.name]
+
+
+_FORTIGATE_LACP_TO_CANONICAL = {
+    "active": "active",
+    "passive": "passive",
+    "static": "static",
+}
+_CANONICAL_MODE_TO_FORTIGATE_LACP = {
+    "active": "active",
+    "passive": "passive",
+    "static": "static",
+}
 
 
 def _apply_snmp_sysinfo(

@@ -61,6 +61,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -230,6 +231,8 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_interface_vlan(lines, iface_by_name, intent)
             elif section == "/interface bridge":
                 _parse_interface_bridge(lines, iface_by_name)
+            elif section == "/interface bonding":
+                _parse_interface_bonding(lines, iface_by_name, intent)
             elif section == "/ip address":
                 _parse_ip_address(lines, iface_by_name)
             elif section == "/ip route":
@@ -283,6 +286,20 @@ class MikroTikRouterOSCodec(CodecBase):
                 if iface.description:
                     parts.append(f'comment="{_escape(iface.description)}"')
                 parts.append(f"disabled={_yes_no(not iface.enabled)}")
+                lines.append(" ".join(parts))
+            lines.append("")
+
+        # ----- /interface bonding (Tier 2 LAGs) -----
+        if tree.lags:
+            lines.append("/interface bonding")
+            for lag in tree.lags:
+                parts = ["add"]
+                if lag.members:
+                    parts.append(f"slaves={','.join(lag.members)}")
+                parts.append(
+                    f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
+                )
+                parts.append(f"name={lag.name}")
                 lines.append(" ".join(parts))
             lines.append("")
 
@@ -655,6 +672,75 @@ def _parse_interface_bridge(
         )
         if "comment" in kv:
             iface.description = kv["comment"]
+
+
+def _parse_interface_bonding(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+    intent: CanonicalIntent,
+) -> None:
+    """Parse ``/interface bonding`` section into :class:`CanonicalLAG`
+    records plus a synthetic LAG interface.
+
+    Expected shape::
+
+        /interface bonding
+        add name=bond1 slaves=ether1,ether2 mode=802.3ad
+
+    ``mode`` values:
+        802.3ad -> LACP (canonical "active")
+        active-backup / balance-* / broadcast -> static
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        slaves_raw = kv.get("slaves", "")
+        members = [s.strip() for s in slaves_raw.split(",") if s.strip()]
+        mode = _ROUTEROS_BONDING_MODE_TO_CANONICAL.get(
+            kv.get("mode", "").lower(), "static"
+        )
+        lag = CanonicalLAG(name=name, members=members, mode=mode)
+        intent.lags.append(lag)
+
+        # Also materialise the LAG as a CanonicalInterface so the
+        # rest of the canonical model treats it uniformly (IP
+        # addresses can be attached, etc.).
+        iface = iface_by_name.setdefault(
+            name,
+            CanonicalInterface(
+                name=name,
+                interface_type="ianaift:ieee8023adLag",
+            ),
+        )
+        if "comment" in kv:
+            iface.description = kv["comment"]
+        # Reverse-link members.
+        for m in members:
+            m_iface = iface_by_name.setdefault(
+                m, CanonicalInterface(name=m)
+            )
+            if m_iface.lag_member_of is None:
+                m_iface.lag_member_of = name
+
+
+_ROUTEROS_BONDING_MODE_TO_CANONICAL = {
+    "802.3ad": "active",
+    "active-backup": "static",
+    "balance-rr": "static",
+    "balance-xor": "static",
+    "balance-tlb": "static",
+    "balance-alb": "static",
+    "broadcast": "static",
+}
+_CANONICAL_MODE_TO_ROUTEROS_BONDING = {
+    "active": "802.3ad",
+    "passive": "802.3ad",    # RouterOS doesn't distinguish LACP passive
+    "static": "active-backup",
+}
 
 
 def _parse_ip_address(

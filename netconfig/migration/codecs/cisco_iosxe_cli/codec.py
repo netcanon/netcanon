@@ -45,6 +45,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -187,6 +188,11 @@ class CiscoIOSXECLICodec(CodecBase):
 
         # SNMP (Tier 2)
         intent.snmp = _parse_snmp(raw)
+
+        # LAGs (Tier 2) — both the `interface Port-channelN` declaration
+        # and the per-member `channel-group N mode M` lines contribute.
+        # See translator-plans.txt BUG 2.
+        intent.lags = _parse_lags(raw, intent)
 
         # Bug 3 transpose: mirror per-port switchport state into the
         # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
@@ -368,6 +374,22 @@ _SWITCHPORT_TRUNK_NATIVE_RE = re.compile(
 _SWITCHPORT_MODE_RE = re.compile(
     r"^\s+switchport\s+mode\s+(\S+)", re.IGNORECASE
 )
+# ``channel-group N mode M`` declares this physical port as a member of
+# LAG ``Port-channelN``.  Cisco's mode vocabulary:
+#   active  -> LACP active  (canonical: "active")
+#   passive -> LACP passive (canonical: "passive")
+#   on      -> static        (canonical: "static")
+#   auto/desirable -> PAgP (Cisco-proprietary; we fold to "active")
+_CHANNEL_GROUP_RE = re.compile(
+    r"^\s+channel-group\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
+)
+_CISCO_LAG_MODE_MAP = {
+    "active": "active",
+    "passive": "passive",
+    "on": "static",
+    "auto": "active",       # PAgP → best-effort equivalent
+    "desirable": "active",  # PAgP → best-effort equivalent
+}
 
 
 def _extract_hostname(raw: str) -> str:
@@ -397,6 +419,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "access_vlan": None,
                 "trunk_allowed": [],
                 "trunk_native": None,
+                "lag_member_of": None,
             }
             continue
 
@@ -450,6 +473,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["trunk_native"] = int(nm.group(1))
             continue
 
+        cgm = _CHANNEL_GROUP_RE.match(line)
+        if cgm:
+            current["lag_member_of"] = f"Port-channel{int(cgm.group(1))}"
+            continue
+
     if current is not None:
         interfaces.append(_build_canonical_interface(current))
 
@@ -471,6 +499,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         access_vlan=raw.get("access_vlan"),
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
+        lag_member_of=raw.get("lag_member_of"),
     )
 
 
@@ -580,6 +609,73 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
         for addr in iface.ipv4_addresses:
             if addr not in existing.ipv4_addresses:
                 existing.ipv4_addresses.append(addr)
+
+
+def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
+    """Build :class:`CanonicalLAG` records from Cisco CLI.
+
+    Sources of truth in a Cisco config:
+      * ``interface Port-channelN`` stanza declares the LAG exists
+        (and carries the LAG's description / switchport / IP state
+        via the existing interface parse path — that's already on
+        ``intent.interfaces``).
+      * ``channel-group N mode M`` under a physical interface declares
+        that physical port a member of Port-channelN.
+
+    A LAG must exist if EITHER signal is present (Cisco allows defining
+    Port-channelN explicitly OR lazily via member channel-group lines).
+
+    Mode is whatever the members agree on; if members disagree, the
+    first member's mode wins (rare in practice, but pathological
+    configs shouldn't crash us).  If no physical members exist (empty
+    LAG stanza), mode defaults to ``CanonicalLAG.mode`` default.
+    """
+    # Scan: for each `interface X` stanza, note its channel-group (if any).
+    members_by_lag: dict[str, list[str]] = {}
+    mode_by_lag: dict[str, str] = {}
+    declared_lag_names: set[str] = set()
+
+    current_iface: str | None = None
+    for line in raw.splitlines():
+        m = _IFACE_RE.match(line)
+        if m:
+            current_iface = m.group(1)
+            if current_iface.lower().startswith("port-channel"):
+                declared_lag_names.add(current_iface)
+            continue
+        if current_iface is None:
+            continue
+        if line.startswith("!") or (line and not line[0].isspace()):
+            current_iface = None
+            continue
+        cgm = _CHANNEL_GROUP_RE.match(line)
+        if cgm:
+            lag_name = f"Port-channel{int(cgm.group(1))}"
+            cisco_mode = cgm.group(2).lower()
+            canonical_mode = _CISCO_LAG_MODE_MAP.get(cisco_mode, "active")
+            members_by_lag.setdefault(lag_name, []).append(current_iface)
+            # First member's mode wins.
+            mode_by_lag.setdefault(lag_name, canonical_mode)
+
+    all_lag_names = declared_lag_names | set(members_by_lag)
+    lags: list[CanonicalLAG] = []
+    for lag_name in sorted(all_lag_names, key=_lag_sort_key):
+        lag = CanonicalLAG(
+            name=lag_name,
+            members=list(members_by_lag.get(lag_name, [])),
+        )
+        if lag_name in mode_by_lag:
+            lag.mode = mode_by_lag[lag_name]
+        lags.append(lag)
+    return lags
+
+
+def _lag_sort_key(name: str) -> tuple[str, int, str]:
+    """Stable sort key that groups ``Port-channel<N>`` numerically."""
+    m = re.match(r"^(port-channel|trk|bond|lag|lagg)(\d+)$", name, re.IGNORECASE)
+    if m:
+        return (m.group(1).lower(), int(m.group(2)), "")
+    return ("", 0, name)
 
 
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:

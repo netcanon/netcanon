@@ -20,6 +20,7 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -239,6 +240,21 @@ class ArubaAOSSCodec(CodecBase):
                 i += 1
                 continue
 
+            tk = _TRUNK_LINE_RE.match(stripped_line)
+            if tk:
+                lag = _build_lag_from_trunk_line(tk)
+                if lag is not None:
+                    intent.lags.append(lag)
+                    # Reverse-link each member to this LAG so the
+                    # canonical tree stays consistent.
+                    iface_by_name = {i.name: i for i in intent.interfaces}
+                    for member in lag.members:
+                        m_iface = iface_by_name.get(member)
+                        if m_iface is not None and m_iface.lag_member_of is None:
+                            m_iface.lag_member_of = lag.name
+                i += 1
+                continue
+
             vm = _VLAN_HEADER_RE.match(stripped_line)
             if vm:
                 vlan_id = int(vm.group(1))
@@ -319,6 +335,25 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append(
                     f'snmp-server host {host} community "{comm}"'
                 )
+
+        # LAGs — AOS-S uses a single top-level ``trunk <ports> <name>
+        # <type>`` line per trunk.  Vendor-native LAG names (e.g.
+        # Cisco ``Port-channel1``) are translated to AOS-S trunk names
+        # (``trk1``) so the output is syntactically valid.
+        for lag in tree.lags:
+            if not lag.members:
+                # Empty LAG — AOS-S has no syntax for declaring one
+                # without members.  Emit a comment so the information
+                # doesn't silently vanish.
+                lines.append(
+                    f"; LAG {lag.name} declared without members — "
+                    f"cannot emit without ports"
+                )
+                continue
+            port_list = _format_port_list(lag.members)
+            trunk_name = _lag_name_to_aos_trunk(lag.name)
+            trunk_type = _lag_mode_to_aos_type(lag.mode)
+            lines.append(f"trunk {port_list} {trunk_name} {trunk_type}")
 
         # VLANs — the architecturally interesting part.  AOS-S's
         # VLAN-centric port membership is our canonical model's
@@ -486,6 +521,27 @@ _IP_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE,
 )
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+# ``trunk <port-list> <name> <type>`` — AOS-S link-aggregation form.
+# Examples:
+#   trunk 1-4 trk1 lacp
+#   trunk A1,A2 trk2 trunk
+#   trunk 25,26 trk3 dt-lacp
+# Types: lacp (802.3ad), trunk (static/manual), fec (HP-proprietary),
+# dt-lacp (distributed-trunk LACP).
+_TRUNK_LINE_RE = re.compile(
+    r"^trunk\s+(\S+)\s+(\S+)\s+(\S+)\s*$", re.IGNORECASE,
+)
+_AOS_TRUNK_TYPE_TO_MODE = {
+    "lacp": "active",
+    "dt-lacp": "active",
+    "trunk": "static",
+    "fec": "static",
+}
+_MODE_TO_AOS_TRUNK_TYPE = {
+    "active": "lacp",
+    "passive": "lacp",    # AOS-S doesn't distinguish active/passive at this layer
+    "static": "trunk",
+}
 _IFACE_HEADER_RE = re.compile(
     r'^interface\s+("?[A-Za-z]*\d+(?:/\d+)?"?)\s*$', re.IGNORECASE,
 )
@@ -574,6 +630,40 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     if prefix_lo != prefix_hi or num_hi < num_lo:
         return [lo, hi]
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
+
+
+def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:
+    """Convert a ``trunk <ports> <name> <type>`` regex match to a CanonicalLAG."""
+    port_list_text, trunk_name, trunk_type = m.group(1), m.group(2), m.group(3)
+    members = _parse_port_list(port_list_text)
+    mode = _AOS_TRUNK_TYPE_TO_MODE.get(trunk_type.lower(), "static")
+    return CanonicalLAG(
+        name=trunk_name,
+        members=members,
+        mode=mode,
+    )
+
+
+def _lag_name_to_aos_trunk(name: str) -> str:
+    """Translate a canonical LAG name to an AOS-S trunk name (``trk<N>``).
+
+    AOS-S requires trunk names of the form ``trk<digits>``.  Non-native
+    names (Cisco ``Port-channel1``, MikroTik ``bond1``, OPNsense ``lagg0``)
+    are mapped by extracting their trailing digits.  If already
+    ``trk<N>`` or ``Trk<N>`` (AOS-native), it's used as-is in lowercase.
+    Names with no trailing digits fall back to ``trk1``.
+    """
+    if re.match(r"^[Tt]rk\d+$", name):
+        return name.lower()
+    m = re.search(r"(\d+)$", name)
+    if m:
+        return f"trk{m.group(1)}"
+    return "trk1"
+
+
+def _lag_mode_to_aos_type(mode: str) -> str:
+    """Canonical LAG mode -> AOS-S ``trunk`` line's type field."""
+    return _MODE_TO_AOS_TRUNK_TYPE.get(mode, "lacp")
 
 
 def _format_port_list(ports: list[str]) -> str:
