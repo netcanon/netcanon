@@ -97,6 +97,27 @@ interface Port-channel1
         assert intent.lags[0].name == "Port-channel1"
         assert intent.lags[0].members == []
 
+    def test_duplicate_channel_group_lines_dedupe_members(self):
+        """Real configs occasionally stack multiple channel-group lines
+        on the same physical interface (historical mode changes, or
+        grammar-test variants).  Surfaced by Batfish's cisco_interface
+        fixture which lists 7 channel-group mode variants on Ethernet0."""
+        raw = """\
+interface Ethernet0
+ channel-group 1 mode active
+ channel-group 1 mode auto
+ channel-group 1 mode desirable
+ channel-group 1 mode on
+ channel-group 1 mode passive
+!
+"""
+        intent = CiscoIOSXECLICodec().parse(raw)
+        assert len(intent.lags) == 1
+        lag = intent.lags[0]
+        assert lag.members == ["Ethernet0"], (
+            f"expected a single Ethernet0 member, got {lag.members}"
+        )
+
     def test_multiple_lags_sort_stable(self):
         raw = """\
 interface GigabitEthernet1/0/1

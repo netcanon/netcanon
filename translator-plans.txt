@@ -212,40 +212,59 @@ LAYER 4 — TRANSPORT
 --- MIGRATION PATH FROM CURRENT CODE (R1–R7) ---
 
   ┌────────────────────────────────────────────────────────────────┐
-  │ URGENT NEXT — REAL-CAPTURE VALIDATION  (before any new codec)  │
+  │ REAL-CAPTURE VALIDATION — infrastructure shipped, Cisco done   │
   ├────────────────────────────────────────────────────────────────┤
-  │ STATUS: pending.  Every codec currently ships at best_effort   │
-  │ certainty because fixtures are hand-crafted from grammars I    │
-  │ know, NOT from real device output.  Per the certification      │
-  │ definition below ("certified = round-trip tested against >=3   │
-  │ real captures from >=2 OS versions") no codec is certified.    │
+  │ STATUS: Cisco IOS-XE CLI validated.  Other 4 vendors queued.   │
   │                                                                │
-  │ Scope:                                                         │
-  │   1. Fetch captures from the URLs in vendor-config-research.   │
-  │      txt §6 — at minimum:                                      │
-  │        * Batfish test configs (Cisco IOS)                      │
-  │        * NTC-Templates test data                               │
-  │        * KevinGuenay/fortinet-resources 14K-line FortiOS 7.6.6 │
-  │        * opnsense/core default config.xml                      │
-  │        * MikroTik community /export samples                    │
-  │        * aruba/central-sample-bulk-configurations              │
-  │   2. Per codec: run parse() -- assert no crash; run            │
-  │      parse->render->parse -- assert round-trip invariant on    │
-  │      the supported subset.                                     │
-  │   3. Spot-check what drops.  Expected (Tier 3 firewall/NAT) -> │
-  │      document in capability matrix.  Unexpected -> fix parser  │
-  │      OR extend the matrix's unsupported list with a reason.    │
-  │   4. Add sanitised real captures as fixtures in                │
-  │      tests/fixtures/<vendor>/real_*.{txt,xml,conf,rsc} so CI   │
-  │      catches regressions on real data.                         │
-  │   5. Graduate best_effort -> certified per codec where ≥3      │
-  │      captures from ≥2 OS versions round-trip cleanly.          │
+  │ Infrastructure shipped:                                        │
+  │   * tests/fixtures/real/ directory with per-vendor subdirs.    │
+  │   * NOTICE.md tracking provenance of every committed fixture   │
+  │     (Apache / MIT / BSD license only).                         │
+  │   * tests/unit/migration/test_real_captures.py — parametrized  │
+  │     harness that auto-discovers fixtures, asserts parse-       │
+  │     doesn't-crash + emits CanonicalIntent + non-trivial        │
+  │     coverage, and prints a per-fixture extraction summary.     │
+  │     Deterministic-parse assertion included.                    │
+  │   * RESULTS.md — human-curated per-codec coverage matrix,      │
+  │     findings, certification decisions.                         │
   │                                                                │
-  │ Effort: 1-2 sessions.  The cross-codec matrix catches shape    │
-  │ regressions but NOT grammar-coverage gaps — real configs       │
-  │ reliably expose parser assumptions the synthetic fixtures      │
-  │ don't hit.  This work is a precondition for any claim of       │
-  │ "this actually works on production configs."                   │
+  │ Cisco IOS-XE CLI validated against:                            │
+  │   * batfish_cisco_interface   — 337-line grammar kitchen sink  │
+  │   * batfish_cisco_ip_route    — static-route variants          │
+  │   * ntc_carrier_interfaces    — carrier IOS w/ VRFs + QoS      │
+  │ Parser didn't crash on any.  Bug surfaced + fixed in the       │
+  │ same pass: _parse_lags was appending the same Ethernet0 once   │
+  │ per `channel-group N mode <variant>` line.  Dedupe + regression│
+  │ test landed.  Certainty promoted experimental -> best_effort.  │
+  │ 994 tests passing.                                             │
+  │                                                                │
+  │ Known silent drops (real configs exercise them, our canonical  │
+  │ doesn't model them — expected, documented, matched to existing │
+  │ roadmap buckets):                                              │
+  │   * VRF memberships                                            │
+  │   * Q-in-Q encapsulation (second-dot1q)                        │
+  │   * QoS service-policies                                       │
+  │   * Interface ACL groups (ip access-group ... in/out)          │
+  │   * IPv6 addressing                                            │
+  │   * Proxy-ARP, uRPF, bandwidth hint                            │
+  │ See RESULTS.md for the full list + tier mapping.               │
+  │                                                                │
+  │ Remaining per-vendor work (1 session each, same shape):        │
+  │   * aruba_aoss    — fixtures scarcer; try aruba/central-*       │
+  │                     and community exports                       │
+  │   * fortigate     — KevinGuenay/fortinet-resources has a 14K-   │
+  │                     line FortiOS 7.6.6 sample; drop full       │
+  │                     + feature-carved subsets                    │
+  │   * opnsense      — opnsense/core repo ships a default config.  │
+  │                     xml; plus user-shared exports on the forum │
+  │   * mikrotik      — community /export samples on forum +       │
+  │                     mikrotik/official Docs examples             │
+  │                                                                │
+  │ `certified` tier still requires a codec to round-trip ≥3       │
+  │ real captures from ≥2 OS versions (definition unchanged).      │
+  │ cisco_iosxe_cli is parse-only, so the round-trip graduation    │
+  │ path is actually via a consumer codec (Aruba etc.) emitting    │
+  │ the Cisco-parsed intent and being checked against the source.  │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐

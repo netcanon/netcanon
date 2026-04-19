@@ -66,7 +66,7 @@ class CiscoIOSXECLICodec(CodecBase):
     version_hint: ClassVar[str | None] = "15.x / 16.x / 17.x"
     input_format: ClassVar[str] = "cli-ios"
     direction: ClassVar[str] = "parse_only"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config`.  This is the text "
@@ -653,7 +653,14 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
             lag_name = f"Port-channel{int(cgm.group(1))}"
             cisco_mode = cgm.group(2).lower()
             canonical_mode = _CISCO_LAG_MODE_MAP.get(cisco_mode, "active")
-            members_by_lag.setdefault(lag_name, []).append(current_iface)
+            # Real configs (and Batfish's grammar-kitchen-sink fixtures)
+            # can stack multiple `channel-group N mode M` lines on a
+            # single physical interface — either as a historical artefact
+            # of mode changes or as test-config variants.  Dedupe so the
+            # member list has one entry per physical port.
+            members = members_by_lag.setdefault(lag_name, [])
+            if current_iface not in members:
+                members.append(current_iface)
             # First member's mode wins.
             mode_by_lag.setdefault(lag_name, canonical_mode)
 

@@ -49,8 +49,11 @@ class TestR3Fields:
     def test_direction_is_parse_only(self):
         assert CiscoIOSXECLICodec.direction == "parse_only"
 
-    def test_certainty_is_experimental(self):
-        assert CiscoIOSXECLICodec.certainty == "experimental"
+    def test_certainty_is_best_effort(self):
+        # Promoted from "experimental" after real-capture validation
+        # against Batfish + NTC-Templates fixtures.  See
+        # tests/fixtures/real/RESULTS.md for the rationale.
+        assert CiscoIOSXECLICodec.certainty == "best_effort"
 
     def test_canonical_model(self):
         assert CiscoIOSXECLICodec.canonical_model == "openconfig-lite"
