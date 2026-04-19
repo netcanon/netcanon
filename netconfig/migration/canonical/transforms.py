@@ -1,0 +1,157 @@
+"""
+Shared post-parse transforms on :class:`CanonicalIntent`.
+
+Individual codecs populate the canonical tree from vendor-native config
+in whichever shape is natural for that vendor.  Some vendors (Cisco
+IOS-XE) describe VLAN membership per-port via ``switchport`` lines on
+the interface stanza.  Others (Aruba AOS-S, OPNsense, MikroTik) describe
+it VLAN-centrically via a membership list on the VLAN record.  The
+canonical model carries **both** representations so that renderers can
+emit whichever shape their target expects, but the parser only fills in
+one side natively.
+
+This module provides the bridging transforms.  Codecs call them at the
+end of ``parse()`` to mirror the native representation across so the
+other side is populated too.
+
+Naming convention: a transform named ``project_X_to_Y`` reads from ``X``
+and writes into ``Y``.  All transforms are:
+
+* idempotent — safe to call twice
+* in-place — they mutate the intent and return None
+* additive — they never delete data already present
+
+The mirror functions are deliberately kept simple and free of codec-
+specific heuristics.  Anything more subtle belongs in the codec itself.
+"""
+
+from __future__ import annotations
+
+from .intent import CanonicalIntent, CanonicalVlan
+
+
+def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
+    """Port-centric -> VLAN-centric membership mirror.
+
+    For every :class:`CanonicalInterface` with switchport state populated,
+    add the interface's name to the matching :class:`CanonicalVlan`'s
+    ``tagged_ports`` / ``untagged_ports`` list.  Synthesize bare VLAN
+    records for any VIDs referenced by a switchport but not declared as
+    a top-level VLAN stanza (otherwise the membership info is lost when
+    a VLAN-centric target renders).
+
+    Semantics:
+        * ``switchport_mode == "access"`` + ``access_vlan == N``:
+          append iface to ``vlans[N].untagged_ports``.
+        * ``switchport_mode == "trunk"``:
+            - for each vid in ``trunk_allowed_vlans``:
+              append iface to ``vlans[vid].tagged_ports``.
+            - if ``trunk_native_vlan`` is set:
+              append iface to ``vlans[native].untagged_ports`` AND
+              remove it from ``tagged_ports`` on that same VLAN.
+              (Native VLAN traffic rides the trunk untagged; Cisco
+              permits listing the native vlan in ``allowed`` but it
+              never actually gets tagged.)
+
+    Idempotent: an interface already present in a list is not added twice.
+
+    This is Bug 3 from translator-plans.txt (KNOWN DATA-LOSS BUGS).
+    """
+    # Index existing VLANs for O(1) lookup and for synthesizing missing ones.
+    by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
+
+    def _vlan(vid: int) -> CanonicalVlan:
+        v = by_id.get(vid)
+        if v is None:
+            v = CanonicalVlan(id=vid)
+            intent.vlans.append(v)
+            by_id[vid] = v
+        return v
+
+    def _add_unique(lst: list[str], name: str) -> None:
+        if name not in lst:
+            lst.append(name)
+
+    for iface in intent.interfaces:
+        mode = iface.switchport_mode
+        if mode is None:
+            continue
+        if mode == "access":
+            if iface.access_vlan is not None:
+                _add_unique(_vlan(iface.access_vlan).untagged_ports, iface.name)
+        elif mode == "trunk":
+            for vid in iface.trunk_allowed_vlans:
+                _add_unique(_vlan(vid).tagged_ports, iface.name)
+            native = iface.trunk_native_vlan
+            if native is not None:
+                vlan = _vlan(native)
+                _add_unique(vlan.untagged_ports, iface.name)
+                # Native VLAN rides the trunk untagged; purge any duplicate
+                # in tagged_ports that came from trunk_allowed_vlans.
+                if iface.name in vlan.tagged_ports:
+                    vlan.tagged_ports.remove(iface.name)
+        # Any other mode ("dynamic", etc.) is left alone — we don't have
+        # enough signal to decide membership.
+
+
+def project_vlan_to_switchport(intent: CanonicalIntent) -> None:
+    """VLAN-centric -> port-centric membership mirror.
+
+    The inverse of :func:`project_switchport_to_vlan`.  For every
+    :class:`CanonicalVlan`, read its membership lists and populate the
+    corresponding :class:`CanonicalInterface`'s switchport fields.
+
+    Semantics:
+        * iface in ``untagged_ports`` only:
+          set ``switchport_mode="access"`` and ``access_vlan=vid``.
+        * iface in ``tagged_ports`` (possibly plus untagged on another
+          VLAN that becomes the native): set ``switchport_mode="trunk"``
+          and append the vid to ``trunk_allowed_vlans``; if the iface
+          also appears in ``untagged_ports`` on some VLAN, set that as
+          ``trunk_native_vlan``.
+
+    Interfaces not found in ``intent.interfaces`` are skipped (membership
+    lists can reference ports that weren't declared as interfaces).
+    Interfaces with pre-existing switchport state are left alone — this
+    transform only fills in missing information.
+
+    Idempotent and additive like :func:`project_switchport_to_vlan`.
+    """
+    iface_by_name = {i.name: i for i in intent.interfaces}
+
+    # Build per-interface aggregated view: which vids as tagged, which as untagged.
+    tagged: dict[str, list[int]] = {}
+    untagged: dict[str, list[int]] = {}
+    for vlan in intent.vlans:
+        for name in vlan.tagged_ports:
+            tagged.setdefault(name, []).append(vlan.id)
+        for name in vlan.untagged_ports:
+            untagged.setdefault(name, []).append(vlan.id)
+
+    names = set(tagged) | set(untagged)
+    for name in names:
+        iface = iface_by_name.get(name)
+        if iface is None:
+            continue
+        # Don't clobber switchport state the codec already set.
+        if iface.switchport_mode is not None:
+            continue
+        t_vids = tagged.get(name, [])
+        u_vids = untagged.get(name, [])
+        if t_vids:
+            # Trunk: tagged list -> trunk_allowed_vlans, first untagged vid
+            # becomes the native.
+            iface.switchport_mode = "trunk"
+            for vid in t_vids:
+                if vid not in iface.trunk_allowed_vlans:
+                    iface.trunk_allowed_vlans.append(vid)
+            if u_vids and iface.trunk_native_vlan is None:
+                iface.trunk_native_vlan = u_vids[0]
+        elif u_vids:
+            # Pure access: single untagged VLAN.  If multiple untagged
+            # vlans appear (unusual), first wins and the rest are ignored
+            # at this layer — they remain in vlan.untagged_ports so a
+            # VLAN-centric renderer can still emit them faithfully.
+            iface.switchport_mode = "access"
+            if iface.access_vlan is None:
+                iface.access_vlan = u_vids[0]

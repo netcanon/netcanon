@@ -188,6 +188,15 @@ class CiscoIOSXECLICodec(CodecBase):
         # SNMP (Tier 2)
         intent.snmp = _parse_snmp(raw)
 
+        # Bug 3 transpose: mirror per-port switchport state into the
+        # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
+        # centric renderers (Aruba, OPNsense) can emit the membership.
+        # Without this, per-interface `switchport access vlan 20` /
+        # `switchport trunk allowed vlan 11,20` never reaches the
+        # target config.  See translator-plans.txt BUG 3.
+        from ...canonical.transforms import project_switchport_to_vlan
+        project_switchport_to_vlan(intent)
+
         return intent
 
     # -----------------------------------------------------------------
