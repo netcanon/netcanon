@@ -1,0 +1,12 @@
+# Aruba 3810M-24G-PoE+ 1-slot (JL073A)
+# 24 × 10/100/1000 BASE-T RJ45 + PoE+
+# 1 × expansion module slot
+vendor: aruba_aoss
+model: 3810M-24G-PoEP
+display_name: "Aruba 3810M-24G-PoE+ 1-slot (JL073A)"
+device_class: switch
+stacking: backplane-stacking
+ports:
+  - {range: "1-24", kind: physical, speed: gig, poe: true}
+  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true, notes: "4x10G SFP+ expansion"}
+lags: {max: 144, prefix: Trk}

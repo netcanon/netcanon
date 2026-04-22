@@ -1,0 +1,13 @@
+# Cisco Catalyst 9500-48Y4C
+# 48 × 25G SFP28 + 4 × 100G QSFP28
+# No PoE (SFP-only chassis)
+vendor: cisco_iosxe
+model: C9500-48Y4C
+display_name: "Cisco Catalyst 9500-48Y4C (48x25G + 4x100G)"
+device_class: switch
+stacking: stackwise-virtual
+ports:
+  - {range: "TwentyFiveGigE1/0/1-48", kind: physical, speed: 25gig, sfp: true, notes: "SFP28 1/10/25G"}
+  - {range: "HundredGigE1/0/49-52", kind: uplink, speed: 100gig, sfp: true, notes: "QSFP28 40/100G"}
+  - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+lags: {max: 128, prefix: Port-channel}

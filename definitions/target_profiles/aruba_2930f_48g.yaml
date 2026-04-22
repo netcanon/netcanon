@@ -1,0 +1,12 @@
+# Aruba 2930F-48G (JL260A)
+# 48 × 10/100/1000 BASE-T RJ45 (no PoE)
+# 4 × 1G/10G SFP+ uplink
+vendor: aruba_aoss
+model: 2930F-48G
+display_name: "Aruba 2930F-48G (JL260A)"
+device_class: switch
+stacking: vsf-capable
+ports:
+  - {range: "1-48", kind: physical, speed: gig, poe: false}
+  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true}
+lags: {max: 24, prefix: Trk}

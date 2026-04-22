@@ -1,0 +1,19 @@
+# Aruba 6300M 48-port 1GbE + 4x SFP56 (JL665A-equivalent / CX platform)
+# 48 × 10/100/1000 BASE-T RJ45 + PoE+ (Class 4 30W/port)
+# 4 × 10/25/50 SFP56 uplinks — the 40G/100G target slot we were
+# missing for Cat 9300 uplink translations
+#
+# NOTE: The 6300M runs AOS-CX (not AOS-S).  This profile covers the
+# port inventory only; the aruba_aoss codec renders AOS-S syntax
+# which the 6300M won't ingest as-is.  Use for port-name planning
+# when the deployment will be hand-finalised into AOS-CX by the
+# operator.  A proper aruba_aoscx codec is a separate deliverable.
+vendor: aruba_aoss
+model: 6300M-48G-PoE4-SFP56
+display_name: "Aruba 6300M 48G PoE+ 4xSFP56 (CX / port planning only)"
+device_class: switch
+stacking: vsx-stacking
+ports:
+  - {range: "1-48", kind: physical, speed: gig, poe: true}
+  - {range: "A1-A4", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 10/25/50G uplink"}
+lags: {max: 256, prefix: lag}

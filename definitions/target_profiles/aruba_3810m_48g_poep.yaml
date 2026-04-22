@@ -1,0 +1,16 @@
+# Aruba 3810M-48G-PoE+ 1-slot (JL076A)
+# 48 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port)
+# 1 × expansion module slot (typically 4× 10G SFP+ or 4× QSFP+)
+# Backplane stacking (up to 10 members)
+vendor: aruba_aoss
+model: 3810M-48G-PoEP
+display_name: "Aruba 3810M-48G-PoE+ 1-slot (JL076A)"
+device_class: switch
+stacking: backplane-stacking
+ports:
+  - {range: "1-48", kind: physical, speed: gig, poe: true}
+  # Expansion module slot (letter suffix A) — assume 4× 10G SFP+
+  # (JL083A 4-port 10GbE SFP+ module); swap letter/count for
+  # different modules when migrations target specific hardware.
+  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true, notes: "JL083A 4x10G SFP+ module slot A"}
+lags: {max: 144, prefix: Trk}

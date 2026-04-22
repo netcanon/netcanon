@@ -1,0 +1,12 @@
+# Aruba 2930F-24G-PoEP (JL255A)
+# 24 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port, 370W budget)
+# 4 × 1G/10G SFP+ uplink
+vendor: aruba_aoss
+model: 2930F-24G-PoEP
+display_name: "Aruba 2930F-24G-PoEP (JL255A)"
+device_class: switch
+stacking: vsf-capable
+ports:
+  - {range: "1-24", kind: physical, speed: gig, poe: true}
+  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true}
+lags: {max: 24, prefix: Trk}

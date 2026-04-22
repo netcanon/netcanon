@@ -49,8 +49,9 @@ YAML shape (see ``definitions/target_profiles/*.yaml`` for examples)::
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel, Field, ValidationError
@@ -182,14 +183,95 @@ class ProfileLoadError(Exception):
     """Raised when a profile YAML file can't be parsed or validated."""
 
 
+#: Range shorthand regex.  Accepts both "1-48" and "A1-A4" style —
+#: the second prefix (between ``-`` and the end number) is optional
+#: and when present must match the first prefix.  Also accepts
+#: "GigabitEthernet1/0/1-24" (prefix on start only).
+_RANGE_RE = re.compile(
+    r"^(?P<prefix>.*?)(?P<start>\d+)-(?P<prefix2>.*?)(?P<end>\d+)$"
+)
+
+
+def _expand_range_entries(ports_raw: list[Any]) -> list[dict[str, Any]]:
+    """Expand ``range`` shorthand entries into concrete port records.
+
+    Two accepted forms for a ports-list entry:
+
+    * ``{id: "A1", kind: uplink, speed: 10gig, ...}`` — literal,
+      passed through unchanged.
+    * ``{range: "<prefix><start>-<end>", kind: ..., ...}`` — expanded
+      into one entry per integer in ``[start, end]``, with each
+      expanded entry's ``id`` set to ``<prefix><n>``.  Every other
+      field (kind, speed, poe, sfp, notes) is duplicated across all
+      expanded entries.
+
+    Examples::
+
+        {range: "1-48", kind: physical, speed: gig, poe: true}
+          → ports 1, 2, ..., 48 all with kind=physical, gig, PoE=true
+
+        {range: "GigabitEthernet1/0/1-24", kind: physical, speed: 10gig}
+          → GigabitEthernet1/0/1, ..., GigabitEthernet1/0/24
+
+        {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true}
+          → A1, A2, A3, A4 — the regex finds the numeric tail, keeping
+            the "A" prefix intact.
+    """
+    out: list[dict[str, Any]] = []
+    for entry in ports_raw:
+        if not isinstance(entry, dict):
+            # Leave exotic entries to pydantic validation below.
+            out.append(entry)
+            continue
+        if "range" not in entry:
+            out.append(entry)
+            continue
+        range_str = entry["range"]
+        m = _RANGE_RE.match(str(range_str).strip())
+        if not m:
+            raise ProfileLoadError(
+                f"invalid range shorthand {range_str!r}; expected "
+                f"'<prefix><start>-<end>' (e.g. '1-48', 'A1-A4' or "
+                f"'GigabitEthernet1/0/1-24')"
+            )
+        prefix = m.group("prefix")
+        prefix2 = m.group("prefix2")
+        if prefix2 and prefix2 != prefix:
+            raise ProfileLoadError(
+                f"invalid range {range_str!r}: inconsistent prefix "
+                f"({prefix!r} vs {prefix2!r}) — both sides must match"
+            )
+        start = int(m.group("start"))
+        end = int(m.group("end"))
+        if start > end:
+            raise ProfileLoadError(
+                f"invalid range {range_str!r}: start {start} > end {end}"
+            )
+        shared = {k: v for k, v in entry.items() if k != "range"}
+        for n in range(start, end + 1):
+            out.append({"id": f"{prefix}{n}", **shared})
+    return out
+
+
 def load_profile_file(path: Path) -> TargetProfile:
-    """Load and validate a single profile YAML file."""
+    """Load and validate a single profile YAML file.
+
+    Supports range-shorthand entries in the ``ports:`` list — see
+    :func:`_expand_range_entries` for syntax.  Range entries are
+    expanded before pydantic validation so the model only ever sees
+    concrete ``{id: ..., kind: ...}`` records.
+    """
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise ProfileLoadError(f"{path}: YAML parse error: {exc}") from exc
     if not isinstance(data, dict):
         raise ProfileLoadError(f"{path}: expected a YAML mapping at top level")
+    if "ports" in data and isinstance(data["ports"], list):
+        try:
+            data["ports"] = _expand_range_entries(data["ports"])
+        except ProfileLoadError as exc:
+            raise ProfileLoadError(f"{path}: {exc}") from exc
     try:
         return TargetProfile(**data)
     except ValidationError as exc:

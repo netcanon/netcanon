@@ -1,0 +1,14 @@
+# Cisco Catalyst 9300-48UXM
+# 48 × 100M/1G/2.5G/5G multigig BASE-T RJ45 + UPOE
+# 1 × network module slot (NM-8X default, or NM-2Q for 2x 40G QSFP)
+# StackWise-480
+vendor: cisco_iosxe
+model: C9300-48UXM
+display_name: "Cisco Catalyst 9300-48UXM (mGig 5G + UPOE)"
+device_class: switch
+stacking: stackwise
+ports:
+  - {range: "GigabitEthernet1/0/1-48", kind: physical, speed: 5gig, poe: true, notes: "mGig 100M-5G UPOE"}
+  - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X slot"}
+  - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+lags: {max: 48, prefix: Port-channel}

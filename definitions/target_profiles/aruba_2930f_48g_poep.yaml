@@ -1,69 +1,14 @@
 # Aruba 2930F-48G-PoEP (JL256A)
-# https://buy.hpe.com/us/en/networking/switches/2930-switch-series/
-#   hpe-aruba-networking-2930f-switch-series/hpe-aruba-networking-2930f-48g-poep-2sfpp-switch/p/JL256A
-#
 # 48 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port, 370W budget)
 # 2 × 1G/10G SFP+ uplink (cages A1 and A2 on the stack-member)
-# VSF-capable (up to 10-member stack)
-# 24 trunks (LAGs) max, prefix "Trk"
+# VSF-capable (up to 10-member stack), 24 trunks max prefix Trk
 vendor: aruba_aoss
 model: 2930F-48G-PoEP
 display_name: "Aruba 2930F-48G-PoEP (JL256A)"
 device_class: switch
 stacking: vsf-capable
 ports:
-  # --- 48 × 1G RJ45 PoE+ ---
-  - {id: "1",   kind: physical, speed: gig, poe: true}
-  - {id: "2",   kind: physical, speed: gig, poe: true}
-  - {id: "3",   kind: physical, speed: gig, poe: true}
-  - {id: "4",   kind: physical, speed: gig, poe: true}
-  - {id: "5",   kind: physical, speed: gig, poe: true}
-  - {id: "6",   kind: physical, speed: gig, poe: true}
-  - {id: "7",   kind: physical, speed: gig, poe: true}
-  - {id: "8",   kind: physical, speed: gig, poe: true}
-  - {id: "9",   kind: physical, speed: gig, poe: true}
-  - {id: "10",  kind: physical, speed: gig, poe: true}
-  - {id: "11",  kind: physical, speed: gig, poe: true}
-  - {id: "12",  kind: physical, speed: gig, poe: true}
-  - {id: "13",  kind: physical, speed: gig, poe: true}
-  - {id: "14",  kind: physical, speed: gig, poe: true}
-  - {id: "15",  kind: physical, speed: gig, poe: true}
-  - {id: "16",  kind: physical, speed: gig, poe: true}
-  - {id: "17",  kind: physical, speed: gig, poe: true}
-  - {id: "18",  kind: physical, speed: gig, poe: true}
-  - {id: "19",  kind: physical, speed: gig, poe: true}
-  - {id: "20",  kind: physical, speed: gig, poe: true}
-  - {id: "21",  kind: physical, speed: gig, poe: true}
-  - {id: "22",  kind: physical, speed: gig, poe: true}
-  - {id: "23",  kind: physical, speed: gig, poe: true}
-  - {id: "24",  kind: physical, speed: gig, poe: true}
-  - {id: "25",  kind: physical, speed: gig, poe: true}
-  - {id: "26",  kind: physical, speed: gig, poe: true}
-  - {id: "27",  kind: physical, speed: gig, poe: true}
-  - {id: "28",  kind: physical, speed: gig, poe: true}
-  - {id: "29",  kind: physical, speed: gig, poe: true}
-  - {id: "30",  kind: physical, speed: gig, poe: true}
-  - {id: "31",  kind: physical, speed: gig, poe: true}
-  - {id: "32",  kind: physical, speed: gig, poe: true}
-  - {id: "33",  kind: physical, speed: gig, poe: true}
-  - {id: "34",  kind: physical, speed: gig, poe: true}
-  - {id: "35",  kind: physical, speed: gig, poe: true}
-  - {id: "36",  kind: physical, speed: gig, poe: true}
-  - {id: "37",  kind: physical, speed: gig, poe: true}
-  - {id: "38",  kind: physical, speed: gig, poe: true}
-  - {id: "39",  kind: physical, speed: gig, poe: true}
-  - {id: "40",  kind: physical, speed: gig, poe: true}
-  - {id: "41",  kind: physical, speed: gig, poe: true}
-  - {id: "42",  kind: physical, speed: gig, poe: true}
-  - {id: "43",  kind: physical, speed: gig, poe: true}
-  - {id: "44",  kind: physical, speed: gig, poe: true}
-  - {id: "45",  kind: physical, speed: gig, poe: true}
-  - {id: "46",  kind: physical, speed: gig, poe: true}
-  - {id: "47",  kind: physical, speed: gig, poe: true}
-  - {id: "48",  kind: physical, speed: gig, poe: true}
-  # --- 2 × SFP+ uplink (cages A1, A2) ---
-  - {id: "A1",  kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1 (1G/10G)"}
-  - {id: "A2",  kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2 (1G/10G)"}
-lags:
-  max: 24
-  prefix: Trk
+  - {range: "1-48", kind: physical, speed: gig, poe: true}
+  - {id: "A1", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1 (1G/10G)"}
+  - {id: "A2", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2 (1G/10G)"}
+lags: {max: 24, prefix: Trk}

@@ -134,6 +134,79 @@ class TestLoader:
         assert set(profiles) == {"aruba_aoss/test"}
 
 
+class TestRangeSyntax:
+    """Range shorthand in port entries.  Keeps profile YAMLs compact
+    — the 48-port 2930F goes from 48 near-identical lines to one
+    `{range: "1-48", ...}` entry."""
+
+    def _write(self, tmp_path, body):
+        fp = tmp_path / "p.yaml"
+        fp.write_text(body, encoding="utf-8")
+        return load_profile_file(fp)
+
+    def test_bare_numeric_range(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "1-48", kind: physical, speed: gig, poe: true}
+""")
+        assert p.port_count == 48
+        assert p.ports[0].id == "1"
+        assert p.ports[-1].id == "48"
+        assert all(x.poe for x in p.ports)
+
+    def test_prefixed_range_cisco_style(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: cisco_iosxe
+model: t
+ports:
+  - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: gig}
+""")
+        assert p.port_count == 24
+        assert p.ports[0].id == "GigabitEthernet1/0/1"
+        assert p.ports[-1].id == "GigabitEthernet1/0/24"
+
+    def test_letter_prefix_range_aruba_uplink_style(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true}
+""")
+        assert [x.id for x in p.ports] == ["A1", "A2", "A3", "A4"]
+        assert all(x.kind == "uplink" for x in p.ports)
+
+    def test_mixed_range_and_literal(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "1-4", kind: physical, speed: gig}
+  - {id: "A1", kind: uplink, speed: 10gig, sfp: true}
+""")
+        assert [x.id for x in p.ports] == ["1", "2", "3", "4", "A1"]
+        assert p.ports[-1].kind == "uplink"
+
+    def test_inconsistent_prefix_rejected(self, tmp_path):
+        with pytest.raises(ProfileLoadError, match="inconsistent prefix"):
+            self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "A1-B4", kind: uplink, speed: 10gig}
+""")
+
+    def test_start_greater_than_end_rejected(self, tmp_path):
+        with pytest.raises(ProfileLoadError, match="start.* > end"):
+            self._write(tmp_path, """
+vendor: aruba_aoss
+model: t
+ports:
+  - {range: "10-1", kind: physical}
+""")
+
+
 class TestRealProfilesShipped:
     """The YAML files under ``definitions/target_profiles/`` load
     cleanly and expose the documented port inventories.  Any breakage

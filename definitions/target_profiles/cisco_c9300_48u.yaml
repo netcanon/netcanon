@@ -1,0 +1,13 @@
+# Cisco Catalyst 9300-48U
+# 48 × 10/100/1000 BASE-T RJ45 + UPOE
+# 1 × network module slot (NM-8X default)
+vendor: cisco_iosxe
+model: C9300-48U
+display_name: "Cisco Catalyst 9300-48U (1G + UPOE)"
+device_class: switch
+stacking: stackwise
+ports:
+  - {range: "GigabitEthernet1/0/1-48", kind: physical, speed: gig, poe: true, notes: "UPOE 60W"}
+  - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X slot"}
+  - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+lags: {max: 48, prefix: Port-channel}

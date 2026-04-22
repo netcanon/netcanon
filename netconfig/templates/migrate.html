@@ -1261,12 +1261,41 @@
       if (/^(Tunnel|wg|gre|ipip|eoip|gif|ovpn)/i.test(name)) return 'tunnel';
       if (/^VirtualPortGroup|^bridge|^br-/i.test(name)) return 'virtual';
       if (/^(ssl\.|tunnel)/i.test(name)) return 'tunnel';
-      // Mgmt heuristics by role name (FortiGate mgmt, Cisco Gi0/0
-      // under Mgmt-vrf is still classified physical by codec; we
-      // treat it as physical here too since we can't tell from name
-      // alone).
       if (/^(mgmt|management)$/i.test(name)) return 'mgmt';
       return 'physical';
+    }
+
+    /** Distinguish uplink-role physical ports from access-role
+     *  physical ports by source-side naming conventions.  Used only
+     *  to pick profile dropdown options — a FortyGig on Cat 9300
+     *  NM slot should get uplink-port target options (A1/A2 on a
+     *  2930F, 40G QSFP on a 6300M), not access-port options.
+     *
+     *  Heuristics (target-vendor-agnostic):
+     *    * Cisco 3-part Gi/TenG/FortyGig/...1/<N>/<port> where <N>
+     *      is not 0 — line-card / NM-slot uplink.
+     *    * Prefix indicates faster-than-access optics:
+     *      FortyGigabitEthernet, TwentyFiveGigE, HundredGigE,
+     *      FourHundredGigE on any Cisco chassis = uplink.
+     *    * Explicit letter-slot forms (Aruba A1/B1, MikroTik
+     *      sfp-sfpplus, qsfpplus) — those are uplinks by convention.
+     *    * FortiGate wan<N> — uplink role.
+     */
+    function looksLikeUplink(name) {
+      // Cisco 3-part with non-zero middle digit (line-card / NM slot).
+      var m = name.match(
+        /^(FastEthernet|GigabitEthernet|TwoGigabitEthernet|FiveGigabitEthernet|TenGigabitEthernet|TwentyFiveGigE|FortyGigabitEthernet|HundredGigE|FourHundredGigE|AppGigabitEthernet)(\d+)\/(\d+)\/(\d+)(\/\d+)?$/i
+      );
+      if (m && parseInt(m[3], 10) !== 0) return true;
+      // High-speed prefixes — always uplinks on Cat 9k (25G/40G/100G/400G).
+      if (/^(TwentyFiveGigE|FortyGigabitEthernet|HundredGigE|FourHundredGigE)/i.test(name)) return true;
+      // Aruba letter-slot uplinks (1/A1, 2/B12).
+      if (/^\d+\/[A-Za-z]\d+$/.test(name)) return true;
+      // MikroTik SFP/SFP+/QSFP cages.
+      if (/^(sfp|sfp-sfpplus|sfpplus|qsfpplus)\d/i.test(name)) return true;
+      // FortiGate WAN role.
+      if (/^wan\d*$/i.test(name)) return true;
+      return false;
     }
 
     var applied = (_lastJob && _lastJob.port_renames) || {};
@@ -1333,16 +1362,27 @@
     var selectedProfile = _renameProfiles.find(function(p) {
       return (p.vendor + '/' + p.model) === profSel.value;
     });
-    function profileOptionsFor(kind) {
+    function profileOptionsFor(kind, sourceName) {
       if (!selectedProfile) return null;
       if (kind === 'physical') {
+        // Split physical rows by uplink heuristic: source names that
+        // look like uplinks get uplink-port options, access-looking
+        // names get access-port options.  Prevents a Cat 9300 NM-slot
+        // FortyGig being offered 48 access ports on a 2930F-48G.
+        var targetKind = (sourceName && looksLikeUplink(sourceName))
+          ? 'uplink' : 'physical';
         return selectedProfile.ports
-          .filter(function(p) { return p.kind === 'physical'; })
+          .filter(function(p) { return p.kind === targetKind; })
           .map(function(p) { return p.id; });
       }
       if (kind === 'uplink' || kind === 'breakout') {
         return selectedProfile.ports
           .filter(function(p) { return p.kind === 'uplink'; })
+          .map(function(p) { return p.id; });
+      }
+      if (kind === 'mgmt') {
+        return selectedProfile.ports
+          .filter(function(p) { return p.kind === 'mgmt'; })
           .map(function(p) { return p.id; });
       }
       if (kind === 'lag') {
@@ -1453,7 +1493,7 @@
         overrideCell.className = 'mig-rename-target';
         // Drop sentinel used in the dropdown's special "don't render" option.
         var DROP_VALUE = '__DROP__';
-        var opts = profileOptionsFor(row.kind);
+        var opts = profileOptionsFor(row.kind, row.source);
         if (opts && opts.length) {
           var sel = document.createElement('select');
           sel.setAttribute('data-testid',

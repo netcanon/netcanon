@@ -1,0 +1,14 @@
+# Cisco Catalyst 9500-24Y4C
+# 24 × 25G SFP28 + 4 × 100G QSFP28 (top-of-rack / aggregation role)
+# No PoE (SFP-only chassis)
+# Supports MACsec, VxLAN, SD-Access transit
+vendor: cisco_iosxe
+model: C9500-24Y4C
+display_name: "Cisco Catalyst 9500-24Y4C (24x25G + 4x100G)"
+device_class: switch
+stacking: stackwise-virtual
+ports:
+  - {range: "TwentyFiveGigE1/0/1-24", kind: physical, speed: 25gig, sfp: true, notes: "SFP28 1/10/25G"}
+  - {range: "HundredGigE1/0/25-28", kind: uplink, speed: 100gig, sfp: true, notes: "QSFP28 40/100G"}
+  - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+lags: {max: 128, prefix: Port-channel}
