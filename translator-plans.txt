@@ -399,26 +399,48 @@ LAYER 4 — TRANSPORT
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐
-  │ TIER 2 REMAINING  (Bugs 2/3/4 now shipped, unblocking queue)   │
+  │ TIER 2 — ALL SHIPPED                                           │
   ├────────────────────────────────────────────────────────────────┤
+  │ STATUS: complete.  SNMP (earlier), LAGs (Bug 2), local_users,  │
+  │ DHCP pools, RADIUS servers — all wired across all 5 codecs     │
+  │ (with pragmatic skip for Aruba DHCP since AOS-S is a relay     │
+  │ platform, not a server).  See per-item notes below for what    │
+  │ shipped and where.  1081 tests passing.                         │
+  │                                                                │
   │ Canonical model defines these but no codec wires them.  Same   │
   │ shape of work as Session E's SNMP wire-through.  Each is one   │
   │ session: model is already in canonical/intent.py, just needs   │
   │ per-codec parse+render+tests and capability-matrix declaration.│
   │                                                                │
-  │   * local_users  — Cisco `username X privilege N secret ...`,  │
-  │                    Aruba `password manager user-name ...`,     │
-  │                    FortiGate `config system admin`, MikroTik   │
-  │                    `/user add`, OPNsense `<system><user>`.     │
-  │   * RADIUS servers — every vendor has some flavour;            │
-  │                       CanonicalRADIUSServer already modelled.  │
-  │   * DHCP server pools — Cisco `ip dhcp pool`, OPNsense         │
-  │                         `<dhcpd>`, MikroTik `/ip dhcp-server`, │
-  │                         FortiGate `config system dhcp server`. │
-  │   * (LAGs shipped as Bug 2 — see KNOWN DATA-LOSS BUGS above.)  │
+  │   * local_users  — SHIPPED.  Cisco `username X privilege N     │
+  │                    secret ...`, Aruba `password manager user-  │
+  │                    name ...`, FortiGate `config system admin`, │
+  │                    MikroTik `/user add`, OPNsense              │
+  │                    `<system><user>`.  Hashed passwords carry   │
+  │                    a per-vendor algorithm tag                   │
+  │                    (sha1/bcrypt/fortios/cisco-type-N:) so      │
+  │                    renderers can route correctly.  26 tests.   │
   │                                                                │
-  │ Priority order: local_users (security-sensitive, every real    │
-  │ config has them), then DHCP pools, then RADIUS.                │
+  │   * DHCP server pools — SHIPPED.  Cisco `ip dhcp pool`,         │
+  │                         OPNsense `<dhcpd>/<zone>`, MikroTik    │
+  │                         `/ip dhcp-server network` + `/ip pool` │
+  │                         with deferred-merge (file-order        │
+  │                         agnostic), FortiGate `config system    │
+  │                         dhcp server` with nested `ip-range`.   │
+  │                         Aruba renders a comment block (AOS-S   │
+  │                         is a relay platform, not a server).    │
+  │                         18 tests.                               │
+  │                                                                │
+  │   * RADIUS servers — SHIPPED.  Cisco modern named-stanza +     │
+  │                      legacy one-liner, Aruba inline-key +      │
+  │                      global-key backfill, OPNsense             │
+  │                      `<authserver type="radius">` (ldap/local  │
+  │                      correctly filtered out), MikroTik         │
+  │                      `/radius add`, FortiGate `config user     │
+  │                      radius`.  22 tests.                        │
+  │                                                                │
+  │   * (LAGs shipped as Bug 2 — see KNOWN DATA-LOSS BUGS above.)  │
+  │   * (SNMP shipped in Tier 2 SNMP session — see CHANGELOG.)     │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐

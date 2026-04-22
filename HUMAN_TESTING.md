@@ -10,6 +10,31 @@ list, don't delete).
 
 ---
 
+## Migration — Tier 2 wire-throughs (ship-fresh)
+
+- [ ] **local_users**: paste a Cisco config with `username admin
+      privilege 15 secret 9 $9$...`; target Aruba should emit
+      `password manager user-name "admin" plaintext "..."` (the
+      Cisco-type-9 hash gets wrapped under AOS-S's `plaintext`
+      keyword — AOS-S will reject at deploy but the data isn't
+      silently dropped).
+- [ ] **DHCP pool (Cisco -> OPNsense)**: paste a Cisco config with
+      `ip dhcp pool X / network N M / default-router G / dns-server D
+      / lease 7`; target OPNsense should emit `<dhcpd>/<zone>` with
+      gateway, dnsserver, defaultleasetime=604800.
+- [ ] **DHCP pool (FortiGate -> Aruba)**: upload the real FortiGate
+      fixture; target Aruba should NOT drop the LAG_INTERNAL DHCP
+      pool — instead emit a `; DHCP pools ... AOS-S` comment block
+      summarising it for the reviewer.
+- [ ] **RADIUS (Cisco -> OPNsense)**: paste Cisco `radius server X /
+      address ipv4 10.0.0.4 auth-port 1812 / key 7 abc123`; target
+      OPNsense should emit `<authserver><type>radius</type>` with
+      host + secret + port preserved.
+- [ ] **RADIUS (Aruba global-key backfill)**: paste an AOS-S config
+      with two `radius-server host` lines + one `radius-server key
+      "fallback"`; parsed canonical should show both servers carry
+      `fallback` as their key.
+
 ## Migration — data-loss bug regressions (fixed, should hold)
 
 - [ ] **Bug 4** — `ip default-gateway X` on Cisco CLI.  Paste a
