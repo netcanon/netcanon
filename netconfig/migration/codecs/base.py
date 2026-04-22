@@ -26,9 +26,12 @@ registry; instances are stateless unless documented otherwise.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, ClassVar, Iterable
+from typing import TYPE_CHECKING, Any, ClassVar, Iterable
 
 from ...models.migration import CapabilityMatrix
+
+if TYPE_CHECKING:
+    from ..canonical.port_names import PortIdentity
 
 
 class CodecError(Exception):
@@ -216,6 +219,75 @@ class CodecBase(ABC):
             for key in tree:
                 if isinstance(key, str):
                     yield key
+
+    # ------------------------------------------------------------------
+    # Cross-vendor port-name translation — vendor-agnostic bridge
+    # ------------------------------------------------------------------
+    #
+    # Each codec implements two symmetric methods so the canonical
+    # orchestrator in ``netconfig.migration.canonical.port_names`` can
+    # rewrite interface names across any (source, target) pair without
+    # ever hard-coding a vendor combination.  Codecs know only their
+    # OWN vendor's naming convention; the :class:`PortIdentity` shape
+    # is the vendor-agnostic meeting point.
+    #
+    # Codecs that haven't implemented these yet inherit the default
+    # no-op behaviour: classify_port_name returns kind="unknown" (so
+    # the orchestrator leaves names verbatim and emits a warning),
+    # format_port_identity returns None (same verbatim-plus-warning
+    # fallback).  This means adding the hooks is incremental — existing
+    # codecs keep working while new ones land.
+    # ------------------------------------------------------------------
+
+    def classify_port_name(self, name: str) -> "PortIdentity":
+        """Parse a vendor-native port name into a :class:`PortIdentity`.
+
+        Subclasses override to recognise THIS vendor's naming
+        conventions (Cisco's ``GigabitEthernet1/0/24``, Aruba's
+        ``1/24``, MikroTik's ``ether1``, etc.).  The returned identity
+        is consumed by the peer codec's :meth:`format_port_identity`
+        on the target side of a translation.
+
+        Default implementation returns ``kind="unknown"`` — safe for
+        codecs that haven't been wired into port-name translation yet.
+        Callers treat unknown identities as "leave the name verbatim"
+        and surface a warning.
+
+        Contract:
+            * Must be pure (no I/O, no mutation of ``self``).
+            * Must populate ``.original = name`` so downstream
+              fallbacks have the source name.
+            * Must NOT reference any other vendor's naming — this
+              method is strictly about recognising MY vendor's names.
+        """
+        from ..canonical.port_names import PortIdentity
+        return PortIdentity(kind="unknown", original=name)
+
+    def format_port_identity(self, identity: "PortIdentity") -> str | None:
+        """Format a :class:`PortIdentity` as THIS vendor's port name.
+
+        Inverse of :meth:`classify_port_name`.  The identity was
+        produced by some OTHER vendor's classifier, and this method
+        renders it in MY vendor's native conventions.
+
+        Returns ``None`` when this vendor has no native representation
+        for the given identity's ``kind`` (e.g. Aruba AOS-S has no
+        loopback concept; ``format_port_identity(PortIdentity(kind="loopback", ...))``
+        returns ``None``).  The orchestrator handles this by leaving
+        the original name verbatim and emitting a specific warning
+        the UI can surface as a manual-review item.
+
+        Default implementation returns ``None`` — safe for codecs not
+        yet participating in port-name translation.
+
+        Contract:
+            * Must be pure.
+            * Must NOT consult ``identity.original`` except as a
+              last-resort fallback — the whole point of going through
+              :class:`PortIdentity` is that we DON'T leak vendor-
+              specific source names into the target render.
+        """
+        return None
 
     @classmethod
     def probe(cls, raw_prefix: str) -> tuple[int, str] | None:

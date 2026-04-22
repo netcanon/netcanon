@@ -139,3 +139,94 @@ def run_plan(
 
     job.completed_at = datetime.now(timezone.utc)
     return job
+
+
+def run_plan_with_rename(
+    source: CodecBase,
+    target: CodecBase,
+    raw_text: str,
+    port_rename_map: dict[str, str] | None = None,
+    transforms: list[TransformCallable] | None = None,
+    transform_specs: list[TransformSpec] | None = None,
+    force: bool = False,
+) -> MigrationJob:
+    """Extended pipeline: parse → port-name rewrite → transforms →
+    validate → render.
+
+    Wraps :func:`run_plan` with the cross-vendor port-name translator
+    from :mod:`netconfig.migration.canonical.port_names` inserted as
+    the FIRST transform in the chain.  The translator:
+
+    * Rewrites every port-name field in the canonical tree
+      (``interfaces[].name``, ``vlans[].tagged_ports``, etc.) from
+      the source vendor's convention to the target vendor's, via
+      each codec's own ``classify_port_name`` / ``format_port_identity``
+      methods — strictly through the vendor-agnostic
+      :class:`PortIdentity` bridge, never hard-coding any vendor
+      pair.
+
+    * Applies user-supplied *port_rename_map* entries FIRST (Tier 2
+      override); falls back to auto-heuristic for any source name
+      not in the map.
+
+    * Populates :attr:`MigrationJob.port_renames` with the full
+      applied source→target map and :attr:`MigrationJob.warnings`
+      with per-name advisories for the complexity cases (breakout,
+      hw-aggregate, unsupported kinds).
+
+    Existing :func:`run_plan` remains unchanged — its signature is
+    frozen per CLAUDE.md "never change signatures of pipeline-stage
+    functions" rule.  Callers that want port-name normalisation
+    explicitly choose this function; legacy callers of ``run_plan``
+    get the historical behaviour (names pass through verbatim).
+
+    Args:
+        source: Source codec (classifies port names).
+        target: Target codec (formats port names + renders output).
+        raw_text: Source-vendor config text.
+        port_rename_map: Optional user override map of
+            source-name → target-name.  Entries win over the
+            auto-heuristic.  Empty / None = fully auto.
+        transforms: Additional transforms to apply AFTER the
+            port-name rewrite.
+        transform_specs: Serialisable transform record (mirrors
+            *transforms* for job-reproducibility).
+        force: Skip the cross-device-class guard.
+
+    Returns:
+        A :class:`MigrationJob` with ``rendered`` populated on
+        success plus ``port_renames`` and ``warnings`` describing
+        what the translator did.
+    """
+    # Lazy import to avoid circular dependency at module import time
+    # (port_names imports CodecBase; this module imports CodecBase).
+    from ..migration.canonical.port_names import build_port_rename_transform
+
+    rename_transform, rename_result = build_port_rename_transform(
+        source, target, rename_map=port_rename_map
+    )
+
+    combined_transforms = [rename_transform, *(transforms or [])]
+
+    job = run_plan(
+        source=source,
+        target=target,
+        raw_text=raw_text,
+        transforms=combined_transforms,
+        transform_specs=transform_specs,
+        force=force,
+    )
+
+    # Attach the translator outcome AFTER run_plan so the job carries
+    # what actually happened even when a later stage (validate/render)
+    # failed — operators want to see the rename decisions that led up
+    # to the failure.
+    if rename_result.applied:
+        job.port_renames = dict(rename_result.applied)
+    if rename_result.warnings:
+        # Extend rather than replace — run_plan itself doesn't populate
+        # warnings today, but future pipeline stages might, and this
+        # wrapper shouldn't eat them.
+        job.warnings.extend(rename_result.warnings)
+
+    return job

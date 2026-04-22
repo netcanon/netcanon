@@ -37,6 +37,7 @@ Round-trip invariant: ``parse(render(tree)) == tree``.
 
 from __future__ import annotations
 
+import re
 from typing import Any, ClassVar, Iterable
 from xml.etree import ElementTree as ET
 
@@ -562,6 +563,132 @@ class OPNsenseCodec(CodecBase):
             return
         for key, val in tree.items():
             yield from _walk(val, f"/{key}")
+
+    # -----------------------------------------------------------------
+    # Cross-vendor port-name translation
+    # -----------------------------------------------------------------
+
+    def classify_port_name(self, name: str):  # -> PortIdentity
+        """Classify an OPNsense interface name into a :class:`PortIdentity`.
+
+        OPNsense presents interfaces at two levels of naming:
+
+        BSD device names (physical / aggregate / VLAN sub-ifaces):
+            * ``igb<N>``, ``em<N>``, ``re<N>``, ``ix<N>``, ``bnxt<N>``,
+              ``mlxen<N>``, ``vmx<N>``, ``vtnet<N>``, ``bge<N>``,
+              ``mce<N>``, ``cxgbe<N>`` etc. — physical NIC ports.
+              The integer is the BSD unit number, not a slot/module.
+            * ``lagg<N>`` — LAG (FreeBSD link aggregation).
+            * ``<parent>.<vlan_id>`` — 802.1q VLAN subinterface, e.g.
+              ``igb0.10`` or ``lagg0.100``.
+            * ``lo<N>`` — loopback (usually ``lo0``).
+            * ``wg<N>`` — WireGuard tunnel.
+            * ``gif<N>``, ``gre<N>`` — tunnel interfaces.
+            * ``ovpns<N>`` / ``ovpnc<N>`` — OpenVPN server / client.
+
+        Zone-level aliases used by OPNsense config UI:
+            * ``wan``, ``lan``, ``opt<N>`` — aliases that map to a
+              specific BSD device; the OPNsense codec's parser maps
+              these to vendor-native names already, so we typically
+              see the BSD form here.  If a zone alias leaks through,
+              classify as ``unknown`` — the source->target map can't
+              resolve the alias without the full OPNsense config.
+        """
+        from ...canonical.port_names import PortIdentity
+
+        stripped = name.strip()
+
+        # BSD NIC-driver list, ordered so longer prefixes match first
+        # (``cxgbe`` before ``ce``; ``mlxen`` before ``m``).
+        nic_prefixes = [
+            "cxgbe", "mlxen", "bnxt",
+            "ixgbe", "ixl", "igb", "ixl", "em", "re",
+            "ix", "vmx", "vtnet", "bge", "mce", "fxp",
+        ]
+        for prefix in nic_prefixes:
+            m = re.match(rf"^{prefix}(\d+)$", stripped, re.IGNORECASE)
+            if m:
+                # ix* and cxgbe are 10G-class; igb/em/re/bge/fxp are
+                # gig-class; bnxt/mlxen are typically 10G+.
+                speed = "10gig" if prefix in (
+                    "ix", "ixgbe", "ixl", "cxgbe", "bnxt", "mlxen"
+                ) else "gig"
+                return PortIdentity(
+                    kind="physical",
+                    port=int(m.group(1)),
+                    name_speed_hint=speed,
+                    meta={"opnsense_driver": prefix.lower()},
+                    original=name,
+                )
+
+        # LAG.
+        m = re.match(r"^lagg(\d+)$", stripped, re.IGNORECASE)
+        if m:
+            return PortIdentity(
+                kind="lag", index=int(m.group(1)), original=name
+            )
+
+        # VLAN subinterface: ``<parent>.<id>``.
+        m = re.match(r"^([a-z][a-z0-9-]*)\.(\d+)$", stripped, re.IGNORECASE)
+        if m:
+            return PortIdentity(
+                kind="svi",
+                index=int(m.group(2)),
+                meta={"opnsense_parent": m.group(1)},
+                original=name,
+            )
+
+        # Loopback.
+        m = re.match(r"^lo(\d+)$", stripped, re.IGNORECASE)
+        if m:
+            return PortIdentity(
+                kind="loopback", index=int(m.group(1)), original=name
+            )
+
+        # Tunnels.
+        m = re.match(
+            r"^(wg|gif|gre|ovpns|ovpnc)(\d+)$", stripped, re.IGNORECASE
+        )
+        if m:
+            return PortIdentity(
+                kind="tunnel",
+                index=int(m.group(2)),
+                meta={"opnsense_tunnel_kind": m.group(1).lower()},
+                original=name,
+            )
+
+        return PortIdentity(kind="unknown", original=name)
+
+    def format_port_identity(self, identity) -> str | None:
+        """Render a :class:`PortIdentity` as an OPNsense BSD-device name.
+
+        Default driver choice is ``igb`` for 1G and ``ix`` for 10G+;
+        the source-side ``opnsense_driver`` meta hint wins when
+        present (same-vendor round-trip preserves the actual NIC
+        type).  SVIs render as ``<parent>.<vlan_id>``; if no parent
+        is in the meta hint, default to ``lagg0`` (the typical
+        OPNsense LAG parent for VLANs in real deployments).
+        """
+        if identity.kind == "physical":
+            driver = identity.meta.get("opnsense_driver")
+            if driver:
+                return f"{driver}{identity.port or 0}"
+            if identity.name_speed_hint in ("10gig", "25gig", "40gig", "100gig"):
+                return f"ix{identity.port or 0}"
+            return f"igb{identity.port or 0}"
+        if identity.kind == "lag":
+            return f"lagg{identity.index or 0}"
+        if identity.kind == "svi":
+            parent = identity.meta.get("opnsense_parent") or "lagg0"
+            return f"{parent}.{identity.index}"
+        if identity.kind == "loopback":
+            return f"lo{identity.index or 0}"
+        if identity.kind == "tunnel":
+            kind = identity.meta.get("opnsense_tunnel_kind") or "gif"
+            return f"{kind}{identity.index or 0}"
+        # OPNsense is a BSD appliance — no hw_aggregate, breakout, or
+        # mgmt-specific concept in the config.xml interface space.
+        return None
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)

@@ -342,6 +342,21 @@ class MigrationJob(BaseModel):
     rendered: str | None = None
     error: str | None = None
 
+    #: Non-fatal advisories from the pipeline.  Populated by
+    #: ``run_plan_with_rename`` when the cross-vendor port-name
+    #: translator leaves interfaces unmapped or surfaces
+    #: complexity-cases (breakout / hw-aggregate / loopback-in-
+    #: AOS-S-style scenarios).  Empty on a fully clean run.
+    warnings: list[str] = Field(default_factory=list)
+
+    #: Source→target port-name rewrites applied during
+    #: :func:`run_plan_with_rename`.  Surfaced in the UI's
+    #: "Interface translation" panel so operators can see exactly
+    #: which names changed (and, in Tier 3, override them).  Keys
+    #: are source names; values are target names.  Unchanged names
+    #: are not included.
+    port_renames: dict[str, str] = Field(default_factory=dict)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
