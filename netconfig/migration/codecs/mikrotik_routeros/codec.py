@@ -87,7 +87,7 @@ class MikroTikRouterOSCodec(CodecBase):
     version_hint: ClassVar[str | None] = "7.x"
     input_format: ClassVar[str] = "cli-mikrotik"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `/export verbose` on RouterOS.  The codec "
@@ -304,14 +304,25 @@ class MikroTikRouterOSCodec(CodecBase):
 
         # ----- /interface ethernet (tweaks to default ports) -----
         ethernet_ifaces = [
-            i for i in tree.interfaces if _is_ethernet_name(i.name)
+            i for i in tree.interfaces
+            if _is_ethernet_name(i.name) or _is_ethernet_name(i.default_name)
+            or (i.interface_type == "ianaift:ethernetCsmacd" and i.default_name)
         ]
         if ethernet_ifaces:
             lines.append("/interface ethernet")
             for iface in ethernet_ifaces:
-                parts = [f"set [ find default-name={iface.name} ]"]
+                # Find key: prefer default_name (factory default, matches
+                # what the device finds by default-name=) falling back to
+                # the canonical name when no default_name was tracked.
+                find_key = iface.default_name or iface.name
+                parts = [f"set [ find default-name={find_key} ]"]
                 if iface.description:
                     parts.append(f'comment="{_escape(iface.description)}"')
+                # Emit the renamed name only when it differs from the
+                # factory default-name — avoids a noisy no-op
+                # `name=ether1` on otherwise-default ports.
+                if iface.name != find_key:
+                    parts.append(f"name={_quote_if_needed(iface.name)}")
                 parts.append(f"disabled={_yes_no(not iface.enabled)}")
                 if iface.mtu is not None:
                     parts.append(f"mtu={iface.mtu}")
@@ -730,22 +741,40 @@ def _parse_interface_ethernet(
     lines: list[str],
     iface_by_name: dict[str, CanonicalInterface],
 ) -> None:
-    """Parse ``set [ find default-name=etherN ] ...`` tweaks."""
+    """Parse ``set [ find default-name=etherN ] ...`` tweaks.
+
+    Real RouterOS configs routinely rename ports for descriptive
+    purposes — e.g. ``set [ find default-name=ether2 ] name="Access
+    Point"``.  When that happens, the RENAMED name (``Access Point``)
+    is how the rest of the config references the port (in
+    ``/interface bridge port interface=...``, ``/queue interface``,
+    ``/ip address interface=``, etc.).  The canonical must therefore
+    track the renamed name as ``CanonicalInterface.name``, with the
+    original factory default-name preserved on ``default_name`` so
+    the renderer can reconstruct the ``set [ find default-name=X ]``
+    lookup.
+    """
     for line in lines:
         if not line.startswith("set"):
             continue
         fm = _FIND_DEFAULT_NAME_RE.search(line)
         if not fm:
             continue
-        name = fm.group(1)
+        default_name = fm.group(1)
         kv = _parse_kv(line)
-        iface = iface_by_name.setdefault(
-            name,
-            CanonicalInterface(
-                name=name,
+        canonical_name = kv.get("name", default_name)
+        iface = iface_by_name.get(canonical_name)
+        if iface is None:
+            iface = CanonicalInterface(
+                name=canonical_name,
+                default_name=default_name,
                 interface_type="ianaift:ethernetCsmacd",
-            ),
-        )
+            )
+            iface_by_name[canonical_name] = iface
+        else:
+            # Merge default_name if we hadn't captured it yet.
+            if not iface.default_name:
+                iface.default_name = default_name
         if "comment" in kv:
             iface.description = kv["comment"]
         if "disabled" in kv:
@@ -787,10 +816,16 @@ def _parse_interface_vlan(
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
         # Also record in intent.vlans so the VLAN database is complete.
-        descriptive_name = kv.get("comment", name)
+        # Use the IFACE name as the canonical VLAN name (not the
+        # comment) — the render path's `_vlan_id_for` lookup matches
+        # iface.name -> vlans[*].name, so keeping those in sync is
+        # essential for round-trip stability.  The comment (a human-
+        # readable label like "Management" or "Cluster") goes onto the
+        # VLAN's description field instead.
         intent.vlans.append(CanonicalVlan(
             id=vlan_id,
-            name=descriptive_name,
+            name=name,
+            description=kv.get("comment", ""),
         ))
 
 
@@ -923,6 +958,12 @@ def _parse_ip_address(
             CanonicalInterface(
                 name=iface_name,
                 interface_type=_infer_iface_type_from_name(iface_name),
+                # If the name already matches a factory default pattern,
+                # use it as the default_name too.  Keeps round-trip
+                # consistent for ifaces that only appear in /ip address
+                # (no /interface ethernet set line carries the default-
+                # name lookup).
+                default_name=iface_name if _is_ethernet_name(iface_name) else "",
             ),
         )
         iface.ipv4_addresses.append(CanonicalIPv4Address(

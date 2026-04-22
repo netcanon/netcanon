@@ -62,7 +62,18 @@ class CanonicalIPv4Address(BaseModel):
 class CanonicalInterface(BaseModel):
     """A network interface — physical, VLAN SVI, LAG, loopback, tunnel."""
 
-    name: str                                   # vendor-native name (opaque)
+    name: str                                   # vendor-native name (opaque);
+                                                # for renamed MikroTik ports
+                                                # this is the renamed name
+                                                # (e.g. "Access Point"), not
+                                                # the factory default (ether2)
+    default_name: str = ""                      # MikroTik: factory default-name
+                                                # (ether1, sfp-sfpplus1) — used
+                                                # by the renderer to emit the
+                                                # `set [ find default-name=X ]`
+                                                # lookup.  Empty for vendors/
+                                                # interface types where the
+                                                # concept doesn't apply.
     description: str = ""
     enabled: bool = True
     interface_type: str = ""                    # e.g. "ethernetCsmacd", "softwareLoopback"

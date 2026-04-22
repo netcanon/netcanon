@@ -239,12 +239,23 @@ LAYER 4 — TRANSPORT
   │   ----------------+-----+-----+------+-------------------       │
   │   cisco_iosxe_cli |  6  |  1* |  1   | best_effort              │
   │   opnsense        |  3  |  1  |  0   | best_effort              │
-  │   mikrotik        |  3† |  2  |  4   | best_effort              │
+  │   mikrotik        |  4  |  3  |  6   | CERTIFIED                │
   │   fortigate       |  2  |  1  |  1   | best_effort              │
   │   aruba_aoss      |  1‡ |  —  |  0   | best_effort              │
   │   * all Cisco fixtures are Batfish/NTC test grammars            │
-  │   † 1 of 3 is a provisioning script, not a captured export      │
   │   ‡ rendered from Aruba Central template, not captured          │
+  │                                                                │
+  │ mikrotik_routeros is the FIRST codec to hit `certified` tier.  │
+  │ 4 real fixtures across 3 OS versions (6.48.1, 6.48.6, 7.18.2), │
+  │ all round-tripping cleanly.  The 4th fixture (user-contributed │
+  │ CRS310 /export, sanitised) surfaced two structural bugs that   │
+  │ were fixed in the same session:                                │
+  │   * CanonicalInterface.default_name field added to track the   │
+  │     RouterOS factory default-name distinct from the renamed    │
+  │     name ("Access Point" rather than "ether2").                │
+  │   * CanonicalVlan.name now stores the iface name (needed for   │
+  │     render's vlan-id lookup); description field holds the      │
+  │     human comment.                                              │
   │                                                                │
   │ 4 bugs surfaced so far by real captures, all fixed in-session  │
   │ with regression tests.  Sample bugs — each would have survived │

@@ -60,8 +60,13 @@ class TestR3Fields:
     def test_direction_is_bidirectional(self):
         assert MikroTikRouterOSCodec.direction == "bidirectional"
 
-    def test_certainty_is_best_effort(self):
-        assert MikroTikRouterOSCodec.certainty == "best_effort"
+    def test_certainty_is_certified(self):
+        # Promoted from best_effort after user-contributed CRS310
+        # RouterOS 7.18.2 /export verbose landed the 4th real fixture
+        # across 3 OS versions (6.48.1, 6.48.6, 7.18.2), satisfying
+        # the >=3 real captures / >=2 OS versions certification bar.
+        # See tests/fixtures/real/RESULTS.md.
+        assert MikroTikRouterOSCodec.certainty == "certified"
 
     def test_canonical_model(self):
         assert MikroTikRouterOSCodec.canonical_model == "openconfig-lite"
@@ -132,9 +137,15 @@ class TestParse:
         e3 = next(i for i in tree.interfaces if i.name == "ether3")
         assert e3.enabled is False
 
-        # VLANs
-        vlans = {v.id: v.name for v in tree.vlans}
-        assert vlans == {10: "Corporate users", 20: "Guest WiFi"}
+        # VLANs — canonical model now stores iface name as
+        # CanonicalVlan.name (stable key for `_vlan_id_for` round-
+        # trip lookups) and the comment on the description field.
+        # Was: vlans[10] == "Corporate users" (the comment).
+        vlans_by_id = {v.id: v for v in tree.vlans}
+        assert vlans_by_id[10].name == "vlan10"
+        assert vlans_by_id[10].description == "Corporate users"
+        assert vlans_by_id[20].name == "vlan20"
+        assert vlans_by_id[20].description == "Guest WiFi"
 
         # Static routes
         assert len(tree.static_routes) == 1
@@ -487,6 +498,120 @@ class TestBridgeRender:
         )
         out = MikroTikRouterOSCodec().render(intent)
         assert 'name="main infrastructure"' in out
+
+
+class TestEthernetRename:
+    """Real RouterOS configs routinely rename ports for descriptive
+    purposes: `set [ find default-name=ether2 ] name="Access Point"`.
+    Canonical must track the renamed name as iface.name (that's what
+    the rest of the config references: bridge ports, VLAN parents,
+    IP addresses) with the original default-name on iface.default_name
+    so render can reconstruct the find lookup.  Surfaced by the
+    user-contributed CRS310 /export capture where all 8 ethernet
+    ports are renamed after their role (Desktop, Access Point,
+    CLUSTER - PVE3, etc.)."""
+
+    def test_renamed_port_becomes_canonical_name(self):
+        raw = (
+            '/interface ethernet\n'
+            'set [ find default-name=ether2 ] name="Access Point" '
+            'disabled=no\n'
+        )
+        intent = MikroTikRouterOSCodec().parse(raw)
+        iface = intent.interfaces[0]
+        assert iface.name == "Access Point"
+        assert iface.default_name == "ether2"
+
+    def test_unrenamed_port_keeps_default_as_name_and_default_name(self):
+        raw = (
+            '/interface ethernet\n'
+            'set [ find default-name=ether1 ] disabled=no\n'
+        )
+        intent = MikroTikRouterOSCodec().parse(raw)
+        iface = intent.interfaces[0]
+        assert iface.name == "ether1"
+        assert iface.default_name == "ether1"
+
+    def test_render_uses_default_name_for_find_key(self):
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            interfaces=[CanonicalInterface(
+                name="Access Point",
+                default_name="ether2",
+                interface_type="ianaift:ethernetCsmacd",
+            )],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        # find by factory default-name
+        assert "set [ find default-name=ether2 ]" in out
+        # and emits the rename
+        assert 'name="Access Point"' in out
+
+    def test_render_omits_noop_name_when_not_renamed(self):
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            interfaces=[CanonicalInterface(
+                name="ether1",
+                default_name="ether1",
+                interface_type="ianaift:ethernetCsmacd",
+            )],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        # Find key present, no `name=` noop.
+        assert "set [ find default-name=ether1 ]" in out
+        # Avoid a redundant `name=ether1` (after `] `) when nothing
+        # was renamed.  Use the `] name=` substring to distinguish
+        # from the `default-name=` occurrence.
+        assert "] name=ether1" not in out
+
+    def test_round_trip_real_rename(self):
+        raw = (
+            '/interface ethernet\n'
+            'set [ find default-name=ether2 ] name="Access Point" '
+            'disabled=no mtu=1500\n'
+        )
+        c = MikroTikRouterOSCodec()
+        first = c.parse(raw)
+        second = c.parse(c.render(first))
+        assert first.interfaces[0].name == second.interfaces[0].name == "Access Point"
+        assert first.interfaces[0].default_name == second.interfaces[0].default_name == "ether2"
+
+
+class TestCanonicalVlanNameSemantics:
+    """CanonicalVlan.name now holds the iface name (for round-trip
+    lookup consistency); comments go on the description field.
+    Without this, `_vlan_id_for("mgmtvlan11", vlans)` couldn't resolve
+    and render would emit ghost `vlan11` records instead."""
+
+    def test_iface_name_stored_as_vlan_name(self):
+        raw = (
+            '/interface vlan\n'
+            'add comment=Management interface=bridge name=mgmtvlan11 '
+            'vlan-id=11\n'
+        )
+        intent = MikroTikRouterOSCodec().parse(raw)
+        assert len(intent.vlans) == 1
+        v = intent.vlans[0]
+        assert v.id == 11
+        assert v.name == "mgmtvlan11"        # iface name
+        assert v.description == "Management" # the comment
+
+    def test_round_trip_of_real_vlan_iface(self):
+        raw = (
+            '/interface vlan\n'
+            'add comment=Cluster interface=bridge name=clustervlan100 '
+            'vlan-id=100\n'
+        )
+        c = MikroTikRouterOSCodec()
+        first = c.parse(raw)
+        second = c.parse(c.render(first))
+        # Same vlan-id + same iface name both sides.
+        assert first.vlans[0].id == second.vlans[0].id == 100
+        assert first.vlans[0].name == second.vlans[0].name == "clustervlan100"
+        # No ghost `vlan100` iface created by the synthetic fallback.
+        names = [i.name for i in second.interfaces]
+        assert "vlan100" not in names
+        assert "clustervlan100" in names
 
 
 class TestVlanInterfaceNamePreservation:

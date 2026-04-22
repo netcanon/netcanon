@@ -90,8 +90,9 @@ upstream or a sanitised customer deployment config.
 | Fixture | Lines | hostname | interfaces | vlans | dhcp | snmp | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `ntc_ip_address_export.rsc` | 8 | 0 | 2 | 0 | 0 | 0 | Real RouterOS 6.48.6 `/export verbose` snippet — `/ip address` with quoted comments and vendor banner. |
-| `routeros_diff_verbose_export.rsc` | 484 | 1 | 9 | 1 | 2 | 1 | Real RouterOS 6.48.1 `/export verbose` from an RB952Ui-5ac2nD home router.  Different OS version (gives MikroTik 2-OS-version coverage already).  `/interface bridge`, `/interface vlan`, `/ip dhcp-server network` + `/ip pool`, `/snmp` all exercised. |
-| `taqavi_initial_provisioning.rsc` | 133 | 0 | 7 | 0 | 1 | 0 | Real MikroTik provisioning script targeting an L009UiGS-2HaxD router.  `/interface bridge` + `/interface bridge port`, per-port comments on ethernet, `/user add`, DHCP, WireGuard, firewall.  Not a `/export` capture — a script admins run. |
+| `routeros_diff_verbose_export.rsc` | 484 | 1 | 9 | 1 | 2 | 1 | Real RouterOS 6.48.1 `/export verbose` from an RB952Ui-5ac2nD home router.  `/interface bridge`, `/interface vlan`, `/ip dhcp-server network` + `/ip pool`, `/snmp` all exercised. |
+| `taqavi_initial_provisioning.rsc` | 133 | 0 | 7 | 0 | 1 | 0 | Real MikroTik provisioning script targeting an L009UiGS-2HaxD router.  Not a `/export` capture — a script admins run. |
+| `user_contrib_crs310_ros7.rsc` | 630 | 1 | 16 | 5 | 0 | 1 | Real RouterOS 7.18.2 `/export verbose` from a CRS310-8G+2S+ switch (user contribution, sanitised).  Renamed ethernet ports (Desktop / "Access Point" / "CLUSTER - PVE3"...), 5 VLANs, full `/interface bridge port` table, extensive system-level config.  The fixture that unblocked MikroTik `certified` tier. |
 
 ### Codec bugs surfaced + fixed
 
@@ -127,9 +128,33 @@ in `TestInterfaceTypeInferenceRoundTrip`.
 
 ### Certification decision
 
-**Stay at `best_effort`.**  Single fixture is well below the
-`certified` threshold.  Need at least 2 more real exports (ideally
-from RouterOS 7.x) to graduate.
+**Promoted to `certified`.**  Four real fixtures across three
+distinct OS versions (6.48.1, 6.48.6, 7.18.2) with all four round-
+tripping cleanly after the bugs surfaced in-session were fixed.
+Each bug added a regression test so reverting the fix breaks CI.
+This is the first codec in the project to hit `certified` tier.
+
+Bugs surfaced by the user-contributed CRS310 fixture and fixed in
+the same pass to unblock the promotion:
+
+* **Interface rename not captured.** Real configs do
+  `set [ find default-name=ether2 ] name="Access Point"` — the
+  canonical was storing `ether2` as the iface name, discarding the
+  rename.  The rest of the config (bridge ports, VLAN parents, IP
+  addresses, etc.) references the renamed name, so the canonical
+  was fundamentally wrong.  Added
+  `CanonicalInterface.default_name` field; parser now stores the
+  renamed name as `.name` and the factory default-name as
+  `.default_name`; renderer uses `.default_name` as the
+  `find default-name=X` key and emits `name=X` only when the
+  iface has actually been renamed (no `name=ether1` noops).
+* **`CanonicalVlan.name` semantics.**  Was storing the comment
+  ("Management", "Cluster"), which made render's `_vlan_id_for`
+  lookup fail for named VLAN ifaces — producing ghost `vlan<N>`
+  synthetic records alongside the real ones on round-trip.  Now
+  stores the iface name (mgmtvlan11, clustervlan100); the comment
+  moves to `CanonicalVlan.description`.  One existing test that
+  asserted the old semantics was updated in the same commit.
 
 ---
 
@@ -236,10 +261,10 @@ Swap the rendered fixture out whenever we find one.
 |---|---:|---:|---:|---|---|
 | cisco_iosxe_cli | 6 | 1* | 1 (LAG member dedup) | best_effort | *all fixtures are Batfish/NTC test data; need a real captured 15.x/16.x/17.x config to count as a 2nd OS version |
 | opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
-| mikrotik_routeros | 3† | 2 (6.48.1 + 6.48.6) | 4 (round-trip interface_type drift; hostname-with-spaces quoting; bridge render; VLAN name preservation) | best_effort | †1 of 3 is a provisioning script rather than a captured export — strict reading of "real device captures" leaves us 1 real export short |
+| **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
 | aruba_aoss | 1 *(rendered from template, not captured)* | — | 0 (harness + render-script refinements only) | best_effort | need any real sanitised capture |
-| **TOTAL** | **15** | — | **6** | — | — |
+| **TOTAL** | **16** | — | **8** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —
