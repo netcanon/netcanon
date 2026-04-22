@@ -21,6 +21,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -240,6 +241,24 @@ class ArubaAOSSCodec(CodecBase):
                 i += 1
                 continue
 
+            pwd = _PASSWORD_LINE_RE.match(stripped_line)
+            if pwd:
+                role = pwd.group(1).lower()
+                name = pwd.group(2)
+                hash_alg = pwd.group(3).lower()
+                hash_val = pwd.group(4)
+                # Stash hash-alg prefix on the hash so render can
+                # reconstruct the `password <role> user-name "X" <alg> "<h>"`
+                # form.  Non-standard algorithms fall through verbatim.
+                intent.local_users.append(CanonicalLocalUser(
+                    name=name,
+                    privilege_level=15 if role == "manager" else 1,
+                    hashed_password=f"{hash_alg}:{hash_val}",
+                    role=role,
+                ))
+                i += 1
+                continue
+
             tk = _TRUNK_LINE_RE.match(stripped_line)
             if tk:
                 lag = _build_lag_from_trunk_line(tk)
@@ -335,6 +354,26 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append(
                     f'snmp-server host {host} community "{comm}"'
                 )
+
+        # Local users (Tier 2).  AOS-S form:
+        #   password manager user-name "X" sha1 "<hash>"
+        #   password operator user-name "Y" sha1 "<hash>"
+        # Role derives from privilege: 15 -> manager, anything else ->
+        # operator (AOS-S has no "superuser+limited" gradient like
+        # Cisco's 1-15 scale; both roles are binary).  Hashes from
+        # other codecs (Cisco type-5/9, FortiGate bcrypt, OPNsense
+        # bcrypt) get emitted verbatim under a best-effort
+        # ``plaintext`` algorithm marker — real AOS-S will reject
+        # non-sha1 hashes at config-push time, but render is lossless
+        # from the canonical's perspective and the lossiness surfaces
+        # on deploy rather than silently here.
+        for user in tree.local_users:
+            aos_role = "manager" if user.privilege_level == 15 else "operator"
+            hash_alg, hash_val = _split_aos_hash(user.hashed_password)
+            lines.append(
+                f'password {aos_role} user-name "{user.name}" '
+                f'{hash_alg} "{hash_val}"'
+            )
 
         # LAGs — AOS-S uses a single top-level ``trunk <ports> <name>
         # <type>`` line per trunk.  Vendor-native LAG names (e.g.
@@ -531,6 +570,15 @@ _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _TRUNK_LINE_RE = re.compile(
     r"^trunk\s+(\S+)\s+(\S+)\s+(\S+)\s*$", re.IGNORECASE,
 )
+# ``password manager user-name "admin" sha1 "8db..."``
+# Real AOS-S output always quotes both the name and the hash; sha1 is
+# the modern algorithm (legacy "plaintext" form is also accepted by
+# the parser for backward compatibility but rarely seen).
+_PASSWORD_LINE_RE = re.compile(
+    r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
+    r'(\S+)\s+"([^"]+)"\s*$',
+    re.IGNORECASE,
+)
 _AOS_TRUNK_TYPE_TO_MODE = {
     "lacp": "active",
     "dt-lacp": "active",
@@ -630,6 +678,40 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     if prefix_lo != prefix_hi or num_hi < num_lo:
         return [lo, hi]
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
+
+
+_AOS_KNOWN_ALGORITHMS = {"sha1", "plaintext"}
+
+
+def _split_aos_hash(hashed: str) -> tuple[str, str]:
+    """Split a canonical ``hashed_password`` into (aos-algorithm, hash).
+
+    Canonical entries carry hashes from multiple vendors in a few
+    shapes.  Map each to the closest AOS-S algorithm keyword so the
+    ``password manager ...`` line is at least syntactically valid:
+
+        ``sha1:<hex>``      -> ("sha1", "<hex>")            [Aruba native]
+        ``bcrypt:<...>``    -> ("plaintext", "bcrypt:<...>") [OPNsense/FortiGate]
+        ``fortios:ENC ...`` -> ("plaintext", "fortios:ENC ...") [FortiGate]
+        ``5 <md5crypt>``    -> ("plaintext", "5 <md5crypt>") [Cisco legacy]
+        ``9 <scrypt>``      -> ("plaintext", "9 <scrypt>")   [Cisco IOS-XE]
+
+    AOS-S only understands ``sha1`` and ``plaintext`` at this position.
+    Foreign algorithm tags are re-wrapped under ``plaintext`` with the
+    original tag preserved inside the value — the line stays
+    syntactically valid, and the deploy-time rejection is explicit
+    rather than silently-corrupted canonical data.
+    """
+    if ":" in hashed:
+        alg, _, val = hashed.partition(":")
+        if alg.lower() in _AOS_KNOWN_ALGORITHMS:
+            return alg, val
+        # Foreign algorithm — preserve the full original string so a
+        # reverse translation can recover it.
+        return "plaintext", hashed
+    # No algorithm tag — looks like a bare Cisco "5 $1$..." or similar.
+    # Wrap as plaintext.
+    return "plaintext", hashed
 
 
 def _build_lag_from_trunk_line(m: re.Match[str]) -> CanonicalLAG | None:

@@ -22,6 +22,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -175,6 +176,8 @@ class FortiGateCLICodec(CodecBase):
                 _apply_snmp_sysinfo(block, intent)
             elif path == "system snmp community":
                 _apply_snmp_community(block, intent)
+            elif path == "system admin":
+                _apply_system_admin(block, intent)
             # Other config paths silently ignored (Tier 3 / out of scope).
 
         return intent
@@ -311,6 +314,35 @@ class FortiGateCLICodec(CodecBase):
                     out.append("        end")
                 out.append("    next")
                 out.append("end")
+
+        # --- system admin (Tier 2 local users) ---
+        if tree.local_users:
+            out.append("config system admin")
+            for user in tree.local_users:
+                out.append(f'    edit "{user.name}"')
+                # Strip the "fortios:" tag when rendering back to a
+                # FortiGate target (lossless for intra-vendor
+                # round-trip); foreign hashes get emitted verbatim
+                # under a generic ENC marker — deploy-time rejection
+                # is the intended failure mode.
+                if user.hashed_password:
+                    alg, _, raw = user.hashed_password.partition(":")
+                    if alg == "fortios":
+                        out.append(f"        set password {raw}")
+                    elif raw:
+                        out.append(f"        set password ENC {raw}")
+                    else:
+                        out.append(
+                            f"        set password ENC {user.hashed_password}"
+                        )
+                # Map canonical privilege back to accprofile.
+                accprofile = (
+                    "super_admin" if user.privilege_level == 15
+                    else (user.role or "prof_admin")
+                )
+                out.append(f'        set accprofile "{accprofile}"')
+                out.append("    next")
+            out.append("end")
 
         # --- router static ---
         if tree.static_routes:
@@ -690,6 +722,50 @@ def _apply_router_static(
             destination=destination,
             gateway=gateway_tokens[0],
             interface=device_tokens[0],
+        ))
+
+
+def _apply_system_admin(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config system admin`` into CanonicalLocalUser records.
+
+    Each ``edit "NAME"`` is an administrator account.  Relevant fields:
+        set password ENC <hash>      - current encrypted password
+        set old-password ENC <hash>  - previous password (seen in some
+                                       exports; we use as fallback if
+                                       `password` isn't present)
+        set accprofile "<profile>"   - admin profile; super_admin = 15
+        set trusthost<N> <net> <mask>- IP allowlist (not modelled)
+
+    FortiOS encrypts passwords with an internal-key scheme; the ``ENC``
+    prefix denotes this.  We preserve the ENC-prefixed hash verbatim
+    under canonical ``hashed_password`` so a lossless round-trip back
+    to a FortiGate target reconstructs the original command.
+    """
+    for edit in block.edits:
+        name = edit.edit_id
+        pw_tokens = edit.settings.get("password") or edit.settings.get("old-password")
+        hashed = ""
+        if pw_tokens:
+            # FortiOS form: `set password ENC <base64>` -> tokens
+            # split by whitespace inside the shlex-aware settings dict
+            # end up as ["ENC", "<base64>"]; join them back with a
+            # "fortios:" prefix so target renderers can route.
+            joined = " ".join(pw_tokens)
+            hashed = f"fortios:{joined}"
+        accprofile_tokens = edit.settings.get("accprofile")
+        accprofile = (
+            accprofile_tokens[0].lower() if accprofile_tokens else ""
+        )
+        # super_admin is FortiOS's built-in full-access profile.
+        # prof_admin / custom profiles are usually scoped.
+        is_admin = accprofile == "super_admin"
+        intent.local_users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=15 if is_admin else 1,
+            hashed_password=hashed,
+            role=accprofile or ("admin" if is_admin else "operator"),
         ))
 
 

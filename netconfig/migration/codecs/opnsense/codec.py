@@ -51,6 +51,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalVlan,
 )
@@ -193,6 +194,50 @@ class OPNsenseCodec(CodecBase):
             dm = sys_el.find("domain")
             if dm is not None and dm.text:
                 intent.domain = dm.text.strip()
+            # Local users — <system>/<user> entries.  OPNsense stores
+            # users at the same level as <hostname>, each with name,
+            # descr, password (bcrypt $2y$), uid, and an optional
+            # groupname.  Group "admins" (and descendants) = admin
+            # privilege; anything else defaults to operator.
+            for user_el in sys_el.findall("user"):
+                name_el = user_el.find("name")
+                if name_el is None or not (name_el.text or "").strip():
+                    continue
+                name = name_el.text.strip()
+                password_el = user_el.find("password")
+                password = (
+                    password_el.text.strip()
+                    if password_el is not None and password_el.text
+                    else ""
+                )
+                groupname_el = user_el.find("groupname")
+                groupname = (
+                    groupname_el.text.strip().lower()
+                    if groupname_el is not None and groupname_el.text
+                    else ""
+                )
+                scope_el = user_el.find("scope")
+                scope = (
+                    scope_el.text.strip().lower()
+                    if scope_el is not None and scope_el.text
+                    else ""
+                )
+                # Admin privilege is determined by group membership,
+                # NOT by <scope>.  In OPNsense, <scope> distinguishes
+                # system-managed accounts from network/LDAP accounts;
+                # both system and user-scope accounts can be admins
+                # (via groupname="admins") or regular users.
+                is_admin = groupname == "admins"
+                _ = scope  # reserved for future use; shape validated
+                intent.local_users.append(CanonicalLocalUser(
+                    name=name,
+                    privilege_level=15 if is_admin else 1,
+                    # Tag as bcrypt so target renderers can route.
+                    hashed_password=(
+                        f"bcrypt:{password}" if password else ""
+                    ),
+                    role="admin" if is_admin else "user",
+                ))
 
         # ----- <interfaces> block — flatten into list -----
         iface_parent = root.find("interfaces")
@@ -281,13 +326,36 @@ class OPNsenseCodec(CodecBase):
         """Render from the canonical intent shape."""
         root = ET.Element("opnsense")
 
-        # System
-        if intent.hostname or intent.domain:
+        # System — attach hostname/domain/users under a single <system>
+        # element so real OPNsense tooling (and our own re-parse) sees
+        # a single canonical block.
+        has_system_content = (
+            intent.hostname or intent.domain or intent.local_users
+        )
+        if has_system_content:
             sys_el = ET.SubElement(root, "system")
             if intent.hostname:
                 ET.SubElement(sys_el, "hostname").text = intent.hostname
             if intent.domain:
                 ET.SubElement(sys_el, "domain").text = intent.domain
+            # Local users (Tier 2).  Map canonical admin -> admins
+            # group, anything else -> users.  Strip the "bcrypt:" tag
+            # from the hash (OPNsense's <password> field carries the
+            # raw $2y$... value).  Foreign hashes are emitted verbatim
+            # — OPNsense will reject non-bcrypt at auth time but our
+            # canonical carries them faithfully.
+            for user in intent.local_users:
+                user_el = ET.SubElement(sys_el, "user")
+                ET.SubElement(user_el, "name").text = user.name
+                if user.hashed_password:
+                    _alg, _, raw_hash = user.hashed_password.partition(":")
+                    # If no "alg:" prefix, use the whole thing verbatim.
+                    hash_out = raw_hash if raw_hash else user.hashed_password
+                    ET.SubElement(user_el, "password").text = hash_out
+                ET.SubElement(user_el, "scope").text = "system"
+                ET.SubElement(user_el, "groupname").text = (
+                    "admins" if user.privilege_level == 15 else "users"
+                )
 
         # Interfaces — render as zone-keyed elements.
         # For canonical intents from OTHER vendors we need to assign zone

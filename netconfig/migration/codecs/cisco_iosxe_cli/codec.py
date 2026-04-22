@@ -46,6 +46,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -188,6 +189,9 @@ class CiscoIOSXECLICodec(CodecBase):
 
         # SNMP (Tier 2)
         intent.snmp = _parse_snmp(raw)
+
+        # Local users (Tier 2).
+        intent.local_users = _parse_local_users(raw)
 
         # LAGs (Tier 2) — both the `interface Port-channelN` declaration
         # and the per-member `channel-group N mode M` lines contribute.
@@ -390,6 +394,25 @@ _CISCO_LAG_MODE_MAP = {
     "auto": "active",       # PAgP → best-effort equivalent
     "desirable": "active",  # PAgP → best-effort equivalent
 }
+# ``username NAME privilege N [secret|password] [HASHTYPE] HASH``
+# Captures:
+#   group 1 = user name
+#   group 2 = privilege level (digits; optional — defaults to 1)
+#   group 3 = secret/password keyword (drives hash interpretation)
+#   group 4 = hash-type digit (optional — Cisco uses 0=plaintext,
+#             5=MD5, 7=reversible, 8=PBKDF2, 9=scrypt).  We preserve
+#             it verbatim so the target codec can tell a plaintext
+#             default from a real hash.
+#   group 5 = hash payload itself
+# ``secret`` is preferred on IOS-XE (strong hashing); ``password`` is
+# legacy + reversible and should trigger a lossy-path warning on
+# render targets that refuse weak hashes.
+_LOCAL_USER_RE = re.compile(
+    r"^username\s+(\S+)"
+    r"(?:\s+privilege\s+(\d+))?"
+    r"\s+(secret|password)\s+(?:(\d+)\s+)?(\S.*)$",
+    re.IGNORECASE,
+)
 
 
 def _extract_hostname(raw: str) -> str:
@@ -772,6 +795,62 @@ _SNMP_HOST_RE = re.compile(
     r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)',
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
+    """Extract ``username NAME privilege N secret|password ...`` lines.
+
+    Cisco IOS privilege scale is 1-15 (15 = full admin).  We map that
+    to CanonicalLocalUser.privilege_level verbatim and set the
+    canonical ``role`` to ``admin`` for privilege 15, ``operator`` for
+    anything else — gives VLAN-centric target codecs (Aruba AOS-S
+    manager/operator distinction) a deterministic mapping without
+    guessing.
+
+    Hashed passwords are preserved verbatim including the Cisco
+    type-digit prefix (``5 $1$..``, ``7 091C08``, ``9 $9$..``) so a
+    lossless round-trip back to a Cisco target can reconstruct the
+    original command.  Other codecs that render plaintext or BCrypt
+    hashes can reject these as lossy.
+    """
+    users: list[CanonicalLocalUser] = []
+    seen_names: set[str] = set()
+    for line in raw.splitlines():
+        m = _LOCAL_USER_RE.match(line)
+        if not m:
+            continue
+        name = m.group(1)
+        # Cisco sometimes emits multiple lines per user (e.g. adding
+        # ssh pubkeys).  Dedupe by name — first wins.
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        privilege_str = m.group(2)
+        privilege = int(privilege_str) if privilege_str else 1
+        kw = m.group(3).lower()          # "secret" or "password"
+        hash_type = m.group(4) or ""
+        hash_payload = m.group(5).strip()
+        # Preserve the type digit as part of the opaque hash so the
+        # target codec's render can reconstruct if needed.
+        if hash_type:
+            hashed = f"{hash_type} {hash_payload}"
+        else:
+            hashed = hash_payload
+        # Annotate reversible-type-7 secrets so downstream codecs can
+        # warn / refuse.  A `password 7 ...` or `secret 7 ...` is
+        # weak and should be flagged.
+        if kw == "password":
+            # `password` keyword implies legacy weak encoding unless
+            # explicitly typed strong.  We just carry it through; the
+            # render side can decide policy.
+            pass
+        users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=privilege,
+            hashed_password=hashed,
+            role="admin" if privilege == 15 else "operator",
+        ))
+    return users
 
 
 def _parse_snmp(raw: str) -> CanonicalSNMP | None:

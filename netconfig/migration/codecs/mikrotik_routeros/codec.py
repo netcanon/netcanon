@@ -62,6 +62,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -241,6 +242,8 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_snmp_root(lines, intent)
             elif section == "/snmp community":
                 _parse_snmp_community(lines, intent)
+            elif section == "/user":
+                _parse_user(lines, intent)
             # Other sections silently ignored — not in scope yet.
 
         # Order interfaces deterministically: ethernet ports first
@@ -390,6 +393,20 @@ class MikroTikRouterOSCodec(CodecBase):
                     f"set [ find default=yes ] name={tree.snmp.community}"
                 )
                 lines.append("")
+
+        # ----- /user (Tier 2 local users) -----
+        if tree.local_users:
+            lines.append("/user")
+            for user in tree.local_users:
+                # Map canonical privilege back to RouterOS group.
+                # Unknown/odd privilege levels fall back to ``read``
+                # (least privilege) per safe-default principle.
+                group = _CANONICAL_PRIVILEGE_TO_ROUTEROS_GROUP.get(
+                    user.privilege_level, "read"
+                )
+                parts = ["add", f"group={group}", f"name={user.name}"]
+                lines.append(" ".join(parts))
+            lines.append("")
 
         # ----- /system dns -----
         if tree.dns_servers:
@@ -810,6 +827,47 @@ def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
                 h = host.strip()
                 if h:
                     intent.snmp.trap_hosts.append(h)
+
+
+def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/user`` section entries into CanonicalLocalUser records.
+
+    RouterOS ``/export`` intentionally omits password hashes (they
+    live in a separate protected store), so canonical
+    ``hashed_password`` will be empty from this parser.  Group membership
+    maps to canonical privilege:
+        full   -> 15 (admin)
+        write  -> 10 (operator, elevated)
+        read   -> 1  (operator, read-only)
+        any custom group -> 1 (operator; unknown group treated as least-privileged)
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        group = (kv.get("group") or "").lower()
+        privilege = _ROUTEROS_GROUP_TO_PRIVILEGE.get(group, 1)
+        intent.local_users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=privilege,
+            hashed_password="",   # /export omits hashes
+            role="admin" if privilege == 15 else "operator",
+        ))
+
+
+_ROUTEROS_GROUP_TO_PRIVILEGE = {
+    "full": 15,
+    "write": 10,
+    "read": 1,
+}
+_CANONICAL_PRIVILEGE_TO_ROUTEROS_GROUP = {
+    15: "full",
+    10: "write",
+    1: "read",
+}
 
 
 def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
