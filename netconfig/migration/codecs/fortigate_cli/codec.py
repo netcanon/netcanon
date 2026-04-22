@@ -41,7 +41,7 @@ class FortiGateCLICodec(CodecBase):
     version_hint: ClassVar[str | None] = "7.x"
     input_format: ClassVar[str] = "cli-fortigate"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste FortiOS CLI export (`config/edit/set/next/end` grammar).  "
@@ -877,9 +877,18 @@ def _apply_user_radius(
         port_tokens = edit.settings.get("radius-port")
         if port_tokens:
             try:
-                auth_port = int(port_tokens[0])
+                raw_port = int(port_tokens[0])
             except ValueError:
-                pass
+                raw_port = 1812
+            # FortiOS uses `set radius-port 0` to mean "use the default
+            # port 1812" — real FG100E captures written by FortiGate's
+            # own config export contain this idiom.  Canonicalise to the
+            # effective value (1812) so round-trip stays stable:
+            # renderer omits when auth_port == 1812 (matching FortiOS's
+            # own default-omission pattern), re-parse sees no
+            # radius-port, defaults to 1812.  Storing 0 would drift.
+            if raw_port != 0:
+                auth_port = raw_port
         intent.radius_servers.append(CanonicalRADIUSServer(
             host=host,
             key=key,

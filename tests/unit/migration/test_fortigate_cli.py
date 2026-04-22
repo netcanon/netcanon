@@ -72,7 +72,16 @@ class TestR3Fields:
         assert FortiGateCLICodec.direction == "bidirectional"
 
     def test_certainty(self):
-        assert FortiGateCLICodec.certainty == "best_effort"
+        # Promoted from best_effort after a sanitised real capture from
+        # a physical FortiGate 100E on FortiOS 7.2.13 (user-contributed)
+        # landed the corpus at 3 fixtures across 2 major.minor OS
+        # versions (7.2.13 + 7.6.6) and 2 device classes (FG100E
+        # physical + FGT-70G + FGT-VM).  Real capture surfaced a real
+        # round-trip bug (radius-port 0 parsed literally but renderer
+        # omitted when 1812, causing drift); fix + regression test
+        # (TestRoundTrip::test_radius_port_zero_canonicalised_to_default)
+        # landed in the same commit.  See tests/fixtures/real/RESULTS.md.
+        assert FortiGateCLICodec.certainty == "certified"
 
     def test_input_format(self):
         assert FortiGateCLICodec.input_format == "cli-fortigate"
@@ -414,6 +423,36 @@ class TestRoundTrip:
         for r1, r2 in zip(tree.static_routes, tree2.static_routes):
             assert r1.destination == r2.destination
             assert r1.gateway == r2.gateway
+
+    def test_radius_port_zero_canonicalised_to_default(self):
+        # Regression: real FortiOS captures (e.g. FG100E 7.2.13 export)
+        # emit `set radius-port 0` under `config user radius` to mean
+        # "use the default port 1812".  Our parser used to store 0
+        # literally, then the renderer (which omits radius-port when
+        # auth_port == 1812 to mirror FortiOS's default-omission idiom)
+        # would not emit anything — so a parse → render → parse cycle
+        # drifted from auth_port=0 to auth_port=1812.  Fix canonicalises
+        # `radius-port 0` to 1812 at parse time; both passes now see
+        # auth_port=1812, round-trip stable.
+        raw = """config user radius
+    edit "TestRadius"
+        set server "10.1.1.1"
+        set secret ENC fakePayloadAbcXyz==
+        set radius-port 0
+    next
+end
+"""
+        codec = FortiGateCLICodec()
+        tree = codec.parse(raw)
+        assert len(tree.radius_servers) == 1
+        assert tree.radius_servers[0].host == "10.1.1.1"
+        assert tree.radius_servers[0].auth_port == 1812, (
+            "radius-port 0 means 'use default 1812' in FortiOS; canonical "
+            "should reflect the effective value, not the literal 0"
+        )
+        # Round-trip stable.
+        tree2 = codec.parse(codec.render(tree))
+        assert tree2.radius_servers[0].auth_port == 1812
 
 
 # ---------------------------------------------------------------------------

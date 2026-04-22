@@ -7,6 +7,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (FortiGate CLI promoted to `certified` — 5th codec to reach the bar + real RADIUS round-trip bug fixed)
+
+- User-contributed real ``show full-configuration`` from a physical
+  **FortiGate 100E** running **FortiOS 7.2.13** (build 1762),
+  captured via NetConfig's backup layer and sanitised per CLAUDE.md
+  hard rule.  ~35K lines — 34 interfaces, 5 VLANs, 2 LAGs, 6 DHCP
+  servers, 3 admins, 1 RADIUS server, 1 SNMP community, full
+  firewall policy table + VIPs + SDWAN + SSL-VPN.  First physical-
+  appliance FortiGate capture in the corpus (existing 2 from
+  KevinGuenay were a VM hub + 70G branch, both on 7.6.6); first
+  FortiOS 7.2.x capture.
+- ``user_contrib_fg100e_fos7213.conf`` — sanitisation inventory
+  (per CLAUDE.md "never commit real credential hashes" rule):
+  - 48 ``ENC <base64>`` encrypted FortiGate secrets (admin
+    passwords, RADIUS secret, FortiGuard proxy password, NTP
+    key, DHCP option passwords, TACACS passwd1/2/3, etc.)
+    replaced with ``ENC fakeEncodedSecret...`` markers
+  - 14 ``-----BEGIN (ENCRYPTED) PRIVATE KEY-----`` /
+    ``-----END`` blocks stripped with ``REMOVED_FIXTURE_SANITISATION``
+    placeholder (public certificate chains retained for grammar)
+  - 5 SSH public keys (``ssh-rsa AAAA...``) replaced with
+    ``AAAAfakeSSHPublicKey...`` markers
+  - 1 Firebase/APNs registration ID (``set reg-id "dxurAYJ..."``)
+    sanitised
+  - Real WAN IP ``[redacted-WAN-IP]`` (6 occurrences in address
+    objects + VIP ``set extip`` entries) replaced with RFC 5737
+    TEST-NET-3 ``203.0.113.217``
+  - Real email ``[redacted-email]`` (2 occurrences in admin
+    contact fields) replaced with ``netadmin@example.test``
+  - All other real data retained — RFC1918 addressing, hostname
+    ``fortihome``, alias ``FortiGate-100E``, interface descriptions,
+    firewall policies with internal IPs, DHCP reservations,
+    SD-WAN SLAs, SSL-VPN portal config.
+- **Real codec bug surfaced + fixed in the same commit:** FortiOS
+  uses ``set radius-port 0`` as the idiom for "use the default port
+  1812" — real FortiOS exports (including the FG100E capture)
+  emit this literally.  Our parser stored the 0 faithfully in
+  ``CanonicalRADIUSServer.auth_port``, but the renderer had an
+  early-out that omitted ``radius-port`` when ``auth_port == 1812``
+  (mirroring FortiOS's own default-omission pattern).  Round-trip
+  drift: first parse gave auth_port=0, render emitted nothing,
+  re-parse defaulted to 1812.  Fix canonicalises ``radius-port 0``
+  to 1812 at parse time in ``_apply_user_radius`` — canonical
+  stores the *effective* value, not the literal 0.  Regression
+  test
+  ``TestRoundTrip::test_radius_port_zero_canonicalised_to_default``
+  in ``tests/unit/migration/test_fortigate_cli.py`` pins the fix.
+- ``certainty`` ClassVar bumped from ``best_effort`` to
+  ``certified`` in
+  ``netconfig/migration/codecs/fortigate_cli/codec.py``; matching
+  test updated in
+  ``tests/unit/migration/test_fortigate_cli.py::TestR3Fields::test_certainty``
+  with comment citing the promotion evidence.
+- ``fortigate_cli`` is the **5th codec to reach ``certified``**
+  (after ``mikrotik_routeros``, ``aruba_aoss``,
+  ``cisco_iosxe_cli``, ``opnsense``).  Only ``cisco_iosxe``
+  (NETCONF OpenConfig) remains at ``best_effort``.
+- Docs: ``tests/fixtures/real/NOTICE.md`` (provenance +
+  sanitisation inventory), ``tests/fixtures/real/RESULTS.md``
+  (per-codec section + summary total from 25 → 26 fixtures),
+  ``README.md`` cert table.
+- **677 migration tests passing** (+4 from the OPNsense commit),
+  zero regressions.
+
 ### Added (OPNsense promoted to `certified` — 4th codec to reach the bar + real render bug fixed)
 
 - User-contributed real ``config.xml`` from a deployed OPNsense

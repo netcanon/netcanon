@@ -221,44 +221,58 @@ the same pass to unblock the promotion:
 
 **Codec:** `netconfig.migration.codecs.fortigate_cli.FortiGateCLICodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` *(unchanged)*
+**Certainty:** `certified` ✅
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | dhcp | local_users | Notes |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
-| `kevinguenay_fgt_70g_branch.conf` | 12,317 | 1 | 2 | 21 | 2 | 1 | 2 | 1 | 1 | Real FortiOS 7.6.6 branch config — `fortilink` + `LAG_INTERNAL` aggregates, VL_100/VL_101 VLAN subinterfaces on LAG_INTERNAL, LO_BGP loopback, SD-WAN, IPsec, firewall policies. |
-| `kevinguenay_fgt_vm_hub.conf` | 13,827 | 1 | 2 | 19 | 0 | 1 | 1 | 1 | 1 | Real FortiOS 7.6.6 VM hub — the counterpart hub config for the branch above.  Same OS version → doesn't unlock `certified` tier on its own. |
+| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | dhcp | local_users | radius | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `kevinguenay_fgt_70g_branch.conf` | 12,317 | 1 | 2 | 21 | 2 | 1 | 2 | 1 | 1 | 0 | Real FortiOS 7.6.6 branch config — `fortilink` + `LAG_INTERNAL` aggregates, VL_100/VL_101 VLAN subinterfaces on LAG_INTERNAL, LO_BGP loopback, SD-WAN, IPsec, firewall policies. |
+| `kevinguenay_fgt_vm_hub.conf` | 13,827 | 1 | 2 | 19 | 0 | 1 | 1 | 1 | 1 | 0 | Real FortiOS 7.6.6 VM hub — the counterpart hub config for the branch above. |
+| `user_contrib_fg100e_fos7213.conf` | ~35,000 | 1 | 2 | 34 | 5 | 0 | 2 | 6 | 3 | 1 | **Real physical FG100E on FortiOS 7.2.13** (user-contributed, sanitised).  34 interfaces, 5 VLANs, 2 LAGs, 6 DHCP servers, 3 admins, 1 RADIUS server, 1 SNMP community, full firewall policy table + VIPs + SDWAN + SSL-VPN. |
 
 ### Findings
 
-**Bug surfaced + fixed:** Our parser required `set type vlan`
-explicitly on a VLAN subinterface edit.  Real FortiOS configs often
-omit it — a VLAN is unambiguously implied by the pair
+**Bug surfaced + fixed (KevinGuenay):** Our parser required `set type
+vlan` explicitly on a VLAN subinterface edit.  Real FortiOS configs
+often omit it — a VLAN is unambiguously implied by the pair
 `set vlanid <N>` + `set interface "<parent>"`.  VL_100 and VL_101 in
 the branch config had that shape and were previously mis-typed as
 `ethernetCsmacd` (via the name-pattern fallback) and dropped from
-`intent.vlans`.
+`intent.vlans`.  Fix landed in `_apply_system_interface`; 3
+regression tests in `TestRealConfigVlanInference`.
 
-Fix: `_apply_system_interface` now recognises `vlanid + parent` as
-a VLAN signal even without `set type vlan`.  Also changed the VLAN
-name to use the iface name (not the alias) so `_vlan_id_for` can
-resolve it on render.  3 regression tests in
-`TestRealConfigVlanInference` pin the corrected behaviour.
+**Bug surfaced + fixed (FG100E):** `set radius-port 0` is FortiOS's
+idiom for "use the default port 1812" — and real FortiOS config
+exports (including the FG100E 7.2.13 capture) emit this literally.
+Our parser stored the 0 faithfully in `CanonicalRADIUSServer.auth_port`,
+but the renderer had an early-out that omitted `radius-port` when
+auth_port == 1812 (mirroring FortiOS's own default-omission
+pattern).  Round-trip drift: first parse gave auth_port=0, render
+emitted nothing (because 0 != 1812 but also 0 is falsy — the
+`if server.auth_port and ...` check short-circuited to False),
+re-parse defaulted to 1812.  Fix canonicalises `radius-port 0` to
+1812 at parse time in `_apply_user_radius` (`radius-port 0` means
+"use default" — canonical should store the effective value).
+Regression test:
+`TestRoundTrip::test_radius_port_zero_canonicalised_to_default`.
 
-**Scale note:** 12,317 lines of real FortiOS config — the largest
-fixture in the corpus by an order of magnitude — parsed and
-round-tripped cleanly (after the VLAN fix).  Strong evidence that
-the recursive block parser handles the full FortiOS `config / edit /
-set / next / end` grammar at scale.
+**Scale note:** The FG100E fixture is ~35,000 lines — nearly 3× the
+prior largest fixture in the corpus.  Parsed and round-tripped
+cleanly after the radius-port fix.  Strong evidence that the
+recursive block parser handles the full FortiOS `config / edit /
+set / next / end` grammar at production scale with real appliance
+policy tables.
 
 ### Certification decision
 
-**Stay at `best_effort`.**  One fixture, one OS version (7.6.6).
-Promoting to `certified` needs 2 more captures, preferably from
-FortiOS 6.x or 7.4.x.  Good candidates: FortiGate config-archive
-repos from Fortinet Developer Network (FNDN) or community
-deployments.
+**Promoted to `certified`.**  Three real captures across 2 OS
+versions (7.2.13 + 7.6.6) and 3 distinct device forms (physical
+FG100E + physical FGT-70G branch + FGT-VM hub).  All three parse
+cleanly and round-trip stable after the radius-port fix.  Bar met
+decisively: ≥3 fixtures, ≥2 OS versions, round-trip stable, at
+least one real-appliance capture (the highest-signal class of
+fixture).
 
 ---
 
@@ -345,9 +359,9 @@ exercised by the rendered template:
 | **cisco_iosxe_cli** | **11** (6 grammar-test + 5 real) | **4 LTS** (16.9 + 17.3 + 17.9 + 17.12) | 1 (LAG member dedup) | **certified** ✅ | — |
 | **opnsense** | **4** (3 upstream + 1 real user-deployed) | 2 sources | 1 (render dropped VLANs) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
-| fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
+| **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
-| **TOTAL** | **25** | — | **9** | — | — |
+| **TOTAL** | **26** | — | **10** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —
