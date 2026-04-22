@@ -1,14 +1,35 @@
 # Cisco Catalyst 9300-24P
 # 24 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port, 445W budget)
-# 1 × network module slot — assumes C9300-NM-8X (8× 10G SFP+)
-# StackWise-480, 48 Port-channels max
+# 1 × network module slot — swappable.  Common SKUs modelled below:
+#   C9300-NM-8X  — 8x 10G SFP+  (default when unspecified)
+#   C9300-NM-2Q  — 2x 40G QSFP+
+# Additional real-world SKUs (NM-4G, NM-4M, NM-8M, NM-2Y) are not
+# yet modelled — add here as users encounter them.
+# StackWise-480, 48 Port-channels max.
+#
+# Mirrors the module-variant structure of the -24UX / -48UXM
+# profiles.  The Cat 9300 NM slot is identical across all plain
+# -P / -U / -UX / -UXM chassis — only the access-port speed
+# differs (1G RJ45 here, mGig on -UX/-UXM).
 vendor: cisco_iosxe
 model: C9300-24P
 display_name: "Cisco Catalyst 9300-24P (1G + PoE+)"
 device_class: switch
 stacking: stackwise
+# Chassis-fixed ports — always present regardless of NM selection.
 ports:
   - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: gig, poe: true}
-  - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X slot"}
   - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+# Swappable uplink modules.  Selecting one adds its ports to the
+# chassis set; the rename-modal UI filters target-name dropdowns to
+# whichever module is active.
+modules:
+  NM-8X:
+    description: "8x 10G SFP+ uplinks (C9300-NM-8X)"
+    ports:
+      - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X SFP+ cage"}
+  NM-2Q:
+    description: "2x 40G QSFP+ uplinks (C9300-NM-2Q)"
+    ports:
+      - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true, notes: "NM-2Q QSFP+ cage"}
 lags: {max: 48, prefix: Port-channel}

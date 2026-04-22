@@ -1,6 +1,14 @@
 # Cisco Catalyst 9300-48U
-# 48 × 10/100/1000 BASE-T RJ45 + UPOE
-# 1 × network module slot (NM-8X default)
+# 48 × 10/100/1000 BASE-T RJ45 + UPOE (60W/port, 1100W budget)
+# 1 × network module slot — swappable.  Common SKUs modelled below:
+#   C9300-NM-8X  — 8x 10G SFP+  (default when unspecified)
+#   C9300-NM-2Q  — 2x 40G QSFP+
+# StackWise-480, 48 Port-channels max.
+#
+# Mirrors the module-variant structure of the -24UX / -48UXM
+# profiles.  The NM slot is shared with all Cat 9300 chassis;
+# only the access-port speed class differs (1G RJ45 here, mGig on
+# -UX/-UXM).
 vendor: cisco_iosxe
 model: C9300-48U
 display_name: "Cisco Catalyst 9300-48U (1G + UPOE)"
@@ -8,6 +16,14 @@ device_class: switch
 stacking: stackwise
 ports:
   - {range: "GigabitEthernet1/0/1-48", kind: physical, speed: gig, poe: true, notes: "UPOE 60W"}
-  - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X slot"}
   - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig, notes: "OOBM (Mgmt-vrf)"}
+modules:
+  NM-8X:
+    description: "8x 10G SFP+ uplinks (C9300-NM-8X)"
+    ports:
+      - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true, notes: "NM-8X SFP+ cage"}
+  NM-2Q:
+    description: "2x 40G QSFP+ uplinks (C9300-NM-2Q)"
+    ports:
+      - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true, notes: "NM-2Q QSFP+ cage"}
 lags: {max: 48, prefix: Port-channel}

@@ -204,7 +204,11 @@ class TestModulesFieldSerialization:
     #: Kept in sync manually — any new module-variant profile
     #: needs to be added to both allowlists.
     MODULE_VARIANT_PROFILES = {
+        "cisco_iosxe/C9300-24P",
+        "cisco_iosxe/C9300-24U",
         "cisco_iosxe/C9300-24UX",
+        "cisco_iosxe/C9300-48P",
+        "cisco_iosxe/C9300-48U",
         "cisco_iosxe/C9300-48UXM",
         "aruba_aoss/3810M-24G-PoEP",
         "aruba_aoss/3810M-48G-PoEP",

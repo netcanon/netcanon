@@ -279,7 +279,11 @@ class TestRealProfilesShipped:
     #: legacy-shaped (empty modules).  Add to this set when
     #: migrating more profiles.
     MODULE_VARIANT_PROFILES = {
+        "cisco_iosxe/C9300-24P",
+        "cisco_iosxe/C9300-24U",
         "cisco_iosxe/C9300-24UX",
+        "cisco_iosxe/C9300-48P",
+        "cisco_iosxe/C9300-48U",
         "cisco_iosxe/C9300-48UXM",
         "aruba_aoss/3810M-24G-PoEP",
         "aruba_aoss/3810M-48G-PoEP",
@@ -320,6 +324,69 @@ class TestRealProfilesShipped:
                 f"{key}: allowlisted as module-variant but modules is "
                 f"empty; update YAML or remove from allowlist"
             )
+
+    @pytest.mark.parametrize(
+        "model,chassis_access,chassis_total,upoe",
+        [
+            ("C9300-24P", 24, 25, False),
+            ("C9300-24U", 24, 25, True),
+            ("C9300-48P", 48, 49, False),
+            ("C9300-48U", 48, 49, True),
+        ],
+    )
+    def test_cisco_c9300_plain_variants_module_shape(
+        self, model, chassis_access, chassis_total, upoe
+    ):
+        """The 4 C9300 plain -P/-U variants share the Cat 9300 NM
+        slot architecture with the already-migrated -UX / -UXM
+        siblings.  After migration they must present the same
+        module-variant shape: 25- or 49-port chassis + NM-8X /
+        NM-2Q modules, with NM-8X adding 8x 10G uplinks and NM-2Q
+        adding 2x 40G uplinks.
+
+        This is the regression guard against accidentally
+        reverting any of these four profiles to the old legacy
+        shape that baked 8 uplinks into the chassis list — doing
+        so would silently re-break the 40G target-port flow for
+        operators on non-multigig Cat 9300 boxes."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles[f"cisco_iosxe/{model}"]
+        assert p.has_modules, (
+            f"{model}: expected module-variant shape, got legacy"
+        )
+        assert set(p.module_skus()) == {"NM-8X", "NM-2Q"}
+        assert p.port_count == chassis_total  # access + mgmt
+        # NM-8X adds 8x 10G → chassis_total + 8
+        assert p.effective_port_count("NM-8X") == chassis_total + 8
+        nm8x_uplinks = p.port_ids(kind="uplink", module_sku="NM-8X")
+        assert nm8x_uplinks == [
+            f"TenGigabitEthernet1/1/{n}" for n in range(1, 9)
+        ]
+        # NM-2Q adds 2x 40G → chassis_total + 2
+        assert p.effective_port_count("NM-2Q") == chassis_total + 2
+        nm2q_uplinks = p.port_ids(kind="uplink", module_sku="NM-2Q")
+        assert nm2q_uplinks == [
+            "FortyGigabitEthernet1/1/1",
+            "FortyGigabitEthernet1/1/2",
+        ]
+        # Chassis access-port kind should be physical and speed=gig
+        # (NOT 10gig — that'd indicate the mGig -UX/-UXM siblings).
+        first_access = p.lookup_port("GigabitEthernet1/0/1")
+        assert first_access is not None
+        assert first_access.kind == "physical"
+        assert first_access.speed == "gig"
+        assert first_access.poe is True
+        if upoe:
+            # UPOE variants carry the note; PoE+ variants don't.
+            assert "UPOE" in first_access.notes
+        # Chassis ports identical between the two module choices
+        # (modules only add uplinks — this is the core invariant
+        # of the module-variant schema).
+        assert (
+            p.port_ids(kind="physical", module_sku="NM-8X")
+            == p.port_ids(kind="physical", module_sku="NM-2Q")
+        )
+        assert len(p.port_ids(kind="physical", module_sku="NM-8X")) == chassis_access
 
     def test_aruba_3810m_48g_poep_module_variants(self):
         """Aruba 3810M chassis with JL083A/JL084A/JL085A expansion
