@@ -32,6 +32,12 @@ from ...canonical.intent import (
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 from . import port_names as _port_names
+from .vlan_heuristics import (
+    infer_iface_type as _infer_iface_type,
+    looks_like_vlan_iface as _looks_like_vlan_iface,
+    parent_for_vlan_iface as _parent_for_vlan_iface,
+    vlan_id_for as _vlan_id_for,
+)
 
 
 @register
@@ -992,46 +998,12 @@ def _apply_system_dhcp_server(
 # ---------------------------------------------------------------------------
 
 
-def _looks_like_vlan_iface(name: str) -> bool:
-    """FortiOS VLAN interfaces are commonly named ``vlanN`` or ``<parent>.N``."""
-    if re.match(r"^vlan\d+$", name, re.IGNORECASE):
-        return True
-    if re.match(r"^[A-Za-z0-9_-]+\.\d+$", name):
-        return True
-    return False
-
-
-def _vlan_id_for(name: str, vlans: list[CanonicalVlan]) -> int | None:
-    """Resolve the VLAN id for an interface name.
-
-    Checks ``vlan<N>`` naming, ``<parent>.<N>`` naming, then falls
-    back to a matching VLAN definition name.
-    """
-    m1 = re.match(r"^vlan(\d+)$", name, re.IGNORECASE)
-    if m1:
-        return int(m1.group(1))
-    m2 = re.match(r"^[A-Za-z0-9_-]+\.(\d+)$", name)
-    if m2:
-        return int(m2.group(1))
-    for v in vlans:
-        if v.name == name:
-            return v.id
-    return None
-
-
-def _parent_for_vlan_iface(
-    name: str, all_interfaces: list[CanonicalInterface],
-) -> str | None:
-    """Find the parent physical interface for a VLAN sub-interface name."""
-    if "." in name:
-        parent = name.split(".", 1)[0]
-        if any(i.name == parent for i in all_interfaces):
-            return parent
-    # Fallback: first non-VLAN interface.
-    for i in all_interfaces:
-        if not _looks_like_vlan_iface(i.name):
-            return i.name
-    return None
+# VLAN-naming heuristics (``_looks_like_vlan_iface``, ``_vlan_id_for``,
+# ``_parent_for_vlan_iface``) extracted to :mod:`.vlan_heuristics` —
+# they're shared between parse and render paths, so centralising
+# them prevents drift if FortiOS adds a new VLAN-naming convention.
+# The underscore-prefixed aliases imported at the top of this file
+# preserve the existing call sites verbatim.
 
 
 def _prefix_to_mask(prefix: int) -> str:
@@ -1071,15 +1043,7 @@ def _split_cidr(destination: str) -> tuple[str, int]:
     return destination, 32
 
 
-def _infer_iface_type(name: str) -> str:
-    """IANA ifType from FortiOS interface-name shape."""
-    lower = name.lower()
-    if re.match(r"^(port|ethernet|internal|wan|lan|dmz)\d*$", lower):
-        return "ianaift:ethernetCsmacd"
-    if lower.startswith("agg") or lower.startswith("trunk"):
-        return "ianaift:ieee8023adLag"
-    if lower.startswith("loopback"):
-        return "ianaift:softwareLoopback"
-    if lower.startswith("tunnel"):
-        return "ianaift:tunnel"
-    return "ianaift:ethernetCsmacd"
+# ``_infer_iface_type`` now lives in :mod:`.vlan_heuristics` alongside
+# the VLAN-naming helpers — the ifType inference shares the same
+# "name-shape → canonical property" pattern and the rules are
+# symmetric with the VLAN-detection rules.

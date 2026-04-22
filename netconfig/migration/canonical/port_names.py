@@ -278,6 +278,19 @@ def translate_port_names(
 
     Returns a :class:`PortRenameResult` summarising what changed.
     """
+    # Non-CanonicalIntent trees have no port-name structure to
+    # rewrite — the legacy mock adapter and any future back-compat
+    # adapter that returns a plain dict fall through this path.
+    # Returning an empty result is a correct no-op: nothing got
+    # renamed, nothing got dropped, the pipeline continues and the
+    # target's render pane sees the tree unchanged.  Without this
+    # guard the iteration below crashes on ``intent.interfaces`` →
+    # ``AttributeError: 'dict' object has no attribute 'interfaces'``
+    # which surfaces in the UI as a spurious "status: failed" job.
+    from .intent import CanonicalIntent
+    if not isinstance(intent, CanonicalIntent):
+        return PortRenameResult(applied={}, warnings=[], dropped=[])
+
     user_map = dict(rename_map or {})
     # Split user map into drops (value is None) and renames (value is str).
     # Drops never go through the target codec — they're stripped from the

@@ -397,12 +397,24 @@ class TestStoredConfigCompatWarn:
     def test_mock_adapter_shows_no_store_warning(
         self, page: Page, base_url: str
     ):
-        """mock's input_format is json-flat with NO compatible file
-        extensions — picking any stored config should warn."""
+        """Picking ANY stored config while mock is the source codec
+        must surface a compatibility warning.  The warning text
+        varies by whether mock's output_extension is declared:
+
+        * No output_extension → "does not read files from the
+          backup store" (the hard-block warning — mock can never
+          read from the store).
+        * ``.json`` output_extension (current state) → "has
+          extension .cfg but mock expects json" (the extension-
+          mismatch warning — mock COULD read .json but the stored
+          config isn't one).
+
+        Either is a legitimate "don't do this" signal; the test
+        accepts both to stay stable across codec-metadata tweaks.
+        """
         mig = self._setup(page)
         # Switch to filename mode; only works if there's at least one config.
         page.locator('[data-testid="migrate-input-mode-filename"]').click()
-        # mock has exts=[] so ANY selected stored file is incompatible.
         mig.pick_source("mock")
         sel = page.locator('[data-testid="migrate-filename-select"]')
         options = sel.evaluate(
@@ -413,8 +425,14 @@ class TestStoredConfigCompatWarn:
             pytest.skip("no stored configs in this session — can't exercise")
         sel.select_option(value=real[0])
         expect(mig.filename_compat_warn).to_be_visible()
-        expect(mig.filename_compat_warn).to_contain_text(
-            "does not read files from the backup store"
+        # Accept either warning-text variant — both signal
+        # "this combination won't work".
+        warn_text = mig.filename_compat_warn.text_content() or ""
+        assert (
+            "does not read files from the backup store" in warn_text
+            or "Translate will almost certainly fail" in warn_text
+        ), (
+            f"expected a mock-vs-stored-config warning, got: {warn_text!r}"
         )
 
 

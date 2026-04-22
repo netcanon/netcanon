@@ -98,10 +98,11 @@ class CiscoIOSXECodec(CodecBase):
     version_hint: ClassVar[str | None] = "17.x"
     input_format: ClassVar[str] = "xml-netconf"
     description: ClassVar[str] = (
-        "Paste an OpenConfig <interfaces> fragment or a full NETCONF "
-        "<rpc-reply><data>… response.  This is the MACHINE-READABLE "
-        "format returned by a device's `netconf get-config`; it is "
-        "NOT the same as `show running-config`."
+        "Paste an OpenConfig NETCONF `<interfaces>` fragment or a full "
+        "`<rpc-reply><data>…</data></rpc-reply>` response.  This is "
+        "the MACHINE-READABLE format returned by a device's "
+        "`netconf get-config`; it is NOT the same as "
+        "`show running-config`."
     )
     sample_input: ClassVar[str] = (
         '<?xml version="1.0"?>\n'

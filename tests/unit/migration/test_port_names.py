@@ -752,3 +752,45 @@ class TestCat9300ToAruba:
         # User override applied.
         assert job.port_renames.get("FortyGigabitEthernet1/1/1") == "1/A1"
         assert job.port_renames.get("FortyGigabitEthernet1/1/2") == "1/A2"
+
+
+class TestNonCanonicalIntentTreeIsNoOp:
+    """Regression guard: :func:`translate_port_names` must gracefully
+    handle trees that aren't :class:`CanonicalIntent` — specifically
+    the reference mock codec's plain dict shape.  Without this guard
+    the orchestrator crashes with
+    ``AttributeError: 'dict' object has no attribute 'interfaces'``
+    and the pipeline surfaces a spurious ``status: failed`` job (the
+    UI always opts into the rename-aware pipeline via
+    ``port_rename_map: {}``, so every mock→mock translation from the
+    browser hit this path before the guard landed)."""
+
+    def test_plain_dict_tree_returns_empty_result(self):
+        from netconfig.migration.codecs.registry import get_codec
+        mock = get_codec("mock")
+        # Mock codec returns a plain dict from parse() — mimics any
+        # future back-compat codec that predates the canonical intent.
+        tree = {"/unsafe/kernel_module": "rootkit"}
+        result = translate_port_names(tree, mock, mock, rename_map={})
+        assert result.applied == {}
+        assert result.warnings == []
+        assert result.dropped == []
+
+    def test_run_plan_with_rename_passes_through_mock_tree(self):
+        """End-to-end: a mock→mock plan with an unsafe path in the
+        input must reach ``partial`` (validate blocks on unsupported)
+        rather than ``failed``.  This is the exact path the web UI
+        hits because it always sends ``port_rename_map: {}`` to opt
+        into the rename-aware pipeline."""
+        from netconfig.migration.codecs.registry import get_codec
+        from netconfig.services.migration_pipeline import run_plan_with_rename
+
+        mock = get_codec("mock")
+        raw = '{"/unsafe/kernel_module": "rootkit"}'
+        job = run_plan_with_rename(mock, mock, raw, port_rename_map={})
+        # Parse succeeded, render succeeded; validate flagged block
+        # severity → job status is ``partial`` (terminal-but-unsafe).
+        assert job.status.value == "partial"
+        assert job.rendered  # the (unsafe) rendered output is present
+        assert job.port_renames == {}
+        assert job.warnings == []
