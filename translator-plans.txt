@@ -239,11 +239,12 @@ LAYER 4 — TRANSPORT
   │   ----------------+-----+-----+------+-------------------       │
   │   cisco_iosxe_cli |  6  |  1* |  1   | best_effort              │
   │   opnsense        |  3  |  1  |  0   | best_effort              │
-  │   mikrotik        |  2  |  2  |  2   | best_effort              │
+  │   mikrotik        |  3† |  2  |  4   | best_effort              │
   │   fortigate       |  2  |  1  |  1   | best_effort              │
-  │   aruba_aoss      |  1† |  —  |  0   | best_effort              │
+  │   aruba_aoss      |  1‡ |  —  |  0   | best_effort              │
   │   * all Cisco fixtures are Batfish/NTC test grammars            │
-  │   † rendered from Aruba Central template, not captured          │
+  │   † 1 of 3 is a provisioning script, not a captured export      │
+  │   ‡ rendered from Aruba Central template, not captured          │
   │                                                                │
   │ 4 bugs surfaced so far by real captures, all fixed in-session  │
   │ with regression tests.  Sample bugs — each would have survived │
@@ -458,9 +459,15 @@ LAYER 4 — TRANSPORT
   │ that could be improved incrementally once the big data-loss    │
   │ bugs are closed.                                                │
   │                                                                │
-  │   * Per-interface MTU (`mtu 1500`) — CanonicalInterface has    │
-  │     the field; Cisco CLI parser doesn't populate it, no        │
-  │     render() emits it.                                          │
+  │   * Per-interface MTU — SHIPPED.  Wired on all 5 codecs:        │
+  │     cisco_iosxe_cli parse (`mtu 1500`); opnsense parse+render  │
+  │     (`<mtu>` element); mikrotik parse+render                    │
+  │     (`/interface ethernet set ... mtu=N`); fortigate            │
+  │     parse+render (`set mtu-override enable` + `set mtu N`).    │
+  │     Aruba AOS-S intentionally skipped — no per-port MTU on     │
+  │     that platform (global `jumbo` only).  14 regression tests. │
+  │     Real captures now surface real MTUs (9000 on Cisco,        │
+  │     1500 on MikroTik, 9096/1546 on the NTC carrier config).    │
   │   * Per-interface speed/duplex — not modelled at all.  Small   │
   │     CanonicalInterface addition + per-codec wiring.            │
   │   * Cisco negative commands (`no ip igmp snooping vlan 20`,    │
@@ -481,20 +488,17 @@ LAYER 4 — TRANSPORT
   │   * Cisco `privilege exec level <N>` aliases — Tier 3          │
   │     informational; currently dropped.                          │
   │                                                                │
-  │   * MikroTik /interface bridge not emitted on render.  Parser  │
-  │     captures bridge interfaces with interface_type=            │
-  │     ianaift:bridge, but the render path doesn't have a         │
-  │     `/interface bridge` section — so bridges survive parse     │
-  │     but vanish on render.  Surfaced by routeros-diff's         │
-  │     verbose_export.rsc fixture (bridges named `upstream`,      │
-  │     `downstream`, `loopback`).  Whitelisted via                 │
-  │     _KNOWN_ROUNDTRIP_GAPS in test_real_captures.py.             │
-  │   * MikroTik VLAN interface name synthesis.  Real configs      │
-  │     freely name VLAN interfaces (`gn-mgmt`, `user-wifi`); our  │
-  │     render emits them as synthetic `vlan<N>` regardless of     │
-  │     original name, losing the name->vlan-id mapping on re-     │
-  │     parse.  Preserve original iface name + carry vlan-id       │
-  │     separately.  Also whitelisted.                              │
+  │   * MikroTik /interface bridge render — SHIPPED.  Emits        │
+  │     `/interface bridge` section for every CanonicalInterface    │
+  │     typed `ianaift:bridge`, preserving name (with quoting for  │
+  │     spaces) and description.                                    │
+  │   * MikroTik VLAN interface name preservation — SHIPPED.        │
+  │     Render now filters by interface_type="ianaift:l3ipvlan"    │
+  │     (not just `vlan\d+` name pattern), so named VLAN           │
+  │     interfaces like `gn-mgmt` survive without being rewritten  │
+  │     to synthetic `vlan<N>`.  Deduplication in the synthetic-    │
+  │     fallback loop tracks by vlan-id instead of name so an      │
+  │     iface-vlan pair doesn't emit twice.                         │
   └────────────────────────────────────────────────────────────────┘
 
   R1  Rename adapter → codec everywhere.  Add vendor_id to the

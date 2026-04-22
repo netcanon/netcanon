@@ -102,12 +102,8 @@ _KNOWN_UNSUPPORTED: dict[str, str] = {
 # a round-trip.  These are TODOs on the codec, not the harness — the
 # fixture stays in the corpus for parse-coverage validation.
 _KNOWN_ROUNDTRIP_GAPS: dict[str, str] = {
-    "mikrotik/routeros_diff_verbose_export.rsc": (
-        "MikroTik renderer doesn't emit /interface bridge section, "
-        "and synthesizes vlan<N> names for VLAN interfaces instead of "
-        "preserving original names like gn-mgmt.  Follow-up bugs in "
-        "translator-plans.txt Fidelity Polish section."
-    ),
+    # Empty — previously-tracked gaps (bridge render, VLAN name
+    # preservation) were both fixed as Fidelity Polish items.
 }
 
 

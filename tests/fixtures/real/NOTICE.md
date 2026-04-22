@@ -38,6 +38,7 @@ re-discover them.
 |---|---|---|---|
 | `ntc_ip_address_export.rsc` | [networktocode/ntc-templates](https://github.com/networktocode/ntc-templates) `tests/mikrotik_routeros/ip_address_export_verbose/mikrotik_routeros_ip_address_export_verbose.raw` | Apache-2.0 | Real RouterOS 6.48.6 `/export verbose` snippet.  Exercises the `# ... by RouterOS` banner + `/ip address` section with quoted comments. |
 | `routeros_diff_verbose_export.rsc` | [adamcharnock/routeros-diff](https://github.com/adamcharnock/routeros-diff) `tests/test_files/verbose_export.rsc` | MIT | Real RouterOS 6.48.1 `/export verbose` — 484 lines from an RB952Ui-5ac2nD home router ("Quinta Router").  Covers `/interface bridge`, `/interface vlan` (named `gn-mgmt`), `/ip address`, `/ip dhcp-server network` + `/ip pool`, `/snmp`, `/interface wireless`, `/queue tree`.  Different OS version (6.48.1 vs 6.48.6). |
+| `taqavi_initial_provisioning.rsc` | [AmirArsalanTaqavi/Mikrotik-Config-Examples](https://github.com/AmirArsalanTaqavi/Mikrotik-Config-Examples) `initial-provisioning.rsc` | MIT | Real MikroTik provisioning script (not a `/export` capture — a script an admin runs to provision an L009UiGS-2HaxD router).  Covers `/interface bridge` + `/interface bridge port`, `/interface ethernet` with per-port comments, `/ip service` restrictions, `/user add`, DHCP, WireGuard, firewall.  Password field contains the placeholder `ChangeMe123!` (called out in the source's own comment) — no real credential. |
 
 ## fortigate/
 

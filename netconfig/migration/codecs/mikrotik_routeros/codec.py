@@ -313,6 +313,29 @@ class MikroTikRouterOSCodec(CodecBase):
                 if iface.description:
                     parts.append(f'comment="{_escape(iface.description)}"')
                 parts.append(f"disabled={_yes_no(not iface.enabled)}")
+                if iface.mtu is not None:
+                    parts.append(f"mtu={iface.mtu}")
+                lines.append(" ".join(parts))
+            lines.append("")
+
+        # ----- /interface bridge -----
+        # Emit any interface typed as a bridge.  Parsed state comes
+        # from `_parse_interface_bridge`; without this render branch
+        # the bridge survives parse but vanishes on render, which
+        # breaks round-trip stability for any config using bridges
+        # (surfaced by routeros-diff's verbose_export.rsc and the
+        # taqavi provisioning script).
+        bridge_ifaces = [
+            i for i in tree.interfaces
+            if i.interface_type == "ianaift:bridge"
+        ]
+        if bridge_ifaces:
+            lines.append("/interface bridge")
+            for iface in bridge_ifaces:
+                parts = ["add"]
+                if iface.description:
+                    parts.append(f'comment="{_escape(iface.description)}"')
+                parts.append(f"name={_quote_if_needed(iface.name)}")
                 lines.append(" ".join(parts))
             lines.append("")
 
@@ -331,13 +354,21 @@ class MikroTikRouterOSCodec(CodecBase):
             lines.append("")
 
         # ----- /interface vlan -----
+        # Filter by interface_type, not by name pattern.  Real configs
+        # name VLAN interfaces freely (gn-mgmt, user-wifi, etc.); the
+        # name-pattern filter used to require `vlan\d+` prefix which
+        # silently dropped any non-conforming name on render.
+        # Surfaced by routeros-diff's verbose_export.rsc (the
+        # "gn-mgmt" VLAN interface named after its purpose, not its
+        # ID).
         vlan_ifaces = [
-            i for i in tree.interfaces if _is_vlan_name(i.name)
+            i for i in tree.interfaces
+            if i.interface_type == "ianaift:l3ipvlan"
+            or _is_vlan_name(i.name)
         ]
         if vlan_ifaces or tree.vlans:
             lines.append("/interface vlan")
-            # Match by name: each VLAN definition becomes one `add` line.
-            rendered_vlan_names: set[str] = set()
+            rendered_vlan_ids: set[int] = set()
             for iface in vlan_ifaces:
                 vid = _vlan_id_for(iface.name, tree.vlans)
                 if vid is None:
@@ -347,23 +378,26 @@ class MikroTikRouterOSCodec(CodecBase):
                 if iface.description:
                     parts.append(f'comment="{_escape(iface.description)}"')
                 parts.append("interface=bridge1")   # convention: single bridge
-                parts.append(f"name={iface.name}")
+                parts.append(f"name={_quote_if_needed(iface.name)}")
                 parts.append(f"vlan-id={vid}")
                 lines.append(" ".join(parts))
-                rendered_vlan_names.add(iface.name)
-            # VLANs defined in intent.vlans but without a matching interface
-            # still get rendered so the id survives the round-trip.
+                rendered_vlan_ids.add(vid)
+            # VLANs defined in intent.vlans but without a matching
+            # interface still get rendered so the id survives the
+            # round-trip.  Dedupe by vlan-id (not name) so we don't
+            # double-emit when an iface carrying vid=N is already out.
             for vlan in tree.vlans:
-                synthetic_name = f"vlan{vlan.id}"
-                if synthetic_name in rendered_vlan_names:
+                if vlan.id in rendered_vlan_ids:
                     continue
+                synthetic_name = f"vlan{vlan.id}"
                 parts = ["add"]
-                if vlan.name:
+                if vlan.name and vlan.name != synthetic_name:
                     parts.append(f'comment="{_escape(vlan.name)}"')
                 parts.append("interface=bridge1")
                 parts.append(f"name={synthetic_name}")
                 parts.append(f"vlan-id={vlan.id}")
                 lines.append(" ".join(parts))
+                rendered_vlan_ids.add(vlan.id)
             lines.append("")
 
         # ----- /ip address -----
@@ -716,6 +750,11 @@ def _parse_interface_ethernet(
             iface.description = kv["comment"]
         if "disabled" in kv:
             iface.enabled = kv["disabled"].lower() == "no"
+        if "mtu" in kv:
+            try:
+                iface.mtu = int(kv["mtu"])
+            except ValueError:
+                pass
 
 
 def _parse_interface_vlan(

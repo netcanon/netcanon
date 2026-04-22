@@ -449,6 +449,100 @@ add address=198.51.100.2/30 interface=ether1
 # ---------------------------------------------------------------------------
 
 
+class TestBridgeRender:
+    """Parse captures bridge interfaces; render must emit them back
+    under `/interface bridge`.  Without this, any config using bridges
+    has the bridge disappear on round-trip — surfaced by
+    routeros-diff's verbose_export.rsc and taqavi's provisioning
+    script."""
+
+    def test_bridge_interface_round_trips(self):
+        raw = "/interface bridge\nadd name=bridge-lan comment=\"Main LAN\"\n"
+        c = MikroTikRouterOSCodec()
+        first = c.parse(raw)
+        assert first.interfaces[0].name == "bridge-lan"
+        assert first.interfaces[0].interface_type == "ianaift:bridge"
+        assert first.interfaces[0].description == "Main LAN"
+
+        rendered = c.render(first)
+        assert "/interface bridge" in rendered
+        assert "name=bridge-lan" in rendered
+        assert 'comment="Main LAN"' in rendered
+
+        second = c.parse(rendered)
+        assert second.interfaces[0].name == "bridge-lan"
+        assert second.interfaces[0].interface_type == "ianaift:bridge"
+        assert second.interfaces[0].description == "Main LAN"
+
+    def test_bridge_name_with_spaces_quoted(self):
+        """Real bridge names can contain spaces (e.g. `"main
+        infrastructure"` from the Defm capxl capture).  Must be
+        quoted on render."""
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            interfaces=[CanonicalInterface(
+                name="main infrastructure",
+                interface_type="ianaift:bridge",
+            )],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert 'name="main infrastructure"' in out
+
+
+class TestVlanInterfaceNamePreservation:
+    """Real VLAN interfaces are named after their purpose, not by the
+    synthetic `vlan<N>` convention.  Render must preserve the original
+    name instead of emitting `vlan<N>`.  Surfaced by the `gn-mgmt`
+    interface in routeros-diff's verbose_export.rsc."""
+
+    def test_named_vlan_iface_round_trips(self):
+        raw = (
+            "/interface vlan\n"
+            "add interface=ether3 name=gn-mgmt vlan-id=84\n"
+        )
+        c = MikroTikRouterOSCodec()
+        first = c.parse(raw)
+        gn_mgmt = next(i for i in first.interfaces if i.name == "gn-mgmt")
+        assert gn_mgmt.interface_type == "ianaift:l3ipvlan"
+
+        rendered = c.render(first)
+        assert "name=gn-mgmt" in rendered
+        assert "vlan-id=84" in rendered
+        # Must NOT synthesize a vlan84 name in place of gn-mgmt.
+        assert "name=vlan84" not in rendered
+
+        second = c.parse(rendered)
+        names = {i.name for i in second.interfaces}
+        assert "gn-mgmt" in names
+        assert "vlan84" not in names
+
+    def test_synthetic_name_still_used_for_vlans_without_iface(self):
+        """When a CanonicalVlan has no matching interface, render
+        still falls back to `vlan<N>` as a safe default."""
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            vlans=[CanonicalVlan(id=50, name="")],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "name=vlan50" in out
+
+    def test_no_duplicate_vlan_when_iface_and_vlan_both_present(self):
+        """Iface named `gn-mgmt` with matching CanonicalVlan(id=84,
+        name="gn-mgmt") should render once, not twice."""
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            interfaces=[CanonicalInterface(
+                name="gn-mgmt",
+                interface_type="ianaift:l3ipvlan",
+            )],
+            vlans=[CanonicalVlan(id=84, name="gn-mgmt")],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        # Count `vlan-id=84` occurrences — exactly one.
+        assert out.count("vlan-id=84") == 1
+        assert "name=vlan84" not in out
+
+
 class TestHostnameQuoting:
     """Real RouterOS configs (e.g. routeros-diff's verbose_export
     fixture) carry hostnames with spaces like "Quinta Router".  Our

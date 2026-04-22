@@ -91,25 +91,23 @@ upstream or a sanitised customer deployment config.
 |---|---:|---:|---:|---:|---:|---:|---|
 | `ntc_ip_address_export.rsc` | 8 | 0 | 2 | 0 | 0 | 0 | Real RouterOS 6.48.6 `/export verbose` snippet — `/ip address` with quoted comments and vendor banner. |
 | `routeros_diff_verbose_export.rsc` | 484 | 1 | 9 | 1 | 2 | 1 | Real RouterOS 6.48.1 `/export verbose` from an RB952Ui-5ac2nD home router.  Different OS version (gives MikroTik 2-OS-version coverage already).  `/interface bridge`, `/interface vlan`, `/ip dhcp-server network` + `/ip pool`, `/snmp` all exercised. |
+| `taqavi_initial_provisioning.rsc` | 133 | 0 | 7 | 0 | 1 | 0 | Real MikroTik provisioning script targeting an L009UiGS-2HaxD router.  `/interface bridge` + `/interface bridge port`, per-port comments on ethernet, `/user add`, DHCP, WireGuard, firewall.  Not a `/export` capture — a script admins run. |
 
-### Known round-trip gap
+### Codec bugs surfaced + fixed
 
-`routeros_diff_verbose_export.rsc` **parses cleanly** but can't
-round-trip bit-exact via our codec — whitelisted via
-`_KNOWN_ROUNDTRIP_GAPS` in `test_real_captures.py`.  Two codec bugs
-the fixture surfaced, both queued under Fidelity Polish in
-translator-plans.txt:
+Both previously-tracked round-trip gaps (bridge render, VLAN name
+preservation) were fixed as Fidelity Polish items this session.  No
+fixtures currently in `_KNOWN_ROUNDTRIP_GAPS`:
 
-1. **Bridge render not implemented.**  `/interface bridge add
-   name=upstream` parses into `CanonicalInterface(interface_type=
-   "ianaift:bridge")` but our renderer doesn't emit `/interface
-   bridge` at all — the bridge survives the first parse, disappears
-   on render, and the second parse sees nothing.
-2. **VLAN interface name synthesis.**  The fixture defines a VLAN
-   interface as `/interface vlan add name=gn-mgmt interface=ether3
-   vlan-id=84` — name is `gn-mgmt`, not `vlan84`.  Our renderer
-   emits it as synthetic `vlan84` which re-parses as a different
-   name, dropping the `gn-mgmt` -> vlan-id=84 mapping.
+1. **Bridge render** — now emits `/interface bridge` section for
+   every CanonicalInterface typed `ianaift:bridge`, preserving name
+   (with quoting for spaces) and description.  Regression tests in
+   `TestBridgeRender`.
+2. **VLAN interface name preservation** — render now filters by
+   `interface_type == "ianaift:l3ipvlan"` (not just name pattern),
+   so named VLAN interfaces like `gn-mgmt` survive without being
+   rewritten to synthetic `vlan<N>`.  Regression tests in
+   `TestVlanInterfaceNamePreservation`.
 
 ### Findings
 
@@ -238,10 +236,10 @@ Swap the rendered fixture out whenever we find one.
 |---|---:|---:|---:|---|---|
 | cisco_iosxe_cli | 6 | 1* | 1 (LAG member dedup) | best_effort | *all fixtures are Batfish/NTC test data; need a real captured 15.x/16.x/17.x config to count as a 2nd OS version |
 | opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
-| mikrotik_routeros | 2 | 2 (6.48.1 + 6.48.6) | 2 (round-trip interface_type drift; hostname-with-spaces quoting) | best_effort | need 1 more fixture (and ideally a RouterOS 7.x version) |
+| mikrotik_routeros | 3† | 2 (6.48.1 + 6.48.6) | 4 (round-trip interface_type drift; hostname-with-spaces quoting; bridge render; VLAN name preservation) | best_effort | †1 of 3 is a provisioning script rather than a captured export — strict reading of "real device captures" leaves us 1 real export short |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
 | aruba_aoss | 1 *(rendered from template, not captured)* | — | 0 (harness + render-script refinements only) | best_effort | need any real sanitised capture |
-| **TOTAL** | **14** | — | **4** | — | — |
+| **TOTAL** | **15** | — | **6** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —

@@ -432,6 +432,8 @@ class OPNsenseCodec(CodecBase):
                     ET.SubElement(zone_el, "descr").text = iface.description
                 if iface.enabled:
                     ET.SubElement(zone_el, "enable")
+                if iface.mtu is not None:
+                    ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
@@ -583,6 +585,15 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
         iface.description = descr_el.text.strip()
     enable_el = el.find("enable")
     iface.enabled = enable_el is not None
+    # MTU — stored under <mtu> when set; inherits platform default (1500)
+    # when absent.  Only populate canonical when explicitly present so
+    # round-trips don't introduce spurious mtu fields.
+    mtu_el = el.find("mtu")
+    if mtu_el is not None and mtu_el.text:
+        try:
+            iface.mtu = int(mtu_el.text.strip())
+        except ValueError:
+            pass
     ipaddr_el = el.find("ipaddr")
     subnet_el = el.find("subnet")
     if ipaddr_el is not None and ipaddr_el.text and subnet_el is not None and subnet_el.text:

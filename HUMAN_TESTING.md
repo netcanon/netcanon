@@ -10,6 +10,27 @@ list, don't delete).
 
 ---
 
+## Migration — Fidelity polish (ship-fresh)
+
+- [ ] **MTU** (Cisco -> OPNsense): paste Cisco config with `interface
+      GigabitEthernet1/0/1 / mtu 9000`; target OPNsense should emit
+      `<mtu>9000</mtu>` inside the corresponding interface zone.
+- [ ] **MTU** (Cisco -> FortiGate): paste same; target FortiGate
+      should emit both `set mtu-override enable` AND `set mtu 9000`
+      (the override flag is needed for mtu to take effect).
+- [ ] **MTU on Aruba** (expected lossy): paste same; target Aruba
+      should NOT emit any per-port mtu (AOS-S doesn't support it).
+      The data is silently dropped — this is the documented lossy
+      path for this field.
+- [ ] **MikroTik bridge render**: paste a MikroTik config with
+      `/interface bridge / add name=bridge-lan comment="Main LAN"`;
+      target MikroTik should emit the same.  Previously rendered
+      nothing.
+- [ ] **MikroTik VLAN name preservation**: paste a MikroTik config
+      with `/interface vlan / add interface=ether3 name=gn-mgmt
+      vlan-id=84`; target MikroTik should emit `name=gn-mgmt` not
+      `name=vlan84`.
+
 ## Migration — Tier 2 wire-throughs (ship-fresh)
 
 - [ ] **local_users**: paste a Cisco config with `username admin

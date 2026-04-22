@@ -288,6 +288,12 @@ class FortiGateCLICodec(CodecBase):
                     mask = _prefix_to_mask(addr.prefix_length)
                     out.append(f"        set ip {addr.ip} {mask}")
                     out.append("        set mode static")
+                if iface.mtu is not None:
+                    # FortiOS requires mtu-override enable before
+                    # set mtu has effect on physical ports.  Emit
+                    # both so the config is deployable.
+                    out.append("        set mtu-override enable")
+                    out.append(f"        set mtu {iface.mtu}")
                 if iface.enabled:
                     out.append("        set status up")
                 else:
@@ -635,6 +641,16 @@ def _apply_system_interface(
         if status:
             # FortiOS uses "up" / "down" for interface admin status.
             iface.enabled = status[0].lower() == "up"
+
+        mtu_tokens = edit.settings.get("mtu")
+        if mtu_tokens:
+            try:
+                iface.mtu = int(mtu_tokens[0])
+            except ValueError:
+                pass
+        # FortiOS uses `set mtu-override enable` + `set mtu N` — we
+        # capture mtu regardless; the override flag is not canonically
+        # modelled.
 
         ip_tokens = edit.settings.get("ip")
         if ip_tokens and len(ip_tokens) >= 2:

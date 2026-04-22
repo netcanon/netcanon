@@ -311,6 +311,7 @@ _IP_RE = re.compile(
 )
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
+_MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 
 #: Interface-name prefix → IANA ifType hint.
 _TYPE_HINTS: dict[str, str] = {
@@ -452,6 +453,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "trunk_allowed": [],
                 "trunk_native": None,
                 "lag_member_of": None,
+                "mtu": None,
             }
             continue
 
@@ -474,6 +476,14 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
 
         if _NO_SHUTDOWN_RE.match(line):
             current["enabled"] = True
+            continue
+
+        mm = _MTU_RE.match(line)
+        if mm:
+            try:
+                current["mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
             continue
 
         im = _IP_RE.match(line)
@@ -532,6 +542,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
+        mtu=raw.get("mtu"),
     )
 
 
