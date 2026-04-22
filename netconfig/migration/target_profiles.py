@@ -44,6 +44,28 @@ YAML shape (see ``definitions/target_profiles/*.yaml`` for examples)::
     lags:
       max: 24
       prefix: Trk
+
+Module variants (chassis-based platforms with swappable uplink
+modules, e.g. Cisco Cat 9300 NM slot, Aruba 3810M expansion slot)::
+
+    vendor: cisco_iosxe
+    model: C9300-24UX
+    ports:                              # chassis-fixed access ports
+      - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: 10gig, poe: true}
+      - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig}
+    modules:
+      NM-8X:
+        description: "8x 10G SFP+ uplinks"
+        ports:
+          - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true}
+      NM-2Q:
+        description: "2x 40G QSFP+ uplinks"
+        ports:
+          - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true}
+
+Modules are ADDITIVE: selecting a module adds its ports to the base
+``ports:`` list.  Profiles with no ``modules:`` key behave exactly as
+before (zero modules → UI module dropdown hidden).
 """
 
 from __future__ import annotations
@@ -96,6 +118,41 @@ class TargetPort(BaseModel):
     """Free-form advisory (e.g. "multigig", "combo with sfp1")."""
 
 
+class TargetModule(BaseModel):
+    """A swappable uplink module option for a chassis-based profile.
+
+    Models the "which NM card is installed?" dimension independently
+    from the chassis.  A ``TargetProfile`` can declare multiple
+    module SKUs; the rename-modal UI surfaces them as a third
+    dropdown (Vendor → Chassis → Module) and adds the selected
+    module's ports to the base ``TargetProfile.ports`` set.
+
+    Module ports are ADDITIVE: the chassis profile's ``ports:``
+    lists chassis-fixed access ports, and each module contributes
+    its own uplinks.  Effective port inventory for a given operator
+    choice = ``profile.ports + profile.modules[sku].ports``.
+
+    ``sku`` is the vendor's part-number-style SKU (``NM-8X``,
+    ``NM-2Q``, ``JL084A``, etc.) when one exists; freeform label
+    otherwise.  Used as the dict key in
+    :attr:`TargetProfile.modules` and as the wire-format value for
+    module selection in ``MigrationPlanRequest``.
+    """
+
+    sku: str = ""
+    """SKU / part-number for the module.  May be empty when set via
+    dict-key-only YAML authorship — the loader backfills from the key."""
+
+    description: str = ""
+    """Human-readable blurb for the UI dropdown (e.g. ``"8x 10G
+    SFP+ uplinks"``)."""
+
+    ports: list[TargetPort] = Field(default_factory=list)
+    """Ports this module contributes when selected.  Same shape as
+    :attr:`TargetProfile.ports`; expanded through the same range
+    shorthand at load time."""
+
+
 class TargetLAGCaps(BaseModel):
     """LAG capacity of the target device."""
 
@@ -140,6 +197,20 @@ class TargetProfile(BaseModel):
     firewalls/routers with no stacking concept."""
 
     ports: list[TargetPort] = Field(default_factory=list)
+    """Chassis-fixed ports — always present regardless of module choice.
+    For legacy profiles (no ``modules:`` declared) this lists every
+    port on the device.  For module-variant profiles this holds only
+    the chassis-fixed access + mgmt ports; uplink inventory moves
+    into per-:class:`TargetModule` entries."""
+
+    modules: dict[str, TargetModule] = Field(default_factory=dict)
+    """Swappable uplink module options, keyed by SKU.  Empty dict =
+    legacy single-variant profile.  Non-empty = operator must choose
+    a module; ``effective_ports(sku)`` returns ``self.ports`` plus
+    the chosen module's ports.
+
+    Module selection is additive and orthogonal to the base ``ports:``
+    list — no port ever appears in both."""
 
     lags: TargetLAGCaps | None = None
 
@@ -154,18 +225,92 @@ class TargetProfile(BaseModel):
 
     @property
     def port_count(self) -> int:
-        """Total ports including uplinks."""
+        """Total base ports (excludes per-module uplinks).  For
+        module-variant profiles use :meth:`effective_port_count` with
+        a specific module SKU to include uplinks."""
         return len(self.ports)
 
-    def port_ids(self, kind: PortKindYaml | None = None) -> list[str]:
-        """Return every port id, optionally filtered by kind."""
-        if kind is None:
-            return [p.id for p in self.ports]
-        return [p.id for p in self.ports if p.kind == kind]
+    @property
+    def has_modules(self) -> bool:
+        """True when at least one module variant is declared.  UI
+        uses this to decide whether to surface the third-stage
+        module dropdown."""
+        return bool(self.modules)
 
-    def lookup_port(self, port_id: str) -> TargetPort | None:
-        """Return the :class:`TargetPort` matching *port_id*, or None."""
-        for p in self.ports:
+    def module_skus(self) -> list[str]:
+        """Ordered SKUs of declared modules (insertion-order stable)."""
+        return list(self.modules.keys())
+
+    def default_module_sku(self) -> str | None:
+        """Return the SKU the UI should preselect.
+
+        * No modules declared → ``None`` (UI hides the dropdown).
+        * ``"default"`` is present → that wins (explicit author intent).
+        * Otherwise the first declared SKU (insertion order).
+        """
+        if not self.modules:
+            return None
+        if "default" in self.modules:
+            return "default"
+        return next(iter(self.modules))
+
+    def _resolve_module_sku(
+        self, module_sku: str | None
+    ) -> str | None:
+        """Normalize None → default_module_sku; unknown SKU → None
+        (falls back to base ports only, caller's responsibility to
+        surface an error / warning if that's not the intent)."""
+        if module_sku is None:
+            return self.default_module_sku()
+        if module_sku in self.modules:
+            return module_sku
+        return None
+
+    def effective_ports(
+        self, module_sku: str | None = None
+    ) -> list[TargetPort]:
+        """Return the full port set the operator would see for
+        *module_sku*.
+
+        Equals ``self.ports + self.modules[sku].ports`` when the
+        module exists; falls back to ``self.ports`` otherwise.  Safe
+        to call on legacy profiles (no modules) — returns
+        ``self.ports`` unchanged.
+        """
+        resolved = self._resolve_module_sku(module_sku)
+        if resolved is None or resolved not in self.modules:
+            return list(self.ports)
+        return list(self.ports) + list(self.modules[resolved].ports)
+
+    def effective_port_count(
+        self, module_sku: str | None = None
+    ) -> int:
+        """Total port count for the given module choice, including
+        chassis-fixed + module uplinks."""
+        return len(self.effective_ports(module_sku))
+
+    def port_ids(
+        self,
+        kind: PortKindYaml | None = None,
+        module_sku: str | None = None,
+    ) -> list[str]:
+        """Return port ids for the given module choice, optionally
+        filtered by kind.  When *module_sku* is None the default
+        module (if any) is used, so this stays backwards compatible
+        with callers that only pass ``kind``."""
+        ports = self.effective_ports(module_sku)
+        if kind is None:
+            return [p.id for p in ports]
+        return [p.id for p in ports if p.kind == kind]
+
+    def lookup_port(
+        self,
+        port_id: str,
+        module_sku: str | None = None,
+    ) -> TargetPort | None:
+        """Return the :class:`TargetPort` matching *port_id* within
+        the given module's effective set, or None."""
+        for p in self.effective_ports(module_sku):
             if p.id == port_id:
                 return p
         return None
@@ -260,6 +405,17 @@ def load_profile_file(path: Path) -> TargetProfile:
     :func:`_expand_range_entries` for syntax.  Range entries are
     expanded before pydantic validation so the model only ever sees
     concrete ``{id: ..., kind: ...}`` records.
+
+    Modules (optional): a top-level ``modules:`` mapping keyed by SKU
+    gets the same range-expansion treatment on its per-module
+    ``ports:`` list, and the dict key is backfilled into each
+    module's ``sku`` field when the author omitted it::
+
+        modules:
+          NM-8X:            # key → module.sku = "NM-8X"
+            description: "8x 10G SFP+"
+            ports:
+              - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig}
     """
     try:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -272,6 +428,26 @@ def load_profile_file(path: Path) -> TargetProfile:
             data["ports"] = _expand_range_entries(data["ports"])
         except ProfileLoadError as exc:
             raise ProfileLoadError(f"{path}: {exc}") from exc
+    # Expand ranges inside each declared module and backfill sku.
+    if "modules" in data and isinstance(data["modules"], dict):
+        expanded: dict[str, Any] = {}
+        for sku, mod_raw in data["modules"].items():
+            if not isinstance(mod_raw, dict):
+                raise ProfileLoadError(
+                    f"{path}: module {sku!r} must be a mapping, "
+                    f"got {type(mod_raw).__name__}"
+                )
+            mod = dict(mod_raw)  # shallow copy — don't mutate caller YAML
+            mod.setdefault("sku", sku)
+            if "ports" in mod and isinstance(mod["ports"], list):
+                try:
+                    mod["ports"] = _expand_range_entries(mod["ports"])
+                except ProfileLoadError as exc:
+                    raise ProfileLoadError(
+                        f"{path}: module {sku!r}: {exc}"
+                    ) from exc
+            expanded[sku] = mod
+        data["modules"] = expanded
     try:
         return TargetProfile(**data)
     except ValidationError as exc:

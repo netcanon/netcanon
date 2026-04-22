@@ -19,6 +19,7 @@ import pytest
 from netconfig.migration.target_profiles import (
     ProfileLoadError,
     TargetLAGCaps,
+    TargetModule,
     TargetPort,
     TargetProfile,
     load_profile_file,
@@ -249,3 +250,354 @@ class TestRealProfilesShipped:
         assert first is not None
         assert first.speed == "10gig"  # max negotiated speed
         assert first.poe is True
+
+    def test_legacy_profiles_have_no_modules(self):
+        """All currently-shipped profiles predate module-variant
+        support, so they must expose ``modules == {}`` and
+        ``has_modules == False`` — the UI uses this to decide
+        whether to render the third-stage dropdown.  A regression
+        here means we accidentally broke backward compatibility
+        with every existing profile YAML."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        for key, p in profiles.items():
+            assert p.modules == {}, (
+                f"{key}: modules should be empty for legacy profile, "
+                f"got {list(p.modules)}"
+            )
+            assert p.has_modules is False
+            assert p.default_module_sku() is None
+            # effective_ports() with no arg should match ports exactly.
+            assert p.effective_ports() == list(p.ports)
+            # Kind-filtered port_ids should be identical to pre-module
+            # behaviour.
+            assert p.port_ids() == [pp.id for pp in p.ports]
+
+
+# ---------------------------------------------------------------------------
+# Module-variant support (schema-first Option B, milestone-1)
+# ---------------------------------------------------------------------------
+
+
+class TestTargetModuleModel:
+    """The :class:`TargetModule` shape on its own."""
+
+    def test_minimal_module(self):
+        m = TargetModule()
+        assert m.sku == ""
+        assert m.description == ""
+        assert m.ports == []
+
+    def test_full_module(self):
+        m = TargetModule(
+            sku="NM-8X",
+            description="8x 10G SFP+ uplinks",
+            ports=[
+                TargetPort(
+                    id="TenGigabitEthernet1/1/1",
+                    kind="uplink",
+                    speed="10gig",
+                    sfp=True,
+                )
+            ],
+        )
+        assert m.sku == "NM-8X"
+        assert m.description.startswith("8x 10G")
+        assert len(m.ports) == 1
+        assert m.ports[0].kind == "uplink"
+
+
+class TestProfileWithModules:
+    """Semantics of :class:`TargetProfile` when ``modules:`` is set."""
+
+    def _build_dual_module_profile(self) -> TargetProfile:
+        """Minimal chassis + two module variants.  Used by several
+        tests to avoid repeating the fixture."""
+        return TargetProfile(
+            vendor="cisco_iosxe",
+            model="C9300-24UX",
+            ports=[
+                TargetPort(id="GigabitEthernet1/0/1", kind="physical"),
+                TargetPort(id="GigabitEthernet1/0/2", kind="physical"),
+                TargetPort(id="GigabitEthernet0/0", kind="mgmt"),
+            ],
+            modules={
+                "NM-8X": TargetModule(
+                    sku="NM-8X",
+                    description="8x 10G SFP+",
+                    ports=[
+                        TargetPort(
+                            id=f"TenGigabitEthernet1/1/{n}",
+                            kind="uplink",
+                            speed="10gig",
+                            sfp=True,
+                        )
+                        for n in range(1, 9)
+                    ],
+                ),
+                "NM-2Q": TargetModule(
+                    sku="NM-2Q",
+                    description="2x 40G QSFP+",
+                    ports=[
+                        TargetPort(
+                            id="FortyGigabitEthernet1/1/1",
+                            kind="uplink",
+                            speed="40gig",
+                            sfp=True,
+                        ),
+                        TargetPort(
+                            id="FortyGigabitEthernet1/1/2",
+                            kind="uplink",
+                            speed="40gig",
+                            sfp=True,
+                        ),
+                    ],
+                ),
+            },
+        )
+
+    def test_has_modules(self):
+        p = self._build_dual_module_profile()
+        assert p.has_modules is True
+        assert set(p.module_skus()) == {"NM-8X", "NM-2Q"}
+
+    def test_default_module_sku_prefers_literal_default(self):
+        p = TargetProfile(
+            vendor="v", model="m",
+            modules={
+                "OTHER": TargetModule(sku="OTHER"),
+                "default": TargetModule(sku="default"),
+            },
+        )
+        # "default" wins even though inserted second.
+        assert p.default_module_sku() == "default"
+
+    def test_default_module_sku_falls_back_to_first_inserted(self):
+        p = self._build_dual_module_profile()
+        # NM-8X was inserted first.
+        assert p.default_module_sku() == "NM-8X"
+
+    def test_default_module_sku_none_when_no_modules(self):
+        p = TargetProfile(vendor="v", model="m")
+        assert p.default_module_sku() is None
+
+    def test_effective_ports_merges_base_and_module(self):
+        p = self._build_dual_module_profile()
+        # Base has 3 (2 physical + 1 mgmt); NM-8X adds 8.
+        eff = p.effective_ports("NM-8X")
+        assert len(eff) == 11
+        # NM-2Q adds 2 instead — chassis ports are identical.
+        eff_q = p.effective_ports("NM-2Q")
+        assert len(eff_q) == 5
+        # First 3 of eff_q are the same chassis ports as eff.
+        assert eff_q[:3] == eff[:3]
+
+    def test_effective_ports_defaults_to_default_sku(self):
+        p = self._build_dual_module_profile()
+        # No arg → uses default_module_sku() ("NM-8X" here).
+        assert p.effective_ports() == p.effective_ports("NM-8X")
+
+    def test_effective_ports_unknown_sku_falls_back_to_base(self):
+        p = self._build_dual_module_profile()
+        eff = p.effective_ports("NM-DOES-NOT-EXIST")
+        # Unknown SKU → base ports only (no crash, no module contrib).
+        assert eff == list(p.ports)
+
+    def test_effective_ports_legacy_profile_ignores_module_arg(self):
+        p = TargetProfile(
+            vendor="v", model="m",
+            ports=[TargetPort(id="1"), TargetPort(id="2")],
+        )
+        # Legacy profile — any module arg just returns base ports.
+        assert p.effective_ports("anything") == list(p.ports)
+
+    def test_port_ids_accepts_module_sku(self):
+        p = self._build_dual_module_profile()
+        uplinks_8x = p.port_ids(kind="uplink", module_sku="NM-8X")
+        uplinks_2q = p.port_ids(kind="uplink", module_sku="NM-2Q")
+        assert len(uplinks_8x) == 8
+        assert len(uplinks_2q) == 2
+        assert uplinks_8x[0].startswith("TenGigabitEthernet")
+        assert uplinks_2q[0].startswith("FortyGigabitEthernet")
+        # Physical filter is module-independent — chassis-fixed.
+        phys_8x = p.port_ids(kind="physical", module_sku="NM-8X")
+        phys_2q = p.port_ids(kind="physical", module_sku="NM-2Q")
+        assert phys_8x == phys_2q
+
+    def test_lookup_port_crosses_base_and_module(self):
+        p = self._build_dual_module_profile()
+        # Chassis port resolvable regardless of module.
+        assert p.lookup_port("GigabitEthernet1/0/1") is not None
+        assert (
+            p.lookup_port("GigabitEthernet1/0/1", module_sku="NM-2Q")
+            is not None
+        )
+        # Module uplink resolvable only with that module selected.
+        assert (
+            p.lookup_port("FortyGigabitEthernet1/1/1", module_sku="NM-2Q")
+            is not None
+        )
+        assert (
+            p.lookup_port("FortyGigabitEthernet1/1/1", module_sku="NM-8X")
+            is None
+        )
+
+    def test_port_count_excludes_modules(self):
+        """``port_count`` is the base (chassis-fixed) count — use
+        ``effective_port_count(sku)`` to include module uplinks.
+        Kept separate so UI code that only wants chassis info
+        (e.g. "this is a 48-port switch") doesn't accidentally
+        double-count."""
+        p = self._build_dual_module_profile()
+        assert p.port_count == 3
+        assert p.effective_port_count("NM-8X") == 11
+        assert p.effective_port_count("NM-2Q") == 5
+
+    def test_legacy_accessors_stay_backcompat(self):
+        """Existing callers that pass only ``kind`` (no
+        ``module_sku``) MUST keep getting the pre-modules
+        behaviour.  This guards all pre-B call sites."""
+        p = TargetProfile(
+            vendor="v", model="m",
+            ports=[
+                TargetPort(id="1", kind="physical"),
+                TargetPort(id="A1", kind="uplink"),
+            ],
+        )
+        assert p.port_ids() == ["1", "A1"]
+        assert p.port_ids(kind="physical") == ["1"]
+        assert p.port_ids(kind="uplink") == ["A1"]
+        assert p.lookup_port("1").kind == "physical"
+
+
+class TestProfileWithModulesLoader:
+    """YAML loader support for the ``modules:`` key."""
+
+    def _write(self, tmp_path: Path, body: str) -> TargetProfile:
+        fp = tmp_path / "p.yaml"
+        fp.write_text(body, encoding="utf-8")
+        return load_profile_file(fp)
+
+    def test_module_ports_with_range_shorthand(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: cisco_iosxe
+model: C9300-24UX
+ports:
+  - {range: "GigabitEthernet1/0/1-24", kind: physical, speed: 10gig}
+modules:
+  NM-8X:
+    description: "8x 10G SFP+"
+    ports:
+      - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true}
+  NM-2Q:
+    description: "2x 40G QSFP+"
+    ports:
+      - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true}
+""")
+        assert p.port_count == 24
+        assert p.has_modules
+        assert set(p.module_skus()) == {"NM-8X", "NM-2Q"}
+        nm8x = p.modules["NM-8X"]
+        assert len(nm8x.ports) == 8
+        assert nm8x.ports[0].id == "TenGigabitEthernet1/1/1"
+        assert nm8x.ports[-1].id == "TenGigabitEthernet1/1/8"
+        nm2q = p.modules["NM-2Q"]
+        assert len(nm2q.ports) == 2
+        assert nm2q.ports[0].id == "FortyGigabitEthernet1/1/1"
+
+    def test_module_sku_backfilled_from_dict_key(self, tmp_path):
+        """Authors can omit the ``sku:`` field under each module —
+        the dict key is the source of truth."""
+        p = self._write(tmp_path, """
+vendor: v
+model: m
+modules:
+  NM-8X:
+    description: "8x 10G"
+    ports: []
+""")
+        assert p.modules["NM-8X"].sku == "NM-8X"
+
+    def test_explicit_module_sku_wins_over_dict_key(self, tmp_path):
+        """If the author set ``sku:`` explicitly we respect it, so
+        authors can use alias keys (e.g. friendly URL slug) while
+        keeping the part-number SKU."""
+        p = self._write(tmp_path, """
+vendor: v
+model: m
+modules:
+  nm8x:
+    sku: "NM-8X"
+    description: "8x 10G"
+    ports: []
+""")
+        assert p.modules["nm8x"].sku == "NM-8X"
+
+    def test_module_not_mapping_rejected(self, tmp_path):
+        with pytest.raises(ProfileLoadError, match="must be a mapping"):
+            self._write(tmp_path, """
+vendor: v
+model: m
+modules:
+  NM-8X: "this should be a mapping not a string"
+""")
+
+    def test_module_range_error_identifies_module(self, tmp_path):
+        with pytest.raises(ProfileLoadError, match=r"module 'NM-8X'"):
+            self._write(tmp_path, """
+vendor: v
+model: m
+modules:
+  NM-8X:
+    ports:
+      - {range: "TenGig1/1/10-1", kind: uplink}
+""")
+
+    def test_no_modules_key_stays_legacy(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: aruba_aoss
+model: 2930F
+ports:
+  - {range: "1-48", kind: physical, speed: gig}
+""")
+        assert p.modules == {}
+        assert p.has_modules is False
+        # effective_ports with no arg returns base ports only.
+        assert len(p.effective_ports()) == 48
+
+    def test_empty_modules_dict_stays_legacy(self, tmp_path):
+        p = self._write(tmp_path, """
+vendor: v
+model: m
+ports: []
+modules: {}
+""")
+        assert p.has_modules is False
+        assert p.default_module_sku() is None
+
+    def test_module_round_trips_through_api_serialization(self, tmp_path):
+        """The serialized JSON shape must preserve the ``modules:``
+        dict — that's what the GET /target-profiles response
+        depends on.  This smoke-tests the pydantic round-trip."""
+        p = self._write(tmp_path, """
+vendor: cisco_iosxe
+model: C9300-24UX
+ports:
+  - {range: "GigabitEthernet1/0/1-2", kind: physical}
+modules:
+  NM-2Q:
+    description: "2x 40G QSFP+"
+    ports:
+      - {id: "FortyGigabitEthernet1/1/1", kind: uplink, speed: 40gig}
+""")
+        dumped = p.model_dump()
+        assert "modules" in dumped
+        assert "NM-2Q" in dumped["modules"]
+        assert dumped["modules"]["NM-2Q"]["ports"][0]["id"] == (
+            "FortyGigabitEthernet1/1/1"
+        )
+        # Legacy field remains populated and distinct from module ports.
+        assert len(dumped["ports"]) == 2
+        # Rehydrate and verify behaviour survives.
+        p2 = TargetProfile.model_validate(dumped)
+        assert p2.default_module_sku() == "NM-2Q"
+        assert len(p2.effective_ports("NM-2Q")) == 3
