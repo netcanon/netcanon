@@ -58,6 +58,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
@@ -219,6 +220,14 @@ class MikroTikRouterOSCodec(CodecBase):
         # address attaches addresses) so we carry an accumulator.
         iface_by_name: dict[str, CanonicalInterface] = {}
 
+        # Some sections must run AFTER others regardless of file order.
+        # /ip pool carries DHCP-range data that needs to merge into pool
+        # records created by /ip dhcp-server network; running them in
+        # file order would split a single logical pool into two
+        # canonical records when the file happens to list /ip pool
+        # first.  Defer /ip pool to a post-pass.
+        deferred_ip_pool: list[list[str]] = []
+
         for section, lines in sections:
             if section == "/system identity":
                 _parse_system_identity(lines, intent)
@@ -244,7 +253,14 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_snmp_community(lines, intent)
             elif section == "/user":
                 _parse_user(lines, intent)
+            elif section == "/ip dhcp-server network":
+                _parse_dhcp_server_network(lines, intent)
+            elif section == "/ip pool":
+                deferred_ip_pool.append(lines)
             # Other sections silently ignored — not in scope yet.
+
+        for pool_lines in deferred_ip_pool:
+            _parse_ip_pool(pool_lines, intent)
 
         # Order interfaces deterministically: ethernet ports first
         # (by natural-sort name), then bridges, then VLANs, then rest.
@@ -393,6 +409,36 @@ class MikroTikRouterOSCodec(CodecBase):
                     f"set [ find default=yes ] name={tree.snmp.community}"
                 )
                 lines.append("")
+
+        # ----- /ip pool + /ip dhcp-server network (Tier 2 DHCP) -----
+        # RouterOS splits DHCP across /ip pool (the address range)
+        # and /ip dhcp-server network (network-scoped options).  We
+        # emit both so the result is deployable without hand-editing.
+        # Pool names are synthesised deterministically.
+        if tree.dhcp_servers:
+            # /ip pool first — depends on nothing else.
+            lines.append("/ip pool")
+            for idx, pool in enumerate(tree.dhcp_servers, start=1):
+                if not (pool.start_ip and pool.end_ip):
+                    continue
+                name = f"dhcp_pool{idx}"
+                lines.append(
+                    f"add name={name} ranges={pool.start_ip}-{pool.end_ip}"
+                )
+            lines.append("")
+            lines.append("/ip dhcp-server network")
+            for pool in tree.dhcp_servers:
+                if not pool.network:
+                    continue
+                parts = ["add", f"address={pool.network}"]
+                if pool.gateway:
+                    parts.append(f"gateway={pool.gateway}")
+                if pool.dns_servers:
+                    parts.append(f"dns-server={','.join(pool.dns_servers)}")
+                if pool.domain_name:
+                    parts.append(f"domain={pool.domain_name}")
+                lines.append(" ".join(parts))
+            lines.append("")
 
         # ----- /user (Tier 2 local users) -----
         if tree.local_users:
@@ -827,6 +873,89 @@ def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
                 h = host.strip()
                 if h:
                     intent.snmp.trap_hosts.append(h)
+
+
+def _parse_dhcp_server_network(
+    lines: list[str], intent: CanonicalIntent,
+) -> None:
+    """Parse ``/ip dhcp-server network`` section into CanonicalDHCPPool.
+
+    RouterOS DHCP is genuinely spread across THREE sections:
+        /ip dhcp-server          - the server instance (binds to iface)
+        /ip dhcp-server network  - network-scoped options (gateway, DNS)
+        /ip pool                 - the allocation range
+
+    For canonical translation, the `network` section is the richest
+    per-pool record — it carries gateway, DNS, domain, and the address
+    CIDR.  We use it as the pool's primary record and merge address-
+    range data from /ip pool in a separate pass.  Real configs keep
+    the sections structurally parallel so match-by-position works in
+    simple cases; more complex cases need a future refinement pass.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        address = kv.get("address")
+        if not address:
+            continue
+        pool = CanonicalDHCPPool(
+            network=address,
+            gateway=kv.get("gateway", ""),
+            domain_name=kv.get("domain", ""),
+        )
+        dns_raw = kv.get("dns-server", "")
+        if dns_raw:
+            pool.dns_servers.extend(
+                s.strip() for s in dns_raw.split(",") if s.strip()
+            )
+        intent.dhcp_servers.append(pool)
+
+
+def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
+    """Merge ``/ip pool add ranges=START-END`` data into existing
+    CanonicalDHCPPool records.
+
+    Matching strategy: find the pool whose network contains the range's
+    start IP.  If none matches (orphan pool) we create a new
+    CanonicalDHCPPool with just the range populated.
+    """
+    import ipaddress
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        ranges = kv.get("ranges", "")
+        if not ranges or "-" not in ranges:
+            continue
+        # ranges= can be comma-separated multiple; take the first.
+        first_range = ranges.split(",")[0].strip()
+        start_str, _, end_str = first_range.partition("-")
+        if not (start_str and end_str):
+            continue
+        try:
+            start_ip = ipaddress.IPv4Address(start_str.strip())
+        except ipaddress.AddressValueError:
+            continue
+        # Find an existing pool whose network contains start_ip.
+        merged = False
+        for pool in intent.dhcp_servers:
+            if not pool.network:
+                continue
+            try:
+                network = ipaddress.IPv4Network(pool.network, strict=False)
+            except (ValueError, ipaddress.AddressValueError):
+                continue
+            if start_ip in network:
+                pool.start_ip = start_str.strip()
+                pool.end_ip = end_str.strip()
+                merged = True
+                break
+        if not merged:
+            intent.dhcp_servers.append(CanonicalDHCPPool(
+                start_ip=start_str.strip(),
+                end_ip=end_str.strip(),
+            ))
 
 
 def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:

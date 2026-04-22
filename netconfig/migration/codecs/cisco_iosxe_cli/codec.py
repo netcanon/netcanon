@@ -42,6 +42,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
@@ -192,6 +193,9 @@ class CiscoIOSXECLICodec(CodecBase):
 
         # Local users (Tier 2).
         intent.local_users = _parse_local_users(raw)
+
+        # DHCP server pools (Tier 2).
+        intent.dhcp_servers = _parse_dhcp_pools(raw)
 
         # LAGs (Tier 2) — both the `interface Port-channelN` declaration
         # and the per-member `channel-group N mode M` lines contribute.
@@ -795,6 +799,102 @@ _SNMP_HOST_RE = re.compile(
     r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)',
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+_DHCP_POOL_HEADER_RE = re.compile(
+    r"^ip\s+dhcp\s+pool\s+(\S+)", re.IGNORECASE,
+)
+_DHCP_NETWORK_RE = re.compile(
+    r"^\s+network\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
+_DHCP_DEFAULT_ROUTER_RE = re.compile(
+    r"^\s+default-router\s+(\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
+_DHCP_DNS_SERVER_RE = re.compile(
+    r"^\s+dns-server\s+(.+)$", re.IGNORECASE,
+)
+_DHCP_DOMAIN_NAME_RE = re.compile(
+    r"^\s+domain-name\s+(\S+)", re.IGNORECASE,
+)
+# Cisco lease syntax: `lease <days> [hours] [minutes]` or `lease infinite`
+_DHCP_LEASE_RE = re.compile(
+    r"^\s+lease\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?", re.IGNORECASE,
+)
+
+
+def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
+    """Extract ``ip dhcp pool`` stanzas into CanonicalDHCPPool records.
+
+    Cisco pools are defined as a named stanza with indented sub-commands.
+    Each pool defines one network and its associated options.  Real
+    configs commonly have multiple pools (one per user VLAN).
+
+    Cisco DHCP doesn't use start/end IP ranges natively — instead, the
+    pool serves ALL non-excluded IPs in the ``network`` statement, and
+    ``ip dhcp excluded-address`` at the global level carves out
+    reservations.  We populate ``network`` from the pool stanza and
+    leave ``start_ip``/``end_ip`` empty; a future pass can derive them
+    from excluded-address lines if needed.
+    """
+    pools: list[CanonicalDHCPPool] = []
+    current: CanonicalDHCPPool | None = None
+
+    for line in raw.splitlines():
+        header = _DHCP_POOL_HEADER_RE.match(line)
+        if header:
+            if current is not None:
+                pools.append(current)
+            current = CanonicalDHCPPool()
+            continue
+        if current is None:
+            continue
+        if line.startswith("!") or (line and not line[0].isspace()):
+            pools.append(current)
+            current = None
+            continue
+
+        nm = _DHCP_NETWORK_RE.match(line)
+        if nm:
+            ip_str, mask = nm.group(1), nm.group(2)
+            prefix = _mask_to_prefix(mask)
+            current.network = f"{ip_str}/{prefix}"
+            continue
+        gm = _DHCP_DEFAULT_ROUTER_RE.match(line)
+        if gm:
+            current.gateway = gm.group(1)
+            continue
+        dm = _DHCP_DNS_SERVER_RE.match(line)
+        if dm:
+            # Cisco allows multiple DNS servers space-separated.
+            servers = dm.group(1).split()
+            current.dns_servers.extend(servers)
+            continue
+        dnm = _DHCP_DOMAIN_NAME_RE.match(line)
+        if dnm:
+            current.domain_name = dnm.group(1)
+            continue
+        lm = _DHCP_LEASE_RE.match(line)
+        if lm:
+            lease_val = lm.group(1).lower()
+            if lease_val == "infinite":
+                # Max uint32 seconds is DHCP's "infinite" marker.
+                current.lease_time = 0xFFFFFFFF
+            else:
+                try:
+                    days = int(lease_val)
+                    hours = int(lm.group(2) or 0)
+                    minutes = int(lm.group(3) or 0)
+                    current.lease_time = (
+                        days * 86400 + hours * 3600 + minutes * 60
+                    )
+                except ValueError:
+                    pass  # Unparseable; leave default
+
+    if current is not None:
+        pools.append(current)
+    return pools
 
 
 def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:

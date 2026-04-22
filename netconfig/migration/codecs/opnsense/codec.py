@@ -47,6 +47,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
@@ -260,6 +261,14 @@ class OPNsenseCodec(CodecBase):
                         name=(descr_el.text or "").strip() if descr_el is not None else "",
                     ))
 
+        # ----- <dhcpd> block (Tier 2 DHCP) -----
+        dhcpd_el = root.find("dhcpd")
+        if dhcpd_el is not None:
+            for zone_el in dhcpd_el:
+                pool = _parse_opnsense_dhcp_zone(zone_el)
+                if pool is not None:
+                    intent.dhcp_servers.append(pool)
+
         # ----- <laggs> block (Tier 2 LAGs) -----
         laggs_el = root.find("laggs")
         if laggs_el is not None:
@@ -374,6 +383,37 @@ class OPNsenseCodec(CodecBase):
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+
+        # DHCP pools (Tier 2).  OPNsense keys DHCP config by interface
+        # zone; use the canonical pool's ``interface`` field as the
+        # zone tag, falling back to ``lan`` if unset (single-zone
+        # default).  Foreign canonical pools (from other vendors that
+        # don't carry an OPNsense-style zone name) get a sanitised
+        # tag via the same _zone_tag_for helper used for interfaces.
+        if intent.dhcp_servers:
+            dhcpd_el = ET.SubElement(root, "dhcpd")
+            for pool in intent.dhcp_servers:
+                zone_tag = _zone_tag_for(pool.interface) if pool.interface else "lan"
+                zone_el = ET.SubElement(dhcpd_el, zone_tag)
+                ET.SubElement(zone_el, "enable")
+                if pool.start_ip or pool.end_ip:
+                    range_el = ET.SubElement(zone_el, "range")
+                    if pool.start_ip:
+                        ET.SubElement(range_el, "from").text = pool.start_ip
+                    if pool.end_ip:
+                        ET.SubElement(range_el, "to").text = pool.end_ip
+                if pool.gateway:
+                    ET.SubElement(zone_el, "gateway").text = pool.gateway
+                if pool.dns_servers:
+                    ET.SubElement(zone_el, "dnsserver").text = (
+                        ",".join(pool.dns_servers)
+                    )
+                if pool.domain_name:
+                    ET.SubElement(zone_el, "domain").text = pool.domain_name
+                if pool.lease_time:
+                    ET.SubElement(zone_el, "defaultleasetime").text = (
+                        str(pool.lease_time)
+                    )
 
         # LAGs (Tier 2) — <laggs> element with one <lagg> per LAG.
         if intent.lags:
@@ -586,6 +626,58 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+def _parse_opnsense_dhcp_zone(zone_el: ET.Element) -> CanonicalDHCPPool | None:
+    """Parse a single ``<dhcpd>/<zone>`` element into a CanonicalDHCPPool.
+
+    OPNsense keys DHCP config by interface zone (wan/lan/optN).  We
+    preserve the zone name on the pool's ``interface`` field so
+    renderers can re-emit under the right zone.  Enabled-flag is
+    implicit via the presence of an ``<enable/>`` element; we treat
+    a zone block as present-but-disabled as a valid pool, since the
+    intent (serve this network) is preserved.
+    """
+    range_el = zone_el.find("range")
+    start_ip = ""
+    end_ip = ""
+    if range_el is not None:
+        from_el = range_el.find("from")
+        to_el = range_el.find("to")
+        start_ip = (from_el.text or "").strip() if from_el is not None else ""
+        end_ip = (to_el.text or "").strip() if to_el is not None else ""
+
+    gateway_el = zone_el.find("gateway")
+    dns_el = zone_el.find("dnsserver")
+    domain_el = zone_el.find("domain")
+    lease_el = zone_el.find("defaultleasetime")
+
+    gateway = (gateway_el.text or "").strip() if gateway_el is not None else ""
+    dns_servers: list[str] = []
+    if dns_el is not None and dns_el.text:
+        dns_servers.extend(s.strip() for s in dns_el.text.split(",") if s.strip())
+    domain = (domain_el.text or "").strip() if domain_el is not None else ""
+    lease = 86400
+    if lease_el is not None and lease_el.text:
+        try:
+            lease = int(lease_el.text.strip())
+        except ValueError:
+            pass
+
+    # If nothing useful was captured, skip (empty zone blocks exist
+    # in upstream config.xml.sample as reserved-zone scaffolding).
+    if not (start_ip or end_ip or gateway or dns_servers or domain):
+        return None
+
+    return CanonicalDHCPPool(
+        interface=zone_el.tag,
+        start_ip=start_ip,
+        end_ip=end_ip,
+        gateway=gateway,
+        dns_servers=dns_servers,
+        lease_time=lease,
+        domain_name=domain,
+    )
 
 
 # OPNsense LAG proto values -> canonical CanonicalLAG.mode

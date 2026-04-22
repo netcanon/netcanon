@@ -18,6 +18,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
@@ -178,6 +179,8 @@ class FortiGateCLICodec(CodecBase):
                 _apply_snmp_community(block, intent)
             elif path == "system admin":
                 _apply_system_admin(block, intent)
+            elif path == "system dhcp server":
+                _apply_system_dhcp_server(block, intent)
             # Other config paths silently ignored (Tier 3 / out of scope).
 
         return intent
@@ -341,6 +344,42 @@ class FortiGateCLICodec(CodecBase):
                     else (user.role or "prof_admin")
                 )
                 out.append(f'        set accprofile "{accprofile}"')
+                out.append("    next")
+            out.append("end")
+
+        # --- system dhcp server (Tier 2 DHCP pools) ---
+        if tree.dhcp_servers:
+            out.append("config system dhcp server")
+            for idx, pool in enumerate(tree.dhcp_servers, start=1):
+                out.append(f"    edit {idx}")
+                if pool.lease_time:
+                    out.append(f"        set lease-time {pool.lease_time}")
+                if pool.gateway:
+                    out.append(f"        set default-gateway {pool.gateway}")
+                if pool.network:
+                    try:
+                        import ipaddress
+                        net = ipaddress.IPv4Network(pool.network, strict=False)
+                        out.append(f"        set netmask {net.netmask}")
+                    except (ValueError, ipaddress.AddressValueError):
+                        pass
+                if pool.interface:
+                    out.append(f'        set interface "{pool.interface}"')
+                for i, dns in enumerate(pool.dns_servers[:3], start=1):
+                    out.append(f"        set dns-server{i} {dns}")
+                if pool.dns_servers:
+                    out.append("        set dns-service specify")
+                if pool.domain_name:
+                    out.append(f'        set domain "{pool.domain_name}"')
+                if pool.start_ip or pool.end_ip:
+                    out.append("        config ip-range")
+                    out.append("            edit 1")
+                    if pool.start_ip:
+                        out.append(f"                set start-ip {pool.start_ip}")
+                    if pool.end_ip:
+                        out.append(f"                set end-ip {pool.end_ip}")
+                    out.append("            next")
+                    out.append("        end")
                 out.append("    next")
             out.append("end")
 
@@ -767,6 +806,79 @@ def _apply_system_admin(
             hashed_password=hashed,
             role=accprofile or ("admin" if is_admin else "operator"),
         ))
+
+
+def _apply_system_dhcp_server(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config system dhcp server`` into CanonicalDHCPPool records.
+
+    Each ``edit <id>`` is a DHCP pool.  Relevant fields:
+        set lease-time <seconds>
+        set default-gateway <ip>
+        set netmask <dotted-decimal>
+        set interface "<iface>"
+        set dns-service default|specify
+        set dns-server1 <ip>
+        set dns-server2 <ip>
+        set domain "<domain>"
+        config ip-range                         (nested)
+            edit 1
+                set start-ip <ip>
+                set end-ip <ip>
+            next
+        end
+    """
+    for edit in block.edits:
+        pool = CanonicalDHCPPool()
+        iface_tokens = edit.settings.get("interface")
+        if iface_tokens:
+            pool.interface = iface_tokens[0]
+        gw_tokens = edit.settings.get("default-gateway")
+        if gw_tokens:
+            pool.gateway = gw_tokens[0]
+        netmask_tokens = edit.settings.get("netmask")
+        if netmask_tokens and gw_tokens:
+            # Derive network CIDR from gateway + netmask.  Gateway
+            # typically sits on the pool's network; masking gives the
+            # network address.
+            try:
+                import ipaddress
+                gw = ipaddress.IPv4Interface(
+                    f"{gw_tokens[0]}/{_mask_to_prefix(netmask_tokens[0])}"
+                )
+                pool.network = str(gw.network)
+            except (ipaddress.AddressValueError, ValueError):
+                pass
+        # DNS servers come in as dns-server1 / dns-server2 / dns-server3
+        for i in range(1, 4):
+            key = f"dns-server{i}"
+            dns_tokens = edit.settings.get(key)
+            if dns_tokens:
+                pool.dns_servers.append(dns_tokens[0])
+        domain_tokens = edit.settings.get("domain")
+        if domain_tokens:
+            pool.domain_name = domain_tokens[0]
+        lease_tokens = edit.settings.get("lease-time")
+        if lease_tokens:
+            try:
+                pool.lease_time = int(lease_tokens[0])
+            except ValueError:
+                pass
+
+        # Nested `config ip-range` block carves out the allocation range.
+        for sub in edit.sub_blocks:
+            if sub.config_path != "ip-range":
+                continue
+            for range_edit in sub.edits:
+                start_tokens = range_edit.settings.get("start-ip")
+                end_tokens = range_edit.settings.get("end-ip")
+                if start_tokens and not pool.start_ip:
+                    pool.start_ip = start_tokens[0]
+                if end_tokens and not pool.end_ip:
+                    pool.end_ip = end_tokens[0]
+
+        intent.dhcp_servers.append(pool)
 
 
 # ---------------------------------------------------------------------------

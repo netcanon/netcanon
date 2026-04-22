@@ -355,6 +355,24 @@ class ArubaAOSSCodec(CodecBase):
                     f'snmp-server host {host} community "{comm}"'
                 )
 
+        # DHCP pools — AOS-S doesn't run a DHCP server on most
+        # platforms (it's a DHCP *relay* platform via
+        # `ip helper-address`).  When a canonical carries DHCP pools,
+        # emit a comment block so the data isn't silently dropped on
+        # the way across — the human reviewer knows something to
+        # reconfigure on a sibling DHCP server.
+        if tree.dhcp_servers:
+            lines.append("; DHCP pools from source codec are not supported")
+            lines.append("; by AOS-S (AOS-S is a DHCP relay platform, not a")
+            lines.append("; DHCP server).  Reconfigure on a sibling server.")
+            for pool in tree.dhcp_servers:
+                summary = (
+                    f";   network={pool.network or '?'} "
+                    f"gw={pool.gateway or '?'} "
+                    f"range={pool.start_ip}-{pool.end_ip}"
+                )
+                lines.append(summary)
+
         # Local users (Tier 2).  AOS-S form:
         #   password manager user-name "X" sha1 "<hash>"
         #   password operator user-name "Y" sha1 "<hash>"
