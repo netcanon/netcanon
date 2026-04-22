@@ -266,6 +266,18 @@ def translate_port_names(
             return name
         out = target_codec.format_port_identity(ident)
         if out is None or out == "":
+            # Target codecs that absorb SVI L3 state into the VLAN
+            # stanza (Aruba AOS-S) have NO port-name for SVIs by
+            # design — the rendered output still carries the IP
+            # address via the VLAN stanza render path.  Suppress
+            # the noise from the rename table so operators don't
+            # see non-actionable "review" rows for something the
+            # codec handles correctly elsewhere.
+            if ident.kind == "svi" and getattr(
+                target_codec, "absorbs_svi_into_vlan", False
+            ):
+                memo[name] = name
+                return name
             # Surface specific advisory text for the complexity cases
             # the user most needs to review, not a generic "no native
             # representation" blurb.  The breakout / hw_aggregate cases

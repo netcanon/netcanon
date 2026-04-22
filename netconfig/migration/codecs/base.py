@@ -164,6 +164,21 @@ class CodecBase(ABC):
     #: at the UI layer.  Examples: ``"xml"``, ``"rsc"``, ``"json"``.
     output_extension: ClassVar[str] = ""
 
+    #: Whether this codec renders VLAN SVIs by absorbing L3 state
+    #: (IP address, description) **into the VLAN stanza itself** rather
+    #: than as a distinct ``interface Vlan<N>`` port.  Aruba AOS-S does
+    #: this (``vlan 11 / ip address X Y / exit``); other codecs (Cisco,
+    #: MikroTik, OPNsense, FortiGate) keep VLAN interfaces as
+    #: standalone named entities.
+    #:
+    #: Consumed by the cross-vendor port-name translator in
+    #: :mod:`netconfig.migration.canonical.port_names`: when the target
+    #: codec absorbs SVIs, the orchestrator suppresses the "no native
+    #: representation" warning for ``kind="svi"`` identities.  The
+    #: L3 data still reaches the target via the VLAN stanza render
+    #: path — there's just no port-name to rename.
+    absorbs_svi_into_vlan: ClassVar[bool] = False
+
     @property
     @abstractmethod
     def capabilities(self) -> CapabilityMatrix:

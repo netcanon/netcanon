@@ -202,6 +202,78 @@ class TestCiscoToAruba:
         ident = src.classify_port_name("Loopback0")
         assert tgt.format_port_identity(ident) is None
 
+    def test_aruba_bails_on_port_zero(self):
+        """Cisco ``GigabitEthernet0/0`` is the OOBM Mgmt-vrf port with
+        port=0.  Aruba has no port 0 and no common OOBM port-name
+        representation; the formatter used to collapse this to bogus
+        ``"1"`` via ``port or 1``.  Regression: must return None so
+        the orchestrator flags it for review instead of silently
+        colliding with a real port 1 assignment."""
+        src = CiscoIOSXECLICodec()
+        tgt = ArubaAOSSCodec()
+        ident = src.classify_port_name("GigabitEthernet0/0")
+        assert ident.port == 0
+        assert tgt.format_port_identity(ident) is None
+
+
+class TestSviAbsorption:
+    """Codecs that render VLAN SVIs via VLAN-stanza absorption (Aruba
+    AOS-S: ``vlan 11 / ip address X / exit``) have no port-name for
+    SVIs — but the L3 state still reaches the target via the VLAN
+    stanza render path.  The orchestrator should NOT emit a "no
+    native representation" warning for these; the rename modal would
+    otherwise list non-actionable review rows for something the
+    codec handles correctly elsewhere."""
+
+    def test_aruba_declares_absorbs_svi(self):
+        assert ArubaAOSSCodec.absorbs_svi_into_vlan is True
+
+    def test_non_absorbing_codecs_default_false(self):
+        # MikroTik, OPNsense, FortiGate render VLANs as standalone
+        # interfaces with their own port names, not via absorption.
+        assert MikroTikRouterOSCodec.absorbs_svi_into_vlan is False
+        assert OPNsenseCodec.absorbs_svi_into_vlan is False
+        assert FortiGateCLICodec.absorbs_svi_into_vlan is False
+        assert CiscoIOSXECLICodec.absorbs_svi_into_vlan is False
+
+    def test_svi_warning_suppressed_when_target_absorbs(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="Vlan11"),
+                CanonicalInterface(name="Vlan100"),
+                # Non-SVI kinds must still warn normally — this is
+                # regression coverage for "we didn't accidentally
+                # silence everything".
+                CanonicalInterface(name="Loopback0"),
+            ],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+        )
+        # SVIs: no warning, name left verbatim (absorbed into VLAN stanza).
+        assert not any("Vlan11" in w for w in result.warnings)
+        assert not any("Vlan100" in w for w in result.warnings)
+        # Loopback still warns (not absorbed).
+        assert any("Loopback0" in w and "loopback" in w for w in result.warnings)
+
+    def test_svi_warning_still_fires_when_target_does_not_absorb(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="Vlan99")],
+        )
+        # FortiGate doesn't absorb SVIs (VLAN subinterfaces are
+        # user-named separate entities); FortiGate's format for SVI
+        # kind returns None → orchestrator should still warn.
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), FortiGateCLICodec(),
+        )
+        assert any("Vlan99" in w for w in result.warnings)
+
 
 # ---------------------------------------------------------------------------
 # Cross-codec mesh: every (source, target) pair produces a result
@@ -355,8 +427,10 @@ class TestOrchestrator:
         assert result.applied["GigabitEthernet1/0/1"] == "1/1"
         assert result.applied["Port-channel1"] == "Trk1"
 
-        # Warnings describe the verbatim-fallback cases.
-        assert any("Vlan10" in w and "svi" in w for w in result.warnings)
+        # Warnings describe the verbatim-fallback cases.  SVI (Vlan10)
+        # is NOT warned about because Aruba absorbs SVI L3 into the
+        # VLAN stanza — see TestSviAbsorption for dedicated coverage.
+        assert not any("Vlan10" in w for w in result.warnings)
         assert any("Loopback0" in w and "loopback" in w for w in result.warnings)
 
     def test_user_rename_map_wins_over_auto(self):
@@ -385,7 +459,9 @@ class TestOrchestrator:
         transform(intent)
         assert intent.interfaces[0].name == "1/1"
         assert "GigabitEthernet1/0/1" in result.applied
-        assert any("Vlan10" in w for w in result.warnings)
+        # Loopback0 warns (Aruba has no loopback).  SVI Vlan10
+        # suppressed because Aruba absorbs SVI into VLAN stanza.
+        assert any("Loopback0" in w for w in result.warnings)
 
 
 # ---------------------------------------------------------------------------

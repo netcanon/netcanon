@@ -46,6 +46,13 @@ class ArubaAOSSCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    #: AOS-S absorbs the SVI's L3 state into the VLAN stanza itself
+    #: (``vlan 11 / ip address X Y / exit``) — there's no
+    #: ``interface Vlan<N>`` port-name to rename in cross-vendor
+    #: translation.  The port-name orchestrator reads this flag to
+    #: suppress "no native representation" warnings on SVI identities
+    #: so the rename modal doesn't list non-actionable rows.
+    absorbs_svi_into_vlan: ClassVar[bool] = True
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Aruba AOS-S "
         "(ProCurve / ArubaOS-Switch 16.x) device.  NOT the same as "
@@ -622,6 +629,13 @@ class ArubaAOSSCodec(CodecBase):
             # us which letter; we don't know that from the source
             # config alone.  Bail with a warning.
             if identity.module and identity.module != 0:
+                return None
+            # Aruba has no port 0.  Cisco's ``GigabitEthernet0/0``
+            # is the dedicated OOBM management port — Aruba's
+            # equivalent is the separate OOBM concept (not in the
+            # regular port-name space), so leave verbatim + warn
+            # instead of collapsing to bogus ``"1"`` via ``port or 1``.
+            if identity.port == 0:
                 return None
             if identity.subslot_letter:
                 # 1/A1 style (uplink module).

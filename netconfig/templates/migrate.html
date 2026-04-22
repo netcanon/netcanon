@@ -176,6 +176,10 @@
   table.mig-rename-table tr.has-warning td { background:#fffbe6; }
   table.mig-rename-table tr.has-collision td { background:#fde5e5; }
   table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:#0c5460; }
+  table.mig-rename-table td.mig-rename-no-auto {
+    color:#aaa; font-style:italic; font-family:system-ui, sans-serif;
+    font-size:.72rem;
+  }
   table.mig-rename-table select, table.mig-rename-table input {
     font-family:monospace; font-size:.78rem;
     padding:.15rem .3rem; border:1px solid #ccc; border-radius:3px;
@@ -1262,16 +1266,25 @@
       var nameMatch = w.match(/'([^']+)'/);
       if (!nameMatch) return;
       var src = nameMatch[1];
-      var kind = 'unknown';
       // Kind hints in warning text (from port_names.py orchestrator).
+      // Order matters — check specific kinds before the generic
+      // "physical" catch-all so e.g. a "breakout" warning doesn't
+      // get reclassified as "physical" (the identity kind IS physical
+      // in some orchestrator paths).
+      var kind = 'unknown';
       if (/\bloopback\b/i.test(w)) kind = 'loopback';
       else if (/\bbreakout\b/i.test(w)) kind = 'breakout';
       else if (/\bhw_aggregate\b|\baggregate\b/i.test(w)) kind = 'hw_aggregate';
       else if (/\btunnel\b/i.test(w)) kind = 'tunnel';
       else if (/\bmgmt\b/i.test(w)) kind = 'mgmt';
       else if (/\bsvi\b/i.test(w)) kind = 'svi';
-      else if (/\bunknown\b|could not classify/i.test(w)) kind = 'unknown';
       else if (/\blag\b/i.test(w)) kind = 'lag';
+      else if (/\bphysical\b/i.test(w)) kind = 'physical';
+      else if (/could not classify/i.test(w)) kind = 'unknown';
+      // Fall back to the source-name classifier if the warning text
+      // didn't contain a kind keyword — ensures rows still land in a
+      // meaningful section (Cat 9300 uplink-module ports, etc.).
+      if (kind === 'unknown') kind = guessKind(src);
       addRow(src, kind, '', w);
     });
 
@@ -1386,8 +1399,15 @@
         if (hasCollision) tr.classList.add('has-collision');
         if (hasOverride) tr.classList.add('has-override');
 
-        tr.innerHTML = '<td>' + escapeHtml(row.source) + '</td>'
-          + '<td>' + escapeHtml(row.auto) + '</td>';
+        // Auto-target column: when the codec left the name verbatim
+        // (auto === source), show a "(needs override)" placeholder
+        // instead of echoing the source — otherwise the cell looks
+        // like the translation did nothing and the user can't tell
+        // it's a manual-decision row.
+        var autoCell = row.auto === row.source
+          ? '<td class="mig-rename-no-auto">(no mapping — needs override)</td>'
+          : '<td>' + escapeHtml(row.auto) + '</td>';
+        tr.innerHTML = '<td>' + escapeHtml(row.source) + '</td>' + autoCell;
 
         var overrideCell = document.createElement('td');
         overrideCell.className = 'mig-rename-target';
@@ -1417,7 +1437,12 @@
         } else {
           var inp = document.createElement('input');
           inp.type = 'text';
-          inp.placeholder = 'auto: ' + row.auto;
+          // Placeholder conveys whether there's an auto default (which
+          // the user could keep by leaving the field blank) or whether
+          // an override is effectively required (no auto was produced).
+          inp.placeholder = row.auto === row.source
+            ? 'Type target name (required)'
+            : 'auto: ' + row.auto;
           inp.value = _renameUserMap[row.source] || '';
           inp.setAttribute('data-testid',
             'migrate-rename-override-' + row.source);
