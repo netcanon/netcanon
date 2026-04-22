@@ -141,13 +141,58 @@ class TestOPNsenseClassifyFormat:
 
 
 class TestFortiGateClassifyFormat:
-    CASES = ["port1", "port24", "wan1", "wan2", "lan", "lan5", "internal", "internal3", "dmz1", "mgmt", "ssl.root", "gre1", "loopback0"]
+    CASES = [
+        "port1", "port24",
+        "wan1", "wan2",
+        "lan", "lan5",
+        "internal", "internal3",
+        "dmz1", "mgmt",
+        "ssl.root", "gre1",
+        "loopback0",
+        # FG-60F / FG-61F bare-letter FortiLink defaults.  These are
+        # documented in Fortinet's fast-path architecture doc for the
+        # 60F/61F — the NPU-connected ports labelled A and B on the
+        # front panel appear in the CLI as literal ``a`` / ``b``,
+        # NOT as ``fortilink1`` / ``fortilink2``.  Same-vendor round-
+        # trip must preserve the letter; cross-vendor targets see
+        # them as physical ports via the fortigate_role=fortilink
+        # meta hint.
+        "a", "b",
+    ]
 
     @pytest.mark.parametrize("name", CASES)
     def test_round_trip(self, name):
         f = FortiGateCLICodec()
         ident = f.classify_port_name(name)
         assert f.format_port_identity(ident) == name
+
+    def test_fortilink_letter_classifies_as_physical(self):
+        """``a`` and ``b`` on FG-60F must NOT fall through to unknown
+        — the rename modal relies on kind=physical for correct
+        profile-dropdown routing (access vs uplink split)."""
+        f = FortiGateCLICodec()
+        for letter in ("a", "b"):
+            ident = f.classify_port_name(letter)
+            assert ident.kind == "physical", (
+                f"FG-60F bare ``{letter}`` must classify as physical, "
+                f"got {ident.kind!r}"
+            )
+            assert ident.meta.get("fortigate_role") == "fortilink"
+            assert (
+                ident.meta.get("fortigate_fortilink_letter") == letter
+            )
+
+    def test_fortilink_letter_case_insensitive(self):
+        """Classifier accepts ``A`` / ``B`` too (rare but seen in
+        community posts where the front-panel label leaked into a
+        pasted config)."""
+        f = FortiGateCLICodec()
+        for upper, lower in [("A", "a"), ("B", "b")]:
+            ident = f.classify_port_name(upper)
+            assert ident.kind == "physical"
+            # Formatter normalises to lowercase — that's the canonical
+            # form FortiOS writes.
+            assert f.format_port_identity(ident) == lower
 
 
 # ---------------------------------------------------------------------------

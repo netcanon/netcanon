@@ -54,6 +54,17 @@ _ROLE_RE = re.compile(
     r"^(wan|dmz|mgmt|ha|modem|fortilink)(\d+)?$", re.IGNORECASE
 )
 
+#: Bare single-letter FortiLink default ports.  FG-60F / FG-61F ship
+#: with two ports literally named ``a`` and ``b`` — these are the
+#: NPU-connected FortiLink defaults documented in Fortinet's fast-path
+#: architecture doc (docs.fortinet.com/document/fortigate/7.6.6/
+#: hardware-acceleration/758378/fortigate-60f-and-61f-fast-path-
+#: architecture).  Classified as physical with ``fortigate_role=fortilink``
+#: so cross-vendor targets see them as regular ports; the letter is
+#: stashed in ``meta["fortigate_fortilink_letter"]`` so same-vendor
+#: round-trip preserves the original name.
+_FORTILINK_LETTER_RE = re.compile(r"^([ab])$", re.IGNORECASE)
+
 #: Numbered ``lan``/``internal`` (physical member of hw-switch
 #: aggregate or standalone port).  Bare forms (``lan`` / ``internal``)
 #: classify as hw_aggregate and are matched via string equality, not
@@ -110,6 +121,22 @@ def classify_port_name(name: str) -> PortIdentity:
             kind=kind,
             port=port_num,
             meta={"fortigate_role": role},
+            original=name,
+        )
+
+    # Bare single-letter FortiLink defaults (FG-60F / FG-61F ship with
+    # two ports named ``a`` and ``b``).  Stash the letter so the
+    # formatter can reproduce it for same-vendor round-trip; cross-
+    # vendor targets see a plain physical port via the fortilink role.
+    m = _FORTILINK_LETTER_RE.match(stripped)
+    if m:
+        return PortIdentity(
+            kind="physical",
+            port=1 + (ord(m.group(1).lower()) - ord("a")),
+            meta={
+                "fortigate_role": "fortilink",
+                "fortigate_fortilink_letter": m.group(1).lower(),
+            },
             original=name,
         )
 
@@ -199,6 +226,14 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     """
     if identity.kind == "physical":
         role = identity.meta.get("fortigate_role", "port")
+        # Same-vendor round-trip for FG-60F bare ``a``/``b`` FortiLink
+        # ports: if the source carried a letter hint, emit it back.
+        # Cross-vendor sources won't populate the letter, so the
+        # regular numeric path handles the generic ``fortilink1`` /
+        # ``fortilink2`` case.
+        letter = identity.meta.get("fortigate_fortilink_letter")
+        if role == "fortilink" and letter:
+            return letter
         if role == "port":
             return f"port{identity.port or 1}"
         if identity.port and identity.port > 1:
