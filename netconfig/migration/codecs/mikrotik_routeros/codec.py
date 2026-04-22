@@ -71,6 +71,7 @@ from ...canonical.intent import (
 )
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
+from . import port_names as _port_names
 
 
 @register
@@ -562,210 +563,17 @@ class MikroTikRouterOSCodec(CodecBase):
     # Cross-vendor port-name translation
     # -----------------------------------------------------------------
 
-    def classify_port_name(self, name: str):  # -> PortIdentity
-        """Classify a RouterOS port name into a :class:`PortIdentity`.
+    # -----------------------------------------------------------------
+    # Cross-vendor port-name translation
+    # -----------------------------------------------------------------
+    # Implementation extracted to :mod:`.port_names` — these methods
+    # delegate so the codec class stays focused on parse/render.
 
-        Recognised native forms:
-
-            * ``ether<N>`` — gigabit Ethernet port (factory default names
-              on CRS/CCR hardware).
-            * ``sfp-sfpplus<N>`` / ``sfpplus<N>`` — 10G SFP+ cage.
-            * ``sfp<N>`` — 1G SFP cage.
-            * ``qsfpplus<N>-<L>`` / ``qsfpplus<N>`` — 40G QSFP+ with
-              optional breakout-lane suffix.
-            * ``bond<N>`` / ``bonding<N>`` — LAG.
-            * ``bridge`` / ``br-<name>`` — bridge interface
-              (classified as ``virtual`` — it aggregates ports but
-              isn't a L2 LAG; most other vendors have no direct
-              equivalent).
-            * ``lo`` / ``loopback<N>`` — loopback.
-            * ``vlan-<parent>-<id>`` / ``<parent>.<id>`` — VLAN
-              subinterface (SVI-analog).
-            * ``wg<N>`` / ``wireguard<N>`` / ``gre<N>`` / ``ipip<N>``
-              — tunnel.
-
-        MikroTik allows arbitrary user-named interfaces via
-        ``set [find ...] name="Access Point"`` — the canonical intent
-        already preserves the rename pair (``name`` + ``default_name``),
-        so classify_port_name only needs to handle the factory-default
-        forms.  User-renamed interfaces classify as ``unknown`` and fall
-        through verbatim, which is correct — there's no algorithmic
-        way to map ``"Access Point"`` to an Aruba port number.
-        """
-        from ...canonical.port_names import PortIdentity
-
-        stripped = name.strip()
-
-        # Physical: ether, sfp-sfpplus, sfp, qsfpplus (with optional
-        # breakout-lane suffix).  Order matters — sfp-sfpplus must
-        # match before the bare sfp pattern.
-        m = re.match(r"^ether(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                name_speed_hint="gig",
-                original=name,
-            )
-        m = re.match(
-            r"^(?:sfp-sfpplus|sfpplus)(\d+)$", stripped, re.IGNORECASE
-        )
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                name_speed_hint="10gig",
-                meta={"mikrotik_cage": "sfpplus"},
-                original=name,
-            )
-        m = re.match(r"^sfp(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                name_speed_hint="gig",
-                meta={"mikrotik_cage": "sfp"},
-                original=name,
-            )
-        # QSFP+ 40G with optional breakout-lane suffix.
-        m = re.match(
-            r"^qsfpplus(\d+)(?:-(\d+))?$", stripped, re.IGNORECASE
-        )
-        if m:
-            port = int(m.group(1))
-            lane = int(m.group(2)) if m.group(2) else None
-            if lane is not None:
-                return PortIdentity(
-                    kind="breakout",
-                    port=port,
-                    breakout_lane=lane,
-                    breakout_parent=f"qsfpplus{port}",
-                    name_speed_hint="10gig",  # 4x10G breakout lanes
-                    original=name,
-                )
-            return PortIdentity(
-                kind="physical",
-                port=port,
-                name_speed_hint="40gig",
-                original=name,
-            )
-
-        # LAG: bond / bonding.
-        m = re.match(r"^bond(?:ing)?(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="lag", index=int(m.group(1)), original=name
-            )
-
-        # Loopback: lo or loopback<N>.
-        if stripped.lower() == "lo":
-            return PortIdentity(kind="loopback", index=0, original=name)
-        m = re.match(r"^loopback(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="loopback", index=int(m.group(1)), original=name
-            )
-
-        # Tunnel kinds — wg, wireguard, gre, ipip, eoip, l2tp-out,
-        # pptp-out, sstp-out.  Preserve the exact subtype in meta so
-        # same-vendor round-trip emits the right one.
-        m = re.match(
-            r"^(wg|wireguard|gre|ipip|eoip|l2tp-out|pptp-out|sstp-out|"
-            r"ovpn-client|ovpn-server)(\d*)$",
-            stripped, re.IGNORECASE,
-        )
-        if m:
-            subtype = m.group(1).lower()
-            idx = int(m.group(2)) if m.group(2) else 0
-            return PortIdentity(
-                kind="tunnel",
-                index=idx,
-                meta={"mikrotik_tunnel": subtype},
-                original=name,
-            )
-
-        # VLAN subinterfaces: convention ``<parent>.<id>`` or
-        # user-named.  We try the dotted form (which classifier gets
-        # unambiguously from the pattern); user-named VLANs fall
-        # through as unknown, which is the correct conservative
-        # behaviour (the canonical preserves name verbatim).
-        m = re.match(r"^([A-Za-z][A-Za-z0-9-]*)\.(\d+)$", stripped)
-        if m:
-            return PortIdentity(
-                kind="svi",
-                index=int(m.group(2)),
-                meta={"mikrotik_parent": m.group(1)},
-                original=name,
-            )
-
-        # Bridge — treat as virtual (aggregation but not a LAG).
-        # Preserve the specific bridge name in meta so same-vendor
-        # round-trip restores ``br-lan`` instead of collapsing to
-        # ``bridge``.
-        if stripped.lower() == "bridge":
-            return PortIdentity(
-                kind="virtual", original=name,
-                meta={"mikrotik_bridge": "bridge"},
-            )
-        if re.match(r"^br-[A-Za-z0-9-]+$", stripped, re.IGNORECASE):
-            return PortIdentity(
-                kind="virtual", original=name,
-                meta={"mikrotik_bridge": stripped},
-            )
-
-        return PortIdentity(kind="unknown", original=name)
+    def classify_port_name(self, name: str):
+        return _port_names.classify_port_name(name)
 
     def format_port_identity(self, identity) -> str | None:
-        """Render a :class:`PortIdentity` as a RouterOS port name.
-
-        Picks the speed-appropriate prefix for physical ports:
-        ``sfp-sfpplus<N>`` for 10G+, ``ether<N>`` otherwise.  QSFP+
-        breakouts render via the lane suffix if the identity carries
-        one.  Tunnels default to the generic ``gre<N>`` when the
-        source-side tunnel subtype can't be inferred.
-        """
-        if identity.kind == "physical":
-            port = identity.port or 1
-            cage = identity.meta.get("mikrotik_cage")
-            if cage == "sfp":
-                return f"sfp{port}"
-            if cage == "sfpplus":
-                return f"sfp-sfpplus{port}"
-            if identity.name_speed_hint in ("40gig", "100gig"):
-                return f"qsfpplus{port}"
-            if identity.name_speed_hint in ("10gig", "25gig"):
-                return f"sfp-sfpplus{port}"
-            return f"ether{port}"
-        if identity.kind == "breakout":
-            # MikroTik expresses QSFP+ breakout lanes with the -<lane>
-            # suffix on the parent QSFP name.
-            return f"qsfpplus{identity.port or 1}-{identity.breakout_lane or 1}"
-        if identity.kind == "lag":
-            return f"bond{identity.index or 1}"
-        if identity.kind == "svi":
-            parent = identity.meta.get("mikrotik_parent")
-            if parent:
-                return f"{parent}.{identity.index}"
-            # Without a parent interface hint, fall back to a default
-            # parent (most common: primary bridge or ether1).  Caller
-            # can override via rename_map.
-            return f"bridge.{identity.index}"
-        if identity.kind == "loopback":
-            return "lo" if identity.index in (None, 0) else f"loopback{identity.index}"
-        if identity.kind == "tunnel":
-            # Prefer the source-side subtype hint (same-vendor round-
-            # trip preserves wg/gre/ipip/etc.); otherwise fall back to
-            # gre as the most portable default for cross-vendor.
-            subtype = identity.meta.get("mikrotik_tunnel", "gre")
-            idx = identity.index if identity.index else 1
-            return f"{subtype}{idx}" if subtype != "wg" else f"wg{idx}"
-        if identity.kind == "virtual":
-            bridge_name = identity.meta.get("mikrotik_bridge")
-            if bridge_name:
-                return bridge_name
-            return None
-        # hw_aggregate, mgmt, unknown — no RouterOS equivalent.
-        return None
+        return _port_names.format_port_identity(identity)
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)

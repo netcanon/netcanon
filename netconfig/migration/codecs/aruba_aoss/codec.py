@@ -29,6 +29,8 @@ from ...canonical.intent import (
 )
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
+from . import port_names as _port_names
+from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
 
 
 @register
@@ -46,13 +48,11 @@ class ArubaAOSSCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
-    #: AOS-S absorbs the SVI's L3 state into the VLAN stanza itself
-    #: (``vlan 11 / ip address X Y / exit``) — there's no
-    #: ``interface Vlan<N>`` port-name to rename in cross-vendor
-    #: translation.  The port-name orchestrator reads this flag to
-    #: suppress "no native representation" warnings on SVI identities
-    #: so the rename modal doesn't list non-actionable rows.
-    absorbs_svi_into_vlan: ClassVar[bool] = True
+    #: AOS-S absorbs the SVI's L3 state into the VLAN stanza itself.
+    #: Full explanation + list of participating code paths lives in
+    #: :mod:`._svi_absorption`; the value is imported from there so
+    #: the rule has a single source of truth.
+    absorbs_svi_into_vlan: ClassVar[bool] = ABSORBS_SVI_INTO_VLAN
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Aruba AOS-S "
         "(ProCurve / ArubaOS-Switch 16.x) device.  NOT the same as "
@@ -317,8 +317,13 @@ class ArubaAOSSCodec(CodecBase):
                 vlan_id = int(vm.group(1))
                 vlan, next_i = _parse_vlan_stanza(lines, i + 1, vlan_id)
                 intent.vlans.append(vlan)
-                # Stanzas may also declare an SVI IP; if so, create a
-                # VLAN interface so the canonical tree has an L3 record.
+                # SVI absorption — codepath 1 of 3.  See
+                # ._svi_absorption for the full rule.  AOS-S packs
+                # the SVI L3 inside the `vlan` stanza; we promote it
+                # to a canonical ``Vlan<N>`` CanonicalInterface here
+                # so downstream consumers (and renderers of *other*
+                # vendors that DO use ``interface Vlan<N>``) see the
+                # L3 record at the canonical location.
                 if vlan.ipv4_addresses:
                     intent.interfaces.append(CanonicalInterface(
                         name=f"Vlan{vlan_id}",
@@ -481,8 +486,14 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append(
                     f"   tagged {_format_port_list(vlan.tagged_ports)}"
                 )
-            # SVI address: may live on the vlan itself OR on a Vlan<N>
-            # interface — honour whichever has data.
+            # SVI absorption — codepath 2 of 3.  See
+            # ._svi_absorption for the full rule.  SVI address may
+            # live on the vlan itself (same-vendor round-trip) OR on
+            # a ``Vlan<N>`` CanonicalInterface (cross-vendor input
+            # from a codec that keeps VLAN L3 separate) — honour
+            # whichever has data so both input shapes render
+            # identically.  Corresponding Vlan<N> iface is skipped
+            # further down the interface emission loop.
             addrs = list(vlan.ipv4_addresses)
             svi_iface = vlan_ifaces_by_name.get(f"Vlan{vlan.id}")
             if not addrs and svi_iface is not None:
@@ -544,124 +555,16 @@ class ArubaAOSSCodec(CodecBase):
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation
     # -----------------------------------------------------------------
+    # Implementation extracted to :mod:`.port_names` — these methods
+    # delegate so the codec class stays focused on parse/render while
+    # the pure port-name translation primitives remain importable
+    # independently by the orchestrator.
 
-    def classify_port_name(self, name: str):  # -> PortIdentity
-        """Classify an AOS-S port name into a vendor-agnostic
-        :class:`PortIdentity`.
-
-        AOS-S port-name forms:
-
-            * ``24`` — standalone switch, port 24.
-            * ``1/24`` — stacked VSF, member 1, port 24.
-            * ``1/A1`` / ``1/B2`` — stacked VSF with letter-slot
-              uplink module (A / B / C), member 1, port 1 / 2.
-            * ``Trk1`` — LAG (case-insensitive, usually rendered ``trk1``).
-
-        AOS-S has no concept of:
-            * Multi-part slot/module numbering (unlike Cisco's
-              ``/member/module/port``)
-            * Breakout ports
-            * Loopback interfaces
-            * Tunnel interfaces
-            * Separate SVI "interface" stanzas (VLAN L3 lives inside
-              the ``vlan N`` stanza itself)
-
-        Everything unrecognised → ``unknown`` so the orchestrator
-        leaves the name verbatim with a warning.
-        """
-        from ...canonical.port_names import PortIdentity
-
-        stripped = name.strip()
-
-        # Trunk (LAG) — case-insensitive because the forum pastes vary
-        # between "Trk1" and "trk1".
-        m = re.match(r"^[Tt]rk(\d+)$", stripped)
-        if m:
-            return PortIdentity(
-                kind="lag", index=int(m.group(1)), original=name
-            )
-
-        # Stacked VSF with letter-slot uplink module: e.g. 1/A1, 2/B24.
-        m = re.match(r"^(\d+)/([A-Za-z])(\d+)$", stripped)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                stack=int(m.group(1)),
-                port=int(m.group(3)),
-                subslot_letter=m.group(2).upper(),
-                original=name,
-            )
-
-        # Stacked VSF plain: 1/24.
-        m = re.match(r"^(\d+)/(\d+)$", stripped)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                stack=int(m.group(1)),
-                port=int(m.group(2)),
-                original=name,
-            )
-
-        # Standalone: bare port number.
-        m = re.match(r"^(\d+)$", stripped)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                original=name,
-            )
-
-        return PortIdentity(kind="unknown", original=name)
+    def classify_port_name(self, name: str):
+        return _port_names.classify_port_name(name)
 
     def format_port_identity(self, identity) -> str | None:
-        """Render a :class:`PortIdentity` as an AOS-S port name.
-
-        Collapses Cisco-style three-part notation by DROPPING the
-        middle (module) digit when it's 0 — ``Gi1/0/24`` → ``1/24``.
-        For non-zero middle digits (typically uplink modules on
-        Cisco stack members) the caller gets a ``None`` return so
-        the orchestrator emits a "review uplink mapping" warning.
-        """
-        if identity.kind == "physical":
-            # Aruba can't represent a non-zero middle module digit
-            # — C9300 ``Gi1/1/1`` is an uplink-module port that maps
-            # to Aruba ``1/A1``/``1/B1`` only if the operator tells
-            # us which letter; we don't know that from the source
-            # config alone.  Bail with a warning.
-            if identity.module and identity.module != 0:
-                return None
-            # Aruba has no port 0.  Cisco's ``GigabitEthernet0/0``
-            # is the dedicated OOBM management port — Aruba's
-            # equivalent is the separate OOBM concept (not in the
-            # regular port-name space), so leave verbatim + warn
-            # instead of collapsing to bogus ``"1"`` via ``port or 1``.
-            if identity.port == 0:
-                return None
-            if identity.subslot_letter:
-                # 1/A1 style (uplink module).
-                return (
-                    f"{identity.stack or 1}/"
-                    f"{identity.subslot_letter}{identity.port or 1}"
-                )
-            if identity.stack is not None:
-                return f"{identity.stack}/{identity.port or 1}"
-            return str(identity.port or 1)
-        if identity.kind == "lag":
-            return f"Trk{identity.index or 1}"
-        # SVI — AOS-S absorbs the L3 config into the VLAN stanza,
-        # there's no "interface VlanN" concept.  The renderer already
-        # handles this; the orchestrator should leave SVIs as-is so
-        # the renderer knows not to emit them as physical-port
-        # stanzas.  Returning None signals "leave verbatim, warn."
-        # This is technically correct — Aruba render's own logic
-        # decides whether a name starting with Vlan becomes a
-        # VLAN-stanza absorption or a silent drop.
-        if identity.kind == "svi":
-            return None
-        # AOS-S has no loopback, tunnel, breakout, or hw_aggregate.
-        # mgmt is a separate OOBM concept that doesn't share the
-        # port-name space.
-        return None
+        return _port_names.format_port_identity(identity)
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)

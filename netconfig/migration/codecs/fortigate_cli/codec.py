@@ -31,6 +31,7 @@ from ...canonical.intent import (
 )
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
+from . import port_names as _port_names
 
 
 @register
@@ -441,174 +442,17 @@ class FortiGateCLICodec(CodecBase):
     # Cross-vendor port-name translation
     # -----------------------------------------------------------------
 
-    def classify_port_name(self, name: str):  # -> PortIdentity
-        """Classify a FortiGate interface name into a :class:`PortIdentity`.
+    # -----------------------------------------------------------------
+    # Cross-vendor port-name translation
+    # -----------------------------------------------------------------
+    # Implementation extracted to :mod:`.port_names` — these methods
+    # delegate so the codec class stays focused on parse/render.
 
-        FortiGate naming is unusual in two ways compared with the
-        other vendors:
-
-        1. **Role-coded prefixes.**  ``wan1`` / ``wan2`` / ``lan`` /
-           ``lanN`` / ``internal`` / ``internalN`` / ``dmz`` — a given
-           port's NAME encodes its intended role, not its physical
-           location.  Moving a physical port from ``lan1`` to
-           ``wan2`` is a rename, not a jumper re-pin.
-        2. **Hardware-switch aggregates.**  On small FortiGate
-           appliances (e.g. 40F / 60F / 80F) the ``internal``
-           interface is a L2 switch fabric unifying N physical ports
-           (often ``internal1..7``).  This is ``kind="hw_aggregate"``
-           — no other vendor has a direct equivalent.
-
-        User-named VLAN subinterfaces (``VL_100``, ``VLAN-DMZ``) and
-        user-named LAGs (``LAG_INTERNAL``) classify as ``unknown``
-        because there's no deterministic way to map a user-chosen
-        name to a cross-vendor convention.  The canonical tree keeps
-        them verbatim; the rename-map override (Tier 2) lets the
-        operator supply an explicit mapping.
-        """
-        from ...canonical.port_names import PortIdentity
-
-        stripped = name.strip()
-
-        # Generic port numbering: port1, port2, …
-        m = re.match(r"^port(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                meta={"fortigate_role": "port"},
-                original=name,
-            )
-
-        # Role-coded physical ports: wan1, wan2, lan, lanN, dmz,
-        # internal (bare name — hw aggregate), internalN (physical
-        # member of the internal aggregate).
-        m = re.match(
-            r"^(wan|dmz|mgmt|ha|modem|fortilink)(\d+)?$",
-            stripped, re.IGNORECASE,
-        )
-        if m:
-            role = m.group(1).lower()
-            port_num = int(m.group(2)) if m.group(2) else 1
-            kind = "mgmt" if role == "mgmt" else "physical"
-            return PortIdentity(
-                kind=kind,
-                port=port_num,
-                meta={"fortigate_role": role},
-                original=name,
-            )
-
-        # ``lan`` without suffix — hardware-switch aggregate on small
-        # FortiGates.  ``lan<N>`` with suffix — physical member of
-        # either a hw-switch aggregate or a standalone routed port,
-        # depending on chassis.  Classify bare form as hw_aggregate
-        # so the warning flags the migration-sensitive case; the
-        # numbered form is classified as plain physical.
-        if stripped.lower() == "lan":
-            return PortIdentity(
-                kind="hw_aggregate",
-                aggregate_kind="hardware-switch",
-                meta={"fortigate_role": "lan"},
-                original=name,
-            )
-        m = re.match(r"^lan(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                meta={"fortigate_role": "lan"},
-                original=name,
-            )
-
-        # ``internal`` bare = hardware-switch aggregate; ``internalN``
-        # = physical member.
-        if stripped.lower() == "internal":
-            return PortIdentity(
-                kind="hw_aggregate",
-                aggregate_kind="hardware-switch",
-                meta={"fortigate_role": "internal"},
-                original=name,
-            )
-        m = re.match(r"^internal(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="physical",
-                port=int(m.group(1)),
-                meta={"fortigate_role": "internal"},
-                original=name,
-            )
-
-        # Tunnels: ssl.root, ssl.web, gre1, ipsec interfaces (usually
-        # named by user).  SSL-VPN root tunnel is a special case.
-        if stripped.lower() == "ssl.root":
-            return PortIdentity(
-                kind="tunnel",
-                meta={"fortigate_tunnel": "ssl"},
-                original=name,
-            )
-        m = re.match(r"^gre(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="tunnel",
-                index=int(m.group(1)),
-                meta={"fortigate_tunnel": "gre"},
-                original=name,
-            )
-
-        # Loopback.
-        m = re.match(r"^loopback(\d+)$", stripped, re.IGNORECASE)
-        if m:
-            return PortIdentity(
-                kind="loopback", index=int(m.group(1)), original=name
-            )
-
-        # User-named VLAN subinterfaces (VL_100, VLAN-*, etc.) and
-        # user-named LAGs (LAG_*, etc.) fall through as unknown —
-        # no deterministic classification possible from the name
-        # alone.
-        return PortIdentity(kind="unknown", original=name)
+    def classify_port_name(self, name: str):
+        return _port_names.classify_port_name(name)
 
     def format_port_identity(self, identity) -> str | None:
-        """Render a :class:`PortIdentity` as a FortiGate interface name.
-
-        For physical ports we prefer the ``fortigate_role`` meta hint
-        if the source identity carried one (same-vendor round-trip
-        preserves wan/lan/internal/dmz naming).  Cross-vendor
-        identities without a role hint fall back to ``port<N>``
-        which is the neutral generic form on FG100+ hardware.
-        """
-        if identity.kind == "physical":
-            role = identity.meta.get("fortigate_role", "port")
-            if role == "port":
-                return f"port{identity.port or 1}"
-            if identity.port and identity.port > 1:
-                return f"{role}{identity.port}"
-            # Role-only bare form (e.g. wan = wan1, lan = lan).
-            return role if role in ("lan",) else f"{role}{identity.port or 1}"
-        if identity.kind == "hw_aggregate":
-            # Only FortiGate has this concept.  Same-vendor target
-            # round-trips the role name; cross-vendor would have
-            # returned None via the other codec's format_port_identity.
-            role = identity.meta.get("fortigate_role", "internal")
-            return role
-        if identity.kind == "lag":
-            # FortiGate LAGs are user-named — no deterministic form.
-            # Return a sensible default (``LAG<N>``); operator can
-            # override via rename_map.
-            return f"LAG{identity.index or 1}"
-        if identity.kind == "loopback":
-            return f"loopback{identity.index or 0}"
-        if identity.kind == "tunnel":
-            kind = identity.meta.get("fortigate_tunnel")
-            if kind == "ssl":
-                return "ssl.root"
-            if kind == "gre":
-                return f"gre{identity.index or 1}"
-            return f"gre{identity.index or 1}"
-        if identity.kind == "mgmt":
-            return "mgmt"
-        # svi, virtual, breakout, unknown — no deterministic FortiGate form
-        # (user picks the VL_XXX / LAG_XXX name).
-        return None
+        return _port_names.format_port_identity(identity)
 
     # -----------------------------------------------------------------
     # Auto-detection probe (R5)
