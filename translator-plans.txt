@@ -212,11 +212,14 @@ LAYER 4 — TRANSPORT
 --- MIGRATION PATH FROM CURRENT CODE (R1–R7) ---
 
   ┌────────────────────────────────────────────────────────────────┐
-  │ REAL-CAPTURE VALIDATION — 4/5 vendors done, Aruba blocked      │
+  │ REAL-CAPTURE VALIDATION — all 5 vendors covered                │
   ├────────────────────────────────────────────────────────────────┤
-  │ STATUS: Cisco/OPNsense/MikroTik/FortiGate validated.  Aruba    │
-  │   AOS-S blocked on finding a public capture (see dedicated     │
-  │   README in tests/fixtures/real/aruba_aoss/).                  │
+  │ STATUS: Cisco/OPNsense/MikroTik/FortiGate validated against    │
+  │   captured configs.  Aruba AOS-S partially unblocked via       │
+  │   Aruba Central 5MemberStack template rendered through         │
+  │   scripts/render_aruba_central_template.py.  Rendered fixture  │
+  │   is strictly less valuable than a real sanitised capture —    │
+  │   do-better note in the aruba_aoss/README.md.                  │
   │                                                                │
   │ Infrastructure shipped:                                        │
   │   * tests/fixtures/real/ directory with per-vendor subdirs.    │
@@ -238,7 +241,8 @@ LAYER 4 — TRANSPORT
   │   opnsense        |    2     |  0   | best_effort (unchanged)   │
   │   mikrotik        |    1     |  1   | best_effort (unchanged)   │
   │   fortigate       |    1     |  1   | best_effort (unchanged)   │
-  │   aruba_aoss      |    0     | BLK  | best_effort (unchanged)   │
+  │   aruba_aoss      |   1*     |  0   | best_effort (unchanged)   │
+  │   *rendered from Central template, not captured                 │
   │                                                                │
   │ 3 bugs surfaced by real captures, all fixed in-session with    │
   │ regression tests.  Sample bugs — each would have survived      │
@@ -276,19 +280,22 @@ LAYER 4 — TRANSPORT
   │                                                                │
   │ Still to do — to graduate any codec to `certified`             │
   │ (≥3 captures from ≥2 OS versions, round-trip stable):          │
-  │   * Unblock Aruba AOS-S — need 1+ real capture.  Best lead:    │
-  │     render aruba/central-sample-bulk-configurations 5member    │
-  │     template with placeholder substitution.                    │
-  │   * Double fixture counts on OPNsense / MikroTik / FortiGate   │
-  │     (currently 2/1/1 → need 3/3/3) and target 2 OS versions    │
-  │     per codec.                                                 │
+  │   * DO-BETTER for Aruba: swap rendered template for a real     │
+  │     sanitised capture when one surfaces.  Rendered template    │
+  │     only exercises grammar Aruba's template author             │
+  │     anticipated — real deployments carry corner cases that     │
+  │     surface further bugs (as every real vendor capture has     │
+  │     done so far).                                              │
+  │   * Double fixture counts on OPNsense / MikroTik / FortiGate / │
+  │     Aruba (currently 2/1/1/1 → need 3/3/3/3) and target 2 OS   │
+  │     versions per codec.                                        │
   │ cisco_iosxe_cli is parse_only so the round-trip graduation     │
   │ path is actually via a consumer codec (Aruba/OPNsense/etc.)    │
   │ rendering the Cisco-parsed intent and checking vs. source.     │
   │                                                                │
-  │ 1012 tests passing (was 885 at start of the bug-fix batch,     │
-  │ +127 across all 4 bug fixes + real-capture harness + 4 vendor  │
-  │ validations).                                                  │
+  │ 1015 tests passing (was 885 at start of the bug-fix batch,     │
+  │ +130 across all 4 bug fixes + real-capture harness + all       │
+  │ 5 vendor validations).                                         │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐

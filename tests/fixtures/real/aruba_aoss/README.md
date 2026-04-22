@@ -1,47 +1,62 @@
-# Aruba AOS-S real captures — BLOCKED
+# Aruba AOS-S real captures — rendered from Aruba Central template
 
-**Status:** No permissively-licensed public captures of Aruba AOS-S
-(formerly HP ProCurve) running-config have been located at the time
-of the first real-capture validation pass.
+**Status:** *partially unblocked* via upstream-template rendering.
+One fixture committed; a real deployed AOS-S capture is still the
+preferred long-term answer.
 
-## What was searched
+## What's here
 
-* Aruba/HPE org repos on GitHub (aruba, HewlettPackard, HPENetworking)
-* NTC-Templates `tests/hp_procurve/` — only has `show <cmd>` output
-  fixtures, no full running-config captures
-* Aruba's `central-sample-bulk-configurations` repo — has a 5-member
-  stack template but it's a `%variable%`-interpolated template with
-  `%if%/%endif%` directives, not directly parseable AOS-S config
-* aruba/aos-switch-ansible-collection — no sample configs
+`aruba_central_5memberstack_rendered.cfg` — the output of
+`scripts/render_aruba_central_template.py` applied to Aruba Central's
+`5MemberStack` bulk-configuration template
+([aruba/central-sample-bulk-configurations](https://github.com/aruba/central-sample-bulk-configurations)
+`ArubaOS-Switch Templates/5MemberStack - Template/5memberStack - Template.txt`).
 
-## Why we're not synthesising one
+Provenance chain:
 
-Real-capture validation earns a codec the right to claim its parser
-survives "the real world".  A fixture I write, even if it mimics
-AOS-S structural markers faithfully, exercises only the grammar I
-already had in mind when I wrote the parser — the whole point of
-this harness is to surface grammar the author didn't anticipate.
+    Aruba Central template (BSD)
+        -> scripts/render_aruba_central_template.py (in-tree)
+        -> aruba_central_5memberstack_rendered.cfg
 
-## How to unblock
+The script substitutes defensible defaults for every `%variable%`
+(hostname, IPs, VLAN IDs, etc.), takes sensible branches through
+`%if% / %else% / %endif%` directives, and post-processes to dedent
+top-level stanzas that the template's nested conditionals indented.
 
-Drop any permissively-licensed AOS-S running-config snippet into this
-directory (2+KB, must include `; J####A Configuration Editor` banner
-or other AOS-S structural marker to confirm provenance).  The
-parametrized harness in `tests/unit/migration/test_real_captures.py`
-picks it up automatically — no code changes needed.  Update
-`NOTICE.md` in the parent dir with origin URL + license, then
-re-run `pytest tests/unit/migration/test_real_captures.py -v -s`.
+## Do-better note
 
-Candidate sources to try:
+A rendered template still only exercises grammar Aruba's template
+author anticipated — strictly less valuable than a sanitised capture
+from a deployed switch (which could surface corner-case grammar even
+Aruba's template authors didn't expect to see).
+
+Swap this fixture for a real capture when one becomes available.
+Candidate sources:
 
 * **Vendor-authored migration guides** — HPE / Aruba migration docs
   sometimes include sanitised customer config snippets.
-* **Reverse-engineering AOS-S templates** — Aruba Central's
-  `central-sample-bulk-configurations` has templates we could
-  render with a placeholder-substitution script; commit the
-  rendered output with provenance pointing at both the template and
-  the substitution script.
-* **Community-sanitised configs** — r/Networking, Network
-  Engineering Stack Exchange, HP networking forums.
-* **GNS3 / EVE-NG saved configs** — occasionally published on
-  GitHub under permissive licenses.
+* **Community-sanitised configs** — r/Networking, Network Engineering
+  Stack Exchange, HP networking forums.
+* **GNS3 / EVE-NG saved configs** — occasionally published on GitHub
+  under permissive licenses.
+
+The parametrized harness at `tests/unit/migration/test_real_captures.py`
+picks up every `*.txt` / `*.cfg` / `*.xml` / `*.conf` / `*.rsc` under
+this directory automatically — no code changes needed to add more.
+
+## Re-rendering
+
+If the upstream template changes and you want to regenerate:
+
+```
+curl -o /tmp/tpl.txt \\
+    'https://raw.githubusercontent.com/aruba/central-sample-bulk-configurations/master/ArubaOS-Switch%20Templates/5MemberStack%20-%20Template/5memberStack%20-%20Template.txt'
+python scripts/render_aruba_central_template.py \\
+    --template /tmp/tpl.txt \\
+    --output tests/fixtures/real/aruba_aoss/aruba_central_5memberstack_rendered.cfg
+```
+
+The upstream template currently has an off-by-one (1462 `%if%` vs.
+1461 `%endif%` as of this writing) — the script auto-closes the
+unclosed block with a stderr warning and renders the best-effort
+result.

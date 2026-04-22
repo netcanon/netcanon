@@ -42,7 +42,9 @@ re-discover them.
 
 ## aruba_aoss/
 
-**BLOCKED** — see `aruba_aoss/README.md` for what was searched and how to unblock.
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `aruba_central_5memberstack_rendered.cfg` | [aruba/central-sample-bulk-configurations](https://github.com/aruba/central-sample-bulk-configurations) `ArubaOS-Switch Templates/5MemberStack - Template/5memberStack - Template.txt` | BSD-2-Clause *(upstream)* | **Rendered** from Aruba Central's bulk-config template via `scripts/render_aruba_central_template.py` (defensible-defaults substitution + top-level-keyword dedent post-pass).  Real AOS-S grammar, but with placeholder values — see `aruba_aoss/README.md` for the "do better later" note. |
 
 ---
 

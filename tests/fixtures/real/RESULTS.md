@@ -161,14 +161,49 @@ deployments.
 **Direction:** `bidirectional`
 **Certainty:** `best_effort` *(unchanged)*
 
-**STATUS: BLOCKED** — see `aruba_aoss/README.md` for what was
-searched and how to unblock.  No permissively-licensed public AOS-S
-running-config captures found.
+### Coverage matrix
 
-Follow-up sessions should consider rendering Aruba Central's
-`central-sample-bulk-configurations` 5MemberStack template through a
-placeholder-substitution script and committing the output with
-provenance pointing at both the template and the script.
+| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `aruba_central_5memberstack_rendered.cfg` | 162 | 1 | 1 | 48 | 3 | 3 | 1 | Rendered from Aruba Central's 5MemberStack bulk-config template via in-tree script (see `aruba_aoss/README.md`).  Exercises hostname, module/snmp engine id, motd banner, logging, static routes (incl. default gateway), manager password stanza, NTP, VLAN 1 + VLAN 20 (USERS) + VLAN 30 (VOICE) with tagged/untagged port lists, 48 interfaces + A1, `trunk` LAG, STP, device-profile for APs. |
+
+### Findings
+
+**Harness refinement surfaced (not a codec bug):** The round-trip
+invariant's strict-equality comparison broke on ordering differences.
+First parse saw interfaces before `vlan` stanzas (template layout);
+our render emits VLANs first; second parse then appended Vlan SVI
+interfaces at the front, diverging from first parse's interface list
+order.  Canonical *meaning* was identical — the ordering difference
+was cosmetic.  Fixed the harness to sort collections by natural
+identity key (interfaces by name, vlans by id, etc.) before comparing.
+Applies to all codecs; no codec behaviour changed.
+
+**Rendering-script refinement surfaced:** Initial render produced
+only 22 lines (most VLANs/interfaces dropped) because the template
+inconsistently uses `member.1.ports` (no underscore) vs.
+`_member.N.ports` for N>1.  Populate both forms in the substitutions
+dict.  Then: only 1 VLAN visible post-parse because the template's
+nested `%if%` blocks indent `vlan <N>` sub-stanzas and our AOS-S
+parser treats indented lines as stanza body (which is correct for
+real AOS-S — real output doesn't have this problem).  Added a
+post-pass to the render script that dedents any line starting with
+a recognised AOS-S top-level keyword.  Final coverage: 3 VLANs,
+48 interfaces, 3 static routes, 1 LAG — matches what the template
+describes.
+
+### Certification decision
+
+**Stay at `best_effort`.**  The fixture is rendered, not captured,
+so strictly speaking it's still exercising grammar Aruba's template
+author anticipated — not the long tail of real deployments.
+Promoting to `certified` requires a sanitised real capture.
+
+### Do-better note
+
+A genuine sanitised AOS-S capture would be strictly more valuable.
+Candidate paths to get one are listed in `aruba_aoss/README.md`.
+Swap the rendered fixture out whenever we find one.
 
 ---
 
@@ -180,8 +215,8 @@ provenance pointing at both the template and the script.
 | opnsense | 2 | 0 | best_effort |
 | mikrotik_routeros | 1 | 1 (round-trip interface_type drift) | best_effort |
 | fortigate_cli | 1 | 1 (implicit VLAN typing) | best_effort |
-| aruba_aoss | 0 | BLOCKED | best_effort |
-| **TOTAL** | **7** | **3** | — |
+| aruba_aoss | 1 *(rendered, not captured)* | 0 (harness + render-script refinements only) | best_effort |
+| **TOTAL** | **8** | **3** | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —

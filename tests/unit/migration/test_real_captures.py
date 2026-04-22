@@ -294,11 +294,32 @@ def test_real_capture_round_trips_stable(
 
     # Strip metadata that encodes WHICH parse produced the tree — it's
     # not a round-trip stability property.
+    #
+    # Also sort list fields where ordering is cosmetic (interfaces,
+    # vlans, static_routes, lags): renderers may emit sections in a
+    # different order than the source file (e.g. Aruba emits VLAN
+    # stanzas before interfaces but templates often put interfaces
+    # first), so a first parse sees a different list order than a
+    # re-parse even though canonical meaning is identical.  Sorting
+    # by the natural identity key for each type gives us the semantic
+    # equality check we actually want.
     def _compare(intent: CanonicalIntent) -> dict[str, Any]:
         d = intent.model_dump()
         d.pop("source_vendor", None)
         d.pop("source_format", None)
         d.pop("source_version", None)
+        # Sort collections by natural identity key.
+        for key, id_key in [
+            ("interfaces", "name"),
+            ("vlans", "id"),
+            ("static_routes", "destination"),
+            ("lags", "name"),
+            ("dhcp_servers", "network"),
+            ("local_users", "name"),
+            ("radius_servers", "host"),
+        ]:
+            if key in d and isinstance(d[key], list):
+                d[key] = sorted(d[key], key=lambda x: x.get(id_key, ""))
         return d
 
     assert _compare(first) == _compare(second), (
