@@ -392,6 +392,18 @@ class MigrationPlanRequest(BaseModel):
     raw_text: str | None = None
     source_filename: str | None = None
     force: bool = False
+    port_rename_map: dict[str, str] | None = None
+    """Optional per-port target-name override map.  When provided, the
+    pipeline runs the Tier 2 port-name translator with these entries
+    taking precedence over the auto-heuristic.  Used by the Tier 3 UI
+    rename modal.  Backwards-compatible: callers that don't set this
+    get the legacy behaviour (no port-name translation at all)."""
+
+    target_profile: str | None = None
+    """Optional target-device profile key (``vendor/model`` form, e.g.
+    ``aruba_aoss/2930F-48G-PoEP``).  Advisory only — the rename modal
+    uses this to drive dropdown options and validate port ids against
+    the target device's known port set.  Does not affect rendering."""
 
 
 class CodecInfo(BaseModel):

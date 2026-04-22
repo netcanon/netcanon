@@ -138,6 +138,16 @@ def sample_definitions_dir(tmp_path: Path) -> Path:
     (defs_dir / "cisco" / "cisco.yaml").write_text(CISCO_YAML, encoding="utf-8")
     (defs_dir / "opnsense").mkdir()
     (defs_dir / "opnsense" / "opnsense.yaml").write_text(OPNSENSE_YAML, encoding="utf-8")
+    # Copy real target profiles in so integration tests can exercise
+    # the Tier 3 port-rename UI backend.  Profiles are declarative
+    # YAML — no test-specific variant is needed; shipping them under
+    # definitions/target_profiles/ is the exact same data the app
+    # loads in production.
+    repo_root = Path(__file__).resolve().parents[1]
+    repo_profiles = repo_root / "definitions" / "target_profiles"
+    if repo_profiles.is_dir():
+        import shutil
+        shutil.copytree(repo_profiles, defs_dir / "target_profiles")
     return defs_dir
 
 

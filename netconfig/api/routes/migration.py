@@ -28,8 +28,9 @@ from ...models.migration import (
     MigrationJob,
     MigrationPlanRequest,
 )
+from ...migration.target_profiles import TargetProfile
 from ...services.migration_detect import DetectCandidate, detect_codec
-from ...services.migration_pipeline import run_plan
+from ...services.migration_pipeline import run_plan, run_plan_with_rename
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
 
@@ -189,7 +190,19 @@ def plan_migration(
     source = _resolve_adapter_or_422(body.source, side="source")
     target = _resolve_adapter_or_422(body.target, side="target")
     raw_text = _resolve_input_text(body, storage)
-    job = run_plan(source, target, raw_text, force=body.force)
+    # Route to the rename-aware pipeline when the caller supplied
+    # either an explicit rename map OR a target profile selection
+    # (target-profile alone means "run auto-heuristic + return
+    # diagnostics the UI can render").  Legacy callers that supply
+    # neither get ``run_plan`` unchanged.
+    if body.port_rename_map is not None or body.target_profile is not None:
+        job = run_plan_with_rename(
+            source, target, raw_text,
+            port_rename_map=body.port_rename_map or {},
+            force=body.force,
+        )
+    else:
+        job = run_plan(source, target, raw_text, force=body.force)
     logger.info(
         "Migration plan %s: %s -> %s = %s",
         job.id[:8],
@@ -270,3 +283,57 @@ def detect_source_codec(
                 detail=f"source_filename not found: {body.source_filename!r}",
             )
     return detect_codec(raw, min_confidence=body.min_confidence)
+
+
+# ---------------------------------------------------------------------------
+# Target profiles (Tier 3 port-rename UI)
+# ---------------------------------------------------------------------------
+
+
+def _get_target_profiles(request: Request) -> dict[str, TargetProfile]:
+    """Dependency: pull the app-state profiles dict loaded at startup."""
+    return getattr(request.app.state, "target_profiles", {})
+
+
+@router.get(
+    "/target-profiles",
+    response_model=list[TargetProfile],
+    summary="List target-device profiles for the rename modal",
+)
+def list_target_profiles(
+    request: Request,
+) -> list[TargetProfile]:
+    """Return every loaded target profile.
+
+    Profiles drive the Tier 3 port-rename UI's dropdown options and
+    collision-detection logic.  See
+    :mod:`netconfig.migration.target_profiles` for the YAML schema
+    and :file:`definitions/target_profiles/*.yaml` for examples.
+
+    The list may be empty if no profiles are defined — the UI falls
+    back to free-form target-name entry in that case.
+    """
+    profiles = _get_target_profiles(request)
+    return list(profiles.values())
+
+
+@router.get(
+    "/target-profiles/{vendor}/{model}",
+    response_model=TargetProfile,
+    summary="Fetch a single target profile by vendor/model key",
+    responses={404: {"description": "profile not found"}},
+)
+def get_target_profile(
+    vendor: str,
+    model: str,
+    request: Request,
+) -> TargetProfile:
+    """Return a single target profile by its ``vendor/model`` key."""
+    profiles = _get_target_profiles(request)
+    key = f"{vendor}/{model}"
+    if key not in profiles:
+        raise HTTPException(
+            status_code=404,
+            detail=f"target profile not found: {key!r}",
+        )
+    return profiles[key]

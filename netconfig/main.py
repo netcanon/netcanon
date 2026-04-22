@@ -98,6 +98,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from .migration.vendors import load_vendors
         _app.state.vendors = load_vendors()
 
+        # Load target-device profiles (Tier 3 port-rename UI data).
+        # Profiles are optional — the UI falls back to free-form target
+        # naming when none are defined.
+        from .migration.target_profiles import load_profiles_dir
+        _app.state.target_profiles = load_profiles_dir(
+            settings.definitions_dir / "target_profiles"
+        )
+
         # Verify storage directories are writable before proceeding.
         data_root = settings.configs_dir.parent
         for check_dir in [settings.configs_dir, data_root]:
