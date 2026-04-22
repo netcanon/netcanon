@@ -448,6 +448,13 @@
             disabled>
       <option value="">— pick vendor first —</option>
     </select>
+    <select id="mig-rename-target-module"
+            data-testid="migrate-rename-target-module-select"
+            style="display:none"
+            title="Uplink module variant — only meaningful for chassis with swappable NM / expansion cards"
+            disabled>
+      <option value="">— no modules —</option>
+    </select>
     <span class="summary"
           id="mig-rename-summary"
           data-testid="migrate-rename-summary"></span>
@@ -1177,6 +1184,8 @@
       placeholder.value = '';
       placeholder.textContent = '— pick vendor first —';
       msel.appendChild(placeholder);
+      // Model reset → module dropdown also clears.
+      populateRenameModuleDropdown(vendor, '');
       return;
     }
     msel.disabled = false;
@@ -1198,6 +1207,58 @@
       opt.textContent = p.display_name || p.model;
       msel.appendChild(opt);
     });
+    // Repopulate module dropdown for the (possibly-newly-selected)
+    // model — no model yet → hides the dropdown.
+    populateRenameModuleDropdown(vendor, msel.value);
+  }
+
+  /** Populate the third-stage module dropdown based on the selected
+   *  profile's ``modules`` dict.  Hides the dropdown entirely when the
+   *  profile has no modules — the UI rule is "module dropdown only
+   *  appears for chassis with swappable uplink hardware".
+   *
+   *  Called whenever vendor or model changes.  When the profile does
+   *  have modules, preselects the first SKU (or "default" if present —
+   *  matches backend :meth:`TargetProfile.default_module_sku`). */
+  function populateRenameModuleDropdown(vendor, model) {
+    var modsel = document.getElementById('mig-rename-target-module');
+    if (!modsel) return;
+    modsel.innerHTML = '';
+    var profile = (vendor && model)
+      ? _renameProfiles.find(function(p) {
+          return p.vendor === vendor && p.model === model;
+        })
+      : null;
+    var modules = (profile && profile.modules) || {};
+    var skus = Object.keys(modules);
+    if (skus.length === 0) {
+      // Legacy profile (or no profile) — dropdown hidden.
+      modsel.style.display = 'none';
+      modsel.disabled = true;
+      var ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = '— no modules —';
+      modsel.appendChild(ph);
+      return;
+    }
+    // Module-variant profile — show the dropdown and populate SKUs.
+    modsel.style.display = '';
+    modsel.disabled = false;
+    // Default-SKU resolution mirrors backend default_module_sku():
+    // "default" literal wins; otherwise first-declared wins.
+    var defaultSku = skus.indexOf('default') !== -1
+      ? 'default'
+      : skus[0];
+    skus.forEach(function(sku) {
+      var opt = document.createElement('option');
+      opt.value = sku;
+      var mod = modules[sku] || {};
+      var label = sku;
+      if (mod.description) label += ' — ' + mod.description;
+      opt.textContent = label;
+      if (sku === defaultSku) opt.selected = true;
+      modsel.appendChild(opt);
+    });
   }
 
   /** Return the currently-selected profile key (``vendor/model``)
@@ -1209,6 +1270,41 @@
     var vendor = vsel ? vsel.value : '';
     var model = msel ? msel.value : '';
     return (vendor && model) ? (vendor + '/' + model) : '';
+  }
+
+  /** Return the currently-selected module SKU, or empty string when
+   *  no module-variant profile is active.  Used by
+   *  :func:`effectivePortsFor` to scope the target-port dropdown
+   *  options to the selected module. */
+  function currentRenameModuleSku() {
+    var modsel = document.getElementById('mig-rename-target-module');
+    if (!modsel || modsel.style.display === 'none') return '';
+    return modsel.value || '';
+  }
+
+  /** Return the effective port inventory for *profile* considering
+   *  the current module selection.  Mirrors backend
+   *  :meth:`TargetProfile.effective_ports` — base ``ports`` plus the
+   *  selected module's ``ports`` (falls back to base-only when the
+   *  profile has no modules or the selected SKU is unknown).
+   *
+   *  This is the single chokepoint the rename modal uses to decide
+   *  which target-port ids populate its per-row dropdowns, so adding
+   *  a fourth dimension later (e.g. "uplink mode" toggling 10G/25G)
+   *  happens here only. */
+  function effectivePortsFor(profile) {
+    if (!profile) return [];
+    var base = profile.ports || [];
+    var modules = profile.modules || {};
+    var skus = Object.keys(modules);
+    if (skus.length === 0) return base.slice();
+    var sku = currentRenameModuleSku();
+    // Unknown / empty SKU → fall back to default_module_sku() semantics.
+    if (!sku || !modules[sku]) {
+      sku = skus.indexOf('default') !== -1 ? 'default' : skus[0];
+    }
+    var modulePorts = (modules[sku] && modules[sku].ports) || [];
+    return base.concat(modulePorts);
   }
 
   /** Call from renderResult: remember the job + request body so the
@@ -1440,6 +1536,11 @@
     });
     function profileOptionsFor(kind, sourceName) {
       if (!selectedProfile) return null;
+      // Effective port set = chassis-fixed + selected-module ports.
+      // For legacy profiles (no modules) this is identical to
+      // ``selectedProfile.ports``; for module-variant profiles it
+      // adds the currently-selected module's uplinks.
+      var effectivePorts = effectivePortsFor(selectedProfile);
       if (kind === 'physical') {
         // Split physical rows by uplink heuristic: source names that
         // look like uplinks get uplink-port options, access-looking
@@ -1447,17 +1548,17 @@
         // FortyGig being offered 48 access ports on a 2930F-48G.
         var targetKind = (sourceName && looksLikeUplink(sourceName))
           ? 'uplink' : 'physical';
-        return selectedProfile.ports
+        return effectivePorts
           .filter(function(p) { return p.kind === targetKind; })
           .map(function(p) { return p.id; });
       }
       if (kind === 'uplink' || kind === 'breakout') {
-        return selectedProfile.ports
+        return effectivePorts
           .filter(function(p) { return p.kind === 'uplink'; })
           .map(function(p) { return p.id; });
       }
       if (kind === 'mgmt') {
-        return selectedProfile.ports
+        return effectivePorts
           .filter(function(p) { return p.kind === 'mgmt'; })
           .map(function(p) { return p.id; });
       }
@@ -1842,6 +1943,10 @@
     body.port_rename_map = Object.assign({}, _renameUserMap);
     var profileKey = currentRenameProfileKey();
     if (profileKey) body.target_profile = profileKey;
+    // Only send target_module when the profile actually has
+    // modules — prevents noise in the request for legacy profiles.
+    var moduleSku = currentRenameModuleSku();
+    if (moduleSku) body.target_module = moduleSku;
     try {
       var resp = await fetch('/api/v1/migration/plan', {
         method: 'POST',
@@ -1917,12 +2022,15 @@
 
     var vsel = document.getElementById('mig-rename-target-vendor');
     var msel = document.getElementById('mig-rename-target-model');
+    var modsel = document.getElementById('mig-rename-target-module');
 
     if (vsel) {
       vsel.addEventListener('change', function() {
         // Re-populate the model dropdown whenever the vendor changes.
         // Model resets to "(pick model)" — user must explicitly commit
-        // to hardware; we don't guess.
+        // to hardware; we don't guess.  populateRenameModelDropdown
+        // cascades into populateRenameModuleDropdown, so the module
+        // dropdown gets reset in the same step.
         populateRenameModelDropdown(vsel.value);
         renderRenameTable();
         renderRenamePreview();
@@ -1931,11 +2039,29 @@
     }
     if (msel) {
       msel.addEventListener('change', function() {
-        // User overrides that pointed at a port in the PREVIOUS
-        // profile's namespace are preserved but surfaced as
-        // "(custom: X — not in profile)" rows in the dropdown —
-        // operator can then see what's orphaned and decide to keep
-        // or re-pick.  See renderRenameTable().
+        // Re-populate the module dropdown when the model changes —
+        // different chassis have different NM-slot inventories (or
+        // none at all for legacy profiles).  User overrides that
+        // pointed at a port in the PREVIOUS profile's namespace are
+        // preserved but surfaced as "(custom: X — not in profile)"
+        // rows in the dropdown — operator can then see what's
+        // orphaned and decide to keep or re-pick.  See
+        // renderRenameTable().
+        populateRenameModuleDropdown(vsel ? vsel.value : '', msel.value);
+        renderRenameTable();
+        renderRenamePreview();
+        renderRenameSummary();
+      });
+    }
+    if (modsel) {
+      modsel.addEventListener('change', function() {
+        // Module swap (e.g. Cat 9300 NM-8X → NM-2Q).  Existing user
+        // overrides persist; if they referenced a port that only
+        // existed under the previous module, the orphaned-override
+        // dropdown logic in renderRenameTable() surfaces them as
+        // "(custom: X — not in profile)" so the operator can re-pick
+        // or keep.  No state reset — operator intent survives module
+        // churn, consistent with profile-change behaviour.
         renderRenameTable();
         renderRenamePreview();
         renderRenameSummary();

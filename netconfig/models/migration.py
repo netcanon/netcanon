@@ -430,6 +430,14 @@ class MigrationPlanRequest(BaseModel):
     uses this to drive dropdown options and validate port ids against
     the target device's known port set.  Does not affect rendering."""
 
+    target_module: str | None = None
+    """Optional module SKU within :attr:`target_profile` (e.g.
+    ``NM-8X``, ``NM-2Q``, ``JL084A``).  Used when the selected profile
+    declares module variants (chassis + swappable uplink module) —
+    tells the rename modal which of the module's uplink port-ids to
+    offer in the target-name dropdown.  Advisory only (mirrors
+    ``target_profile`` semantics — does not affect rendering)."""
+
 
 class CodecInfo(BaseModel):
     """Summary surfaced by ``GET /api/v1/migration/adapters``.

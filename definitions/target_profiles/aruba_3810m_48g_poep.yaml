@@ -1,16 +1,34 @@
 # Aruba 3810M-48G-PoE+ 1-slot (JL076A)
 # 48 × 10/100/1000 BASE-T RJ45 + PoE+ (30W/port)
-# 1 × expansion module slot (typically 4× 10G SFP+ or 4× QSFP+)
+# 1 × expansion module slot — swappable.  Common SKUs modelled below:
+#   JL083A  — 4x 10G SFP+           (default when unspecified)
+#   JL084A  — 4x 40G QSFP+
+#   JL085A  — 1x 40G QSFP+
+# Additional expansion modules (JL081A stacking, JL082A 4-port HPE Smart
+# Rate, etc.) are not yet modelled — add when users encounter them.
 # Backplane stacking (up to 10 members)
 vendor: aruba_aoss
 model: 3810M-48G-PoEP
 display_name: "Aruba 3810M-48G-PoE+ 1-slot (JL076A)"
 device_class: switch
 stacking: backplane-stacking
+# Chassis-fixed ports — always present regardless of expansion module.
 ports:
   - {range: "1/1-1/48", kind: physical, speed: gig, poe: true}
-  # Expansion module slot (letter suffix A) — assume 4× 10G SFP+
-  # (JL083A 4-port 10GbE SFP+ module); swap letter/count for
-  # different modules when migrations target specific hardware.
-  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true, notes: "JL083A 4x10G SFP+ module slot A"}
+# Swappable expansion modules.  Selecting one adds its uplinks to the
+# chassis set; the rename-modal UI filters target-name dropdowns to
+# whichever module is active.
+modules:
+  JL083A:
+    description: "4x 10G SFP+ uplinks (JL083A)"
+    ports:
+      - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true, notes: "SFP+ cage"}
+  JL084A:
+    description: "4x 40G QSFP+ uplinks (JL084A)"
+    ports:
+      - {range: "1/A1-1/A4", kind: uplink, speed: 40gig, sfp: true, notes: "QSFP+ cage"}
+  JL085A:
+    description: "1x 40G QSFP+ uplink (JL085A)"
+    ports:
+      - {id: "1/A1", kind: uplink, speed: 40gig, sfp: true, notes: "QSFP+ cage"}
 lags: {max: 144, prefix: Trk}

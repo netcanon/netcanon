@@ -1,12 +1,29 @@
 # Aruba 3810M-24G-PoE+ 1-slot (JL073A)
 # 24 × 10/100/1000 BASE-T RJ45 + PoE+
-# 1 × expansion module slot
+# 1 × expansion module slot — swappable.  Common SKUs modelled below:
+#   JL083A  — 4x 10G SFP+           (default when unspecified)
+#   JL084A  — 4x 40G QSFP+
+#   JL085A  — 1x 40G QSFP+
 vendor: aruba_aoss
 model: 3810M-24G-PoEP
 display_name: "Aruba 3810M-24G-PoE+ 1-slot (JL073A)"
 device_class: switch
 stacking: backplane-stacking
+# Chassis-fixed ports.
 ports:
   - {range: "1/1-1/24", kind: physical, speed: gig, poe: true}
-  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true, notes: "4x10G SFP+ expansion"}
+# Swappable expansion modules.
+modules:
+  JL083A:
+    description: "4x 10G SFP+ uplinks (JL083A)"
+    ports:
+      - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true, notes: "SFP+ cage"}
+  JL084A:
+    description: "4x 40G QSFP+ uplinks (JL084A)"
+    ports:
+      - {range: "1/A1-1/A4", kind: uplink, speed: 40gig, sfp: true, notes: "QSFP+ cage"}
+  JL085A:
+    description: "1x 40G QSFP+ uplink (JL085A)"
+    ports:
+      - {id: "1/A1", kind: uplink, speed: 40gig, sfp: true, notes: "QSFP+ cage"}
 lags: {max: 144, prefix: Trk}

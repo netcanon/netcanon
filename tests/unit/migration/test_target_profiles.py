@@ -237,12 +237,35 @@ class TestRealProfilesShipped:
                 assert port.poe is True
 
     def test_cisco_c9300_24ux(self):
+        """C9300-24UX is a module-variant profile (NM-8X + NM-2Q).
+        Chassis is 25 ports (24 mGig + 1 mgmt); each module adds
+        its own uplink inventory on top."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         p = profiles["cisco_iosxe/C9300-24UX"]
-        assert p.port_count == 33  # 24 mGig + 8 NM + 1 mgmt
-        assert len(p.port_ids(kind="physical")) == 24
-        assert len(p.port_ids(kind="uplink")) == 8
-        assert len(p.port_ids(kind="mgmt")) == 1
+        assert p.has_modules
+        assert set(p.module_skus()) == {"NM-8X", "NM-2Q"}
+        # Chassis only (modules excluded): 24 mGig access + 1 mgmt.
+        assert p.port_count == 25
+        # NM-8X variant adds 8x 10G uplinks → 33 total.
+        assert p.effective_port_count("NM-8X") == 33
+        assert len(p.port_ids(kind="uplink", module_sku="NM-8X")) == 8
+        # NM-2Q variant adds 2x 40G uplinks → 27 total.  This is the
+        # path that unblocks the user-reported 40G case — source
+        # FortyGigabitEthernet1/1/1-2 now has matching targets.
+        assert p.effective_port_count("NM-2Q") == 27
+        nm2q_uplinks = p.port_ids(kind="uplink", module_sku="NM-2Q")
+        assert nm2q_uplinks == [
+            "FortyGigabitEthernet1/1/1",
+            "FortyGigabitEthernet1/1/2",
+        ]
+        # Chassis ports identical between modules (uplinks are the
+        # only moving piece).
+        assert (
+            p.port_ids(kind="physical", module_sku="NM-8X")
+            == p.port_ids(kind="physical", module_sku="NM-2Q")
+        )
+        assert len(p.port_ids(kind="physical", module_sku="NM-8X")) == 24
+        assert len(p.port_ids(kind="mgmt", module_sku="NM-8X")) == 1
         assert p.lags.max == 48
         assert p.lags.prefix == "Port-channel"
         # First port is a mGig multigig interface.
@@ -251,15 +274,27 @@ class TestRealProfilesShipped:
         assert first.speed == "10gig"  # max negotiated speed
         assert first.poe is True
 
-    def test_legacy_profiles_have_no_modules(self):
-        """All currently-shipped profiles predate module-variant
-        support, so they must expose ``modules == {}`` and
-        ``has_modules == False`` — the UI uses this to decide
-        whether to render the third-stage dropdown.  A regression
-        here means we accidentally broke backward compatibility
-        with every existing profile YAML."""
+    #: Profiles in the shipped set that have opted in to the
+    #: module-variant schema.  Everything else must still be
+    #: legacy-shaped (empty modules).  Add to this set when
+    #: migrating more profiles.
+    MODULE_VARIANT_PROFILES = {
+        "cisco_iosxe/C9300-24UX",
+        "cisco_iosxe/C9300-48UXM",
+        "aruba_aoss/3810M-24G-PoEP",
+        "aruba_aoss/3810M-48G-PoEP",
+    }
+
+    def test_non_module_variant_profiles_stay_legacy(self):
+        """Profiles not in :attr:`MODULE_VARIANT_PROFILES` must
+        keep their legacy shape (``modules == {}``) so existing
+        UI/API consumers don't see modules they don't expect.  A
+        regression here means a profile was accidentally migrated
+        without updating the allowlist."""
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         for key, p in profiles.items():
+            if key in self.MODULE_VARIANT_PROFILES:
+                continue
             assert p.modules == {}, (
                 f"{key}: modules should be empty for legacy profile, "
                 f"got {list(p.modules)}"
@@ -271,6 +306,60 @@ class TestRealProfilesShipped:
             # Kind-filtered port_ids should be identical to pre-module
             # behaviour.
             assert p.port_ids() == [pp.id for pp in p.ports]
+
+    def test_all_module_variant_profiles_declare_modules(self):
+        """Every entry in the allowlist must actually declare
+        modules in its YAML — catches accidental mis-adds."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        for key in self.MODULE_VARIANT_PROFILES:
+            assert key in profiles, (
+                f"{key}: declared as module-variant but YAML missing"
+            )
+            p = profiles[key]
+            assert p.has_modules, (
+                f"{key}: allowlisted as module-variant but modules is "
+                f"empty; update YAML or remove from allowlist"
+            )
+
+    def test_aruba_3810m_48g_poep_module_variants(self):
+        """Aruba 3810M chassis with JL083A/JL084A/JL085A expansion
+        modules.  Exercises the real-world shape where multiple
+        modules reuse the same port-name space (``1/A1-1/A4``) at
+        different speeds — picking JL084A gives 4x 40G on the same
+        port ids JL083A used for 4x 10G.  The rename modal filters
+        target dropdowns by the selected module, so this parallels
+        Cat 9300 NM-8X vs NM-2Q at different port-name spaces."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["aruba_aoss/3810M-48G-PoEP"]
+        assert set(p.module_skus()) == {"JL083A", "JL084A", "JL085A"}
+        # Chassis: 48 RJ45 (no mgmt — AOS-S stackable has no OOB port).
+        assert p.port_count == 48
+        # JL083A: +4 × 10G SFP+ → 52 total.
+        assert p.effective_port_count("JL083A") == 52
+        jl083a_uplinks = [
+            pt for pt in p.modules["JL083A"].ports if pt.kind == "uplink"
+        ]
+        assert all(pt.speed == "10gig" for pt in jl083a_uplinks)
+        # JL084A: +4 × 40G QSFP+ on the SAME port id range.
+        assert p.effective_port_count("JL084A") == 52
+        jl084a_uplinks = [
+            pt for pt in p.modules["JL084A"].ports if pt.kind == "uplink"
+        ]
+        assert all(pt.speed == "40gig" for pt in jl084a_uplinks)
+        # Same ids, different speeds — this is the key property the
+        # rename modal relies on when swapping modules.
+        assert (
+            [pt.id for pt in jl083a_uplinks]
+            == [pt.id for pt in jl084a_uplinks]
+        )
+        # JL085A: 1 × 40G QSFP+ only (single port).
+        assert p.effective_port_count("JL085A") == 49
+        jl085a_uplinks = [
+            pt for pt in p.modules["JL085A"].ports if pt.kind == "uplink"
+        ]
+        assert len(jl085a_uplinks) == 1
+        assert jl085a_uplinks[0].id == "1/A1"
+        assert jl085a_uplinks[0].speed == "40gig"
 
 
 # ---------------------------------------------------------------------------
