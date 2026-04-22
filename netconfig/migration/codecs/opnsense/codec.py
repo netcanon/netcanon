@@ -53,6 +53,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalVlan,
 )
@@ -200,6 +201,37 @@ class OPNsenseCodec(CodecBase):
             # descr, password (bcrypt $2y$), uid, and an optional
             # groupname.  Group "admins" (and descendants) = admin
             # privilege; anything else defaults to operator.
+            # RADIUS servers live under <system>/<authserver> with
+            # <type>radius</type>.  Other <authserver> types (ldap,
+            # local) are ignored here.
+            for auth_el in sys_el.findall("authserver"):
+                type_el = auth_el.find("type")
+                if type_el is None or (type_el.text or "").strip().lower() != "radius":
+                    continue
+                host_el = auth_el.find("host")
+                if host_el is None or not (host_el.text or "").strip():
+                    continue
+                secret_el = auth_el.find("radius_secret")
+                ap_el = auth_el.find("radius_auth_port")
+                acctp_el = auth_el.find("radius_acct_port")
+                auth_port = 1812
+                acct_port = 1813
+                if ap_el is not None and ap_el.text:
+                    try:
+                        auth_port = int(ap_el.text.strip())
+                    except ValueError:
+                        pass
+                if acctp_el is not None and acctp_el.text:
+                    try:
+                        acct_port = int(acctp_el.text.strip())
+                    except ValueError:
+                        pass
+                intent.radius_servers.append(CanonicalRADIUSServer(
+                    host=host_el.text.strip(),
+                    key=(secret_el.text or "").strip() if secret_el is not None else "",
+                    auth_port=auth_port,
+                    acct_port=acct_port,
+                ))
             for user_el in sys_el.findall("user"):
                 name_el = user_el.find("name")
                 if name_el is None or not (name_el.text or "").strip():
@@ -340,6 +372,7 @@ class OPNsenseCodec(CodecBase):
         # a single canonical block.
         has_system_content = (
             intent.hostname or intent.domain or intent.local_users
+            or intent.radius_servers
         )
         if has_system_content:
             sys_el = ET.SubElement(root, "system")
@@ -347,6 +380,25 @@ class OPNsenseCodec(CodecBase):
                 ET.SubElement(sys_el, "hostname").text = intent.hostname
             if intent.domain:
                 ET.SubElement(sys_el, "domain").text = intent.domain
+            # RADIUS servers (Tier 2).  Emit a <system>/<authserver>
+            # element per server, typed "radius", with the canonical
+            # host/secret/ports preserved.
+            for idx, server in enumerate(intent.radius_servers, start=1):
+                auth_el = ET.SubElement(sys_el, "authserver")
+                ET.SubElement(auth_el, "name").text = (
+                    f"radius-{idx}"
+                )
+                ET.SubElement(auth_el, "type").text = "radius"
+                ET.SubElement(auth_el, "host").text = server.host
+                if server.key:
+                    ET.SubElement(auth_el, "radius_secret").text = server.key
+                ET.SubElement(auth_el, "radius_auth_port").text = (
+                    str(server.auth_port)
+                )
+                ET.SubElement(auth_el, "radius_acct_port").text = (
+                    str(server.acct_port)
+                )
+
             # Local users (Tier 2).  Map canonical admin -> admins
             # group, anything else -> users.  Strip the "bcrypt:" tag
             # from the hash (OPNsense's <password> field carries the

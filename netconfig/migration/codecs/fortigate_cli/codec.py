@@ -24,6 +24,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -181,6 +182,8 @@ class FortiGateCLICodec(CodecBase):
                 _apply_system_admin(block, intent)
             elif path == "system dhcp server":
                 _apply_system_dhcp_server(block, intent)
+            elif path == "user radius":
+                _apply_user_radius(block, intent)
             # Other config paths silently ignored (Tier 3 / out of scope).
 
         return intent
@@ -344,6 +347,25 @@ class FortiGateCLICodec(CodecBase):
                     else (user.role or "prof_admin")
                 )
                 out.append(f'        set accprofile "{accprofile}"')
+                out.append("    next")
+            out.append("end")
+
+        # --- user radius (Tier 2 RADIUS servers) ---
+        if tree.radius_servers:
+            out.append("config user radius")
+            for idx, server in enumerate(tree.radius_servers, start=1):
+                out.append(f'    edit "radius-{idx}"')
+                out.append(f'        set server "{server.host}"')
+                if server.key:
+                    alg, _, raw = server.key.partition(":")
+                    if alg == "fortios":
+                        out.append(f"        set secret {raw}")
+                    elif raw:
+                        out.append(f"        set secret ENC {raw}")
+                    else:
+                        out.append(f"        set secret ENC {server.key}")
+                if server.auth_port and server.auth_port != 1812:
+                    out.append(f"        set radius-port {server.auth_port}")
                 out.append("    next")
             out.append("end")
 
@@ -805,6 +827,48 @@ def _apply_system_admin(
             privilege_level=15 if is_admin else 1,
             hashed_password=hashed,
             role=accprofile or ("admin" if is_admin else "operator"),
+        ))
+
+
+def _apply_user_radius(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config user radius`` into CanonicalRADIUSServer records.
+
+    FortiOS shape:
+        edit "MyRadius"
+            set server "10.0.0.4"
+            set secret ENC <encoded>
+            set auth-type auto
+            set radius-port 1812
+            set acct-interim-interval 600
+        next
+
+    The ``ENC`` prefix is preserved on the canonical key so a lossless
+    round-trip back to FortiGate reconstructs the original command.
+    """
+    for edit in block.edits:
+        server_tokens = edit.settings.get("server")
+        if not server_tokens:
+            continue
+        host = server_tokens[0]
+        secret_tokens = edit.settings.get("secret")
+        key = ""
+        if secret_tokens:
+            key = f"fortios:{' '.join(secret_tokens)}"
+        auth_port = 1812
+        acct_port = 1813
+        port_tokens = edit.settings.get("radius-port")
+        if port_tokens:
+            try:
+                auth_port = int(port_tokens[0])
+            except ValueError:
+                pass
+        intent.radius_servers.append(CanonicalRADIUSServer(
+            host=host,
+            key=key,
+            auth_port=auth_port,
+            acct_port=acct_port,
         ))
 
 

@@ -22,6 +22,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -241,6 +242,36 @@ class ArubaAOSSCodec(CodecBase):
                 i += 1
                 continue
 
+            rad = _RADIUS_HOST_RE.match(stripped_line)
+            if rad:
+                # AOS-S can emit either:
+                #   radius-server host 10.0.0.4 key "secret"
+                # or:
+                #   radius-server host 10.0.0.4
+                # In the keyless form the shared secret lives on a
+                # separate ``radius-server key`` line that applies
+                # globally — we capture that into a local, then
+                # backfill hostless servers after the parse loop.
+                host = rad.group(1)
+                key = (rad.group(2) or "").strip().strip('"')
+                intent.radius_servers.append(CanonicalRADIUSServer(
+                    host=host,
+                    key=key,
+                ))
+                i += 1
+                continue
+
+            rk = _RADIUS_KEY_GLOBAL_RE.match(stripped_line)
+            if rk:
+                # Global-scope key — apply to any RADIUS server that
+                # didn't carry its own inline key.
+                global_key = rk.group(1).strip().strip('"')
+                for server in intent.radius_servers:
+                    if not server.key:
+                        server.key = global_key
+                i += 1
+                continue
+
             pwd = _PASSWORD_LINE_RE.match(stripped_line)
             if pwd:
                 role = pwd.group(1).lower()
@@ -354,6 +385,18 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append(
                     f'snmp-server host {host} community "{comm}"'
                 )
+
+        # RADIUS servers (Tier 2).  Emit one ``radius-server host``
+        # line per server, with the inline key form (keeps each
+        # server's secret co-located with its host for readability —
+        # AOS-S accepts both inline and global-key forms).
+        for server in tree.radius_servers:
+            if server.key:
+                lines.append(
+                    f'radius-server host {server.host} key "{server.key}"'
+                )
+            else:
+                lines.append(f"radius-server host {server.host}")
 
         # DHCP pools — AOS-S doesn't run a DHCP server on most
         # platforms (it's a DHCP *relay* platform via
@@ -595,6 +638,21 @@ _TRUNK_LINE_RE = re.compile(
 _PASSWORD_LINE_RE = re.compile(
     r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
     r'(\S+)\s+"([^"]+)"\s*$',
+    re.IGNORECASE,
+)
+# AOS-S RADIUS forms:
+#   radius-server host <ip>
+#   radius-server host <ip> key "<secret>"
+_RADIUS_HOST_RE = re.compile(
+    r'^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)'
+    r'(?:\s+key\s+"?([^"]*)"?)?'
+    r'\s*$',
+    re.IGNORECASE,
+)
+# Global shared-secret fallback (applies to hosts without inline key):
+#   radius-server key "<secret>"
+_RADIUS_KEY_GLOBAL_RE = re.compile(
+    r'^radius-server\s+key\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
 _AOS_TRUNK_TYPE_TO_MODE = {

@@ -64,6 +64,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -257,6 +258,8 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_dhcp_server_network(lines, intent)
             elif section == "/ip pool":
                 deferred_ip_pool.append(lines)
+            elif section == "/radius":
+                _parse_radius(lines, intent)
             # Other sections silently ignored — not in scope yet.
 
         for pool_lines in deferred_ip_pool:
@@ -409,6 +412,26 @@ class MikroTikRouterOSCodec(CodecBase):
                     f"set [ find default=yes ] name={tree.snmp.community}"
                 )
                 lines.append("")
+
+        # ----- /radius (Tier 2 RADIUS) -----
+        if tree.radius_servers:
+            lines.append("/radius")
+            for server in tree.radius_servers:
+                parts = ["add", f"address={server.host}"]
+                if server.key:
+                    parts.append(f"secret={server.key}")
+                if server.auth_port and server.auth_port != 1812:
+                    parts.append(f"authentication-port={server.auth_port}")
+                if server.acct_port and server.acct_port != 1813:
+                    parts.append(f"accounting-port={server.acct_port}")
+                # `service=login` is the default/safe value for a
+                # RADIUS server record when nothing more specific
+                # is known.  Real configs often use comma-separated
+                # `login,ppp,hotspot,wireless,dhcp` — we preserve
+                # only the baseline here.
+                parts.append("service=login")
+                lines.append(" ".join(parts))
+            lines.append("")
 
         # ----- /ip pool + /ip dhcp-server network (Tier 2 DHCP) -----
         # RouterOS splits DHCP across /ip pool (the address range)
@@ -873,6 +896,41 @@ def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
                 h = host.strip()
                 if h:
                     intent.snmp.trap_hosts.append(h)
+
+
+def _parse_radius(
+    lines: list[str], intent: CanonicalIntent,
+) -> None:
+    """Parse ``/radius`` section entries into CanonicalRADIUSServer.
+
+    RouterOS form:
+        /radius
+        add address=10.0.0.4 secret=shared-secret service=login,dhcp \\
+            authentication-port=1812 accounting-port=1813
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        address = kv.get("address")
+        if not address:
+            continue
+        auth_port = 1812
+        acct_port = 1813
+        try:
+            auth_port = int(kv.get("authentication-port") or 1812)
+        except ValueError:
+            pass
+        try:
+            acct_port = int(kv.get("accounting-port") or 1813)
+        except ValueError:
+            pass
+        intent.radius_servers.append(CanonicalRADIUSServer(
+            host=address,
+            key=kv.get("secret", ""),
+            auth_port=auth_port,
+            acct_port=acct_port,
+        ))
 
 
 def _parse_dhcp_server_network(

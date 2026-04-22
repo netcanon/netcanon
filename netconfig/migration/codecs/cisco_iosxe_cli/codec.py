@@ -48,6 +48,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -196,6 +197,10 @@ class CiscoIOSXECLICodec(CodecBase):
 
         # DHCP server pools (Tier 2).
         intent.dhcp_servers = _parse_dhcp_pools(raw)
+
+        # RADIUS servers (Tier 2).  Handles both modern named-server
+        # syntax and legacy `radius-server host` one-liner.
+        intent.radius_servers = _parse_radius_servers(raw)
 
         # LAGs (Tier 2) — both the `interface Port-channelN` declaration
         # and the per-member `channel-group N mode M` lines contribute.
@@ -895,6 +900,103 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
     if current is not None:
         pools.append(current)
     return pools
+
+
+# Modern IOS-XE RADIUS: named stanza
+#   radius server <name>
+#    address ipv4 <ip> auth-port <N> acct-port <N>
+#    key [7] <secret>
+_RADIUS_SERVER_HEADER_RE = re.compile(
+    r"^radius\s+server\s+(\S+)", re.IGNORECASE,
+)
+_RADIUS_ADDRESS_RE = re.compile(
+    r"^\s+address\s+ipv4\s+(\d+\.\d+\.\d+\.\d+)"
+    r"(?:\s+auth-port\s+(\d+))?"
+    r"(?:\s+acct-port\s+(\d+))?",
+    re.IGNORECASE,
+)
+_RADIUS_KEY_RE = re.compile(
+    r"^\s+key\s+(?:(\d+)\s+)?(\S.*)$",
+    re.IGNORECASE,
+)
+# Legacy IOS: single line
+#   radius-server host <ip> [auth-port <N>] [acct-port <N>] [key <secret>]
+_RADIUS_HOST_LEGACY_RE = re.compile(
+    r"^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)"
+    r"(?:\s+auth-port\s+(\d+))?"
+    r"(?:\s+acct-port\s+(\d+))?"
+    r"(?:\s+key\s+(?:\d+\s+)?(\S+.*))?",
+    re.IGNORECASE,
+)
+
+
+def _parse_radius_servers(raw: str) -> list[CanonicalRADIUSServer]:
+    """Extract RADIUS server definitions from IOS CLI text.
+
+    Handles both the modern named-stanza form (``radius server NAME`` /
+    ``address ipv4 ...`` / ``key ...``) and the legacy one-liner
+    (``radius-server host X auth-port N key SECRET``).
+    """
+    servers: list[CanonicalRADIUSServer] = []
+    current: CanonicalRADIUSServer | None = None
+
+    for line in raw.splitlines():
+        # Modern header opens a new stanza.
+        header = _RADIUS_SERVER_HEADER_RE.match(line)
+        if header:
+            if current is not None and current.host:
+                servers.append(current)
+            current = CanonicalRADIUSServer(host="")
+            continue
+
+        # Legacy single-line form.
+        legacy = _RADIUS_HOST_LEGACY_RE.match(line)
+        if legacy:
+            # Flush any in-progress modern stanza before recording legacy.
+            if current is not None and current.host:
+                servers.append(current)
+                current = None
+            host = legacy.group(1)
+            auth_port = int(legacy.group(2) or 1812)
+            acct_port = int(legacy.group(3) or 1813)
+            key = (legacy.group(4) or "").strip()
+            servers.append(CanonicalRADIUSServer(
+                host=host,
+                auth_port=auth_port,
+                acct_port=acct_port,
+                key=key,
+            ))
+            continue
+
+        if current is None:
+            continue
+
+        # Modern-stanza body.
+        if line.startswith("!") or (line and not line[0].isspace()):
+            if current.host:
+                servers.append(current)
+            current = None
+            continue
+        am = _RADIUS_ADDRESS_RE.match(line)
+        if am:
+            current.host = am.group(1)
+            if am.group(2):
+                current.auth_port = int(am.group(2))
+            if am.group(3):
+                current.acct_port = int(am.group(3))
+            continue
+        km = _RADIUS_KEY_RE.match(line)
+        if km:
+            key_type = km.group(1) or ""
+            key_val = km.group(2).strip()
+            # Preserve the type digit prefix so a lossless render
+            # back to Cisco can reconstruct it; other codecs can
+            # strip the prefix.
+            current.key = f"{key_type} {key_val}" if key_type else key_val
+
+    if current is not None and current.host:
+        servers.append(current)
+    return servers
 
 
 def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
