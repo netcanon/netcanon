@@ -725,6 +725,113 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[ ] MODULE-VARIANT TARGET PROFILES (hardware-awareness, high priority):
+    # PROBLEM
+    # Target profiles currently bake ONE specific hardware config per
+    # file.  All shipped Cat 9300 profiles assume the NM-8X (8× 10G
+    # SFP+) network module.  Real Cat 9300 chassis accept ≥4 NM
+    # modules, each with a different uplink inventory:
+    #   C9300-NM-8X    8× 10G SFP+      (what we profiled)
+    #   C9300-NM-2Q    2× 40G QSFP+     (MISSING — user's 40G case)
+    #   C9300-NM-4G    4× 1G
+    #   C9300-NM-4M    4× multigig
+    #   C9300-NM-8M    8× multigig
+    #
+    # Same class of issue on:
+    #   * Aruba 3810M 1-slot expansion — JL083A (4×10G), JL084A
+    #     (4×40G QSFP+), JL085A (1×40G QSFP+)
+    #   * Aruba 5400R / zl2 chassis (many blade options)
+    #   * Cisco Cat 9500 NM slot variants
+    #   * FortiGate 200F/300F+ SFP cage configs
+    #
+    # SYMPTOM (user-reported 2026-04-22)
+    # Cat 9300 → Cat 9300-24UX translation: source config has
+    # `FortyGigabitEthernet1/1/1-2` stanzas.  Shipped C9300-24UX
+    # profile only has `TenGigabitEthernet1/1/1-8` uplinks (NM-8X
+    # assumption).  FortyGig source rows get offered TenGig targets
+    # in the dropdown — no 40G target available despite chassis
+    # physically supporting NM-2Q.
+    #
+    # DESIGN SPACE — pick one before coding:
+    #
+    #   Option A — FLAT FILE PER (CHASSIS, MODULE) COMBO
+    #     File: cisco_c9300_24ux_nm8x.yaml
+    #           cisco_c9300_24ux_nm2q.yaml
+    #           cisco_c9300_24ux_nm4g.yaml
+    #           ... etc.
+    #     Model IDs: C9300-24UX-NM-8X, C9300-24UX-NM-2Q
+    #     Pros: simplest schema, UI unchanged, two-stage dropdown
+    #           just gets more model entries
+    #     Cons: ~7 chassis × ~4 modules = ~28 Cat 9300 files; more
+    #           for chassis-based gear
+    #     Scope: ~1-2 hours for initial Cat 9300 + 3810M coverage;
+    #            tests that hardcode model keys need updates.
+    #
+    #   Option B — BASE PROFILE + INLINE MODULE VARIANTS (preferred
+    #   long-term)
+    #     Profile YAML gains top-level `modules:` dict keyed by
+    #     module SKU, each entry with its own uplink port list:
+    #       vendor: cisco_iosxe
+    #       model: C9300-24UX
+    #       ports:              # access ports (chassis-fixed)
+    #         - {range: "GigabitEthernet1/0/1-24", kind: physical, ...}
+    #       modules:
+    #         NM-8X:
+    #           description: "8x 10G SFP+ uplinks"
+    #           ports:
+    #             - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, ...}
+    #         NM-2Q:
+    #           description: "2x 40G QSFP+ uplinks"
+    #           ports:
+    #             - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, ...}
+    #         NM-4G:
+    #           description: "4x 1G RJ45 uplinks"
+    #           ports:
+    #             - {range: "GigabitEthernet1/1/1-4", kind: uplink, ...}
+    #     UI: third dropdown stage (Vendor → Chassis → Module).
+    #     Pros: DRY, fewer files, module is first-class operator
+    #           decision surfaced in UI.
+    #     Cons: bigger schema + loader change + third dropdown +
+    #           more test coverage; existing model-key test fixtures
+    #           need migration
+    #     Scope: ~3-4 hours.
+    #
+    #   Option C — BASE CHASSIS + OVERLAY MODULE FILES
+    #     Two files merged at load time: base chassis + overlay.
+    #     Maximum DRY, but merge semantics + filename discovery
+    #     rules add complexity.  Probably don't do this.
+    #
+    # SECONDARY CONSIDERATIONS
+    #   * "I don't know what module is installed" fallback — default
+    #     to "any uplink" / no module gating to avoid blocking users
+    #     who haven't opened the chassis yet.
+    #   * Speed mismatch UX — source TenG vs target with only 40G
+    #     uplinks.  Offer anyway (operator may downshift) + warn, or
+    #     filter out?  Probably offer with a `(speed downshift)`
+    #     suffix.  Don't hard-block — operator judgment.
+    #   * Test-suite touchpoints for Option A (hardcoded model keys):
+    #       tests/unit/migration/test_target_profiles.py:227,240
+    #       tests/integration/test_migration_target_profiles_api.py:
+    #         31,32,36,41,119,164
+    #       tests/e2e/test_migrate_rename_modal.py:276,288
+    #   * Aruba parity — if renaming Cat 9300 profiles, do the same
+    #     for 3810M + add the 40G QSFP+ module variant (JL084A).
+    #
+    # IMMEDIATE SMALLEST WIN (if picking Option A):
+    #   1. Rename 7 Cat 9300 profiles to -NM-8X suffix in model/file
+    #   2. Add cisco_c9300_24ux_nm2q.yaml + cisco_c9300_48uxm_nm2q.yaml
+    #      (2× 40G QSFP+ uplinks each)
+    #   3. Add aruba_3810m_48g_poep_qsfp.yaml (JL084A variant)
+    #   4. Update the 9-ish test references to new model keys
+    #   Profile authoring = trivial YAML; the commit is mostly
+    #   renames + 3 new files + test update.
+    #
+    # RECOMMENDATION: start with Option A for immediate unblock (the
+    # 40G case is a real user report), revisit Option B as the
+    # module-choice UX gets refined.  The profile-key rename is the
+    # riskiest part — do it behind tests or tolerate a single-commit
+    # renaming of 28 references.
+
 [ ] SAVE AS PROFILE (operator convenience):
     # Persist an operator's rename decisions as
     # `profiles/<source_vendor>_<target_vendor>_<label>.json` and
