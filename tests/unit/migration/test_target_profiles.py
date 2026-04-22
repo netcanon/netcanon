@@ -547,6 +547,77 @@ class TestRealProfilesShipped:
         for wrong in ("ix0", "ix1", "igb0", "em0", "cxgbe0"):
             assert p.lookup_port(wrong) is None
 
+    def test_opnsense_deciso_a10_82574l_gen1(self):
+        """Deciso Netboard A10 Gen1 (original ~2014-2016): 4x
+        82574L GbE via em(4) driver.  Grounded in 7+ independent
+        bsd-hardware.info probes (primary b64efa8617).  SOC: AMD
+        GX-416RA Jaguar pins the generation."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A10-82574L"]
+        assert p.port_count == 4
+        assert p.port_ids() == ["em0", "em1", "em2", "em3"]
+        for pt in p.ports:
+            assert pt.speed == "gig"
+            assert pt.kind == "physical"
+        # Pure-em profile has NO SFP+ or 10G ports.
+        for wrong in ("ax0", "ix0", "igb0", "igc0"):
+            assert p.lookup_port(wrong) is None
+
+    def test_opnsense_deciso_a20_i210_sfpplus_dec3840(self):
+        """Deciso A20 pre-R2.0 / DEC3840 rack: 4x I210 GbE + 2x 10G
+        SFP+ (AMD).  Grounded in probes 8ded6d9af6 and bab94f86da.
+        Distinct from the current R2.0/DEC850 variant which swaps
+        I210 copper for I225 2.5GbE."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A20-I210-SFPPlus"]
+        assert p.port_count == 6
+        ids = p.port_ids()
+        assert ids == ["igb0", "igb1", "igb2", "igb3", "ax0", "ax1"]
+        # igb copper at 1G (not 2.5G — that'd be the igc variant).
+        for n in range(4):
+            pt = p.lookup_port(f"igb{n}")
+            assert pt is not None
+            assert pt.speed == "gig"
+            assert pt.kind == "physical"
+        # AMD 10G uplink — never ix or cxgbe.
+        for wrong in ("ix0", "ix1", "cxgbe0", "cxgbe1"):
+            assert p.lookup_port(wrong) is None
+
+    def test_opnsense_deciso_a8_i225_current(self):
+        """Deciso Netboard A8 current 2.5GbE revision (DEC600
+        series): 4x I225-V via igc(4).  Grounded in probe
+        ad01c76099, OPNsense DEC600 2.5G desktop.  NO SFP+ cage —
+        distinct from A20 which has the same igc chipset but adds
+        2x AMD 10G."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A8-I225"]
+        assert p.port_count == 4
+        assert p.port_ids() == ["igc0", "igc1", "igc2", "igc3"]
+        for pt in p.ports:
+            assert pt.speed == "2.5gig"
+            assert pt.kind == "physical"
+        # A8 is 2.5G copper only — no SFP+.
+        for wrong in ("ax0", "ix0"):
+            assert p.lookup_port(wrong) is None
+
+    def test_opnsense_deciso_a8_i211_older(self):
+        """Deciso Netboard A8 older 1GbE revision: 4x I211 via
+        igb(4).  The "A8" name was reused across two electrical
+        revisions — this profile targets the older 1GbE variant
+        (distinct from the current 2.5GbE igc-based variant)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A8-I211"]
+        assert p.port_count == 4
+        assert p.port_ids() == ["igb0", "igb1", "igb2", "igb3"]
+        for pt in p.ports:
+            assert pt.speed == "gig"  # 1G, not 2.5G
+            assert pt.kind == "physical"
+        # A8-I211 must NOT expose the 2.5G ports that belong to the
+        # I225 sibling — else authoring collision between the two
+        # revisions.
+        for wrong in ("igc0", "igc1", "ax0"):
+            assert p.lookup_port(wrong) is None
+
 # ---------------------------------------------------------------------------
 # Module-variant support (schema-first Option B, milestone-1)
 # ---------------------------------------------------------------------------

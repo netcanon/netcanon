@@ -1,0 +1,27 @@
+# Deciso Netboard A10 — Gen1 (original, ~2014-2016 era)
+# 4 × 1GbE via Intel 82574L discrete NICs (one per PCIe lane)
+#
+# FreeBSD driver: em(4) — Intel Gigabit CT 82574L
+# Default BSD iface names: em0, em1, em2, em3
+# SOC: AMD GX-416RA (Jaguar quad-core) — pins this to the original
+#      A10 generation, pre-I210.
+#
+# NOTE on "A10" naming: Deciso has reused the A10 label across
+# generations with different chipsets.  This profile is the
+# **82574L Gen1** variant specifically — if your A10 enumerates as
+# igb0..igb3 use the "I210" profile; if igb0..igb2 + ax0/ax1 use
+# the "I210-SFPPlus" profile.
+#
+# Validation: bsd-hardware.info has 7+ probes of this variant, all
+# showing identical em0..em3 attachment (primary probe b64efa8617,
+# OPNsense 24.7.3 / FreeBSD 13.2).  Each NIC is on its own PCIe
+# lane (pci1..pci4) confirming 4 discrete 82574L dies rather than a
+# quad-port controller.  HIGH confidence on interface naming.
+vendor: opnsense
+model: Netboard-A10-82574L
+display_name: "Deciso Netboard A10 (4x 82574L GbE — Gen1)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "em0-3", kind: physical, speed: gig, notes: "Intel 82574L Gigabit CT"}
+lags: {max: 4, prefix: lagg}

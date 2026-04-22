@@ -1,0 +1,26 @@
+# Deciso Netboard A8 — older 1GbE electrical revision
+# 4 × 1GbE via Intel I211 (flashless copper)
+# No SFP+ cage, no separate management NIC
+#
+# FreeBSD driver: igb(4) — Intel I210/I211 GbE
+# Default BSD iface names: igb0, igb1, igb2, igb3
+#
+# IMPORTANT: the "Netboard A8" name has been used for at least two
+# distinct electrical revisions.  This profile targets the **I211
+# 1GbE** revision specifically — if your A8 enumerates as igc0..igc3
+# you have the current I225-V 2.5GbE variant; use
+# opnsense_deciso_a8_i225.yaml instead.  SMBIOS alone cannot
+# disambiguate (both report "Netboard A8"); key on the NIC driver.
+#
+# Validation: bsd-hardware.info probes cf3b678212 and 2944a5b780
+# show the igb-driver 4x I211 attachment pattern on real Netboard
+# A8 boards (pre-current-DEC600-era).  HIGH confidence on
+# interface naming.
+vendor: opnsense
+model: Netboard-A8-I211
+display_name: "Deciso Netboard A8 (4x I211 GbE — older 1GbE revision)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I211 copper GbE"}
+lags: {max: 4, prefix: lagg}

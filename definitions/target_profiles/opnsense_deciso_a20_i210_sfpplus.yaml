@@ -1,0 +1,29 @@
+# Deciso Netboard A20 — pre-R2.0 revision (DEC3840 rack, earlier desktop SKUs)
+# 4 × 1GbE via Intel I210 (flashless copper)
+# 2 × 10G SFP+ via AMD EPYC 3201 SoC-integrated 10G (XGMAC)
+#
+# FreeBSD drivers:
+#   igb(4) → Intel I210 copper GbE — iface names igb0..igb3
+#   ax(4)  → AMD 10 Gigabit Ethernet — iface names ax0, ax1
+#
+# Distinct from the current-gen A20 (R2.0 / DEC850 era) which
+# swapped the I210 copper for I225-V 2.5GbE (igc driver); see
+# opnsense_deciso_a20_i225_sfpplus.yaml for that variant.  The
+# 10G SFP+ cages are identical across both generations (AMD XGMAC
+# via ax driver) — only the copper side differs.
+#
+# Validation: bsd-hardware.info probes 8ded6d9af6 and bab94f86da
+# (OPNsense 25.1 / FreeBSD 14.2 on EPYC 3201) both show the exact
+# iface set igb0..igb3 + ax0/ax1 linking at 10Gbps/Full.  Netgate
+# forum thread "PFSense on a DEC3840 (Netboard A20)" explicitly
+# identifies this as the DEC3840 rack SKU.  HIGH confidence on
+# interface naming.
+vendor: opnsense
+model: Netboard-A20-I210-SFPPlus
+display_name: "Deciso Netboard A20 (4x I210 GbE + 2x 10G — pre-R2.0 / DEC3840)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I210 copper GbE"}
+  - {range: "ax0-1", kind: uplink, speed: 10gig, sfp: true, notes: "AMD XGMAC SFP+ (EPYC 3201 integrated)"}
+lags: {max: 6, prefix: lagg}

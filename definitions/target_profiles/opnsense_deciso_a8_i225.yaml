@@ -1,0 +1,28 @@
+# Deciso DEC600 series — Netboard A8 (2.5GbE variant, current shipping)
+# 4 × 2.5GbE via Intel I225-V
+# No SFP+ cage, no separate management NIC
+#
+# FreeBSD driver: igc(4) — Intel I225/I226 2.5GbE
+# Default BSD iface names: igc0, igc1, igc2, igc3
+#
+# IMPORTANT — branding confusion: the current DEC600 series is
+# marketed with the "Netboard A8" board name, NOT "A10".  Older
+# reseller pages sometimes called 4x2.5G desktop units "A10 v2"
+# or similar; the shop.opnsense.com DEC600 product page is
+# authoritative ("At the heart of this small desktop, AMD's
+# G-Series SOC powers the Netboard A8").  An older A8 electrical
+# revision shipped with 4x I211 GbE (igb driver, 1GbE); see
+# opnsense_deciso_a8_i211.yaml for that variant.
+#
+# Validation: bsd-hardware.info probe ad01c76099 shows the exact
+# iface set igc0..igc3 (I225-V) with NO other NICs attaching (no
+# em, ix, bge, re, or mgmt).  HIGH confidence on interface naming.
+# Board version reported as "4.16" in dmidecode.
+vendor: opnsense
+model: Netboard-A8-I225
+display_name: "Deciso Netboard A8 (4x I225-V 2.5GbE — DEC600 2.5G)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-3", kind: physical, speed: 2.5gig, notes: "Intel I225-V 2.5GbE copper"}
+lags: {max: 4, prefix: lagg}
