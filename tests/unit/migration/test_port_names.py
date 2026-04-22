@@ -514,11 +514,14 @@ class TestOrchestrator:
     def test_rewrites_every_port_name_field(self):
         intent = _cisco_intent_with_lag()
         result = translate_port_names(
-            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec()
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            strip_unmappable=False,  # keep verbatim for reference checks
         )
 
         # Interfaces — physical ones rewritten; Vlan10 + Loopback0
         # fall through with warnings since Aruba can't express those.
+        # (With default strip_unmappable=True the Loopback would have
+        # been auto-dropped — exercised in TestAutoDrop below.)
         names = [i.name for i in intent.interfaces]
         assert "1/1" in names
         assert "1/2" in names
@@ -585,6 +588,103 @@ class TestOrchestrator:
         # Loopback0 warns (Aruba has no loopback).  SVI Vlan10
         # suppressed because Aruba absorbs SVI into VLAN stanza.
         assert any("Loopback0" in w for w in result.warnings)
+        # Default strip_unmappable=True auto-drops Loopback0.
+        assert "Loopback0" in result.dropped
+
+
+class TestAutoDropUnmappable:
+    """Default behaviour (``strip_unmappable=True``): when the auto-
+    heuristic can't translate a name (target codec's
+    ``format_port_identity`` returns None), the source name is
+    AUTO-DROPPED from the canonical tree instead of leaking verbatim
+    into the rendered output.  Operator can still override with a
+    user rename map, or use the Tier 3 UI's "keep verbatim" link."""
+
+    def test_auto_drops_unmappable_by_default(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                # Aruba uplink module (non-zero middle digit) — no
+                # auto-translation possible.
+                CanonicalInterface(name="FortyGigabitEthernet1/1/1"),
+                CanonicalInterface(name="Loopback0"),
+            ],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+        )
+        names = [i.name for i in intent.interfaces]
+        # Successfully auto-translated: stays (renamed).
+        assert "1/1" in names
+        # Unmappable: auto-dropped.
+        assert "FortyGigabitEthernet1/1/1" not in names
+        assert "Loopback0" not in names
+        # Dropped set reflects the auto-drops.
+        assert "FortyGigabitEthernet1/1/1" in result.dropped
+        assert "Loopback0" in result.dropped
+        # Warnings still fire so the operator sees what happened.
+        assert any("FortyGigabitEthernet1/1/1" in w for w in result.warnings)
+
+    def test_strip_unmappable_false_keeps_verbatim(self):
+        """Opt-out: ``strip_unmappable=False`` preserves legacy
+        leave-verbatim behaviour.  Used by API callers that need
+        to inspect unmapped names before deciding what to do."""
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1")],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            strip_unmappable=False,
+        )
+        # Name preserved in canonical tree.
+        assert intent.interfaces[0].name == "FortyGigabitEthernet1/1/1"
+        # Warning still fires (we didn't translate it).
+        assert any("FortyGigabitEthernet1/1/1" in w for w in result.warnings)
+        # Not auto-dropped.
+        assert "FortyGigabitEthernet1/1/1" not in result.dropped
+
+    def test_verbatim_user_override_beats_auto_drop(self):
+        """Operators who explicitly want to keep an unmappable name
+        verbatim can supply a no-op rename (``{name: name}``) — the
+        user map wins over auto-drop."""
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1")],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"FortyGigabitEthernet1/1/1": "FortyGigabitEthernet1/1/1"},
+        )
+        # User override applied → name preserved, no drop.
+        assert intent.interfaces[0].name == "FortyGigabitEthernet1/1/1"
+        assert "FortyGigabitEthernet1/1/1" not in result.dropped
+
+    def test_svi_absorbed_not_auto_dropped(self):
+        """SVIs that the target codec absorbs into the VLAN stanza
+        are a special case — neither warned nor auto-dropped.  The
+        L3 data still reaches the target via the VLAN render path."""
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface, CanonicalVlan,
+        )
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="Vlan11")],
+            vlans=[CanonicalVlan(id=11, name="mgmt")],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+        )
+        # Name stays verbatim (no port-name rename), NO auto-drop.
+        assert "Vlan11" in [i.name for i in intent.interfaces]
+        assert "Vlan11" not in result.dropped
+        assert not any("Vlan11" in w for w in result.warnings)
 
 
 # ---------------------------------------------------------------------------

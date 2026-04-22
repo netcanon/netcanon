@@ -221,6 +221,7 @@ def translate_port_names(
     source_codec: "CodecBase",
     target_codec: "CodecBase",
     rename_map: "dict[str, str | None] | None" = None,
+    strip_unmappable: bool = True,
 ) -> PortRenameResult:
     """Rewrite every port-name reference in *intent* from source-vendor
     convention to target-vendor convention.
@@ -240,9 +241,26 @@ def translate_port_names(
            target's native formatting.
         4. If the auto-path returns ``None`` (target has no equivalent
            for this kind — e.g. Aruba AOS-S can't express
-           ``Loopback0``) keep the original name verbatim and emit a
-           warning.  Caller decides whether to surface the warning or
-           strip the affected interface before rendering.
+           ``Loopback0``) the behaviour depends on *strip_unmappable*:
+
+             * ``True`` (default) — the source name is AUTO-DROPPED
+               from the canonical tree alongside the warning.  This
+               produces clean target output (no garbage
+               source-vendor names leaking into the render) and
+               matches the operator's typical intent when cross-
+               vendor translating.  Operators who want to keep the
+               name verbatim anyway can add ``{name: name}`` to
+               *rename_map* (a no-op rename beats the auto-drop) or
+               use the Tier 3 UI's "keep verbatim" affordance.
+             * ``False`` — name stays verbatim in the canonical
+               tree, warning fires.  Used by tests or API callers
+               that want to inspect what the auto-heuristic
+               couldn't resolve without the rename sweep silently
+               deleting data.
+
+        SVI + target-absorbs-SVI is a special case that short-
+        circuits before (4): no warning, no drop, name stays verbatim
+        (target's VLAN-stanza render path handles the L3 data).
 
     Port-name references are rewritten uniformly across ALL places
     the canonical tree stores them:
@@ -358,6 +376,15 @@ def translate_port_names(
                     f"{ident.kind} {name!r} "
                     f"(source {source_codec.name}); left verbatim."
                 )
+            # Auto-drop: the target codec can't represent this name,
+            # so leaving it verbatim in the canonical tree pollutes
+            # the rendered output with invalid source-vendor syntax.
+            # Default strip_unmappable=True removes the name from
+            # downstream rendering; operators who explicitly want to
+            # keep it can use a verbatim-override (``map[name] =
+            # name``) or the Tier 3 UI's "keep verbatim" link.
+            if strip_unmappable:
+                dropped_set.add(name)
             memo[name] = name
             return name
         memo[name] = out
@@ -447,6 +474,7 @@ def build_port_rename_transform(
     source_codec: "CodecBase",
     target_codec: "CodecBase",
     rename_map: "dict[str, str | None] | None" = None,
+    strip_unmappable: bool = True,
 ) -> tuple[Callable[["CanonicalIntent"], "CanonicalIntent"], PortRenameResult]:
     """Return a ``(transform, result)`` pair.
 
@@ -466,7 +494,8 @@ def build_port_rename_transform(
 
     def transform(intent: "CanonicalIntent") -> "CanonicalIntent":
         outcome = translate_port_names(
-            intent, source_codec, target_codec, rename_map
+            intent, source_codec, target_codec, rename_map,
+            strip_unmappable=strip_unmappable,
         )
         # Merge into the shared result object so the caller sees the
         # aggregate even if the transform runs more than once.

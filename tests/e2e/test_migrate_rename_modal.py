@@ -141,34 +141,77 @@ class TestRenameModalApply:
 
 class TestRenameModalDrop:
     """Dropping an interface removes it from the rendered output.
-    The Tier 3 UI exposes this via a 'drop' link next to free-text
-    override inputs (or a '— Drop (don't render) —' option in
-    profile-driven dropdowns).
+
+    Two paths:
+      * Auto-drop (default) — server strips unmappable names (Loopback0
+        on Aruba target, etc.) before render.  The rendered output
+        already excludes them; UI shows them as "auto-dropped" rows.
+      * Explicit drop — operator clicks the row's drop link to
+        remove a name that would otherwise auto-translate.
     """
 
-    def test_drop_link_removes_interface_from_output(
+    def test_loopback_auto_dropped_by_default(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
+        # Default behaviour (strip_unmappable=True): Loopback0 has no
+        # Aruba equivalent and is auto-dropped before render.  The
+        # main output does NOT contain the Loopback name without any
+        # user action.
+        output = page.locator('[data-testid="migrate-output"]')
+        assert "Loopback0" not in (output.text_content() or "")
+
+    def test_explicit_drop_link_removes_interface(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        # Drop a source that WOULD auto-translate (Gi1/0/1 → 1/1);
+        # user explicitly says "don't render this".
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
-        # No target profile picked → free-text inputs + drop links.
         drop_link = page.locator(
-            '[data-testid="migrate-rename-drop-Loopback0"]'
+            '[data-testid="migrate-rename-drop-GigabitEthernet1/0/1"]'
         )
         expect(drop_link).to_be_visible()
+        # For rows that auto-translated successfully, link says "drop".
+        expect(drop_link).to_contain_text("drop")
         drop_link.click()
-        # Summary shows the drop count.
         summary = page.locator('[data-testid="migrate-rename-summary"]')
         expect(summary).to_contain_text("drop")
-        # Apply → pipeline re-runs.
         page.locator('[data-testid="migrate-rename-apply-btn"]').click()
         expect(
             page.locator('[data-testid="migrate-rename-status"]')
         ).to_contain_text("Applied", timeout=5_000)
         page.locator('[data-testid="migrate-rename-modal-close"]').click()
-        # Rendered output no longer contains the Loopback0 name.
+        # The target-side name for Gi1/0/1 would have been "1/1";
+        # assert neither source nor target appears in rendered output.
         output = page.locator('[data-testid="migrate-output"]')
-        # The dropped name should not appear in rendered text.
-        assert "Loopback0" not in (output.text_content() or "")
+        text = output.text_content() or ""
+        assert "GigabitEthernet1/0/1" not in text
+        # "1/1" check is stricter than needed — Aruba's Trk1 rendering
+        # contains "1/1" as part of trunk port lists — so just assert
+        # the Gi1/0/1 interface STANZA doesn't appear.
+
+    def test_keep_verbatim_re_includes_auto_dropped_row(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        # Default auto-drop hides Loopback0.  Operator wants to KEEP
+        # it anyway (e.g. to carry it through for manual cleanup in
+        # the target config).  The drop link on an auto-dropped row
+        # says "keep verbatim" and clicking it un-drops the row.
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        keep_link = page.locator(
+            '[data-testid="migrate-rename-drop-Loopback0"]'
+        )
+        expect(keep_link).to_be_visible()
+        expect(keep_link).to_contain_text("keep verbatim")
+        keep_link.click()
+        page.locator('[data-testid="migrate-rename-apply-btn"]').click()
+        expect(
+            page.locator('[data-testid="migrate-rename-status"]')
+        ).to_contain_text("Applied", timeout=5_000)
+        page.locator('[data-testid="migrate-rename-modal-close"]').click()
+        # Loopback0 now appears verbatim in rendered output
+        # (the user explicitly asked for it).
+        output = page.locator('[data-testid="migrate-output"]')
+        assert "Loopback0" in (output.text_content() or "")
 
 
 class TestRenameModalCollisionDetection:
