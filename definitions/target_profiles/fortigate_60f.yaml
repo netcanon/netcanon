@@ -1,0 +1,32 @@
+# FortiGate 60F (FG-60F)
+# 10 × GE RJ45 total, factory-default names (per Fortinet fast-path doc):
+#     wan1, wan2                 — 2x WAN (uplink)
+#     internal1 .. internal5     — 5x LAN (hardware-switch "internal")
+#     a, b                       — 2x FortiLink-default ports
+#     dmz                        — 1x DMZ
+#
+# Common reseller pages bill the 60F as "7 internal ports" — that
+# count rolls the two FortiLink ports (a, b) into the LAN tally.
+# The actual CLI has only internal1-5, NOT internal1-7.  Sibling
+# models (60E / 80F / 100E) DO have internal1-7; be careful not to
+# copy-paste between profiles.
+#
+# Validation: port naming from Fortinet's own fast-path architecture
+# doc (docs.fortinet.com/document/fortigate/7.6.6/hardware-acceleration
+# /758378/fortigate-60f-and-61f-fast-path-architecture) which
+# enumerates the NPU-connected ports by name.  Port breakdown
+# (2 WAN / 5 internal / 1 DMZ / 2 FortiLink) corroborated by the
+# public FG-60F datasheet PDF.  HIGH confidence.
+vendor: fortigate
+model: 60F
+display_name: "FortiGate 60F (FG-60F)"
+device_class: firewall
+stacking: ""
+ports:
+  - {id: "wan1", kind: uplink, speed: gig}
+  - {id: "wan2", kind: uplink, speed: gig}
+  - {range: "internal1-5", kind: physical, speed: gig, notes: "internal hw-switch default"}
+  - {id: "a", kind: physical, speed: gig, notes: "FortiLink default"}
+  - {id: "b", kind: physical, speed: gig, notes: "FortiLink default"}
+  - {id: "dmz", kind: physical, speed: gig}
+lags: {max: 8, prefix: ""}

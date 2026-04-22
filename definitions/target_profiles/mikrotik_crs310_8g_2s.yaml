@@ -1,0 +1,19 @@
+# MikroTik CRS310-8G+2S+
+# 8 × 2.5G BASE-T RJ45 (PoE+ 802.3bt on ether1-8, max 170W budget)
+# 2 × 10G SFP+ uplink cages (sfp-sfpplus1..2)
+# 1 × management interface is typically reached via any enabled ether,
+#     not a dedicated mgmt port — the CRS310 doesn't have an OOB port.
+#
+# Validation: grounded in user-contributed real capture
+# (tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc), which
+# exercises all 8 ether* + both sfp-sfpplus* interfaces under
+# RouterOS 7.18.2.  HIGH confidence on interface naming.
+vendor: mikrotik_routeros
+model: CRS310-8G+2S+
+display_name: "MikroTik CRS310-8G+2S+"
+device_class: switch
+stacking: ""   # CRS310 has no native stacking
+ports:
+  - {range: "ether1-8", kind: physical, speed: 2.5gig, poe: true}
+  - {range: "sfp-sfpplus1-2", kind: uplink, speed: 10gig, sfp: true}
+lags: {max: 16, prefix: bond}

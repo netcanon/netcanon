@@ -361,6 +361,134 @@ class TestRealProfilesShipped:
         assert jl085a_uplinks[0].id == "1/A1"
         assert jl085a_uplinks[0].speed == "40gig"
 
+    # ------------------------------------------------------------------
+    # MikroTik / FortiGate / OPNsense target profiles
+    #
+    # Each assertion anchors the YAML to its authorship-time
+    # rationale so that a careless edit (wrong port count, wrong
+    # CLI name) gets caught by CI instead of shipping.  Port-name
+    # strings are the critical invariant — they become literal target
+    # dropdown options in the rename modal, and a typo silently
+    # offers the operator non-existent ports.
+    # ------------------------------------------------------------------
+
+    def test_mikrotik_crs310(self):
+        """CRS310-8G+2S+: grounded in real user-contributed capture
+        (user_contrib_crs310_ros7.rsc).  ether1-8 are 2.5G PoE+ RJ45,
+        sfp-sfpplus1-2 are 10G SFP+."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["mikrotik_routeros/CRS310-8G+2S+"]
+        assert p.vendor == "mikrotik_routeros"
+        assert p.device_class == "switch"
+        assert p.port_count == 10
+        # ether1..8 — every one PoE+ capable
+        ether_ids = [pt.id for pt in p.ports if pt.id.startswith("ether")]
+        assert ether_ids == [f"ether{n}" for n in range(1, 9)]
+        for pt in p.ports:
+            if pt.id.startswith("ether"):
+                assert pt.poe is True
+                assert pt.speed == "2.5gig"
+        # sfp-sfpplus1..2 — uplinks, 10gig
+        sfp_ids = [pt.id for pt in p.ports if pt.kind == "uplink"]
+        assert sfp_ids == ["sfp-sfpplus1", "sfp-sfpplus2"]
+        assert p.lags.prefix == "bond"
+
+    def test_mikrotik_ccr2004(self):
+        """CCR2004-1G-12S+2XS: 1x GbE mgmt + 12x 10G SFP+ + 2x 25G SFP28."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["mikrotik_routeros/CCR2004-1G-12S+2XS"]
+        assert p.device_class == "router"
+        assert p.port_count == 15
+        # ether1 is the GbE mgmt port.
+        ether1 = p.lookup_port("ether1")
+        assert ether1 is not None and ether1.kind == "mgmt"
+        # 12x SFP+ 10G with exact RouterOS default-name form.
+        sfp_plus_ids = [
+            pt.id for pt in p.ports if pt.id.startswith("sfp-sfpplus")
+        ]
+        assert sfp_plus_ids == [f"sfp-sfpplus{n}" for n in range(1, 13)]
+        # 2x SFP28 25G — different default-name prefix (no `sfp-`).
+        sfp28_ids = [pt.id for pt in p.ports if pt.id.startswith("sfp28")]
+        assert sfp28_ids == ["sfp28-1", "sfp28-2"]
+        for pt in p.ports:
+            if pt.id.startswith("sfp28"):
+                assert pt.speed == "25gig"
+                assert pt.kind == "uplink"
+        assert p.lags.prefix == "bond"
+
+    def test_fortigate_40f(self):
+        """FG-40F: 5 GE RJ45 with the peculiar default naming
+        `wan`/`a`/`lan1`-`lan3`.  NOT `internal1-4`, NOT `port1-5`,
+        NOT `lan4` — the factory config doesn't expose any of those."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["fortigate/40F"]
+        assert p.device_class == "firewall"
+        assert p.port_count == 5
+        ids = set(p.port_ids())
+        assert ids == {"wan", "a", "lan1", "lan2", "lan3"}
+        # `wan` is an uplink; `a` and lan1-3 are physical.
+        assert p.lookup_port("wan").kind == "uplink"
+        assert p.lookup_port("a").kind == "physical"
+        for n in (1, 2, 3):
+            assert p.lookup_port(f"lan{n}").kind == "physical"
+        # Common mistakes that should NOT be valid targets on a 40F.
+        for wrong in ("wan1", "wan2", "internal1", "port1", "lan4"):
+            assert p.lookup_port(wrong) is None, (
+                f"{wrong} must not be a valid 40F port — fix the YAML"
+            )
+        assert p.lags.prefix == ""  # FortiGate LAGs are user-named
+
+    def test_fortigate_60f(self):
+        """FG-60F: 10 GE RJ45.  Distinct from sibling 60E/80F/100E
+        (which have internal1-7); the 60F has internal1-5 + FortiLink
+        ports `a`, `b`."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["fortigate/60F"]
+        assert p.port_count == 10
+        ids = set(p.port_ids())
+        assert ids == {
+            "wan1", "wan2", "dmz",
+            "internal1", "internal2", "internal3", "internal4", "internal5",
+            "a", "b",
+        }
+        # internal1-5 only — not 6/7 (those are sibling-model names).
+        for wrong in ("internal6", "internal7", "lan1"):
+            assert p.lookup_port(wrong) is None, (
+                f"{wrong} must not be a 60F port — that's a 60E/80F/100E name"
+            )
+        # `a`/`b` are the FortiLink defaults (physical, not uplink/mgmt).
+        assert p.lookup_port("a").kind == "physical"
+        assert p.lookup_port("b").kind == "physical"
+
+    def test_fortigate_100e(self):
+        """FG-100E: grounded in real user-contributed capture
+        (user_contrib_fg100e_fos7213.conf).  22 ports total: wan1/wan2,
+        dmz, mgmt, ha1/ha2, port1-14 RJ45, port15-16 GE SFP."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["fortigate/100E"]
+        assert p.port_count == 22
+        ids = set(p.port_ids())
+        # All 6 special-named ports present.
+        assert {"wan1", "wan2", "dmz", "mgmt", "ha1", "ha2"} <= ids
+        # port1..16 present.
+        for n in range(1, 17):
+            assert f"port{n}" in ids, f"missing port{n}"
+        # port15 and port16 are the SFP cages (sfp=True).
+        for n in (15, 16):
+            pt = p.lookup_port(f"port{n}")
+            assert pt is not None and pt.sfp is True
+        # mgmt has its own kind.
+        assert p.lookup_port("mgmt").kind == "mgmt"
+
+    # NOTE: OPNsense target profiles for the Deciso A-series were
+    # considered for this commit but deferred.  A background
+    # research agent surfaced significant ambiguity — the "A10" and
+    # "A20" names have each been reused across multiple hardware
+    # generations (em/igb/igc + ax driver families), and the 10G
+    # SFP+ cages use AMD XGMAC (`ax0`/`ax1`) not Intel `ix`.
+    # Shipping a confidently-wrong dropdown would misdirect
+    # operators; flagged for dedicated follow-up with dmesg-grade
+    # per-generation verification.
 
 # ---------------------------------------------------------------------------
 # Module-variant support (schema-first Option B, milestone-1)

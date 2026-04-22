@@ -1,0 +1,28 @@
+# FortiGate 40F (FG-40F)
+# 5 × GE RJ45 total — front panel silkscreen: WAN, A, 1, 2, 3
+#     CLI names:                              wan, a, lan1, lan2, lan3
+#
+# The `a` port defaults to being a member of the FortiLink software
+# switch.  lan1/lan2/lan3 default to being members of the `lan`
+# virtual-switch (hard-switch).
+#
+# Validation: default-config naming corroborated by Fortinet support
+# post at
+# https://community.fortinet.com/t5/Support-Forum/40F-Physical-ports-hard-switch-Disambiguation-Default-config/m-p/277431
+# which shows a verbatim `config system virtual-switch` block from a
+# factory-default 40F.  HIGH confidence on interface naming — do NOT
+# use `internal1-4` / `port1-5` / `lan4` / `wan1`/`wan2` (common
+# copy-paste mistakes from reseller product pages; they don't
+# correspond to the actual factory-default CLI).
+vendor: fortigate
+model: 40F
+display_name: "FortiGate 40F (FG-40F)"
+device_class: firewall
+stacking: ""
+ports:
+  - {id: "wan", kind: uplink, speed: gig}
+  - {id: "a", kind: physical, speed: gig, notes: "FortiLink default"}
+  - {range: "lan1-3", kind: physical, speed: gig, notes: "lan hard-switch default"}
+# FortiGate LAGs are user-named; leave prefix empty to signal
+# "free-form LAG name".
+lags: {max: 4, prefix: ""}

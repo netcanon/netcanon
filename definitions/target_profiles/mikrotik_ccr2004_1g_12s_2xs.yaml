@@ -1,0 +1,26 @@
+# MikroTik CCR2004-1G-12S+2XS (Cloud Core Router)
+# 1  × GbE RJ45 management / out-of-band (ether1)
+# 12 × 10G SFP+ (sfp-sfpplus1..12)
+# 2  × 25G SFP28 (sfp28-1..2) — RouterOS 7 default-name convention
+#
+# Validation: interface naming scheme corroborated by two independent
+# user-posted `/export` dumps from real CCR2004-1G-12S+2XS units on
+# the MikroTik forum (thread 142685 shows sfp-sfpplus1..11 verbatim;
+# thread 266127 independently shows sfp28-1/sfp28-2).  A third thread
+# (183601) confirms the 1G RJ45 is named `ether1`, not `mgmt1`.  No
+# full single-source `.rsc` capture is under tests/fixtures/real yet —
+# only sub-100-line excerpts — but the naming is HIGH confidence.
+vendor: mikrotik_routeros
+model: CCR2004-1G-12S+2XS
+display_name: "MikroTik CCR2004-1G-12S+2XS"
+device_class: router
+stacking: ""   # CCR routers don't stack
+ports:
+  - {id: "ether1", kind: mgmt, speed: gig, notes: "copper mgmt / OOB"}
+  - {range: "sfp-sfpplus1-12", kind: physical, speed: 10gig, sfp: true, notes: "SFP+ cage"}
+  # SFP28 names can't use the range-shorthand helper because the
+  # dash in the prefix (`sfp28-`) clashes with the range separator.
+  # Enumerated literally instead.
+  - {id: "sfp28-1", kind: uplink, speed: 25gig, sfp: true, notes: "SFP28 cage"}
+  - {id: "sfp28-2", kind: uplink, speed: 25gig, sfp: true, notes: "SFP28 cage"}
+lags: {max: 16, prefix: bond}

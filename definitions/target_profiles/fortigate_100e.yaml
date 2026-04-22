@@ -1,0 +1,30 @@
+# FortiGate 100E (FG-100E)
+# 18 × GE RJ45 switch/firewall ports (port1-14, wan1, wan2, dmz, mgmt,
+#      ha1, ha2 — see grouping below)
+# 2  × GE SFP uplink cages (port15, port16)
+#
+# Validation: grounded in user-contributed real capture
+# (tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf),
+# FortiOS 7.2.13, running on a physical FG-100E.  That capture
+# exercises wan1, wan2, dmz, mgmt, ha1, ha2, and port1-16.  HIGH
+# confidence on interface naming.
+vendor: fortigate
+model: 100E
+display_name: "FortiGate 100E (FG-100E)"
+device_class: firewall
+stacking: ""   # HA clusters (active-passive / active-active) don't
+               # count as stacking for port-naming — each unit keeps
+               # its own port IDs.
+ports:
+  - {id: "wan1", kind: uplink, speed: gig}
+  - {id: "wan2", kind: uplink, speed: gig}
+  - {id: "dmz", kind: physical, speed: gig}
+  - {id: "mgmt", kind: mgmt, speed: gig}
+  - {id: "ha1", kind: physical, speed: gig}
+  - {id: "ha2", kind: physical, speed: gig}
+  - {range: "port1-14", kind: physical, speed: gig}
+  - {range: "port15-16", kind: uplink, speed: gig, sfp: true, notes: "GE SFP cage"}
+# FortiGate LAGs are user-named (`set type aggregate` + operator picks
+# the name) — no vendor-native prefix.  Leave prefix empty to signal
+# "free-form LAG name" to the UI; max lifted from FortiOS 7.x limits.
+lags: {max: 16, prefix: ""}
