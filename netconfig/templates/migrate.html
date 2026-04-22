@@ -121,6 +121,32 @@
   .mig-rename-summary-warn { color:#7a5d00; font-weight:700; }
   .mig-rename-summary-collision { color:#721c24; font-weight:700; }
 
+  /* Hardware fit-check banner — source-vs-target port counts,
+     grouped by kind.  Visible only when a target profile is
+     selected (needs capacity data).  Auto-colours: green when
+     source fits, amber when overage, red for speed-downshift on
+     uplinks.  Always compact — never dominates the modal. */
+  #mig-rename-fitcheck {
+    padding:.4rem .8rem; font-size:.78rem;
+    border-bottom:1px solid #e0e0e8;
+    font-family:monospace;
+  }
+  #mig-rename-fitcheck.fit-ok    { background:#eef8ee; color:#1a5928; }
+  #mig-rename-fitcheck.fit-warn  { background:#fff6e0; color:#7a5d00; }
+  #mig-rename-fitcheck.fit-block { background:#fde5e5; color:#721c24; }
+  #mig-rename-fitcheck .mig-fitcheck-kind {
+    display:inline-block; margin-right:1rem;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-kind strong {
+    font-weight:700; margin-right:.25rem;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-over {
+    color:#721c24; font-weight:700;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-note {
+    color:#555; font-style:italic; margin-left:.5rem;
+  }
+
   #mig-rename-modal-body {
     flex:1; display:flex; overflow:hidden;
   }
@@ -459,6 +485,11 @@
           id="mig-rename-summary"
           data-testid="migrate-rename-summary"></span>
   </div>
+
+  <div id="mig-rename-fitcheck"
+       data-testid="migrate-rename-fitcheck"
+       style="display:none"
+       aria-label="Hardware fit check — source vs target port counts"></div>
 
   <div id="mig-rename-modal-body">
     <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
@@ -1927,6 +1958,160 @@
     // Disable Apply when collisions exist.
     var applyBtn = document.getElementById('mig-rename-apply-btn');
     if (applyBtn) applyBtn.disabled = collisions > 0;
+
+    // Fit-check banner is re-rendered whenever the summary is —
+    // same inputs (job state + user overrides can change source
+    // drops/keeps) and same triggering events (profile/model/module
+    // change, modal open, apply complete).  Inlining this call here
+    // means every summary call-site automatically refreshes the
+    // banner without touching all 9 chains.
+    renderFitCheck();
+  }
+
+  /** Hardware fit-check banner.  When a target profile is selected,
+   *  compare source-side port counts (grouped by kind) against the
+   *  profile's effective capacity (chassis + selected module) and
+   *  surface the deltas so the operator sees capacity overage before
+   *  they commit mappings.
+   *
+   *  MVP: per-kind count + overage flag.  Fancier dimensions
+   *  (speed-downshift warnings, LAG headroom, PoE budget) are
+   *  deferred — this is the "one-glance" check, not an audit.
+   *
+   *  Hidden when:
+   *    * No profile selected (can't compute capacity → no banner).
+   *    * Profile is module-variant and no module selected (shouldn't
+   *      happen in practice — the UI pre-selects a default — but
+   *      guards against the edge case). */
+  function renderFitCheck() {
+    var el = document.getElementById('mig-rename-fitcheck');
+    if (!el) return;
+    var profileKey = currentRenameProfileKey();
+    var profile = profileKey && _renameProfiles.find(function(p) {
+      return (p.vendor + '/' + p.model) === profileKey;
+    });
+    if (!profile || !_lastJob) {
+      el.style.display = 'none';
+      el.className = '';
+      return;
+    }
+    // Count source interfaces by kind.  Sources come from three
+    // places in the job: port_renames (successfully auto-translated),
+    // port_drops (auto-dropped), warnings (unclassified / complexity
+    // cases).  Union them to cover the full source universe.
+    var seenSources = new Set();
+    var sourceByKind = {};
+    function bumpSource(name) {
+      if (!name || seenSources.has(name)) return;
+      seenSources.add(name);
+      var kind = _guessKind(name);
+      // Roll uplink-looking physical into 'uplink' bucket for the
+      // fitcheck math — matches how target-dropdown options are
+      // routed in profileOptionsFor().  Otherwise a Cat 9300
+      // source FortyGigabitEthernet would get tallied as access
+      // against the target's access ports, inflating overage noise.
+      if (kind === 'physical' && _looksLikeUplink(name)) {
+        kind = 'uplink';
+      }
+      sourceByKind[kind] = (sourceByKind[kind] || 0) + 1;
+    }
+    var applied = (_lastJob.port_renames) || {};
+    Object.keys(applied).forEach(bumpSource);
+    var drops = (_lastJob.port_drops) || [];
+    drops.forEach(bumpSource);
+    var warns = (_lastJob.warnings) || [];
+    warns.forEach(function(w) {
+      var m = w.match(/'([^']+)'/);
+      if (m) bumpSource(m[1]);
+    });
+
+    // Count target capacity by kind using the effective port list
+    // (chassis + selected module, mirrors backend effective_ports()).
+    var effectivePorts = effectivePortsFor(profile);
+    var targetByKind = {};
+    effectivePorts.forEach(function(p) {
+      targetByKind[p.kind] = (targetByKind[p.kind] || 0) + 1;
+    });
+
+    // Compose the banner.  Kinds shown in a stable order, empty
+    // categories suppressed so the banner stays compact.
+    var KIND_ORDER = ['physical', 'uplink', 'mgmt'];
+    var KIND_LABEL = {
+      physical: 'access',
+      uplink: 'uplink',
+      mgmt: 'mgmt',
+    };
+    var worstState = 'ok';
+    var parts = [];
+    KIND_ORDER.forEach(function(kind) {
+      var src = sourceByKind[kind] || 0;
+      var tgt = targetByKind[kind] || 0;
+      if (src === 0 && tgt === 0) return;
+      var overage = src > tgt ? (src - tgt) : 0;
+      if (overage > 0) worstState = 'warn';
+      var html = '<span class="mig-fitcheck-kind" '
+        + 'data-testid="migrate-fitcheck-kind-' + kind + '">'
+        + '<strong>' + KIND_LABEL[kind] + ':</strong> '
+        + src + ' / ' + tgt;
+      if (overage > 0) {
+        html += ' <span class="mig-fitcheck-over">(+' + overage
+          + ' over capacity)</span>';
+      }
+      html += '</span>';
+      parts.push(html);
+    });
+    // Module-awareness note: surface the SKU so the operator
+    // understands which hardware variant the numbers are counted
+    // against.  Omitted for legacy profiles.
+    var sku = currentRenameModuleSku();
+    if (sku) {
+      parts.push('<span class="mig-fitcheck-note" '
+        + 'data-testid="migrate-fitcheck-module-note">'
+        + '(module: ' + sku + ')</span>');
+    }
+    if (parts.length === 0) {
+      el.style.display = 'none';
+      el.className = '';
+      return;
+    }
+    el.className = 'fit-' + worstState;
+    el.innerHTML = parts.join(' ');
+    el.style.display = '';
+  }
+
+  /** Client-side kind classifier shared between renderRenameTable
+   *  and renderFitCheck.  Extracted from the nested helper to let
+   *  both renderers reuse it without duplication.  Mirrors codec
+   *  classify_port_name regex patterns; server-side is still the
+   *  authoritative classifier — this is UI grouping only. */
+  function _guessKind(name) {
+    if (/^(Port-channel|Trk|trk|LAG|bond|lagg)\d/i.test(name)) return 'lag';
+    if (/^Vlan\d|^vlan\d/.test(name)) return 'svi';
+    if (/\.\d+$/.test(name)) return 'svi';  // OPN/MT dotted form
+    if (/^Loopback\d|^lo$|^loopback\d/i.test(name)) return 'loopback';
+    if (/^(Tunnel|wg|gre|ipip|eoip|gif|ovpn)/i.test(name)) return 'tunnel';
+    if (/^VirtualPortGroup|^bridge|^br-/i.test(name)) return 'virtual';
+    if (/^(ssl\.|tunnel)/i.test(name)) return 'tunnel';
+    if (/^(mgmt|management)$/i.test(name)) return 'mgmt';
+    return 'physical';
+  }
+
+  /** Client-side uplink heuristic — mirrors looksLikeUplink()
+   *  nested in renderRenameTable.  Kept as a sibling helper so
+   *  renderFitCheck() doesn't have to re-scope through the table
+   *  renderer.  Same rules: 3-part Cisco non-zero middle digit,
+   *  high-speed prefixes, Aruba letter-slot, MikroTik cages,
+   *  FortiGate wan<N>. */
+  function _looksLikeUplink(name) {
+    var m = name.match(
+      /^(FastEthernet|GigabitEthernet|TwoGigabitEthernet|FiveGigabitEthernet|TenGigabitEthernet|TwentyFiveGigE|FortyGigabitEthernet|HundredGigE|FourHundredGigE|AppGigabitEthernet)(\d+)\/(\d+)\/(\d+)(\/\d+)?$/i
+    );
+    if (m && parseInt(m[3], 10) !== 0) return true;
+    if (/^(TwentyFiveGigE|FortyGigabitEthernet|HundredGigE|FourHundredGigE)/i.test(name)) return true;
+    if (/^\d+\/[A-Za-z]\d+$/.test(name)) return true;
+    if (/^(sfp|sfp-sfpplus|sfpplus|qsfpplus)\d/i.test(name)) return true;
+    if (/^wan\d*$/i.test(name)) return true;
+    return false;
   }
 
   /** POST to /plan again with the user's map, then swap in the new
