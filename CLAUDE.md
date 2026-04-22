@@ -3,6 +3,34 @@
 These directives govern all development in this repository.  Follow them in
 every session without being asked.
 
+**Project orientation:** if this is your first read, also skim
+[`README.md`](README.md) for the quickstart and
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the 4-layer design.
+[`translator-plans.txt`](translator-plans.txt) carries the active
+roadmap; [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md)
+tracks per-codec certification state.
+
+---
+
+## Two concerns, one FastAPI app
+
+NetConfig handles two independent (but co-hosted) concerns:
+
+1. **Backup** — `netconfig/collectors/` + `netconfig/api/routes/backups.py`.
+   Pulls raw `running-config` (or vendor equivalent) from devices over
+   SSH / NETCONF / REST and stores in `configs/<host>.<ext>`.  Mocked in
+   tests at a single entry point: `get_collector`.
+2. **Migration** — `netconfig/migration/`.  Translates a stored backup
+   from one vendor's native config to another through a shared
+   `CanonicalIntent` tree.  Per-vendor codecs under
+   `netconfig/migration/codecs/` — see
+   [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
+   for authorship guide.
+
+A change to one concern rarely touches the other.  When in doubt about
+where code belongs, ask: "does this fetch bytes off a device?" → backup.
+"Does this translate canonical representation?" → migration.
+
 ---
 
 ## Parallel Platform Development
@@ -105,3 +133,12 @@ tests use these exclusively — never CSS classes or element structure.  See
 - **Never** assert on the POST `/api/v1/backups` response body for final job
   state — it always returns `pending` (serialised before background task runs).
   Always GET the job by ID to read the completed state.
+- **Never** change the signatures of the existing pipeline-stage functions
+  in `netconfig/services/migration_pipeline.py`.  API routes and dozens of
+  tests depend on their exact shape.  Later phases add NEW public
+  functions; existing stages stay frozen.  See the module docstring.
+- **Never** commit real credential hashes to test fixtures.  Synthetic
+  hashes in test input should LOOK like real hashes but be obviously
+  fake (e.g. `$9$fake$hash`, `ENC fakeEncodedHash==`).  Third-party
+  real captures from published repos are OK — their hashes are already
+  public.  See `tests/fixtures/real/NOTICE.md` for provenance conventions.
