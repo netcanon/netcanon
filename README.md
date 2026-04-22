@@ -102,7 +102,7 @@ load, surfaced via `GET /api/v1/migration/adapters`):
 | mikrotik_routeros | **certified** ✅ | 4 across 3 OS versions |
 | aruba_aoss | **certified** ✅ | 4 (3 real + 1 rendered) across 3 OS versions |
 | cisco_iosxe_cli | **certified** ✅ | 11 (6 grammar-test + 5 real, incl. physical Cat 9300-24UX) across 4 LTS OS versions |
-| opnsense | best_effort | 3 (opnsense/core repo) |
+| opnsense | **certified** ✅ | 4 (3 upstream + 1 real user-deployed) across 2 sources |
 | fortigate_cli | best_effort | 2 (same OS version) |
 | cisco_iosxe (NETCONF) | best_effort | — |
 

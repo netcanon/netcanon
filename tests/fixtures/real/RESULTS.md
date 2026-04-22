@@ -100,29 +100,41 @@ the bar is met on both grammar fronts.
 
 **Codec:** `netconfig.migration.codecs.opnsense.OPNsenseCodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` *(unchanged)*
+**Certainty:** `certified` ✅
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | interfaces | dhcp | local_users | Notes |
-|---|---:|---:|---:|---:|---:|---|
-| `opnsense_core_default.xml` | 141 | 1 | 2 | 0 | 1 | Upstream default `config.xml` template — system, users, groups, timeservers, interface stubs. |
-| `opnsense_service_test_config.xml` | 91 | 0 | 3 | 0 | 0 | Service-layer test config with real wan/lan/opt1 zones, DHCP client + DHCPv6 prefix delegation, gateway tracking. |
-| `opnsense_acl_test_config.xml` | 239 | 1 | 2 | 1 | 5 | ACL model test — 5 users + 4 groups with distinct priv sets.  Richest local_users surface in the corpus. |
+| Fixture | Lines | hostname | interfaces | vlans | dhcp | local_users | Notes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `opnsense_core_default.xml` | 141 | 1 | 2 | 0 | 0 | 1 | Upstream default `config.xml` template — system, users, groups, timeservers, interface stubs. |
+| `opnsense_service_test_config.xml` | 91 | 0 | 3 | 0 | 0 | 0 | Service-layer test config with real wan/lan/opt1 zones, DHCP client + DHCPv6 prefix delegation, gateway tracking. |
+| `opnsense_acl_test_config.xml` | 239 | 1 | 2 | 0 | 1 | 5 | ACL model test — 5 users + 4 groups with distinct priv sets.  Richest local_users surface in the corpus. |
+| `user_contrib_supergate_opn25.xml` | 2,302 | 1 | 8 | 5 | per-zone | 2 | **Real deployed OPNsense instance** (user-contributed, sanitised).  8 interfaces across wan/lan/opt1-5/loopback, 5 VLANs with `<tag>` + `<descr>`, extensive per-zone DHCP static MAC reservations (~20 per zone), Unbound DNS with local overrides, IPsec, WireGuard, SNMP, NTP, self-signed cert chain. |
 
 ### Findings
 
-**Nothing failed.**  Both fixtures parse cleanly, round-trip cleanly.
-The OPNsense codec benefits from `ElementTree`-based parsing — XML
-grammar is rigidly enforced by the parser library, so "parse doesn't
-crash" is a cheap-to-validate invariant.
+**Bug surfaced + fixed by the real fixture:** the render path
+silently dropped every `CanonicalVlan` entry.  The parser read
+`<vlans><vlan><tag/>` + `<descr/>` correctly (populating
+`intent.vlans`) but `_render_canonical` had no inverse block, so a
+`parse → render → parse` cycle on the supergate capture collapsed
+5 VLANs down to 0.  The three upstream `opnsense/core` fixtures
+didn't exercise the `<vlans>` block at all so this bug slept until
+real-deployment contact.  Fix: added a `<vlans>` render block in
+`_render_canonical` that emits `<tag>` + `<descr>` per VLAN.
+Regression test in `TestRoundTrip::test_roundtrip_preserves_vlans`.
 
 ### Certification decision
 
-**Stay at `best_effort`.**  Two fixtures from a single source repo
-(albeit the canonical upstream) don't meet the `certified` threshold
-(≥3 captures from ≥2 OS versions).  Promotion awaits a second
-upstream or a sanitised customer deployment config.
+**Promoted to `certified`.**  The corpus now spans 4 fixtures from
+2 distinct sources — 3 from `opnsense/core` upstream (schema v9
+test/default configs) + 1 real deployed user-contributed OPNsense
+instance (2,302-line full `/conf/config.xml` with 5 VLANs, 8
+interfaces, bcrypt-hashed local users, self-signed cert chain).
+All four parse cleanly, produce populated canonical trees, and
+round-trip stable after the VLAN-render fix.  Bar met decisively:
+≥3 fixtures, ≥2 sources, round-trip stable after the fix, at least
+one real-deployment capture (the highest-signal class of fixture).
 
 ---
 
@@ -331,11 +343,11 @@ exercised by the rendered template:
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
 | **cisco_iosxe_cli** | **11** (6 grammar-test + 5 real) | **4 LTS** (16.9 + 17.3 + 17.9 + 17.12) | 1 (LAG member dedup) | **certified** ✅ | — |
-| opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
+| **opnsense** | **4** (3 upstream + 1 real user-deployed) | 2 sources | 1 (render dropped VLANs) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
 | **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
-| **TOTAL** | **24** | — | **8** | — | — |
+| **TOTAL** | **25** | — | **9** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —

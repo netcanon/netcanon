@@ -145,6 +145,36 @@ class TestRoundTrip:
         tree = a.parse(raw)
         assert a.parse(a.render(tree)) == tree
 
+    def test_roundtrip_preserves_vlans(self):
+        # Regression: the render path used to silently drop
+        # CanonicalVlan entries — it parsed <vlans><vlan><tag/> +
+        # <descr/> but never emitted the inverse block, so a
+        # parse→render→parse cycle returned an empty vlans list even
+        # when the source config had several.  Surfaced by the real
+        # supergate capture and fixed by adding a <vlans> render
+        # block in _render_canonical.
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <system><hostname>fw01</hostname></system>
+  <vlans>
+    <vlan><tag>10</tag><descr>USER VLAN</descr></vlan>
+    <vlan><tag>20</tag><descr>SERVER VLAN</descr></vlan>
+    <vlan><tag>100</tag><descr>CLUSTER VLAN</descr></vlan>
+  </vlans>
+</opnsense>
+"""
+        a = OPNsenseCodec()
+        first = a.parse(raw)
+        assert len(first.vlans) == 3
+        second = a.parse(a.render(first))
+        assert len(second.vlans) == 3
+        ids_first = sorted(v.id for v in first.vlans)
+        ids_second = sorted(v.id for v in second.vlans)
+        assert ids_first == ids_second == [10, 20, 100]
+        names_first = sorted(v.name for v in first.vlans)
+        names_second = sorted(v.name for v in second.vlans)
+        assert names_first == names_second == ["CLUSTER VLAN", "SERVER VLAN", "USER VLAN"]
+
 
 # ---------------------------------------------------------------------------
 # iter_xpaths
@@ -197,6 +227,17 @@ class TestCapabilities:
             up.path for up in OPNsenseCodec().capabilities.unsupported
         ]
         assert "/filter/rule" in unsupp
+
+    def test_certainty_is_certified(self):
+        # Promoted from best_effort after a sanitised real-world
+        # config.xml capture from a user-contributed deployed OPNsense
+        # instance ("supergate") landed the corpus at 4 fixtures
+        # across 2 sources (3 from opnsense/core upstream + 1 real
+        # user-deployed).  Real capture round-trip surfaced a real
+        # bug (render dropped <vlans> even though parse read them);
+        # fix + regression test (TestRoundTrip::test_roundtrip_preserves_vlans)
+        # landed in the same commit.  See tests/fixtures/real/RESULTS.md.
+        assert OPNsenseCodec.certainty == "certified"
 
 
 # ---------------------------------------------------------------------------

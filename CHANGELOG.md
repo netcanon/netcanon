@@ -7,6 +7,59 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (OPNsense promoted to `certified` — 4th codec to reach the bar + real render bug fixed)
+
+- User-contributed real ``config.xml`` from a deployed OPNsense
+  instance ("supergate"), captured via NetConfig's own backup layer
+  (SSH + ``cat /conf/config.xml``).  Sanitised per CLAUDE.md hard
+  rule — 2 bcrypt ``<password>`` hashes replaced with
+  ``$2y$11$fakeBcrypt...`` markers; API keys and the QFeeds
+  ``tip_...`` token replaced with synthetic placeholders; 2
+  self-signed-cert private-key ``<prv>`` blobs stripped (public
+  ``<crt>`` retained for grammar coverage); the real domain
+  (``[redacted-domain]``) replaced with ``example.test`` across 22
+  occurrences; 13 real MAC addresses sanitised with OUI-preserving
+  last-3-octet anonymisation; SSH-capture artifacts (``cat
+  /conf/config.xml`` prefix and trailing shell prompt) stripped.
+- ``user_contrib_supergate_opn25.xml`` — 2,302 lines, 8 interfaces
+  (wan/lan/opt1-5/loopback with USERVLAN/MGMTVLAN/SERVERVLAN/
+  CLUSTERVLAN/IOTVLAN descriptions), 5 VLANs with ``<tag>`` +
+  ``<descr>``, 2 local users w/ bcrypt hashes, extensive per-zone
+  DHCP static MAC reservations (~20/zone with operational
+  commentary), Unbound DNS with local overrides, IPsec, WireGuard,
+  SNMP, NTP.  The first genuinely-real-deployment OPNsense fixture
+  (previous 3 were all from ``opnsense/core`` upstream).
+- **Real codec bug surfaced + fixed in the same commit:** the
+  render path silently dropped every ``CanonicalVlan`` entry.  The
+  parser correctly read ``<vlans><vlan><tag/>`` + ``<descr/>`` into
+  ``intent.vlans``, but ``_render_canonical`` had no inverse block
+  — so a ``parse → render → parse`` cycle on the supergate capture
+  collapsed 5 VLANs down to 0.  The three upstream
+  ``opnsense/core`` fixtures didn't exercise the ``<vlans>`` block
+  at all, so this bug slept until real-deployment contact.  Fix:
+  added a ``<vlans>`` render block in
+  ``netconfig/migration/codecs/opnsense/codec.py`` that emits
+  ``<tag>`` + ``<descr>`` per VLAN (round-trip-symmetric with what
+  the parser reads).  Regression test
+  ``TestRoundTrip::test_roundtrip_preserves_vlans`` in
+  ``tests/unit/migration/test_opnsense.py`` pins the fix — the
+  test constructs a 3-VLAN input, parses/renders/re-parses, and
+  asserts the VLAN ids and names survive.
+- ``certainty`` ClassVar bumped from ``best_effort`` to
+  ``certified`` in
+  ``netconfig/migration/codecs/opnsense/codec.py``; matching
+  ``test_certainty_is_certified`` added in
+  ``tests/unit/migration/test_opnsense.py`` with comment citing the
+  promotion evidence.
+- ``opnsense`` is the **4th codec to reach ``certified``** (after
+  ``mikrotik_routeros``, ``aruba_aoss``, ``cisco_iosxe_cli``).
+- Docs: ``tests/fixtures/real/NOTICE.md`` (provenance for the new
+  file + sanitisation inventory), ``tests/fixtures/real/RESULTS.md``
+  (per-codec table + summary total from 24 → 25 fixtures),
+  ``README.md`` cert table.
+- **673 migration tests passing** (+7 from the last cert commit),
+  zero regressions.
+
 ### Added (Cisco IOS-XE CLI cert strengthened with physical Cat 9300-24UX real capture)
 
 - User-contributed real ``show running-config`` from a physical

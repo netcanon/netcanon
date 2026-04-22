@@ -74,7 +74,7 @@ class OPNsenseCodec(CodecBase):
     version_hint: ClassVar[str | None] = "25.x"
     input_format: ClassVar[str] = "xml-opnsense"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the contents of an OPNsense config.xml "
@@ -437,6 +437,21 @@ class OPNsenseCodec(CodecBase):
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+
+        # VLANs — emit <vlans><vlan> per CanonicalVlan.  We mirror the
+        # minimal shape the parser reads back: <tag> (required) + <descr>
+        # (for the human-readable name).  Real OPNsense <vlan> elements
+        # carry additional metadata (uuid, if, pcp, vlanif) but those
+        # aren't in the canonical — OPNsense happily re-ingests XML
+        # without them.  Round-trip stability only needs parser/render
+        # symmetry on the fields we canonicalise.
+        if intent.vlans:
+            vlans_el = ET.SubElement(root, "vlans")
+            for vlan in intent.vlans:
+                vlan_el = ET.SubElement(vlans_el, "vlan")
+                ET.SubElement(vlan_el, "tag").text = str(vlan.id)
+                if vlan.name:
+                    ET.SubElement(vlan_el, "descr").text = vlan.name
 
         # DHCP pools (Tier 2).  OPNsense keys DHCP config by interface
         # zone; use the canonical pool's ``interface`` field as the
