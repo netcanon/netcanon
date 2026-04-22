@@ -69,7 +69,7 @@ class CiscoIOSXECLICodec(CodecBase):
     version_hint: ClassVar[str | None] = "15.x / 16.x / 17.x"
     input_format: ClassVar[str] = "cli-ios"
     direction: ClassVar[str] = "parse_only"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config`.  This is the text "

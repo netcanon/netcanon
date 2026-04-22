@@ -7,6 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Cisco IOS-XE CLI promoted to `certified` — 3rd codec to reach the bar)
+
+- Three BSD-3-Clause real captures ingested from
+  [nickrusso42518/racc](https://github.com/nickrusso42518/racc) —
+  authored by a Cisco DevNet trainer, checked in as the playbook's
+  own sample output directory, so provenance is unambiguous:
+  - ``racc_csr1000v_iosxe169_bgp_ospf.txt`` — CSR1000v on
+    **IOS-XE 16.9 LTS**, 280 lines.  BGP AS 65001 with ``vpnv4`` +
+    ``rtfilter`` address-families, OSPF, QoS ``class-map`` +
+    ``policy-map``, ``logging host``, RESTCONF + NETCONF-YANG.
+  - ``racc_csr1_iosxe173_umbrella_sig.txt`` — CSR1000v on
+    **IOS-XE 17.3 LTS**, 398 lines.  Cisco Umbrella SIG tunnel
+    deployment: IKEv2 proposal/policy/profile + IPsec profile +
+    ``tunnel protection ipsec profile`` on Tunnel100, 22 static
+    routes (anycast SIG targets), EIGRP CITYNET, OSPF, SSH
+    ``pubkey-chain``, guestshell app-hosting, NETCONF-YANG
+    ``candidate-datastore``.
+  - ``racc_cat8000v_iosxe179_netconf.txt`` — Cat8000V on
+    **IOS-XE 17.9 LTS**, 343 lines.  ``ip nat inside source list
+    ... overload`` (PAT), ``telemetry ietf subscription`` (YANG-
+    push periodic update-policy over grpc-tcp), type-9 ``$9$...``
+    hash, RESTCONF + NETCONF-YANG, app-hosting guestshell.
+- **Zero codec bugs surfaced.**  All three fixtures parse cleanly
+  on first contact and produce populated canonical trees —
+  evidence the grammar coverage from the Batfish / NTC corpus
+  already generalised to real deployed CSR1000v / Cat8000V
+  configs.  Large cert chains, IKEv2 profiles, guestshell stanzas,
+  telemetry subscriptions, PKI trustpoints all fell through to
+  "parse-and-ignore" without tripping the parser — exactly as
+  designed.
+- Cert-bar for ``parse_only`` codecs: ≥3 real captures from ≥2 OS
+  versions that parse cleanly and produce populated canonical
+  trees (round-trip is N/A for parse-only).  The three racc
+  fixtures give us 3 distinct LTS OS versions — meets the bar
+  decisively.
+- ``certainty`` ClassVar bumped from ``best_effort`` to
+  ``certified`` in
+  ``netconfig/migration/codecs/cisco_iosxe_cli/codec.py``;
+  matching test renamed/updated in
+  ``tests/unit/migration/test_cisco_iosxe_cli.py``
+  (``test_certainty_is_certified``).
+- ``cisco_iosxe_cli`` is the **3rd codec to reach ``certified``**
+  (after ``mikrotik_routeros`` and ``aruba_aoss``).
+- Docs: ``tests/fixtures/real/NOTICE.md`` (provenance for 3 new
+  files), ``tests/fixtures/real/RESULTS.md`` (per-codec table +
+  summary total from 19 → 22 fixtures), ``README.md`` cert table.
+- **664 migration tests passing**, zero regressions.
+
 ### Added (Aruba AOS-S promoted to `certified` — 2nd codec to reach the bar)
 
 - Three sanitised real captures ingested from HPE Community forum

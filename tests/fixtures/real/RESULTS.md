@@ -22,18 +22,21 @@ equal trees).
 
 **Codec:** `netconfig.migration.codecs.cisco_iosxe_cli.CiscoIOSXECLICodec`
 **Direction:** `parse_only` *(round-trip N/A)*
-**Certainty:** `best_effort`
+**Certainty:** `certified` ✅
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | interfaces | vlans | routes | lags | snmp | Notes |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `batfish_cisco_interface.txt` | 337 | 1 | 24 | 9 | 0 | 1 | 0 | Grammar kitchen-sink — every interface sub-command Batfish supports. |
-| `batfish_cisco_ip_route.txt` | 26 | 1 | 0 | 0 | 10 | 0 | 0 | Static-route variants (interface next-hops, IP next-hops). |
-| `ntc_carrier_interfaces.txt` | 82 | 0 | 6 | 0 | 0 | 0 | 0 | Carrier IOS: VRFs, dot1Q Q-in-Q subinterfaces, QoS, ACL groups, uRPF. |
-| `batfish_cisco_aaa.txt` | 102 | 1 | 0 | 0 | 0 | 0 | 0 | AAA stanzas — tests parser tolerance for unmodelled commands. |
-| `batfish_cisco_snmp.txt` | 110 | 1 | 0 | 0 | 0 | 0 | 1 | `snmp-server community` with groups + views + users. |
-| `batfish_cisco_logging.txt` | 101 | 1 | 0 | 0 | 0 | 0 | 0 | `logging host`, buffered, facility — not canonically modelled, validates "parse doesn't crash". |
+| Fixture | Lines | hostname | interfaces | vlans | routes | lags | snmp | users | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `batfish_cisco_interface.txt` | 337 | 1 | 24 | 9 | 0 | 1 | 0 | 0 | Grammar kitchen-sink — every interface sub-command Batfish supports. |
+| `batfish_cisco_ip_route.txt` | 26 | 1 | 0 | 0 | 10 | 0 | 0 | 0 | Static-route variants (interface next-hops, IP next-hops). |
+| `ntc_carrier_interfaces.txt` | 82 | 0 | 6 | 0 | 0 | 0 | 0 | 0 | Carrier IOS: VRFs, dot1Q Q-in-Q subinterfaces, QoS, ACL groups, uRPF. |
+| `batfish_cisco_aaa.txt` | 102 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | AAA stanzas — tests parser tolerance for unmodelled commands. |
+| `batfish_cisco_snmp.txt` | 110 | 1 | 0 | 0 | 0 | 0 | 1 | 0 | `snmp-server community` with groups + views + users. |
+| `batfish_cisco_logging.txt` | 101 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | `logging host`, buffered, facility — not canonically modelled, validates "parse doesn't crash". |
+| `racc_csr1000v_iosxe169_bgp_ospf.txt` | 280 | 1 | 11 | 0 | 1 | 0 | 0 | 2 | Real `show run` from CSR1000v on **IOS-XE 16.9 LTS**.  BGP AS 65001 (vpnv4 + rtfilter AFs), OSPF, QoS policy-maps, syslog-host, RESTCONF + NETCONF-YANG, `enable secret`. |
+| `racc_csr1_iosxe173_umbrella_sig.txt` | 398 | 1 | 6 | 0 | 22 | 0 | 0 | 2 | Real `show run` from CSR1000v on **IOS-XE 17.3 LTS**.  EIGRP CITYNET, OSPF, 22 static routes (Cisco Umbrella SIG anycast), IKEv2 + IPsec profiles + `tunnel protection`, SSH pubkey-chain, guestshell. |
+| `racc_cat8000v_iosxe179_netconf.txt` | 343 | 1 | 7 | 0 | 1 | 0 | 0 | 1 | Real `show run` from Cat8000V on **IOS-XE 17.9 LTS**.  `ip nat inside source list ... overload`, `telemetry ietf subscription` (YANG-push over grpc-tcp), app-hosting guestshell, RESTCONF + NETCONF-YANG, `username X secret 9 $9$...` type-9 hash. |
 
 ### Findings
 
@@ -46,6 +49,29 @@ Dedupe + regression test landed in the same commit.
 service-policies, interface ACL groups, IPv6 addressing, proxy-ARP,
 uRPF, bandwidth hint.  All mapped to existing roadmap buckets (Tier 3
 raw_sections or Fidelity Polish).
+
+**Zero bugs surfaced by the 3 new real captures.**  All three racc
+fixtures parsed cleanly on first contact and produced non-empty
+canonical trees — evidence the grammar coverage from the Batfish /
+NTC corpus already generalised to real deployed CSR1000v / Cat8000V
+configs on 16.9 / 17.3 / 17.9 LTS.  The large cert chains, IKEv2
+profiles, guestshell stanzas, telemetry subscriptions, and PKI
+trustpoints fell through to "parse-and-ignore" without tripping the
+parser — exactly as designed.
+
+### Certification decision
+
+**Promoted to `certified`.**  Three BSD-3-Clause real captures from
+[nickrusso42518/racc](https://github.com/nickrusso42518/racc) landed
+the corpus at 9 fixtures across 3 distinct LTS OS versions (**16.9,
+17.3, 17.9**).  All three real captures start with the authoritative
+`Building configuration...` / `Current configuration : NNNN bytes` /
+`! Last configuration change at ...` / `version X.X` banners that
+prove they're device outputs rather than hand-crafted grammar tests.
+Parse-only direction means round-trip is N/A — the cert bar for
+`parse_only` codecs is ≥3 real captures from ≥2 OS versions that
+parse cleanly and produce populated canonical trees, which the three
+racc fixtures meet decisively.
 
 ---
 
@@ -283,12 +309,12 @@ exercised by the rendered template:
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
-| cisco_iosxe_cli | 6 | 1* | 1 (LAG member dedup) | best_effort | *all fixtures are Batfish/NTC test data; need a real captured 15.x/16.x/17.x config to count as a 2nd OS version |
+| **cisco_iosxe_cli** | **9** (6 grammar-test + 3 real) | **3 LTS** (16.9 + 17.3 + 17.9) | 1 (LAG member dedup) | **certified** ✅ | — |
 | opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
 | **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
-| **TOTAL** | **19** | — | **8** | — | — |
+| **TOTAL** | **22** | — | **8** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —

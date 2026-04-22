@@ -49,11 +49,14 @@ class TestR3Fields:
     def test_direction_is_parse_only(self):
         assert CiscoIOSXECLICodec.direction == "parse_only"
 
-    def test_certainty_is_best_effort(self):
-        # Promoted from "experimental" after real-capture validation
-        # against Batfish + NTC-Templates fixtures.  See
-        # tests/fixtures/real/RESULTS.md for the rationale.
-        assert CiscoIOSXECLICodec.certainty == "best_effort"
+    def test_certainty_is_certified(self):
+        # Promoted from best_effort after three BSD-3-Clause licensed
+        # real captures from nickrusso42518/racc landed the corpus at
+        # 9 fixtures across 3 distinct LTS OS versions (16.9, 17.3,
+        # 17.9), with all three real captures parsing cleanly and
+        # producing non-empty canonical trees.  parse_only direction —
+        # round-trip is N/A.  See tests/fixtures/real/RESULTS.md.
+        assert CiscoIOSXECLICodec.certainty == "certified"
 
     def test_canonical_model(self):
         assert CiscoIOSXECLICodec.canonical_model == "openconfig-lite"
