@@ -7,6 +7,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Cisco IOS-XE CLI cert strengthened with physical Cat 9300-24UX real capture)
+
+- User-contributed real ``show running-config`` from a physical
+  **Cisco Catalyst 9300-24UX** running **IOS-XE 17.12**, captured via
+  NetConfig's own backup layer against the contributor's live home-
+  lab switch and sanitised per CLAUDE.md hard rules.  Fills the
+  physical-switch coverage gap that the earlier 3 BSD-3 racc
+  captures didn't address — they were all **virtual routers**
+  (CSR1000v / Cat8000V) and validated IOS-XE routing grammar but not
+  physical-switch switching grammar.
+- ``user_contrib_cat9300_iosxe1712.txt`` — 491 lines, 47 interfaces,
+  6 VLANs, 3 LACP EtherChannels (the Fortigate uplink, NAS LAG, and
+  Proxmox-blade LAG), 2 local users, 1 default-gateway static route.
+  Exercises the whole physical-switch grammar surface: ``switch 1
+  provision c9300-24ux``, ``TenGigabitEthernet1/0/N`` /
+  ``FortyGigabitEthernet1/1/N`` / ``TwentyFiveGigE1/1/N`` /
+  ``AppGigabitEthernet1/0/1`` port families, ``switchport mode
+  trunk/access`` + ``switchport trunk allowed vlan <list>`` +
+  ``switchport trunk native vlan``, ``channel-group N mode active``
+  binding into ``interface Port-channel N``, ``interface Vlan N``
+  SVIs, ``vrf forwarding Mgmt-vrf`` on the management port, the
+  full Cat9k ``class-map system-cpp-police-*`` + ``policy-map
+  system-cpp-policy`` CPP (control-plane policer) grammar,
+  ``spanning-tree mode rapid-pvst``, 28 × ``privilege exec level 5
+  show X`` delegation entries, multiple ``line vty`` ranges
+  (``0 4`` / ``5 29`` / ``30 31``).
+- Sanitisation: the two ``username X secret 9 $9$...`` hashes were
+  replaced with synthetic-marked ``$9$fakeSalt...$fakeHash...`` per
+  CLAUDE.md "never commit real hashes from non-public devices" rule;
+  the ``by <windows-username>`` annotation in the
+  ``Last configuration change`` timestamp was updated to
+  ``by netadmin``.  All other real data retained — RFC1918
+  addressing, VLAN IDs, infrastructure-describing interface
+  descriptions (``TRUNK - FORTIGATE`` / ``pvenas 2x 10gbe trunk`` /
+  ``pveblade lacp``), and the self-signed device certificate chain.
+  Same convention as the MikroTik ``user_contrib_crs310_ros7.rsc``
+  precedent.
+- Secondary fixture added: ``cml_saumur_iosxe1712_pvrstp.txt`` —
+  BSD-3-Clause capture extracted from
+  [CiscoDevNet/cml-community](https://github.com/CiscoDevNet/cml-community)
+  `lab-topologies/ccna/Domain_2/2.5-interpret_stp/saumur_PVRSTP_solution.yaml`
+  (the ``saumur`` node's ``configuration:`` block).  147 lines, IOS-
+  XE 17.12 on a virtual ``ioll2-xe`` image (IOU port notation
+  ``Ethernet0/N`` rather than physical ``Gi1/0/N``).  Complements
+  the Cat 9300 capture with PVRST+ cost-tuning grammar the Cat 9300
+  doesn't exercise: ``spanning-tree pathcost method long``,
+  ``spanning-tree vlan 1-4094 priority 4096``, ``spanning-tree
+  link-type point-to-point``, ``spanning-tree cost 2000000``,
+  ``vtp version 1``, ``vlan internal allocation policy ascending``.
+- **Zero codec bugs surfaced.**  Both fixtures parse cleanly on
+  first contact and produce populated canonical trees.
+- The cert promotion from the previous commit is now justified on
+  **both** router grammar (racc corpus) and physical-switch grammar
+  (Cat 9300 capture) rather than router grammar alone.  Test
+  assertion comment updated in
+  ``tests/unit/migration/test_cisco_iosxe_cli.py`` to reflect
+  strengthened coverage.
+- Docs: ``tests/fixtures/real/NOTICE.md`` (provenance for both new
+  files), ``tests/fixtures/real/RESULTS.md`` (per-codec table +
+  summary total from 22 → 24 fixtures; cisco_iosxe_cli row now
+  shows 4 LTS OS versions and 11 fixtures), ``README.md`` cert
+  table.
+- **666 migration tests passing**, zero regressions.
+
 ### Added (Cisco IOS-XE CLI promoted to `certified` — 3rd codec to reach the bar)
 
 - Three BSD-3-Clause real captures ingested from

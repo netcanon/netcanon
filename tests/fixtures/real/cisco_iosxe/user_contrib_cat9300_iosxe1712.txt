@@ -1,0 +1,491 @@
+Building configuration...
+
+Current configuration : 14725 bytes
+!
+! Last configuration change at 23:32:29 UTC Sun Apr 12 2026 by netadmin
+!
+version 17.12
+service timestamps debug datetime msec
+service timestamps log datetime msec
+platform punt-keepalive disable-kernel-core
+!
+hostname Switch
+!
+!
+vrf definition Mgmt-vrf
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+no aaa new-model
+switch 1 provision c9300-24ux
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+no ip igmp snooping vlan 20
+no ip igmp snooping vlan 100
+login on-success log
+vtp version 1
+!
+!
+!
+!
+!
+!
+!
+!
+crypto pki trustpoint TP-self-signed-838306438
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-838306438
+ revocation-check none
+ rsakeypair TP-self-signed-838306438
+ hash sha256
+!
+crypto pki trustpoint SLA-TrustPoint
+ enrollment pkcs12
+ revocation-check crl
+ hash sha256
+!
+!
+crypto pki certificate chain TP-self-signed-838306438
+ certificate self-signed 01
+  3082032E 30820216 A0030201 02020101 300D0609 2A864886 F70D0101 0B050030 
+  30312E30 2C060355 04030C25 494F532D 53656C66 2D536967 6E65642D 43657274 
+  69666963 6174652D 38333833 30363433 38301E17 0D323431 30323630 30353735 
+  335A170D 33343130 32363030 35373533 5A303031 2E302C06 03550403 0C25494F 
+  532D5365 6C662D53 69676E65 642D4365 72746966 69636174 652D3833 38333036 
+  34333830 82012230 0D06092A 864886F7 0D010101 05000382 010F0030 82010A02 
+  82010100 AC895ED1 DF796635 0E4D0A3C 11A835A9 28E618E9 7CFA6C34 29B473E7 
+  42646150 DA552382 5C48C48A 76C9A430 75D9000B F07366FF 6FABAB9C A6B96958 
+  0D64F6D3 92354BD7 FF009BFA 238FEAC4 C1C64852 3B9CE072 064E4F25 7FEDA438 
+  599ACF2D BBC313CB EEE8DA02 B756A5C5 80B5D8FA FFD59369 47C8DD90 3FC3F959 
+  A026424E 295D7242 64552A14 AC2A0C85 F4488CA5 B66E3C57 B21BFFFC 21101444 
+  5960A673 750FF86B 1DFC46B6 C7FE1595 19FC9BBD 480D64DB 101069C5 39E59525 
+  3DDD2CDB 7F7D21BF CA81C119 CF3678A9 3DD54D00 C56C0A18 BDDBE533 D88DEABF 
+  9DE9DC2F 9F3640D8 782815BF 4D992B1D DDC44E07 576E9560 E91D996C EBBBF972 
+  7F330B59 02030100 01A35330 51301D06 03551D0E 04160414 B13A17BC 4AFA2A3F 
+  37778202 B6AA0D55 A4CF0899 301F0603 551D2304 18301680 14B13A17 BC4AFA2A 
+  3F377782 02B6AA0D 55A4CF08 99300F06 03551D13 0101FF04 05300301 01FF300D 
+  06092A86 4886F70D 01010B05 00038201 0100679E 9AF7AFE7 9F414FA5 32D0EE05 
+  576D6582 55FC01D1 3FB781D5 8A5740A1 36182BF4 9823AC75 F7DE8156 957BED3D 
+  6C30AE72 825530AC 66D06153 7145ABA0 B84687DC E4768DC5 D43ADE5D D78C1F92 
+  8D689D11 681D767B A2864FF4 C01CF752 23B66F1F EFAAD3E5 DE130E9B 20DDD40F 
+  2EEE24C4 CC3F81DC B59A3DF5 60F10FE0 25BFC4F4 43F846EC 0005A431 5BFE6939 
+  F8C7CFDF B6D51E08 8DB0DC63 A530CF31 7173C251 951BAFAE BF6A0BA9 AA8115FF 
+  C8F6AAEE E207D8BA F0456182 A73644E6 20147390 C3D40159 33D43DC2 979C14BA 
+  9F28EBC9 EDCB4B8B C45E9FDC A3773CFD 0CA66918 605F7DA7 F56FF674 EEBB1046 
+  5A9CFEE2 AD58E242 FA90BB65 9AF295D7 40C3
+  	quit
+crypto pki certificate chain SLA-TrustPoint
+ certificate ca 01
+  30820321 30820209 A0030201 02020101 300D0609 2A864886 F70D0101 0B050030 
+  32310E30 0C060355 040A1305 43697363 6F312030 1E060355 04031317 43697363 
+  6F204C69 63656E73 696E6720 526F6F74 20434130 1E170D31 33303533 30313934 
+  3834375A 170D3338 30353330 31393438 34375A30 32310E30 0C060355 040A1305 
+  43697363 6F312030 1E060355 04031317 43697363 6F204C69 63656E73 696E6720 
+  526F6F74 20434130 82012230 0D06092A 864886F7 0D010101 05000382 010F0030 
+  82010A02 82010100 A6BCBD96 131E05F7 145EA72C 2CD686E6 17222EA1 F1EFF64D 
+  CBB4C798 212AA147 C655D8D7 9471380D 8711441E 1AAF071A 9CAE6388 8A38E520 
+  1C394D78 462EF239 C659F715 B98C0A59 5BBB5CBD 0CFEBEA3 700A8BF7 D8F256EE 
+  4AA4E80D DB6FD1C9 60B1FD18 FFC69C96 6FA68957 A2617DE7 104FDC5F EA2956AC 
+  7390A3EB 2B5436AD C847A2C5 DAB553EB 69A9A535 58E9F3E3 C0BD23CF 58BD7188 
+  68E69491 20F320E7 948E71D7 AE3BCC84 F10684C7 4BC8E00F 539BA42B 42C68BB7 
+  C7479096 B4CB2D62 EA2F505D C7B062A4 6811D95B E8250FC4 5D5D5FB8 8F27D191 
+  C55F0D76 61F9A4CD 3D992327 A8BB03BD 4E6D7069 7CBADF8B DF5F4368 95135E44 
+  DFC7C6CF 04DD7FD1 02030100 01A34230 40300E06 03551D0F 0101FF04 04030201 
+  06300F06 03551D13 0101FF04 05300301 01FF301D 0603551D 0E041604 1449DC85 
+  4B3D31E5 1B3E6A17 606AF333 3D3B4C73 E8300D06 092A8648 86F70D01 010B0500 
+  03820101 00507F24 D3932A66 86025D9F E838AE5C 6D4DF6B0 49631C78 240DA905 
+  604EDCDE FF4FED2B 77FC460E CD636FDB DD44681E 3A5673AB 9093D3B1 6C9E3D8B 
+  D98987BF E40CBD9E 1AECA0C2 2189BB5C 8FA85686 CD98B646 5575B146 8DFC66A8 
+  467A3DF4 4D565700 6ADF0F0D CF835015 3C04FF7C 21E878AC 11BA9CD2 55A9232C 
+  7CA7B7E6 C1AF74F6 152E99B7 B1FCF9BB E973DE7F 5BDDEB86 C71E3B49 1765308B 
+  5FB0DA06 B92AFE7F 494E8A9E 07B85737 F3A58BE1 1A48A229 C37C1E69 39F08678 
+  80DDCD16 D6BACECA EEBC7CF9 8428787B 35202CDC 60E4616A B623CDBD 230E3AFB 
+  418616A9 4093E049 4D10AB75 27E86F73 932E35B5 8862FDAE 0275156F 719BB2F0 
+  D697DF7F 28
+  	quit
+!
+!
+license boot level network-advantage addon dna-advantage
+memory free low-watermark processor 130180
+!
+diagnostic bootup level minimal
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+!
+no errdisable detect cause loopdetect
+no errdisable detect cause loopback
+no errdisable detect cause gbic-invalid
+no errdisable detect cause sfp-config-mismatch
+no errdisable detect cause pagp-flap
+no errdisable detect cause dtp-flap
+no errdisable detect cause link-flap
+no errdisable detect cause l2ptguard
+no errdisable detect cause pppoe-ia-rate-limit
+no errdisable detect cause dhcp-rate-limit
+no errdisable detect cause arp-inspection
+!
+username netadmin privilege 15 secret 9 $9$fakeSaltAdmin1$fakeHashForNetadminPriv15ExampleValue00
+username monitor privilege 5 secret 9 $9$fakeSaltMonitr$fakeHashForMonitorPriv5ExampleValueFill
+!
+redundancy
+ mode sso
+crypto engine compliance shield disable
+!
+!
+!
+!
+!
+transceiver type all
+ monitoring
+!
+lldp run
+!
+class-map match-any system-cpp-police-ewlc-control
+  description EWLC Control 
+class-map match-any system-cpp-police-topology-control
+  description Topology control
+class-map match-any system-cpp-police-sw-forward
+  description Sw forwarding, L2 LVX data packets, LOGGING, Transit Traffic
+class-map match-any system-cpp-default
+  description EWLC Data, Inter FED Traffic 
+class-map match-any system-cpp-police-sys-data
+  description Openflow, Exception, EGR Exception, NFL Sampled Data, RPF Failed
+class-map match-any system-cpp-police-punt-webauth
+  description Punt Webauth
+class-map match-any system-cpp-police-l2lvx-control
+  description L2 LVX control packets
+class-map match-any system-cpp-police-forus
+  description Forus Address resolution and Forus traffic
+class-map match-any system-cpp-police-multicast-end-station
+  description MCAST END STATION
+class-map match-any system-cpp-police-high-rate-app
+  description High Rate Applications 
+class-map match-any system-cpp-police-multicast
+  description MCAST Data
+class-map match-any system-cpp-police-l2-control
+  description L2 control
+class-map match-any system-cpp-police-dot1x-auth
+  description DOT1X Auth
+class-map match-any system-cpp-police-data
+  description ICMP redirect, ICMP_GEN and BROADCAST
+class-map match-any system-cpp-police-stackwise-virt-control
+  description Stackwise Virtual OOB
+class-map match-any non-client-nrt-class
+class-map match-any system-cpp-police-routing-control
+  description Routing control and Low Latency
+class-map match-any system-cpp-police-protocol-snooping
+  description Protocol snooping
+class-map match-any system-cpp-police-dhcp-snooping
+  description DHCP snooping
+class-map match-any system-cpp-police-ios-routing
+  description L2 control, Topology control, Routing control, Low Latency
+class-map match-any system-cpp-police-system-critical
+  description System Critical and Gold Pkt
+class-map match-any system-cpp-police-ios-feature
+  description ICMPGEN,BROADCAST,ICMP,L2LVXCntrl,ProtoSnoop,PuntWebauth,MCASTData,Transit,DOT1XAuth,Swfwd,LOGGING,L2LVXData,ForusTraffic,ForusARP,McastEndStn,Openflow,Exception,EGRExcption,NflSampled,RpfFailed
+!
+policy-map system-cpp-policy
+!
+! 
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+interface Port-channel1
+ description TRUNK - FORTIGATE
+ switchport trunk allowed vlan 1,10,11,20,100,150
+ switchport mode trunk
+ spanning-tree portfast disable
+!
+interface Port-channel2
+ description pvenas 2x 10gbe trunk
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ spanning-tree portfast disable
+!
+interface Port-channel3
+ description pveblade lacp
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ spanning-tree portfast disable
+!
+interface GigabitEthernet0/0
+ vrf forwarding Mgmt-vrf
+ no ip address
+ negotiation auto
+!
+interface TenGigabitEthernet1/0/1
+ switchport trunk allowed vlan 1,10,11,20,100,150
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface TenGigabitEthernet1/0/2
+ switchport trunk allowed vlan 1,10,11,20,100,150
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface TenGigabitEthernet1/0/3
+ switchport trunk allowed vlan 1,10,11,20,100,150
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface TenGigabitEthernet1/0/4
+ switchport trunk allowed vlan 1,10,11,20,100,150
+ switchport mode trunk
+ channel-group 1 mode active
+!
+interface TenGigabitEthernet1/0/5
+ switchport access vlan 20
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/6
+ switchport access vlan 20
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/7
+ switchport access vlan 20
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/8
+ switchport access vlan 20
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/9
+ switchport access vlan 11
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/10
+ switchport access vlan 150
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 10,11,150
+ switchport mode trunk
+!
+interface TenGigabitEthernet1/0/11
+!
+interface TenGigabitEthernet1/0/12
+!
+interface TenGigabitEthernet1/0/13
+ switchport access vlan 10
+ switchport trunk native vlan 10
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/14
+ switchport access vlan 100
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 100
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/15
+ switchport access vlan 100
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 100
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/16
+ switchport access vlan 100
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 100
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/17
+ switchport access vlan 100
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 100
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/18
+ switchport access vlan 11
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 100
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/19
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ channel-group 3 mode active
+!
+interface TenGigabitEthernet1/0/20
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ channel-group 3 mode active
+!
+interface TenGigabitEthernet1/0/21
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ channel-group 2 mode active
+!
+interface TenGigabitEthernet1/0/22
+ switchport trunk native vlan 100
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+ channel-group 2 mode active
+!
+interface TenGigabitEthernet1/0/23
+ switchport access vlan 11
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20
+ switchport mode access
+!
+interface TenGigabitEthernet1/0/24
+ switchport access vlan 150
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 10,11,20,100,150
+ switchport mode trunk
+!
+interface GigabitEthernet1/1/1
+!
+interface GigabitEthernet1/1/2
+!
+interface GigabitEthernet1/1/3
+!
+interface GigabitEthernet1/1/4
+!
+interface TenGigabitEthernet1/1/1
+!
+interface TenGigabitEthernet1/1/2
+!
+interface TenGigabitEthernet1/1/3
+!
+interface TenGigabitEthernet1/1/4
+!
+interface TenGigabitEthernet1/1/5
+!
+interface TenGigabitEthernet1/1/6
+!
+interface TenGigabitEthernet1/1/7
+!
+interface TenGigabitEthernet1/1/8
+!
+interface FortyGigabitEthernet1/1/1
+ switchport trunk native vlan 11
+ switchport mode trunk
+ mtu 1500
+ speed nonegotiate
+!
+interface FortyGigabitEthernet1/1/2
+ switchport trunk native vlan 11
+ switchport trunk allowed vlan 11,20,100
+ switchport mode trunk
+!
+interface TwentyFiveGigE1/1/1
+!
+interface TwentyFiveGigE1/1/2
+!
+interface AppGigabitEthernet1/0/1
+!
+interface Vlan1
+ no ip address
+!
+interface Vlan11
+ ip address 192.168.11.252 255.255.255.0
+!
+ip default-gateway 192.168.11.1
+ip forward-protocol nd
+ip http server
+ip http authentication local
+ip http secure-server
+ip ssh bulk-mode 131072
+ip ssh server algorithm mac hmac-sha2-256 hmac-sha2-512
+ip ssh server algorithm encryption aes128-ctr aes192-ctr aes256-ctr
+!
+!
+!
+!
+snmp-server manager
+!
+!
+control-plane
+ service-policy input system-cpp-policy
+!
+!
+privilege exec level 5 traceroute
+privilege exec level 5 ping
+privilege exec level 5 show spanning-tree
+privilege exec level 5 show mac address-table
+privilege exec level 5 show mac
+privilege exec level 5 show memory
+privilege exec level 5 show inventory
+privilege exec level 5 show tech-support
+privilege exec level 5 show vlan
+privilege exec level 5 show lldp neighbors
+privilege exec level 5 show lldp
+privilege exec level 5 show ip route
+privilege exec level 5 show ip interface brief
+privilege exec level 5 show ip interface
+privilege exec level 5 show ip
+privilege exec level 5 show arp
+privilege exec level 5 show cdp neighbors
+privilege exec level 5 show cdp
+privilege exec level 5 show power
+privilege exec level 5 show environment
+privilege exec level 5 show clock
+privilege exec level 5 show processes
+privilege exec level 5 show users
+privilege exec level 5 show version
+privilege exec level 5 show startup-config
+privilege exec level 5 show running-config
+privilege exec level 5 show access-lists
+privilege exec level 5 show logging
+privilege exec level 5 show interfaces description
+privilege exec level 5 show interfaces counters
+privilege exec level 5 show interfaces status
+privilege exec level 5 show interfaces
+privilege exec level 5 show
+!
+line con 0
+ stopbits 1
+line vty 0 4
+ login local
+ length 0
+ transport input ssh
+line vty 5 29
+ login local
+ transport input ssh
+line vty 30 31
+ login
+ transport input ssh
+!
+!
+!
+!
+!
+!
+!
+end

@@ -1,0 +1,153 @@
+Building configuration...
+
+Current configuration : 3752 bytes
+!
+! Last configuration change at 15:05:20 UTC Thu May 23 2024
+!
+version 17.12
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+hostname saumur
+!
+boot-start-marker
+boot-end-marker
+!
+!
+no logging console
+no aaa new-model
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip audit notify log
+ip audit po max-events 100
+no ip domain lookup
+ip cef
+login on-success log
+no ipv6 cef
+!
+!
+!
+!
+!
+!
+!
+vtp version 1
+multilink bundle-name authenticated
+!
+crypto pki trustpoint TP-self-signed-131184641
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-131184641
+ revocation-check none
+ rsakeypair TP-self-signed-131184641
+ hash sha256
+!
+!
+crypto pki certificate chain TP-self-signed-131184641
+ certificate self-signed 01
+  3082032E 30820216 A0030201 02020101 300D0609 2A864886 F70D0101 0B050030
+  30312E30 2C060355 04030C25 494F532D 53656C66 2D536967 6E65642D 43657274
+  69666963 6174652D 31333131 38343634 31301E17 0D323430 35323231 34303631
+  385A170D 33343035 32323134 30363138 5A303031 2E302C06 03550403 0C25494F
+  532D5365 6C662D53 69676E65 642D4365 72746966 69636174 652D3133 31313834
+  36343130 82012230 0D06092A 864886F7 0D010101 05000382 010F0030 82010A02
+  82010100 B3D916DA 911B3DA4 4BE96133 B17B2D20 680E56E9 EF0ADEE9 F71866CD
+  CF474486 7706BABE 9C59B385 4A00CF37 0907EE00 1A45FD19 639D3457 89A114A8
+  5C7AC563 BD764E1F 2599D631 6E924DAD 459FAFCB 11849765 944E9011 7F8E4AD8
+  AD9C66DE 05739B36 369CF94F C7717F9C 85529418 38171CD9 CCD62A86 1F973194
+  48827238 DB4F6E12 ACB586FD A448B6B2 503F13F0 085AB33C 1A33E48C 4AFAF419
+  30E43A8B CE18F79B 44A1B522 63A791C7 3FFA12B5 791BA096 0375A01B 77B5DEF3
+  3CA0FE20 DFE14892 4D8D0573 EEBA2B34 6AD04C3D DBAD50E2 AA25F326 B9D36CE5
+  13933B1C 59879E7F BFC56F22 41CCA515 B4CE5039 AF6D956B BE6F69F3 0FCB2EA8
+  751DF737 02030100 01A35330 51301D06 03551D0E 04160414 6AD6028F AD21C9A2
+  54B829A1 78D93313 BCA3DF0B 301F0603 551D2304 18301680 146AD602 8FAD21C9
+  A254B829 A178D933 13BCA3DF 0B300F06 03551D13 0101FF04 05300301 01FF300D
+  06092A86 4886F70D 01010B05 00038201 0100A41B 575A32F5 E03388E9 441DBD83
+  42E8964D 5AB56561 54FFC978 18418208 A99F4BCD 39E340FE B7D0D5F4 A5D46ABE
+  16A0D8E3 B05180D0 AEC43096 B8FE45EC 86088020 5C0C597A C82CEE2C 935184BB
+  5E4B3CB8 D57053C0 8095268F 1B9C13E4 4B75A21E C5027169 5992C99E 499B83B9
+  A118196A 87F29657 42544324 98E0F506 B9A12AAB B321B166 963CB116 139525C5
+  47E970D8 B4E65061 5F1D8F3B B65AAAED D487719D 4F520376 E9CFD352 6DD7CBB9
+  85EECA8E 7BDF65B3 E0607A24 6B5C09DA A0F9BB4E A2E3957D AB0B2A93 D797253E
+  EF52EDD7 A8DF2E49 A2DFF2E4 DE08AD06 ABD694B5 EB70B7A7 DD65477D 3E6E7677
+  F20F1D80 CEDA4373 AFE5A399 66D560B0 83C4
+  	quit
+!
+!
+memory free low-watermark processor 80589
+!
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+spanning-tree pathcost method long
+spanning-tree vlan 1-4094 priority 4096
+!
+!
+vlan internal allocation policy ascending
+!
+!
+!
+!
+!
+interface Ethernet0/0
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ bandwidth 1000000
+ spanning-tree link-type point-to-point
+!
+interface Ethernet0/1
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ bandwidth 1000000
+ spanning-tree link-type point-to-point
+!
+interface Ethernet0/2
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ bandwidth 1000000
+ spanning-tree link-type point-to-point
+!
+interface Ethernet0/3
+ switchport trunk encapsulation dot1q
+ switchport mode trunk
+ bandwidth 1000000
+ spanning-tree link-type point-to-point
+ spanning-tree cost 2000000
+!
+ip forward-protocol nd
+!
+!
+ip http server
+ip http secure-server
+ip ssh bulk-mode 131072
+!
+!
+!
+!
+!
+!
+control-plane
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+line aux 0
+line vty 0 4
+ exec-timeout 0 0
+ login
+ transport input ssh
+!
+!
+end

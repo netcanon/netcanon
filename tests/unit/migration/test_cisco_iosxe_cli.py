@@ -50,12 +50,21 @@ class TestR3Fields:
         assert CiscoIOSXECLICodec.direction == "parse_only"
 
     def test_certainty_is_certified(self):
-        # Promoted from best_effort after three BSD-3-Clause licensed
-        # real captures from nickrusso42518/racc landed the corpus at
-        # 9 fixtures across 3 distinct LTS OS versions (16.9, 17.3,
-        # 17.9), with all three real captures parsing cleanly and
-        # producing non-empty canonical trees.  parse_only direction —
-        # round-trip is N/A.  See tests/fixtures/real/RESULTS.md.
+        # Certified on a two-domain corpus:
+        #   * Router grammar: 3 BSD-3 real captures from
+        #     nickrusso42518/racc (CSR1000v + Cat8000V on IOS-XE 16.9,
+        #     17.3, 17.9 LTS — BGP/OSPF/EIGRP/IPsec/NAT/telemetry).
+        #   * Switch grammar: 1 user-contributed real capture from a
+        #     physical Cisco Catalyst 9300-24UX on IOS-XE 17.12
+        #     (switchport trunk/access, 3 EtherChannels w/ LACP, 6
+        #     VLANs, SVIs, Mgmt-vrf, CPP policy-maps, 28 privilege-
+        #     delegation entries, 47 interfaces across Gi/TenG/
+        #     FortyG/TwentyFiveG/AppG port families) — plus 1 CML
+        #     virtual IOL (ioll2-xe) on 17.12 for spanning-tree cost
+        #     grammar.
+        # 11 fixtures total; all parse cleanly and produce populated
+        # canonical trees.  parse_only direction means round-trip is
+        # N/A.  See tests/fixtures/real/RESULTS.md.
         assert CiscoIOSXECLICodec.certainty == "certified"
 
     def test_canonical_model(self):

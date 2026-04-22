@@ -37,6 +37,8 @@ equal trees).
 | `racc_csr1000v_iosxe169_bgp_ospf.txt` | 280 | 1 | 11 | 0 | 1 | 0 | 0 | 2 | Real `show run` from CSR1000v on **IOS-XE 16.9 LTS**.  BGP AS 65001 (vpnv4 + rtfilter AFs), OSPF, QoS policy-maps, syslog-host, RESTCONF + NETCONF-YANG, `enable secret`. |
 | `racc_csr1_iosxe173_umbrella_sig.txt` | 398 | 1 | 6 | 0 | 22 | 0 | 0 | 2 | Real `show run` from CSR1000v on **IOS-XE 17.3 LTS**.  EIGRP CITYNET, OSPF, 22 static routes (Cisco Umbrella SIG anycast), IKEv2 + IPsec profiles + `tunnel protection`, SSH pubkey-chain, guestshell. |
 | `racc_cat8000v_iosxe179_netconf.txt` | 343 | 1 | 7 | 0 | 1 | 0 | 0 | 1 | Real `show run` from Cat8000V on **IOS-XE 17.9 LTS**.  `ip nat inside source list ... overload`, `telemetry ietf subscription` (YANG-push over grpc-tcp), app-hosting guestshell, RESTCONF + NETCONF-YANG, `username X secret 9 $9$...` type-9 hash. |
+| `user_contrib_cat9300_iosxe1712.txt` | 491 | 1 | 47 | 6 | 1 | 3 | 0 | 2 | **Real physical Cat 9300-24UX on IOS-XE 17.12** (user-contributed, sanitised).  `switch 1 provision c9300-24ux`, Gi/TenG/FortyG/TwentyFiveG/AppG + Port-channel1-3 + Vlan SVIs + Mgmt-vrf, 3 LACP EtherChannels (`channel-group N mode active`), `switchport mode trunk/access` + `switchport trunk allowed vlan <list>` + `switchport trunk native vlan`, full Cat9k `class-map system-cpp-police-*` + `policy-map system-cpp-policy` CPP grammar, 28 × `privilege exec level 5 show X` delegation, multiple `line vty` ranges. |
+| `cml_saumur_iosxe1712_pvrstp.txt` | 147 | 1 | 4 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual `ioll2-xe` on **IOS-XE 17.12**.  Uses `Ethernet0/N` IOL port notation (not physical `Gi1/0/N`) but the spanning-tree grammar is authentic: `spanning-tree mode rapid-pvst`, `spanning-tree pathcost method long`, `spanning-tree vlan 1-4094 priority 4096`, `spanning-tree link-type point-to-point`, `spanning-tree cost 2000000`.  Closes PVRST+ cost-tuning grammar coverage the Cat9300 fixture doesn't exercise. |
 
 ### Findings
 
@@ -50,28 +52,47 @@ service-policies, interface ACL groups, IPv6 addressing, proxy-ARP,
 uRPF, bandwidth hint.  All mapped to existing roadmap buckets (Tier 3
 raw_sections or Fidelity Polish).
 
-**Zero bugs surfaced by the 3 new real captures.**  All three racc
-fixtures parsed cleanly on first contact and produced non-empty
-canonical trees — evidence the grammar coverage from the Batfish /
-NTC corpus already generalised to real deployed CSR1000v / Cat8000V
-configs on 16.9 / 17.3 / 17.9 LTS.  The large cert chains, IKEv2
-profiles, guestshell stanzas, telemetry subscriptions, and PKI
-trustpoints fell through to "parse-and-ignore" without tripping the
-parser — exactly as designed.
+**Zero bugs surfaced by the 5 new real captures.**  All parsed
+cleanly on first contact and produced populated canonical trees.
+Large cert chains, IKEv2 profiles, guestshell stanzas, telemetry
+subscriptions, Cat9k CPP `class-map`/`policy-map` stanzas, and PKI
+trustpoints all fell through to "parse-and-ignore" without tripping
+the parser — exactly as designed.  The Cat 9300 capture in
+particular exercised grammar the earlier Batfish / NTC synthetic
+corpus never stressed: real 3-part port notation (`TenGigabitEthernet1/0/N`,
+`FortyGigabitEthernet1/1/N`, `TwentyFiveGigE1/1/N`, `AppGigabitEthernet`),
+3 LACP `Port-channel` interfaces bound via `channel-group N mode
+active`, the full Cat9k `class-map system-cpp-police-*` table, and
+the long `privilege exec level 5 show X` delegation set — and
+every one of them parsed cleanly.
 
 ### Certification decision
 
-**Promoted to `certified`.**  Three BSD-3-Clause real captures from
-[nickrusso42518/racc](https://github.com/nickrusso42518/racc) landed
-the corpus at 9 fixtures across 3 distinct LTS OS versions (**16.9,
-17.3, 17.9**).  All three real captures start with the authoritative
+**Promoted to `certified`.**  Two complementary corpora meet the
+bar decisively:
+
+* **Router grammar (3 fixtures from 3 LTS OS versions)** —
+  [nickrusso42518/racc](https://github.com/nickrusso42518/racc)
+  under BSD-3-Clause:
+  `racc_csr1000v_iosxe169_bgp_ospf.txt` (16.9 LTS, BGP+OSPF+QoS),
+  `racc_csr1_iosxe173_umbrella_sig.txt` (17.3 LTS, IKEv2+IPsec+
+  Umbrella SIG+EIGRP+OSPF), `racc_cat8000v_iosxe179_netconf.txt`
+  (17.9 LTS, NAT+telemetry+NETCONF/RESTCONF).
+* **Switch grammar (2 fixtures on IOS-XE 17.12)** —
+  `user_contrib_cat9300_iosxe1712.txt` (real physical Cat 9300-
+  24UX, user contribution, sanitised) + `cml_saumur_iosxe1712_pvrstp.txt`
+  (CML virtual IOL under BSD-3 for PVRST+ cost grammar).
+
+All 5 real captures start with authoritative
 `Building configuration...` / `Current configuration : NNNN bytes` /
 `! Last configuration change at ...` / `version X.X` banners that
 prove they're device outputs rather than hand-crafted grammar tests.
-Parse-only direction means round-trip is N/A — the cert bar for
+`parse_only` direction means round-trip is N/A — the cert bar for
 `parse_only` codecs is ≥3 real captures from ≥2 OS versions that
-parse cleanly and produce populated canonical trees, which the three
-racc fixtures meet decisively.
+parse cleanly and produce populated canonical trees.  Across 4 real
+OS-version anchors (16.9 + 17.3 + 17.9 + 17.12) and two distinct
+device domains (virtual routers + physical switch + virtual switch),
+the bar is met on both grammar fronts.
 
 ---
 
@@ -309,12 +330,12 @@ exercised by the rendered template:
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
-| **cisco_iosxe_cli** | **9** (6 grammar-test + 3 real) | **3 LTS** (16.9 + 17.3 + 17.9) | 1 (LAG member dedup) | **certified** ✅ | — |
+| **cisco_iosxe_cli** | **11** (6 grammar-test + 5 real) | **4 LTS** (16.9 + 17.3 + 17.9 + 17.12) | 1 (LAG member dedup) | **certified** ✅ | — |
 | opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
 | **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
-| **TOTAL** | **22** | — | **8** | — | — |
+| **TOTAL** | **24** | — | **8** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —
