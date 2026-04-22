@@ -480,15 +480,72 @@ class TestRealProfilesShipped:
         # mgmt has its own kind.
         assert p.lookup_port("mgmt").kind == "mgmt"
 
-    # NOTE: OPNsense target profiles for the Deciso A-series were
-    # considered for this commit but deferred.  A background
-    # research agent surfaced significant ambiguity — the "A10" and
-    # "A20" names have each been reused across multiple hardware
-    # generations (em/igb/igc + ax driver families), and the 10G
-    # SFP+ cages use AMD XGMAC (`ax0`/`ax1`) not Intel `ix`.
-    # Shipping a confidently-wrong dropdown would misdirect
-    # operators; flagged for dedicated follow-up with dmesg-grade
-    # per-generation verification.
+    # ------------------------------------------------------------------
+    # OPNsense Deciso Netboard A-series — three generation-specific
+    # profiles, each grounded in a dmesg capture at bsd-hardware.info.
+    # Deciso reuses the "A10" and "A20" labels across multiple
+    # hardware generations with different chipsets, so we name the
+    # profiles by chipset-variant (not by A10/A20 alone) to
+    # disambiguate in the rename-modal dropdown.
+    # ------------------------------------------------------------------
+
+    def test_opnsense_deciso_a10_i210_gen2(self):
+        """Deciso A10 Gen2 (DEC670/DEC690 family): 4x Intel I210
+        GbE.  Grounded in bsd-hardware.info probe e0b8ceecae."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A10-I210"]
+        assert p.device_class == "firewall"
+        assert p.port_count == 4
+        assert p.port_ids() == ["igb0", "igb1", "igb2", "igb3"]
+        for pt in p.ports:
+            assert pt.speed == "gig"
+            assert pt.kind == "physical"
+        assert p.lags.prefix == "lagg"
+
+    def test_opnsense_deciso_a10_i210_sfpplus_gen3(self):
+        """Deciso A10 Gen3 (DEC750): 3x I210/I211 + 2x 10G SFP+
+        (AMD XGMAC, NOT Intel ix).  Grounded in probe 272dd56725.
+
+        Regression guard against the most likely authoring mistake:
+        using ``ix0``/``ix1`` for the 10G cages.  Those are Intel
+        ixgbe names — no Deciso platform uses them."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A10-I210-SFPPlus"]
+        assert p.port_count == 5
+        ids = p.port_ids()
+        assert ids == ["igb0", "igb1", "igb2", "ax0", "ax1"]
+        # The 10G SFP+ cages MUST be ax* not ix* or cxgbe*.
+        for wrong in ("ix0", "ix1", "cxgbe0", "cxgbe1"):
+            assert p.lookup_port(wrong) is None, (
+                f"{wrong} must not appear — Deciso uses AMD XGMAC (ax*) "
+                f"for all 10G cages"
+            )
+        # Verify speed + kind on the AMD ports.
+        for letter in ("0", "1"):
+            pt = p.lookup_port(f"ax{letter}")
+            assert pt is not None and pt.speed == "10gig"
+            assert pt.kind == "uplink"
+            assert pt.sfp is True
+
+    def test_opnsense_deciso_a20_i225_sfpplus(self):
+        """Deciso A20 current generation (DEC850 era): 4x I225-V
+        2.5GbE + 2x 10G SFP+ (AMD).  Grounded in probe 06e5f53429
+        (OPNsense 23.7.9 / FreeBSD 13.2)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netboard-A20-I225-SFPPlus"]
+        assert p.port_count == 6
+        ids = p.port_ids()
+        assert ids == ["igc0", "igc1", "igc2", "igc3", "ax0", "ax1"]
+        # igc* are the 2.5GbE copper ports; I225 and I226 share the
+        # same igc(4) driver name — don't over-specialise the YAML.
+        for n in range(4):
+            pt = p.lookup_port(f"igc{n}")
+            assert pt is not None
+            assert pt.speed == "2.5gig"
+            assert pt.kind == "physical"
+        # Common mistakes that should NOT be valid ports on the A20.
+        for wrong in ("ix0", "ix1", "igb0", "em0", "cxgbe0"):
+            assert p.lookup_port(wrong) is None
 
 # ---------------------------------------------------------------------------
 # Module-variant support (schema-first Option B, milestone-1)

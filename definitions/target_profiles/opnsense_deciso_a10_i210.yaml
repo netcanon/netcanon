@@ -1,0 +1,26 @@
+# Deciso Netboard A10 — Gen2 (DEC670 / DEC690 family)
+# 4 × 1GbE via Intel I210 (flashless, copper)
+#
+# FreeBSD driver: igb(4) — Intel(R) I210/I211 PCIe
+# Default BSD iface names: igb0, igb1, igb2, igb3
+#
+# NOTE on "A10" naming: Deciso has shipped at least four Netboard
+# variants under the "A10" label across generations (1x 82574L
+# quad, 2x I210 quad, 3x I210/I211 + 2x 10G AMD, and 2.5GbE DEC600
+# series).  This profile targets the **I210 GbE Gen2** specifically.
+# If your A10 has SFP+ cages or 2.5GbE copper, use a different
+# profile (see opnsense_deciso_a10_i210_sfpplus.yaml for Gen3).
+#
+# Validation: bsd-hardware.info probe e0b8ceecae shows the I210
+# generation emitting igb0..igb3 on a real Deciso Netboard A10.
+# HIGH confidence on interface naming.  OPNsense core issue #7133
+# confirms the <if>igbN</if> XML naming pattern.
+vendor: opnsense
+model: Netboard-A10-I210
+display_name: "Deciso Netboard A10 (4x I210 GbE — Gen2)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I210 copper GbE"}
+# OPNsense / FreeBSD LAG uses the lagg(4) driver.
+lags: {max: 4, prefix: lagg}

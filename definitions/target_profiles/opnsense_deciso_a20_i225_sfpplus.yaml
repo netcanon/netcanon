@@ -1,0 +1,27 @@
+# Deciso Netboard A20 — current 2.5GbE generation (DEC850 era)
+# 4 × 2.5GbE via Intel I225-V (copper)
+# 2 × 10G SFP+ via AMD EPYC SoC-integrated 10G (XGMAC)
+#
+# FreeBSD drivers:
+#   igc(4) → Intel I225/I226 2.5GbE — iface names igc0, igc1, igc2, igc3
+#   ax(4)  → AMD 10 Gigabit Ethernet — iface names ax0, ax1
+#
+# CRITICAL: the 10G cages are AMD XGMAC, NOT Intel ixgbe (ix) and
+# NOT Chelsio cxgbe.  The igc(4) driver covers both I225 and I226;
+# an earlier A20 variant shipped with I210 copper + ax SFP+ under
+# igb(4) (not currently modelled here — a future profile would
+# author "opnsense_deciso_a20_i210_sfpplus.yaml").
+#
+# Validation: bsd-hardware.info probe 06e5f53429 shows the exact
+# iface set igc0..igc3 + ax0/ax1 on a real Deciso Netboard A20
+# running OPNsense 23.7.9 / FreeBSD 13.2.  HIGH confidence on
+# interface naming.
+vendor: opnsense
+model: Netboard-A20-I225-SFPPlus
+display_name: "Deciso Netboard A20 (4x I225 2.5GbE + 2x 10G — DEC850)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-3", kind: physical, speed: 2.5gig, notes: "Intel I225-V 2.5GbE copper"}
+  - {range: "ax0-1", kind: uplink, speed: 10gig, sfp: true, notes: "AMD XGMAC SFP+ (EPYC integrated)"}
+lags: {max: 6, prefix: lagg}

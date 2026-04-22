@@ -1,0 +1,31 @@
+# Deciso Netboard A10 — Gen3 (DEC750 / DEC7xx family)
+# 3 × 1GbE via Intel I210/I211 (copper)
+# 2 × 10G SFP+ via AMD EPYC 3201 SoC-integrated 10G (XGMAC)
+#
+# FreeBSD drivers:
+#   igb(4) → Intel I210/I211 — iface names igb0, igb1, igb2
+#   ax(4)  → AMD 10 Gigabit Ethernet — iface names ax0, ax1
+#
+# CRITICAL: the 10G cages on DEC750 are AMD XGMAC, NOT Intel ixgbe
+# and NOT Chelsio cxgbe.  Shipping a profile with ``ix0``/``ix1`` or
+# ``cxgbe0``/``cxgbe1`` will offer dropdown options the target
+# device doesn't expose.
+#
+# NOTE on "A10" naming: Deciso has shipped multiple Netboard
+# variants under this label; Gen3 is the 3+2 configuration
+# specifically.  Not interchangeable with the 4x I210 Gen2 variant
+# (which is a different profile) or the 4x 82574L Gen1 variant
+# (not currently modelled).
+#
+# Validation: bsd-hardware.info probe 272dd56725 shows the full
+# iface set igb0..igb2 + ax0/ax1 on a real DEC750.  HIGH
+# confidence on interface naming.
+vendor: opnsense
+model: Netboard-A10-I210-SFPPlus
+display_name: "Deciso Netboard A10 (3x I210 GbE + 2x 10G — Gen3 / DEC750)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-2", kind: physical, speed: gig, notes: "Intel I210/I211 copper GbE"}
+  - {range: "ax0-1", kind: uplink, speed: 10gig, sfp: true, notes: "AMD XGMAC SFP+ (EPYC 3201 integrated)"}
+lags: {max: 5, prefix: lagg}
