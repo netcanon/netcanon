@@ -212,9 +212,11 @@ LAYER 4 — TRANSPORT
 --- MIGRATION PATH FROM CURRENT CODE (R1–R7) ---
 
   ┌────────────────────────────────────────────────────────────────┐
-  │ REAL-CAPTURE VALIDATION — infrastructure shipped, Cisco done   │
+  │ REAL-CAPTURE VALIDATION — 4/5 vendors done, Aruba blocked      │
   ├────────────────────────────────────────────────────────────────┤
-  │ STATUS: Cisco IOS-XE CLI validated.  Other 4 vendors queued.   │
+  │ STATUS: Cisco/OPNsense/MikroTik/FortiGate validated.  Aruba    │
+  │   AOS-S blocked on finding a public capture (see dedicated     │
+  │   README in tests/fixtures/real/aruba_aoss/).                  │
   │                                                                │
   │ Infrastructure shipped:                                        │
   │   * tests/fixtures/real/ directory with per-vendor subdirs.    │
@@ -228,43 +230,65 @@ LAYER 4 — TRANSPORT
   │   * RESULTS.md — human-curated per-codec coverage matrix,      │
   │     findings, certification decisions.                         │
   │                                                                │
-  │ Cisco IOS-XE CLI validated against:                            │
-  │   * batfish_cisco_interface   — 337-line grammar kitchen sink  │
-  │   * batfish_cisco_ip_route    — static-route variants          │
-  │   * ntc_carrier_interfaces    — carrier IOS w/ VRFs + QoS      │
-  │ Parser didn't crash on any.  Bug surfaced + fixed in the       │
-  │ same pass: _parse_lags was appending the same Ethernet0 once   │
-  │ per `channel-group N mode <variant>` line.  Dedupe + regression│
-  │ test landed.  Certainty promoted experimental -> best_effort.  │
-  │ 994 tests passing.                                             │
+  │ Results summary (full matrix in tests/fixtures/real/RESULTS.md):│
+  │                                                                │
+  │   codec           | fixtures | bugs | cert status               │
+  │   ----------------+----------+------+-------------------        │
+  │   cisco_iosxe_cli |    3     |  1   | exp -> best_effort        │
+  │   opnsense        |    2     |  0   | best_effort (unchanged)   │
+  │   mikrotik        |    1     |  1   | best_effort (unchanged)   │
+  │   fortigate       |    1     |  1   | best_effort (unchanged)   │
+  │   aruba_aoss      |    0     | BLK  | best_effort (unchanged)   │
+  │                                                                │
+  │ 3 bugs surfaced by real captures, all fixed in-session with    │
+  │ regression tests.  Sample bugs — each would have survived      │
+  │ arbitrarily long against synthetic fixtures:                   │
+  │   * cisco: _parse_lags appended Ethernet0 7x when Batfish's    │
+  │     kitchen sink stacked 7 `channel-group N mode <variant>`    │
+  │     lines on one iface.                                        │
+  │   * mikrotik: round-trip drift from missing name-based         │
+  │     interface_type inference in _parse_ip_address().  Second   │
+  │     parse hit /interface ethernet section and stamped the      │
+  │     type; first parse didn't.  Fixed via                       │
+  │     _infer_iface_type_from_name() called consistently.         │
+  │   * fortigate: `set vlanid N` + `set interface parent` without │
+  │     explicit `set type vlan` wasn't recognised as a VLAN iface │
+  │     — real 7.6.6 configs use this form and lost VLAN records.  │
+  │     Fixed by treating the pair as an implicit VLAN signal.     │
+  │                                                                │
+  │ Harness additions this session:                                │
+  │   * parse->render->parse round-trip assertion for all          │
+  │     bidirectional codecs (skips parse_only).  Catches the      │
+  │     silent-drift class of regressions that canonical-shape     │
+  │     comparison alone misses.                                   │
+  │   * Per-vendor extension whitelist (.rsc added for RouterOS).  │
   │                                                                │
   │ Known silent drops (real configs exercise them, our canonical  │
-  │ doesn't model them — expected, documented, matched to existing │
-  │ roadmap buckets):                                              │
-  │   * VRF memberships                                            │
-  │   * Q-in-Q encapsulation (second-dot1q)                        │
-  │   * QoS service-policies                                       │
-  │   * Interface ACL groups (ip access-group ... in/out)          │
-  │   * IPv6 addressing                                            │
-  │   * Proxy-ARP, uRPF, bandwidth hint                            │
-  │ See RESULTS.md for the full list + tier mapping.               │
+  │ doesn't model them — all mapped to existing roadmap buckets):  │
+  │   * Cisco: VRFs, Q-in-Q, QoS, ACL groups, IPv6, proxy-ARP,     │
+  │     uRPF, bandwidth.                                           │
+  │   * FortiGate: VDOMs (beyond first), firewall policies, VIPs,  │
+  │     IPsec VPN, SD-WAN rules, AV/IPS profiles, web filtering.   │
+  │   * OPNsense: firewall rules, NAT, DHCPv6 prefix delegation    │
+  │     advanced options.                                          │
+  │   * MikroTik: firewall rules, queue tree, mangle.              │
+  │ See RESULTS.md for the full per-vendor tier mapping.           │
   │                                                                │
-  │ Remaining per-vendor work (1 session each, same shape):        │
-  │   * aruba_aoss    — fixtures scarcer; try aruba/central-*       │
-  │                     and community exports                       │
-  │   * fortigate     — KevinGuenay/fortinet-resources has a 14K-   │
-  │                     line FortiOS 7.6.6 sample; drop full       │
-  │                     + feature-carved subsets                    │
-  │   * opnsense      — opnsense/core repo ships a default config.  │
-  │                     xml; plus user-shared exports on the forum │
-  │   * mikrotik      — community /export samples on forum +       │
-  │                     mikrotik/official Docs examples             │
+  │ Still to do — to graduate any codec to `certified`             │
+  │ (≥3 captures from ≥2 OS versions, round-trip stable):          │
+  │   * Unblock Aruba AOS-S — need 1+ real capture.  Best lead:    │
+  │     render aruba/central-sample-bulk-configurations 5member    │
+  │     template with placeholder substitution.                    │
+  │   * Double fixture counts on OPNsense / MikroTik / FortiGate   │
+  │     (currently 2/1/1 → need 3/3/3) and target 2 OS versions    │
+  │     per codec.                                                 │
+  │ cisco_iosxe_cli is parse_only so the round-trip graduation     │
+  │ path is actually via a consumer codec (Aruba/OPNsense/etc.)    │
+  │ rendering the Cisco-parsed intent and checking vs. source.     │
   │                                                                │
-  │ `certified` tier still requires a codec to round-trip ≥3       │
-  │ real captures from ≥2 OS versions (definition unchanged).      │
-  │ cisco_iosxe_cli is parse-only, so the round-trip graduation    │
-  │ path is actually via a consumer codec (Aruba etc.) emitting    │
-  │ the Cisco-parsed intent and being checked against the source.  │
+  │ 1012 tests passing (was 885 at start of the bug-fix batch,     │
+  │ +127 across all 4 bug fixes + real-capture harness + 4 vendor  │
+  │ validations).                                                  │
   └────────────────────────────────────────────────────────────────┘
 
   ┌────────────────────────────────────────────────────────────────┐

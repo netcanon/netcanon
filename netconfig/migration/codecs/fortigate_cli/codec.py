@@ -258,7 +258,15 @@ class FortiGateCLICodec(CodecBase):
                         f"        set lacp-mode "
                         f"{_CANONICAL_MODE_TO_FORTIGATE_LACP.get(lag.mode, 'active')}"
                     )
-                elif _looks_like_vlan_iface(iface.name):
+                elif (
+                    iface.interface_type == "ianaift:l3ipvlan"
+                    or _looks_like_vlan_iface(iface.name)
+                ):
+                    # VLAN identification can come from either signal —
+                    # canonical interface_type OR FortiGate-native
+                    # name convention.  Real configs name VLAN ifaces
+                    # freely (VL_100, DATA, etc.) so name alone isn't
+                    # sufficient.
                     vid = _vlan_id_for(iface.name, tree.vlans)
                     parent = _parent_for_vlan_iface(iface.name, tree.interfaces)
                     if vid is not None:
@@ -549,14 +557,25 @@ def _apply_system_interface(
         member_tokens = edit.settings.get("member")
         type_value = iface_type[0].lower() if iface_type else ""
 
-        if type_value == "vlan" and vlanid:
+        # Real FortiOS configs often omit `set type vlan`, leaving
+        # vlanid + interface (parent) as the only VLAN signals.  Treat
+        # either form as a VLAN subinterface.  Surfaced by
+        # KevinGuenay/fortinet-resources FGT-70G-BRANCH.conf: VL_100
+        # has no `set type` line but carries vlanid=100 /
+        # interface=LAG_INTERNAL and is unambiguously a VLAN iface.
+        looks_like_vlan = (
+            type_value == "vlan"
+            or (vlanid is not None and parent_iface is not None)
+        )
+        if looks_like_vlan and vlanid:
             iface.interface_type = "ianaift:l3ipvlan"
             try:
                 vid = int(vlanid[0])
-                intent.vlans.append(CanonicalVlan(
-                    id=vid,
-                    name=alias[0] if alias else name,
-                ))
+                # Use the iface name as the canonical VLAN name so the
+                # render path can map the iface back to its VLAN id
+                # via `_vlan_id_for`.  The alias (set via `set alias`)
+                # is preserved on the interface's description field.
+                intent.vlans.append(CanonicalVlan(id=vid, name=name))
             except ValueError:
                 pass
         elif type_value == "aggregate":

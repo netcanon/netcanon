@@ -322,6 +322,75 @@ class TestRender:
 # ---------------------------------------------------------------------------
 
 
+class TestRealConfigVlanInference:
+    """Real FortiOS configs often omit ``set type vlan`` on subinterfaces,
+    relying on ``set vlanid`` + ``set interface <parent>`` to imply VLAN
+    semantics.  Surfaced by KevinGuenay/fortinet-resources FGT-70G-BRANCH
+    during real-capture validation."""
+
+    def test_vlanid_plus_parent_without_type_recognised_as_vlan(self):
+        raw = """\
+config system interface
+    edit "LAG_INTERNAL"
+        set type aggregate
+        set member "port1" "port2"
+    next
+    edit "VL_100"
+        set alias "TEST100"
+        set ip 192.168.100.1 255.255.255.0
+        set interface "LAG_INTERNAL"
+        set vlanid 100
+    next
+end
+"""
+        intent = FortiGateCLICodec().parse(raw)
+        vl100 = next(i for i in intent.interfaces if i.name == "VL_100")
+        assert vl100.interface_type == "ianaift:l3ipvlan"
+        assert any(v.id == 100 for v in intent.vlans), (
+            f"expected a CanonicalVlan with id=100, got {[v.id for v in intent.vlans]}"
+        )
+
+    def test_canonical_vlan_name_matches_iface_name(self):
+        """For the render path to map iface -> vlan id without help,
+        the CanonicalVlan.name must equal the iface name (not the
+        alias).  Otherwise round-trip drops VLANs."""
+        raw = """\
+config system interface
+    edit "VL_100"
+        set alias "TEST100"
+        set interface "port1"
+        set vlanid 100
+    next
+end
+"""
+        intent = FortiGateCLICodec().parse(raw)
+        vlan = next(v for v in intent.vlans if v.id == 100)
+        assert vlan.name == "VL_100"
+
+    def test_round_trip_stable_with_implicit_vlan(self):
+        raw = """\
+config system interface
+    edit "port1"
+        set status up
+    next
+    edit "VL_100"
+        set alias "TEST100"
+        set ip 192.168.100.1 255.255.255.0
+        set interface "port1"
+        set vlanid 100
+    next
+end
+"""
+        c = FortiGateCLICodec()
+        first = c.parse(raw)
+        second = c.parse(c.render(first))
+        def norm(i):
+            d = i.model_dump()
+            for k in ('source_vendor','source_format','source_version'): d.pop(k,None)
+            return d
+        assert norm(first) == norm(second)
+
+
 class TestRoundTrip:
     def test_roundtrip_minimal(self):
         codec = FortiGateCLICodec()

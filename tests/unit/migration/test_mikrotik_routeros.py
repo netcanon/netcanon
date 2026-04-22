@@ -442,6 +442,54 @@ add address=198.51.100.2/30 interface=ether1
 
 
 # ---------------------------------------------------------------------------
+# Round-trip stability: interface_type inference must be consistent
+# regardless of which section first mentions an interface name.
+# Surfaced by real-capture validation against the NTC
+# ip_address_export_verbose fixture (parse→render→parse was unstable).
+# ---------------------------------------------------------------------------
+
+
+class TestInterfaceTypeInferenceRoundTrip:
+    def test_ethernet_name_from_ip_address_only_gets_typed(self):
+        """``/ip address add interface=etherN`` with no matching
+        ``/interface ethernet`` section must still populate
+        interface_type via name-pattern inference.  Without this the
+        second parse (after render emits the /interface ethernet
+        stub) adds the type, breaking round-trip equality."""
+        raw = (
+            "/ip address\n"
+            "add address=10.0.0.1/24 interface=ether2\n"
+        )
+        intent = MikroTikRouterOSCodec().parse(raw)
+        assert len(intent.interfaces) == 1
+        assert intent.interfaces[0].name == "ether2"
+        assert intent.interfaces[0].interface_type == "ianaift:ethernetCsmacd"
+
+    def test_round_trip_stable_with_ip_only_interface(self):
+        c = MikroTikRouterOSCodec()
+        raw = (
+            "/ip address\n"
+            "add address=10.0.0.1/24 interface=ether2\n"
+            "add address=10.0.1.1/24 interface=eth3_vlan1\n"
+        )
+        first = c.parse(raw)
+        second = c.parse(c.render(first))
+        assert first.model_dump(exclude={'source_vendor', 'source_format', 'source_version'}) \
+               == second.model_dump(exclude={'source_vendor', 'source_format', 'source_version'})
+
+    def test_bond_name_infers_lag_type(self):
+        """``bond1`` -> ianaift:ieee8023adLag so a LAG materialised from
+        /interface bonding and a LAG mentioned only in /ip address get
+        the same type."""
+        raw = (
+            "/ip address\n"
+            "add address=10.0.0.1/24 interface=bond1\n"
+        )
+        intent = MikroTikRouterOSCodec().parse(raw)
+        assert intent.interfaces[0].interface_type == "ianaift:ieee8023adLag"
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 

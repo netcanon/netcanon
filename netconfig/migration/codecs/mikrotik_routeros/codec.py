@@ -721,7 +721,11 @@ def _parse_interface_bonding(
         # Reverse-link members.
         for m in members:
             m_iface = iface_by_name.setdefault(
-                m, CanonicalInterface(name=m)
+                m,
+                CanonicalInterface(
+                    name=m,
+                    interface_type=_infer_iface_type_from_name(m),
+                ),
             )
             if m_iface.lag_member_of is None:
                 m_iface.lag_member_of = name
@@ -773,7 +777,10 @@ def _parse_ip_address(
             )
         iface = iface_by_name.setdefault(
             iface_name,
-            CanonicalInterface(name=iface_name),
+            CanonicalInterface(
+                name=iface_name,
+                interface_type=_infer_iface_type_from_name(iface_name),
+            ),
         )
         iface.ipv4_addresses.append(CanonicalIPv4Address(
             ip=ip_str.strip(),
@@ -852,6 +859,26 @@ def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
 def _is_ethernet_name(name: str) -> bool:
     """Does this name look like a MikroTik default ethernet port?"""
     return bool(re.match(r"^ether\d", name, re.IGNORECASE))
+
+
+def _infer_iface_type_from_name(name: str) -> str:
+    """Map a RouterOS interface-name pattern to the canonical IANA
+    interface-type string.
+
+    Any code that materialises a fresh ``CanonicalInterface`` must use
+    this — otherwise different sections populate ``interface_type``
+    inconsistently and round-trips drift.  Order matters: more-specific
+    patterns come first.
+    """
+    if _is_vlan_name(name):
+        return "ianaift:l3ipvlan"
+    if _is_ethernet_name(name):
+        return "ianaift:ethernetCsmacd"
+    if re.match(r"^bond\d", name, re.IGNORECASE):
+        return "ianaift:ieee8023adLag"
+    if re.match(r"^(br|bridge)\d", name, re.IGNORECASE):
+        return "ianaift:bridge"
+    return ""
 
 
 def _is_vlan_name(name: str) -> bool:

@@ -116,7 +116,9 @@ def _discover_fixtures() -> list[tuple[str, Path]]:
                 continue
             if path.name.startswith("."):
                 continue
-            if path.suffix.lower() not in {".txt", ".cfg", ".xml", ".conf"}:
+            # Per-vendor native extensions.  .rsc = RouterOS export,
+            # .conf = FortiOS-style, .cfg = Aruba/IOS, .xml = OPNsense.
+            if path.suffix.lower() not in {".txt", ".cfg", ".xml", ".conf", ".rsc"}:
                 continue
             out.append((codec_key, path))
     return out
@@ -232,4 +234,74 @@ def test_real_capture_parse_is_deterministic(
         pytest.skip("parse already covered by test_real_capture_parses_cleanly")
     assert a.model_dump() == b.model_dump(), (
         f"{codec_key}.parse({path.name}) is non-deterministic"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Round-trip invariant for bidirectional codecs
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.skipif(
+    not _FIXTURE_PARAMS,
+    reason="no real-capture fixtures present yet",
+)
+@pytest.mark.parametrize(
+    "codec_key,path",
+    _FIXTURE_PARAMS,
+    ids=[_param_id(p) for p in _FIXTURE_PARAMS],
+)
+def test_real_capture_round_trips_stable(
+    codec_key: str, path: Path,
+) -> None:
+    """For bidirectional codecs: ``parse(render(parse(raw))) ==
+    parse(raw)``.
+
+    The render output isn't required to be byte-identical to the input
+    (real configs carry comments, whitespace, unsupported directives we
+    don't model).  What IS required is that the canonical
+    *representation* we extract stabilises after one round-trip —
+    otherwise the codec is either lossy in a way that compounds
+    (bad) or non-deterministic in render (also bad).
+
+    Skips parse_only codecs (cisco_iosxe_cli) and any fixture that
+    already raised in parse (covered by the sibling test).
+    """
+    codec = _VENDOR_TO_CODEC[codec_key]()
+    if getattr(codec.__class__, "direction", "") == "parse_only":
+        pytest.skip(f"{codec_key} is parse_only; round-trip not applicable")
+
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    try:
+        first = codec.parse(raw)
+    except ParseError:
+        pytest.skip("parse failure already reported by sibling test")
+
+    try:
+        rendered = codec.render(first)
+    except Exception as exc:  # noqa: BLE001 — we want any render surprise
+        pytest.fail(
+            f"{codec_key}.render() blew up on the parsed-from-real intent: {exc}"
+        )
+
+    try:
+        second = codec.parse(rendered)
+    except ParseError as exc:
+        pytest.fail(
+            f"{codec_key}.parse(render(parse(raw))) ParseError: {exc}\n"
+            f"Rendered (first 400 chars): {rendered[:400]!r}"
+        )
+
+    # Strip metadata that encodes WHICH parse produced the tree — it's
+    # not a round-trip stability property.
+    def _compare(intent: CanonicalIntent) -> dict[str, Any]:
+        d = intent.model_dump()
+        d.pop("source_vendor", None)
+        d.pop("source_format", None)
+        d.pop("source_version", None)
+        return d
+
+    assert _compare(first) == _compare(second), (
+        f"{codec_key} round-trip not stable on {path.name}: "
+        f"canonical representation changed after parse->render->parse"
     )
