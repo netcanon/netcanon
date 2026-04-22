@@ -357,6 +357,15 @@ class MigrationJob(BaseModel):
     #: are not included.
     port_renames: dict[str, str] = Field(default_factory=dict)
 
+    #: Source names the operator explicitly marked "don't render" via
+    #: the Tier 3 rename modal.  Every reference to these names was
+    #: stripped from the canonical tree before render; the rendered
+    #: output does not contain the corresponding interface stanzas.
+    #: Populated by ``run_plan_with_rename`` from entries in
+    #: :attr:`MigrationPlanRequest.port_rename_map` whose value was
+    #: ``None``.
+    port_drops: list[str] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
@@ -392,12 +401,28 @@ class MigrationPlanRequest(BaseModel):
     raw_text: str | None = None
     source_filename: str | None = None
     force: bool = False
-    port_rename_map: dict[str, str] | None = None
+    port_rename_map: dict[str, str | None] | None = None
     """Optional per-port target-name override map.  When provided, the
     pipeline runs the Tier 2 port-name translator with these entries
     taking precedence over the auto-heuristic.  Used by the Tier 3 UI
     rename modal.  Backwards-compatible: callers that don't set this
-    get the legacy behaviour (no port-name translation at all)."""
+    get the legacy behaviour (no port-name translation at all).
+
+    Entry value semantics:
+
+    * ``str`` — use this name as the target-side port name verbatim
+      (user override wins over the auto-heuristic).
+    * ``None`` (``null`` in JSON) — DROP the interface from the
+      canonical tree before render.  Every reference to the source
+      name disappears: the interface stanza, VLAN tagged/untagged
+      lists, LAG membership, static-route egress, DHCP pool
+      interface.  Used when an operator decides a source interface
+      has no target representation and should be stripped rather
+      than mapped (e.g. Cisco ``AppGigabitEthernet1/0/1``
+      app-hosting bridge, loopbacks that can't be ported, unused
+      physical ports).
+    * key NOT in map — run the auto-heuristic (classify + format).
+    """
 
     target_profile: str | None = None
     """Optional target-device profile key (``vendor/model`` form, e.g.

@@ -196,6 +196,20 @@ class PortRenameResult(BaseModel):
     equivalent, etc.).  Safe to concatenate into a UI panel.
     """
 
+    dropped: list[str] = Field(default_factory=list)
+    """Source names the operator explicitly marked "don't render".
+    Entries in the :func:`translate_port_names` ``rename_map``
+    parameter with ``None`` value signal a drop — the orchestrator
+    removes every reference to that name from the canonical tree
+    (interface stanzas, VLAN port lists, LAG members, static-route
+    interface fields, DHCP pool interface).  The rendered output
+    simply does not contain the dropped interface.  Used by the
+    Tier 3 rename modal when the operator decides a source
+    interface has no target representation and should be stripped
+    rather than mapped (e.g. Cisco ``AppGigabitEthernet1/0/1``
+    app-hosting bridge, loopbacks where the target has no loopback
+    concept, unused physical ports)."""
+
 
 # ---------------------------------------------------------------------------
 # Orchestrator — vendor-agnostic cross-vendor rewrite
@@ -206,19 +220,25 @@ def translate_port_names(
     intent: "CanonicalIntent",
     source_codec: "CodecBase",
     target_codec: "CodecBase",
-    rename_map: dict[str, str] | None = None,
+    rename_map: "dict[str, str | None] | None" = None,
 ) -> PortRenameResult:
     """Rewrite every port-name reference in *intent* from source-vendor
     convention to target-vendor convention.
 
     Priority for each name:
-        1. If *rename_map* is supplied and contains an entry for the
-           source name, use the user-supplied target name verbatim.
-           (Tier 2 hybrid: user override wins over auto.)
-        2. Else run ``source_codec.classify_port_name(name)`` →
+        1. If *rename_map* contains an entry for the source name with
+           a ``None`` value: the entry is DROPPED from the canonical
+           tree (no rename, no warning — the interface disappears
+           from the rendered output entirely).  Used when an operator
+           decides a source interface has no target representation
+           and should be stripped rather than mapped.
+        2. If *rename_map* contains an entry with a string value, use
+           that as the target name verbatim.  (Tier 2 hybrid: user
+           override wins over auto.)
+        3. Else run ``source_codec.classify_port_name(name)`` →
            ``target_codec.format_port_identity(ident)`` and use the
            target's native formatting.
-        3. If the auto-path returns ``None`` (target has no equivalent
+        4. If the auto-path returns ``None`` (target has no equivalent
            for this kind — e.g. Aruba AOS-S can't express
            ``Loopback0``) keep the original name verbatim and emit a
            warning.  Caller decides whether to surface the warning or
@@ -241,6 +261,15 @@ def translate_port_names(
     Returns a :class:`PortRenameResult` summarising what changed.
     """
     user_map = dict(rename_map or {})
+    # Split user map into drops (value is None) and renames (value is str).
+    # Drops never go through the target codec — they're stripped from the
+    # canonical tree after the rename pass completes.
+    dropped_set: set[str] = {
+        name for name, tgt in user_map.items() if tgt is None
+    }
+    str_map: dict[str, str] = {
+        name: tgt for name, tgt in user_map.items() if isinstance(tgt, str)
+    }
     applied: dict[str, str] = {}
     warnings: list[str] = []
     memo: dict[str, str] = {}
@@ -250,8 +279,14 @@ def translate_port_names(
         # the same output without re-classifying.
         if name in memo:
             return memo[name]
-        if name in user_map:
-            out = user_map[name]
+        if name in dropped_set:
+            # Leave verbatim in the rename pass — the strip pass
+            # below removes the name entirely.  Memoise to skip the
+            # classifier lookup for subsequent references.
+            memo[name] = name
+            return name
+        if name in str_map:
+            out = str_map[name]
             memo[name] = out
             if out != name:
                 applied[name] = out
@@ -349,13 +384,69 @@ def translate_port_names(
         if pool.interface:
             pool.interface = resolve(pool.interface)
 
-    return PortRenameResult(applied=applied, warnings=warnings)
+    # Strip pass: remove every reference to a dropped name from the
+    # canonical tree.  Runs AFTER the rename sweep so dropped entries
+    # don't interfere with other sources' resolution.
+    if dropped_set:
+        _strip_dropped_ports(intent, dropped_set)
+
+    return PortRenameResult(
+        applied=applied,
+        warnings=warnings,
+        dropped=sorted(dropped_set),
+    )
+
+
+def _strip_dropped_ports(
+    intent: "CanonicalIntent", dropped: set[str]
+) -> None:
+    """Remove every reference to *dropped* port names from *intent*.
+
+    Cascades through every canonical field that stores a port name:
+
+        * ``intent.interfaces`` — interfaces whose name is dropped
+          are deleted outright.  Surviving interfaces get their
+          ``lag_member_of`` cleared if the referenced LAG is dropped.
+        * ``intent.vlans[].tagged_ports`` / ``untagged_ports`` —
+          dropped names filtered out.
+        * ``intent.lags`` — LAGs whose name is dropped are deleted;
+          surviving LAGs get their ``members`` list filtered.
+        * ``intent.static_routes`` — routes whose ``interface`` is
+          dropped are deleted (they no longer have a viable egress).
+        * ``intent.dhcp_servers`` — pools whose ``interface`` is
+          dropped are deleted (pool has no interface to serve).
+
+    Mutates *intent* in place.  Idempotent: subsequent calls with the
+    same *dropped* set are no-ops.
+    """
+    intent.interfaces = [
+        i for i in intent.interfaces if i.name not in dropped
+    ]
+    for iface in intent.interfaces:
+        if iface.lag_member_of in dropped:
+            iface.lag_member_of = None
+    for vlan in intent.vlans:
+        vlan.tagged_ports = [
+            p for p in vlan.tagged_ports if p not in dropped
+        ]
+        vlan.untagged_ports = [
+            p for p in vlan.untagged_ports if p not in dropped
+        ]
+    intent.lags = [l for l in intent.lags if l.name not in dropped]
+    for lag in intent.lags:
+        lag.members = [m for m in lag.members if m not in dropped]
+    intent.static_routes = [
+        r for r in intent.static_routes if r.interface not in dropped
+    ]
+    intent.dhcp_servers = [
+        p for p in intent.dhcp_servers if p.interface not in dropped
+    ]
 
 
 def build_port_rename_transform(
     source_codec: "CodecBase",
     target_codec: "CodecBase",
-    rename_map: dict[str, str] | None = None,
+    rename_map: "dict[str, str | None] | None" = None,
 ) -> tuple[Callable[["CanonicalIntent"], "CanonicalIntent"], PortRenameResult]:
     """Return a ``(transform, result)`` pair.
 
@@ -381,6 +472,12 @@ def build_port_rename_transform(
         # aggregate even if the transform runs more than once.
         result.applied.update(outcome.applied)
         result.warnings.extend(outcome.warnings)
+        # Union of drops (order-preserving dedup).
+        seen = set(result.dropped)
+        for name in outcome.dropped:
+            if name not in seen:
+                result.dropped.append(name)
+                seen.add(name)
         return intent
 
     return transform, result

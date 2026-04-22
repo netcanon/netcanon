@@ -139,6 +139,38 @@ class TestRenameModalApply:
         expect(output).to_contain_text("1/42")
 
 
+class TestRenameModalDrop:
+    """Dropping an interface removes it from the rendered output.
+    The Tier 3 UI exposes this via a 'drop' link next to free-text
+    override inputs (or a '— Drop (don't render) —' option in
+    profile-driven dropdowns).
+    """
+
+    def test_drop_link_removes_interface_from_output(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # No target profile picked → free-text inputs + drop links.
+        drop_link = page.locator(
+            '[data-testid="migrate-rename-drop-Loopback0"]'
+        )
+        expect(drop_link).to_be_visible()
+        drop_link.click()
+        # Summary shows the drop count.
+        summary = page.locator('[data-testid="migrate-rename-summary"]')
+        expect(summary).to_contain_text("drop")
+        # Apply → pipeline re-runs.
+        page.locator('[data-testid="migrate-rename-apply-btn"]').click()
+        expect(
+            page.locator('[data-testid="migrate-rename-status"]')
+        ).to_contain_text("Applied", timeout=5_000)
+        page.locator('[data-testid="migrate-rename-modal-close"]').click()
+        # Rendered output no longer contains the Loopback0 name.
+        output = page.locator('[data-testid="migrate-output"]')
+        # The dropped name should not appear in rendered text.
+        assert "Loopback0" not in (output.text_content() or "")
+
+
 class TestRenameModalCollisionDetection:
     def test_same_target_on_two_sources_disables_apply(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,

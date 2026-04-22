@@ -145,7 +145,7 @@ def run_plan_with_rename(
     source: CodecBase,
     target: CodecBase,
     raw_text: str,
-    port_rename_map: dict[str, str] | None = None,
+    port_rename_map: dict[str, str | None] | None = None,
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
@@ -228,5 +228,7 @@ def run_plan_with_rename(
         # warnings today, but future pipeline stages might, and this
         # wrapper shouldn't eat them.
         job.warnings.extend(rename_result.warnings)
+    if rename_result.dropped:
+        job.port_drops = list(rename_result.dropped)
 
     return job

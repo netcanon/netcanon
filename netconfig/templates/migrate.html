@@ -176,10 +176,26 @@
   table.mig-rename-table tr.has-warning td { background:#fffbe6; }
   table.mig-rename-table tr.has-collision td { background:#fde5e5; }
   table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:#0c5460; }
+  /* Drop (don't-render) rows: dim row, strike source name, grey the
+     override cell so it's unambiguous this interface will be omitted
+     from the rendered output. */
+  table.mig-rename-table tr.has-drop td { background:#f0f0f0; color:#888; }
+  table.mig-rename-table tr.has-drop td:first-child {
+    text-decoration:line-through; color:#888;
+  }
+  table.mig-rename-table tr.has-drop select,
+  table.mig-rename-table tr.has-drop input { color:#888; }
   table.mig-rename-table td.mig-rename-no-auto {
     color:#aaa; font-style:italic; font-family:system-ui, sans-serif;
     font-size:.72rem;
   }
+  .mig-rename-drop-link {
+    font-size:.7rem; color:#721c24; text-decoration:underline;
+    cursor:pointer; margin-left:.3rem; user-select:none;
+    white-space:nowrap;
+  }
+  .mig-rename-drop-link:hover { color:#a02030; }
+  .mig-rename-summary-drop { color:#555; font-weight:700; }
   table.mig-rename-table select, table.mig-rename-table input {
     font-family:monospace; font-size:.78rem;
     padding:.15rem .3rem; border:1px solid #ccc; border-radius:3px;
@@ -1297,9 +1313,13 @@
     emptyEl.style.display = 'none';
 
     // Build collision set from user map: target_name -> [source_name, ...].
+    // Dropped sources don't count — they won't reach the target so
+    // they can't collide with anything.
     var targetHits = {};
     _RENAME_KIND_ORDER.forEach(function(kind) {
       (rowsByKind[kind] || []).forEach(function(row) {
+        // Drop is encoded as null in the user map.
+        if (_renameUserMap[row.source] === null) return;
         var effective = _renameUserMap[row.source] || row.auto;
         if (!effective) return;
         if (!targetHits[effective]) targetHits[effective] = [];
@@ -1391,13 +1411,16 @@
       rows.forEach(function(row) {
         var tr = document.createElement('tr');
         tr.setAttribute('data-testid', 'migrate-rename-row-' + row.source);
-        var effective = _renameUserMap[row.source] || row.auto;
-        var hasOverride = _renameUserMap[row.source] !== undefined;
-        var hasCollision = effective && targetHits[effective]
+        var userVal = _renameUserMap[row.source];
+        var isDropped = userVal === null;
+        var effective = isDropped ? null : (userVal || row.auto);
+        var hasOverride = userVal !== undefined && !isDropped;
+        var hasCollision = !isDropped && effective && targetHits[effective]
                            && targetHits[effective].length > 1;
         if (row.warning) tr.classList.add('has-warning');
         if (hasCollision) tr.classList.add('has-collision');
         if (hasOverride) tr.classList.add('has-override');
+        if (isDropped) tr.classList.add('has-drop');
 
         // Auto-target column: when the codec left the name verbatim
         // (auto === source), show a "(needs override)" placeholder
@@ -1411,6 +1434,8 @@
 
         var overrideCell = document.createElement('td');
         overrideCell.className = 'mig-rename-target';
+        // Drop sentinel used in the dropdown's special "don't render" option.
+        var DROP_VALUE = '__DROP__';
         var opts = profileOptionsFor(row.kind);
         if (opts && opts.length) {
           var sel = document.createElement('select');
@@ -1420,6 +1445,12 @@
           blank.value = '';
           blank.textContent = '(auto: ' + row.auto + ')';
           sel.appendChild(blank);
+          // "Don't render" — first option after auto so it's easy to find.
+          var dropOpt = document.createElement('option');
+          dropOpt.value = DROP_VALUE;
+          dropOpt.textContent = '— Drop (don\'t render) —';
+          if (isDropped) dropOpt.selected = true;
+          sel.appendChild(dropOpt);
           opts.forEach(function(opt) {
             var o = document.createElement('option');
             o.value = opt; o.textContent = opt;
@@ -1427,7 +1458,8 @@
             sel.appendChild(o);
           });
           sel.addEventListener('change', function() {
-            if (sel.value) _renameUserMap[row.source] = sel.value;
+            if (sel.value === DROP_VALUE) _renameUserMap[row.source] = null;
+            else if (sel.value) _renameUserMap[row.source] = sel.value;
             else delete _renameUserMap[row.source];
             renderRenameTable();
             renderRenamePreview();
@@ -1443,7 +1475,8 @@
           inp.placeholder = row.auto === row.source
             ? 'Type target name (required)'
             : 'auto: ' + row.auto;
-          inp.value = _renameUserMap[row.source] || '';
+          inp.value = isDropped ? '' : (_renameUserMap[row.source] || '');
+          inp.disabled = isDropped;
           inp.setAttribute('data-testid',
             'migrate-rename-override-' + row.source);
           inp.addEventListener('input', function() {
@@ -1454,6 +1487,21 @@
             renderRenameSummary();
           });
           overrideCell.appendChild(inp);
+          // "Drop" link beside the input — free-text mode's equivalent
+          // of the dropdown's drop option.
+          var dropLink = document.createElement('span');
+          dropLink.className = 'mig-rename-drop-link';
+          dropLink.textContent = isDropped ? 'un-drop' : 'drop';
+          dropLink.setAttribute('data-testid',
+            'migrate-rename-drop-' + row.source);
+          dropLink.addEventListener('click', function() {
+            if (isDropped) delete _renameUserMap[row.source];
+            else _renameUserMap[row.source] = null;
+            renderRenameTable();
+            renderRenamePreview();
+            renderRenameSummary();
+          });
+          overrideCell.appendChild(dropLink);
         }
         tr.appendChild(overrideCell);
 
@@ -1531,10 +1579,16 @@
     if (!summ || !_lastJob) return;
     var auto = _lastJob.port_renames
       ? Object.keys(_lastJob.port_renames).length : 0;
-    var overrides = Object.keys(_renameUserMap).length;
+    var drops = Object.keys(_renameUserMap).filter(function(k) {
+      return _renameUserMap[k] === null;
+    }).length;
+    var overrides = Object.keys(_renameUserMap).filter(function(k) {
+      return _renameUserMap[k] !== null;
+    }).length;
     var warnings = (_lastJob.warnings || []).length;
 
-    // Collision count re-compute.
+    // Collision count re-compute.  Dropped sources don't contribute
+    // (they won't reach the target).
     var targetCounts = {};
     var seenSources = new Set();
     function tally(src, tgt) {
@@ -1543,6 +1597,7 @@
       targetCounts[tgt] = (targetCounts[tgt] || 0) + 1;
     }
     Object.keys(_renameUserMap).forEach(function(src) {
+      if (_renameUserMap[src] === null) return;  // dropped
       tally(src, _renameUserMap[src]);
     });
     if (_lastJob.port_renames) {
@@ -1559,6 +1614,8 @@
 
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
+    if (drops) html += ' / <span class="mig-rename-summary-drop">'
+                      + drops + ' drop' + (drops > 1 ? 's' : '') + '</span>';
     if (warnings) html += ' / <span class="mig-rename-summary-warn">'
                         + warnings + ' ⚠</span>';
     if (collisions) html += ' / <span class="mig-rename-summary-collision">'

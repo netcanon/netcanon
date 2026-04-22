@@ -275,6 +275,129 @@ class TestSviAbsorption:
         assert any("Vlan99" in w for w in result.warnings)
 
 
+class TestDropSemantic:
+    """Entries with ``None`` value in the rename map DROP the source
+    interface from the canonical tree before render.  Cascade sweep
+    removes references from vlans/lags/routes/dhcp so the rendered
+    output has no dangling pointers to the dropped name."""
+
+    def _build_cat9300ish_intent(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface, CanonicalLAG,
+            CanonicalVlan, CanonicalStaticRoute, CanonicalDHCPPool,
+        )
+        return CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="GigabitEthernet1/0/1"),
+                CanonicalInterface(name="AppGigabitEthernet1/0/1"),
+                CanonicalInterface(
+                    name="GigabitEthernet1/0/2",
+                    lag_member_of="Port-channel1",
+                ),
+            ],
+            vlans=[
+                CanonicalVlan(
+                    id=10, name="users",
+                    tagged_ports=[
+                        "GigabitEthernet1/0/1",
+                        "AppGigabitEthernet1/0/1",
+                    ],
+                    untagged_ports=["GigabitEthernet1/0/2"],
+                ),
+            ],
+            lags=[CanonicalLAG(name="Port-channel1", members=["GigabitEthernet1/0/2"])],
+            static_routes=[
+                CanonicalStaticRoute(
+                    destination="0.0.0.0/0",
+                    interface="AppGigabitEthernet1/0/1",
+                ),
+            ],
+            dhcp_servers=[
+                CanonicalDHCPPool(interface="AppGigabitEthernet1/0/1"),
+            ],
+        )
+
+    def test_drop_removes_interface_from_tree(self):
+        intent = self._build_cat9300ish_intent()
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"AppGigabitEthernet1/0/1": None},
+        )
+        # Interface gone.
+        names = [i.name for i in intent.interfaces]
+        assert "AppGigabitEthernet1/0/1" not in names
+        # Dropped set echoed in result.
+        assert "AppGigabitEthernet1/0/1" in result.dropped
+
+    def test_drop_cascades_to_vlan_port_lists(self):
+        intent = self._build_cat9300ish_intent()
+        translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"AppGigabitEthernet1/0/1": None},
+        )
+        vlan10 = next(v for v in intent.vlans if v.id == 10)
+        # Gi1/0/1 still in tagged_ports (renamed to 1/1).
+        assert "1/1" in vlan10.tagged_ports
+        # AppGig dropped; NO reference in any VLAN list.
+        for vlan in intent.vlans:
+            for p in vlan.tagged_ports + vlan.untagged_ports:
+                assert "AppGigabitEthernet" not in p
+
+    def test_drop_cascades_to_static_routes_and_dhcp(self):
+        intent = self._build_cat9300ish_intent()
+        translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"AppGigabitEthernet1/0/1": None},
+        )
+        # Static route + DHCP pool pointing at the dropped interface
+        # are deleted entirely (no dangling pointer).
+        assert len(intent.static_routes) == 0
+        assert len(intent.dhcp_servers) == 0
+
+    def test_drop_cascades_to_lag_membership(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface, CanonicalLAG,
+        )
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Gi1/0/1", lag_member_of="Port-channel1",
+                ),
+            ],
+            lags=[
+                CanonicalLAG(name="Port-channel1", members=["Gi1/0/1"]),
+            ],
+        )
+        translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"Port-channel1": None},
+        )
+        # LAG gone.
+        assert len(intent.lags) == 0
+        # Member interface's lag_member_of back-reference cleared.
+        assert intent.interfaces[0].lag_member_of is None
+
+    def test_drop_does_not_warn(self):
+        """Dropped names emit NO warning — the operator deliberately
+        chose not to render this.  Different from 'no target
+        equivalent' (which DOES warn).  Warning noise is the whole
+        point of having explicit drop."""
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface,
+        )
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="Loopback0")],
+        )
+        result = translate_port_names(
+            intent, CiscoIOSXECLICodec(), ArubaAOSSCodec(),
+            rename_map={"Loopback0": None},
+        )
+        # No warning for the dropped Loopback0 — normally would warn
+        # ("Aruba has no loopback") but the drop signals intent.
+        assert not any("Loopback0" in w for w in result.warnings)
+        assert "Loopback0" in result.dropped
+
+
 # ---------------------------------------------------------------------------
 # Cross-codec mesh: every (source, target) pair produces a result
 # ---------------------------------------------------------------------------
