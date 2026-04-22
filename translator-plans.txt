@@ -235,17 +235,18 @@ LAYER 4 — TRANSPORT
   │                                                                │
   │ Results summary (full matrix in tests/fixtures/real/RESULTS.md):│
   │                                                                │
-  │   codec           | fixtures | bugs | cert status               │
-  │   ----------------+----------+------+-------------------        │
-  │   cisco_iosxe_cli |    3     |  1   | exp -> best_effort        │
-  │   opnsense        |    2     |  0   | best_effort (unchanged)   │
-  │   mikrotik        |    1     |  1   | best_effort (unchanged)   │
-  │   fortigate       |    1     |  1   | best_effort (unchanged)   │
-  │   aruba_aoss      |   1*     |  0   | best_effort (unchanged)   │
-  │   *rendered from Central template, not captured                 │
+  │   codec           | fix | OS  | bugs | cert status              │
+  │   ----------------+-----+-----+------+-------------------       │
+  │   cisco_iosxe_cli |  6  |  1* |  1   | best_effort              │
+  │   opnsense        |  3  |  1  |  0   | best_effort              │
+  │   mikrotik        |  2  |  2  |  2   | best_effort              │
+  │   fortigate       |  2  |  1  |  1   | best_effort              │
+  │   aruba_aoss      |  1† |  —  |  0   | best_effort              │
+  │   * all Cisco fixtures are Batfish/NTC test grammars            │
+  │   † rendered from Aruba Central template, not captured          │
   │                                                                │
-  │ 3 bugs surfaced by real captures, all fixed in-session with    │
-  │ regression tests.  Sample bugs — each would have survived      │
+  │ 4 bugs surfaced so far by real captures, all fixed in-session  │
+  │ with regression tests.  Sample bugs — each would have survived │
   │ arbitrarily long against synthetic fixtures:                   │
   │   * cisco: _parse_lags appended Ethernet0 7x when Batfish's    │
   │     kitchen sink stacked 7 `channel-group N mode <variant>`    │
@@ -259,6 +260,12 @@ LAYER 4 — TRANSPORT
   │     explicit `set type vlan` wasn't recognised as a VLAN iface │
   │     — real 7.6.6 configs use this form and lost VLAN records.  │
   │     Fixed by treating the pair as an implicit VLAN signal.     │
+  │   * mikrotik: hostnames containing spaces (e.g. "Quinta        │
+  │     Router") were emitted unquoted on render, which RouterOS   │
+  │     parses as two tokens (name + orphan).  Surfaced by         │
+  │     routeros-diff's verbose_export.rsc fixture.  Fixed by      │
+  │     adding a _quote_if_needed() helper that wraps any value    │
+  │     containing whitespace/quotes/backslashes.                   │
   │                                                                │
   │ Harness additions this session:                                │
   │   * parse->render->parse round-trip assertion for all          │
@@ -473,6 +480,21 @@ LAYER 4 — TRANSPORT
   │     so they survive parse even if never auto-rendered.         │
   │   * Cisco `privilege exec level <N>` aliases — Tier 3          │
   │     informational; currently dropped.                          │
+  │                                                                │
+  │   * MikroTik /interface bridge not emitted on render.  Parser  │
+  │     captures bridge interfaces with interface_type=            │
+  │     ianaift:bridge, but the render path doesn't have a         │
+  │     `/interface bridge` section — so bridges survive parse     │
+  │     but vanish on render.  Surfaced by routeros-diff's         │
+  │     verbose_export.rsc fixture (bridges named `upstream`,      │
+  │     `downstream`, `loopback`).  Whitelisted via                 │
+  │     _KNOWN_ROUNDTRIP_GAPS in test_real_captures.py.             │
+  │   * MikroTik VLAN interface name synthesis.  Real configs      │
+  │     freely name VLAN interfaces (`gn-mgmt`, `user-wifi`); our  │
+  │     render emits them as synthetic `vlan<N>` regardless of     │
+  │     original name, losing the name->vlan-id mapping on re-     │
+  │     parse.  Preserve original iface name + carry vlan-id       │
+  │     separately.  Also whitelisted.                              │
   └────────────────────────────────────────────────────────────────┘
 
   R1  Rename adapter → codec everywhere.  Add vendor_id to the

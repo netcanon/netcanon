@@ -294,7 +294,12 @@ class MikroTikRouterOSCodec(CodecBase):
         # ----- /system identity -----
         if tree.hostname:
             lines.append("/system identity")
-            lines.append(f"set name={tree.hostname}")
+            # Hostnames with spaces or special characters need
+            # quoting — without quotes, a hostname like "Quinta Router"
+            # renders as `set name=Quinta Router`, which RouterOS
+            # parses as `name=Quinta` + an orphan token `Router`.
+            # Surfaced by routeros-diff's verbose_export.rsc fixture.
+            lines.append(f'set name={_quote_if_needed(tree.hostname)}')
             lines.append("")
 
         # ----- /interface ethernet (tweaks to default ports) -----
@@ -643,6 +648,19 @@ def _parse_kv(line: str) -> dict[str, str]:
 
 
 _FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")
+
+
+def _quote_if_needed(value: str) -> str:
+    """Quote a RouterOS key=value value if it contains whitespace
+    or characters that would otherwise break parsing.  No-op for
+    simple identifiers (the common case, so we keep render output
+    tidy by default)."""
+    if not value:
+        return '""'
+    if any(c in value for c in ' \t\n"\\'):
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return value
 
 
 def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:

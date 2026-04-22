@@ -449,6 +449,34 @@ add address=198.51.100.2/30 interface=ether1
 # ---------------------------------------------------------------------------
 
 
+class TestHostnameQuoting:
+    """Real RouterOS configs (e.g. routeros-diff's verbose_export
+    fixture) carry hostnames with spaces like "Quinta Router".  Our
+    render must quote the value — without quotes,
+    `set name=Quinta Router` is parsed by RouterOS as
+    `name=Quinta` plus an orphan `Router` token, which breaks the
+    parse/render/parse round-trip."""
+
+    def test_hostname_with_space_round_trips(self):
+        c = MikroTikRouterOSCodec()
+        raw = '/system identity\nset name="Quinta Router"\n'
+        first = c.parse(raw)
+        assert first.hostname == "Quinta Router"
+        second = c.parse(c.render(first))
+        assert second.hostname == "Quinta Router"
+
+    def test_simple_hostname_not_quoted_unnecessarily(self):
+        """No quotes on values that don't need them — keeps the
+        render output tidy and matches RouterOS output style."""
+        intent = CanonicalIntent(
+            source_vendor="test", source_format="test",
+            hostname="router1",
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "set name=router1" in out
+        assert 'set name="router1"' not in out
+
+
 class TestInterfaceTypeInferenceRoundTrip:
     def test_ethernet_name_from_ip_address_only_gets_typed(self):
         """``/ip address add interface=etherN`` with no matching

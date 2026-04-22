@@ -26,11 +26,14 @@ equal trees).
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | interfaces | vlans | static_routes | lags | Notes |
-|---|---:|---:|---:|---:|---:|---:|---|
-| `batfish_cisco_interface.txt` | 337 | 1 | 24 | 9 | 0 | 1 | Grammar kitchen-sink — every interface sub-command Batfish supports. |
-| `batfish_cisco_ip_route.txt` | 26 | 1 | 0 | 0 | 10 | 0 | Static-route variants (interface next-hops, IP next-hops). |
-| `ntc_carrier_interfaces.txt` | 82 | 0 | 6 | 0 | 0 | 0 | Carrier IOS: VRFs, dot1Q Q-in-Q subinterfaces, QoS, ACL groups, uRPF. |
+| Fixture | Lines | hostname | interfaces | vlans | routes | lags | snmp | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---|
+| `batfish_cisco_interface.txt` | 337 | 1 | 24 | 9 | 0 | 1 | 0 | Grammar kitchen-sink — every interface sub-command Batfish supports. |
+| `batfish_cisco_ip_route.txt` | 26 | 1 | 0 | 0 | 10 | 0 | 0 | Static-route variants (interface next-hops, IP next-hops). |
+| `ntc_carrier_interfaces.txt` | 82 | 0 | 6 | 0 | 0 | 0 | 0 | Carrier IOS: VRFs, dot1Q Q-in-Q subinterfaces, QoS, ACL groups, uRPF. |
+| `batfish_cisco_aaa.txt` | 102 | 1 | 0 | 0 | 0 | 0 | 0 | AAA stanzas — tests parser tolerance for unmodelled commands. |
+| `batfish_cisco_snmp.txt` | 110 | 1 | 0 | 0 | 0 | 0 | 1 | `snmp-server community` with groups + views + users. |
+| `batfish_cisco_logging.txt` | 101 | 1 | 0 | 0 | 0 | 0 | 0 | `logging host`, buffered, facility — not canonically modelled, validates "parse doesn't crash". |
 
 ### Findings
 
@@ -54,10 +57,11 @@ raw_sections or Fidelity Polish).
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | interfaces | Notes |
-|---|---:|---:|---:|---|
-| `opnsense_core_default.xml` | 141 | 1 | 2 | Upstream default `config.xml` template — system, users, groups, timeservers, interface stubs. |
-| `opnsense_service_test_config.xml` | 91 | 0 | 3 | Service-layer test config with real wan/lan/opt1 zones, DHCP client + DHCPv6 prefix delegation, gateway tracking. |
+| Fixture | Lines | hostname | interfaces | dhcp | local_users | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| `opnsense_core_default.xml` | 141 | 1 | 2 | 0 | 1 | Upstream default `config.xml` template — system, users, groups, timeservers, interface stubs. |
+| `opnsense_service_test_config.xml` | 91 | 0 | 3 | 0 | 0 | Service-layer test config with real wan/lan/opt1 zones, DHCP client + DHCPv6 prefix delegation, gateway tracking. |
+| `opnsense_acl_test_config.xml` | 239 | 1 | 2 | 1 | 5 | ACL model test — 5 users + 4 groups with distinct priv sets.  Richest local_users surface in the corpus. |
 
 ### Findings
 
@@ -83,9 +87,29 @@ upstream or a sanitised customer deployment config.
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | interfaces | Notes |
-|---|---:|---:|---:|---|
-| `ntc_ip_address_export.rsc` | 8 | 0 | 2 | Real RouterOS 6.48.6 `/export verbose` snippet — `/ip address` with quoted comments and vendor banner. |
+| Fixture | Lines | hostname | interfaces | vlans | dhcp | snmp | Notes |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `ntc_ip_address_export.rsc` | 8 | 0 | 2 | 0 | 0 | 0 | Real RouterOS 6.48.6 `/export verbose` snippet — `/ip address` with quoted comments and vendor banner. |
+| `routeros_diff_verbose_export.rsc` | 484 | 1 | 9 | 1 | 2 | 1 | Real RouterOS 6.48.1 `/export verbose` from an RB952Ui-5ac2nD home router.  Different OS version (gives MikroTik 2-OS-version coverage already).  `/interface bridge`, `/interface vlan`, `/ip dhcp-server network` + `/ip pool`, `/snmp` all exercised. |
+
+### Known round-trip gap
+
+`routeros_diff_verbose_export.rsc` **parses cleanly** but can't
+round-trip bit-exact via our codec — whitelisted via
+`_KNOWN_ROUNDTRIP_GAPS` in `test_real_captures.py`.  Two codec bugs
+the fixture surfaced, both queued under Fidelity Polish in
+translator-plans.txt:
+
+1. **Bridge render not implemented.**  `/interface bridge add
+   name=upstream` parses into `CanonicalInterface(interface_type=
+   "ianaift:bridge")` but our renderer doesn't emit `/interface
+   bridge` at all — the bridge survives the first parse, disappears
+   on render, and the second parse sees nothing.
+2. **VLAN interface name synthesis.**  The fixture defines a VLAN
+   interface as `/interface vlan add name=gn-mgmt interface=ether3
+   vlan-id=84` — name is `gn-mgmt`, not `vlan84`.  Our renderer
+   emits it as synthetic `vlan84` which re-parses as a different
+   name, dropping the `gn-mgmt` -> vlan-id=84 mapping.
 
 ### Findings
 
@@ -119,9 +143,10 @@ from RouterOS 7.x) to graduate.
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | Notes |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `kevinguenay_fgt_70g_branch.conf` | 12,317 | 1 | 2 | 21 | 2 | 1 | 2 | Real FortiOS 7.6.6 branch config — `fortilink` + `LAG_INTERNAL` aggregates, VL_100/VL_101 VLAN subinterfaces on LAG_INTERNAL, LO_BGP loopback, SD-WAN, IPsec, firewall policies. |
+| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | dhcp | local_users | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `kevinguenay_fgt_70g_branch.conf` | 12,317 | 1 | 2 | 21 | 2 | 1 | 2 | 1 | 1 | Real FortiOS 7.6.6 branch config — `fortilink` + `LAG_INTERNAL` aggregates, VL_100/VL_101 VLAN subinterfaces on LAG_INTERNAL, LO_BGP loopback, SD-WAN, IPsec, firewall policies. |
+| `kevinguenay_fgt_vm_hub.conf` | 13,827 | 1 | 2 | 19 | 0 | 1 | 1 | 1 | 1 | Real FortiOS 7.6.6 VM hub — the counterpart hub config for the branch above.  Same OS version → doesn't unlock `certified` tier on its own. |
 
 ### Findings
 
@@ -209,14 +234,14 @@ Swap the rendered fixture out whenever we find one.
 
 ## Summary
 
-| Codec | Fixtures | Bugs surfaced | Certainty |
-|---|---:|---:|---|
-| cisco_iosxe_cli | 3 | 1 (LAG member dedup) | best_effort |
-| opnsense | 2 | 0 | best_effort |
-| mikrotik_routeros | 1 | 1 (round-trip interface_type drift) | best_effort |
-| fortigate_cli | 1 | 1 (implicit VLAN typing) | best_effort |
-| aruba_aoss | 1 *(rendered, not captured)* | 0 (harness + render-script refinements only) | best_effort |
-| **TOTAL** | **8** | **3** | — |
+| Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
+|---|---:|---:|---:|---|---|
+| cisco_iosxe_cli | 6 | 1* | 1 (LAG member dedup) | best_effort | *all fixtures are Batfish/NTC test data; need a real captured 15.x/16.x/17.x config to count as a 2nd OS version |
+| opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
+| mikrotik_routeros | 2 | 2 (6.48.1 + 6.48.6) | 2 (round-trip interface_type drift; hostname-with-spaces quoting) | best_effort | need 1 more fixture (and ideally a RouterOS 7.x version) |
+| fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
+| aruba_aoss | 1 *(rendered from template, not captured)* | — | 0 (harness + render-script refinements only) | best_effort | need any real sanitised capture |
+| **TOTAL** | **14** | — | **4** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —
