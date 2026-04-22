@@ -7,6 +7,44 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Aruba AOS-S promoted to `certified` — 2nd codec to reach the bar)
+
+- Three sanitised real captures ingested from HPE Community forum
+  threads, collectively spanning **3 distinct OS versions** and
+  **2 switch families**:
+  - ``hpe_community_2930f_wc1607_intervlan.cfg`` — 2930F JL260A on
+    **WC.16.07.0002**.  12 VLANs with per-VLAN SVIs, ``ip
+    helper-address`` (DHCP relay) at scale, ``ip forward-protocol udp``
+    for DNS/NTP helper forwarding, ``primary-vlan``, 4 static routes
+    including ``ip default-gateway``.
+  - ``hpe_community_2920_wb1608_dhcp_snooping.cfg`` — 2920 J9729A on
+    **WB.16.08.0001** (different WB branch + different switch family
+    to the other two).  Exercises ``dhcp-snooping`` with 13
+    authorized-servers + VLAN scope + trust ports, ``ntp unicast``
+    with ``iburst``, ``web-management ssl``, ``ip authorized-managers``,
+    ``snmp-server host ... trap-level critical``.
+  - ``hpe_community_2930f_wc1610_dhcp_server.cfg`` — 2930F JL258A on
+    **WC.16.10.0005**.  Real AOS-S built-in ``dhcp-server pool``
+    grammar (3 pools × ``default-router``/``dns-server``/``network``/
+    ``range``), per-VLAN ``dhcp-server`` enable flag,
+    ``allow-unsupported-transceiver``.
+- **Zero codec bugs surfaced.**  All four fixtures (3 new + 1
+  pre-existing rendered template) round-trip clean on first pass,
+  parse deterministically, produce matching canonical trees — the
+  harness invariants held without a single fix.
+- ``certainty`` ClassVar bumped from ``best_effort`` to ``certified``
+  in ``netconfig/migration/codecs/aruba_aoss/codec.py``; matching
+  test updated in ``tests/unit/migration/test_aruba_aoss.py`` with
+  a comment citing the promotion evidence (pattern mirrors the
+  MikroTik certification commit).
+- ``aruba_aoss`` is the **2nd codec to reach ``certified``** (after
+  ``mikrotik_routeros``).  Cert bar: ≥3 real captures from ≥2 OS
+  versions, all round-tripping clean.
+- Docs: ``tests/fixtures/real/NOTICE.md`` (provenance for all 3 new
+  files), ``tests/fixtures/real/RESULTS.md`` (per-codec table + summary
+  total from 16 → 19 fixtures), ``README.md`` cert table.
+- **658 migration tests passing**, zero regressions.
+
 ### Fixed (Bug 1: Cisco IOS-XE SVI dropped silently into Aruba render)
 
 - **Symptom** (found via real-config dogfooding): feeding a Cisco

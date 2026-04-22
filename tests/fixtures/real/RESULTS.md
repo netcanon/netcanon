@@ -207,13 +207,16 @@ deployments.
 
 **Codec:** `netconfig.migration.codecs.aruba_aoss.ArubaAOSSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` *(unchanged)*
+**Certainty:** `certified` ✅
 
 ### Coverage matrix
 
-| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | Notes |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `aruba_central_5memberstack_rendered.cfg` | 162 | 1 | 1 | 48 | 3 | 3 | 1 | Rendered from Aruba Central's 5MemberStack bulk-config template via in-tree script (see `aruba_aoss/README.md`).  Exercises hostname, module/snmp engine id, motd banner, logging, static routes (incl. default gateway), manager password stanza, NTP, VLAN 1 + VLAN 20 (USERS) + VLAN 30 (VOICE) with tagged/untagged port lists, 48 interfaces + A1, `trunk` LAG, STP, device-profile for APs. |
+| Fixture | Lines | hostname | dns | interfaces | vlans | routes | lags | snmp | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `aruba_central_5memberstack_rendered.cfg` | 162 | 1 | 1 | 48 | 3 | 3 | 1 | 0 | Rendered from Aruba Central's 5MemberStack bulk-config template via in-tree script (see `aruba_aoss/README.md`).  Exercises hostname, module/snmp engine id, motd banner, logging, static routes (incl. default gateway), manager password stanza, NTP, VLAN 1 + VLAN 20 (USERS) + VLAN 30 (VOICE) with tagged/untagged port lists, 48 interfaces + A1, `trunk` LAG, STP, device-profile for APs. |
+| `hpe_community_2930f_wc1607_intervlan.cfg` | 109 | 1 | 1 | 10 | 12 | 4 | 0 | 1 | Real 2930F `show running-config` on **WC.16.07.0002**.  12 VLANs with per-VLAN SVIs, `ip helper-address` (DHCP relay), `ip forward-protocol udp` for DNS/NTP, `primary-vlan`, 4 static routes including `ip default-gateway`.  Inter-VLAN L3 at realistic scale. |
+| `hpe_community_2920_wb1608_dhcp_snooping.cfg` | 74 | 1 | 0 | 9 | 2 | 1 | 0 | 1 | Real 2920 `show running-config` on **WB.16.08.0001** — different switch family (2920 = J9729A vs 2930F/5406R) and major OS branch (WB vs WC).  Exercises `dhcp-snooping` with 13 authorized-servers, `ntp unicast` with public peer, `web-management ssl`, `ip authorized-managers`, `snmp-server host ... trap-level critical`. |
+| `hpe_community_2930f_wc1610_dhcp_server.cfg` | 58 | 1 | 0 | 4 | 4 | 1 | 0 | 1 | Real 2930F `show running-config` on **WC.16.10.0005**.  `dhcp-server pool` grammar (3 pools with default-router + dns-server + network + range), per-VLAN `dhcp-server` enable flag, `allow-unsupported-transceiver`. |
 
 ### Findings
 
@@ -242,16 +245,37 @@ describes.
 
 ### Certification decision
 
-**Stay at `best_effort`.**  The fixture is rendered, not captured,
-so strictly speaking it's still exercising grammar Aruba's template
-author anticipated — not the long tail of real deployments.
-Promoting to `certified` requires a sanitised real capture.
+**Promoted to `certified`.**  Three sanitised captures from HPE
+Community forum threads landed the corpus at 4 fixtures across
+**3 distinct OS versions** (WC.16.07.0002, WB.16.08.0001,
+WC.16.10.0005) and **2 switch families** (2920 J9729A + 2930F
+JL258A/JL260A).  All four round-trip clean on first parse — zero
+codec bugs surfaced by the real-capture pass.  The pre-existing
+rendered template fixture remains a 4th data point but is not
+counted toward OS-version diversity (it's synthetic).
 
-### Do-better note
+Grammar exercised across the three real captures that wasn't
+exercised by the rendered template:
 
-A genuine sanitised AOS-S capture would be strictly more valuable.
-Candidate paths to get one are listed in `aruba_aoss/README.md`.
-Swap the rendered fixture out whenever we find one.
+* **Real `ip default-gateway`** line (not synthesised into
+  `ip route 0.0.0.0/0`) — validates Bug 4 fix holds on real input.
+* **`ip helper-address`** (DHCP relay) at scale — 10 VLANs in C3
+  use it; none previously.
+* **`ip forward-protocol udp <ip> <service>`** (DNS/NTP helper
+  forwarding) — parse-and-ignore grammar not in any other fixture.
+* **`dhcp-snooping`** with `authorized-server`, `vlan` scope,
+  trust-port, `no option 82` — silent-drop validation.
+* **`dhcp-server pool`** with `default-router` / `dns-server` /
+  `network` / `range` sub-lines, plus per-VLAN `dhcp-server` enable
+  flag — the only capture exercising AOS-S's (rare) built-in DHCP
+  server grammar.
+* **`snmp-server host ... trap-level critical`** — trap-host
+  target grammar.
+* **`web-management ssl`**, **`ip authorized-managers ... access manager`**
+  — silent-drop validation.
+* **`primary-vlan N`**, **`allow-unsupported-transceiver`**,
+  **`timesync ntp`** with `time daylight-time-rule` and `time timezone`
+  — silent-drop validation.
 
 ---
 
@@ -263,8 +287,8 @@ Swap the rendered fixture out whenever we find one.
 | opnsense | 3 | 1 | 0 | best_effort | need fixture from a non-`opnsense/core` source |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | fortigate_cli | 2 | 1 (7.6.6) | 1 (implicit VLAN typing) | best_effort | need fixture from 7.4.x or 6.x |
-| aruba_aoss | 1 *(rendered from template, not captured)* | — | 0 (harness + render-script refinements only) | best_effort | need any real sanitised capture |
-| **TOTAL** | **16** | — | **8** | — | — |
+| **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
+| **TOTAL** | **19** | — | **8** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
 have survived arbitrarily long against our synthetic fixtures —

@@ -66,7 +66,13 @@ class TestR3Fields:
         assert ArubaAOSSCodec.direction == "bidirectional"
 
     def test_certainty(self):
-        assert ArubaAOSSCodec.certainty == "best_effort"
+        # Promoted from best_effort after three sanitised HPE Community
+        # forum captures landed the corpus at 4 fixtures across 3 OS
+        # versions (WC.16.07.0002, WB.16.08.0001, WC.16.10.0005), with
+        # all four round-tripping cleanly.  The existing rendered-
+        # template fixture remains a 4th data point but is not counted
+        # toward OS-version diversity.  See tests/fixtures/real/RESULTS.md.
+        assert ArubaAOSSCodec.certainty == "certified"
 
     def test_input_format(self):
         assert ArubaAOSSCodec.input_format == "cli-aruba-aoss"

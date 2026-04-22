@@ -100,10 +100,10 @@ load, surfaced via `GET /api/v1/migration/adapters`):
 | Codec | Certainty | Real fixtures |
 |---|---|---:|
 | mikrotik_routeros | **certified** ✅ | 4 across 3 OS versions |
+| aruba_aoss | **certified** ✅ | 4 (3 real + 1 rendered) across 3 OS versions |
 | cisco_iosxe_cli | best_effort | 6 (grammar-test sources) |
 | opnsense | best_effort | 3 (opnsense/core repo) |
 | fortigate_cli | best_effort | 2 (same OS version) |
-| aruba_aoss | best_effort | 1 (rendered from template) |
 | cisco_iosxe (NETCONF) | best_effort | — |
 
 See `tests/fixtures/real/RESULTS.md` for the full matrix, per-fixture
