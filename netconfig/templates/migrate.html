@@ -73,6 +73,145 @@
                    overflow:auto; border:1px solid #eee; border-radius:4px;
                    padding:.35rem .5rem; background:#fafafa; }
   .mig-path-list code { background:transparent; }
+
+  /* ──────────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal — draggable 2-pane window that overlays
+     the migration result view.  Not a blocking modal: operator can
+     drag it aside to consult the rendered output underneath.
+     ────────────────────────────────────────────────────────────── */
+  #mig-rename-modal {
+    display:none; position:fixed; top:10vh; left:50%;
+    width:min(1100px, 94vw); max-height:80vh; z-index:9500;
+    background:#fff; border-radius:8px;
+    box-shadow:0 10px 40px rgba(0,0,0,.35);
+    border:1px solid #d0d4e0;
+    transform:translateX(-50%);
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  #mig-rename-modal.open { display:flex; }
+  #mig-rename-modal-header {
+    background:#1a1a2e; color:#eee;
+    padding:.55rem .8rem; display:flex; align-items:center; gap:.6rem;
+    cursor:move; user-select:none; flex:0 0 auto;
+  }
+  #mig-rename-modal-header strong { font-size:.9rem; }
+  #mig-rename-modal-header .grip { font-size:.7rem; color:#7eb8f7;
+                                   letter-spacing:.1em; margin-right:.3rem;
+                                   font-family:monospace; }
+  #mig-rename-modal-header button {
+    background:transparent; color:#eee; border:1px solid #444;
+    border-radius:3px; padding:.2rem .55rem; cursor:pointer;
+    font-weight:normal; font-size:.8rem;
+  }
+  #mig-rename-modal-header button:hover { background:#333; }
+  #mig-rename-modal-toolbar {
+    padding:.5rem .8rem; background:#f5f5f8;
+    border-bottom:1px solid #e0e0e8;
+    display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
+    flex:0 0 auto;
+  }
+  #mig-rename-modal-toolbar label { font-size:.8rem; font-weight:600;
+                                    color:#555; }
+  #mig-rename-modal-toolbar select {
+    padding:.25rem .4rem; font-size:.82rem;
+    border:1px solid #ccc; border-radius:3px;
+  }
+  #mig-rename-modal-toolbar .summary { font-size:.78rem; color:#666;
+                                       font-family:monospace; margin-left:auto; }
+  .mig-rename-summary-warn { color:#7a5d00; font-weight:700; }
+  .mig-rename-summary-collision { color:#721c24; font-weight:700; }
+
+  #mig-rename-modal-body {
+    flex:1; display:flex; overflow:hidden;
+  }
+  #mig-rename-table-pane {
+    flex:1.1; overflow:auto; padding:.6rem .8rem; border-right:1px solid #e0e0e8;
+    min-width:400px;
+  }
+  #mig-rename-preview-pane {
+    flex:1; overflow:auto; background:#1e1e1e; padding:.6rem .8rem;
+    min-width:300px;
+  }
+  #mig-rename-preview-pane pre {
+    margin:0; background:transparent; padding:0; color:#d4d4d4;
+    font-family:monospace; font-size:.78rem; line-height:1.35;
+    white-space:pre;
+  }
+  #mig-rename-preview-pane .preview-label {
+    font-size:.7rem; color:#888; font-family:monospace;
+    text-transform:uppercase; letter-spacing:.08em;
+    margin-bottom:.4rem; display:block;
+  }
+
+  .mig-rename-kind-section { margin-bottom:.65rem; }
+  .mig-rename-kind-section summary {
+    cursor:pointer; font-weight:600; font-size:.84rem;
+    padding:.3rem .4rem; background:#eef;  border-radius:3px;
+    list-style:none;
+  }
+  .mig-rename-kind-section summary::-webkit-details-marker { display:none; }
+  .mig-rename-kind-section summary::before {
+    content:"▶"; display:inline-block; width:1rem;
+    transition:transform .15s;
+  }
+  .mig-rename-kind-section[open] summary::before { transform:rotate(90deg); }
+  .mig-rename-kind-section .count { color:#666; font-weight:normal;
+                                    font-family:monospace; font-size:.78rem;
+                                    margin-left:.4rem; }
+  .mig-rename-kind-section .warn-count { color:#7a5d00; font-weight:700; }
+
+  table.mig-rename-table {
+    width:100%; border-collapse:collapse; font-size:.8rem;
+    margin-top:.2rem;
+  }
+  table.mig-rename-table th {
+    text-align:left; padding:.3rem .4rem; font-size:.72rem;
+    color:#666; border-bottom:1px solid #e0e0e8;
+    background:#fafafa;
+  }
+  table.mig-rename-table td {
+    padding:.25rem .4rem; vertical-align:top; font-family:monospace;
+    font-size:.78rem; border-bottom:1px dashed #eee;
+  }
+  table.mig-rename-table tr.has-warning td { background:#fffbe6; }
+  table.mig-rename-table tr.has-collision td { background:#fde5e5; }
+  table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:#0c5460; }
+  table.mig-rename-table select, table.mig-rename-table input {
+    font-family:monospace; font-size:.78rem;
+    padding:.15rem .3rem; border:1px solid #ccc; border-radius:3px;
+    width:100%;
+  }
+  table.mig-rename-table tr.has-collision input,
+  table.mig-rename-table tr.has-collision select { border-color:#721c24; }
+  .mig-rename-warn-icon {
+    color:#7a5d00; font-size:.95rem; cursor:help;
+    user-select:none;
+  }
+  .mig-rename-collision-icon {
+    color:#721c24; font-size:.95rem; cursor:help;
+    user-select:none;
+  }
+
+  #mig-rename-modal-footer {
+    padding:.5rem .8rem; background:#f5f5f8;
+    border-top:1px solid #e0e0e8;
+    display:flex; gap:.5rem; align-items:center; flex:0 0 auto;
+  }
+  #mig-rename-modal-footer button {
+    padding:.35rem .9rem; font-size:.82rem;
+  }
+  #mig-rename-modal-footer .spacer { flex:1; }
+
+  /* "Open rename modal" entry button inside the output section. */
+  .mig-rename-open-btn {
+    display:inline-flex; align-items:center; gap:.35rem;
+    font-size:.78rem; padding:.25rem .6rem;
+  }
+  .mig-rename-open-btn .badge-count {
+    background:#fd7e14; color:#fff; border-radius:8px;
+    padding:.05rem .4rem; font-size:.7rem; font-weight:700;
+    font-family:monospace;
+  }
 </style>
 
 <h1>Migrate</h1>
@@ -195,6 +334,17 @@
                 margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem">
       <h2 style="margin:0;font-size:1rem">Rendered output</h2>
       <div style="display:flex;gap:.4rem">
+        <button type="button" class="btn-secondary mig-rename-open-btn"
+                id="mig-rename-open-btn"
+                data-testid="migrate-rename-open-btn"
+                onclick="openRenameModal()"
+                style="display:none"
+                title="Interactively remap interface names between source and target">
+          <span>&#9881;</span> Interface rename
+          <span id="mig-rename-badge-count" class="badge-count"
+                data-testid="migrate-rename-badge-count"
+                style="display:none"></span>
+        </button>
         <button type="button" class="btn-secondary"
                 data-testid="migrate-copy-output-btn"
                 onclick="copyMigrateOutput()"
@@ -236,6 +386,77 @@
         <div class="mig-path-list" data-testid="migrate-paths-unsupported"></div>
       </div>
     </details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal — draggable, 2-pane (mapping table +
+     live target preview).  Hidden by default; opens via the "Interface
+     rename" button in the output section, which only appears once a
+     successful translation produces port-rename data.
+     ────────────────────────────────────────────────────────────── -->
+<div id="mig-rename-modal" data-testid="migrate-rename-modal"
+     role="dialog" aria-modal="false"
+     aria-labelledby="mig-rename-modal-title">
+  <div id="mig-rename-modal-header" data-testid="migrate-rename-modal-header">
+    <span class="grip" aria-hidden="true">&#8942;&#8942;</span>
+    <strong id="mig-rename-modal-title">Interface rename</strong>
+    <span style="flex:1"></span>
+    <button type="button"
+            data-testid="migrate-rename-modal-reset"
+            onclick="renameModalResetAll()"
+            title="Clear all user overrides and revert to auto-heuristic">
+      Reset all
+    </button>
+    <button type="button"
+            data-testid="migrate-rename-modal-close"
+            onclick="closeRenameModal()"
+            title="Close (changes not applied)"
+            aria-label="Close">
+      &#10005;
+    </button>
+  </div>
+
+  <div id="mig-rename-modal-toolbar">
+    <label for="mig-rename-target-profile">Target profile:</label>
+    <select id="mig-rename-target-profile"
+            data-testid="migrate-rename-target-profile-select">
+      <option value="">(none — free-form entry)</option>
+    </select>
+    <span class="summary"
+          id="mig-rename-summary"
+          data-testid="migrate-rename-summary"></span>
+  </div>
+
+  <div id="mig-rename-modal-body">
+    <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
+      <div id="mig-rename-table-empty"
+           data-testid="migrate-rename-table-empty"
+           style="display:none;color:#888;font-size:.85rem;padding:1rem">
+        No port names recognised in the translated output.
+      </div>
+      <!-- Kind sections rendered here by renderRenameTable() -->
+      <div id="mig-rename-sections"
+           data-testid="migrate-rename-sections"></div>
+    </div>
+    <div id="mig-rename-preview-pane" data-testid="migrate-rename-preview-pane">
+      <span class="preview-label">Target output preview</span>
+      <pre id="mig-rename-preview" data-testid="migrate-rename-preview"></pre>
+    </div>
+  </div>
+
+  <div id="mig-rename-modal-footer">
+    <span style="font-size:.75rem;color:#888"
+          id="mig-rename-status"
+          data-testid="migrate-rename-status"></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn-secondary"
+            data-testid="migrate-rename-cancel-btn"
+            onclick="closeRenameModal()">Cancel</button>
+    <button type="button" class="btn-primary"
+            data-testid="migrate-rename-apply-btn"
+            id="mig-rename-apply-btn"
+            onclick="renameModalApply()">Apply &amp; regenerate</button>
   </div>
 </div>
 {% endblock %}
@@ -599,6 +820,13 @@
       source: sourceSel.value,
       target: targetSel.value,
       force: document.getElementById('mig-force').checked,
+      // Always opt into the rename-aware pipeline from the UI so
+      // cross-vendor source-name leakage (the original Tier 3 complaint)
+      // is fixed out of the box, and the Interface rename button can
+      // surface actionable rename data on every translation.  Backend
+      // stays backwards-compatible — API-only callers that don't send
+      // this field still get the legacy run_plan path.
+      port_rename_map: {},
     };
     var mode = form.querySelector(
       'input[name="input_mode"]:checked'
@@ -634,6 +862,9 @@
       }
       var job = await resp.json();
       renderResult(job);
+      // Feed the rename modal so the "Interface rename" button can
+      // open against this job without re-fetching.
+      captureJobForRename(body, job);
     } catch (err) {
       showToast('Network error: ' + err.message, 'error');
     } finally {
@@ -838,6 +1069,582 @@
     setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
   };
 
+  /* ───────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal client
+     ──────────────────────────────────────────────────────────── */
+
+  // Module-scope state.  Reset on every successful translation.
+  var _renameProfiles = [];          // [{vendor, model, display_name, ports, lags}]
+  var _lastJobBody = null;           // last POST body that produced an output
+  var _lastJob = null;               // last MigrationJob from the server
+  var _renameUserMap = {};           // source_name -> target_name (user overrides)
+  var _renameDragState = null;       // { offsetX, offsetY } while dragging
+
+  // Kind ordering in the modal (drives the collapsible section order).
+  var _RENAME_KIND_ORDER = ['physical', 'breakout', 'lag', 'svi',
+                            'loopback', 'tunnel', 'hw_aggregate',
+                            'mgmt', 'virtual', 'unknown'];
+  var _RENAME_KIND_LABEL = {
+    physical:      'Physical ports',
+    breakout:      'Breakout lanes',
+    lag:           'Link aggregations',
+    svi:           'VLAN SVIs',
+    loopback:      'Loopbacks',
+    tunnel:        'Tunnels',
+    hw_aggregate:  'Hardware-switch aggregates',
+    mgmt:          'Management',
+    virtual:       'Virtual',
+    unknown:       'Unclassified',
+  };
+
+  async function loadRenameTargetProfiles() {
+    try {
+      var resp = await fetch('/api/v1/migration/target-profiles');
+      if (!resp.ok) return;
+      _renameProfiles = await resp.json();
+      var sel = document.getElementById('mig-rename-target-profile');
+      if (!sel) return;
+      // Clear any preloaded (other than the free-form default).
+      while (sel.options.length > 1) sel.remove(1);
+      _renameProfiles.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.vendor + '/' + p.model;
+        opt.textContent = p.display_name || (p.vendor + ' ' + p.model);
+        sel.appendChild(opt);
+      });
+    } catch (_) {
+      // Target profiles are optional; silent-ignore failures so the
+      // migrate form itself still works.
+    }
+  }
+
+  /** Call from renderResult: remember the job + request body so the
+   *  modal can use them, and toggle the rename-open button. */
+  function captureJobForRename(body, job) {
+    _lastJobBody = body;
+    _lastJob = job;
+    _renameUserMap = {};
+    var btn = document.getElementById('mig-rename-open-btn');
+    var badge = document.getElementById('mig-rename-badge-count');
+    if (!btn) return;
+    // Only show the rename button when we have a rendered output
+    // AND at least one port-name was affected (either auto-renamed
+    // or flagged as a warning by the server-side translator).
+    var hasRenames = job && job.port_renames
+      && Object.keys(job.port_renames).length > 0;
+    var hasWarnings = job && Array.isArray(job.warnings)
+      && job.warnings.length > 0;
+    if (job && job.rendered && (hasRenames || hasWarnings)) {
+      btn.style.display = '';
+      var attentionCount = hasWarnings ? job.warnings.length : 0;
+      if (attentionCount > 0) {
+        badge.textContent = attentionCount;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  /** Choose a target profile automatically based on the target codec
+   *  selected in the form.  Picks the first profile whose vendor
+   *  matches; falls back to '' (free-form) if none. */
+  function suggestTargetProfile(targetCodec) {
+    if (!targetCodec || !_renameProfiles.length) return '';
+    var adapter = adapterEntry(targetCodec);
+    var vendorId = adapter ? adapter.codec.split('_')[0] : '';
+    // Exact-match by codec name prefix first, then vendor_id.
+    var match = _renameProfiles.find(function(p) {
+      return targetCodec.indexOf(p.vendor) === 0;
+    });
+    return match ? (match.vendor + '/' + match.model) : '';
+  }
+
+  window.openRenameModal = function() {
+    if (!_lastJob || !_lastJobBody) {
+      showToast('No translation result to rename yet.', 'error');
+      return;
+    }
+    var modal = document.getElementById('mig-rename-modal');
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    // Seed target-profile dropdown with an auto-suggestion.
+    var profSel = document.getElementById('mig-rename-target-profile');
+    var suggested = suggestTargetProfile(targetSel.value);
+    if (suggested) profSel.value = suggested;
+    // Initial render from the current job.
+    renderRenameTable();
+    renderRenamePreview();
+    renderRenameSummary();
+  };
+
+  window.closeRenameModal = function() {
+    var modal = document.getElementById('mig-rename-modal');
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  };
+
+  window.renameModalResetAll = function() {
+    _renameUserMap = {};
+    renderRenameTable();
+    renderRenamePreview();
+    renderRenameSummary();
+    var status = document.getElementById('mig-rename-status');
+    if (status) status.textContent = 'All overrides cleared.';
+  };
+
+  /** Build the mapping table from _lastJob.port_renames + warnings.
+   *
+   *  Row shape: each row has a source name, the codec's auto-computed
+   *  target, and a user-editable target that wins when set. */
+  function renderRenameTable() {
+    var sectionsEl = document.getElementById('mig-rename-sections');
+    var emptyEl = document.getElementById('mig-rename-table-empty');
+    if (!sectionsEl) return;
+    sectionsEl.innerHTML = '';
+
+    // Collect per-kind rows.  The server-side
+    // translate_port_names returned only what CHANGED (applied map)
+    // + warnings for what fell through.  For a complete table we
+    // need to merge: every name mentioned in applied + every name
+    // mentioned in warnings gets a row.
+    var rowsByKind = {};
+    function addRow(sourceName, kind, autoTarget, warning) {
+      if (!rowsByKind[kind]) rowsByKind[kind] = [];
+      // Deduplicate by source name within a kind.
+      var existing = rowsByKind[kind].find(function(r) {
+        return r.source === sourceName;
+      });
+      if (existing) {
+        if (warning && !existing.warning) existing.warning = warning;
+        if (autoTarget && !existing.auto) existing.auto = autoTarget;
+        return;
+      }
+      rowsByKind[kind].push({
+        source: sourceName,
+        kind: kind,
+        auto: autoTarget || sourceName,
+        warning: warning || '',
+      });
+    }
+
+    // Client-side kind classifier mirroring the codec classify_port_name
+    // regex patterns.  Kept deliberately simple — the server does
+    // authoritative classification; this is purely for UI grouping.
+    function guessKind(name) {
+      if (/^(Port-channel|Trk|trk|LAG|bond|lagg)\d/i.test(name)) return 'lag';
+      if (/^Vlan\d|^vlan\d/.test(name)) return 'svi';
+      if (/\.\d+$/.test(name)) return 'svi';  // OPN/MT dotted form
+      if (/^Loopback\d|^lo$|^loopback\d/i.test(name)) return 'loopback';
+      if (/^(Tunnel|wg|gre|ipip|eoip|gif|ovpn)/i.test(name)) return 'tunnel';
+      if (/^VirtualPortGroup|^bridge|^br-/i.test(name)) return 'virtual';
+      if (/^(ssl\.|tunnel)/i.test(name)) return 'tunnel';
+      // Mgmt heuristics by role name (FortiGate mgmt, Cisco Gi0/0
+      // under Mgmt-vrf is still classified physical by codec; we
+      // treat it as physical here too since we can't tell from name
+      // alone).
+      if (/^(mgmt|management)$/i.test(name)) return 'mgmt';
+      return 'physical';
+    }
+
+    var applied = (_lastJob && _lastJob.port_renames) || {};
+    Object.keys(applied).forEach(function(src) {
+      addRow(src, guessKind(src), applied[src], '');
+    });
+
+    var warnings = (_lastJob && _lastJob.warnings) || [];
+    warnings.forEach(function(w) {
+      // Warning text shape:
+      //  "<codec>: <verb> ... <'port-name'> ... <details>"
+      // Extract the 'port-name' between single quotes and a kind keyword.
+      var nameMatch = w.match(/'([^']+)'/);
+      if (!nameMatch) return;
+      var src = nameMatch[1];
+      var kind = 'unknown';
+      // Kind hints in warning text (from port_names.py orchestrator).
+      if (/\bloopback\b/i.test(w)) kind = 'loopback';
+      else if (/\bbreakout\b/i.test(w)) kind = 'breakout';
+      else if (/\bhw_aggregate\b|\baggregate\b/i.test(w)) kind = 'hw_aggregate';
+      else if (/\btunnel\b/i.test(w)) kind = 'tunnel';
+      else if (/\bmgmt\b/i.test(w)) kind = 'mgmt';
+      else if (/\bsvi\b/i.test(w)) kind = 'svi';
+      else if (/\bunknown\b|could not classify/i.test(w)) kind = 'unknown';
+      else if (/\blag\b/i.test(w)) kind = 'lag';
+      addRow(src, kind, '', w);
+    });
+
+    var totalRows = 0;
+    _RENAME_KIND_ORDER.forEach(function(kind) { totalRows += (rowsByKind[kind] || []).length; });
+    if (totalRows === 0) {
+      emptyEl.style.display = '';
+      return;
+    }
+    emptyEl.style.display = 'none';
+
+    // Build collision set from user map: target_name -> [source_name, ...].
+    var targetHits = {};
+    _RENAME_KIND_ORDER.forEach(function(kind) {
+      (rowsByKind[kind] || []).forEach(function(row) {
+        var effective = _renameUserMap[row.source] || row.auto;
+        if (!effective) return;
+        if (!targetHits[effective]) targetHits[effective] = [];
+        targetHits[effective].push(row.source);
+      });
+    });
+
+    // Profile-driven dropdown options.  If a profile is selected,
+    // dropdown lists the profile's known port ids, filtered by kind.
+    var profSel = document.getElementById('mig-rename-target-profile');
+    var selectedProfile = _renameProfiles.find(function(p) {
+      return (p.vendor + '/' + p.model) === profSel.value;
+    });
+    function profileOptionsFor(kind) {
+      if (!selectedProfile) return null;
+      if (kind === 'physical') {
+        return selectedProfile.ports
+          .filter(function(p) { return p.kind === 'physical'; })
+          .map(function(p) { return p.id; });
+      }
+      if (kind === 'uplink' || kind === 'breakout') {
+        return selectedProfile.ports
+          .filter(function(p) { return p.kind === 'uplink'; })
+          .map(function(p) { return p.id; });
+      }
+      if (kind === 'lag') {
+        if (!selectedProfile.lags || !selectedProfile.lags.prefix) return null;
+        var opts = [];
+        for (var i = 1; i <= selectedProfile.lags.max; i++) {
+          opts.push(selectedProfile.lags.prefix + i);
+        }
+        return opts;
+      }
+      return null;
+    }
+
+    // Auto-expand the first non-empty section so the user sees
+    // content immediately on modal open; remaining sections default
+    // collapsed per operator preference ("Default Collapsed is good
+    // if it works right").  Sections with warnings or collisions
+    // always open regardless of order.
+    var firstNonEmptyKind = null;
+    _RENAME_KIND_ORDER.forEach(function(kind) {
+      if (firstNonEmptyKind === null && (rowsByKind[kind] || []).length) {
+        firstNonEmptyKind = kind;
+      }
+    });
+
+    _RENAME_KIND_ORDER.forEach(function(kind) {
+      var rows = rowsByKind[kind] || [];
+      if (!rows.length) return;
+
+      var warnCount = rows.filter(function(r) { return r.warning; }).length;
+      var collisionCount = rows.filter(function(r) {
+        var effective = _renameUserMap[r.source] || r.auto;
+        return effective && targetHits[effective] && targetHits[effective].length > 1;
+      }).length;
+
+      var section = document.createElement('details');
+      section.className = 'mig-rename-kind-section';
+      section.setAttribute('data-testid', 'migrate-rename-section-' + kind);
+      // Auto-open: first non-empty section, OR any section with
+      // warnings/collisions (needs attention).
+      if (kind === firstNonEmptyKind || warnCount || collisionCount) {
+        section.open = true;
+      }
+
+      var summary = document.createElement('summary');
+      summary.innerHTML = _RENAME_KIND_LABEL[kind]
+        + '<span class="count">' + rows.length + '</span>'
+        + (warnCount ? '<span class="count warn-count">'
+             + warnCount + ' ⚠</span>' : '')
+        + (collisionCount ? '<span class="count" style="color:#721c24">'
+             + collisionCount + ' collisions</span>' : '');
+      section.appendChild(summary);
+
+      var table = document.createElement('table');
+      table.className = 'mig-rename-table';
+      var thead = document.createElement('thead');
+      thead.innerHTML = '<tr>'
+        + '<th>Source</th>'
+        + '<th>Auto target</th>'
+        + '<th>Override</th>'
+        + '<th style="width:1.5rem">⚠</th>'
+        + '</tr>';
+      table.appendChild(thead);
+
+      var tbody = document.createElement('tbody');
+      rows.forEach(function(row) {
+        var tr = document.createElement('tr');
+        tr.setAttribute('data-testid', 'migrate-rename-row-' + row.source);
+        var effective = _renameUserMap[row.source] || row.auto;
+        var hasOverride = _renameUserMap[row.source] !== undefined;
+        var hasCollision = effective && targetHits[effective]
+                           && targetHits[effective].length > 1;
+        if (row.warning) tr.classList.add('has-warning');
+        if (hasCollision) tr.classList.add('has-collision');
+        if (hasOverride) tr.classList.add('has-override');
+
+        tr.innerHTML = '<td>' + escapeHtml(row.source) + '</td>'
+          + '<td>' + escapeHtml(row.auto) + '</td>';
+
+        var overrideCell = document.createElement('td');
+        overrideCell.className = 'mig-rename-target';
+        var opts = profileOptionsFor(row.kind);
+        if (opts && opts.length) {
+          var sel = document.createElement('select');
+          sel.setAttribute('data-testid',
+            'migrate-rename-override-' + row.source);
+          var blank = document.createElement('option');
+          blank.value = '';
+          blank.textContent = '(auto: ' + row.auto + ')';
+          sel.appendChild(blank);
+          opts.forEach(function(opt) {
+            var o = document.createElement('option');
+            o.value = opt; o.textContent = opt;
+            if (_renameUserMap[row.source] === opt) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.addEventListener('change', function() {
+            if (sel.value) _renameUserMap[row.source] = sel.value;
+            else delete _renameUserMap[row.source];
+            renderRenameTable();
+            renderRenamePreview();
+            renderRenameSummary();
+          });
+          overrideCell.appendChild(sel);
+        } else {
+          var inp = document.createElement('input');
+          inp.type = 'text';
+          inp.placeholder = 'auto: ' + row.auto;
+          inp.value = _renameUserMap[row.source] || '';
+          inp.setAttribute('data-testid',
+            'migrate-rename-override-' + row.source);
+          inp.addEventListener('input', function() {
+            if (inp.value.trim()) _renameUserMap[row.source] = inp.value.trim();
+            else delete _renameUserMap[row.source];
+            renderRenameTable();
+            renderRenamePreview();
+            renderRenameSummary();
+          });
+          overrideCell.appendChild(inp);
+        }
+        tr.appendChild(overrideCell);
+
+        var warnCell = document.createElement('td');
+        if (hasCollision) {
+          warnCell.innerHTML = '<span class="mig-rename-collision-icon" '
+            + 'title="' + escapeHtml(
+              'Collides with: '
+              + targetHits[effective].filter(function(s) {
+                return s !== row.source;
+              }).join(', ')
+            ) + '">⛔</span>';
+        } else if (row.warning) {
+          warnCell.innerHTML = '<span class="mig-rename-warn-icon" '
+            + 'title="' + escapeHtml(row.warning) + '">⚠</span>';
+        }
+        tr.appendChild(warnCell);
+
+        tbody.appendChild(tr);
+      });
+      table.appendChild(tbody);
+      section.appendChild(table);
+      sectionsEl.appendChild(section);
+    });
+  }
+
+  /** Client-side approximation of the target output with current
+   *  user overrides applied via whole-word string replacement.  Not
+   *  canonical — the Apply button re-runs the server-side render
+   *  for the authoritative result — but gives the operator an
+   *  immediate "here's what this change looks like" view. */
+  function renderRenamePreview() {
+    var preview = document.getElementById('mig-rename-preview');
+    if (!preview || !_lastJob) return;
+    var text = _lastJob.rendered || '';
+    // Combined map = applied (baseline) with user overrides layered on top.
+    var appliedBaseline = {};
+    if (_lastJob.port_renames) {
+      Object.keys(_lastJob.port_renames).forEach(function(src) {
+        // Server already rewrote the rendered text; for preview we
+        // want to show the user's FURTHER edits relative to that.
+        // So baseline = identity mapping for already-rewritten names.
+      });
+    }
+    // Apply overrides: replace occurrences of (currently-effective
+    // target) with the user's chosen name.
+    var effective = {};
+    Object.keys(_renameUserMap).forEach(function(src) {
+      // The rendered text already shows auto-target; user override
+      // means "replace that auto-target with my chosen name".
+      var autoTarget = _lastJob.port_renames
+        ? _lastJob.port_renames[src]
+        : src;
+      var userTarget = _renameUserMap[src];
+      if (autoTarget && userTarget && autoTarget !== userTarget) {
+        effective[autoTarget] = userTarget;
+      } else if (!autoTarget && userTarget) {
+        // Source wasn't auto-rewritten; replace source in text.
+        effective[src] = userTarget;
+      }
+    });
+    Object.keys(effective).forEach(function(from) {
+      // Word-boundary replacement to avoid partial matches (e.g.
+      // "Trk1" inside "Trk10").
+      var esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('(^|[^A-Za-z0-9/_.-])' + esc
+                          + '([^A-Za-z0-9/_.-]|$)', 'g');
+      text = text.replace(re, '$1' + effective[from] + '$2');
+    });
+    preview.textContent = text;
+  }
+
+  function renderRenameSummary() {
+    var summ = document.getElementById('mig-rename-summary');
+    if (!summ || !_lastJob) return;
+    var auto = _lastJob.port_renames
+      ? Object.keys(_lastJob.port_renames).length : 0;
+    var overrides = Object.keys(_renameUserMap).length;
+    var warnings = (_lastJob.warnings || []).length;
+
+    // Collision count re-compute.
+    var targetCounts = {};
+    var seenSources = new Set();
+    function tally(src, tgt) {
+      if (!tgt || seenSources.has(src)) return;
+      seenSources.add(src);
+      targetCounts[tgt] = (targetCounts[tgt] || 0) + 1;
+    }
+    Object.keys(_renameUserMap).forEach(function(src) {
+      tally(src, _renameUserMap[src]);
+    });
+    if (_lastJob.port_renames) {
+      Object.keys(_lastJob.port_renames).forEach(function(src) {
+        if (_renameUserMap[src] === undefined) {
+          tally(src, _lastJob.port_renames[src]);
+        }
+      });
+    }
+    var collisions = 0;
+    Object.keys(targetCounts).forEach(function(t) {
+      if (targetCounts[t] > 1) collisions += targetCounts[t];
+    });
+
+    var html = auto + ' auto';
+    if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
+    if (warnings) html += ' / <span class="mig-rename-summary-warn">'
+                        + warnings + ' ⚠</span>';
+    if (collisions) html += ' / <span class="mig-rename-summary-collision">'
+                          + collisions + ' collision' + (collisions > 1 ? 's' : '')
+                          + '</span>';
+    summ.innerHTML = html;
+
+    // Disable Apply when collisions exist.
+    var applyBtn = document.getElementById('mig-rename-apply-btn');
+    if (applyBtn) applyBtn.disabled = collisions > 0;
+  }
+
+  /** POST to /plan again with the user's map, then swap in the new
+   *  rendered output + refresh the modal table. */
+  window.renameModalApply = async function() {
+    if (!_lastJobBody || !_lastJob) return;
+    var applyBtn = document.getElementById('mig-rename-apply-btn');
+    var status = document.getElementById('mig-rename-status');
+    var origText = applyBtn.textContent;
+    applyBtn.disabled = true;
+    applyBtn.textContent = 'Applying…';
+    if (status) status.textContent = '';
+    var body = JSON.parse(JSON.stringify(_lastJobBody));
+    body.port_rename_map = Object.assign({}, _renameUserMap);
+    var profSel = document.getElementById('mig-rename-target-profile');
+    if (profSel && profSel.value) body.target_profile = profSel.value;
+    try {
+      var resp = await fetch('/api/v1/migration/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        showToast('Request rejected: '
+          + (typeof err.detail === 'string' ? err.detail
+             : JSON.stringify(err.detail || err)), 'error');
+        return;
+      }
+      var newJob = await resp.json();
+      _lastJob = newJob;
+      _lastJobBody = body;
+      renderResult(newJob);
+      // Re-render the modal from the refreshed job.
+      renderRenameTable();
+      renderRenamePreview();
+      renderRenameSummary();
+      if (status) status.textContent = 'Applied. Rendered output refreshed.';
+      showToast('Rename applied; output regenerated.', 'success');
+    } catch (e) {
+      showToast('Network error: ' + e.message, 'error');
+    } finally {
+      applyBtn.disabled = false;
+      applyBtn.textContent = origText;
+    }
+  };
+
+  /* ── Drag behaviour on the modal header ── */
+  function onRenameDragStart(e) {
+    var modal = document.getElementById('mig-rename-modal');
+    if (!modal.classList.contains('open')) return;
+    // Only drag when the mousedown originated on the header itself
+    // (not one of its buttons).
+    if (e.target.closest('button')) return;
+    var rect = modal.getBoundingClientRect();
+    _renameDragState = {
+      offsetX: e.clientX - rect.left,
+      offsetY: e.clientY - rect.top,
+    };
+    // Switch to absolute positioning so translateX(-50%) no longer
+    // affects drag math.
+    modal.style.transform = 'none';
+    modal.style.left = rect.left + 'px';
+    modal.style.top  = rect.top + 'px';
+    e.preventDefault();
+  }
+  function onRenameDragMove(e) {
+    if (!_renameDragState) return;
+    var modal = document.getElementById('mig-rename-modal');
+    modal.style.left = (e.clientX - _renameDragState.offsetX) + 'px';
+    modal.style.top  = (e.clientY - _renameDragState.offsetY) + 'px';
+  }
+  function onRenameDragEnd() { _renameDragState = null; }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Wire drag + target-profile change.
+  document.addEventListener('DOMContentLoaded', function() {
+    var header = document.getElementById('mig-rename-modal-header');
+    if (header) header.addEventListener('mousedown', onRenameDragStart);
+    document.addEventListener('mousemove', onRenameDragMove);
+    document.addEventListener('mouseup', onRenameDragEnd);
+    var profSel = document.getElementById('mig-rename-target-profile');
+    if (profSel) {
+      profSel.addEventListener('change', function() {
+        // Changing the profile invalidates any user overrides that
+        // don't exist in the new profile's port set — but for v1 we
+        // keep them and let the collision/invalid-option checks warn.
+        renderRenameTable();
+        renderRenamePreview();
+        renderRenameSummary();
+      });
+    }
+  });
+
   // Event wiring
   sourceSel.addEventListener('change', function() {
     renderAdapterInfo();
@@ -863,6 +1670,7 @@
 
   // Initial load
   loadAdapters();
+  loadRenameTargetProfiles();
 })();
 </script>
 {% endblock %}

@@ -10,6 +10,46 @@ list, don't delete).
 
 ---
 
+## Migration — Port-name translation (Tier 3 UI, ship-fresh)
+
+- [ ] **Cisco → Aruba /0/ strip**: on the Migrate page, translate the
+      Cat 9300-24UX real fixture to Aruba AOS-S.  Rendered output
+      should show `interface 1/1` / `interface 1/24` (NOT
+      `GigabitEthernet1/0/*`), `Trk1` (NOT `Port-channel1`), and
+      absorb VLAN SVIs into the VLAN stanza.  "Interface rename"
+      button appears below the output.
+- [ ] **Open rename modal**: click "Interface rename" — draggable
+      modal opens with mapping table (left) + live preview (right).
+      First non-empty section auto-expands; others collapsed.
+- [ ] **Draggable**: grab the modal header (the ⋮⋮ grip + title) and
+      drag it around the page.  Does NOT block content underneath.
+- [ ] **Target profile selector**: pick "Aruba 2930F-48G-PoEP
+      (JL256A)" from the toolbar dropdown.  Physical-port override
+      cells should change from free-form text inputs to dropdowns
+      listing ports 1-48 + A1/A2.
+- [ ] **User override**: type a custom target in one row's override
+      field (e.g. change `1/1` to `1/5`).  Row highlights as an
+      override (bold teal target).  Preview pane text updates live.
+- [ ] **Collision detection**: type the same target name in two rows.
+      Both rows highlight red, summary shows "2 collisions", Apply
+      button disables.  Clear one to un-collide.
+- [ ] **Apply**: with overrides set and no collisions, click
+      "Apply & regenerate".  Modal stays open; main output pane
+      updates with the new rendered text.  Status text at bottom of
+      modal shows "Applied. Rendered output refreshed."
+- [ ] **Reset all**: with overrides set, click "Reset all" in the
+      modal header.  All override cells clear back to placeholder
+      "(auto: N/N)".  Apply button re-enables.
+- [ ] **Close modal**: click × in the header OR "Cancel" button.
+      Modal hides.  Main output unchanged (unless Apply was clicked
+      first).
+- [ ] **Badge count**: after a translation with warnings (e.g. Cat
+      9300 with loopbacks and uplink modules), the orange badge on
+      the Interface rename button shows the warning count.
+- [ ] **Collapsible sections**: sections with warnings default
+      open (⚠ icon in summary).  Clean sections collapsed.  Click
+      summary to toggle.
+
 ## Migration — Fidelity polish (ship-fresh)
 
 - [ ] **MTU** (Cisco -> OPNsense): paste Cisco config with `interface

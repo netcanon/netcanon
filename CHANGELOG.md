@@ -7,6 +7,67 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Tier 3 port-rename modal — interactive cross-vendor interface-name mapping in the /migrate UI)
+
+- Draggable, non-blocking modal on the Migrate results view that
+  exposes the Tiers 1+2 port-name translator to the operator.  The
+  cross-vendor rename that used to happen silently (or fail to
+  happen at all — the original complaint was Cisco ``GigabitEthernet1/0/24``
+  leaking into Aruba output) is now:
+    * **Auditable** — a mapping table shows every source name, the
+      codec's auto-computed target, and warnings for untranslatable
+      cases (breakout ports, loopbacks without target equivalents,
+      uplink modules without operator input, etc.)
+    * **Editable** — per-row override dropdown (profile-driven when
+      a target profile is selected) or free-form input; user's
+      choice wins over the auto-heuristic.
+    * **Validated** — collision detection disables the Apply button
+      when two sources map to the same target; warnings count shown
+      in the header badge.
+
+- Modal features:
+    * Draggable (grab the ⋮⋮ grip header); non-blocking — user
+      can drag aside to consult the rendered output behind it.
+    * 2-pane layout: mapping table on the left (grouped by kind —
+      physical / lag / svi / loopback / tunnel / breakout /
+      hw_aggregate / virtual / unknown), client-side live preview
+      on the right.
+    * Sections collapsible; first-non-empty + any section with
+      warnings/collisions auto-opens.
+    * Target-profile selector in the toolbar: picking a profile
+      swaps free-form inputs for dropdowns listing only ports the
+      target hardware actually has; falls back to free-form when
+      none selected.
+    * Collision icons (⛔) with tooltips naming the colliding
+      sources; warning icons (⚠) with the orchestrator's advisory
+      text as tooltips.
+    * "Reset all" clears user overrides; Apply POSTs to ``/plan``
+      with the updated rename_map and refreshes the main output
+      pane.
+
+- The ``/migrate`` form now always sends ``port_rename_map: {}`` to
+  opt into the rename-aware pipeline.  This means cross-vendor
+  translations no longer leak source-vendor port names into the
+  target output by default — the original Tier 3 complaint is fixed
+  end-to-end.
+
+- New e2e tests (7):
+  ``tests/e2e/test_migrate_rename_modal.py`` — visibility gating,
+  modal open/close, section rendering, override apply end-to-end,
+  collision detection disables Apply, loopback warning row styling.
+
+- Docs: ``translator-plans.txt`` gains a "PORT-NAME TRANSLATION
+  (Tiers 1+2+3) — SHIPPED + DEFERRED WORK" section tracking the
+  deferred save-as-profile, 3-pane layout, hardware fit-check,
+  rename-operation diff, and target-profile expansion.
+  ``HUMAN_TESTING.md`` gains a per-feature manual-verification
+  checklist for the modal.
+
+### Added (Tier 3 port-rename backend: target profiles + rename-aware /plan)
+
+See commit ``b5cb5ca`` for the backend foundation that the frontend
+consumes.
+
 ### Added (FortiGate CLI promoted to `certified` — 5th codec to reach the bar + real RADIUS round-trip bug fixed)
 
 - User-contributed real ``show full-configuration`` from a physical

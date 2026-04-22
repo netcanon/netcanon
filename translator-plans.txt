@@ -661,6 +661,116 @@ LAYER 4 — TRANSPORT
   then decide whether R5-R7 earn their complexity.
 
 =====================================================================
+## PORT-NAME TRANSLATION (Tiers 1+2+3) — SHIPPED + DEFERRED WORK
+=====================================================================
+# Ships: cross-vendor port-name bridge so source-vendor names don't
+# leak into target-vendor output (the "GigabitEthernet1/0/24 in an
+# Aruba config" complaint).  Three-tier design, all committed bar
+# the small roadmap items tracked below.
+#
+# CODE LOCATIONS
+#   * netconfig/migration/canonical/port_names.py
+#       - PortIdentity pydantic model (vendor-agnostic bridge)
+#       - translate_port_names(intent, source, target, rename_map=None)
+#       - build_port_rename_transform(source, target, rename_map=None)
+#   * netconfig/migration/codecs/<vendor>/codec.py
+#       - classify_port_name(name) → PortIdentity
+#       - format_port_identity(ident) → str | None
+#       Each codec implements ONLY its own vendor's rules.
+#   * netconfig/services/migration_pipeline.py
+#       - run_plan_with_rename(source, target, raw, port_rename_map=)
+#         NEW public function; existing run_plan stays frozen per the
+#         "pipeline stages never change shape" rule.
+#   * netconfig/migration/target_profiles.py
+#       - TargetProfile pydantic model + YAML loader
+#   * definitions/target_profiles/*.yaml
+#       - aruba_2930f_48g_poep.yaml
+#       - cisco_c9300_24ux.yaml
+#       Add more profiles as vendor YAML — no code change needed.
+#   * netconfig/api/routes/migration.py
+#       - POST /plan now accepts optional port_rename_map +
+#         target_profile; returns job.port_renames + job.warnings
+#       - GET /target-profiles (+ /{vendor}/{model})
+#   * netconfig/templates/migrate.html
+#       - Tier 3 draggable 2-pane modal with mapping table + live
+#         preview + collision detection + target-profile selector
+
+--- SHIPPED ---
+
+TIER 1 — auto-heuristic cross-vendor port-name rewrite.
+  * classify/format methods on each codec; orchestrator rewrites
+    every port-name field in CanonicalIntent uniformly.
+  * Cisco→Aruba: Gi1/0/24→1/24, Port-channel1→Trk1, etc.
+  * Full mesh: every (source, target) pair works without
+    vendor-pair conditionals.
+  * Complexity cases modelled: breakout, hw_aggregate,
+    name_speed_hint vs operational_speed, subslot_letter.
+
+TIER 2 — user-supplied rename_map overrides the auto-heuristic.
+  * Per-source-name map wins over auto; missing names auto.
+  * New pipeline function run_plan_with_rename; existing run_plan
+    stays frozen.
+  * MigrationJob gains port_renames + warnings fields.
+
+TIER 3 — interactive rename modal in /migrate UI.
+  * Draggable modal with mapping table (left) + live preview (right).
+  * Per-kind collapsible sections (physical / lag / svi / loopback /
+    tunnel / breakout / hw_aggregate / virtual / unknown).
+  * Per-port dropdown options driven by selected target profile,
+    free-text fallback.
+  * Collision detection disables Apply when two sources map to the
+    same target.
+  * Client-side live preview; Apply button fires server-side
+    re-render for canonical output.
+
+--- DEFERRED ROADMAP ---
+
+[ ] SAVE AS PROFILE (operator convenience):
+    # Persist an operator's rename decisions as
+    # `profiles/<source_vendor>_<target_vendor>_<label>.json` and
+    # offer "Load profile" dropdown in the modal toolbar.  Operators
+    # doing repeated Cisco→Aruba migrations reuse their mappings
+    # without re-entering them each time.
+    Where: netconfig/migration/target_profiles.py (or a new
+           netconfig/migration/rename_profiles.py if preferred) —
+           YAML or JSON, user-writable (under configs_dir so it
+           survives reinstall) + API endpoints POST/GET/DELETE
+           /api/v1/migration/rename-profiles/<key>.
+    Scope: ~1 day; UI adds two buttons (Save As, Load) in the modal
+           toolbar; backend adds a small persistence layer.
+
+[ ] HARDWARE FIT-CHECK:
+    # When source config has more ports than the selected target
+    # profile, surface an aggregate "N source interfaces can't fit
+    # on target X" banner in the modal header.  Already have the
+    # data (profile.port_count + source intent.interfaces length);
+    # just need to compute + render.
+    Scope: ~15 min in the modal toolbar; pairs nicely with target
+           profile selection.
+
+[ ] 3-PANE LAYOUT OPTION:
+    # Current modal is 2-pane (table + preview).  Route C from the
+    # brainstorm discussion added a 3rd pane showing source config
+    # with port names highlighted-and-clickable (click → scroll
+    # table row).  Useful on wide monitors; optional via a toolbar
+    # toggle.
+    Scope: ~2 hours of frontend; backend unchanged.
+
+[ ] MORE TARGET PROFILES:
+    # Ship profiles for more common target hardware so the
+    # profile-driven dropdown covers real use cases out of the box.
+    # Each profile is pure YAML authoring (no code change).
+    Target list: Cisco 9200/9500 series, Aruba 3810M / 6300M,
+    MikroTik CCR / CRS line, FortiGate 40F/60F/100E/200F, OPNsense
+    Deciso A10/A20/A30.
+
+[ ] RENAME-OPERATION DIFF:
+    # Show an inline diff of rendered output BEFORE vs AFTER the
+    # user's rename map, instead of a full re-render in the preview
+    # pane.  Easier to spot what actually changed.
+    Scope: ~1 hour; reuses the existing compute_diff infrastructure.
+
+=====================================================================
 ## UPDATES SINCE INITIAL PLANNING
 =====================================================================
 # Several capabilities the plan assumed would need to be built now already
