@@ -214,6 +214,91 @@ class TestRenameModalDrop:
         assert "Loopback0" in (output.text_content() or "")
 
 
+class TestRenameModalTargetProfileTwoStage:
+    """Target profile selector is two-stage: Vendor dropdown first,
+    then Model dropdown filtered to that vendor's profiles.  Tests
+    the initial state, vendor-picks-gate-models behaviour, and that
+    selecting a model drives the per-row dropdown options."""
+
+    def test_model_disabled_until_vendor_picked(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        vendor = page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        )
+        model = page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        )
+        expect(vendor).to_be_visible()
+        expect(model).to_be_visible()
+        # The vendor auto-suggests "aruba_aoss" because the target
+        # codec is aruba_aoss, so the model dropdown becomes active
+        # on modal open.  Verify by resetting to "(none)" and
+        # confirming model disables.
+        vendor.select_option(value="")
+        expect(model).to_be_disabled()
+
+    def test_vendor_pick_populates_model_options(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        vendor = page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        )
+        vendor.select_option(value="aruba_aoss")
+        model = page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        )
+        # Model dropdown now contains all Aruba profiles we shipped.
+        options = model.locator("option").all_text_contents()
+        assert any("2930F-48G-PoEP" in o for o in options)
+        assert any("3810M-48G-PoE" in o for o in options)
+
+
+class TestRenameModalOrphanedOverride:
+    """When the operator sets an override under one target profile,
+    then switches profiles, their override value might not exist in
+    the new profile's port list.  The UI preserves the override and
+    surfaces it as a ``(custom: X — not in profile)`` dropdown option
+    so the operator can see and correct it."""
+
+    def test_override_surfaces_as_custom_when_not_in_new_profile(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # Pick a profile and set an override on a physical port.
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="aruba_aoss")
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value="2930F-48G-PoEP")
+        # Override GigabitEthernet1/0/1 → 1/12 (valid on 2930F-48G-PoEP).
+        page.locator(
+            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
+        ).select_option(value="1/12")
+        # Now switch profile to one that has DIFFERENT port names
+        # (Cisco uses GigabitEthernet1/0/N style).
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="cisco_iosxe")
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value="C9300-24UX")
+        # The override of "1/12" doesn't exist in Cisco C9300-24UX
+        # (ports are "GigabitEthernet1/0/N").  Dropdown should
+        # surface it as "(custom: 1/12 — not in profile)".
+        override = page.locator(
+            '[data-testid="migrate-rename-override-GigabitEthernet1/0/1"]'
+        )
+        options_text = override.locator("option").all_text_contents()
+        assert any(
+            "custom:" in o and "1/12" in o and "not in profile" in o
+            for o in options_text
+        ), f"expected orphaned-override custom option; got: {options_text}"
+
+
 class TestRenameModalCollisionDetection:
     def test_same_target_on_two_sources_disables_apply(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,

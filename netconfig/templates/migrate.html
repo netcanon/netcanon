@@ -438,10 +438,15 @@
   </div>
 
   <div id="mig-rename-modal-toolbar">
-    <label for="mig-rename-target-profile">Target profile:</label>
-    <select id="mig-rename-target-profile"
-            data-testid="migrate-rename-target-profile-select">
-      <option value="">(none — free-form entry)</option>
+    <label for="mig-rename-target-vendor">Target:</label>
+    <select id="mig-rename-target-vendor"
+            data-testid="migrate-rename-target-vendor-select">
+      <option value="">(none — free-form)</option>
+    </select>
+    <select id="mig-rename-target-model"
+            data-testid="migrate-rename-target-model-select"
+            disabled>
+      <option value="">— pick vendor first —</option>
     </select>
     <span class="summary"
           id="mig-rename-summary"
@@ -1117,25 +1122,93 @@
     unknown:       'Unclassified',
   };
 
+  // Vendor-id → display-name map for the first-stage dropdown.
+  // Keeps the dropdown readable without requiring every vendor
+  // definition YAML to be fetched just to resolve display names.
+  var _VENDOR_LABELS = {
+    cisco_iosxe:         'Cisco IOS-XE',
+    aruba_aoss:          'Aruba AOS-S',
+    mikrotik_routeros:   'MikroTik RouterOS',
+    opnsense:            'OPNsense',
+    fortigate:           'FortiGate',
+  };
+
   async function loadRenameTargetProfiles() {
     try {
       var resp = await fetch('/api/v1/migration/target-profiles');
       if (!resp.ok) return;
       _renameProfiles = await resp.json();
-      var sel = document.getElementById('mig-rename-target-profile');
-      if (!sel) return;
-      // Clear any preloaded (other than the free-form default).
-      while (sel.options.length > 1) sel.remove(1);
-      _renameProfiles.forEach(function(p) {
-        var opt = document.createElement('option');
-        opt.value = p.vendor + '/' + p.model;
-        opt.textContent = p.display_name || (p.vendor + ' ' + p.model);
-        sel.appendChild(opt);
-      });
+      populateRenameVendorDropdown();
     } catch (_) {
       // Target profiles are optional; silent-ignore failures so the
       // migrate form itself still works.
     }
+  }
+
+  function populateRenameVendorDropdown() {
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    if (!vsel) return;
+    // Clear everything after the first "(none)" sentinel.
+    while (vsel.options.length > 1) vsel.remove(1);
+    // Distinct vendor ids across loaded profiles, sorted by display
+    // label so the dropdown is human-scannable.
+    var vendors = Array.from(new Set(_renameProfiles.map(function(p) {
+      return p.vendor;
+    }))).sort(function(a, b) {
+      var la = _VENDOR_LABELS[a] || a;
+      var lb = _VENDOR_LABELS[b] || b;
+      return la.localeCompare(lb);
+    });
+    vendors.forEach(function(vendor) {
+      var opt = document.createElement('option');
+      opt.value = vendor;
+      opt.textContent = _VENDOR_LABELS[vendor] || vendor;
+      vsel.appendChild(opt);
+    });
+  }
+
+  function populateRenameModelDropdown(vendor) {
+    var msel = document.getElementById('mig-rename-target-model');
+    if (!msel) return;
+    msel.innerHTML = '';
+    if (!vendor) {
+      msel.disabled = true;
+      var placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '— pick vendor first —';
+      msel.appendChild(placeholder);
+      return;
+    }
+    msel.disabled = false;
+    // "(any)" sentinel first so the user can pick a vendor but not
+    // commit to a specific model yet (stays free-form).
+    var blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '— pick model —';
+    msel.appendChild(blank);
+    var models = _renameProfiles
+      .filter(function(p) { return p.vendor === vendor; })
+      .sort(function(a, b) {
+        return (a.display_name || a.model).localeCompare(
+          b.display_name || b.model);
+      });
+    models.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.model;
+      opt.textContent = p.display_name || p.model;
+      msel.appendChild(opt);
+    });
+  }
+
+  /** Return the currently-selected profile key (``vendor/model``)
+   *  or empty string if none selected.  Central accessor used by
+   *  every renderer so they all agree on which profile is active. */
+  function currentRenameProfileKey() {
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    var msel = document.getElementById('mig-rename-target-model');
+    var vendor = vsel ? vsel.value : '';
+    var model = msel ? msel.value : '';
+    return (vendor && model) ? (vendor + '/' + model) : '';
   }
 
   /** Call from renderResult: remember the job + request body so the
@@ -1168,18 +1241,17 @@
     }
   }
 
-  /** Choose a target profile automatically based on the target codec
-   *  selected in the form.  Picks the first profile whose vendor
-   *  matches; falls back to '' (free-form) if none. */
-  function suggestTargetProfile(targetCodec) {
+  /** Choose initial vendor + model based on the target codec
+   *  selected in the form.  Pre-selects the vendor dropdown when a
+   *  profile for that vendor exists; leaves model un-picked so the
+   *  operator explicitly chooses their hardware (we don't know which
+   *  model they're migrating to). */
+  function suggestTargetProfileVendor(targetCodec) {
     if (!targetCodec || !_renameProfiles.length) return '';
-    var adapter = adapterEntry(targetCodec);
-    var vendorId = adapter ? adapter.codec.split('_')[0] : '';
-    // Exact-match by codec name prefix first, then vendor_id.
     var match = _renameProfiles.find(function(p) {
       return targetCodec.indexOf(p.vendor) === 0;
     });
-    return match ? (match.vendor + '/' + match.model) : '';
+    return match ? match.vendor : '';
   }
 
   window.openRenameModal = function() {
@@ -1190,10 +1262,14 @@
     var modal = document.getElementById('mig-rename-modal');
     modal.classList.add('open');
     modal.style.display = 'flex';
-    // Seed target-profile dropdown with an auto-suggestion.
-    var profSel = document.getElementById('mig-rename-target-profile');
-    var suggested = suggestTargetProfile(targetSel.value);
-    if (suggested) profSel.value = suggested;
+    // Seed vendor dropdown with an auto-suggestion; model left
+    // un-picked so the operator explicitly commits to hardware.
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    var suggestedVendor = suggestTargetProfileVendor(targetSel.value);
+    if (suggestedVendor && !vsel.value) {
+      vsel.value = suggestedVendor;
+    }
+    populateRenameModelDropdown(vsel.value);
     // Initial render from the current job.
     renderRenameTable();
     renderRenamePreview();
@@ -1358,9 +1434,9 @@
 
     // Profile-driven dropdown options.  If a profile is selected,
     // dropdown lists the profile's known port ids, filtered by kind.
-    var profSel = document.getElementById('mig-rename-target-profile');
+    var profileKey = currentRenameProfileKey();
     var selectedProfile = _renameProfiles.find(function(p) {
-      return (p.vendor + '/' + p.model) === profSel.value;
+      return (p.vendor + '/' + p.model) === profileKey;
     });
     function profileOptionsFor(kind, sourceName) {
       if (!selectedProfile) return null;
@@ -1508,6 +1584,23 @@
             ? '(auto-dropped)'
             : '(auto: ' + row.auto + ')';
           sel.appendChild(blank);
+          // Orphaned user-override: if the user set an override
+          // under a PREVIOUS target profile and then changed the
+          // profile, their chosen value might not be in the new
+          // profile's port list.  Surface it as a "(custom: X)"
+          // option at the top so the operator can see and correct
+          // it; selecting anything else from the dropdown replaces
+          // the override.
+          if (typeof userVal === 'string'
+              && userVal !== row.source  // not a keep-verbatim no-op
+              && opts.indexOf(userVal) === -1) {
+            var customOpt = document.createElement('option');
+            customOpt.value = userVal;
+            customOpt.textContent = '(custom: ' + userVal
+              + ' — not in profile)';
+            customOpt.selected = true;
+            sel.appendChild(customOpt);
+          }
           // "Keep verbatim" — only shown when the row is auto-dropped;
           // a no-op rename that beats the server's auto-drop.
           if (isAutoDropped) {
@@ -1747,8 +1840,8 @@
     if (status) status.textContent = '';
     var body = JSON.parse(JSON.stringify(_lastJobBody));
     body.port_rename_map = Object.assign({}, _renameUserMap);
-    var profSel = document.getElementById('mig-rename-target-profile');
-    if (profSel && profSel.value) body.target_profile = profSel.value;
+    var profileKey = currentRenameProfileKey();
+    if (profileKey) body.target_profile = profileKey;
     try {
       var resp = await fetch('/api/v1/migration/plan', {
         method: 'POST',
@@ -1815,18 +1908,34 @@
       .replace(/"/g, '&quot;');
   }
 
-  // Wire drag + target-profile change.
+  // Wire drag + two-stage target-profile change.
   document.addEventListener('DOMContentLoaded', function() {
     var header = document.getElementById('mig-rename-modal-header');
     if (header) header.addEventListener('mousedown', onRenameDragStart);
     document.addEventListener('mousemove', onRenameDragMove);
     document.addEventListener('mouseup', onRenameDragEnd);
-    var profSel = document.getElementById('mig-rename-target-profile');
-    if (profSel) {
-      profSel.addEventListener('change', function() {
-        // Changing the profile invalidates any user overrides that
-        // don't exist in the new profile's port set — but for v1 we
-        // keep them and let the collision/invalid-option checks warn.
+
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    var msel = document.getElementById('mig-rename-target-model');
+
+    if (vsel) {
+      vsel.addEventListener('change', function() {
+        // Re-populate the model dropdown whenever the vendor changes.
+        // Model resets to "(pick model)" — user must explicitly commit
+        // to hardware; we don't guess.
+        populateRenameModelDropdown(vsel.value);
+        renderRenameTable();
+        renderRenamePreview();
+        renderRenameSummary();
+      });
+    }
+    if (msel) {
+      msel.addEventListener('change', function() {
+        // User overrides that pointed at a port in the PREVIOUS
+        // profile's namespace are preserved but surfaced as
+        // "(custom: X — not in profile)" rows in the dropdown —
+        // operator can then see what's orphaned and decide to keep
+        // or re-pick.  See renderRenameTable().
         renderRenameTable();
         renderRenamePreview();
         renderRenameSummary();

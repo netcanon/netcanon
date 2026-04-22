@@ -7,8 +7,11 @@ model: 2930F-48G-PoEP
 display_name: "Aruba 2930F-48G-PoEP (JL256A)"
 device_class: switch
 stacking: vsf-capable
+# Port ids use the stacked-form "1/N" that the aruba_aoss codec emits
+# (assumes stack member 1).  Multi-member stacks should author a
+# variant profile with the correct stack-member numbers.
 ports:
-  - {range: "1-48", kind: physical, speed: gig, poe: true}
-  - {id: "A1", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1 (1G/10G)"}
-  - {id: "A2", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2 (1G/10G)"}
+  - {range: "1/1-1/48", kind: physical, speed: gig, poe: true}
+  - {id: "1/A1", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1"}
+  - {id: "1/A2", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2"}
 lags: {max: 24, prefix: Trk}

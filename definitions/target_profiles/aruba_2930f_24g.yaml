@@ -7,6 +7,6 @@ display_name: "Aruba 2930F-24G (JL258A)"
 device_class: switch
 stacking: vsf-capable
 ports:
-  - {range: "1-24", kind: physical, speed: gig, poe: false}
-  - {range: "A1-A4", kind: uplink, speed: 10gig, sfp: true}
+  - {range: "1/1-1/24", kind: physical, speed: gig, poe: false}
+  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true}
 lags: {max: 24, prefix: Trk}

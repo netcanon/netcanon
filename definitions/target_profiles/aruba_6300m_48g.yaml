@@ -14,6 +14,6 @@ display_name: "Aruba 6300M 48G PoE+ 4xSFP56 (CX / port planning only)"
 device_class: switch
 stacking: vsx-stacking
 ports:
-  - {range: "1-48", kind: physical, speed: gig, poe: true}
-  - {range: "A1-A4", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 10/25/50G uplink"}
+  - {range: "1/1-1/48", kind: physical, speed: gig, poe: true}
+  - {range: "1/A1-1/A4", kind: uplink, speed: 50gig, sfp: true, notes: "SFP56 10/25/50G uplink"}
 lags: {max: 256, prefix: lag}
