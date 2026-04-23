@@ -32,6 +32,7 @@ Limitations (``experimental`` certainty):
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 from typing import Any, ClassVar, Iterable
 
@@ -56,6 +57,8 @@ from ...canonical.intent import (
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 from . import port_names as _port_names
+
+logger = logging.getLogger(__name__)
 
 
 # ----------------------------------------------------------------------
@@ -224,6 +227,23 @@ class CiscoIOSXECLICodec(CodecBase):
         from ...canonical.transforms import project_switchport_to_vlan
         project_switchport_to_vlan(intent)
 
+        # Parse-end summary: lets ops answer "did parse succeed?" from
+        # a debug-level log line without needing to inspect the
+        # response JSON.  Zero counts across the board on a non-empty
+        # input usually mean a grammar the codec doesn't handle —
+        # same signal the real-capture harness enforces at test time.
+        logger.debug(
+            "cisco_iosxe_cli parsed: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            intent.hostname,
+            len(intent.interfaces),
+            len(intent.vlans),
+            len(intent.static_routes),
+            len(intent.lags),
+            len(intent.local_users),
+            "yes" if intent.snmp else "no",
+            len(raw),
+        )
         return intent
 
     # -----------------------------------------------------------------

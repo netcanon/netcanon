@@ -60,6 +60,7 @@ for every tree in the adapter's supported subset.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, ClassVar, Iterable
 from xml.etree import ElementTree as ET
 
@@ -71,6 +72,8 @@ from ....models.migration import (
 )
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -241,6 +244,18 @@ class CiscoIOSXECodec(CodecBase):
         for idx, iface_el in enumerate(interfaces_el.findall(_q("interface"))):
             raw_iface = _parse_interface(iface_el, idx=idx)
             intent.interfaces.append(_iface_dict_to_canonical(raw_iface))
+        logger.debug(
+            "cisco_iosxe parsed: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            intent.hostname,
+            len(intent.interfaces),
+            len(intent.vlans),
+            len(intent.static_routes),
+            len(intent.lags),
+            len(intent.local_users),
+            "yes" if intent.snmp else "no",
+            len(raw),
+        )
         return intent
 
     # -----------------------------------------------------------------

@@ -7,6 +7,7 @@ See package ``__init__`` for scope and structural-quirks notes.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 from typing import Any, ClassVar, Iterable
 
@@ -31,6 +32,8 @@ from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 from . import port_names as _port_names
 from ._svi_absorption import ABSORBS_SVI_INTO_VLAN
+
+logger = logging.getLogger(__name__)
 
 
 @register
@@ -363,6 +366,18 @@ class ArubaAOSSCodec(CodecBase):
                 if m_iface is not None and m_iface.lag_member_of is None:
                     m_iface.lag_member_of = lag.name
 
+        logger.debug(
+            "aruba_aoss parsed: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            intent.hostname,
+            len(intent.interfaces),
+            len(intent.vlans),
+            len(intent.static_routes),
+            len(intent.lags),
+            len(intent.local_users),
+            "yes" if intent.snmp else "no",
+            len(raw),
+        )
         return intent
 
     # -----------------------------------------------------------------

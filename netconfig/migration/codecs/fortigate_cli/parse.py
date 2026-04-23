@@ -38,6 +38,7 @@ both modules.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 import shlex
 from typing import ClassVar
@@ -56,6 +57,8 @@ from ...canonical.intent import (
     CanonicalVlan,
 )
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -666,10 +669,42 @@ def parse_intent(raw: str) -> CanonicalIntent:
     )
 
     blocks = _parse_blocks(raw)
+    # Track which top-level paths we saw vs which we dispatched — the
+    # gap is the set of silently-ignored stanzas (Tier 3 / out of
+    # scope).  DEBUG surface lets ops see what was dropped without
+    # requiring a separate grep pass.
+    ignored_paths: list[str] = []
     for block in blocks:
         applier = _DISPATCH.get(block.config_path)
         if applier is not None:
             applier(block, intent)
-        # Other config paths silently ignored (Tier 3 / out of scope).
+        else:
+            ignored_paths.append(block.config_path)
+
+    logger.debug(
+        "fortigate_cli parsed: hostname=%r ifaces=%d vlans=%d "
+        "routes=%d lags=%d users=%d snmp=%s dhcp=%d radius=%d "
+        "blocks=%d ignored=%d (input=%d chars)",
+        intent.hostname,
+        len(intent.interfaces),
+        len(intent.vlans),
+        len(intent.static_routes),
+        len(intent.lags),
+        len(intent.local_users),
+        "yes" if intent.snmp else "no",
+        len(intent.dhcp_servers),
+        len(intent.radius_servers),
+        len(blocks),
+        len(ignored_paths),
+        len(raw),
+    )
+    # Only emit the ignored-paths detail when there's actual gap to
+    # report — avoids noise on clean round-trip cases.
+    if ignored_paths:
+        logger.debug(
+            "fortigate_cli: %d unhandled config path(s) dropped: %s",
+            len(ignored_paths),
+            ", ".join(sorted(set(ignored_paths))[:15]),
+        )
 
     return intent

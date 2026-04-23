@@ -37,6 +37,7 @@ Round-trip invariant: ``parse(render(tree)) == tree``.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, ClassVar, Iterable
 from xml.etree import ElementTree as ET
@@ -61,6 +62,8 @@ from ...canonical.intent import (
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 from . import port_names as _port_names
+
+logger = logging.getLogger(__name__)
 
 
 @register
@@ -369,6 +372,18 @@ class OPNsenseCodec(CodecBase):
                     or snmp.trap_hosts):
                 intent.snmp = snmp
 
+        logger.debug(
+            "opnsense parsed: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            intent.hostname,
+            len(intent.interfaces),
+            len(intent.vlans),
+            len(intent.static_routes),
+            len(intent.lags),
+            len(intent.local_users),
+            "yes" if intent.snmp else "no",
+            len(raw),
+        )
         return intent
 
     # -----------------------------------------------------------------

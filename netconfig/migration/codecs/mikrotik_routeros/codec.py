@@ -48,6 +48,7 @@ default, so repeated parse/render cycles stabilise after one pass.
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, ClassVar, Iterable
 
@@ -72,6 +73,8 @@ from ...canonical.intent import (
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
 from . import port_names as _port_names
+
+logger = logging.getLogger(__name__)
 
 
 @register
@@ -270,6 +273,18 @@ class MikroTikRouterOSCodec(CodecBase):
         # (by natural-sort name), then bridges, then VLANs, then rest.
         intent.interfaces = _sort_interfaces(iface_by_name.values())
 
+        logger.debug(
+            "mikrotik_routeros parsed: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            intent.hostname,
+            len(intent.interfaces),
+            len(intent.vlans),
+            len(intent.static_routes),
+            len(intent.lags),
+            len(intent.local_users),
+            "yes" if intent.snmp else "no",
+            len(raw),
+        )
         return intent
 
     # -----------------------------------------------------------------

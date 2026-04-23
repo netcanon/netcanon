@@ -194,3 +194,71 @@ class TestRunPlanLogging:
             "unexpected WARNING on MockCodec → MockCodec: "
             + "; ".join(r.getMessage() for r in warnings)
         )
+
+
+class TestCodecParseEndDebugUniformity:
+    """Phase 8 audit finding: codec parse paths were silent, making
+    "why is my tree empty?" debugging require either response-body
+    inspection or a pdb session.  Every shipped codec now emits a
+    single DEBUG-level summary at the end of parse() with extracted
+    counts.  This test enforces the uniformity: a new codec that
+    skips the line would fail CI, not silently ship without a
+    troubleshooting breadcrumb.
+
+    Checked against each codec's sample_input — the same smoke
+    fixture the cross-codec matrix uses — so this test runs
+    end-to-end through the real parse path.
+    """
+
+    def _parse_and_capture(self, codec, sample, caplog):
+        logger_name = codec.__class__.__module__
+        # Some codecs (fortigate_cli) delegate parse() to a sibling
+        # module; log signal lives on the sibling's logger.  Capture
+        # the top of the fortigate_cli package plus the codec module
+        # so either source is observed.
+        capture_loggers = [
+            logger_name,
+            logger_name.rsplit(".", 1)[0] + ".parse",
+        ]
+        for name in capture_loggers:
+            caplog.set_level("DEBUG", logger=name)
+        codec.parse(sample)
+
+    @pytest.mark.parametrize(
+        "codec_name",
+        [
+            "cisco_iosxe_cli",
+            "cisco_iosxe",
+            "aruba_aoss",
+            "mikrotik_routeros",
+            "opnsense",
+            "fortigate_cli",
+        ],
+    )
+    def test_codec_parse_emits_debug_summary(
+        self, codec_name, caplog,
+    ):
+        from netconfig.migration.codecs.registry import get_codec
+        codec = get_codec(codec_name)
+        sample = getattr(codec, "sample_input", "")
+        if not sample:
+            pytest.skip(f"{codec_name} declares no sample_input")
+        self._parse_and_capture(codec, sample, caplog)
+        # Every codec's summary starts with "<codec_name> parsed:"
+        # — naming itself in the message keeps logs grep-able by
+        # codec without depending on %(name)s (which prefixes
+        # differently across codecs due to sub-module loggers).
+        matching = [
+            r for r in caplog.records
+            if r.levelname == "DEBUG"
+            and codec_name in r.getMessage()
+            and "parsed:" in r.getMessage()
+        ]
+        assert matching, (
+            f"{codec_name}: no '<codec> parsed:' DEBUG log from "
+            f"parse().  Records seen: "
+            + "; ".join(
+                f"{r.name}/{r.levelname}/{r.getMessage()[:60]}"
+                for r in caplog.records
+            )
+        )
