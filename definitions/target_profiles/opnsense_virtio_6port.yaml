@@ -1,0 +1,21 @@
+# OPNsense on KVM/QEMU/Proxmox — VirtIO paravirtual NICs (6-port)
+# FreeBSD driver: vtnet(4)
+# Default BSD iface names: vtnet0, vtnet1, vtnet2, vtnet3, vtnet4, vtnet5
+#
+# Covers the 6-port VirtIO guest configuration — popular for
+# enthusiasts running OPNsense as a VM with a larger virtual port
+# inventory (e.g. multiple VLANs broken out as separate vtnet
+# devices for QoS / traffic isolation, or a homelab with many
+# downstream Proxmox bridges).
+#
+# Validation: FreeBSD driver-convention grounded.  See
+# opnsense_virtio_4port.yaml for driver details; only the range
+# differs.
+vendor: opnsense
+model: VirtIO-6port
+display_name: "OPNsense KVM/QEMU/Proxmox guest (6x VirtIO)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "vtnet0-5", kind: physical, speed: 10gig, notes: "VirtIO paravirtual (reports 10G)"}
+lags: {max: 8, prefix: lagg}

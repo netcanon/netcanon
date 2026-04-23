@@ -667,6 +667,72 @@ class TestRealProfilesShipped:
         for wrong in ("ax0", "ix0"):
             assert p.lookup_port(wrong) is None
 
+    # ------------------------------------------------------------------
+    # Generic OPNsense + virtualization-class profiles
+    #
+    # The codec is hardware-agnostic — FreeBSD's driver->iface-name
+    # mapping is a kernel guarantee.  These profiles let the UI
+    # cover common non-appliance cases (bring-your-own-hardware,
+    # hypervisor guests) without enumerating every possible SKU.
+    # ------------------------------------------------------------------
+
+    def test_opnsense_generic_is_empty_ports_fallback(self):
+        """The Generic profile intentionally has ``ports: []`` —
+        signals to the rename-modal UI that no dropdown validation
+        is available, and the UI falls back to free-form entry.
+        Verified behaviour: rename-table.js's check ``if (opts &&
+        opts.length)`` treats the empty list as falsy and creates
+        a free-form <input> per row."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Generic"]
+        assert p.device_class == "firewall"
+        assert p.port_count == 0
+        assert p.ports == []
+        assert p.port_ids() == []
+        # LAGs still declared — lagg(4) works regardless of hardware.
+        assert p.lags.prefix == "lagg"
+
+    def test_opnsense_vmware_vmxnet3(self):
+        """VMware guest: 4x vmx(4) VMXNET3.  FreeBSD driver naming
+        is deterministic across hypervisor versions; the VMXNET3
+        protocol is what's being modelled, not a specific chipset."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/VMware-VMXNET3"]
+        assert p.port_count == 4
+        assert p.port_ids() == ["vmx0", "vmx1", "vmx2", "vmx3"]
+        for pt in p.ports:
+            assert pt.speed == "10gig"
+            assert pt.kind == "physical"
+
+    def test_opnsense_virtio_4port(self):
+        """KVM/QEMU/Proxmox 4-port VirtIO guest: vtnet0..vtnet3."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/VirtIO-4port"]
+        assert p.port_count == 4
+        assert p.port_ids() == [f"vtnet{n}" for n in range(4)]
+
+    def test_opnsense_virtio_6port(self):
+        """KVM 6-port VirtIO guest — distinct from 4-port solely by
+        vtnet count; same driver, same speed."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/VirtIO-6port"]
+        assert p.port_count == 6
+        assert p.port_ids() == [f"vtnet{n}" for n in range(6)]
+        # Regression guard: if this accidentally regresses to 4
+        # ports, the fit-check banner will silently undercount for
+        # a 6-port VM operator.
+        assert p.port_count == 6, "6-port profile must stay 6"
+
+    def test_opnsense_hyperv(self):
+        """Microsoft Hyper-V guest: 4x hn(4) synthetic NICs.
+        SR-IOV deployments see the underlying physical driver
+        instead; those operators should use Generic OPNsense or an
+        appliance-specific profile."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/HyperV"]
+        assert p.port_count == 4
+        assert p.port_ids() == ["hn0", "hn1", "hn2", "hn3"]
+
     def test_opnsense_deciso_a8_i211_older(self):
         """Deciso Netboard A8 older 1GbE revision: 4x I211 via
         igb(4).  The "A8" name was reused across two electrical

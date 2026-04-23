@@ -1,0 +1,39 @@
+# Generic OPNsense — bring-your-own-hardware (free-form entry)
+#
+# OPNsense is an appliance firewall that runs on arbitrary FreeBSD-
+# compatible hardware.  The codec can classify / format any NIC
+# driver (igb, igc, em, ix, cxgbe, bnxt, mlxen, vmx, vtnet, mvneta,
+# ax, lagg, wg, gif, gre, ovpns, ovpnc — see
+# netconfig/migration/codecs/opnsense/port_names.py), but we can't
+# pre-enumerate every possible port layout.
+#
+# Use this profile when migrating TO OPNsense on:
+#   * Custom Supermicro / Dell bare-metal
+#   * Generic mini-PC (Intel NUC, generic fanless x86, etc.) not in
+#     the Qotom / Protectli / Netgate / Deciso shipped profile list
+#   * A mix-and-match NIC setup (user has a PCIe add-in NIC)
+#   * Anything the appliance-specific profiles don't cover
+#
+# The empty ports: [] list signals to the rename-modal UI that no
+# port-name validation is available — it falls back to Tier-2
+# free-form entry where the operator types target names directly.
+# The codec still handles translation correctly; we just can't
+# offer dropdown suggestions without knowing the hardware.
+#
+# For well-known appliances prefer a specific profile (opnsense/
+# Netboard-A20-I225-SFPPlus, opnsense/vmware-vmxnet3, etc.) —
+# dropdown validation + fit-check banner + collision detection
+# all work there.  This "Generic" profile is the graceful-
+# degradation path.
+vendor: opnsense
+model: Generic
+display_name: "Generic OPNsense (bring your own hardware — free-form entry)"
+device_class: firewall
+stacking: ""
+# Intentionally empty.  The rename-modal UI's profileOptionsFor()
+# returns no dropdown options when the effective port list is
+# empty, which falls through to a free-form <input type="text">
+# for every row.  See tests/testid_reference.md "Tier-3 rename
+# modal" for the UI contract.
+ports: []
+lags: {max: 16, prefix: lagg}

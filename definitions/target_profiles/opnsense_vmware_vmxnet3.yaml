@@ -1,0 +1,29 @@
+# OPNsense on VMware — vmxnet3 paravirtual NICs
+# FreeBSD driver: vmx(4)
+# Default BSD iface names: vmx0, vmx1, vmx2, vmx3
+#
+# Covers the common 4-port VMware guest configuration (ESXi / vCenter
+# with VMXNET3 adapters).  Users with fewer or more ports should still
+# find this profile useful — the driver naming is deterministic across
+# VMXNET3 configurations, and "+N over capacity" fit-check feedback
+# steers them to the Generic OPNsense profile if their setup differs.
+#
+# VMware-specific notes:
+#   * vmxnet3 speed reports as "10000Mbps full duplex" regardless of
+#     the underlying physical NIC — the driver presents a virtual
+#     10G link to the guest.
+#   * No SFP+ concept in the guest view; all vmx* look identical.
+#
+# Validation: FreeBSD driver-convention grounded.  vmx(4) is the
+# canonical VMXNET3 driver in FreeBSD 12+ / OPNsense 22+; naming
+# scheme (`vmx<N>` where N is unit number) is a hard kernel
+# guarantee, not VMware-specific configuration.  If you need a
+# different port count, duplicate this file and edit the range.
+vendor: opnsense
+model: VMware-VMXNET3
+display_name: "OPNsense VMware guest (4x vmxnet3)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "vmx0-3", kind: physical, speed: 10gig, notes: "VMXNET3 paravirtual (reports 10G)"}
+lags: {max: 8, prefix: lagg}
