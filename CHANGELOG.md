@@ -7,6 +7,100 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (P1C3 — pre-backup probe phase + layered-definition resolver wiring)
+
+- New `ProbeConfig` block on `DeviceDefinition` (optional `command:` +
+  `patterns:` regex map).  Empty defaults keep existing definitions
+  working unchanged; only definitions that opt in by declaring a
+  probe command participate.
+- New pure-function parser at `netconfig/collectors/probe.py` with
+  11 unit tests (`tests/unit/test_probe_parser.py`).  Handles
+  multi-line output, missing captures, malformed regexes, auto-
+  timestamps successful results.
+- New `probe()` method on `BaseCollector` (no-op default) + concrete
+  Netmiko implementation.  Short-lived separate session (30s probe
+  timeout, 4x tighter than the main 120s config timeout).  Failures
+  are non-fatal — log WARNING, return `{}`, proceed with family-base.
+- Backup pipeline (`_process_one_device`) now threads a
+  `DefinitionLoader` + device-profile store through the execution
+  path: probe → resolve overlay (operator pins win over detected
+  facts) → persist `detected_facts` on the linked profile → collect
+  against the resolved definition.  Both interactive and scheduled
+  backups get the same treatment.
+- `app.state.definition_loader` exposed on the FastAPI app alongside
+  the existing `app.state.definitions` dict (kept for endpoints that
+  iterate type_keys).  New `get_definition_loader` dependency.
+
+### Added (P2C3 — rename-modal left-rail category nav + VLAN pane + localStorage persistence)
+
+- Rename modal body refactored from `table | preview` into
+  `rail | table | preview`.  Left rail is a vertical category
+  navigation with Ports and VLANs today; the rail is the extension
+  point for future categories (local_users / SNMP / RADIUS under
+  P2C4+).  Counts + badges on rail buttons show per-category row
+  totals at a glance.
+- New `_partials/vlan-rename-table.js` renders the VLAN pane —
+  structural parallel to the existing ports table but simpler
+  (integer IDs, no per-kind sections, no target-profile dropdown).
+  Rows enumerate every VLAN declared in the source config; each row
+  has an integer override input + drop/un-drop link.
+- `MigrationJob` exposes `source_vlans: list[int]` and
+  `source_hostname: str` populated by a capture transform that
+  runs ahead of every user-override transform in
+  `run_plan_with_overrides`.  The UI needs both — source_vlans
+  drives the VLAN pane's row enumeration, source_hostname keys
+  the localStorage persistence entry.
+- localStorage ack persistence: overrides survive page reloads
+  keyed on `(source_codec, target_codec, hostname)` under
+  `netconfig.rename-ack.v1:…`.  Load on modal-open, save on every
+  render-summary (universal choke point), clear on Reset-all.
+  Surfaces an age hint on restore ("Restored prior overrides
+  (N port, M VLAN) from 3m ago").
+- ARCHITECTURE.md gains a "Per-pane overrides (Tier-3 rename
+  modal)" section documenting the three-step recipe for adding a
+  new category (orchestrator → pipeline wiring → UI rail + pane),
+  the sentinel semantics, and the localStorage schema.
+- 14 new testids documented in `tests/testid_reference.md` under
+  a new "Left-rail category nav + VLAN pane" subsection.
+- 7 new e2e tests (`TestRenameModalLeftRail`,
+  `TestRenameModalLocalStoragePersistence`) + 5 new integration
+  tests (`TestSourceShapeCapture`).
+
+### Added (P2C2 — canonical VLAN-rename orchestrator + /plan/vlans endpoint)
+
+- Cross-vendor VLAN-ID rewrite transform
+  (`netconfig/migration/canonical/vlan_names.py`) — walks the
+  canonical tree and rewrites every VLAN-referring field
+  (`CanonicalVlan.id`, `access_vlan`, `trunk_allowed_vlans`,
+  `trunk_native_vlan`, `voice_vlan`).  Drop semantics via `None`
+  values; collision merge (union of port lists, concat of SVI
+  addresses) when multiple source IDs map to the same target.
+- `POST /api/v1/migration/plan/vlans` per-pane endpoint accepts
+  only the VLAN override map; delegates to `run_plan_with_overrides`
+  with `port_rename_map=None`.
+- `run_plan_with_overrides` extended with `vlan_rename_map`
+  parameter.  VLAN transform runs AFTER port rename so port-name
+  rewrites don't race with VLAN-ID changes.
+- Cross-mesh smoke tests
+  (`tests/unit/migration/test_cross_mesh_overrides.py`) parametrised
+  over every `(source, target)` capable pair; new `cross_mesh`
+  pytest marker with documented 30s aggregate-runtime budget.
+
+### Added (P2C1 — run_plan_with_overrides engine + /plan/ports per-pane endpoint)
+
+- New `run_plan_with_overrides` in `migration_pipeline.py` — the
+  shared engine for every per-pane override surface.  Grows via
+  optional category-map parameters; existing `run_plan` +
+  `run_plan_with_rename` signatures stay frozen per CLAUDE.md's
+  pipeline-signatures invariant.
+- Sentinel semantics standardised across categories:
+  `None` → don't engage, `{}` → engage with auto-heuristic only,
+  `{src: tgt}` → engage with explicit overrides.
+- `POST /api/v1/migration/plan/ports` per-pane endpoint — first
+  instance of the per-pane pattern; dispatches to
+  `run_plan_with_overrides` with only `port_rename_map`
+  populated.
+
 ### Added (Tier 3 port-rename modal — interactive cross-vendor interface-name mapping in the /migrate UI)
 
 - Draggable, non-blocking modal on the Migrate results view that

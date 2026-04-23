@@ -173,6 +173,12 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
         app.state.storage,
         job_store,
         max_workers,
+        # P1C3 layered-definition + probe wiring — schedule-triggered
+        # backups get the same overlay resolution + detected_facts
+        # persistence as interactive ones.
+        getattr(app.state, "definition_loader", None),
+        getattr(app.state, "device_profiles", None),
+        getattr(app.state, "device_profile_store", None),
     )
 
     schedule.last_run_at = datetime.now(timezone.utc)

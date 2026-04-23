@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import Request
 
+from ..definitions.loader import DefinitionLoader
 from ..definitions.schema import DeviceDefinition
 from ..models.backup import BackupJob
 from ..models.device_profile import DeviceProfile
@@ -33,6 +34,14 @@ if TYPE_CHECKING:
 def get_definitions(request: Request) -> dict[str, DeviceDefinition]:
     """Inject the loaded device-definition registry from application state."""
     return request.app.state.definitions
+
+
+def get_definition_loader(request: Request) -> DefinitionLoader:
+    """Inject the DefinitionLoader instance so backup routes can call
+    :meth:`DefinitionLoader.resolve` for overlay lookup.  The dict
+    returned by :func:`get_definitions` stays as the family-base
+    registry for endpoints that iterate type_keys."""
+    return request.app.state.definition_loader
 
 
 def get_storage(request: Request) -> BaseConfigStore:

@@ -10,6 +10,67 @@ list, don't delete).
 
 ---
 
+## Backup — Probe phase + layered definitions (P1C3, ship-fresh)
+
+- [ ] **Definition probe opt-in**: edit a Cisco IOS-XE definition
+      YAML and add `probe: { command: "show version", patterns:
+      { detected_os_version: "Version\\s+([\\d.]+)", detected_model:
+      "Model Number\\s+:\\s+(\\S+)" } }`.  Restart the server, run
+      a backup against a real Cisco switch.  The devices page edit
+      form's "Detected facts" panel should populate with the
+      current OS version + model + probe_timestamp.
+- [ ] **Probe failure is non-fatal**: point the probe at a device
+      where auth would fail (wrong port/creds).  Backup should
+      still run against the family-base definition; server log
+      shows a WARNING about probe failure but backup job status
+      reaches `completed`.
+- [ ] **Pinned overrides detected facts**: set `os_version: 17.12`
+      on a DeviceProfile + keep probe configured.  Backup should
+      use the 17.12 overlay regardless of what the device
+      actually reports; detected_facts still populate (for
+      display) from the probe output.
+- [ ] **No pin + no probe**: legacy setup with neither pin nor
+      probe declaration — backup picks the family-base definition
+      (same as pre-P1C3 behaviour).
+
+## Migration — Rename modal VLAN pane + persistence (P2C3, ship-fresh)
+
+- [ ] **Left-rail renders**: translate a Cisco config with multiple
+      VLANs to Aruba.  Open the rename modal.  Left rail shows
+      "Ports" (active by default) and "VLANs" with row-count
+      badges on each.
+- [ ] **Switch to VLANs pane**: click the VLANs rail button.
+      Center pane swaps from ports to a VLAN ID table.  Ports pane
+      hides (display:none via CSS class toggle).  Preview pane on
+      the right stays visible.
+- [ ] **VLAN override**: type `999` in VLAN 10's override input.
+      Summary above Apply shows "VLAN: 0 auto / 1 override".
+      Click Apply — rendered output's VLAN 10 blocks now emit
+      as VLAN 999.
+- [ ] **VLAN drop**: click "drop" link next to VLAN 20.  Row dims
+      + strikes through.  After Apply, VLAN 20 is absent from
+      rendered output; interfaces that were on VLAN 20 are
+      detached (operator advisory surfaces in summary warnings).
+- [ ] **Collision detection**: override VLAN 10 → 30 AND
+      VLAN 20 → 30.  Both rows highlight red.  Collision icon
+      appears.  Apply still works (server merges), but the UI
+      surfaces the collision visibly.
+- [ ] **localStorage persistence**: override VLAN 10 → 555.  Hard-
+      reload the page.  Re-run the same translation.  Open the
+      rename modal.  The 10→555 override is already populated and
+      the status line says "Restored prior overrides (0 port,
+      1 VLAN) from just now".
+- [ ] **Reset clears persistence**: click "Reset all" in the
+      modal header.  All overrides clear AND the localStorage
+      entry is removed (verify via DevTools → Application →
+      Local Storage → no `netconfig.rename-ack.v1:…` entry
+      remains for the current codec pair).
+- [ ] **Different hostname = fresh slate**: translate a Cisco
+      config with `hostname A`, set an override.  Reset textarea
+      + paste a config with `hostname B`, re-translate.  Open
+      rename modal — no restore notice appears; state is fresh
+      (hostname is part of the persistence key).
+
 ## Migration — Port-name translation (Tier 3 UI, ship-fresh)
 
 - [ ] **Cisco → Aruba /0/ strip**: on the Migrate page, translate the

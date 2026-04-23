@@ -89,9 +89,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Loading device definitions from %s", settings.definitions_dir
         )
         _app.state.settings = settings
-        _app.state.definitions = DefinitionLoader(
-            settings.definitions_dir
-        ).load_all()
+        # Keep the loader around so backup routes can call
+        # :meth:`DefinitionLoader.resolve` for version/model-pinned
+        # overlay lookup.  The dict-shaped ``definitions`` is kept
+        # alongside for backwards compatibility with endpoints that
+        # iterate type_keys (schedules page, definitions list).
+        _definition_loader = DefinitionLoader(settings.definitions_dir)
+        _app.state.definitions = _definition_loader.load_all()
+        _app.state.definition_loader = _definition_loader
         _app.state.storage = FileConfigStore(settings.configs_dir)
 
         # Load vendor declarations from YAML files.

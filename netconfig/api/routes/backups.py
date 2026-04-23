@@ -22,12 +22,23 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 
 from ...collectors.base import get_collector
 from ...config import MAX_BACKUP_CONCURRENCY
+from ...definitions.loader import DefinitionLoader
 from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, BackupResult, JobStatus
 from ...models.device import BackupRequest, DeviceTarget
+from ...models.device_profile import DeviceProfile
 from ...storage.base import BaseConfigStore
+from ...storage.device_profile_store import FileDeviceProfileStore
 from ...storage.job_store import FileJobStore
-from ..deps import get_definitions, get_job_store, get_jobs, get_storage
+from ..deps import (
+    get_definition_loader,
+    get_definitions,
+    get_device_profile_store,
+    get_device_profiles,
+    get_job_store,
+    get_jobs,
+    get_storage,
+)
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/backups", tags=["backups"])
@@ -44,9 +55,14 @@ def create_backup(
     background_tasks: BackgroundTasks,
     request: Request,
     definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
+    definition_loader: DefinitionLoader = Depends(get_definition_loader),
     storage: BaseConfigStore = Depends(get_storage),
     jobs: dict[str, BackupJob] = Depends(get_jobs),
     job_store: FileJobStore = Depends(get_job_store),
+    device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
+    device_profile_store: FileDeviceProfileStore = Depends(
+        get_device_profile_store
+    ),
 ) -> BackupJob:
     """Validate devices, create a job, and enqueue the backup task.
 
@@ -95,6 +111,9 @@ def create_backup(
         storage,
         job_store,
         max_workers,
+        definition_loader,
+        device_profiles,
+        device_profile_store,
     )
     logger.info(
         "Created backup job %s for %d device(s) (max_workers=%d)",
@@ -150,12 +169,35 @@ def _process_one_device(
     device: DeviceTarget,
     definitions: dict[str, DeviceDefinition],
     storage: BaseConfigStore,
+    definition_loader: DefinitionLoader | None = None,
+    device_profiles: dict[str, DeviceProfile] | None = None,
+    device_profile_store: FileDeviceProfileStore | None = None,
 ) -> None:
     """Run the backup for a single device and mutate ``job.results[idx]``.
 
     Extracted from ``_run_backup_job`` so the same code path runs whether
     a job uses the thread pool or executes sequentially (single-device
     jobs skip the pool for cleaner traces).
+
+    Layered-definition resolution (P1C3):
+      1. Family-base definition looked up via ``definitions[type_key]``
+         is always the starting point.
+      2. If the definition declares a ``probe.command`` AND
+         ``definition_loader`` was provided, run the collector's
+         probe to populate detected_facts.
+      3. Pinned values (``device.os_version`` / ``device.model``)
+         win over detected facts in the resolve() call.
+      4. If the loader yields a more-specific overlay, swap to it
+         for the main collect.
+      5. If the device carries a ``device_profile_id``, persist the
+         fresh detected_facts onto the profile so the UI's edit form
+         reflects what the device actually reports.
+
+    Each step is independent and gracefully degrades: probe failure
+    → empty facts → family-base wins; no loader → no resolve();
+    no profile_id → no persistence.  Existing callers that don't
+    supply the new optional params get legacy single-definition
+    behaviour.
 
     All exceptions are caught and recorded on the ``BackupResult``; this
     function therefore never raises under normal operation.  Any exception
@@ -165,9 +207,78 @@ def _process_one_device(
     Thread safety: ``job.results[idx]`` is mutated only by the single
     worker assigned to index *idx*.  Other workers touch other indices,
     so no locking is required.  Python's GIL makes the individual attribute
-    writes atomic.
+    writes atomic.  Device-profile persistence uses the profile store's
+    own atomic-write guarantees.
     """
-    definition = definitions[device.type_key]
+    family_base = definitions[device.type_key]
+    # Use the family-base collector for probe — connection-layer
+    # settings (netmiko_device_type, auth) are stable across overlays.
+    base_collector = get_collector(family_base)
+
+    detected_facts: dict[str, str] = {}
+    if family_base.probe.command and definition_loader is not None:
+        try:
+            detected_facts = base_collector.probe(device, family_base)
+        except Exception as exc:  # noqa: BLE001 — probe NEVER fails the backup
+            logger.warning(
+                "Probe of %s raised unexpectedly; continuing with "
+                "family-base definition: %s",
+                device.host,
+                exc,
+            )
+
+    # Resolution precedence: operator pins win over detected facts.
+    # Operator wrote os_version="17.12" on the profile → use that;
+    # only consult detected_facts when the pin is empty.
+    resolve_os_version = device.os_version or detected_facts.get(
+        "detected_os_version"
+    )
+    resolve_model = device.model or detected_facts.get("detected_model")
+
+    if definition_loader is not None and (
+        resolve_os_version or resolve_model
+    ):
+        resolved = definition_loader.resolve(
+            device.type_key,
+            os_version=resolve_os_version,
+            model=resolve_model,
+        )
+        definition = resolved or family_base
+        if resolved and resolved is not family_base:
+            logger.info(
+                "Backup of %s: resolved layered definition "
+                "(os_version=%r, model=%r)",
+                device.host,
+                resolve_os_version,
+                resolve_model,
+            )
+    else:
+        definition = family_base
+
+    # Persist detected_facts onto the linked profile for UI display.
+    # Swallow persistence errors — a successful backup is not worth
+    # failing because we couldn't update the display panel.
+    if (
+        detected_facts
+        and device.device_profile_id
+        and device_profiles is not None
+        and device_profile_store is not None
+    ):
+        try:
+            profile = device_profiles.get(device.device_profile_id)
+            if profile is not None:
+                profile.detected_facts = detected_facts
+                device_profile_store.save(profile)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Failed to persist detected_facts for profile %s: %s",
+                device.device_profile_id,
+                exc,
+            )
+
+    # Use a per-definition collector for the actual collect — the
+    # resolved overlay may have different commands or prompts than
+    # the family base even though connection params are stable.
     collector = get_collector(definition)
     result = job.results[idx]
     result.status = "running"
@@ -213,6 +324,9 @@ def _run_backup_job(
     storage: BaseConfigStore,
     job_store: FileJobStore | None = None,
     max_workers: int = MAX_BACKUP_CONCURRENCY,
+    definition_loader: DefinitionLoader | None = None,
+    device_profiles: dict[str, DeviceProfile] | None = None,
+    device_profile_store: FileDeviceProfileStore | None = None,
 ) -> None:
     """Execute all device backups for *job* and update its state.
 
@@ -274,7 +388,10 @@ def _run_backup_job(
     if workers == 1:
         # Serial fast-path: single device, or deployment pinned to 1.
         for idx, device in enumerate(request.devices):
-            _process_one_device(job, idx, device, definitions, storage)
+            _process_one_device(
+                job, idx, device, definitions, storage,
+                definition_loader, device_profiles, device_profile_store,
+            )
     else:
         # Parallel path: up to `workers` devices in flight at once; the
         # executor itself queues the rest and drains FIFO.
@@ -284,7 +401,8 @@ def _run_backup_job(
         ) as pool:
             futures = [
                 pool.submit(
-                    _process_one_device, job, idx, device, definitions, storage
+                    _process_one_device, job, idx, device, definitions, storage,
+                    definition_loader, device_profiles, device_profile_store,
                 )
                 for idx, device in enumerate(request.devices)
             ]
