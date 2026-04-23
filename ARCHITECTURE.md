@@ -224,6 +224,90 @@ returns a ranked list.  Structural markers that discriminate vendors:
 
 ---
 
+## Target profiles (hardware-aware rename-modal metadata)
+
+**Where:** `definitions/target_profiles/*.yaml` +
+`netconfig/migration/target_profiles.py`
+**What:** Declarative descriptions of a target device's port
+inventory — vendor, model, device class, stacking mode,
+chassis-fixed ports + optional swappable-module variants, LAG
+capacity.  Loaded from YAML at startup; never modified at runtime.
+
+**Purpose:** drive the Tier-3 **rename modal** in `/migrate`:
+
+* Populate the per-row target-name dropdown with the profile's
+  valid port ids (so a Cat 9300-48P offers `GigabitEthernet1/0/1`
+  … `1/0/48` + the selected uplink module, not free-form text).
+* Drive the hardware fit-check banner (source vs. target per-kind
+  capacity comparison).
+* Drive the three-stage `vendor → model → module` selector cascade.
+
+Profiles are **optional** — leaving the target-profile dropdown
+empty falls back to Tier-2 free-form input (the codec still runs,
+no dropdown validation).  The `opnsense/Generic` profile with
+``ports: []`` is an explicit opt-out for bring-your-own-hardware
+cases.
+
+### Two shapes: legacy vs. module-variant
+
+**Legacy** (fixed hardware — 2930F, C9500, fixed-port firewalls):
+
+```yaml
+vendor: aruba_aoss
+model: 2930F-48G
+ports:
+  - {range: "1/1-1/48", kind: physical, speed: gig}
+  - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true}
+lags: {max: 24, prefix: Trk}
+```
+
+**Module-variant** (chassis + swappable uplink module — Cat 9300
+NM slot, Aruba 3810M expansion slot):
+
+```yaml
+vendor: cisco_iosxe
+model: C9300-48P
+ports:                              # chassis-fixed
+  - {range: "GigabitEthernet1/0/1-48", kind: physical, speed: gig, poe: true}
+  - {id: "GigabitEthernet0/0", kind: mgmt, speed: gig}
+modules:
+  NM-8X:
+    description: "8x 10G SFP+"
+    ports:
+      - {range: "TenGigabitEthernet1/1/1-8", kind: uplink, speed: 10gig, sfp: true}
+  NM-2Q:
+    description: "2x 40G QSFP+"
+    ports:
+      - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true}
+```
+
+Modules are **additive**: `effective_ports(sku) = chassis_ports +
+modules[sku].ports`.  The UI's third-stage dropdown enumerates
+declared SKUs; operator picks the module they have installed and
+the dropdown options reconfigure.  `MODULE_VARIANT_PROFILES`
+allowlists in
+[`tests/unit/migration/test_target_profile_shipped.py`](tests/unit/migration/test_target_profile_shipped.py)
+and [`tests/integration/test_migration_target_profiles_api.py`](tests/integration/test_migration_target_profiles_api.py)
+guard against silent drift — a profile listed there must actually
+declare `modules:`, and a legacy profile must keep `modules: {}`.
+
+### Relationship to backup-side device definitions
+
+The two subsystems share a vendor slug (`cisco_iosxe`,
+`aruba_aoss`, etc.) but not a schema.  Backup definitions describe
+**how to fetch bytes** (`prompts.trailing`, paging, netmiko
+device_type); target profiles describe **what port ids exist on
+the target**.  No automatic cross-link today; a future `PlatformKey`
+shared type may unify on `(vendor, os_family)` — see
+[`translator-plans.txt`](translator-plans.txt).
+
+See [`definitions/README.md`](definitions/README.md) for full
+schema + authoring guide;
+[`netconfig/migration/target_profiles.py`](netconfig/migration/target_profiles.py)
+for the loader + accessor implementation.
+
+---
+
 ## Template organisation
 
 Jinja2 templates live in `netconfig/templates/`.  The base layout is
@@ -235,13 +319,15 @@ to factor long `<script>` blocks out into reusable partial files:
 
 ```
 netconfig/templates/
-├── migrate.html              # 1,601 LOC — outer HTML + script
+├── migrate.html              # ~1,500 LOC — outer HTML + script
 ├── base.html                 #   ~520 LOC — outer chrome + global JS
 └── _partials/
     ├── classify.js           # shared _guessKind / _looksLikeUplink
     ├── config-viewer.js      # modal viewer + search (base.html)
     ├── fit-check.js          # hardware-capacity banner (migrate.html)
     ├── job-progress.js       # floating job widget (base.html)
+    ├── rename-apply.js       # rename-modal apply flow + drag handlers
+    │                         #   + vendor/model/module selector wiring
     ├── rename-panel.js       # rename-modal preview + summary
     └── rename-table.js       # rename-modal per-kind table renderer
 ```

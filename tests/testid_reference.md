@@ -28,6 +28,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `backup-form`           | `<form>` | The form element itself |
 | `device-list`           | `<div>` | Container for all device entry rows |
 | `device-entry`          | `<div>` | One device row (cloned when adding devices) |
+| `device-profile-select` | `<select>` | "Saved Device" picker — first option is ``— new device —`` for ad-hoc; subsequent options pre-fill the row from a persisted `DeviceProfile`.  Option elements carry `data-type-key`, `data-host`, `data-port`, `data-username` for client-side pre-fill |
 | `device-type-select`    | `<select>` | Device type dropdown; options carry `data-needs-enable` |
 | `device-host-input`     | `<input>` | Host / IP field |
 | `device-port-input`     | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
@@ -36,6 +37,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `device-enable-input`   | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
 | `remove-device-btn`     | `<button>` | Remove this device row; hidden when only one row exists |
 | `add-device-btn`        | `<button>` | Add a new device row |
+| `device-profile-name-input` | `<input>` | "Save as Profile" — optional free-text name.  When populated, the backup route creates/updates a persisted `DeviceProfile` alongside running the backup |
 | `submit-backup-btn`     | `<button type="submit">` | Start the backup job; disabled while job is in flight |
 
 ### Job status / results (now driven by the global Job progress panel)
@@ -274,6 +276,22 @@ useful for E2E assertions):
 | `sched-add-device-btn`         | `<button>` | Add a new device row |
 | `sched-submit-btn`             | `<button type="submit">` | Create schedule; disabled while request is in flight |
 
+### Target pickers (device-type × specific-profile)
+
+Flanking the inline device list, the schedule form exposes two
+checkbox grids that let the operator back up "all profiles of
+these types" OR "these specific profiles" (or both — inclusive
+union).  Empty-state messages render when no device profiles
+exist yet.
+
+| `data-testid`                  | Element | Notes |
+|-------------------------------|---------|-------|
+| `sched-type-keys-section`      | `<div>` | Wraps the type-key checkbox grid — one checkbox per loaded device definition |
+| `sched-type-key-checkbox`      | `<input type="checkbox">` | One per `type_key`; `value` carries the definition key; checked types get every matching `DeviceProfile` in the resulting schedule |
+| `sched-devices-section`        | `<div>` | Wraps the specific-profile checkbox grid — one checkbox per persisted `DeviceProfile` |
+| `sched-device-checkbox`        | `<input type="checkbox">` | One per saved profile; `value` carries the profile UUID; checked profiles get included in the schedule regardless of `type_key` selection |
+| `no-profiles-for-sched-msg`    | `<p>` | Empty-state — shown inside `sched-devices-section` when no `DeviceProfile` records exist yet.  Links to `/devices` for the user to add one |
+
 ### Existing schedules table
 
 | `data-testid`                  | Element | Notes |
@@ -498,7 +516,7 @@ migrate.html):
 | `migrate-rename-table-pane`           | `<div>`    | Left pane holding the kind sections and the empty-state message |
 | `migrate-rename-sections`             | `<div>`    | Container the renderer clears and rebuilds on each call |
 | `migrate-rename-section-<kind>`       | `<details>`| One per non-empty kind; `<kind>` is one of `physical`, `breakout`, `lag`, `svi`, `loopback`, `tunnel`, `mgmt`, `hw_aggregate`, `virtual`, `unknown` |
-| `migrate-rename-row-<source>`         | `<tr>`     | One per port; `<source>` is the literal source-side port name (e.g. `GigabitEthernet1/0/1`).  CSS classes `has-warning` / `has-collision` / `has-override` / `has-drop` / `has-auto-drop` signal row state |
+| `migrate-rename-row-<source>`         | `<tr>`     | One per port; `<source>` is the literal source-side port name (e.g. `GigabitEthernet1/0/1`).  **Forward slashes and dots are preserved verbatim** in the attribute value — do not URL-encode or escape.  CSS classes `has-warning` / `has-collision` / `has-override` / `has-drop` / `has-auto-drop` signal row state |
 | `migrate-rename-override-<source>`    | `<select>` or `<input>` | Target-name dropdown when a profile is selected; free-form input when not.  The dropdown's first option is "(auto: X)" / "(auto-dropped)" and lists the profile's valid port IDs filtered by kind |
 | `migrate-rename-drop-<source>`        | `<span>`   | Inline link beside free-form inputs.  Text cycles "drop" / "un-drop" / "keep verbatim" based on the row's drop state |
 | `migrate-rename-table-empty`          | `<div>`    | Empty-state message when no renames or warnings exist |
@@ -511,7 +529,7 @@ migrate.html):
 | `migrate-rename-preview`              | `<pre>`    | Client-side approximation of the target output with user overrides applied via whole-word replacement; informational only — the Apply button re-runs the server-side render for the authoritative result |
 | `migrate-rename-summary`              | `<div>`    | Inline summary above Apply: "N auto / M override / K drops / W ⚠ / C collisions". Collision count disables the Apply button |
 | `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state |
-| `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` |
+| `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` — **closed enumeration** as of this writing (fit-check.js hardcodes the list in `KIND_ORDER`).  Adding a new kind requires touching both the partial and this doc |
 | `migrate-fitcheck-module-note`        | `<span>`   | "(module: NM-8X)" suffix on the banner when a module SKU is selected; omitted for legacy profiles |
 
 ### RESERVED for Phase 2 (transforms + deploy)

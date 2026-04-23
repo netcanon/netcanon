@@ -105,3 +105,14 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 | `integration` | API-level tests using `TestClient`, no real SSH |
 | `e2e`         | Full browser tests via Playwright against a live server |
 | `slow`        | Tests that take longer than ~5 seconds |
+| `cross_mesh`  | Cross-codec translation matrix tests (category × source × target).  **Aggregate runtime under this marker must stay under 30 seconds** as the matrix grows; cases running >500ms each should get demoted to Layer A per-codec unit tests.  See [`tests/unit/migration/test_cross_mesh_overrides.py`](unit/migration/test_cross_mesh_overrides.py). |
+
+## Related documentation
+
+| Concern | See |
+|---|---|
+| Every interactive HTML element's `data-testid` | [`testid_reference.md`](testid_reference.md) — canonical E2E selector inventory |
+| Real-capture fixture provenance + licensing | [`fixtures/real/NOTICE.md`](fixtures/real/NOTICE.md) |
+| Codec certification state + coverage matrix | [`fixtures/real/RESULTS.md`](fixtures/real/RESULTS.md) |
+| Codec authoring (how to add a new vendor) | [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) |
+| Device-definition + target-profile schema | [`../definitions/README.md`](../definitions/README.md) |

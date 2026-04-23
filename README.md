@@ -43,8 +43,10 @@ pytest                       # unit + integration + desktop (fast)
 pytest -m e2e                # Playwright browser tests (slower)
 ```
 
-Current test state: **1,130 passing, 55 skipped** across unit /
-integration / e2e / desktop / real-capture-validation layers.
+Current test state: **~1,410 unit+integration + 143 e2e passing**
+across unit / integration / e2e / desktop / real-capture-validation
+layers.  Exact counts drift as commits land; source of truth is the
+CI output.
 
 ---
 
@@ -55,6 +57,7 @@ integration / e2e / desktop / real-capture-validation layers.
 | Understand the architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer model, canonical bridge, codec types |
 | Follow the contributor rules | [`CLAUDE.md`](CLAUDE.md) — hard rules, parity checklist, gotchas |
 | Add a new codec (vendor parser/renderer) | [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) |
+| Add a new device definition / target profile | [`definitions/README.md`](definitions/README.md) — layered definitions (family base + os_version / model overlays), target-profile module-variant schema |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — MTU as a worked example |
 | Read the roadmap / current blockers | [`translator-plans.txt`](translator-plans.txt) — dense, grep-friendly, opens with a TL;DR |
 | See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |

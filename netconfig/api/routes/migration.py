@@ -1,7 +1,7 @@
 """
 ``/api/v1/migration`` routes.
 
-Phase 0 surfaces only read-only introspection:
+Read-only introspection:
 
     GET  /api/v1/migration/adapters
         → list of CodecInfo (one entry per registered adapter)
@@ -9,8 +9,55 @@ Phase 0 surfaces only read-only introspection:
     GET  /api/v1/migration/adapters/{name}/capabilities
         → the full CapabilityMatrix
 
-Phase 2 will add ``POST /plan``, ``/render``, ``/deploy`` and a
-sibling ``MigrationJob`` persistence layer analogous to ``FileJobStore``.
+Translation pipeline entries:
+
+    POST /api/v1/migration/plan
+        → everything-at-once entry.  Accepts a MigrationPlanRequest
+          with any combination of per-category override maps
+          (``port_rename_map``, ``vlan_rename_map``); engages the
+          rename-aware pipeline when either is present or when a
+          target_profile is selected.
+
+    POST /api/v1/migration/plan/ports
+        → per-pane override endpoint for port-name rewrites
+          (introduced P2C1).  Dispatches to run_plan_with_overrides
+          with only port_rename_map engaged.
+
+    POST /api/v1/migration/plan/vlans
+        → per-pane override endpoint for VLAN-ID rewrites
+          (introduced P2C2).  Dispatches to run_plan_with_overrides
+          with only vlan_rename_map engaged.  Drop via None value +
+          collision merge-by-union.  See the endpoint's own
+          docstring for full semantics.
+
+    POST /api/v1/migration/render
+        → current alias of /plan, retained for API symmetry and a
+          future split (see TestRenderEndpoint lock-in tests).
+
+Auto-detection:
+
+    POST /api/v1/migration/detect
+        → probe raw config prefix against every registered codec's
+          ``probe()`` classifier; returns ranked DetectCandidates
+          for UI suggestion.
+
+Target profiles (for the Tier-3 rename modal's dropdown population):
+
+    GET  /api/v1/migration/target-profiles
+        → list all loaded profiles (vendor/model)
+    GET  /api/v1/migration/target-profiles/{vendor}/{model}
+        → one profile, including module-variants when declared
+
+All POST endpoints accept the same :class:`MigrationPlanRequest`
+body (input mode is raw_text XOR source_filename) and return a
+:class:`MigrationJob`.  Future per-pane categories
+(``local_users``, ``snmp``, ...) will extend the endpoint set by
+adding siblings under ``/plan/<category>`` per the pattern
+established by /plan/ports and /plan/vlans.
+
+Deploy-time endpoints (``/deploy`` and associated MigrationJob
+persistence analogous to ``FileJobStore``) are not yet shipped and
+remain on the roadmap — see ``translator-plans.txt``.
 """
 
 from __future__ import annotations
