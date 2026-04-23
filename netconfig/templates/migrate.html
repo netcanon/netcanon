@@ -619,6 +619,16 @@
       <div id="mig-rename-local-users-pane"
            class="mig-rename-category-pane"
            data-testid="migrate-rename-local-users-pane">
+        <!-- Target-compatibility banner.  Shows when the active
+             target codec's unsupported_rename_categories list
+             includes 'local_users' — warns the operator that
+             overrides in this pane won't affect rendered output.
+             Hidden by default; populated by
+             renderCompatBanners() based on CodecInfo data. -->
+        <div id="mig-rename-local-users-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-local-users-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-local-users-empty"
              data-testid="migrate-rename-local-users-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
@@ -1642,6 +1652,63 @@
     }
   }
 
+  /** Render the per-pane compatibility banners.  Reads the current
+   *  target codec's CodecInfo (already cached in the module-scope
+   *  ``adapters`` list) and surfaces an amber warning on each pane
+   *  whose category appears in the target's
+   *  ``unsupported_rename_categories`` list.
+   *
+   *  Category → pane-element mapping is deliberately hard-coded
+   *  against the known rail categories — adding a new category
+   *  means adding a banner element to the pane AND an entry here.
+   *  A data-driven alternative (discover panes via DOM query) was
+   *  considered but rejected: keeping the map explicit lets the
+   *  compiler/linter catch typos and forces the author to wire the
+   *  banner element in the template at the same time.
+   */
+  function renderCompatBanners() {
+    if (!adapters.length || !_lastJob) return;
+    var targetName = (_lastJob && _lastJob.target_codec)
+      || (targetSel && targetSel.value);
+    var target = adapters.find(function(a) { return a.name === targetName; });
+    if (!target) return;
+    var unsupported = target.unsupported_rename_categories || [];
+    var categoryLabels = {
+      local_users: 'local users',
+      vlans: 'VLANs',
+      ports: 'port names',
+    };
+    // PANE_ID_BY_CATEGORY: extend here when new categories gain
+    // compat banners.  Value is the element id of the banner div
+    // inside that pane; undefined entries are skipped silently.
+    var paneIdByCategory = {
+      local_users: 'mig-rename-local-users-compat',
+    };
+    Object.keys(paneIdByCategory).forEach(function(cat) {
+      var el = document.getElementById(paneIdByCategory[cat]);
+      if (!el) return;
+      if (unsupported.indexOf(cat) !== -1) {
+        var label = categoryLabels[cat] || cat;
+        var vendorLabel = target.vendor_display_name || target.name;
+        el.style.display = '';
+        el.innerHTML =
+          '<div style="flex:1">'
+          + '<strong>\u26A0 Target codec doesn\'t render '
+          + escapeHtml(label) + '.</strong> '
+          + escapeHtml(vendorLabel) + ' parses + renders interfaces '
+          + 'and VLANs but ' + escapeHtml(label) + ' are currently '
+          + 'Tier-3 passthrough (raw_sections).  Rename overrides '
+          + 'will apply to the canonical tree but won\'t appear in '
+          + 'the rendered output until the codec wires full '
+          + 'round-trip support for this category.'
+          + '</div>';
+      } else {
+        el.style.display = 'none';
+        el.innerHTML = '';
+      }
+    });
+  }
+
   /** Switch the active rail category.  Mutually exclusive — exactly
    *  one category pane is visible at a time.  Preview pane stays
    *  visible regardless so the operator can see how per-category
@@ -1735,14 +1802,22 @@
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
-    // Only show the rename button when we have a rendered output
-    // AND at least one port-name was affected (either auto-renamed
-    // or flagged as a warning by the server-side translator).
+    // Show the rename button whenever ANY pane has content to work
+    // with — port renames/warnings, source VLANs to remap, or
+    // source local users to remap.  Pre-P2C4 this gate was ports-
+    // only; with three panes live the modal is useful even when
+    // the source config declares no interfaces (e.g. a user-only
+    // migration snippet).
     var hasRenames = job && job.port_renames
       && Object.keys(job.port_renames).length > 0;
     var hasWarnings = job && Array.isArray(job.warnings)
       && job.warnings.length > 0;
-    if (job && job.rendered && (hasRenames || hasWarnings)) {
+    var hasVlans = job && Array.isArray(job.source_vlans)
+      && job.source_vlans.length > 0;
+    var hasLocalUsers = job && Array.isArray(job.source_local_users)
+      && job.source_local_users.length > 0;
+    var hasAnything = hasRenames || hasWarnings || hasVlans || hasLocalUsers;
+    if (job && job.rendered && hasAnything) {
       btn.style.display = '';
       var attentionCount = hasWarnings ? job.warnings.length : 0;
       if (attentionCount > 0) {
@@ -1798,6 +1873,7 @@
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     renderRenameRailCounts();
+    renderCompatBanners();
     renderRenamePreview();
     renderRenameSummary();
   };

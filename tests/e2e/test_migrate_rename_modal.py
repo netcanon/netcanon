@@ -799,6 +799,55 @@ class TestRenameModalPaneScopedControls:
         expect(group).to_be_visible()
 
 
+class TestRenameModalCompatBanner:
+    """Target-codec compatibility banner on the local-users pane.
+    OPNsense + FortiGate don't round-trip CanonicalLocalUser; the
+    banner warns operators up-front so they don't apply a rename
+    that silently vanishes from rendered output."""
+
+    def test_banner_hidden_when_target_supports_local_users(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """Cisco → Aruba: both codecs round-trip local_users, so
+        no banner on the local-users pane."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-local-users-compat"]'
+        )
+        expect(banner).to_be_hidden()
+
+    def test_banner_visible_when_target_omits_local_users(
+        self, page: Page, live_server_url: str,
+    ):
+        """Cisco → OPNsense: OPNsense doesn't round-trip local_users,
+        so the banner should surface."""
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("opnsense")
+        # Source config that declares a user so the local-users
+        # pane has at least one row to warn about.
+        mp.fill_raw(
+            "hostname test-sw\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n!\n"
+        )
+        mp.submit_and_wait()
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-local-users-compat"]'
+        )
+        expect(banner).to_be_visible()
+        expect(banner).to_contain_text("doesn't render")
+        expect(banner).to_contain_text("local users")
+
+
 class TestRenameModalLocalUsersPane:
     """P2C4 added a third rail category for local-user renaming.
     Structural parallel to the VLAN pane — enumerates every user
