@@ -79,6 +79,40 @@ class TestTargetProfileModel:
         with pytest.raises(Exception):  # negative max rejected
             TargetLAGCaps(max=-1)
 
+    def test_max_vlans_defaults_to_none(self):
+        """None (default) means "no limit declared" — UI hides the
+        VLAN fit-check banner for that profile."""
+        p = TargetProfile(vendor="aruba_aoss", model="test")
+        assert p.max_vlans is None
+
+    def test_max_vlans_accepts_int(self):
+        p = TargetProfile(
+            vendor="aruba_aoss", model="2930F-48G", max_vlans=2048,
+        )
+        assert p.max_vlans == 2048
+
+    def test_max_local_users_defaults_to_none(self):
+        p = TargetProfile(vendor="aruba_aoss", model="test")
+        assert p.max_local_users is None
+
+    def test_max_local_users_accepts_int(self):
+        p = TargetProfile(
+            vendor="cisco_iosxe", model="C9300-48P", max_local_users=65535,
+        )
+        assert p.max_local_users == 65535
+
+    def test_max_vlans_serialises_through_model_dump(self):
+        """TargetProfile is exposed via GET /target-profiles; both
+        fields must serialise so the UI can read them from the
+        JSON response."""
+        p = TargetProfile(
+            vendor="aruba_aoss", model="2930F-48G",
+            max_vlans=2048, max_local_users=64,
+        )
+        data = p.model_dump()
+        assert data["max_vlans"] == 2048
+        assert data["max_local_users"] == 64
+
 
 class TestTargetModuleModel:
     """The :class:`TargetModule` shape on its own."""

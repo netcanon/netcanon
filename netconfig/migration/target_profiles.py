@@ -214,6 +214,24 @@ class TargetProfile(BaseModel):
 
     lags: TargetLAGCaps | None = None
 
+    max_vlans: int | None = None
+    """Maximum number of simultaneously-configured VLANs this device
+    supports (vendor-specific — e.g. Aruba 2930F: 2048, Cisco
+    Catalyst 9300: 4094, MikroTik CRS: 4094).  Drives the VLAN-
+    pane fit-check banner: when source_vlans.length exceeds this
+    value, the pane shows a red block banner telling the operator
+    they'll need to trim before the migration will fit.  ``None``
+    (default) means "no limit known / declared" and hides the
+    banner on this pane — same discipline as ports (no profile =
+    no fit-check)."""
+
+    max_local_users: int | None = None
+    """Maximum number of local user accounts.  Real examples:
+    Aruba AOS-S 2930F declares a ``max-users-local`` around 16-64;
+    Cisco IOS-XE allows up to 65535 concurrently; OPNsense is
+    essentially unbounded.  Same None-default + pane-scoped
+    banner semantics as ``max_vlans``."""
+
     # ------------------------------------------------------------------
     # Helper accessors — keep UI code decoupled from the YAML structure
     # ------------------------------------------------------------------
