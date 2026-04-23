@@ -7,6 +7,86 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 3 — real-capture fixtures promoting Arista + Junos to best_effort)
+
+- `tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt`
+  — real **EOS-4.23.0.1F** vEOS EVPN leaf from Arista's EVPN L3
+  Design Guide lab validation (Apache-2.0, via batfish/lab-validation
+  @ `d40faf6`).  429 lines, 40 interfaces, 15 VLANs, MLAG peer-link
+  + 5 Port-Channels, VXLAN1 overlay, router bgp 65102, VRF
+  definitions, VARP virtual-router MAC.  Second Arista fixture from
+  a different EOS major (4.22 + 4.23).
+- `tests/fixtures/real/junos/ksator_labmgmt_qfx5100_junos173.set` —
+  real **Junos 17.3R1.10** set-form config from a QFX5100 DC
+  access/leaf switch (MIT, (c) Juniper Networks 2018).  106 lines,
+  11 interfaces (including `ae0`/`ae1` LAGs), 16 VLAN declarations,
+  apply-groups inheritance pattern.
+- `tests/fixtures/real/junos/ksator_labmgmt_ex4550_junos151.set` —
+  real **Junos 15.1R6.7** set-form from an EX4550 campus/DC access
+  switch (same MIT source).  52 lines, 3 interfaces, 6 VLANs,
+  `chassis aggregated-devices ethernet device-count 2`.  Oldest
+  Junos major in the corpus — closes ≥3-version gap for promotion.
+
+### Changed (GAP 3 — codec certification promotions + bug fixes surfaced by real captures)
+
+- `arista_eos` codec certainty promoted from `experimental` to
+  `best_effort` — 2 real captures across EOS 4.22 + 4.23 both
+  round-trip stable.
+- `juniper_junos` codec certainty promoted from `experimental` to
+  `best_effort` — 3 real captures across Junos 15.1 + 17.3 + 18.4
+  all round-trip stable.
+- `netconfig/migration/codecs/arista_eos/codec.py` — render-side
+  LAG bug fixed.  The render loop emitted `interface Port-ChannelN`
+  stubs but did NOT emit the matching `channel-group N mode <mode>`
+  on member Ethernet interfaces.  Arista LAGs (like Cisco IOS)
+  are synthesised at parse time from `channel-group` lines on the
+  child side; with nothing on that side in the rendered output,
+  re-parse produced zero LAGs even when the canonical tree carried
+  them.  Round-trip lost all 5 MLAG Port-Channels on the batfish
+  EVPN capture.  Fixed by building a `lag_mode_by_name` lookup at
+  render top + emitting `channel-group N mode <mode>` on
+  interfaces whose `lag_member_of` is populated, with canonical-
+  to-EOS mode normalisation (`static` → `on`, `passive` →
+  `passive`, else `active`).
+- `netconfig/migration/codecs/juniper_junos/codec.py` — render-side
+  bare-interface bug fixed.  The v2a render loop emitted interface
+  set-lines only when the canonical interface carried a
+  description / disable flag / IPv4 address.  The Junos parse side
+  creates an interface entry for every `set interfaces <name> ...`
+  line seen — including lines whose trailing tokens are all Tier-3
+  grammar (e.g. `unit 0 family ethernet-switching ...`).  Those
+  interfaces landed in the canonical tree with no renderable
+  attributes, render dropped them silently, and round-trip showed
+  the interface count shrinking on the ksator EX4550 fixture.
+  Fixed by emitting `set interfaces <name>` as a placeholder line
+  when no other attributes are present.
+
+### Tests (GAP 3)
+
+- `tests/unit/migration/test_arista_eos.py::TestRender` — two new
+  regression tests:
+  - `test_render_lag_member_emits_channel_group` — parse a LAG
+    config, render, re-parse, assert identical LAG recovered.
+  - `test_render_lag_member_mode_normalised` — canonical mode
+    `static` must render as EOS `on`.
+- `tests/unit/migration/test_juniper_junos.py::TestRenderInterfaces::
+  test_render_bare_interface_emits_placeholder` — parse an
+  attribute-less interface, render, re-parse, assert the interface
+  survives.
+- 9 real-capture tests newly active across the 3 new fixtures
+  (parse / round-trip / canonical representation stability).
+
+- `tests/fixtures/real/RESULTS.md` — Arista + Junos sections
+  updated with new coverage matrix rows, findings (the two bugs
+  above), certification-decision paragraphs promoted to
+  `best_effort`, and revised promotion-path notes.  Summary table
+  updated: Arista 1→2 real / 1→2 versions / 2→3 bugs surfaced;
+  Junos 1→3 real / 1→3 versions / 0→1 bug; TOTAL 31→34 fixtures,
+  12→16 bugs surfaced.
+- `tests/fixtures/real/NOTICE.md` — provenance rows added for
+  each new fixture: source repo + commit SHA + license + line
+  count + grammar summary.
+
 ### Changed (GAP 2 — Juniper Junos render-side v2a [flat set-form, no apply-groups])
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — render

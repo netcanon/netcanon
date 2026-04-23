@@ -390,6 +390,72 @@ class TestRender:
             "arista:sha512:$6$abc$def"
         )
 
+    def test_render_lag_member_emits_channel_group(self):
+        """Regression guard for the LAG round-trip bug surfaced by the
+        batfish DC1-LEAF2A EVPN fixture (GAP 3).
+
+        Before the fix: render emitted ``interface Port-Channel3``
+        stubs but did NOT emit ``channel-group 3 mode active`` on the
+        member Ethernet interfaces.  The canonical tree carried both
+        ``tree.lags[].members`` AND each member's ``lag_member_of``;
+        the render loop only consumed the lag list, leaving the member
+        side silent.  Re-parse then produced zero LAGs because Arista
+        LAGs are synthesised from ``channel-group`` lines on members.
+        """
+        raw = (
+            "! device: sw1 (DCS-7050SX-64, EOS-4.23.0F)\n"
+            "hostname sw1\n"
+            "!\n"
+            "interface Ethernet3\n"
+            "   channel-group 3 mode active\n"
+            "!\n"
+            "interface Ethernet4\n"
+            "   channel-group 3 mode active\n"
+            "!\n"
+            "interface Port-Channel3\n"
+            "!\n"
+            "end\n"
+        )
+        codec = AristaEOSCodec()
+        first = codec.parse(raw)
+        assert len(first.lags) == 1
+        assert first.lags[0].name == "Port-Channel3"
+        assert set(first.lags[0].members) == {"Ethernet3", "Ethernet4"}
+        # Render must emit channel-group on the member side so re-parse
+        # reconstructs the same LAG.
+        rendered = codec.render(first)
+        assert "channel-group 3 mode active" in rendered
+        # Round-trip stability.
+        second = codec.parse(rendered)
+        assert len(second.lags) == 1
+        assert second.lags[0].name == "Port-Channel3"
+        assert set(second.lags[0].members) == {"Ethernet3", "Ethernet4"}
+
+    def test_render_lag_member_mode_normalised(self):
+        """Canonical LAG modes map to EOS CLI tokens:
+        ``static`` → ``on``, ``passive`` → ``passive``,
+        everything else (including ``active``) → ``active``.
+        """
+        from netconfig.migration.canonical.intent import CanonicalLAG
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Ethernet1",
+                    lag_member_of="Port-Channel1",
+                ),
+            ],
+            lags=[
+                CanonicalLAG(
+                    name="Port-Channel1",
+                    members=["Ethernet1"],
+                    mode="static",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "channel-group 1 mode on" in out
+
 
 class TestRoundTrip:
     """Full parse → render → parse idempotency on realistic snippets."""

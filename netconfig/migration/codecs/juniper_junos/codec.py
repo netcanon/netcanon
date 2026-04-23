@@ -74,7 +74,7 @@ class JunosCodec(CodecBase):
     version_hint: ClassVar[str | None] = "Junos 18.x+"
     input_format: ClassVar[str] = "cli-junos-set"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste Junos `set`-form configuration text — the output of "
@@ -335,6 +335,11 @@ class JunosCodec(CodecBase):
         # --- interfaces ---
         for iface in tree.interfaces:
             name = iface.name
+            has_renderable_attr = (
+                bool(iface.description)
+                or (not iface.enabled)
+                or bool(iface.ipv4_addresses)
+            )
             if iface.description:
                 out.append(
                     f"set interfaces {name} description "
@@ -348,6 +353,14 @@ class JunosCodec(CodecBase):
                     f"set interfaces {name} unit 0 family inet "
                     f"address {addr.ip}/{addr.prefix_length}"
                 )
+            # Placeholder: the parse side creates an interface entry
+            # for every ``set interfaces <name> ...`` line, even when
+            # the trailing tokens land entirely in unmodelled (Tier-3)
+            # grammar like ``unit 0 family ethernet-switching ...``.
+            # Without this, round-trip would drop interfaces that
+            # exist in the tree but carry no canonical attributes.
+            if not has_renderable_attr:
+                out.append(f"set interfaces {name}")
 
         # --- vlans ---
         for vlan in tree.vlans:

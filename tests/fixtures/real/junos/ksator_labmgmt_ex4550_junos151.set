@@ -1,0 +1,53 @@
+set version 15.1R6.7
+set groups POC_Lab system host-name EX4550-190
+set groups POC_Lab system backup-router 172.25.90.1
+set groups POC_Lab system time-zone America/New_York
+set groups POC_Lab system authentication-order radius
+set groups POC_Lab system authentication-order password
+set groups POC_Lab system root-authentication encrypted-password "$1$aGzCar1E$CpOc4PZ0/xWHcp2tz1UV00"
+set groups POC_Lab system name-server 172.29.131.60
+set groups POC_Lab system login message "\n \n System is in use for a customer POC testing \n \n *** Please do not make changes before contacting the Herndon POC admins *** \n \n"
+set groups POC_Lab system login user lab uid 2000
+set groups POC_Lab system login user lab class super-user
+set groups POC_Lab system login user lab authentication encrypted-password "$1$IzJ6BfCC$MBJ3Q6asq1J3nQuVKt/w/0"
+set groups POC_Lab system services ftp
+set groups POC_Lab system services ssh protocol-version v2
+set groups POC_Lab system services telnet
+set groups POC_Lab system services xnm-clear-text
+set groups POC_Lab system services netconf ssh
+set groups POC_Lab system syslog host 172.25.45.6 authorization any
+set groups POC_Lab system syslog file messages any info
+set groups POC_Lab system ntp server 66.129.255.62 prefer
+set groups POC_Lab interfaces me0 unit 0 family inet address 172.25.90.190/24
+set groups POC_Lab snmp community public
+set groups POC_Lab routing-options static route 0.0.0.0/0 next-hop 172.25.90.1
+set apply-groups POC_Lab
+set system syslog host 172.25.90.135 any any
+set system syslog host 172.25.90.135 match UI_COMMIT_COMPLETED
+set system syslog host 172.25.90.135 port 516
+set chassis aggregated-devices ethernet device-count 2
+set interfaces xe-0/0/0 unit 0 family ethernet-switching port-mode trunk
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2021
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2022
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2023
+set interfaces xe-0/0/1 unit 0 family ethernet-switching port-mode trunk
+set interfaces xe-0/0/1 unit 0 family ethernet-switching vlan members V2024
+set interfaces xe-0/0/1 unit 0 family ethernet-switching vlan members V2025
+set interfaces xe-0/0/1 unit 0 family ethernet-switching vlan members V2031
+set interfaces xe-0/0/2 description "ixia 2.1 - APP1"
+set interfaces xe-0/0/2 unit 0 family ethernet-switching port-mode trunk
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2021
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2022
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2023
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2024
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2025
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2031
+set routing-options forwarding-table export load-balance
+set protocols lldp interface all
+set policy-options policy-statement load-balance then load-balance per-packet
+set vlans V2021 vlan-id 2021
+set vlans V2022 vlan-id 2022
+set vlans V2023 vlan-id 2023
+set vlans V2024 vlan-id 2024
+set vlans V2025 vlan-id 2025
+set vlans V2031 vlan-id 2031

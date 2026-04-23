@@ -129,7 +129,7 @@ class AristaEOSCodec(CodecBase):
     version_hint: ClassVar[str | None] = "EOS 4.20+"
     input_format: ClassVar[str] = "cli-arista"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Arista EOS "
@@ -619,6 +619,12 @@ class AristaEOSCodec(CodecBase):
             out.append("!")
 
         # --- Interfaces ---
+        # Build LAG mode lookup so member interfaces can emit the
+        # matching ``channel-group N mode <mode>`` line.  Arista LAGs
+        # live on the member side — the canonical tree carries
+        # `lag_member_of` on each member + a `CanonicalLAG` record in
+        # `tree.lags`; render needs both.
+        lag_mode_by_name = {lag.name: (lag.mode or "active") for lag in tree.lags}
         for iface in tree.interfaces:
             out.append(f"interface {iface.name}")
             if iface.description:
@@ -646,6 +652,26 @@ class AristaEOSCodec(CodecBase):
                 out.append(
                     f"   ip address {addr.ip}/{addr.prefix_length}"
                 )
+            # LAG membership: ``channel-group N mode <mode>`` on member
+            # Ethernet interfaces.  Arista (like Cisco IOS) puts this
+            # on the child side, not the Port-Channel stanza.
+            if iface.lag_member_of:
+                m = re.match(r"^Port-Channel(\d+)$", iface.lag_member_of)
+                if m is not None:
+                    chan_id = m.group(1)
+                    mode = lag_mode_by_name.get(
+                        iface.lag_member_of, "active",
+                    )
+                    # Normalise canonical mode strings to EOS CLI tokens.
+                    if mode == "static":
+                        mode_token = "on"
+                    elif mode == "passive":
+                        mode_token = "passive"
+                    else:
+                        mode_token = "active"
+                    out.append(
+                        f"   channel-group {chan_id} mode {mode_token}"
+                    )
             if iface.mtu is not None:
                 out.append(f"   mtu {iface.mtu}")
             if not iface.enabled:

@@ -1,0 +1,107 @@
+set version 17.3R1.10
+set groups POC_Lab system host-name QFX5100-183
+set groups POC_Lab system backup-router 172.25.90.1
+set groups POC_Lab system authentication-order radius
+set groups POC_Lab system authentication-order password
+set groups POC_Lab system root-authentication encrypted-password "$1$4IG2TqkF$BWRFZOwUfQNpQ5wNErZYm/"
+set groups POC_Lab system name-server 172.29.131.60
+set groups POC_Lab system login message "\n \n System is in use for a customer POC testing \n \n *** Please do not make changes before contacting the Herndon POC admins *** \n\n"
+set groups POC_Lab system login user lab uid 2002
+set groups POC_Lab system login user lab class super-user
+set groups POC_Lab system login user lab authentication encrypted-password "$1$EUL7Cv53$KB/VblftmUIy5gvRCFhlt0"
+set groups POC_Lab system services ftp
+set groups POC_Lab system services ssh protocol-version v2
+set groups POC_Lab system services telnet
+set groups POC_Lab system services xnm-clear-text
+set groups POC_Lab system services netconf ssh
+set groups POC_Lab system syslog host 172.25.45.6 authorization any
+set groups POC_Lab system syslog file messages any any
+set groups POC_Lab system syslog file messages interactive-commands none
+set groups POC_Lab system syslog file messages archive size 10m
+set groups POC_Lab system syslog file messages archive files 10
+set groups POC_Lab system commit synchronize
+set groups POC_Lab system ntp server 66.129.255.62 prefer
+set groups POC_Lab interfaces vme unit 0 family inet address 172.25.90.183/24
+set groups POC_Lab snmp community public
+set groups POC_Lab routing-options static route 10.255.255.0/24 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 10.255.255.0/24 retain
+set groups POC_Lab routing-options static route 10.255.255.0/24 no-readvertise
+set groups POC_Lab routing-options static route 10.161.0.0/16 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 10.161.0.0/16 retain
+set groups POC_Lab routing-options static route 10.161.0.0/16 no-readvertise
+set groups POC_Lab routing-options static route 172.16.0.0/12 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 172.16.0.0/12 retain
+set groups POC_Lab routing-options static route 172.16.0.0/12 no-readvertise
+set groups POC_Lab routing-options static route 192.168.0.0/16 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 192.168.0.0/16 retain
+set groups POC_Lab routing-options static route 192.168.0.0/16 no-readvertise
+set apply-groups POC_Lab
+set system services extension-service request-response grpc clear-text port 50051
+set system services extension-service request-response grpc skip-authentication
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set system syslog host 172.25.90.135 any any
+set system syslog host 172.25.90.135 match UI_COMMIT_COMPLETED
+set system syslog host 172.25.90.135 port 516
+set chassis aggregated-devices ethernet device-count 5
+set interfaces xe-0/0/0 ether-options 802.3ad ae0
+set interfaces xe-0/0/1 mtu 9216
+set interfaces xe-0/0/1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces xe-0/0/1 unit 0 family ethernet-switching vlan members V4050
+set interfaces xe-0/0/1 unit 0 family ethernet-switching vlan members V4051
+set interfaces xe-0/0/2 description "ixia 1.6"
+set interfaces xe-0/0/2 unit 0 family ethernet-switching interface-mode trunk
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members 3006-3010
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2030
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members V2031
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members VDEV
+set interfaces xe-0/0/2 unit 0 family ethernet-switching vlan members VPROD
+set interfaces et-0/0/48 ether-options 802.3ad ae1
+set interfaces et-0/0/49 ether-options 802.3ad ae1
+set interfaces xe-1/0/0 ether-options 802.3ad ae0
+set interfaces xe-1/0/1 mtu 9216
+set interfaces xe-1/0/1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces xe-1/0/1 unit 0 family ethernet-switching vlan members V4050
+set interfaces xe-1/0/1 unit 0 family ethernet-switching vlan members V4051
+set interfaces et-1/0/48 ether-options 802.3ad ae1
+set interfaces et-1/0/49 ether-options 802.3ad ae1
+set interfaces ae0 description "LAG to 4500-191"
+set interfaces ae0 mtu 9216
+set interfaces ae0 aggregated-ether-options lacp active
+set interfaces ae0 aggregated-ether-options lacp periodic fast
+set interfaces ae0 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae0 unit 0 family ethernet-switching vlan members all
+set interfaces ae1 description "ESI 22:22 to POD1 Spine"
+set interfaces ae1 mtu 9216
+set interfaces ae1 aggregated-ether-options lacp active
+set interfaces ae1 aggregated-ether-options lacp periodic fast
+set interfaces ae1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae1 unit 0 family ethernet-switching vlan members all
+set forwarding-options enhanced-hash-key ecmp-resilient-hash
+set routing-options forwarding-table export load-balance
+set protocols igmp interface all
+set protocols igmp interface xe-0/0/2.0
+set protocols igmp interface ae1.0
+set protocols lldp interface all
+set protocols igmp-snooping vlan all
+set policy-options policy-statement load-balance then load-balance per-packet
+set virtual-chassis preprovisioned
+set virtual-chassis member 0 role routing-engine
+set virtual-chassis member 0 serial-number TA3713470175
+set virtual-chassis member 1 role routing-engine
+set virtual-chassis member 1 serial-number TA3713470300
+set vlans V2030 vlan-id 2030
+set vlans V2031 vlan-id 2031
+set vlans V3001 vlan-id 3001
+set vlans V3002 vlan-id 3002
+set vlans V3003 vlan-id 3003
+set vlans V3004 vlan-id 3004
+set vlans V3005 vlan-id 3005
+set vlans V3006 vlan-id 3006
+set vlans V3007 vlan-id 3007
+set vlans V3008 vlan-id 3008
+set vlans V3009 vlan-id 3009
+set vlans V3010 vlan-id 3010
+set vlans V4050 vlan-id 4050
+set vlans V4051 vlan-id 4051
+set vlans VDEV vlan-id 2050
+set vlans VPROD vlan-id 2051

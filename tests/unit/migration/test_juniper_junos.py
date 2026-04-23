@@ -551,6 +551,43 @@ class TestRenderInterfaces:
         assert "10.0.1.1/24" in out
         assert out.index("10.0.0.1/24") < out.index("10.0.1.1/24")
 
+    def test_render_bare_interface_emits_placeholder(self):
+        """Regression guard for the bare-interface round-trip bug
+        surfaced by the ksator EX4550 fixture (GAP 3).
+
+        Junos parse creates an interface entry for every
+        ``set interfaces <name> ...`` line seen — including lines
+        whose trailing tokens are all Tier-3 grammar (e.g.
+        ``unit 0 family ethernet-switching ...``) that the canonical
+        tree can't carry.  Those interfaces end up with no
+        description, no IP, enabled=True — nothing renderable.
+
+        Before the fix: render dropped them silently, so the
+        interface count shrank on round-trip and parse(render(tree))
+        was not stable.
+
+        After the fix: render emits ``set interfaces <name>`` as a
+        placeholder declaration so the interface survives re-parse.
+        """
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="xe-0/0/0",
+                    description="",
+                    enabled=True,
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        assert "set interfaces xe-0/0/0\n" in rendered or (
+            rendered.rstrip().endswith("set interfaces xe-0/0/0")
+        )
+        # Round-trip stability.
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.interfaces) == 1
+        assert reparsed.interfaces[0].name == "xe-0/0/0"
+
 
 class TestRenderVlans:
     def test_render_named_vlan(self):

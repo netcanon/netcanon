@@ -737,6 +737,39 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] ARISTA + JUNOS BEST_EFFORT PROMOTION (GAP 3):
+    # Adds 3 real-capture fixtures closing the ≥2-version gap for
+    # both arista_eos and juniper_junos:
+    #   tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt
+    #     — EOS-4.23.0.1F vEOS EVPN leaf (Apache-2.0, batfish/lab-validation)
+    #   tests/fixtures/real/junos/ksator_labmgmt_qfx5100_junos173.set
+    #     — Junos 17.3R1.10 QFX5100 (MIT, ksator/lab_management)
+    #   tests/fixtures/real/junos/ksator_labmgmt_ex4550_junos151.set
+    #     — Junos 15.1R6.7 EX4550 (MIT, ksator/lab_management)
+    #
+    # arista_eos: certainty experimental → best_effort (2 EOS majors)
+    # juniper_junos: certainty experimental → best_effort (3 Junos majors)
+    #
+    # 2 real bugs surfaced + fixed:
+    #   * Arista render dropped channel-group lines on LAG member
+    #     Ethernet interfaces → round-trip lost all 5 MLAG Port-
+    #     Channels on the EVPN fixture.  Regression tests:
+    #     test_render_lag_member_emits_channel_group +
+    #     test_render_lag_member_mode_normalised.
+    #   * Junos render dropped bare interfaces (no description / no
+    #     IP / enabled=True) → round-trip shrank interface count on
+    #     the EX4550 fixture where every trunk port's only attributes
+    #     were Tier-3 (ethernet-switching port-mode trunk + vlan
+    #     members).  Regression test:
+    #     test_render_bare_interface_emits_placeholder.
+    #
+    # Promotion to `certified` still requires:
+    #   * Arista: ≥1 more real capture from a 3rd EOS major
+    #     (4.25+ / 4.27+ / 4.30+) + GAP 1 EVPN-VXLAN codec wire-up
+    #   * Junos: ≥2 more real captures from newer majors (20.x /
+    #     21.x / 22.x / 23.x LTS) + GAP 4 routing-instances +
+    #     apply-groups inheritance
+
 [SHIPPED] JUNIPER JUNOS RENDER-SIDE v2a (flat set-form, GAP 2):
     # Promotes juniper_junos from direction=parse_only to
     # direction=bidirectional.  Render emits flat set-form commands

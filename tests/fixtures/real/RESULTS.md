@@ -416,31 +416,36 @@ designed to catch.
 
 **Codec:** `netconfig.migration.codecs.arista_eos.AristaEOSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `experimental` — first real capture just landed; promotion to `best_effort` after a second real fixture from a different EOS version.
+**Certainty:** `best_effort` — two real captures across two EOS majors (4.22 + 4.23), both round-trip stable.
 
 ### Coverage matrix
 
 | Fixture | Lines | hostname | dns | interfaces | vlans | routes | users | snmp | Notes |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `ksator_dcs_7150s64_eos4224.txt` | 256 | 1 | 1 | 66 | 0 | 1 | 5 | 1 | Real **DCS-7150S-64-CL** `show running-config` on **EOS 4.22.4M-2GB**.  52 × `Ethernet<N>` + 16 × QSFP-breakout `Ethernet<N>/<M>` + `Loopback0` + `Management1`; mix of `username ... nopassword` / `secret sha512 $6$` / `secret 5 $1$` across 5 admins; `snmp-server community public ro` + `private rw` (first wins); `spanning-tree mode mstp` + `management api http-commands` + `daemon TerminAttr` all parse-and-ignore. |
+| `batfish_labval_dc1_leaf2a_eos4230.txt` | 429 | 1 | 0 | 40 | 15 | 0 | 0 | 0 | Real **DC1-LEAF2A** (vEOS EVPN leaf, from Arista's EVPN L3 Design Guide lab validation) on **EOS-4.23.0.1F**.  DC-fabric kitchen-sink: MLAG peer-link + MLAG across 5 Port-Channels (`channel-group` 3/6/7/10/11), VXLAN1 overlay (`interface Vxlan1` + `vxlan source-interface Loopback0` + per-VNI bindings — currently parse-and-ignore pending GAP 1 codec wire-up), 15 tenant VLANs (zones 110-4094), `router bgp 65102` + EVPN address-family (parse-and-ignore), VRF definitions (`Tenant_A_OP_Zone` + `WEB_Zone`), `interface Vlan3009` with VARP virtual-router MAC, 40 interfaces spanning Ethernet1-11 + Port-Channel3/6/7/10/11 + Loopback0/1 + Management1. |
 
 ### Findings
 
-**Bugs surfaced + fixed during codec v1 development:**
+**Bugs surfaced + fixed during codec v1 development (EOS 4.22 ksator fixture):**
 
 1. **Username-regex newline bleed.** The `\s+` whitespace matcher inside the optional ``pwmode`` alternation of the ``username`` parse regex consumed `\nusername` from the next line on multi-user blocks — causing cvp-infra (and any user whose preceding row ended with a `secret sha512 $6$...` hash) to disappear from finditer.  Fixed by switching every intra-line whitespace matcher to `[^\S\n]+` (non-newline whitespace).  Regression test: `TestParseUsers::test_multiple_users_no_line_bleed`.
 
 2. **Render hash-delimiter drift.** The canonical-to-render path was emitting `secret sha512:$6$...` (colon separator — internal canonical form) instead of `secret sha512 $6$...` (space separator — EOS wire format).  Re-parse of rendered output then failed to match the two-token `secret <alg> <hash>` shape, dropping password info on round-trip.  Fixed to `.partition(":")` the tail of the canonical `arista:sha512:$6$...` string into `alg` + `hash` and emit space-separated.  Regression test: `TestRender::test_render_user_with_hash_roundtrips`.
 
-Both bugs found by round-tripping the ksator fixture — parse → render → parse divergence surfaced missing users.  Textbook justification for the real-capture harness.
+**Bug surfaced + fixed by the EOS 4.23 batfish EVPN fixture (GAP 3):**
+
+3. **LAG render dropped channel-group lines.** Render emitted `interface Port-ChannelN` stubs but did NOT emit the matching `channel-group N mode <mode>` on the member Ethernet interfaces.  Arista LAGs (like Cisco IOS) are synthesised at parse time from `channel-group` lines on the child side; with nothing on that side in the rendered output, re-parse produced zero LAGs even when the canonical tree carried them.  Round-trip lost all 5 MLAG Port-Channels on the batfish EVPN capture.  Fixed by building a `lag_mode_by_name` lookup from `tree.lags` at render top and emitting `channel-group N mode <mode>` on interfaces whose `lag_member_of` is populated, with canonical-to-EOS mode normalisation (`static` → `on`, `passive` → `passive`, else `active`).  Regression tests: `TestRender::test_render_lag_member_emits_channel_group` + `TestRender::test_render_lag_member_mode_normalised`.
+
+All three bugs found by round-tripping real fixtures — parse → render → parse divergence surfaced the missing data.  Textbook justification for the real-capture harness.
 
 ### Certification decision
 
-**Ships at `experimental`** (not `best_effort` — needs ≥1 more real capture from a different EOS version).  The ksator fixture parses + round-trips clean after the two bugs fixed above; 45 unit tests + cross-codec mesh tests all pass.  Arista grammar is a deliberate IOS dialect so cross-vendor rename pairing with Cisco IOS-XE is expected to be the strongest — the port-name identity bridge auto-drops stack + module indices when translating Cisco `GigabitEthernet1/0/24` → Arista `Ethernet24` (documented collision trade-off).
+**Promotes to `best_effort`.**  Two real captures from two different EOS majors (4.22 + 4.23) both round-trip cleanly after the three bugs above.  The EOS 4.23 fixture is a DC-fabric EVPN leaf that stresses LAG grammar, VRF definitions, VARP virtual-router MAC, and 15-VLAN allowed-lists — grammar surface the synthetic tests + ksator fixture didn't exercise.
 
-Promotion path:
-  * `best_effort` — ≥1 more real fixture (EOS 4.25+ / 4.27+ / 4.30+)
-  * `certified` — ≥3 real fixtures from ≥2 EOS versions, all round-trip clean
+Promotion path to `certified`:
+  * ≥1 more real fixture from a 3rd EOS major (ideally 4.25+ / 4.27+ / 4.30+) so the codec has proven stability across ≥3 versions
+  * Plus the GAP 1 EVPN-VXLAN codec wire-up (currently parse-and-ignore, declared Unsupported); once Arista parses + renders VXLAN VNIs + EVPN Type-5, the EVPN leaf fixture will exercise the intended semantic path rather than the tolerance path
 
 ---
 
@@ -448,21 +453,31 @@ Promotion path:
 
 **Codec:** `netconfig.migration.codecs.juniper_junos.JunosCodec`
 **Direction:** `bidirectional` *(v2a — flat set-form render, no apply-groups; v2b apply-groups inheritance deferred)*
-**Certainty:** `experimental` — first real capture just landed; still needs more captures + render-side hardening before promotion.  v1 also parses set-form only, block-form reserved for a follow-up.
+**Certainty:** `best_effort` — three real captures across three Junos majors (15.1 + 17.3 + 18.4), all round-trip stable.  v1 parses set-form only; block-form reserved for a follow-up.
 
 ### Coverage matrix
 
 | Fixture | Lines | hostname | interfaces | vlans | routes | users | snmp | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `buraglio_netlab_junos184.set` | 28 | 1 | 2 | 0 | 0 | 0 | 0 | Real **Junos 18.4R1-S1.1** set-form from ES.net netlab-ns demo.  em0 + lo0 with IPv4 addresses + IPv6/ISO/MPLS families parse-and-ignore.  Root-authentication parse-and-ignore (not a user declaration).  BGP / IS-IS / MPLS / LLDP / topology-export all exercise the parse-tolerance path. |
+| `ksator_labmgmt_qfx5100_junos173.set` | 106 | 0 | 11 | 16 | 0 | 0 | 0 | Real **Junos 17.3R1.10** set-form from ksator/lab_management (MIT, (c) Juniper Networks 2018).  QFX5100 DC access/leaf switch: `ae0`/`ae1` aggregated-ethernet LAGs, 2× `et-0/0/48-49` 40G uplinks, 16 `set vlans V<N>` declarations, `apply-groups POC_Lab` inheritance pattern (host-name lives under `set groups POC_Lab system host-name` — parse-and-ignore until v2b), RADIUS + SSH.  Hostname shows as empty because the `set groups` apply-groups path isn't wired yet. |
+| `ksator_labmgmt_ex4550_junos151.set` | 52 | 0 | 3 | 6 | 0 | 0 | 0 | Real **Junos 15.1R6.7** set-form from ksator/lab_management.  EX4550 campus/DC access switch with 3× `xe-0/0/0-2` trunk ports (`unit 0 family ethernet-switching port-mode trunk` + `vlan members`), 6 `set vlans V<N>`, `chassis aggregated-devices ethernet device-count 2`, same apply-groups pattern.  Oldest Junos major in the corpus. |
 
 ### Findings
 
-First fixture; no bugs surfaced.  Parse-tolerance validated by five distinct `set protocols` / `set routing-options` stanza types all silently dropping without crashing.
+**Bug surfaced + fixed by the EX4550 + QFX5100 fixtures (GAP 3):**
+
+1. **Render dropped bare interfaces.** The v2a render loop emitted interface-level `set` lines (description / disable / family inet address) only when the canonical interface had at least one renderable attribute.  The Junos parse side creates an interface entry for every `set interfaces <name> ...` line seen — including lines whose trailing tokens are all Tier-3 grammar (e.g. `unit 0 family ethernet-switching port-mode trunk` + `vlan members V<N>`).  Those interfaces landed in the canonical tree with no description, no IP, enabled=True — no renderable attributes — so render dropped them silently and round-trip showed the interface count shrinking.  Fixed by emitting a bare `set interfaces <name>` placeholder line when no other attributes are present, which the parse side accepts as a no-op declaration keeping the tree stable.  Regression test: `TestRenderInterfaces::test_render_bare_interface_emits_placeholder`.
+
+Parse-tolerance validated across three fixtures covering `set protocols bgp / isis / mpls / lldp / topology-export / vstp`, `set routing-options autonomous-system`, `set groups <name> ...` + `set apply-groups <name>`, `set chassis aggregated-devices`, `set system root-authentication encrypted-password`, `set system services ssh`, `set system radius-server`, `set system login user ... authentication ssh-rsa` — all silently drop without crashing.
 
 ### Certification decision
 
-**Ships at `experimental`.**  Needs ≥2 more real captures (ideally one block-form-to-set-form exported from a different Junos major version) to move to `best_effort`.  Render-side promoted to `bidirectional` in GAP 2 (v2a — flat set-form, no apply-groups); render round-trips the buraglio fixture cleanly and is exercised by `test_real_captures.py`'s round-trip stability check.  Apply-groups inheritance + routing-instances are v2b follow-up (GAP 4).
+**Promotes to `best_effort`.**  Three real captures from three different Junos majors (15.1 + 17.3 + 18.4) all round-trip cleanly after the bare-interface render fix.  GAP 3 closed the promotion bar (needed ≥2 more captures from the previous experimental state).
+
+Promotion path to `certified`:
+  * ≥2 more real captures — ideally from newer majors (Junos 20.x / 21.x / 22.x / 23.x LTS).  Public ``.set`` corpora are thin; user contributions remain the realistic path.
+  * Plus the GAP 4 routing-instances + apply-groups wire-up (currently parse-and-ignore for both); once codec-level apply-groups inheritance is implemented, the hostname field will populate correctly from fixtures that declare host-name under `set groups <name> system host-name` + `set apply-groups <name>` (both ksator fixtures do this today).
 
 Strategic:
   * Junos v1 unlocks **migration FROM Junos** — the primary customer direction (Juniper-core → Cisco/Arista replacement in DC refreshes, SP-to-enterprise moves).
@@ -480,9 +495,9 @@ Strategic:
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **arista_eos** | **1** real | **1** (EOS 4.22.4M) | 2 (username regex line-bleed; render hash-delimiter drift) | **experimental** 🧪 | needs ≥1 more real capture from a different EOS version |
-| **juniper_junos** | **1** real | **1** (Junos 18.4R1) | 0 | **experimental** 🧪 | needs ≥2 more real captures (render-side shipped in GAP 2 v2a — flat set-form, no apply-groups) |
-| **TOTAL** | **31** | — | **12** | — | — |
+| **arista_eos** | **2** real | **2** (EOS 4.22.4M + 4.23.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **best_effort** 🟡 | needs ≥1 more real capture from a 3rd EOS major + GAP 1 EVPN-VXLAN codec wire-up |
+| **juniper_junos** | **3** real | **3** (Junos 15.1R6 + 17.3R1 + 18.4R1) | 1 (render dropped bare interfaces) | **best_effort** 🟡 | needs ≥2 more real captures from newer majors (20.x / 21.x / 22.x / 23.x) + GAP 4 routing-instances + apply-groups |
+| **TOTAL** | **34** | — | **16** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our
