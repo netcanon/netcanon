@@ -7,6 +7,64 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (GAP 2 — Juniper Junos render-side v2a [flat set-form, no apply-groups])
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — render
+  implementation replaces the previous ``NotImplementedError`` stub.
+  Direction promoted from ``parse_only`` to ``bidirectional``.
+  Codec remains ``experimental`` tier pending additional real
+  captures (see RESULTS.md for promotion bar).
+- Render emits flat set-form commands in a deterministic order —
+  system / login / interfaces / vlans / routing-options / snmp —
+  so repeated renders of the same tree produce byte-identical
+  output (load-bearing for diff-based deploy + snapshot compare).
+- Quoting strategy mirrors what Junos's ``| display set`` emits
+  natively: bare tokens for simple strings, double-quoted wrappers
+  for strings containing whitespace or shell-special characters,
+  backslash-escaping for embedded quotes.  Two internal helpers
+  (``_quote_if_needed`` for identifiers, ``_quote_always`` for
+  free-text fields) split the two conventions.
+- Hash round-trip: passwords stored under the ``junos:<hash>``
+  vendor tag (added by parse) get the prefix stripped on render,
+  producing the operator-facing ``encrypted-password "<hash>"``
+  form.  Cross-vendor hashes (no ``junos:`` prefix) emit verbatim.
+- Role inference for rendered ``class``: explicit ``role`` field
+  wins; otherwise privilege-level ≥15 → ``super-user``, ≥5 →
+  ``operator``, else ``read-only``.  Preserves cross-vendor
+  round-trips that drop role during codec-to-codec translation.
+- Connected/blackhole static routes (empty gateway) are skipped on
+  render — Junos flat set-form requires a ``next-hop``; we'd rather
+  drop them than emit invalid input.  Logged as a future
+  enrichment if demand arrives.
+- Apply-groups inheritance (``set groups <name> ... / set
+  apply-groups <name>``) is NOT emitted in v2a.  Output is verbose
+  but syntactically complete.  v2b (deferred, bundleable with
+  GAP 4) will detect repeated sub-trees and collapse them for
+  operator readability.
+
+### Tests (GAP 2)
+
+- ``tests/unit/migration/test_juniper_junos.py`` — render test
+  classes added alongside existing parse tests:
+  ``TestRenderBasic`` (empty tree, hostname-only, determinism),
+  ``TestRenderInterfaces`` (description quoting incl. embedded
+  quotes, disabled flag, multi-IP, loopback), ``TestRenderVlans``
+  (named, synthetic ``VLAN-<id>`` fallback, space-quoted name),
+  ``TestRenderUsers`` (super-user/read-only from privilege,
+  role-wins-over-privilege, hash vendor-tag stripping, cross-
+  vendor hash preservation), ``TestRenderRouting`` (static route
+  + connected-route skip), ``TestRenderSnmp`` (community,
+  location, contact, trap-hosts), ``TestRenderRoundTrip``
+  (hostname, sample-input round-trip, user-with-hash round-trip,
+  special-char description round-trip), ``TestRenderCodecMetadata``
+  (direction-promoted-to-bidirectional, render idempotence).
+- Previously-skipped real-capture round-trip tests for Junos
+  (``test_real_captures.py``) now run and pass against the
+  buraglio fixture — Junos is no longer a parse_only skip case.
+- Previously-skipped ``cross_mesh`` cases that filtered on
+  ``direction == "bidirectional"`` now include Junos, expanding
+  the per-pane rename-overrides smoke surface.
+
 ### Added (GAP 1 — EVPN-VXLAN canonical schema [ship-before-wire])
 
 - `CanonicalVxlan` + `CanonicalEvpnType5Route` models in

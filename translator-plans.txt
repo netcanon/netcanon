@@ -737,6 +737,31 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] JUNIPER JUNOS RENDER-SIDE v2a (flat set-form, GAP 2):
+    # Promotes juniper_junos from direction=parse_only to
+    # direction=bidirectional.  Render emits flat set-form commands
+    # in deterministic order (system / login / interfaces / vlans /
+    # routing-options / snmp) so repeated renders produce byte-
+    # identical output.  Junos-style quoting: bare for simple tokens,
+    # double-quoted for strings containing whitespace or shell
+    # specials, backslash-escaped embedded quotes.  Hashes with
+    # ``junos:`` vendor-tag prefix are stripped on render so
+    # parse(render(tree)) is a true round-trip.
+    #
+    # What's NOT in v2a (deferred to v2b):
+    #   * apply-groups inheritance detection + collapse
+    #   * routing-instances (richer VRF semantics than Cisco ip vrf)
+    #   * per-unit sub-interfaces (unit 1+)
+    #   * block-form (curly-brace) RENDER (v2a emits set-form only)
+    #
+    # Covered by tests/unit/migration/test_juniper_junos.py
+    # (render test classes added alongside existing parse tests)
+    # plus test_real_captures.py round-trip stability on the
+    # buraglio_netlab_junos184.set fixture (previously skipped).
+    #
+    # Codec stays at certainty=experimental — promotion to
+    # best_effort still needs ≥2 more real captures (GAP 3).
+
 [SHIPPED] EVPN-VXLAN CANONICAL SCHEMA (ship-before-wire, GAP 1):
     # Adds CanonicalVxlan + CanonicalEvpnType5Route to
     # netconfig/migration/canonical/intent.py plus vxlan_vnis[] +

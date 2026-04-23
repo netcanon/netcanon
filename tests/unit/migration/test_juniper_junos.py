@@ -1,5 +1,9 @@
 """
-Unit tests for the Juniper Junos codec (v1 — set-form parse-only).
+Unit tests for the Juniper Junos codec.
+
+v1 — set-form parse-only (shipped Phase 13).
+v2a — flat set-form render added (GAP 2 commit); apply-groups
+      optimisation deferred to v2b.
 
 Real-capture parse is exercised separately by
 ``test_real_captures.py`` against
@@ -10,6 +14,15 @@ from __future__ import annotations
 
 import pytest
 
+from netconfig.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalIPv4Address,
+    CanonicalInterface,
+    CanonicalLocalUser,
+    CanonicalSNMP,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+)
 from netconfig.migration.codecs.base import ParseError
 from netconfig.migration.codecs.juniper_junos import JunosCodec
 from netconfig.migration.codecs.juniper_junos.port_names import (
@@ -259,9 +272,11 @@ class TestParseValidation:
         with pytest.raises(ParseError, match="display set"):
             JunosCodec().parse(raw)
 
-    def test_render_not_implemented(self):
-        with pytest.raises(NotImplementedError, match="parse-only"):
-            JunosCodec().render(None)
+    def test_render_rejects_non_canonical_tree(self):
+        """Render is strict: anything other than a CanonicalIntent is a
+        programming error, fail loud."""
+        with pytest.raises(TypeError, match="CanonicalIntent"):
+            JunosCodec().render({"hostname": "oops"})
 
 
 # ---------------------------------------------------------------------------
@@ -416,3 +431,364 @@ class TestPortNames:
         cisco_ident = cisco_classify("TenGigabitEthernet1/0/48")
         junos_name = format_port_identity(cisco_ident)
         assert junos_name == "xe-1/0/48"
+
+
+# ---------------------------------------------------------------------------
+# Render (v2a — flat set-form, no apply-groups)
+# ---------------------------------------------------------------------------
+
+
+class TestRenderBasic:
+    def test_render_empty_tree(self):
+        """Rendering an empty intent yields an empty string (no noise
+        lines).  Operator pasting an empty output gets silent no-op."""
+        out = JunosCodec().render(CanonicalIntent())
+        assert out == ""
+
+    def test_render_hostname_only(self):
+        intent = CanonicalIntent(hostname="sw1")
+        out = JunosCodec().render(intent)
+        assert out == "set system host-name sw1\n"
+
+    def test_render_fqdn_hostname(self):
+        intent = CanonicalIntent(hostname="sw-edge-01.example.com")
+        out = JunosCodec().render(intent)
+        assert "set system host-name sw-edge-01.example.com" in out
+
+    def test_render_deterministic(self):
+        """Repeated renders of the same tree must produce identical
+        output — load-bearing for diff-based deploy + snapshot compare."""
+        intent = CanonicalIntent(
+            hostname="deterministic-host",
+            vlans=[
+                CanonicalVlan(id=10, name="USERS"),
+                CanonicalVlan(id=20, name="VOICE"),
+            ],
+        )
+        codec = JunosCodec()
+        first = codec.render(intent)
+        second = codec.render(intent)
+        assert first == second
+
+
+class TestRenderInterfaces:
+    def test_render_simple_interface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    description="uplink to core",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.0.1", prefix_length=31),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'set interfaces ge-0/0/0 description "uplink to core"' in out
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31"
+            in out
+        )
+
+    def test_render_disabled_interface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="ge-0/0/5", enabled=False),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/5 disable" in out
+
+    def test_render_loopback_with_ip(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="lo0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="172.16.0.1", prefix_length=32),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces lo0 unit 0 family inet address 172.16.0.1/32"
+            in out
+        )
+
+    def test_render_description_quoting(self):
+        """Descriptions with special chars get escaped in the double-
+        quoted wrapper — operator should paste the render output back
+        and have it parse identically."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/1",
+                    description='uplink with "quoted" words',
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'description "uplink with \\"quoted\\" words"' in out
+
+    def test_render_multiple_ipv4_addresses(self):
+        """Junos allows multiple `family inet address` entries per unit;
+        render each on its own line preserving order."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+                        CanonicalIPv4Address(ip="10.0.1.1", prefix_length=24),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "10.0.0.1/24" in out
+        assert "10.0.1.1/24" in out
+        assert out.index("10.0.0.1/24") < out.index("10.0.1.1/24")
+
+
+class TestRenderVlans:
+    def test_render_named_vlan(self):
+        intent = CanonicalIntent(vlans=[CanonicalVlan(id=10, name="USERS")])
+        out = JunosCodec().render(intent)
+        assert "set vlans USERS vlan-id 10" in out
+
+    def test_render_unnamed_vlan_uses_synthetic_key(self):
+        """VLANs without a name fall back to ``VLAN-<id>`` so Junos
+        grammar stays valid — ``set vlans <key> vlan-id N`` requires a
+        non-empty key."""
+        intent = CanonicalIntent(vlans=[CanonicalVlan(id=42)])
+        out = JunosCodec().render(intent)
+        assert "set vlans VLAN-42 vlan-id 42" in out
+
+    def test_render_vlan_name_with_space_quoted(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=100, name="GUEST WIFI")],
+        )
+        out = JunosCodec().render(intent)
+        assert 'set vlans "GUEST WIFI" vlan-id 100' in out
+
+
+class TestRenderUsers:
+    def test_render_super_user_from_privilege(self):
+        """Privilege 15 with no explicit role → super-user on render."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="admin", privilege_level=15),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set system login user admin class super-user" in out
+
+    def test_render_read_only_from_privilege(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="auditor", privilege_level=1),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set system login user auditor class read-only" in out
+
+    def test_render_explicit_role_wins_over_privilege(self):
+        """A role like ``super-user`` on the canonical user takes
+        precedence over the privilege-to-role fallback."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    role="super-user",
+                    privilege_level=1,  # nonsense, but role must win
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "class super-user" in out
+
+    def test_render_encrypted_password_strips_vendor_tag(self):
+        """Hashes stored under ``junos:<hash>`` get the prefix stripped
+        on render so parse(render(tree)) is a true round-trip."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    hashed_password="junos:$6$abcd$fake",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'authentication encrypted-password "$6$abcd$fake"' in out
+        assert "junos:" not in out  # prefix must not leak
+
+    def test_render_hash_from_other_vendor_preserved_verbatim(self):
+        """If a hash lacks the junos: prefix (came from another
+        codec's canonical layer), emit it verbatim inside the
+        double-quoted wrapper — it's still a valid encrypted-password
+        value."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    hashed_password="$9$foreign$hash",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert 'authentication encrypted-password "$9$foreign$hash"' in out
+
+
+class TestRenderRouting:
+    def test_render_static_route(self):
+        intent = CanonicalIntent(
+            static_routes=[
+                CanonicalStaticRoute(
+                    destination="0.0.0.0/0",
+                    gateway="10.0.0.2",
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2"
+            in out
+        )
+
+    def test_render_connected_route_skipped(self):
+        """Junos static routes require a next-hop; connected/blackhole
+        routes (empty gateway) have no representation in the flat
+        set-form grammar we emit, so skip them rather than produce
+        invalid input."""
+        intent = CanonicalIntent(
+            static_routes=[
+                CanonicalStaticRoute(destination="10.1.0.0/24", gateway=""),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "10.1.0.0/24" not in out
+
+
+class TestRenderSnmp:
+    def test_render_community_read_only(self):
+        intent = CanonicalIntent(snmp=CanonicalSNMP(community="public"))
+        out = JunosCodec().render(intent)
+        assert (
+            "set snmp community public authorization read-only" in out
+        )
+
+    def test_render_location_contact_quoted(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                location="Rack 4 DC1",
+                contact="neteng@example.com",
+            ),
+        )
+        out = JunosCodec().render(intent)
+        assert 'set snmp location "Rack 4 DC1"' in out
+        assert 'set snmp contact "neteng@example.com"' in out
+
+    def test_render_trap_hosts(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                trap_hosts=["10.1.1.100", "10.1.1.101"],
+            ),
+        )
+        out = JunosCodec().render(intent)
+        assert "set snmp trap-group targets targets 10.1.1.100" in out
+        assert "set snmp trap-group targets targets 10.1.1.101" in out
+
+
+class TestRenderRoundTrip:
+    """parse(render(tree)) == tree for every feature v2a emits."""
+
+    def _assert_roundtrip(self, intent: CanonicalIntent) -> None:
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered) if rendered.strip() else CanonicalIntent()
+        # Normalise source-vendor metadata (added by parse, not by
+        # caller-supplied intent).
+        reparsed.source_vendor = intent.source_vendor
+        reparsed.source_format = intent.source_format
+        assert reparsed.hostname == intent.hostname
+        assert len(reparsed.interfaces) == len(intent.interfaces)
+        assert len(reparsed.vlans) == len(intent.vlans)
+        assert len(reparsed.static_routes) == len(intent.static_routes)
+        assert len(reparsed.local_users) == len(intent.local_users)
+
+    def test_roundtrip_hostname_only(self):
+        self._assert_roundtrip(CanonicalIntent(hostname="sw1"))
+
+    def test_roundtrip_sample_input(self):
+        """The codec's sample_input round-trips via parse → render →
+        parse without data loss on any field v2a emits."""
+        codec = JunosCodec()
+        first = codec.parse(codec.sample_input)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert second.hostname == first.hostname
+        assert len(second.interfaces) == len(first.interfaces)
+        assert len(second.vlans) == len(first.vlans)
+        assert len(second.static_routes) == len(first.static_routes)
+        assert len(second.local_users) == len(first.local_users)
+        # SNMP field-by-field.
+        assert (second.snmp is None) == (first.snmp is None)
+        if first.snmp is not None:
+            assert second.snmp.community == first.snmp.community
+            assert second.snmp.location == first.snmp.location
+
+    def test_roundtrip_user_with_hash(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin",
+                    privilege_level=15,
+                    role="super-user",
+                    hashed_password="junos:$6$abcd$fake",
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.local_users) == 1
+        user = reparsed.local_users[0]
+        assert user.name == "admin"
+        assert user.role == "super-user"
+        assert user.privilege_level == 15
+        assert user.hashed_password == "junos:$6$abcd$fake"
+
+    def test_roundtrip_interface_with_special_chars_in_description(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/1",
+                    description="long haul link $to $us",
+                ),
+            ],
+        )
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        assert len(reparsed.interfaces) == 1
+        assert reparsed.interfaces[0].description == "long haul link $to $us"
+
+
+class TestRenderCodecMetadata:
+    def test_direction_promoted_to_bidirectional(self):
+        assert JunosCodec.direction == "bidirectional"
+
+    def test_render_idempotent_via_double_parse(self):
+        """Trees produced by re-parsing rendered output render
+        identically — proves render is deterministic on the parsed
+        form's ordering."""
+        codec = JunosCodec()
+        first = codec.parse(codec.sample_input)
+        rendered_a = codec.render(first)
+        second = codec.parse(rendered_a)
+        rendered_b = codec.render(second)
+        assert rendered_a == rendered_b

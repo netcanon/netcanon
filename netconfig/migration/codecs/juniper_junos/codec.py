@@ -17,10 +17,19 @@ transformation ``block-form → set-form`` is a separate well-defined
 pass that can plug in ahead of this set-form parser without touching
 any of the apply functions below.
 
-Render is NOT implemented (direction=parse_only).  Junos migrations
-are predominantly "FROM Junos TO something else"; render-side Junos
-is higher-complexity (commit semantics, apply-groups, candidate
-config) and warrants a dedicated v2 pass.
+Render strategy (v2a / flat set-form, no apply-groups):
+
+The codec emits flat Junos ``set``-form commands in a deterministic
+order (system / login / interfaces / vlans / routing-options / snmp)
+that round-trips through the v1 parser.  Strings containing spaces
+or shell-special characters are double-quoted per Junos convention.
+Hashes stored under the ``junos:<hash>`` vendor tag get their prefix
+stripped on render so parse(render(tree)) is a true round-trip.
+
+Apply-groups inheritance (``set groups <name> ... / set apply-groups
+<name>``) is NOT emitted in v2a — the output is verbose but
+syntactically complete.  v2b (deferred) will detect repeated sub-
+trees and collapse them via apply-groups for operator readability.
 """
 
 from __future__ import annotations
@@ -64,7 +73,7 @@ class JunosCodec(CodecBase):
     name: ClassVar[str] = "juniper_junos"
     version_hint: ClassVar[str | None] = "Junos 18.x+"
     input_format: ClassVar[str] = "cli-junos-set"
-    direction: ClassVar[str] = "parse_only"
+    direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "experimental"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
@@ -260,16 +269,144 @@ class JunosCodec(CodecBase):
         return intent
 
     # -----------------------------------------------------------------
-    # Render — NOT IMPLEMENTED in v1
+    # Render (v2a — flat set-form, no apply-groups)
     # -----------------------------------------------------------------
 
     def render(self, tree: Any) -> str:
-        raise NotImplementedError(
-            "juniper_junos: render is parse-only in v1.  Junos "
-            "render-side requires commit / apply-groups / candidate-"
-            "config handling that warrants a dedicated follow-up "
-            "commit.  Migrate FROM Junos TO another vendor instead."
+        """Render a :class:`CanonicalIntent` to Junos ``set``-form text.
+
+        Emits commands in a deterministic order so repeated renders of
+        the same tree produce byte-identical output (important for
+        diff-based deployment + snapshot compare).
+
+        Order:
+            1. ``set system host-name``
+            2. ``set system login user ...`` (role + encrypted-password)
+            3. ``set interfaces <name> description / disable / unit 0
+               family inet address``
+            4. ``set vlans <NAME> vlan-id``
+            5. ``set routing-options static route``
+            6. ``set snmp community / location / contact / trap-group
+               targets``
+
+        Strings with spaces or shell-special chars are double-quoted;
+        bare tokens stay unquoted.  Hashes tagged ``junos:<hash>`` get
+        their prefix stripped so parse(render(tree)) round-trips.
+        """
+        if not isinstance(tree, CanonicalIntent):
+            raise TypeError(
+                "juniper_junos.render: expected CanonicalIntent, got "
+                f"{type(tree).__name__}"
+            )
+
+        out: list[str] = []
+
+        # --- system ---
+        if tree.hostname:
+            out.append(f"set system host-name {_quote_if_needed(tree.hostname)}")
+
+        # --- login users ---
+        for user in tree.local_users:
+            if user.role:
+                role = user.role
+            elif user.privilege_level >= 15:
+                role = "super-user"
+            elif user.privilege_level >= 5:
+                role = "operator"
+            else:
+                role = "read-only"
+            out.append(
+                f"set system login user {_quote_if_needed(user.name)} "
+                f"class {_quote_if_needed(role)}"
+            )
+            if user.hashed_password:
+                # Strip the ``junos:`` vendor tag on render; canonical
+                # storage prefixes it on parse to mark Junos-sourced
+                # hashes.
+                hsh = user.hashed_password
+                if hsh.startswith("junos:"):
+                    hsh = hsh[len("junos:"):]
+                out.append(
+                    f"set system login user {_quote_if_needed(user.name)} "
+                    f"authentication encrypted-password "
+                    f"{_quote_always(hsh)}"
+                )
+
+        # --- interfaces ---
+        for iface in tree.interfaces:
+            name = iface.name
+            if iface.description:
+                out.append(
+                    f"set interfaces {name} description "
+                    f"{_quote_always(iface.description)}"
+                )
+            if not iface.enabled:
+                out.append(f"set interfaces {name} disable")
+            # IPv4 addresses — emit under unit 0 (v1's convention).
+            for addr in iface.ipv4_addresses:
+                out.append(
+                    f"set interfaces {name} unit 0 family inet "
+                    f"address {addr.ip}/{addr.prefix_length}"
+                )
+
+        # --- vlans ---
+        for vlan in tree.vlans:
+            vlan_key = vlan.name or f"VLAN-{vlan.id}"
+            out.append(
+                f"set vlans {_quote_if_needed(vlan_key)} vlan-id {vlan.id}"
+            )
+
+        # --- routing-options ---
+        for route in tree.static_routes:
+            if not route.gateway:
+                # Junos requires a next-hop for static routes; skip
+                # connected/blackhole entries we can't express.
+                continue
+            out.append(
+                f"set routing-options static route {route.destination} "
+                f"next-hop {route.gateway}"
+            )
+
+        # --- snmp ---
+        if tree.snmp is not None:
+            if tree.snmp.community:
+                out.append(
+                    f"set snmp community "
+                    f"{_quote_if_needed(tree.snmp.community)} "
+                    f"authorization read-only"
+                )
+            if tree.snmp.location:
+                out.append(
+                    f"set snmp location {_quote_always(tree.snmp.location)}"
+                )
+            if tree.snmp.contact:
+                out.append(
+                    f"set snmp contact {_quote_always(tree.snmp.contact)}"
+                )
+            for host in tree.snmp.trap_hosts:
+                # Synthesise a trap-group name keyed by sanitised host
+                # so two trap hosts don't collide.
+                group_name = "targets"
+                out.append(
+                    f"set snmp trap-group {group_name} targets {host}"
+                )
+
+        result = "\n".join(out)
+        if result:
+            result += "\n"
+
+        logger.debug(
+            "juniper_junos rendered: hostname=%r ifaces=%d vlans=%d "
+            "routes=%d users=%d snmp=%s (output=%d chars)",
+            tree.hostname,
+            len(tree.interfaces),
+            len(tree.vlans),
+            len(tree.static_routes),
+            len(tree.local_users),
+            "yes" if tree.snmp else "no",
+            len(result),
         )
+        return result
 
     # -----------------------------------------------------------------
     # iter_xpaths
@@ -546,6 +683,35 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+_QUOTE_NEEDED_RE = re.compile(r"[\s\"';$`\\]")
+
+
+def _quote_if_needed(s: str) -> str:
+    """Junos-style quoting: wrap in double quotes only if the string
+    contains whitespace or shell-special characters.  Mirrors what
+    ``show configuration | display set`` emits natively.
+
+    Returns the input verbatim when no quoting is needed — keeps the
+    output clean for the common case of simple hostnames, interface
+    names, class names.
+    """
+    if not s:
+        return '""'
+    if _QUOTE_NEEDED_RE.search(s):
+        escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return s
+
+
+def _quote_always(s: str) -> str:
+    """Always-quoted variant for free-text fields (description,
+    location, contact, password hash).  Junos tolerates quoted simple
+    strings; operators expect quotes around free-text regardless.
+    """
+    escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
 
 
 def _infer_iface_type(name: str) -> str:

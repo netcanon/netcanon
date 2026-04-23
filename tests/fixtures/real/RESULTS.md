@@ -447,8 +447,8 @@ Promotion path:
 ## juniper_junos
 
 **Codec:** `netconfig.migration.codecs.juniper_junos.JunosCodec`
-**Direction:** `parse_only` *(v1 — render-side Junos deferred due to commit / apply-groups / candidate-config complexity)*
-**Certainty:** `experimental` — first real capture just landed; v1 also parses set-form only, block-form reserved for a follow-up.
+**Direction:** `bidirectional` *(v2a — flat set-form render, no apply-groups; v2b apply-groups inheritance deferred)*
+**Certainty:** `experimental` — first real capture just landed; still needs more captures + render-side hardening before promotion.  v1 also parses set-form only, block-form reserved for a follow-up.
 
 ### Coverage matrix
 
@@ -462,11 +462,12 @@ First fixture; no bugs surfaced.  Parse-tolerance validated by five distinct `se
 
 ### Certification decision
 
-**Ships at `experimental`.**  Needs ≥2 more real captures (ideally one block-form-to-set-form exported from a different Junos major version) to move to `best_effort`.  Render-side is parse-only by design in v1 — migrating TO Junos requires commit / apply-groups / candidate-config handling that warrants a dedicated follow-up commit; render-side promotion to `bidirectional` + `best_effort` is a future phase.
+**Ships at `experimental`.**  Needs ≥2 more real captures (ideally one block-form-to-set-form exported from a different Junos major version) to move to `best_effort`.  Render-side promoted to `bidirectional` in GAP 2 (v2a — flat set-form, no apply-groups); render round-trips the buraglio fixture cleanly and is exercised by `test_real_captures.py`'s round-trip stability check.  Apply-groups inheritance + routing-instances are v2b follow-up (GAP 4).
 
 Strategic:
   * Junos v1 unlocks **migration FROM Junos** — the primary customer direction (Juniper-core → Cisco/Arista replacement in DC refreshes, SP-to-enterprise moves).
-  * Grammar surface that v1 skips: `set groups` / `apply-groups` inheritance, `set routing-instances` (VRF equivalent), `set policy-options` / firewall filters, block-form (curly-brace) input.  Each warrants its own follow-up.
+  * Junos v2a adds **migration TO Junos** — flat set-form output is syntactically complete (operator can paste it into Junos CLI and `commit`); it's more verbose than a seasoned Junos operator would hand-write because apply-groups collapse isn't done yet.
+  * Grammar surface that v2a still skips: `set groups` / `apply-groups` inheritance (v2b), `set routing-instances` (VRF equivalent, v2b/GAP 4), per-unit sub-interfaces (unit 1+), `set policy-options` / firewall filters, block-form (curly-brace) input.  Each warrants its own follow-up.
 
 ---
 
@@ -480,7 +481,7 @@ Strategic:
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
 | **arista_eos** | **1** real | **1** (EOS 4.22.4M) | 2 (username regex line-bleed; render hash-delimiter drift) | **experimental** 🧪 | needs ≥1 more real capture from a different EOS version |
-| **juniper_junos** | **1** real | **1** (Junos 18.4R1) | 0 | **experimental** 🧪 | needs ≥2 more real captures + render-side (follow-up commit) |
+| **juniper_junos** | **1** real | **1** (Junos 18.4R1) | 0 | **experimental** 🧪 | needs ≥2 more real captures (render-side shipped in GAP 2 v2a — flat set-form, no apply-groups) |
 | **TOTAL** | **31** | — | **12** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
