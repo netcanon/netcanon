@@ -61,6 +61,48 @@
                           + '([^A-Za-z0-9/_.-]|$)', 'g');
       text = text.replace(re, '$1' + effective[from] + '$2');
     });
+
+    // VLAN + local-user rename previews — same whole-word
+    // substitution technique.  Scope is strictly RENAMES (drops
+    // require stanza-level removal which isn't safe client-side;
+    // Apply is the authoritative re-render for those).
+    //
+    // Baseline: server already rewrote the text for any entries in
+    // _lastJob.vlan_renames / local_user_renames.  User overrides
+    // are interpreted as "replace the CURRENTLY-EFFECTIVE target
+    // with my chosen value" — same idiom as ports above.
+    function applySubstitutionPreview(userMap, appliedMap) {
+      if (!userMap || typeof userMap !== 'object') return;
+      var subs = {};
+      Object.keys(userMap).forEach(function(src) {
+        var userTarget = userMap[src];
+        if (userTarget === null || userTarget === undefined) return;
+        var srcKey = String(src);
+        var autoTarget = appliedMap && appliedMap[srcKey] !== undefined
+          ? String(appliedMap[srcKey])
+          : (appliedMap && appliedMap[src] !== undefined
+              ? String(appliedMap[src])
+              : srcKey);
+        var tgtStr = String(userTarget);
+        if (autoTarget === tgtStr) return;  // no-op
+        subs[autoTarget] = tgtStr;
+      });
+      Object.keys(subs).forEach(function(from) {
+        var esc = from.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var re = new RegExp('(^|[^A-Za-z0-9/_.-])' + esc
+                            + '([^A-Za-z0-9/_.-]|$)', 'g');
+        text = text.replace(re, '$1' + subs[from] + '$2');
+      });
+    }
+    applySubstitutionPreview(
+      _renameVlanUserMap,
+      _lastJob && _lastJob.vlan_renames,
+    );
+    applySubstitutionPreview(
+      _renameLocalUserMap,
+      _lastJob && _lastJob.local_user_renames,
+    );
+
     preview.textContent = text;
   }
 
@@ -151,6 +193,56 @@
     var userAuto = (_lastJob && _lastJob.local_user_renames)
       ? Object.keys(_lastJob.local_user_renames).length : 0;
 
+    // Collision counts for VLANs + users — parity with the port
+    // collision logic above so collisions in ANY pane disable Apply.
+    // Rationale: feature-parity with ports pane.  Even though the
+    // server auto-merges VLAN + user collisions (union-by-policy),
+    // a collision almost always indicates operator confusion or
+    // typo — better to block Apply and let them explicitly resolve
+    // than to ship silently-merged output.
+    function countCollisions(userMap, autoMap, dropsSet) {
+      if (!userMap && !autoMap) return 0;
+      var hits = {};
+      var seen = new Set();
+      function t(src, tgt) {
+        if (tgt === null || tgt === undefined) return;
+        if (seen.has(src)) return;
+        seen.add(src);
+        hits[tgt] = (hits[tgt] || 0) + 1;
+      }
+      if (userMap) {
+        Object.keys(userMap).forEach(function(s) { t(s, userMap[s]); });
+      }
+      if (autoMap) {
+        Object.keys(autoMap).forEach(function(s) {
+          if (userMap && userMap[s] !== undefined) return;
+          if (dropsSet && dropsSet.has(s)) return;
+          t(s, autoMap[s]);
+        });
+      }
+      var total = 0;
+      Object.keys(hits).forEach(function(tgt) {
+        if (hits[tgt] > 1) total += hits[tgt];
+      });
+      return total;
+    }
+    var vlanAutoDrops = new Set(
+      (_lastJob && _lastJob.vlan_drops) || []
+    );
+    var userAutoDrops = new Set(
+      (_lastJob && _lastJob.local_user_drops) || []
+    );
+    var vlanCollisions = countCollisions(
+      _renameVlanUserMap,
+      _lastJob && _lastJob.vlan_renames,
+      vlanAutoDrops,
+    );
+    var userCollisions = countCollisions(
+      _renameLocalUserMap,
+      _lastJob && _lastJob.local_user_renames,
+      userAutoDrops,
+    );
+
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
     if (drops) html += ' / <span class="mig-rename-summary-drop">'
@@ -163,30 +255,42 @@
     // VLAN-category sub-summary — only surfaces when something
     // VLAN-related is happening, so port-only sessions don't see
     // extra noise.
-    if (vlanAuto || vlanOverrides || vlanDrops) {
+    if (vlanAuto || vlanOverrides || vlanDrops || vlanCollisions) {
       html += ' &middot; <span data-testid="migrate-rename-summary-vlans">'
         + 'VLAN: ' + vlanAuto + ' auto';
       if (vlanOverrides) html += ' / ' + vlanOverrides + ' override'
         + (vlanOverrides > 1 ? 's' : '');
       if (vlanDrops) html += ' / <span class="mig-rename-summary-drop">'
         + vlanDrops + ' drop' + (vlanDrops > 1 ? 's' : '') + '</span>';
+      if (vlanCollisions) html += ' / <span class="mig-rename-summary-collision">'
+        + vlanCollisions + ' collision'
+        + (vlanCollisions > 1 ? 's' : '') + '</span>';
       html += '</span>';
     }
     // Local-users sub-summary — same gate-on-any-state pattern.
-    if (userAuto || userOverrides || userDrops) {
+    if (userAuto || userOverrides || userDrops || userCollisions) {
       html += ' &middot; <span data-testid="migrate-rename-summary-local-users">'
         + 'Users: ' + userAuto + ' auto';
       if (userOverrides) html += ' / ' + userOverrides + ' override'
         + (userOverrides > 1 ? 's' : '');
       if (userDrops) html += ' / <span class="mig-rename-summary-drop">'
         + userDrops + ' drop' + (userDrops > 1 ? 's' : '') + '</span>';
+      if (userCollisions) html += ' / <span class="mig-rename-summary-collision">'
+        + userCollisions + ' collision'
+        + (userCollisions > 1 ? 's' : '') + '</span>';
       html += '</span>';
     }
     summ.innerHTML = html;
 
-    // Disable Apply when collisions exist.
+    // Disable Apply when collisions exist in ANY pane — feature
+    // parity across categories.  Even though the server auto-merges
+    // VLAN + user collisions (union-by-policy) and wouldn't produce
+    // duplicate stanzas, silently shipping a merge is almost always
+    // an operator confusion rather than intent.  Forcing the operator
+    // to resolve or explicitly drop prevents accidental merges.
+    var totalCollisions = collisions + vlanCollisions + userCollisions;
     var applyBtn = document.getElementById('mig-rename-apply-btn');
-    if (applyBtn) applyBtn.disabled = collisions > 0;
+    if (applyBtn) applyBtn.disabled = totalCollisions > 0;
 
     // Fit-check banner is re-rendered whenever the summary is —
     // same inputs (job state + user overrides can change source

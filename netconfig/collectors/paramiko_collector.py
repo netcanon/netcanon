@@ -25,6 +25,7 @@ import paramiko
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 from .base import BaseCollector
+from .probe import parse_probe_output
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +33,11 @@ _READ_INTERVAL = 0.2   # seconds between recv polls
 _IDLE_THRESHOLD = 15   # consecutive idle polls before stopping (= 3 s)
 _MAX_SECONDS = 120     # absolute read timeout
 _CONNECT_TIMEOUT = 30
+# Probe-specific tighter bounds — "show version" style output is
+# tiny (< 1KB typically), so a shorter idle threshold keeps probe
+# latency low and the separate-session cost acceptable.
+_PROBE_IDLE_THRESHOLD = 8   # consecutive idle polls (~1.6s)
+_PROBE_MAX_SECONDS = 30
 
 
 class ParamikoShellCollector(BaseCollector):
@@ -124,6 +130,100 @@ class ParamikoShellCollector(BaseCollector):
         logger.info("Collected %d bytes from %s", len(output), device.host)
         return output
 
+    def probe(
+        self, device: DeviceTarget, definition: DeviceDefinition
+    ) -> dict[str, str]:
+        """Run the probe command via a short-lived Paramiko shell session.
+
+        Mirrors :meth:`NetmikoCollector.probe` for paramiko_shell
+        strategy devices — opens a separate SSH session, handles the
+        OPNsense console menu if the definition opts in, runs the
+        probe command with a tighter idle threshold (~1.6s vs 3s
+        main), parses output via :func:`parse_probe_output`.
+
+        Failure modes all return ``{}`` and WARN:
+          * ``definition.probe.command`` empty (nothing to do).
+          * Connection / auth failure.
+          * Menu handling produces no usable shell.
+          * Probe command returns no output within
+            ``_PROBE_MAX_SECONDS``.
+          * Regex patterns don't match the output.
+
+        Probe failure is NEVER fatal to the main backup — the caller
+        (backup pipeline) falls back to the family-base definition.
+        """
+        if not definition.probe.command:
+            return {}
+
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        logger.info(
+            "Probing (Paramiko shell) %s:%d with command %r",
+            device.host,
+            device.port,
+            definition.probe.command,
+        )
+        try:
+            client.connect(
+                hostname=device.host,
+                port=device.port,
+                username=device.credentials.username,
+                password=device.credentials.password.get_secret_value(),
+                timeout=_CONNECT_TIMEOUT,
+                look_for_keys=False,
+                allow_agent=False,
+            )
+        except Exception as exc:  # noqa: BLE001 — probe non-fatal
+            logger.warning(
+                "Probe connect to %s failed: %s — continuing with "
+                "family-base definition",
+                device.host,
+                exc,
+            )
+            return {}
+
+        try:
+            shell = client.invoke_shell(width=220, height=50)
+            time.sleep(2)
+            initial = self._drain(shell)
+
+            if definition.connection.opnsense_shell_menu:
+                if "8) Shell" in initial or "Enter an option:" in initial:
+                    logger.debug(
+                        "OPNsense menu detected on %s during probe — "
+                        "sending '8'",
+                        device.host,
+                    )
+                    shell.send("8\n")
+                    time.sleep(3)
+                    self._drain(shell)
+
+            time.sleep(1)
+            self._drain(shell)
+
+            shell.send(f"{definition.probe.command}\n")
+            output = self._collect_probe_output(shell, device.host)
+        except Exception as exc:  # noqa: BLE001 — probe non-fatal
+            logger.warning(
+                "Probe session on %s failed: %s — continuing with "
+                "family-base definition",
+                device.host,
+                exc,
+            )
+            return {}
+        finally:
+            client.close()
+
+        facts = parse_probe_output(output or "", definition.probe)
+        logger.info(
+            "Probe of %s returned %d fact(s): %s",
+            device.host,
+            len(facts),
+            ", ".join(sorted(facts)) if facts else "(none)",
+        )
+        return facts
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -202,4 +302,35 @@ class ParamikoShellCollector(BaseCollector):
             raise TimeoutError(
                 f"No output received from {host} within {_MAX_SECONDS}s"
             )
+        return buf
+
+    def _collect_probe_output(
+        self, shell: paramiko.Channel, host: str
+    ) -> str:
+        """Probe-tuned variant of :meth:`_collect_output`.
+
+        Uses ``_PROBE_IDLE_THRESHOLD`` + ``_PROBE_MAX_SECONDS`` in
+        place of the main-collect constants.  "Show version" output
+        is tiny, so the tighter idle window keeps probe latency to
+        a couple of seconds even on slow devices.  Returns the
+        accumulated buffer — empty string is a valid result (the
+        caller treats missing-match as a no-op, not an error).
+        """
+        buf = ""
+        idle_count = 0
+        started = False
+        deadline = time.monotonic() + _PROBE_MAX_SECONDS
+
+        while time.monotonic() < deadline:
+            time.sleep(_READ_INTERVAL)
+            if shell.recv_ready():
+                chunk = shell.recv(65536).decode("utf-8", errors="replace")
+                buf += chunk
+                idle_count = 0
+                if len(buf.splitlines()) > 0:
+                    started = True
+            else:
+                idle_count += 1
+                if started and idle_count >= _PROBE_IDLE_THRESHOLD:
+                    break
         return buf

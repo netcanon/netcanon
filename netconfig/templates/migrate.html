@@ -507,23 +507,32 @@
   </div>
 
   <div id="mig-rename-modal-toolbar">
-    <label for="mig-rename-target-vendor">Target:</label>
-    <select id="mig-rename-target-vendor"
-            data-testid="migrate-rename-target-vendor-select">
-      <option value="">(none — free-form)</option>
-    </select>
-    <select id="mig-rename-target-model"
-            data-testid="migrate-rename-target-model-select"
-            disabled>
-      <option value="">— pick vendor first —</option>
-    </select>
-    <select id="mig-rename-target-module"
-            data-testid="migrate-rename-target-module-select"
-            style="display:none"
-            title="Uplink module variant — only meaningful for chassis with swappable NM / expansion cards"
-            disabled>
-      <option value="">— no modules —</option>
-    </select>
+    <!-- Target-profile controls drive the Ports-pane dropdown-vs-freetext
+         behaviour and the fit-check banner.  They have no effect on the
+         VLAN / local-users panes, so the whole group hides when a non-
+         ports category is active — prevents operators from thinking
+         they need to pick a profile before renaming VLANs or users. -->
+    <span id="mig-rename-target-profile-group"
+          data-testid="migrate-rename-target-profile-group"
+          style="display:flex;align-items:center;gap:.75rem">
+      <label for="mig-rename-target-vendor">Target:</label>
+      <select id="mig-rename-target-vendor"
+              data-testid="migrate-rename-target-vendor-select">
+        <option value="">(none — free-form)</option>
+      </select>
+      <select id="mig-rename-target-model"
+              data-testid="migrate-rename-target-model-select"
+              disabled>
+        <option value="">— pick vendor first —</option>
+      </select>
+      <select id="mig-rename-target-module"
+              data-testid="migrate-rename-target-module-select"
+              style="display:none"
+              title="Uplink module variant — only meaningful for chassis with swappable NM / expansion cards"
+              disabled>
+        <option value="">— no modules —</option>
+      </select>
+    </span>
     <span class="summary"
           id="mig-rename-summary"
           data-testid="migrate-rename-summary"></span>
@@ -1648,6 +1657,29 @@
     document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.category === cat);
     });
+    // Hide target-profile controls + fit-check banner on non-ports
+    // panes — both consume ports-specific data (port inventory,
+    // per-kind counts) and have no effect on VLAN / user panes.
+    // Keeping them visible invites operators to think they need to
+    // pick a profile before renaming VLANs or users, which they
+    // don't.  When future VLAN/user fit-checks ship, each pane will
+    // own its own banner rather than reusing this one.
+    var profileGroup = document.getElementById('mig-rename-target-profile-group');
+    var fitcheck = document.getElementById('mig-rename-fitcheck');
+    var portsOnly = (cat === 'ports');
+    if (profileGroup) profileGroup.style.display = portsOnly ? 'flex' : 'none';
+    if (fitcheck) {
+      // Preserve the existing "no profile = hidden" rule when on
+      // ports pane — fit-check.js manages its own show/hide based
+      // on profile selection.  Here we only force-hide when leaving
+      // ports.  When returning to ports, we re-trigger renderFitCheck
+      // so it can decide based on current profile state.
+      if (!portsOnly) {
+        fitcheck.style.display = 'none';
+      } else if (typeof renderFitCheck === 'function') {
+        renderFitCheck();
+      }
+    }
     // Re-render the newly-visible pane so it reflects any state
     // changes the operator made in the other categories (cross-
     // category interactions are rare but non-zero: VLAN drops can

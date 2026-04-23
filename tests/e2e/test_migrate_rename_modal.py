@@ -753,6 +753,52 @@ def migrate_with_cisco_users_to_aruba(page: Page, live_server_url: str):
     return mp
 
 
+class TestRenameModalPaneScopedControls:
+    """The target-profile dropdowns + fit-check banner in the modal
+    header drive ports-pane-specific behaviour (dropdown-vs-freetext
+    rows, per-kind capacity counts).  They have no effect on VLAN /
+    local-users panes, so those panes hide the controls to prevent
+    operators from thinking they need to pick a profile first."""
+
+    def test_target_profile_group_visible_on_ports_pane(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        group = page.locator(
+            '[data-testid="migrate-rename-target-profile-group"]'
+        )
+        expect(group).to_be_visible()
+
+    def test_target_profile_group_hidden_on_vlans_pane(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-vlans"]'
+        ).click()
+        group = page.locator(
+            '[data-testid="migrate-rename-target-profile-group"]'
+        )
+        expect(group).to_be_hidden()
+
+    def test_target_profile_group_restores_on_returning_to_ports(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # Leave ports → hidden.
+        page.locator(
+            '[data-testid="migrate-rename-rail-vlans"]'
+        ).click()
+        # Return to ports → visible again.
+        page.locator(
+            '[data-testid="migrate-rename-rail-ports"]'
+        ).click()
+        group = page.locator(
+            '[data-testid="migrate-rename-target-profile-group"]'
+        )
+        expect(group).to_be_visible()
+
+
 class TestRenameModalLocalUsersPane:
     """P2C4 added a third rail category for local-user renaming.
     Structural parallel to the VLAN pane — enumerates every user
