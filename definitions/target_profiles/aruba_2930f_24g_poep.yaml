@@ -10,3 +10,7 @@ ports:
   - {range: "1/1-1/24", kind: physical, speed: gig, poe: true}
   - {range: "1/A1-1/A4", kind: uplink, speed: 10gig, sfp: true}
 lags: {max: 24, prefix: Trk}
+
+# Datasheet capacity limits (AOS-S 16.11 2930F family).
+max_vlans: 2048
+max_local_users: 16

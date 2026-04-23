@@ -15,3 +15,10 @@ ports:
   - {id: "1/A1", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A1"}
   - {id: "1/A2", kind: uplink, speed: 10gig, sfp: true, notes: "stack uplink cage A2"}
 lags: {max: 24, prefix: Trk}
+# Datasheet capacity limits — drive the per-pane fit-check banners
+# in the Tier-3 rename modal.  Values from the AOS-S 16.11 datasheet:
+#   * 2048 active VLANs (``show vlans summary`` cap)
+#   * 16 local manager+operator accounts combined (``aaa password-*``
+#     + ``password manager user-name``)
+max_vlans: 2048
+max_local_users: 16

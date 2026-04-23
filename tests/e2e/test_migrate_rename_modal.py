@@ -799,6 +799,86 @@ class TestRenameModalPaneScopedControls:
         expect(group).to_be_visible()
 
 
+class TestRenameModalPerPaneFitCheck:
+    """Per-pane fit-check banners.  Each pane (VLANs, local_users)
+    owns its own banner that surfaces when the active target
+    profile declares a capacity limit for that category AND the
+    source tree's count for that category is known.  Hidden when
+    no profile is picked OR the profile doesn't declare the limit
+    — same discipline as the ports fit-check."""
+
+    def test_vlan_fitcheck_hidden_without_profile(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """Modal opens with no vendor selected → VLAN fit-check
+        stays hidden."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        # Clear the auto-suggested vendor so no profile is active.
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="")
+        page.locator(
+            '[data-testid="migrate-rename-rail-vlans"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-vlans-fitcheck"]'
+        )
+        expect(banner).to_be_hidden()
+
+    def test_vlan_fitcheck_visible_when_profile_declares_limit(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """Aruba 2930F-48G-PoEP declares max_vlans=2048 in its
+        shipped YAML.  Picking it should show a green OK banner
+        ('1 / 2048' for our 1-VLAN fixture)."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="aruba_aoss")
+        page.locator(
+            '[data-testid="migrate-rename-target-model-select"]'
+        ).select_option(value="2930F-48G-PoEP")
+        page.locator(
+            '[data-testid="migrate-rename-rail-vlans"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-vlans-fitcheck"]'
+        )
+        expect(banner).to_be_visible()
+        expect(banner).to_contain_text("VLAN fit")
+        # OK state — CSS class includes fit / ok indicators.
+        cls = banner.get_attribute("class") or ""
+        assert "mig-banner-ok" in cls
+
+    def test_vlan_fitcheck_hidden_when_limit_undeclared(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        """OPNsense profiles don't declare max_vlans — banner stays
+        hidden even though a profile is picked (graceful fallback)."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-target-vendor-select"]'
+        ).select_option(value="opnsense")
+        # Pick any model; OPNsense profiles don't declare max_vlans.
+        options = page.locator(
+            '[data-testid="migrate-rename-target-model-select"] option'
+        ).all_text_contents()
+        # Fallback to ANY non-blank option so the test isn't tied
+        # to a specific model name.
+        real_opts = [o for o in options if o and "pick" not in o.lower()]
+        if real_opts:
+            page.locator(
+                '[data-testid="migrate-rename-target-model-select"]'
+            ).select_option(label=real_opts[0])
+        page.locator(
+            '[data-testid="migrate-rename-rail-vlans"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-vlans-fitcheck"]'
+        )
+        expect(banner).to_be_hidden()
+
+
 class TestRenameModalCompatBanner:
     """Target-codec compatibility banner on the local-users pane.
     OPNsense + FortiGate don't round-trip CanonicalLocalUser; the

@@ -33,3 +33,8 @@ modules:
     ports:
       - {range: "FortyGigabitEthernet1/1/1-2", kind: uplink, speed: 40gig, sfp: true, notes: "NM-2Q QSFP+ cage"}
 lags: {max: 48, prefix: Port-channel}
+
+# Datasheet capacity limits (IOS-XE 17.x C9300 family).
+# max_local_users left unset — IOS-XE's effective limit is
+# in the tens of thousands; fit-check banner stays hidden.
+max_vlans: 4094

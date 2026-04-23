@@ -27,3 +27,7 @@ modules:
     ports:
       - {id: "1/A1", kind: uplink, speed: 40gig, sfp: true, notes: "QSFP+ cage"}
 lags: {max: 144, prefix: Trk}
+
+# Datasheet capacity limits (AOS-S 16.11 3810M family).
+max_vlans: 4094
+max_local_users: 16

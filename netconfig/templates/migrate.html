@@ -604,6 +604,14 @@
       <div id="mig-rename-vlans-pane"
            class="mig-rename-category-pane"
            data-testid="migrate-rename-vlans-pane">
+        <!-- VLAN fit-check banner.  Shows when the active target
+             profile declares max_vlans AND source_vlans exceeds it.
+             Mirrors the ports fit-check pattern (pane-scoped, hidden
+             when profile doesn't declare the limit). -->
+        <div id="mig-rename-vlans-fitcheck"
+             class="mig-banner"
+             data-testid="migrate-rename-vlans-fitcheck"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-vlans-empty"
              data-testid="migrate-rename-vlans-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
@@ -628,6 +636,13 @@
         <div id="mig-rename-local-users-compat"
              class="mig-banner mig-banner-warn"
              data-testid="migrate-rename-local-users-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <!-- Local-users fit-check banner.  Mirrors the VLANs
+             pattern: shows when target profile declares
+             max_local_users AND source_local_users exceeds it. -->
+        <div id="mig-rename-local-users-fitcheck"
+             class="mig-banner"
+             data-testid="migrate-rename-local-users-fitcheck"
              style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-local-users-empty"
              data-testid="migrate-rename-local-users-empty"
@@ -1709,6 +1724,79 @@
     });
   }
 
+  /** Render the per-pane fit-check banners for VLANs + local users.
+   *  Each pane's banner surfaces only when the current target
+   *  profile declares a capacity limit for that category AND the
+   *  source tree's count for that category is known.
+   *
+   *  Three states per pane:
+   *    * profile missing OR limit not declared → hidden
+   *    * source count ≤ limit → green "N / limit" banner
+   *    * source count > limit → red "over by K" banner
+   *
+   *  This is the per-pane counterpart to the ports fit-check banner
+   *  that lives in _partials/fit-check.js; VLANs and local_users get
+   *  their own banners rather than stuffing the ports fit-check
+   *  with cross-category data.  Each category's capacity is a
+   *  distinct concept (max VLAN IDs vs max user accounts vs per-
+   *  kind port counts) so separating the UI keeps the banners
+   *  specific and readable.
+   */
+  function renderPerPaneFitCheck() {
+    if (!_lastJob) return;
+    var profileKey = currentRenameProfileKey();
+    var profile = profileKey
+      ? _renameProfiles.find(function(p) {
+          return (p.vendor + '/' + p.model) === profileKey;
+        })
+      : null;
+
+    function renderOne(elId, maxValue, sourceCount, label) {
+      var el = document.getElementById(elId);
+      if (!el) return;
+      if (!profile || maxValue === null || maxValue === undefined) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        el.className = 'mig-banner';
+        return;
+      }
+      el.style.display = '';
+      if (sourceCount <= maxValue) {
+        el.className = 'mig-banner mig-banner-ok';
+        el.innerHTML =
+          '&#10003; ' + escapeHtml(label) + ' fit: '
+          + sourceCount + ' / ' + maxValue + ' (' + escapeHtml(
+              profile.display_name || (profile.vendor + ' ' + profile.model)
+            ) + ')';
+      } else {
+        var over = sourceCount - maxValue;
+        el.className = 'mig-banner mig-banner-block';
+        el.innerHTML =
+          '&#10007; ' + escapeHtml(label) + ' OVER capacity: '
+          + sourceCount + ' / ' + maxValue
+          + ' <strong>(' + over + ' over)</strong>. '
+          + escapeHtml(
+              profile.display_name || (profile.vendor + ' ' + profile.model)
+            )
+          + ' won\'t accept this config as-is — drop '
+          + over + ' entries or pick a larger-capacity model.';
+      }
+    }
+
+    renderOne(
+      'mig-rename-vlans-fitcheck',
+      profile ? profile.max_vlans : null,
+      (_lastJob.source_vlans || []).length,
+      'VLAN',
+    );
+    renderOne(
+      'mig-rename-local-users-fitcheck',
+      profile ? profile.max_local_users : null,
+      (_lastJob.source_local_users || []).length,
+      'Local-user',
+    );
+  }
+
   /** Switch the active rail category.  Mutually exclusive — exactly
    *  one category pane is visible at a time.  Preview pane stays
    *  visible regardless so the operator can see how per-category
@@ -1874,6 +1962,7 @@
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     renderRenameRailCounts();
     renderCompatBanners();
+    renderPerPaneFitCheck();
     renderRenamePreview();
     renderRenameSummary();
   };

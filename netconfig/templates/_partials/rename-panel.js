@@ -300,6 +300,14 @@
     // banner without touching all 9 chains.
     renderFitCheck();
 
+    // Per-pane fit-check banners (VLANs + local_users).  Same
+    // summary-is-the-universal-chokepoint pattern as renderFitCheck
+    // above — all profile/module change handlers + override-mutating
+    // paths flow through here.
+    if (typeof renderPerPaneFitCheck === 'function') {
+      renderPerPaneFitCheck();
+    }
+
     // localStorage ack persistence — strict super-set of every
     // override-mutating callsite, so wiring save here means
     // partials don't need persistence awareness.  Idempotent on
