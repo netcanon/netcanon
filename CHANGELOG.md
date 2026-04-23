@@ -7,6 +7,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 1 — EVPN-VXLAN canonical schema [ship-before-wire])
+
+- `CanonicalVxlan` + `CanonicalEvpnType5Route` models in
+  `netconfig/migration/canonical/intent.py`.  ``CanonicalVxlan``
+  carries ``vlan_id``, ``vni`` (24-bit, validated 1..16777215),
+  optional ``mcast_group``, and ``flood_list`` for head-end
+  replication.  ``CanonicalEvpnType5Route`` carries ``vrf``,
+  ``prefix`` (CIDR, IPv4 or IPv6), and ``rt_imports`` / ``rt_exports``
+  for BGP-EVPN IP-prefix advertisements.
+- Two new top-level Tier-2 lists on ``CanonicalIntent``:
+  ``vxlan_vnis: list[CanonicalVxlan]`` and
+  ``evpn_type5_routes: list[CanonicalEvpnType5Route]``.
+- Ship-before-wire contract: no codec populates the new fields in
+  this commit.  Arista EOS, Juniper Junos, and Cisco IOS-XE CLI
+  capability matrices gain ``UnsupportedPath`` entries for
+  ``/vxlan-vnis/vni`` and ``/evpn-type5-routes/route`` so the
+  pipeline validate stage surfaces "VXLAN / EVPN detected but not
+  translated" in the UI banner instead of silently dropping the
+  payload.  Access-switch and firewall codecs (Aruba AOS-S,
+  OPNsense, MikroTik, FortiGate) don't declare — the feature is
+  architecturally inapplicable to their deployment class.
+- Documentation: ``ARCHITECTURE.md`` Layer-3 (CIM) section gains
+  a "Tier 2 (ship-before-wire)" row in the field-tier table and a
+  paragraph describing the pattern, with EVPN-VXLAN as the
+  reference case.  ``docs/adding-a-canonical-field.md`` gains a
+  "Two shapes of this commit" header distinguishing the MTU-style
+  wire-through from the ship-before-wire shape.  ``translator-plans.txt``
+  DEFERRED ROADMAP gains a ``[SHIPPED]`` entry for GAP 1.
+- Tests: ``tests/unit/migration/test_vxlan_evpn_schema.py`` covers
+  model construction, VNI range validation, flood-list semantics,
+  IPv6 prefix acceptance, round-trip through pydantic dump/load,
+  and the ship-before-wire contract (parametrised check that every
+  DC codec declares the two new paths as ``unsupported``).
+
 ### Added (Phase 13 — Juniper Junos codec v1 [parse-only] + 7 switching target profiles)
 
 - `netconfig/migration/codecs/juniper_junos/` package — first

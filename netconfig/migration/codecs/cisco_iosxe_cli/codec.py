@@ -143,6 +143,24 @@ class CiscoIOSXECLICodec(CodecBase):
                 path="/interfaces/interface/subinterfaces/subinterface/ipv6",
                 reason="Phase 0.5 scope — IPv4 only.",
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason=(
+                    "IOS-XE VXLAN mappings (`interface nve1 / member "
+                    "vni <N> associate vrf <name>`) parse-and-ignore "
+                    "in v1.  CanonicalVxlan schema exists; wire-up "
+                    "deferred until demand arrives for Catalyst-to-"
+                    "Arista migrations."
+                ),
+            ),
+            UnsupportedPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 (`router bgp / address-family l2vpn "
+                    "evpn`) parse-and-ignore in v1.  Schema exists; "
+                    "wire-up deferred."
+                ),
+            ),
         ],
     )
 

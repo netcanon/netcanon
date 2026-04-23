@@ -152,6 +152,26 @@ class JunosCodec(CodecBase):
                     "ACL models in other codecs and defers."
                 ),
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason=(
+                    "VLAN-to-VNI mappings (`set vlans <name> vxlan "
+                    "vni <N>`) parse-and-ignore in v1.  "
+                    "CanonicalVxlan schema landed; Junos codec "
+                    "wire-up pending render-side promotion."
+                ),
+            ),
+            UnsupportedPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 advertisements (`set "
+                    "routing-instances <vrf> protocols evpn ip-"
+                    "prefix-routes`) parse-and-ignore in v1.  "
+                    "CanonicalEvpnType5Route schema exists; Junos "
+                    "wire-up deferred alongside routing-instances "
+                    "support."
+                ),
+            ),
         ],
     )
 

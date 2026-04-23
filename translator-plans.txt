@@ -737,6 +737,23 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] EVPN-VXLAN CANONICAL SCHEMA (ship-before-wire, GAP 1):
+    # Adds CanonicalVxlan + CanonicalEvpnType5Route to
+    # netconfig/migration/canonical/intent.py plus vxlan_vnis[] +
+    # evpn_type5_routes[] top-level Tier-2 lists on CanonicalIntent.
+    # No codec populates them in v1.  Every DC-class codec (Arista
+    # EOS, Juniper Junos, Cisco IOS-XE CLI) declares /vxlan-vnis/vni
+    # and /evpn-type5-routes/route under CapabilityMatrix.unsupported
+    # so the UI banner surfaces "VXLAN detected but not translated"
+    # instead of silently dropping it.  Covered by
+    # tests/unit/migration/test_vxlan_evpn_schema.py (31 tests
+    # covering model construction, validation, round-trip through
+    # model_dump, and capability-matrix declarations).
+    #
+    # Wire-up (per-vendor parse+render demoting Unsupported to
+    # supported/lossy) lands on demand — see GAP 4 roadmap entry
+    # for the natural bundle with Junos routing-instances.
+
 [ ] MODULE-VARIANT TARGET PROFILES (hardware-awareness, high priority):
     # PROBLEM
     # Target profiles currently bake ONE specific hardware config per

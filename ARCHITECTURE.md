@@ -146,11 +146,22 @@ with fields tiered by semantic stability:
 |---|---|---|
 | **Tier 1** | Every vendor models it, stable cross-vendor semantics | `hostname`, `dns_servers`, `ntp_servers`, `interfaces[]` with ipv4_addresses, `vlans[]` with tagged/untagged port lists, `static_routes[]` |
 | **Tier 2** | Common enough to model, vendor mappings are lossy | `snmp`, `lags[]`, `local_users[]`, `dhcp_servers[]`, `radius_servers[]`, per-port `mtu` |
+| **Tier 2 (ship-before-wire)** | Schema shipped ahead of any codec populating it; DC codecs declare the xpath under `unsupported` so the UI banner surfaces the gap | `vxlan_vnis[]` (VLAN↔VNI mappings), `evpn_type5_routes[]` (BGP-EVPN IP-prefix advertisements) |
 | **Tier 3** | Opaque carry-through, never auto-rendered | `raw_sections[]` — firewall rules, PKI chains, QoS policies, vendor-specific |
 
 **The design bet:** most cross-vendor translation value lives in
 Tiers 1 + 2.  Tier 3 features get preserved as opaque blobs so they
 survive the round-trip but don't have to be modelled end-to-end.
+
+**Ship-before-wire** is the pattern for features whose canonical
+shape we're confident about but whose codec implementations will
+land incrementally.  The schema ships with `Unsupported` capability-
+matrix entries on every relevant codec; each codec-wiring commit
+demotes the entry (to `supported` or `lossy`) as parse+render land.
+EVPN-VXLAN is the reference case: `CanonicalVxlan` + `CanonicalEvpnType5Route`
+landed in a single commit ahead of any Arista / Junos / NX-OS
+wire-up, letting the UI report "VXLAN detected but not translated"
+instead of silently dropping it.
 
 **Shared transforms:** `netconfig/migration/canonical/transforms.py`
 holds post-parse passes that bridge representation differences (e.g.

@@ -204,9 +204,7 @@ class AristaEOSCodec(CodecBase):
                 reason=(
                     "BGP stanzas parse-and-ignore in v1 — neighbor "
                     "tables, redistribution, address-families are "
-                    "silently dropped.  EVPN / VXLAN VNI mappings "
-                    "likewise deferred until CanonicalIntent gains "
-                    "VXLAN + EVPN models."
+                    "silently dropped."
                 ),
             ),
             UnsupportedPath(
@@ -214,6 +212,26 @@ class AristaEOSCodec(CodecBase):
                 reason=(
                     "OSPF areas / redistribution / interface-level "
                     "cost tuning parse-and-ignore in v1."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason=(
+                    "VLAN-to-VNI mappings (`vlan X vxlan vni N`) "
+                    "parse-and-ignore in v1.  CanonicalVxlan schema "
+                    "landed but Arista codec wire-up is deferred — "
+                    "cross-vendor EVPN fabric migrations blocked "
+                    "until both Arista and the paired codec (NX-OS / "
+                    "Junos) gain parse+render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 IP-prefix advertisements (`router "
+                    "bgp / address-family evpn`) parse-and-ignore in "
+                    "v1.  CanonicalEvpnType5Route schema exists; "
+                    "codec wire-up pending."
                 ),
             ),
         ],

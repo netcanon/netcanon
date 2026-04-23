@@ -38,6 +38,14 @@ Scope (Tier 2 — auto-translate with review banner):
 
 Scope (Tier 3 — parse for display, never auto-render):
     firewall_rules, nat_rules, vpn, routing_protocols (informational).
+
+Schema extensions (ship-before-wire):
+    ``vxlan_vnis`` and ``evpn_type5_routes`` are top-level Tier 2 lists
+    added to support EVPN-VXLAN fabric migrations (Arista ↔ NX-OS ↔
+    Junos).  No codec populates them in v1 — each codec's
+    :class:`CapabilityMatrix` lists them under ``unsupported`` until
+    wired up.  This lets the UI's Unsupported-path banner surface the
+    gap even before any codec knows how to parse the bytes.
 """
 
 from __future__ import annotations
@@ -169,6 +177,83 @@ class CanonicalRADIUSServer(BaseModel):
     acct_port: int = 1813
 
 
+class CanonicalVxlan(BaseModel):
+    """A VLAN-to-VNI mapping for an EVPN-VXLAN overlay.
+
+    Models the association between a Layer-2 VLAN and the VXLAN Network
+    Identifier (VNI) that carries its broadcast/unknown-unicast/multicast
+    traffic across a fabric.  Vendors diverge sharply on grammar:
+
+    * Arista EOS declares mappings on the VLAN (``vlan 100 vxlan vni
+      10100``) or inside an ``interface Vlan``-to-VTEP binding.
+    * Cisco NX-OS uses ``vn-segment <vni>`` inside the VLAN stanza and
+      declares the VTEP under ``interface nve1``.
+    * Junos declares ``vxlan vni <vni>`` inside ``vlans <name>`` plus
+      a separate ``switch-options`` or ``routing-instance`` VRF target.
+
+    Only the cross-vendor-stable fields live on this model.  Vendor-
+    native extras (ingress-replication protocol choice, learning mode,
+    source-interface) belong in the codec's render-path logic or in
+    ``raw_sections`` if they carry no cross-vendor semantic.
+
+    Attributes:
+        vlan_id: The VLAN the VNI maps to.  Matches
+            :attr:`CanonicalVlan.id` for discoverability; codecs that
+            emit VNI mappings should keep both records in sync.
+        vni: The 24-bit VXLAN Network Identifier (1-16777215).
+        mcast_group: Underlay multicast group for BUM replication, or
+            empty string for head-end / ingress replication.  Stored as
+            dotted-quad (e.g. ``"239.1.1.100"``).
+        flood_list: Explicit VTEP IPs for head-end replication, in
+            preference order.  Empty when multicast-only.
+    """
+
+    vlan_id: int = Field(ge=1, le=4094)
+    vni: int = Field(ge=1, le=16777215)
+    mcast_group: str = ""                           # empty = no mcast; use flood_list
+    flood_list: list[str] = Field(default_factory=list)
+
+
+class CanonicalEvpnType5Route(BaseModel):
+    """An EVPN Type-5 (IP Prefix) advertisement.
+
+    Type-5 routes carry L3 prefix advertisements across an EVPN fabric
+    and are the cross-vendor primitive for "advertise this VRF's subnets
+    through BGP-EVPN".  Type-2 (MAC/IP) is emitted automatically from
+    VLAN-to-VNI bindings and does not need its own canonical record.
+
+    Vendors diverge on where the intent is expressed:
+
+    * Arista EOS:  ``router bgp <asn> / vrf <name> / neighbor ...
+      activate`` + ``router bgp <asn> / address-family evpn / neighbor
+      ... activate`` + per-VRF RT import/export under ``vrf``.
+    * Cisco NX-OS:  ``vrf context <name>`` carries ``address-family
+      ipv4 unicast`` with ``route-target import/export evpn`` lines.
+    * Junos:  ``routing-instances <vrf>`` with ``vrf-target target:...``
+      plus ``protocols evpn``.
+
+    This record stores the minimum common surface.  Richer semantics
+    (ECMP, next-hop-unchanged, route-filter rewrites) stay in each
+    codec's raw path until a concrete cross-vendor need surfaces.
+
+    Attributes:
+        vrf: The VRF / routing-instance / tenant name the prefix
+            belongs to (opaque string; matches the VRF name declared
+            elsewhere in the tree).
+        prefix: The IPv4 CIDR being advertised (e.g. ``"10.1.0.0/16"``).
+            IPv6 prefixes are accepted as-is; codecs decide how to
+            emit them based on the address-family stanza they own.
+        rt_imports: BGP Route-Target import communities (e.g.
+            ``["65001:100", "65001:200"]``).
+        rt_exports: BGP Route-Target export communities.
+    """
+
+    vrf: str
+    prefix: str                                     # CIDR; IPv4 or IPv6
+    rt_imports: list[str] = Field(default_factory=list)
+    rt_exports: list[str] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Top-level canonical intent dict
 # ---------------------------------------------------------------------------
@@ -203,6 +288,11 @@ class CanonicalIntent(BaseModel):
     lags: list[CanonicalLAG] = Field(default_factory=list)
     local_users: list[CanonicalLocalUser] = Field(default_factory=list)
     radius_servers: list[CanonicalRADIUSServer] = Field(default_factory=list)
+    # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+    # No codec populates these in v1; each codec's CapabilityMatrix
+    # lists them under ``unsupported`` until wired up per-vendor.
+    vxlan_vnis: list[CanonicalVxlan] = Field(default_factory=list)
+    evpn_type5_routes: list[CanonicalEvpnType5Route] = Field(default_factory=list)
 
     # ── Tier 3 — informational only (never auto-rendered) ──
     raw_sections: dict[str, str] = Field(default_factory=dict)

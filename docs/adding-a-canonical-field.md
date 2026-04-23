@@ -5,6 +5,20 @@ field.  The worked example is the per-interface MTU wire-through that
 landed as commit `e3b48b4`; every step below maps to a concrete change
 you can `git show` for reference.
 
+**Two shapes of this commit:**
+
+1. **Wire-through (this doc's main pattern):** schema + every codec's
+   parse + every codec's render + tests, all in one commit.  Best when
+   the feature is cross-cutting and you know exactly how each codec
+   emits it.  MTU was this shape.
+2. **Ship-before-wire:** schema + `Unsupported` entries on the
+   capability matrices of every relevant codec, no parse/render wiring
+   yet.  Best when the feature is DC-class or niche and codec wire-up
+   will land incrementally as demand arrives.  `CanonicalVxlan` +
+   `CanonicalEvpnType5Route` are the reference case — see commit for
+   GAP 1 in the translator-plans roadmap.  Each later codec-wiring
+   commit demotes the `Unsupported` entry to `supported`/`lossy`.
+
 ---
 
 ## The shape of the work
