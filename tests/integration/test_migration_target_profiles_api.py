@@ -14,6 +14,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from tests.fixtures.module_variants import MODULE_VARIANT_PROFILES
+
 pytestmark = pytest.mark.integration
 
 
@@ -199,20 +201,10 @@ class TestModulesFieldSerialization:
             )
             assert isinstance(p["modules"], dict)
 
-    #: API-side mirror of
-    #: :attr:`TestRealProfilesShipped.MODULE_VARIANT_PROFILES`.
-    #: Kept in sync manually — any new module-variant profile
-    #: needs to be added to both allowlists.
-    MODULE_VARIANT_PROFILES = {
-        "cisco_iosxe/C9300-24P",
-        "cisco_iosxe/C9300-24U",
-        "cisco_iosxe/C9300-24UX",
-        "cisco_iosxe/C9300-48P",
-        "cisco_iosxe/C9300-48U",
-        "cisco_iosxe/C9300-48UXM",
-        "aruba_aoss/3810M-24G-PoEP",
-        "aruba_aoss/3810M-48G-PoEP",
-    }
+    #: Canonical allowlist imported from
+    #: :mod:`tests.fixtures.module_variants` — single source of
+    #: truth shared with the unit-tier shipped-profile tests.
+    MODULE_VARIANT_PROFILES = MODULE_VARIANT_PROFILES
 
     def test_legacy_profiles_serialize_empty_modules(
         self, client: TestClient,

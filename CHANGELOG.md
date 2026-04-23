@@ -7,6 +7,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (kill module-variant allowlist manual-sync tax)
+
+- The `MODULE_VARIANT_PROFILES` set was duplicated as two identical
+  literals — one in `tests/unit/migration/test_target_profile_shipped.py`
+  and one in `tests/integration/test_migration_target_profiles_api.py`
+  — with a "kept in sync manually" comment on each and a matching
+  Documentation Sync Checklist row in CLAUDE.md.
+- Extracted to a canonical shared module at
+  `tests/fixtures/module_variants.py` (following the existing
+  `tests/fixtures/` convention for test-input data).  Both test
+  classes now import from there via `MODULE_VARIANT_PROFILES = MODULE_VARIANT_PROFILES`
+  (class-body re-bind of the module-level constant — standard
+  Python idiom).
+- New CI-guard test
+  `test_module_variant_allowlist_shared_with_integration_tier`
+  asserts both class attributes are IDENTITY-equal (`is`) to the
+  canonical set — catches accidental shadowing with a literal even
+  if the content would otherwise match.
+- CLAUDE.md Documentation Sync Checklist row updated: single-file
+  edit + CI-guard replaces the two-file manual-sync discipline.
+
 ### Added (deferred item 3 — more target profiles: Netgate ARM + Deciso DEC600)
 
 - `opnsense_netgate_sg1100.yaml` — 3-port ARM desktop firewall,

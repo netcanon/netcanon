@@ -11,11 +11,11 @@ common-mistake regression guards (e.g. VP6600 uses ``ixl`` not
 
   1. Copy-paste mistakes between sibling SKUs (VP2410 vs VP2420,
      C9300-24P vs C9300-24U).
-  2. Module-variant allowlist drift — the
-     ``MODULE_VARIANT_PROFILES`` set here mirrors the API-side
-     allowlist in
-     ``tests/integration/test_migration_target_profiles_api.py``
-     and is kept in sync manually.
+  2. Module-variant allowlist drift — the canonical list of
+     module-variant profiles lives in
+     :mod:`tests.fixtures.module_variants` and is imported here
+     + by the API-tier integration tests.  Single source, no
+     manual sync.
 
 Schema / accessor tests live in ``test_target_profile_schema.py``;
 loader behaviour tests live in ``test_target_profile_loader.py``.
@@ -36,6 +36,7 @@ from netconfig.migration.target_profiles import (
     load_profile_file,
     load_profiles_dir,
 )
+from tests.fixtures.module_variants import MODULE_VARIANT_PROFILES
 
 pytestmark = pytest.mark.unit
 
@@ -106,20 +107,37 @@ class TestRealProfilesShipped:
         assert first.speed == "10gig"  # max negotiated speed
         assert first.poe is True
 
-    #: Profiles in the shipped set that have opted in to the
-    #: module-variant schema.  Everything else must still be
-    #: legacy-shaped (empty modules).  Add to this set when
-    #: migrating more profiles.
-    MODULE_VARIANT_PROFILES = {
-        "cisco_iosxe/C9300-24P",
-        "cisco_iosxe/C9300-24U",
-        "cisco_iosxe/C9300-24UX",
-        "cisco_iosxe/C9300-48P",
-        "cisco_iosxe/C9300-48U",
-        "cisco_iosxe/C9300-48UXM",
-        "aruba_aoss/3810M-24G-PoEP",
-        "aruba_aoss/3810M-48G-PoEP",
-    }
+    #: Canonical allowlist imported from
+    #: :mod:`tests.fixtures.module_variants` — single source of
+    #: truth shared with the API-tier integration tests.
+    MODULE_VARIANT_PROFILES = MODULE_VARIANT_PROFILES
+
+    def test_module_variant_allowlist_shared_with_integration_tier(self):
+        """CI-guard: the unit-tier and integration-tier tests reference
+        THE SAME frozenset via :mod:`tests.fixtures.module_variants`.
+        Pre-fix the allowlist was duplicated as two literal sets with
+        a "keep in sync manually" comment; that manual-sync tax is gone.
+
+        A regression here (either tier accidentally shadowing the
+        import with a local literal) would re-open the drift hole.
+        The import-identity check (``is`` rather than ``==``) catches
+        it even if the two literals happen to match content-wise."""
+        from tests.fixtures.module_variants import (
+            MODULE_VARIANT_PROFILES as CANONICAL,
+        )
+        # Lazy-import the integration-tier class to avoid pulling the
+        # full FastAPI TestClient graph into unit-test collection.
+        from tests.integration.test_migration_target_profiles_api import (
+            TestModulesFieldSerialization,
+        )
+        assert self.MODULE_VARIANT_PROFILES is CANONICAL, (
+            "unit-tier allowlist no longer imports the canonical "
+            "shared set"
+        )
+        assert TestModulesFieldSerialization.MODULE_VARIANT_PROFILES is CANONICAL, (
+            "integration-tier allowlist no longer imports the "
+            "canonical shared set — manual-sync tax has returned"
+        )
 
     def test_non_module_variant_profiles_stay_legacy(self):
         """Profiles not in :attr:`MODULE_VARIANT_PROFILES` must
