@@ -41,7 +41,11 @@ helpers stay easy to unit-test in isolation:
 
 ```
 netconfig/migration/codecs/<vendor>/
-├── codec.py            # orchestration — parse, render, probe
+├── codec.py            # orchestration — class, probe, delegation
+├── parse.py            # (fortigate_cli) block tokeniser + per-stanza
+│                       # dispatchers; thin codec.parse() delegates here
+├── render.py           # (fortigate_cli) canonical tree → vendor text;
+│                       # thin codec.render() delegates here
 ├── port_names.py       # pure classify_port_name + format_port_identity
 │                       # (ALL four CLI codecs have this — mandatory
 │                       # when the codec participates in the Tier-3
@@ -52,6 +56,26 @@ netconfig/migration/codecs/<vendor>/
 └── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
                         # that absorbs SVI L3 into VLAN stanzas
 ```
+
+**`parse.py` / `render.py` split** is an optional codec-level
+refactor applied when `codec.py` grows past the ~800-1000 LOC band
+and the god-file effect starts hurting contributor clarity.
+Pattern: `codec.py` keeps the codec class (metadata + probe +
+capability matrix + port-name delegates); `codec.parse()` is a
+one-line `return parse_intent(raw)` delegator to a module-level
+function in `parse.py`, and `codec.render()` is the mirror
+delegator to `render.py`.  Shared utilities (IP-mask helpers,
+vendor-specific mode tables) live in `parse.py` and get re-imported
+into `render.py` — one directional edge, no circular risk.
+
+First codec with the split: **fortigate_cli** (Phase 1 god-file
+cleanup).  Remaining split candidates as of this writing:
+mikrotik_routeros (~1292 LOC), cisco_iosxe_cli (~1115), aruba_aoss
+(~1095), opnsense (~862).  Apply opportunistically when each
+becomes painful; the pattern generalises cleanly.  Tests that
+pin internal symbols (``_parse_blocks``, ``_prefix_to_mask``)
+should import via re-export in `codec.py` so the split doesn't
+break them — see fortigate_cli/codec.py's `__all__` for the shape.
 
 **`port_names.py` is mandatory** for any codec that participates in
 the rename-modal flow.  The cross-vendor orchestrator at

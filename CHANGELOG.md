@@ -7,6 +7,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (god-file cleanup — fortigate_cli codec split into parse.py + render.py)
+
+- `netconfig/migration/codecs/fortigate_cli/codec.py` was the 4th-
+  largest codec file at ~1068 LOC carrying both parse dispatchers
+  (`_apply_<path>` functions) and render logic inline on the
+  `FortiGateCLICodec` class.  Split into:
+    - `parse.py` — block-model (`_ConfigBlock` / `_EditBlock`),
+      tokeniser (`_parse_blocks`), per-stanza dispatchers
+      (`_apply_system_global`, `_apply_system_interface`, …), IP
+      mask utilities shared with render, LACP-mode maps.  Public
+      entry `parse_intent(raw) -> CanonicalIntent` replaces the
+      previously-inline parse method body.
+    - `render.py` — canonical tree → FortiOS CLI text.  Public
+      entry `render_intent(tree) -> str`.  Imports IP utilities +
+      canonical-to-FortiGate LACP map from `parse.py` (one-
+      directional edge, no circular risk).
+    - `codec.py` — thin orchestrator retaining the
+      `FortiGateCLICodec` class with metadata, probe, capability
+      matrix, port-name delegates.  `parse()` and `render()` are
+      one-line delegators to the sibling modules.  Re-exports
+      `_parse_blocks`, `_prefix_to_mask`, `_mask_to_prefix` via
+      `__all__` so `tests/unit/migration/test_fortigate_cli.py`
+      (which pins internal symbols as test contracts) doesn't
+      need to change.
+- `vlan_heuristics.py` already existed as an earlier partial
+  extraction; untouched by this commit.
+- **Line counts post-split:** codec.py 246 (was 1068, −77%),
+  parse.py 675, render.py 290.  Total is up slightly because
+  each new module carries its own docstring + imports — the win
+  is focus, not line reduction.
+- `netconfig/migration/codecs/fortigate_cli/__init__.py` docstring
+  refreshed: stale `certainty: best_effort` claim corrected to
+  `certified` (matches RESULTS.md post-promotion), module-layout
+  section added describing the new parse/render split, Tier-2
+  coverage (SNMP / admin / RADIUS / DHCP) enumerated, structural
+  quirks updated with the `set radius-port 0` canonicalisation.
+- `netconfig/migration/codecs/README.md` Module layout section
+  extended with the `parse.py` / `render.py` split pattern.
+  Lists remaining split candidates (mikrotik_routeros,
+  cisco_iosxe_cli, aruba_aoss, opnsense) and the re-export
+  discipline that keeps tests unchanged across a split.
+- **No behaviour change**: 1526 passed, 60 skipped (identical
+  to pre-split).  All 26 `test_fortigate_cli.py` wire-through
+  tests + real-capture harness + cross-mesh mesh still green.
+
 ### Added (P2C5 — per-pane SNMP community rename: fourth per-pane override category)
 
 - New canonical orchestrator
