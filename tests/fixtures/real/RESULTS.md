@@ -421,17 +421,45 @@ designed to catch.
 | **aruba_aoss** | **5** (4 real + 1 rendered) | **4** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
 | **TOTAL** | **26** | — | **10** | — | — |
 
-Three bugs surfaced in the first real-capture pass.  All three would
-have survived arbitrarily long against our synthetic fixtures —
-exactly the kind of regression class the harness was built to catch.
-All fixes include regression tests so reverting them breaks CI.
+10 total bugs surfaced by the real-capture harness across all five
+codecs.  Every one would have survived arbitrarily long against our
+synthetic fixtures — exactly the regression class the harness was
+built to catch.  All fixes include regression tests so reverting
+them breaks CI.
 
-**Notable success:** the 12K-line real FortiOS config parsed and
-round-tripped cleanly after one grammar fix — strong evidence the
-recursive block parser generalises beyond hand-crafted samples.
+**Notable success:** the 12K-line real FortiOS branch config and the
+~35K-line FG-100E capture both parsed and round-tripped cleanly
+after one grammar fix each — strong evidence the recursive block
+parser generalises beyond hand-crafted samples.
 
-No codec is `certified` yet.  The threshold is ≥3 captures from
-≥2 OS versions with round-trip stability — each vendor is ~2
-captures short of that bar.  Follow-up: find more captures
-(preferably from different OS versions) per vendor, and Aruba AOS-S
-needs a first real capture at all.
+### Certification state (April 2026)
+
+**All five codecs are now `certified`.**  The cert bar (≥3 real-ish
+fixtures from ≥2 OS versions with round-trip stability for
+bidirectional codecs) was met decisively by each codec in the
+promotion commits recorded in `CHANGELOG.md`.  The earlier
+"no codec is certified yet — each vendor is ~2 captures short"
+advisory predates the promotion wave and has been retired.
+
+The corpus purpose has shifted from **promotion-driving** to
+**hardening-driving**: new captures now exist to surface latent
+bugs + cover grammar surfaces the current corpus doesn't touch.
+Promotion is no longer a backlog goal.  Concrete gaps worth
+closing opportunistically:
+
+* **FortiGate multi-VDOM** — no multi-VDOM fixture in the corpus
+  (all three are single-VDOM).  Likely to surface latent
+  scope-handling bugs in the recursive `config / edit / set / next /
+  end` block parser when real multi-VDOM exports land.
+* **FortiOS 7.4** — we have 7.2.13 + 7.6.6 but no 7.4 datapoint.
+* **MikroTik RouterOS 7.19+** — current newest is 7.18.2.
+* **OPNsense 25.x series** — current user-contrib capture is
+  pre-25 schema.  Any structural changes in the 25.x config.xml
+  shape would be caught by a newer capture.
+* **AOS-S 16.11 later patches** — covered 16.11.0025, later dot
+  releases exist.
+
+Landing any of these is strictly opportunistic — no codec is
+blocked on them, and a grammar-diversity commit here matters less
+than fixing bugs in the lower-certainty codecs (none exist) or
+adding new canonical fields (ongoing roadmap).

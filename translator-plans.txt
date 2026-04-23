@@ -214,8 +214,20 @@ LAYER 4 — TRANSPORT
   ┌────────────────────────────────────────────────────────────────┐
   │ REAL-CAPTURE VALIDATION — all 5 vendors covered                │
   ├────────────────────────────────────────────────────────────────┤
-  │ STATUS: Cisco/OPNsense/MikroTik/FortiGate validated against    │
-  │   captured configs.  Aruba AOS-S partially unblocked via       │
+  │ SUPERSEDED: This section captures the state of the             │
+  │   real-capture harness DURING the R6/7 bug-fix sessions.       │
+  │   All 5 shipped codecs have since been promoted to             │
+  │   `certified` (the "Still to do — to graduate any codec to     │
+  │   certified" subsection inside this block is stale).  The      │
+  │   current cert matrix, known silent drops, and hardening       │
+  │   backlog live in tests/fixtures/real/RESULTS.md — single      │
+  │   source of truth.  Preserved here as a historical journal     │
+  │   entry showing which bugs each fixture surfaced during        │
+  │   promotion; do not treat it as current state.                 │
+  │                                                                │
+  │ STATUS (historical): Cisco/OPNsense/MikroTik/FortiGate         │
+  │   validated against captured configs.  Aruba AOS-S partially   │
+  │   unblocked via                                                │
   │   Aruba Central 5MemberStack template rendered through         │
   │   scripts/render_aruba_central_template.py.  Rendered fixture  │
   │   is strictly less valuable than a real sanitised capture —    │

@@ -7,6 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (stale cert-promotion drift in RESULTS.md / ARCHITECTURE.md / translator-plans.txt)
+
+- `tests/fixtures/real/RESULTS.md` closing paragraph said
+  "No codec is `certified` yet.  The threshold is ≥3 captures from
+  ≥2 OS versions with round-trip stability — each vendor is ~2
+  captures short of that bar".  Factually wrong — every shipped
+  codec has since been promoted to `certified` (cisco_iosxe_cli,
+  opnsense, mikrotik_routeros, fortigate_cli, aruba_aoss).  The
+  Summary table above the paragraph already showed all five as
+  certified ✅; the prose hadn't been updated to match.  Replaced
+  with a "Certification state (April 2026)" block explaining the
+  corpus purpose has shifted from promotion-driving to
+  hardening-driving, with concrete grammar-diversity gaps listed
+  (FortiGate multi-VDOM, FortiOS 7.4, RouterOS 7.19+, OPNsense
+  25.x, AOS-S 16.11 late patches) — all opportunistic, none
+  blocking.
+- `ARCHITECTURE.md` "Real-capture validation" paragraph said the
+  harness "is what gates codec promotion to `certified`".  Past
+  tense now: all five are already at `certified`; the harness
+  drives hardening rather than promotion.
+- `ARCHITECTURE.md` Evolution roadmap "What's queued" listed
+  "Fixture hunting to promote more codecs toward `certified`" as
+  a top queue item.  Replaced with the accurate grammar-diversity
+  gap list (pointers to RESULTS.md for the live version) + added
+  per-pane SNMP / RADIUS override work to the queue (already
+  slated via the established three-step recipe but previously
+  undocumented in ARCHITECTURE).
+- `translator-plans.txt` R6/7 "REAL-CAPTURE VALIDATION" block
+  contained a snapshot of bug-fix session state that predates
+  the cert-promotion wave — results table showed mikrotik as
+  "CERTIFIED" and others as "best_effort", plus a "Still to do
+  — to graduate any codec to `certified`" subsection listing
+  fixture-count shortfalls.  Marked the whole block as
+  SUPERSEDED with a pointer to RESULTS.md as the single source
+  of truth.  Block preserved as a historical journal entry
+  (per the CHANGELOG-archival-records Hard Rule exception) —
+  its value now is showing which bugs each promotion surfaced,
+  not current state.
+
+This is a pure-docs fix — no code changes, no test count delta.
+The drift slipped through earlier promotion commits because the
+CHANGELOG + RESULTS.md tier-table got updated in each promotion
+but the paragraph-form prose below the tables (and the
+ARCHITECTURE queued-work + translator-plans historical block)
+were left behind.  A useful illustration of why the Doc Sync
+Checklist Hard Rule exists: numbers in tables fail loudly when
+wrong, prose rots silently.
+
 ### Added (deferred item — FortiGate `max_vlans` version-tuning + `max_vlans_source` provenance field)
 
 - New optional `TargetProfile.max_vlans_source: str` field carrying a

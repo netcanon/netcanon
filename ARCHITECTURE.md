@@ -526,8 +526,13 @@ Four layers, each with specific isolation guarantees:
 **Real-capture validation** lives at `tests/unit/migration/test_real_captures.py`.
 It auto-discovers fixtures under `tests/fixtures/real/<vendor>/`,
 runs parse + round-trip + determinism assertions, and prints
-per-fixture coverage metrics.  The harness is what gates codec
-promotion to `certified`.
+per-fixture coverage metrics.  The harness is what gated codec
+promotion to `certified` during the real-capture-pass sessions —
+all five shipped codecs are now at `certified` (see
+`tests/fixtures/real/RESULTS.md` for the per-vendor matrix and
+cert decisions).  The harness now drives *hardening* rather than
+promotion: new fixtures surface latent bugs and cover grammar
+surfaces the current corpus doesn't touch.
 
 Mocking single entry point: **SSH collection is mocked at
 `netconfig.api.routes.backups.get_collector`, never at `ConnectHandler`
@@ -549,7 +554,12 @@ that have shipped:
 - **Tier 2 wire-throughs** — SNMP, LAGs, local_users, DHCP pools, RADIUS, MTU
 
 What's queued:
-- Fixture hunting to promote more codecs toward `certified`
+- Opportunistic grammar-diversity fixtures (FortiGate multi-VDOM,
+  FortiOS 7.4, RouterOS 7.19+, OPNsense 25.x, AOS-S 16.11 late
+  patches — all hardening, no longer cert-promotion — see
+  `tests/fixtures/real/RESULTS.md`)
 - Fidelity polish bucket (VRFs, STP globals, PKI chains → Tier 3)
 - Deploy phase (transport layer wiring for migration output push)
 - Additional canonical models (firewall-specific, wireless-specific CIMs)
+- Per-pane overrides for SNMP / RADIUS following the ports / VLANs /
+  local-users three-step recipe (orchestrator → pipeline → pane)
