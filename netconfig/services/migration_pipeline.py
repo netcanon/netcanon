@@ -141,7 +141,7 @@ def run_plan(
     return job
 
 
-def run_plan_with_rename(
+def run_plan_with_overrides(
     source: CodecBase,
     target: CodecBase,
     raw_text: str,
@@ -150,63 +150,77 @@ def run_plan_with_rename(
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
 ) -> MigrationJob:
-    """Extended pipeline: parse → port-name rewrite → transforms →
-    validate → render.
+    """Extended pipeline with user-override support for multiple
+    canonical categories.
 
-    Wraps :func:`run_plan` with the cross-vendor port-name translator
-    from :mod:`netconfig.migration.canonical.port_names` inserted as
-    the FIRST transform in the chain.  The translator:
+    Shared engine for every per-pane override surface (ports today;
+    VLANs / local_users / SNMP / RADIUS in subsequent commits).  Each
+    per-pane API endpoint in :mod:`netconfig.api.routes.migration`
+    calls this function with only its category's override map
+    populated; the other categories' params default to None (no-op).
+    When multiple panes' overrides need to land together, the caller
+    populates multiple maps in one call — future extension, not
+    currently exercised by any shipped endpoint.
 
-    * Rewrites every port-name field in the canonical tree
-      (``interfaces[].name``, ``vlans[].tagged_ports``, etc.) from
-      the source vendor's convention to the target vendor's, via
-      each codec's own ``classify_port_name`` / ``format_port_identity``
-      methods — strictly through the vendor-agnostic
-      :class:`PortIdentity` bridge, never hard-coding any vendor
-      pair.
+    Current category support:
+      * ``port_rename_map`` — see
+        :func:`netconfig.migration.canonical.port_names.build_port_rename_transform`.
 
-    * Applies user-supplied *port_rename_map* entries FIRST (Tier 2
-      override); falls back to auto-heuristic for any source name
-      not in the map.
+    Planned future-commit categories:
+      * ``vlan_rename_map`` — VLAN ID mapping (P2C2)
+      * ``local_user_rename_map`` — username mapping (P2C5+)
+      * ``snmp_override_map`` — community / trap-host mapping (P2C5+)
 
-    * Populates :attr:`MigrationJob.port_renames` with the full
-      applied source→target map and :attr:`MigrationJob.warnings`
-      with per-name advisories for the complexity cases (breakout,
-      hw-aggregate, unsupported kinds).
+    Cross-device-class guard + validate stage are unchanged from
+    :func:`run_plan`; this function composes the override transforms
+    AHEAD of any caller-supplied transforms so overrides are the
+    first thing that happens to the parsed tree.
 
-    Existing :func:`run_plan` remains unchanged — its signature is
-    frozen per CLAUDE.md "never change signatures of pipeline-stage
-    functions" rule.  Callers that want port-name normalisation
-    explicitly choose this function; legacy callers of ``run_plan``
-    get the historical behaviour (names pass through verbatim).
+    Frozen-signatures rule: NEW function (signature free to grow);
+    :func:`run_plan` and :func:`run_plan_with_rename` remain
+    unchanged.  Adding a new override category in a later commit is
+    a same-function signature extension (optional param with default
+    None) — backwards compatible.
 
     Args:
-        source: Source codec (classifies port names).
-        target: Target codec (formats port names + renders output).
+        source: Source codec.
+        target: Target codec.
         raw_text: Source-vendor config text.
-        port_rename_map: Optional user override map of
-            source-name → target-name.  Entries win over the
-            auto-heuristic.  Empty / None = fully auto.
-        transforms: Additional transforms to apply AFTER the
-            port-name rewrite.
-        transform_specs: Serialisable transform record (mirrors
-            *transforms* for job-reproducibility).
+        port_rename_map: Optional source-name → target-name override
+            map.  Entries win over the auto-heuristic.  Empty / None
+            = fully auto.  Set to ``{}`` (rather than None) to opt
+            into the rename-aware pipeline with no explicit overrides
+            — this is what the UI sends when the operator has
+            selected a target profile but not yet customised any row.
+        transforms: Additional transforms applied AFTER all override
+            transforms.
+        transform_specs: Serialisable transform record.
         force: Skip the cross-device-class guard.
 
     Returns:
-        A :class:`MigrationJob` with ``rendered`` populated on
-        success plus ``port_renames`` and ``warnings`` describing
-        what the translator did.
+        :class:`MigrationJob` with ``rendered`` on success.  Per-
+        category outcome fields are populated when their override
+        was engaged:
+          * ``port_renames`` / ``port_drops`` / ``warnings`` when
+            ``port_rename_map is not None``.
     """
     # Lazy import to avoid circular dependency at module import time
     # (port_names imports CodecBase; this module imports CodecBase).
     from ..migration.canonical.port_names import build_port_rename_transform
 
-    rename_transform, rename_result = build_port_rename_transform(
-        source, target, rename_map=port_rename_map
-    )
+    override_transforms: list[TransformCallable] = []
+    rename_result = None
 
-    combined_transforms = [rename_transform, *(transforms or [])]
+    # Port-rename category.  Engaged when the caller explicitly opts
+    # in by passing a dict (even an empty one).  None means "don't
+    # run the translator at all" — legacy run_plan behaviour.
+    if port_rename_map is not None:
+        rename_transform, rename_result = build_port_rename_transform(
+            source, target, rename_map=port_rename_map
+        )
+        override_transforms.append(rename_transform)
+
+    combined_transforms = override_transforms + list(transforms or [])
 
     job = run_plan(
         source=source,
@@ -217,18 +231,62 @@ def run_plan_with_rename(
         force=force,
     )
 
-    # Attach the translator outcome AFTER run_plan so the job carries
+    # Attach per-category outcomes AFTER run_plan so the job carries
     # what actually happened even when a later stage (validate/render)
-    # failed — operators want to see the rename decisions that led up
-    # to the failure.
-    if rename_result.applied:
-        job.port_renames = dict(rename_result.applied)
-    if rename_result.warnings:
-        # Extend rather than replace — run_plan itself doesn't populate
-        # warnings today, but future pipeline stages might, and this
-        # wrapper shouldn't eat them.
-        job.warnings.extend(rename_result.warnings)
-    if rename_result.dropped:
-        job.port_drops = list(rename_result.dropped)
+    # failed — operators want to see the override decisions that led
+    # up to the failure.
+    if rename_result is not None:
+        if rename_result.applied:
+            job.port_renames = dict(rename_result.applied)
+        if rename_result.warnings:
+            # Extend rather than replace — future stages might push
+            # warnings of their own.
+            job.warnings.extend(rename_result.warnings)
+        if rename_result.dropped:
+            job.port_drops = list(rename_result.dropped)
 
     return job
+
+
+def run_plan_with_rename(
+    source: CodecBase,
+    target: CodecBase,
+    raw_text: str,
+    port_rename_map: dict[str, str | None] | None = None,
+    transforms: list[TransformCallable] | None = None,
+    transform_specs: list[TransformSpec] | None = None,
+    force: bool = False,
+) -> MigrationJob:
+    """Port-rename-specific pipeline entry (legacy signature).
+
+    Thin compatibility wrapper around :func:`run_plan_with_overrides`
+    preserved so existing callers (the UI's ``POST /api/v1/migration/plan``
+    path, integration tests, e2e suite, sample code in this repo's
+    README) keep working unchanged.  New code should prefer
+    :func:`run_plan_with_overrides` directly.
+
+    Signature-frozen per CLAUDE.md: dozens of tests and the main
+    migration API route depend on the exact parameter shape.  Any
+    parameter additions needed for multi-category overrides go on
+    :func:`run_plan_with_overrides`, not here.
+
+    See :func:`run_plan_with_overrides` for the canonical
+    documentation of what port_rename_map does.
+
+    Behaviour-preservation note: pre-P2C1 ``run_plan_with_rename``
+    ALWAYS engaged the rename pipeline, regardless of whether the
+    caller passed a rename map.  The new engine distinguishes
+    ``None`` (don't engage) from ``{}`` (engage with no overrides);
+    this wrapper normalises ``None`` → ``{}`` so existing callers
+    (tests, the UI's ``POST /plan`` handler) keep getting the
+    rename-aware behaviour they were written against.
+    """
+    return run_plan_with_overrides(
+        source=source,
+        target=target,
+        raw_text=raw_text,
+        port_rename_map=port_rename_map if port_rename_map is not None else {},
+        transforms=transforms,
+        transform_specs=transform_specs,
+        force=force,
+    )

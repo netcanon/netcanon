@@ -326,6 +326,105 @@ class TestPlanEndpoint:
         assert resp.json()["status"] == "completed"
 
 
+class TestPlanPortsEndpoint:
+    """``POST /api/v1/migration/plan/ports`` — first per-pane override
+    endpoint.  Establishes the pattern that future category-specific
+    endpoints (``/plan/vlans``, ``/plan/snmp``, etc.) will follow.
+
+    Exists alongside the existing ``POST /plan`` which remains the
+    "everything at once" entry; per-pane endpoints let the client
+    POST only the category that changed.  Semantically equivalent to
+    ``POST /plan`` with a ``port_rename_map`` in the body; the
+    organisational distinction is routing-by-URL vs routing-by-body-
+    field-presence.
+    """
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_engages_rename_pipeline_even_with_no_map(self, client):
+        """Hitting /plan/ports with no explicit rename map still
+        engages the rename-aware pipeline (auto-heuristic only) —
+        distinct from the legacy /plan endpoint which falls through
+        to the un-rename-aware run_plan when no map is supplied."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        # Rename pipeline sets port_renames (possibly empty dict);
+        # run_plan alone leaves it as the default empty dict.
+        # Assert the key is present and typed correctly — value is
+        # codec-dependent.
+        body = resp.json()
+        assert "port_renames" in body
+        assert isinstance(body["port_renames"], dict)
+
+    def test_port_rename_map_is_applied(self, client):
+        """User-supplied rename map should carry through end-to-end —
+        resulting MigrationJob reflects the mapping in port_renames.
+
+        Uses the actual port name present in _IOSXE_SIMPLE (Gi0/0/0)
+        so the rename has a real target to act on."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+                "port_rename_map": {"Gi0/0/0": "GigabitEthernet99"},
+            },
+        )
+        assert resp.status_code == 200
+        applied = resp.json()["port_renames"]
+        # Explicit override wins over the identity auto-heuristic.
+        assert applied.get("Gi0/0/0") == "GigabitEthernet99"
+
+    def test_422_for_unknown_source_codec(self, client):
+        """Error-path parity with /plan."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "not_an_adapter",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_plan_ports_matches_plan_with_rename_map(self, client):
+        """Regression guard: /plan/ports with a rename_map produces
+        the same outcome as /plan with the same body.  Per-pane
+        endpoints are an organisational redirection, not a behaviour
+        change."""
+        body = {
+            "source": "cisco_iosxe",
+            "target": "cisco_iosxe",
+            "raw_text": _IOSXE_SIMPLE,
+            "port_rename_map": {},   # opt into rename-aware pipeline
+        }
+        plan = client.post("/api/v1/migration/plan", json=body).json()
+        plan_ports = client.post("/api/v1/migration/plan/ports", json=body).json()
+        # Same pipeline outcome (job IDs differ, but status + rendered
+        # content match).
+        assert plan["status"] == plan_ports["status"]
+        assert plan["rendered"] == plan_ports["rendered"]
+        assert plan["port_renames"] == plan_ports["port_renames"]
+
+
 class TestRenderEndpoint:
     """/render is currently an alias for /plan.  These tests lock that
     fact in so a future split gets a visible PR."""

@@ -30,7 +30,11 @@ from ...models.migration import (
 )
 from ...migration.target_profiles import TargetProfile
 from ...services.migration_detect import DetectCandidate, detect_codec
-from ...services.migration_pipeline import run_plan, run_plan_with_rename
+from ...services.migration_pipeline import (
+    run_plan,
+    run_plan_with_overrides,
+    run_plan_with_rename,
+)
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
 
@@ -205,6 +209,63 @@ def plan_migration(
         job = run_plan(source, target, raw_text, force=body.force)
     logger.info(
         "Migration plan %s: %s -> %s = %s",
+        job.id[:8],
+        body.source,
+        body.target,
+        job.status.value,
+    )
+    return job
+
+
+@router.post(
+    "/plan/ports",
+    response_model=MigrationJob,
+    summary="Per-pane override endpoint: port-name renames",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid adapter name or input specification"},
+    },
+)
+def plan_migration_ports(
+    body: MigrationPlanRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> MigrationJob:
+    """Port-rename-only entry into the migration pipeline.
+
+    First concrete per-pane override endpoint.  Establishes the
+    pattern that subsequent category endpoints (``/plan/vlans``,
+    ``/plan/snmp``, ``/plan/local-users``) will follow: each accepts
+    the same :class:`MigrationPlanRequest` body and dispatches to
+    :func:`run_plan_with_overrides` with only its category's
+    override map populated.
+
+    Semantically equivalent to ``POST /plan`` when the request body
+    carries a ``port_rename_map``.  The distinction is purely
+    organisational — routing by URL rather than by body-field
+    presence makes the UI's pane-switch behaviour explicit and lets
+    operators observe which override category fired via server
+    logs / network-tab inspection.  ``POST /plan`` stays as the
+    "everything at once" entry; per-pane endpoints let the client
+    post only the category that changed.
+
+    Ignores other override maps if the body carries them — a
+    hypothetical future client posting ``vlan_rename_map`` to
+    ``/plan/ports`` would see the VLAN map silently dropped.
+    Discipline of posting to the right URL is part of the contract.
+    """
+    source = _resolve_adapter_or_422(body.source, side="source")
+    target = _resolve_adapter_or_422(body.target, side="target")
+    raw_text = _resolve_input_text(body, storage)
+    # Always engage the rename-aware pipeline from this endpoint —
+    # hitting /plan/ports signals clear intent even when the map is
+    # empty ({} = "auto-heuristic only, please").
+    job = run_plan_with_overrides(
+        source, target, raw_text,
+        port_rename_map=body.port_rename_map or {},
+        force=body.force,
+    )
+    logger.info(
+        "Migration plan/ports %s: %s -> %s = %s",
         job.id[:8],
         body.source,
         body.target,
