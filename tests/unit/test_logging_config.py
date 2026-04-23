@@ -162,3 +162,107 @@ class TestNoisyLoggerSuppression:
         # NOTSET means "inherit from parent / root" — correct behaviour.
         assert logging.getLogger("netconfig").level == logging.NOTSET
         assert logging.getLogger("netconfig.api.routes.backups").level == logging.NOTSET
+
+
+# ---------------------------------------------------------------------------
+# Request-ID filter (Phase 9 logging audit)
+# ---------------------------------------------------------------------------
+
+
+class TestRequestIdFilter:
+    """Locks in the contextvar + LogFilter shape so future refactors
+    of ``configure_logging`` don't silently lose the correlation
+    column on log lines.
+    """
+
+    def test_filter_injects_default_sentinel_when_no_request(self):
+        """Outside a request scope, REQUEST_ID_CTX returns '-'.  The
+        filter must preserve the column alignment by injecting the
+        sentinel rather than leaving the attribute missing."""
+        from netconfig.logging_config import (
+            REQUEST_ID_CTX,
+            RequestIdFilter,
+        )
+        # Baseline: no request is in flight.
+        assert REQUEST_ID_CTX.get() == "-"
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="",
+            lineno=0, msg="hello", args=(), exc_info=None,
+        )
+        RequestIdFilter().filter(record)
+        assert record.request_id == "-"
+
+    def test_filter_uses_contextvar_value(self):
+        from netconfig.logging_config import (
+            REQUEST_ID_CTX,
+            RequestIdFilter,
+        )
+        token = REQUEST_ID_CTX.set("abc12345")
+        try:
+            record = logging.LogRecord(
+                name="test", level=logging.INFO, pathname="",
+                lineno=0, msg="hello", args=(), exc_info=None,
+            )
+            RequestIdFilter().filter(record)
+            assert record.request_id == "abc12345"
+        finally:
+            REQUEST_ID_CTX.reset(token)
+
+    def test_filter_preserves_explicit_extra_request_id(self):
+        """Explicit ``extra={'request_id': '...'}`` instrumentation
+        wins over the contextvar — a deliberate override shouldn't
+        get stomped by the filter."""
+        from netconfig.logging_config import RequestIdFilter
+        record = logging.LogRecord(
+            name="test", level=logging.INFO, pathname="",
+            lineno=0, msg="hello", args=(), exc_info=None,
+        )
+        record.request_id = "custom-id"
+        RequestIdFilter().filter(record)
+        assert record.request_id == "custom-id"
+
+    def test_configure_logging_installs_filter_on_console(self):
+        configure_logging()
+        from netconfig.logging_config import RequestIdFilter
+        console_handlers = [
+            h for h in logging.getLogger().handlers
+            if type(h) is logging.StreamHandler
+        ]
+        assert console_handlers, "expected a StreamHandler"
+        for h in console_handlers:
+            assert any(
+                isinstance(f, RequestIdFilter) for f in h.filters
+            ), f"handler {h!r} missing RequestIdFilter"
+
+    def test_configure_logging_installs_filter_on_file(self, tmp_path):
+        configure_logging(log_file=tmp_path / "req.log")
+        from netconfig.logging_config import RequestIdFilter
+        file_handlers = [
+            h for h in logging.getLogger().handlers
+            if isinstance(h, logging.handlers.RotatingFileHandler)
+        ]
+        assert file_handlers, "expected a RotatingFileHandler"
+        for h in file_handlers:
+            assert any(
+                isinstance(f, RequestIdFilter) for f in h.filters
+            )
+
+    def test_formatted_output_contains_request_id_column(
+        self, tmp_path,
+    ):
+        """End-to-end: set a request id, emit a log, read the file,
+        assert the [req=...] column renders with the id."""
+        from netconfig.logging_config import REQUEST_ID_CTX
+        log_file = tmp_path / "netconfig.log"
+        configure_logging(level="INFO", log_file=log_file)
+        token = REQUEST_ID_CTX.set("e2e12345")
+        try:
+            logging.getLogger("test.fmt").info("correlated-probe")
+            for h in logging.getLogger().handlers:
+                h.flush()
+        finally:
+            REQUEST_ID_CTX.reset(token)
+        text = log_file.read_text(encoding="utf-8")
+        assert "[req=e2e12345]" in text, (
+            f"expected [req=e2e12345] in formatted log; got: {text!r}"
+        )

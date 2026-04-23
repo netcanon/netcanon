@@ -204,6 +204,50 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
 
     # ------------------------------------------------------------------
+    # Request-ID middleware (Phase 9 logging audit)
+    # ------------------------------------------------------------------
+    # Sets a contextvar that flows through to every log record via the
+    # RequestIdFilter installed by configure_logging().  Inbound
+    # X-Request-ID is honoured when present (lets upstream proxies /
+    # clients supply their own correlation id); otherwise we generate
+    # a short UUID prefix.  The id is echoed on the response header
+    # so clients can reference the same id in bug reports.
+    #
+    # Middlewares are applied in *reverse* registration order per
+    # Starlette semantics — this one is registered BEFORE the
+    # security-headers middleware below so it wraps the outermost
+    # response, guaranteeing the contextvar is set before any
+    # downstream code (including other middleware + route handlers)
+    # writes a log line.
+    import uuid
+
+    from .logging_config import REQUEST_ID_CTX
+
+    @app.middleware("http")
+    async def add_request_id(request: Request, call_next):
+        # Honour an upstream-supplied id when it's short + printable;
+        # otherwise ignore (defence against header-injected garbage
+        # bloating log lines).  Accept 8-36 chars of ASCII alnum +
+        # hyphen + underscore — covers short UUID prefixes, full
+        # UUIDs, and typical trace-id formats.
+        inbound = request.headers.get("x-request-id", "")
+        if 8 <= len(inbound) <= 36 and all(
+            c.isalnum() or c in "-_" for c in inbound
+        ):
+            req_id = inbound
+        else:
+            req_id = uuid.uuid4().hex[:8]
+        token = REQUEST_ID_CTX.set(req_id)
+        try:
+            response = await call_next(request)
+        finally:
+            REQUEST_ID_CTX.reset(token)
+        # Always echo the id on the response so log-stitching works
+        # from the client side (bug reports can cite "X-Request-ID").
+        response.headers["X-Request-ID"] = req_id
+        return response
+
+    # ------------------------------------------------------------------
     # Security headers middleware
     # ------------------------------------------------------------------
     @app.middleware("http")
