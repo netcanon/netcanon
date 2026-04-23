@@ -215,15 +215,16 @@ stages stay frozen.  See the module docstring.
 
 **Where:** `run_plan_with_overrides` in
 `netconfig/services/migration_pipeline.py` +
-`netconfig/migration/canonical/{port_names,vlan_names}.py` +
-`netconfig/api/routes/migration.py` (per-pane POST endpoints) +
+`netconfig/migration/canonical/{port_names,vlan_names,local_user_names,snmp_names}.py`
++ `netconfig/api/routes/migration.py` (per-pane POST endpoints) +
 the left-rail category nav in `netconfig/templates/migrate.html`
 with per-category partials under `_partials/`.
 
 **What:** The Tier-3 rename modal lets operators override the
 auto-heuristic for individual canonical categories without
 leaving the translate workflow.  Each category (Ports, VLANs,
-Local Users today; future SNMP / RADIUS) has:
+Local Users, SNMP community today; future SNMP trap-hosts /
+RADIUS) has:
 
 1. **An orchestrator** under `netconfig/migration/canonical/`
    that walks the canonical tree and applies a caller-supplied
@@ -232,7 +233,8 @@ Local Users today; future SNMP / RADIUS) has:
    what happened.
 2. **A per-pane API endpoint** — `POST /api/v1/migration/plan/ports`,
    `POST /api/v1/migration/plan/vlans`,
-   `POST /api/v1/migration/plan/local_users` — that accepts only
+   `POST /api/v1/migration/plan/local_users`,
+   `POST /api/v1/migration/plan/snmp` — that accepts only
    its category's override map and delegates to
    `run_plan_with_overrides` with the other categories' maps
    defaulted to `None`.
@@ -244,12 +246,22 @@ Local Users today; future SNMP / RADIUS) has:
 function new per-pane categories extend.  New parameters go there
 as optional maps defaulting to `None`; `run_plan` and
 `run_plan_with_rename` signatures stay frozen.  Adding a new
-category follows the established three-step recipe (proven by
-ports → vlans → local_users): orchestrator module → wire into
-`run_plan_with_overrides` under a None-vs-dict sentinel guard →
-add endpoint + rail button + pane partial.  Each new category
-also extends the capture transform if the UI pane needs to
-enumerate source-tree entities (VLAN IDs, usernames, etc.).
+category follows the established three-step recipe (proven four
+times over: ports → vlans → local_users → snmp_community):
+orchestrator module → wire into `run_plan_with_overrides` under
+a None-vs-dict sentinel guard → add endpoint + rail button +
+pane partial.  Each new category also extends the capture
+transform if the UI pane needs to enumerate source-tree entities
+(VLAN IDs, usernames, SNMP community, etc.).
+
+**Scalar vs list canonical surfaces:** ports / VLANs / local_users
+are list-like (many rows per pane, collision detection, merge
+semantics).  SNMP community is scalar — one string per canonical
+tree — so its pane renders a single-row table for visual parity
+with the list-oriented siblings and collision detection
+definitionally returns zero.  Future categories in either shape
+class fit the same recipe; the map shape is uniformly
+`dict[T, T | None] | None` even when T is effectively singleton.
 
 **Sentinel semantics (all override maps):**
 
@@ -263,10 +275,14 @@ enumerate source-tree entities (VLAN IDs, usernames, etc.).
 
 **Cross-category ordering:** port rename runs BEFORE VLAN rename
 in `run_plan_with_overrides` so port-name rewrites don't race
-with VLAN-ID references changing underneath them.  Adding a
-future category requires deciding its order relative to the
-existing transforms; document the choice in both
-`run_plan_with_overrides` and the orchestrator module.
+with VLAN-ID references changing underneath them.  Current order
+is ports → vlans → local_users → snmp_community; the last three
+are independent of each other (VLANs don't reference users, users
+don't reference SNMP, SNMP doesn't reference ports/VLANs) so
+only the ports-first constraint is load-bearing.  Adding a future
+category requires deciding its order relative to the existing
+transforms; document the choice in both `run_plan_with_overrides`
+and the orchestrator module.
 
 **localStorage ack persistence (UI):** operator overrides are
 persisted under
@@ -278,11 +294,12 @@ parsers start populating `CanonicalIntent.source_version`.
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
 capture-first transform that populates `MigrationJob.source_vlans`,
-`source_local_users`, and `source_hostname` from the post-parse,
-pre-transform tree.  This is load-bearing for the VLAN +
-local-users panes (they have no "auto-rewritten" rows to fall
-back on if the operator hasn't already sent overrides) and for
-the localStorage key (hostname).
+`source_local_users`, `source_snmp_community`, and
+`source_hostname` from the post-parse, pre-transform tree.  This
+is load-bearing for the VLAN / local-users / SNMP panes (they
+have no "auto-rewritten" rows to fall back on if the operator
+hasn't already sent overrides) and for the localStorage key
+(hostname).
 
 **Target-codec compatibility banners:** each codec exposes
 `unsupported_rename_categories: frozenset[str]` listing per-pane
@@ -495,6 +512,12 @@ the source of truth):
   category pane renderer (P2C4); third per-pane category after
   ports + VLANs.  Free-text rewrite, collision warning is
   informational (server merges on max privilege + first-wins role).
+* **snmp-rename-table.js** — rename-modal SNMP-community pane
+  renderer (P2C5); fourth per-pane category.  Scalar canonical
+  surface (one community string) so the pane renders a single-row
+  table for visual parity with the list-oriented panes.
+  "Clear" replaces "drop" semantically — clearing the community
+  causes the render path to omit the entire SNMP block.
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the
