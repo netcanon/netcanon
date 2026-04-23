@@ -424,6 +424,30 @@ class MigrationJob(BaseModel):
     #: transform.  Empty on legacy :func:`run_plan` calls.
     source_local_users: list[str] = Field(default_factory=list)
 
+    #: Source→target SNMP community-name rewrites applied during
+    #: :func:`run_plan_with_overrides` when the caller supplied a
+    #: ``snmp_community_rename_map``.  Fourth per-pane category
+    #: after ``port_renames`` / ``vlan_renames`` / ``local_user_renames``.
+    #: Effectively single-entry (the canonical tree holds one
+    #: community string) but uses the dict shape for symmetry with
+    #: the sibling fields.  Unchanged community → empty dict.
+    #: CanonicalSNMP models v1/v2c only; SNMPv3 users are NOT in
+    #: scope for this map (see :mod:`netconfig.migration.canonical.snmp_names`).
+    snmp_community_renames: dict[str, str] = Field(default_factory=dict)
+
+    #: SNMP community names the operator explicitly cleared via a
+    #: ``None`` value in the rename map.  Effectively single-entry
+    #: list.  Render paths treat an empty
+    #: :attr:`CanonicalSNMP.community` as "don't emit the SNMP block".
+    snmp_community_drops: list[str] = Field(default_factory=list)
+
+    #: Source-tree SNMP community string captured post-parse, pre-
+    #: transform.  Lets the Tier-3 rename modal's SNMP pane show
+    #: the current community value so the operator can rewrite
+    #: knowingly.  Empty when the source config had no SNMP block
+    #: or a bare SNMP block without a community configured.
+    source_snmp_community: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
@@ -547,6 +571,34 @@ class MigrationPlanRequest(BaseModel):
     that set it to ``{}`` opt into the VLAN-rename pipeline with
     no explicit overrides (useful when the UI wants to surface
     "no VLAN overrides applied" in the response shape)."""
+
+    snmp_community_rename_map: dict[str, str | None] | None = None
+    """Optional SNMP-community rename map.  Fourth per-pane surface
+    after :attr:`port_rename_map` / :attr:`vlan_rename_map` /
+    :attr:`local_user_rename_map`.  Only affects
+    :attr:`CanonicalSNMP.community` (v1/v2c string) — SNMPv3 user
+    identities are NOT modelled in the canonical schema and are not
+    renameable by this map.
+
+    Entry value semantics:
+
+    * ``str`` — rewrite the community string to this value.
+    * ``None`` — clear the community string (render paths then
+      omit the SNMP block).
+    * key NOT matching the current community → advisory-only
+      warning; no rewrite happens.
+
+    Because the canonical tree holds a SINGLE community string,
+    the map is effectively single-entry.  Multiple entries are
+    permitted (for API-symmetry with the list-oriented panes) but
+    at most one can match the current community; others generate
+    warnings.
+
+    Backwards-compatible: callers that don't set this get the
+    legacy behaviour (community unchanged).  Callers that set it
+    to ``{}`` opt into the SNMP-rename pipeline with no explicit
+    overrides (useful for surfacing "no SNMP overrides applied"
+    in the response shape)."""
 
 
 class CodecInfo(BaseModel):

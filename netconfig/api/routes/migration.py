@@ -15,9 +15,9 @@ Translation pipeline entries:
         → everything-at-once entry.  Accepts a MigrationPlanRequest
           with any combination of per-category override maps
           (``port_rename_map``, ``vlan_rename_map``,
-          ``local_user_rename_map``); engages the rename-aware
-          pipeline when any is present or when a target_profile is
-          selected.
+          ``local_user_rename_map``, ``snmp_community_rename_map``);
+          engages the rename-aware pipeline when any is present or
+          when a target_profile is selected.
 
     POST /api/v1/migration/plan/ports
         → per-pane override endpoint for port-name rewrites
@@ -37,6 +37,16 @@ Translation pipeline entries:
           with only local_user_rename_map engaged.  Drop via None
           value; collision merge keeps highest privilege_level +
           first-wins role + first-wins hashed_password.
+
+    POST /api/v1/migration/plan/snmp
+        → per-pane override endpoint for SNMP community-name
+          rewrites (introduced P2C5).  Dispatches to
+          run_plan_with_overrides with only snmp_community_rename_map
+          engaged.  Effectively single-entry rename (CanonicalSNMP
+          holds one community string); drop via None value clears
+          the community and render paths omit the SNMP block.
+          SNMPv3 users are NOT in scope — CanonicalSNMP models
+          v1/v2c only.
 
     POST /api/v1/migration/render
         → current alias of /plan, retained for API symmetry and a
@@ -59,9 +69,10 @@ Target profiles (for the Tier-3 rename modal's dropdown population):
 All POST endpoints accept the same :class:`MigrationPlanRequest`
 body (input mode is raw_text XOR source_filename) and return a
 :class:`MigrationJob`.  Future per-pane categories
-(``snmp``, ``radius``, ...) will extend the endpoint set by adding
-siblings under ``/plan/<category>`` per the pattern established by
-/plan/ports, /plan/vlans, and /plan/local_users.
+(``radius``, ``snmp_trap_hosts``, ...) will extend the endpoint set
+by adding siblings under ``/plan/<category>`` per the pattern
+established by /plan/ports, /plan/vlans, /plan/local_users, and
+/plan/snmp.
 
 Deploy-time endpoints (``/deploy`` and associated MigrationJob
 persistence analogous to ``FileJobStore``) are not yet shipped and
@@ -261,14 +272,15 @@ def plan_migration(
         body.port_rename_map is not None
         or body.vlan_rename_map is not None
         or body.local_user_rename_map is not None
+        or body.snmp_community_rename_map is not None
         or body.target_profile is not None
     )
     if has_any_override:
         # Dispatch directly to run_plan_with_overrides so EVERY
         # category map threads through — run_plan_with_rename is
         # signature-frozen and only accepts port_rename_map, so
-        # calling it here would silently drop VLAN / local-user
-        # overrides posted in the same body.
+        # calling it here would silently drop VLAN / local-user /
+        # SNMP overrides posted in the same body.
         job = run_plan_with_overrides(
             source, target, raw_text,
             port_rename_map=(
@@ -278,6 +290,7 @@ def plan_migration(
             ),
             vlan_rename_map=body.vlan_rename_map,
             local_user_rename_map=body.local_user_rename_map,
+            snmp_community_rename_map=body.snmp_community_rename_map,
             force=body.force,
         )
     else:
@@ -461,6 +474,71 @@ def plan_migration_local_users(
     )
     logger.info(
         "Migration plan/local_users %s: %s -> %s = %s",
+        job.id[:8],
+        body.source,
+        body.target,
+        job.status.value,
+    )
+    return job
+
+
+@router.post(
+    "/plan/snmp",
+    response_model=MigrationJob,
+    summary="Per-pane override endpoint: SNMP community rename",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid adapter name or input specification"},
+    },
+)
+def plan_migration_snmp(
+    body: MigrationPlanRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> MigrationJob:
+    """SNMP-community-rename-only entry into the migration pipeline.
+
+    Fourth concrete per-pane override endpoint (ports + vlans +
+    local_users came first).  Accepts the same
+    :class:`MigrationPlanRequest` body and dispatches to
+    :func:`run_plan_with_overrides` with only
+    ``snmp_community_rename_map`` populated.
+
+    SNMP-community rename is a string → string rewrite applied to
+    :attr:`CanonicalSNMP.community` — a single-value scalar field.
+    The rename map is effectively single-entry (at most one key
+    can match the current community); using the dict shape keeps
+    API symmetry with the other three per-pane endpoints.  ``None``
+    as a map value clears the community string; render paths then
+    omit the entire SNMP block on output.
+
+    Explicitly NOT in scope:
+        * SNMPv3 users.  :class:`CanonicalSNMP` models v1/v2c only
+          (community, location, contact, trap_hosts).  Adding v3
+          user-based security is a canonical-schema change — see
+          ``docs/adding-a-canonical-field.md``.
+        * Trap-host rename.  The ``trap_hosts`` list is a distinct
+          rename surface planned as a follow-up commit
+          (``snmp_trap_host_rename_map``); community-only was the
+          proportionate first pass because community is the
+          dominant migration use case.
+        * Location / contact.  These are sysadmin metadata edited
+          per-device in a CMDB, not identity fields — migrations
+          carry them through unchanged by design.
+
+    Ignores other override maps if the body carries them — hitting
+    ``/plan/snmp`` applies the SNMP category only.  Use
+    ``POST /plan`` for multi-category overrides in a single call.
+    """
+    source = _resolve_adapter_or_422(body.source, side="source")
+    target = _resolve_adapter_or_422(body.target, side="target")
+    raw_text = _resolve_input_text(body, storage)
+    job = run_plan_with_overrides(
+        source, target, raw_text,
+        snmp_community_rename_map=body.snmp_community_rename_map or {},
+        force=body.force,
+    )
+    logger.info(
+        "Migration plan/snmp %s: %s -> %s = %s",
         job.id[:8],
         body.source,
         body.target,

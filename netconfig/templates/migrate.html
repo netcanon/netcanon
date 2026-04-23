@@ -578,6 +578,15 @@
         <span id="mig-rename-rail-local-users-count" class="rail-count"
               data-testid="migrate-rename-rail-local-users-count">0</span>
       </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-snmp"
+              data-category="snmp"
+              onclick="showRenameCategory('snmp')">
+        <span>SNMP</span>
+        <span id="mig-rename-rail-snmp-count" class="rail-count"
+              data-testid="migrate-rename-rail-snmp-count">0</span>
+      </button>
     </nav>
 
     <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
@@ -652,6 +661,32 @@
         <div id="mig-rename-local-users-sections"
              data-testid="migrate-rename-local-users-sections"></div>
       </div>
+
+      <!-- SNMP category pane — community-string rename.  Fourth per-
+           pane override after ports + VLANs + local_users.  Distinct
+           shape from the other three panes: SNMP community is a
+           SINGLE scalar on the canonical tree (not a list), so this
+           pane renders ONE row rather than a table.  Future commit
+           can extend with a trap-host rename table here — see
+           snmp-rename-table.js for the extension point comment. -->
+      <div id="mig-rename-snmp-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-snmp-pane">
+        <!-- SNMP-pane compatibility banner.  Same amber banner
+             pattern as the local-users pane — shown when the target
+             codec declares 'snmp' in its unsupported_rename_categories. -->
+        <div id="mig-rename-snmp-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-snmp-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-snmp-empty"
+             data-testid="migrate-rename-snmp-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No SNMP block found in the source config.
+        </div>
+        <div id="mig-rename-snmp-sections"
+             data-testid="migrate-rename-snmp-sections"></div>
+      </div>
     </div>
 
     <div id="mig-rename-preview-pane" data-testid="migrate-rename-preview-pane">
@@ -694,6 +729,9 @@
  *                                  rows under the left-rail nav; P2C3)
  *   _partials/local-user-rename-table.js — renderLocalUserRenameTable
  *                                  (third per-pane category; P2C4)
+ *   _partials/snmp-rename-table.js — renderSnmpRenameTable (fourth per-
+ *                                  pane category, single-row scalar
+ *                                  community rename; P2C5)
  *   _partials/rename-panel.js    — renderRenamePreview + renderRenameSummary
  *   _partials/fit-check.js       — renderFitCheck hardware-capacity banner
  *   _partials/rename-apply.js    — renameModalApply + drag handlers +
@@ -1327,7 +1365,8 @@
   var _renameUserMap = {};           // source_name -> target_name (user overrides)
   var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
   var _renameLocalUserMap = {};      // source_username -> target_username | null
-  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users'
+  var _renameSnmpCommunityMap = {};  // source_community -> target_community | null (effectively single-entry)
+  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
 
   // Kind ordering in the modal (drives the collapsible section order).
@@ -1590,13 +1629,15 @@
       ports: Object.assign({}, _renameUserMap),
       vlans: Object.assign({}, _renameVlanUserMap),
       local_users: Object.assign({}, _renameLocalUserMap),
+      snmp_community: Object.assign({}, _renameSnmpCommunityMap),
       ts: new Date().toISOString(),
     };
     // Skip writes when all maps are empty — keeps localStorage
     // clean after a Reset-all rather than leaving an empty marker.
     if (!Object.keys(payload.ports).length
         && !Object.keys(payload.vlans).length
-        && !Object.keys(payload.local_users).length) {
+        && !Object.keys(payload.local_users).length
+        && !Object.keys(payload.snmp_community).length) {
       try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
       return;
     }
@@ -1637,15 +1678,22 @@
       // Usernames are string-keyed, no coercion needed.
       _renameLocalUserMap = Object.assign({}, ack.local_users);
     }
+    if (ack.snmp_community && typeof ack.snmp_community === 'object') {
+      // Single-entry map keyed on source community string; same
+      // no-coercion story as local_users.
+      _renameSnmpCommunityMap = Object.assign({}, ack.snmp_community);
+    }
     var portCount = Object.keys(_renameUserMap).length;
     var vlanCount = Object.keys(_renameVlanUserMap).length;
     var userCount = Object.keys(_renameLocalUserMap).length;
+    var snmpCount = Object.keys(_renameSnmpCommunityMap).length;
     var status = document.getElementById('mig-rename-status');
-    if (status && (portCount || vlanCount || userCount)) {
+    if (status && (portCount || vlanCount || userCount || snmpCount)) {
       var bits = [];
       if (portCount) bits.push(portCount + ' port');
       if (vlanCount) bits.push(vlanCount + ' VLAN');
       if (userCount) bits.push(userCount + ' user');
+      if (snmpCount) bits.push(snmpCount + ' SNMP');
       status.textContent = 'Restored prior overrides ('
         + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
       status.setAttribute('data-testid-state', 'ack-restored');
@@ -1692,12 +1740,14 @@
       local_users: 'local users',
       vlans: 'VLANs',
       ports: 'port names',
+      snmp: 'SNMP community',
     };
     // PANE_ID_BY_CATEGORY: extend here when new categories gain
     // compat banners.  Value is the element id of the banner div
     // inside that pane; undefined entries are skipped silently.
     var paneIdByCategory = {
       local_users: 'mig-rename-local-users-compat',
+      snmp: 'mig-rename-snmp-compat',
     };
     Object.keys(paneIdByCategory).forEach(function(cat) {
       var el = document.getElementById(paneIdByCategory[cat]);
@@ -1817,9 +1867,11 @@
     var portsPane = document.getElementById('mig-rename-ports-pane');
     var vlansPane = document.getElementById('mig-rename-vlans-pane');
     var localUsersPane = document.getElementById('mig-rename-local-users-pane');
+    var snmpPane = document.getElementById('mig-rename-snmp-pane');
     if (portsPane) portsPane.classList.toggle('active', cat === 'ports');
     if (vlansPane) vlansPane.classList.toggle('active', cat === 'vlans');
     if (localUsersPane) localUsersPane.classList.toggle('active', cat === 'local_users');
+    if (snmpPane) snmpPane.classList.toggle('active', cat === 'snmp');
     document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.category === cat);
     });
@@ -1856,6 +1908,9 @@
     } else if (cat === 'local_users'
                && typeof renderLocalUserRenameTable === 'function') {
       renderLocalUserRenameTable();
+    } else if (cat === 'snmp'
+               && typeof renderSnmpRenameTable === 'function') {
+      renderSnmpRenameTable();
     } else if (cat === 'ports') {
       renderRenameTable();
     }
@@ -1872,6 +1927,7 @@
     var portsCount = document.getElementById('mig-rename-rail-ports-count');
     var vlansCount = document.getElementById('mig-rename-rail-vlans-count');
     var usersCount = document.getElementById('mig-rename-rail-local-users-count');
+    var snmpCount = document.getElementById('mig-rename-rail-snmp-count');
     if (portsCount) {
       var applied = _lastJob.port_renames
         ? Object.keys(_lastJob.port_renames).length : 0;
@@ -1888,6 +1944,13 @@
       var u = (_lastJob.source_local_users || []).length;
       usersCount.textContent = String(u);
     }
+    if (snmpCount) {
+      // SNMP count is 1 when the source has a community string to
+      // rename, 0 otherwise.  Matches the "rows operator can act on"
+      // semantic used by the other panes.
+      var s = (_lastJob.source_snmp_community) ? 1 : 0;
+      snmpCount.textContent = String(s);
+    }
   }
 
   /** Call from renderResult: remember the job + request body so the
@@ -1898,15 +1961,16 @@
     _renameUserMap = {};
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
+    _renameSnmpCommunityMap = {};
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
     // Show the rename button whenever ANY pane has content to work
-    // with — port renames/warnings, source VLANs to remap, or
-    // source local users to remap.  Pre-P2C4 this gate was ports-
-    // only; with three panes live the modal is useful even when
-    // the source config declares no interfaces (e.g. a user-only
-    // migration snippet).
+    // with — port renames/warnings, source VLANs to remap, source
+    // local users to remap, or a source SNMP community to rename.
+    // Pre-P2C5 this gate stopped at users; SNMP adds the fourth
+    // open-trigger so SNMP-only source snippets (no ports / VLANs
+    // / users) still get the modal.
     var hasRenames = job && job.port_renames
       && Object.keys(job.port_renames).length > 0;
     var hasWarnings = job && Array.isArray(job.warnings)
@@ -1915,7 +1979,10 @@
       && job.source_vlans.length > 0;
     var hasLocalUsers = job && Array.isArray(job.source_local_users)
       && job.source_local_users.length > 0;
-    var hasAnything = hasRenames || hasWarnings || hasVlans || hasLocalUsers;
+    var hasSnmpCommunity = job && typeof job.source_snmp_community === 'string'
+      && job.source_snmp_community.length > 0;
+    var hasAnything = hasRenames || hasWarnings || hasVlans
+                      || hasLocalUsers || hasSnmpCommunity;
     if (job && job.rendered && hasAnything) {
       btn.style.display = '';
       var attentionCount = hasWarnings ? job.warnings.length : 0;
@@ -1971,6 +2038,7 @@
     renderRenameTable();
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
+    if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
     renderRenameRailCounts();
     renderCompatBanners();
     renderPerPaneFitCheck();
@@ -1988,6 +2056,7 @@
     _renameUserMap = {};
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
+    _renameSnmpCommunityMap = {};
     // Clear the persisted entry so a subsequent modal-open for the
     // same (source, target, hostname) doesn't restore what the
     // operator just reset.  renderRenameSummary below will write an
@@ -1997,6 +2066,7 @@
     renderRenameTable();
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
+    if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
@@ -2012,6 +2082,9 @@
 
   /* ── Local-user rename pane renderer (extracted to _partials/local-user-rename-table.js) ── */
   {% include "_partials/local-user-rename-table.js" %}
+
+  /* ── SNMP community rename pane renderer (extracted to _partials/snmp-rename-table.js) ── */
+  {% include "_partials/snmp-rename-table.js" %}
 
   /* ── Rename-modal preview + summary (extracted to _partials/rename-panel.js) ── */
   {% include "_partials/rename-panel.js" %}

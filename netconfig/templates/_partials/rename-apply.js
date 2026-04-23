@@ -46,6 +46,17 @@
         && Object.keys(_renameLocalUserMap).length > 0) {
       body.local_user_rename_map = Object.assign({}, _renameLocalUserMap);
     }
+    // SNMP-community category — scalar but the wire contract uses
+    // the same dict shape.  Only send when the operator actually
+    // touched the community row; otherwise the pipeline stays on
+    // the auto path (no override, no drop).
+    if (typeof _renameSnmpCommunityMap === 'object'
+        && _renameSnmpCommunityMap
+        && Object.keys(_renameSnmpCommunityMap).length > 0) {
+      body.snmp_community_rename_map = Object.assign(
+        {}, _renameSnmpCommunityMap,
+      );
+    }
     var profileKey = currentRenameProfileKey();
     if (profileKey) body.target_profile = profileKey;
     // Only send target_module when the profile actually has
@@ -73,6 +84,7 @@
       renderRenameTable();
       if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
       if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
+      if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
       if (typeof renderRenameRailCounts === 'function') renderRenameRailCounts();
       renderRenamePreview();
       renderRenameSummary();

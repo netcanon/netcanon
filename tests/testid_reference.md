@@ -565,6 +565,17 @@ surfaces under a shared left-rail navigation):
 | `migrate-rename-local-users-compat`   | `<div>`    | Amber target-codec compatibility banner inside the local-users pane.  Shows when the active target codec's `unsupported_rename_categories` list includes `local_users`.  Warns the operator that rename overrides will apply to the canonical tree but won't reach rendered output until the codec's Tier-2 parse+render path ships |
 | `migrate-rename-vlans-fitcheck`       | `<div>`    | Per-pane fit-check banner inside the VLANs pane.  Shows when the active target profile declares `max_vlans`.  Three CSS states: hidden (no profile / no limit), `mig-banner-ok` (source count ≤ limit), `mig-banner-block` (source count > limit) |
 | `migrate-rename-local-users-fitcheck` | `<div>`    | Per-pane fit-check banner inside the local-users pane.  Same three-state contract as the VLAN banner, driven by target profile's `max_local_users` field |
+| `migrate-rename-rail-snmp`            | `<button>` | Activates the SNMP category pane.  `data-category="snmp"`.  Fourth per-pane category (P2C5) |
+| `migrate-rename-rail-snmp-count`      | `<span>`   | Row-count badge on the SNMP rail button.  Shows `1` when the source config declared a community string, `0` otherwise (scalar canonical surface, not a list) |
+| `migrate-rename-snmp-pane`            | `<div>`    | SNMP category pane wrapper.  `active` CSS class when visible |
+| `migrate-rename-snmp-empty`           | `<div>`    | Empty-state message when the source config has no SNMP block or a bare block without a community configured |
+| `migrate-rename-snmp-sections`        | `<div>`    | Container the SNMP pane renderer clears and rebuilds on each call.  Holds the single-row community-rename table |
+| `migrate-rename-snmp-table`           | `<table>`  | The single-row SNMP community rewrite table.  Structurally a table for visual parity with the list-oriented panes; always exactly one data row because the canonical tree holds one community string |
+| `migrate-rename-snmp-community-row`   | `<tr>`     | The single community-rename row.  No per-row `<src>` suffix — there's only one.  CSS classes `has-override` / `has-drop` / `has-auto-drop` signal row state |
+| `migrate-rename-snmp-community-override` | `<input>` | Free-text new-community input.  `type="text"`; blank = keep current / accept auto.  Non-empty value triggers a rename on Apply |
+| `migrate-rename-snmp-community-drop`  | `<span>`   | Inline clear / un-clear / keep-verbatim link.  "clear" is the SNMP equivalent of "drop" — renders the SNMP block out entirely rather than removing an identity |
+| `migrate-rename-summary-snmp`         | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "SNMP: A auto / B overrides / C clears".  Only present when any SNMP-category state exists |
+| `migrate-rename-snmp-compat`          | `<div>`    | Amber target-codec compatibility banner inside the SNMP pane.  Shows when the active target codec's `unsupported_rename_categories` list includes `snmp`.  Mirrors the local-users pane's banner pattern |
 
 ### RESERVED for Phase 2 (transforms + deploy)
 

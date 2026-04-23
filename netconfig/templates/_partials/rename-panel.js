@@ -102,6 +102,15 @@
       _renameLocalUserMap,
       _lastJob && _lastJob.local_user_renames,
     );
+    // SNMP community rename preview — single-entry map but shares the
+    // same whole-word-substitution technique as VLAN / local_users.
+    // Drops (community cleared) still require a server re-render since
+    // the whole SNMP stanza disappears; preview just shows the
+    // rename case.
+    applySubstitutionPreview(
+      _renameSnmpCommunityMap,
+      _lastJob && _lastJob.snmp_community_renames,
+    );
 
     preview.textContent = text;
   }
@@ -193,6 +202,19 @@
     var userAuto = (_lastJob && _lastJob.local_user_renames)
       ? Object.keys(_lastJob.local_user_renames).length : 0;
 
+    // SNMP-community category totals — scalar canonical surface so
+    // the counts are 0/1, but using the same shape as ports / VLANs /
+    // users keeps the summary renderer symmetric.
+    var snmpOverrides = 0, snmpDrops = 0;
+    if (typeof _renameSnmpCommunityMap === 'object' && _renameSnmpCommunityMap) {
+      Object.keys(_renameSnmpCommunityMap).forEach(function(k) {
+        if (_renameSnmpCommunityMap[k] === null) snmpDrops += 1;
+        else snmpOverrides += 1;
+      });
+    }
+    var snmpAuto = (_lastJob && _lastJob.snmp_community_renames)
+      ? Object.keys(_lastJob.snmp_community_renames).length : 0;
+
     // Collision counts for VLANs + users — parity with the port
     // collision logic above so collisions in ANY pane disable Apply.
     // Rationale: feature-parity with ports pane.  Even though the
@@ -242,6 +264,17 @@
       _lastJob && _lastJob.local_user_renames,
       userAutoDrops,
     );
+    // SNMP community is a scalar — collisions are definitionally
+    // impossible (one slot, one value).  Pass through countCollisions
+    // for uniformity; always returns 0.
+    var snmpAutoDrops = new Set(
+      (_lastJob && _lastJob.snmp_community_drops) || []
+    );
+    var snmpCollisions = countCollisions(
+      _renameSnmpCommunityMap,
+      _lastJob && _lastJob.snmp_community_renames,
+      snmpAutoDrops,
+    );
 
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
@@ -280,6 +313,18 @@
         + (userCollisions > 1 ? 's' : '') + '</span>';
       html += '</span>';
     }
+    // SNMP sub-summary — shows only when SNMP-related activity exists.
+    // Uses "cleared" wording instead of "drop" because clearing the
+    // community is less dramatic than dropping a user — it just omits
+    // the SNMP stanza rather than removing an identity.
+    if (snmpAuto || snmpOverrides || snmpDrops) {
+      html += ' &middot; <span data-testid="migrate-rename-summary-snmp">'
+        + 'SNMP: ' + snmpAuto + ' auto';
+      if (snmpOverrides) html += ' / ' + snmpOverrides + ' override';
+      if (snmpDrops) html += ' / <span class="mig-rename-summary-drop">'
+        + snmpDrops + ' clear</span>';
+      html += '</span>';
+    }
     summ.innerHTML = html;
 
     // Disable Apply when collisions exist in ANY pane — feature
@@ -288,7 +333,8 @@
     // duplicate stanzas, silently shipping a merge is almost always
     // an operator confusion rather than intent.  Forcing the operator
     // to resolve or explicitly drop prevents accidental merges.
-    var totalCollisions = collisions + vlanCollisions + userCollisions;
+    var totalCollisions = collisions + vlanCollisions + userCollisions
+      + snmpCollisions;
     var applyBtn = document.getElementById('mig-rename-apply-btn');
     if (applyBtn) applyBtn.disabled = totalCollisions > 0;
 

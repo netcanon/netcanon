@@ -7,6 +7,99 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (P2C5 — per-pane SNMP community rename: fourth per-pane override category)
+
+- New canonical orchestrator
+  `netconfig/migration/canonical/snmp_names.py` — community-string
+  rename via the same `build_X_rename_transform(rename_map) →
+  (transform, result)` shape as ports / VLANs / local_users.
+  Scope is scalar (`CanonicalIntent.snmp` holds a single
+  `CanonicalSNMP` object) so the rename map is effectively single-
+  entry but keeps the `dict[str, str | None]` shape for API
+  symmetry with the list-oriented panes.
+- Pipeline extension:
+  `run_plan_with_overrides` grows a new optional
+  `snmp_community_rename_map` parameter.  Runs last in the override
+  chain (independent of ports / VLANs / users so ordering is free).
+  Capture-first transform extended to populate
+  `source_snmp_community` alongside `source_vlans` / `source_local_users`.
+- Model fields on `MigrationJob`:
+  `snmp_community_renames`, `snmp_community_drops`,
+  `source_snmp_community`.  New field on `MigrationPlanRequest`:
+  `snmp_community_rename_map`.
+- New endpoint `POST /api/v1/migration/plan/snmp` — fourth
+  concrete per-pane override endpoint.  Follows the `/plan/ports`
+  pattern established in P2C1; ignores other category maps posted
+  in the same body.  Main `POST /plan` routing predicate updated
+  to detect `snmp_community_rename_map` (closes the same silent-
+  drop class of bug the P2C4 fix caught for VLAN + user maps).
+- UI:
+  - New SNMP rail button in the rename modal (4th category).
+  - New SNMP pane with single-row community-rewrite table.
+    Structurally a table for visual parity with the list-oriented
+    panes; always exactly one row.
+  - New `_partials/snmp-rename-table.js` partial (~170 LOC)
+    rendering the row with input + clear/un-clear/keep-verbatim
+    three-state link.  The "drop" link is labelled **clear** on
+    this pane because clearing the community omits the entire
+    SNMP block rather than removing an identity.
+  - `_renameSnmpCommunityMap` module-scope state; wired into
+    localStorage ack persistence (schema-v1 additive — missing
+    keys load as empty dict), reset-all, capture-for-rename gate,
+    open-modal render, showRenameCategory pane switch,
+    renderRenameRailCounts.
+  - `rename-panel.js` preview substitution extended for SNMP
+    community rename (whole-word match, same technique as VLANs
+    + users).  Clear semantics still require server re-render
+    (the SNMP stanza itself disappears, not a substitution).
+  - `rename-panel.js` summary adds an SNMP sub-summary that
+    surfaces only when SNMP activity exists (0-state gate parity
+    with VLAN + user sub-summaries).
+  - `rename-apply.js` POST body augmented with
+    `snmp_community_rename_map` when the map is non-empty
+    (same gate-on-non-empty pattern as the other categories).
+- Tests:
+  - 20 new unit tests in
+    `tests/unit/migration/test_snmp_names.py` covering identity,
+    rename, clear, no-SNMP-block warning, non-matching-source
+    warning, input validation, transform builder.
+  - 8 new integration tests in
+    `tests/integration/test_migration_api.py` — new
+    `TestPlanSnmpEndpoint` class + extensions to
+    `TestSourceShapeCapture` (source_snmp_community
+    populate/empty/pre-mutation contracts) +
+    `TestPlanMultiCategoryRoutingSnmp` (routing + four-way
+    composition).
+  - Cross-mesh extension in
+    `tests/unit/migration/test_cross_mesh_overrides.py`: new
+    parametrized `test_snmp_community_rename_smoke_cross_codec`
+    across cisco_iosxe_cli + aruba_aoss + mikrotik_routeros as
+    sources, aruba_aoss + mikrotik_routeros as targets
+    (cisco_iosxe_cli is parse_only, excluded from target set).
+    New `test_four_category_overrides_in_one_call` locks in
+    the full port+vlan+user+snmp composition contract.
+- Docs synced per CLAUDE.md Documentation Sync Checklist:
+  - `tests/testid_reference.md` — 11 new testid rows documented
+    for the SNMP pane (verified via grep self-check: reference
+    count matches template/partial count).
+  - `netconfig/templates/migrate.html` Contents map comment —
+    adds the new partial entry.
+  - Route docstring in `netconfig/api/routes/migration.py`
+    (top-of-file endpoint enumeration) — lists `/plan/snmp`.
+  - Pipeline docstring in
+    `netconfig/services/migration_pipeline.py` — category
+    support list updated; new capture-only field documented.
+  - Model docstrings on `MigrationJob` + `MigrationPlanRequest`.
+  - `HUMAN_TESTING.md` — new SNMP-pane manual-test scenarios.
+  - `ARCHITECTURE.md` — queued "per-pane SNMP / RADIUS overrides"
+    item updated to reflect SNMP is no longer queued.
+- **Deferred** (explicitly NOT in this commit; reserved in
+  pipeline param docstring): SNMPv3 user rename (requires
+  canonical-schema extension; CanonicalSNMP models v1/v2c only),
+  SNMP trap-host rename (list surface parallel to this commit's
+  scalar community surface — same recipe applied again,
+  reserved parameter name `snmp_trap_host_rename_map`).
+
 ### Fixed (stale cert-promotion drift in RESULTS.md / ARCHITECTURE.md / translator-plans.txt)
 
 - `tests/fixtures/real/RESULTS.md` closing paragraph said

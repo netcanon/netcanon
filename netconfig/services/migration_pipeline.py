@@ -148,6 +148,7 @@ def run_plan_with_overrides(
     port_rename_map: dict[str, str | None] | None = None,
     vlan_rename_map: dict[int, int | None] | None = None,
     local_user_rename_map: dict[str, str | None] | None = None,
+    snmp_community_rename_map: dict[str, str | None] | None = None,
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
@@ -171,10 +172,14 @@ def run_plan_with_overrides(
         :func:`netconfig.migration.canonical.vlan_names.build_vlan_rename_transform`.
       * ``local_user_rename_map`` — see
         :func:`netconfig.migration.canonical.local_user_names.build_local_user_rename_transform`.
+      * ``snmp_community_rename_map`` — see
+        :func:`netconfig.migration.canonical.snmp_names.build_snmp_community_rename_transform`.
 
     Planned future-commit categories:
-      * ``snmp_override_map`` — community / trap-host mapping (P2C5+)
-      * ``radius_override_map`` — host / key mapping (P2C5+)
+      * ``snmp_trap_host_rename_map`` — trap-host list rename (follow-up
+        commit; community-only was the proportionate first pass because
+        community is the dominant migration use case)
+      * ``radius_override_map`` — host / key mapping
 
     Cross-device-class guard + validate stage are unchanged from
     :func:`run_plan`; this function composes the override transforms
@@ -208,6 +213,14 @@ def run_plan_with_overrides(
             Same None-vs-{} sentinel semantics.  ``None`` values
             drop the user entirely.  Collisions merge on highest
             privilege_level + first-wins role + first-wins hash.
+        snmp_community_rename_map: Optional source_community →
+            target_community override map for
+            :class:`CanonicalSNMP.community`.  Effectively single-
+            entry (the canonical tree holds one community string)
+            but uses the dict shape for API symmetry with the other
+            categories.  ``None`` value clears the community string
+            (render paths then omit the SNMP block).  SNMPv3 users
+            are NOT in scope — CanonicalSNMP models v1/v2c only.
         transforms: Additional transforms applied AFTER all override
             transforms.
         transform_specs: Serialisable transform record.
@@ -223,6 +236,9 @@ def run_plan_with_overrides(
             ``vlan_rename_map is not None``.
           * ``local_user_renames`` / ``local_user_drops`` /
             ``warnings`` when ``local_user_rename_map is not None``.
+          * ``snmp_community_renames`` / ``snmp_community_drops`` /
+            ``warnings`` when
+            ``snmp_community_rename_map is not None``.
 
         Capture-only fields always populate (all are needed by
         the Tier-3 rename modal even when no overrides engaged):
@@ -230,6 +246,10 @@ def run_plan_with_overrides(
             config, before any rewrites.
           * ``source_local_users`` — local-user names as parsed
             from source config, before any rewrites.
+          * ``source_snmp_community`` — current community string
+            from source config, before any rewrites.  Empty string
+            when the source config has no SNMP block or a bare
+            SNMP block without a community configured.
           * ``source_hostname`` — canonical hostname, feeds the
             modal's localStorage ack key.
     """
@@ -239,12 +259,16 @@ def run_plan_with_overrides(
         build_local_user_rename_transform,
     )
     from ..migration.canonical.port_names import build_port_rename_transform
+    from ..migration.canonical.snmp_names import (
+        build_snmp_community_rename_transform,
+    )
     from ..migration.canonical.vlan_names import build_vlan_rename_transform
 
     override_transforms: list[TransformCallable] = []
     rename_result = None
     vlan_result = None
     local_user_result = None
+    snmp_result = None
 
     # Capture-first transform — snapshots the post-parse canonical
     # tree's VLAN IDs + local-user names + hostname for the UI's
@@ -257,6 +281,7 @@ def run_plan_with_overrides(
         "vlan_ids": [],
         "local_user_names": [],
         "hostname": "",
+        "snmp_community": "",
     }
 
     def _capture_source_shape(tree: Any) -> Any:
@@ -274,6 +299,10 @@ def run_plan_with_overrides(
             n for n in captured["local_user_names"] if n
         ]
         captured["hostname"] = getattr(tree, "hostname", "") or ""
+        snmp = getattr(tree, "snmp", None)
+        captured["snmp_community"] = (
+            getattr(snmp, "community", "") or ""
+        ) if snmp is not None else ""
         return tree
 
     override_transforms.append(_capture_source_shape)
@@ -308,6 +337,19 @@ def run_plan_with_overrides(
             )
         )
         override_transforms.append(local_user_transform)
+
+    # SNMP-community rename category.  Same None-vs-dict sentinel.
+    # Like local-users, independent of the other categories — SNMP
+    # config doesn't reference ports or VLANs or users.  Runs last
+    # in the override chain; ordering invariant:
+    # ports → vlans → users → snmp_community.
+    if snmp_community_rename_map is not None:
+        snmp_transform, snmp_result = (
+            build_snmp_community_rename_transform(
+                rename_map=snmp_community_rename_map,
+            )
+        )
+        override_transforms.append(snmp_transform)
 
     combined_transforms = override_transforms + list(transforms or [])
 
@@ -350,11 +392,20 @@ def run_plan_with_overrides(
         if local_user_result.dropped:
             job.local_user_drops = list(local_user_result.dropped)
 
+    if snmp_result is not None:
+        if snmp_result.applied:
+            job.snmp_community_renames = dict(snmp_result.applied)
+        if snmp_result.warnings:
+            job.warnings.extend(snmp_result.warnings)
+        if snmp_result.dropped:
+            job.snmp_community_drops = list(snmp_result.dropped)
+
     # Source-shape fields — ALWAYS populated when the capture ran
     # (which it did, unconditionally).  Empty lists are fine —
     # the UI handles that by showing each pane's empty state.
     job.source_vlans = list(captured.get("vlan_ids", []))
     job.source_local_users = list(captured.get("local_user_names", []))
+    job.source_snmp_community = captured.get("snmp_community", "") or ""
     job.source_hostname = captured.get("hostname", "") or ""
 
     return job

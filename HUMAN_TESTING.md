@@ -163,6 +163,57 @@ list, don't delete).
       detected_facts panel populates.  No probe? Backup still
       completes (legacy behaviour unchanged).
 
+## Migration — Rename modal SNMP pane (P2C5, ship-fresh)
+
+- [ ] **Rail button appears**: translate a Cisco config with an
+      `snmp-server community public RO` line to Aruba.  Open the
+      rename modal.  Left rail shows Ports / VLANs / Local users /
+      **SNMP** with a badge count of `1` (one community to rename).
+      Badge is `0` when the source had no SNMP block or a bare
+      SNMP block without a community.
+- [ ] **Switch to SNMP pane**: click the SNMP rail button.  Center
+      pane swaps to a single-row table showing "public" in the
+      Source community cell.  Other panes hide.  Target-profile
+      dropdowns + ports fit-check banner stay hidden on non-ports
+      panes (same discipline as the VLAN + local-users panes).
+- [ ] **Rename the community**: type `monitoring-ro` in the
+      override input.  Summary shows "SNMP: 0 auto / 1 override".
+      Click Apply — rendered output's `snmp-server community
+      public` becomes `snmp-server community monitoring-ro` (or
+      the vendor-specific equivalent on non-Cisco targets).
+- [ ] **Clear the community**: click the "clear" link next to
+      the row.  Row dims; override input disables.  Summary shows
+      "SNMP: 0 auto / 1 clear".  After Apply, the rendered output
+      has NO SNMP block at all (community cleared = omit the
+      block).  Clicking "un-clear" afterward reverses the decision
+      and the row returns to normal state.
+- [ ] **Empty state when no SNMP block**: translate a Cisco config
+      with no `snmp-server` line.  Open rename modal.  SNMP rail
+      button shows count `0`.  Click it — centre pane shows the
+      "No SNMP block found in the source config" empty message,
+      no table.
+- [ ] **No-match warning**: post `{"snmp_community_rename_map":
+      {"private": "foo"}}` to `/api/v1/migration/plan/snmp`
+      against a config whose community is `public` (curl works
+      well for this).  Response carries a `warnings` entry
+      saying the source name "private" doesn't match the parsed
+      community.
+- [ ] **Persistence round-trips**: rename community to
+      `site-rw`; reload page; re-translate same config; re-open
+      modal; click SNMP rail button.  Override input pre-populated
+      with "site-rw", status line says "Restored prior overrides
+      (..., 1 SNMP) from just now".
+- [ ] **Four-category co-edit**: translate a Cisco config with
+      ports + VLANs + a user + an SNMP community to Aruba.
+      Rename something in each of the four panes.  Summary shows
+      all four sub-summaries (top-level + VLAN + Users + SNMP).
+      Click Apply — rendered output reflects all four categories'
+      rewrites in a single `/plan` call.
+- [ ] **Reset clears SNMP too**: with rewrites in all four
+      categories, click Reset All.  Every pane resets including
+      SNMP; localStorage entry disappears (verify via DevTools →
+      Application → Local Storage).
+
 ## Migration — Rename modal Local-Users pane (P2C4, ship-fresh)
 
 - [ ] **Rail button appears**: translate a Cisco config declaring

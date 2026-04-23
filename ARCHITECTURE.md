@@ -561,5 +561,8 @@ What's queued:
 - Fidelity polish bucket (VRFs, STP globals, PKI chains → Tier 3)
 - Deploy phase (transport layer wiring for migration output push)
 - Additional canonical models (firewall-specific, wireless-specific CIMs)
-- Per-pane overrides for SNMP / RADIUS following the ports / VLANs /
-  local-users three-step recipe (orchestrator → pipeline → pane)
+- Per-pane overrides for **SNMP trap-hosts** + **RADIUS** following
+  the ports / VLANs / local_users / SNMP-community three-step recipe
+  (orchestrator → pipeline → pane).  SNMP community rename shipped
+  in P2C5; trap-hosts is the list-surface extension, RADIUS is the
+  next category after that.

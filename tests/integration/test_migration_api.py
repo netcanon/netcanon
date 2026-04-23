@@ -898,6 +898,244 @@ interface GigabitEthernet1/0/1
         assert "admin" in body["source_local_users"]
         assert body["local_user_renames"] == {"admin": "netadmin"}
 
+    def test_source_snmp_community_populated(self, client):
+        """P2C5 M1 added source_snmp_community for the SNMP pane.
+        Matches source_vlans / source_local_users pre-mutation contract."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "snmp-server community public RO\n"
+            "snmp-server location HQ\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {},  # engage capture
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_snmp_community"] == "public"
+
+    def test_source_snmp_community_empty_when_no_snmp(self, client):
+        """Source config has no SNMP block → empty string (not null).
+        Matches the string-default convention used by source_hostname."""
+        cfg = "hostname NoSnmp\n!\n"
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {},
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_snmp_community"] == ""
+
+    def test_source_snmp_community_captured_before_rename(self, client):
+        """Pre-mutation snapshot: the rename modal still sees the
+        original community after the pipeline rewrites it."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "snmp-server community public RO\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["source_snmp_community"] == "public"
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+
+
+class TestPlanSnmpEndpoint:
+    """``POST /api/v1/migration/plan/snmp`` — fourth per-pane
+    override endpoint (P2C5).  Exercises the
+    ``snmp_community_rename_map`` surface end-to-end.
+
+    Structural shape parallels ``/plan/local_users`` etc., but the
+    SNMP canonical surface is scalar (single community string) so
+    collision tests don't apply.
+    """
+
+    _IOSXE_WITH_SNMP = """\
+hostname TestCisco
+!
+snmp-server community public RO
+snmp-server location HQ
+snmp-server contact netops@example.com
+!
+"""
+
+    _IOSXE_WITHOUT_SNMP = """\
+hostname TestCisco
+!
+interface GigabitEthernet1/0/1
+ description uplink
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_community_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+
+    def test_community_clear_appears_in_drops(self, client):
+        """Map value None clears the community — drop semantics."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": None},
+            },
+        )
+        assert resp.status_code == 200
+        assert "public" in resp.json()["snmp_community_drops"]
+
+    def test_no_snmp_block_surfaces_warning(self, client):
+        """Source config has no SNMP block; operator override produces
+        an advisory warning and no rewrite."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITHOUT_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {}
+        warnings_text = "\n".join(body["warnings"])
+        assert "no SNMP block" in warnings_text
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_ignores_other_category_maps(self, client):
+        """Per-pane endpoints apply their category only.  If the
+        operator sends port_rename_map / vlan_rename_map /
+        local_user_rename_map to /plan/snmp, they're silently dropped
+        — documented contract, same shape as /plan/ports + siblings."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmp",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+                "port_rename_map": {"GigabitEthernet1/0/1": "X1"},
+                "vlan_rename_map": {10: 100},
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        # Other categories NOT engaged from this endpoint.
+        assert body["port_renames"] == {}
+        assert body["vlan_renames"] == {}
+        assert body["local_user_renames"] == {}
+
+
+class TestPlanMultiCategoryRoutingSnmp:
+    """Extension of TestPlanMultiCategoryRouting: /plan dispatches to
+    run_plan_with_overrides when snmp_community_rename_map is set,
+    exactly the same way it does for the three pre-P2C5 maps.  Guards
+    against a future refactor that might miss the SNMP fork in the
+    routing predicate."""
+
+    _IOSXE_WITH_SNMP = """\
+hostname MultiTest
+!
+vlan 10
+ name USERS
+!
+snmp-server community public RO
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+"""
+
+    def test_plan_with_only_snmp_map_engages_snmp_transform(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        # Capture still fires (source_snmp_community populated).
+        assert body["source_snmp_community"] == "public"
+
+    def test_plan_with_all_four_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_SNMP,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin"},
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # All four categories surface populated responses.
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+
 
 class TestRenderEndpoint:
     """/render is currently an alias for /plan.  These tests lock that

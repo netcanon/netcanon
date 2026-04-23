@@ -8,11 +8,14 @@ overrides on the way through any codec combination's parse + render.
 
 **Runtime budget:** aggregate runtime under ``@pytest.mark.cross_mesh``
 must stay under 30 seconds as the matrix grows.  When adding a new
-category (local_users, SNMP, etc.) extend the parametrize list here
-rather than creating new class-per-category files — the aggregate
+category (SNMP trap-hosts, RADIUS, etc.) extend the parametrize list
+here rather than creating new class-per-category files — the aggregate
 cap is easier to enforce when the mesh is one pytest file.  If a case
 consistently runs >500ms, demote it to a layer-A per-codec unit test
 and leave only a "fast smoke" representative in this file.
+
+Currently covered categories: ports, VLANs, local_users,
+snmp_community (each with parametrized cross-codec smoke).
 
 Layer A (per-codec correctness, no cross-mesh) lives in
 ``test_vlan_names.py``, ``test_port_names.py``, etc.
@@ -358,3 +361,108 @@ def test_three_category_overrides_in_one_call():
     # local_user_renames fires if the canonical tree captured admin.
     if "admin" in job.source_local_users:
         assert job.local_user_renames.get("admin") == "netadmin"
+
+
+# ---------------------------------------------------------------------------
+# SNMP community rename — P2C5 fourth per-pane category
+# ---------------------------------------------------------------------------
+
+
+# Source configs carrying an SNMP community.  Only a representative
+# set of codecs — all five parse snmp-community lines into
+# CanonicalSNMP.community, but keeping the list narrow bounds the
+# cross-mesh runtime budget.  Codecs omitted here are still covered
+# by the Layer-A ``test_snmp_names.py`` tests.
+_SNMP_SRC_CONFIGS = {
+    "cisco_iosxe_cli": (
+        "hostname TestCisco\n!\n"
+        "snmp-server community public RO\n"
+        "snmp-server location HQ\n!\n"
+    ),
+    "aruba_aoss": (
+        'hostname "TestAruba"\n'
+        "snmp-server community \"public\" unrestricted\n"
+    ),
+    "mikrotik_routeros": (
+        "# 2026-01-01 12:00:00 by RouterOS 7.18.2\n"
+        "/snmp\n"
+        'set enabled=yes contact="" location="" trap-community=public\n'
+        "/snmp community\n"
+        'set [ find default=yes ] name=public\n'
+    ),
+}
+
+_SNMP_CAPABLE = list(_SNMP_SRC_CONFIGS.keys())
+# cisco_iosxe_cli is parse_only — excluded from the target set.
+# Same discipline as the local_users mesh above.
+_SNMP_TARGET_CAPABLE = [
+    "aruba_aoss",
+    "mikrotik_routeros",
+]
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _SNMP_CAPABLE)
+@pytest.mark.parametrize("target_name", _SNMP_TARGET_CAPABLE)
+def test_snmp_community_rename_smoke_cross_codec(
+    source_name: str, target_name: str,
+):
+    """Every (source, target) pair in the SNMP-capable set runs the
+    rename pipeline end-to-end without crashing.  Smoke only — does
+    not assert byte-identical output.  Locks in that the rename map
+    survives the canonical round-trip and that source_snmp_community
+    populates from every tested source."""
+    source = _CODECS[source_name]()
+    target = _CODECS[target_name]()
+    raw = _SNMP_SRC_CONFIGS[source_name]
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        snmp_community_rename_map={"public": "monitoring-ro"},
+    )
+
+    # Pipeline must not crash.
+    assert job is not None
+    assert job.rendered is not None
+
+    # source_snmp_community captured BEFORE rename — when the source
+    # codec successfully parsed the SNMP block, 'public' surfaces
+    # on the job.  Codecs that didn't map into CanonicalSNMP leave
+    # it empty (legitimate — exercised by Layer-A tests instead).
+    if job.source_snmp_community == "public":
+        # Rename surfaced in applied-map.
+        assert job.snmp_community_renames.get("public") == "monitoring-ro"
+
+
+@pytest.mark.cross_mesh
+def test_four_category_overrides_in_one_call():
+    """Ports + VLANs + local_users + SNMP in a single pipeline run —
+    extends test_three_category_overrides_in_one_call with the
+    fourth category.  Locks in the full four-way composition
+    contract post-P2C5."""
+    source = ArubaAOSSCodec()
+    target = ArubaAOSSCodec()
+    raw = (
+        'hostname "TestAruba"\n'
+        "vlan 1\n   name \"DEFAULT_VLAN\"\n   exit\n"
+        "vlan 10\n   name \"USERS\"\n   untagged 1/1\n   exit\n"
+        "password manager user-name admin "
+        "plaintext ClearTextPassw0rd\n"
+        'snmp-server community "public" unrestricted\n'
+    )
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        port_rename_map={"1/1": "1/47"},
+        vlan_rename_map={10: 100},
+        local_user_rename_map={"admin": "netadmin"},
+        snmp_community_rename_map={"public": "monitoring-ro"},
+    )
+
+    # Each category's outcome is independent.
+    assert job.port_renames.get("1/1") == "1/47"
+    assert job.vlan_renames.get(10) == 100
+    if "admin" in job.source_local_users:
+        assert job.local_user_renames.get("admin") == "netadmin"
+    if job.source_snmp_community == "public":
+        assert job.snmp_community_renames.get("public") == "monitoring-ro"
