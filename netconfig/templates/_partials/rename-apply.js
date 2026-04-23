@@ -40,6 +40,12 @@
         && Object.keys(_renameVlanUserMap).length > 0) {
       body.vlan_rename_map = Object.assign({}, _renameVlanUserMap);
     }
+    // Local-users category — same gate-on-non-empty pattern.
+    if (typeof _renameLocalUserMap === 'object'
+        && _renameLocalUserMap
+        && Object.keys(_renameLocalUserMap).length > 0) {
+      body.local_user_rename_map = Object.assign({}, _renameLocalUserMap);
+    }
     var profileKey = currentRenameProfileKey();
     if (profileKey) body.target_profile = profileKey;
     // Only send target_module when the profile actually has
@@ -66,6 +72,7 @@
       // Re-render the modal from the refreshed job.
       renderRenameTable();
       if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+      if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
       if (typeof renderRenameRailCounts === 'function') renderRenameRailCounts();
       renderRenamePreview();
       renderRenameSummary();

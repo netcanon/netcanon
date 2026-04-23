@@ -140,6 +140,17 @@
     var vlanAuto = (_lastJob && _lastJob.vlan_renames)
       ? Object.keys(_lastJob.vlan_renames).length : 0;
 
+    // Local-users category totals — same pattern as VLANs above.
+    var userOverrides = 0, userDrops = 0;
+    if (typeof _renameLocalUserMap === 'object' && _renameLocalUserMap) {
+      Object.keys(_renameLocalUserMap).forEach(function(k) {
+        if (_renameLocalUserMap[k] === null) userDrops += 1;
+        else userOverrides += 1;
+      });
+    }
+    var userAuto = (_lastJob && _lastJob.local_user_renames)
+      ? Object.keys(_lastJob.local_user_renames).length : 0;
+
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
     if (drops) html += ' / <span class="mig-rename-summary-drop">'
@@ -159,6 +170,16 @@
         + (vlanOverrides > 1 ? 's' : '');
       if (vlanDrops) html += ' / <span class="mig-rename-summary-drop">'
         + vlanDrops + ' drop' + (vlanDrops > 1 ? 's' : '') + '</span>';
+      html += '</span>';
+    }
+    // Local-users sub-summary — same gate-on-any-state pattern.
+    if (userAuto || userOverrides || userDrops) {
+      html += ' &middot; <span data-testid="migrate-rename-summary-local-users">'
+        + 'Users: ' + userAuto + ' auto';
+      if (userOverrides) html += ' / ' + userOverrides + ' override'
+        + (userOverrides > 1 ? 's' : '');
+      if (userDrops) html += ' / <span class="mig-rename-summary-drop">'
+        + userDrops + ' drop' + (userDrops > 1 ? 's' : '') + '</span>';
       html += '</span>';
     }
     summ.innerHTML = html;

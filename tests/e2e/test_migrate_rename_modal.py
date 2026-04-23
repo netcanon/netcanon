@@ -713,3 +713,156 @@ class TestRenameModalLocalStoragePersistence:
             "hits.push(k); } return hits; }"
         )
         assert remaining == []
+
+
+# Cisco config carrying local users — exercises P2C4's local-users
+# pane which needs non-empty source_local_users on the job.  The
+# base _CISCO_SRC fixture at the top of this file declares no
+# usernames, so tests below use their own config.
+_CISCO_WITH_USERS_SRC = """hostname test-sw-users
+!
+username admin privilege 15 secret 5 $1$abc$fake
+username operator privilege 5 secret 5 $1$def$fake
+username svc-backup-2019 privilege 1 secret 5 $1$ghi$fake
+!
+vlan 10
+ name users
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+end
+"""
+
+
+@pytest.fixture()
+def migrate_with_cisco_users_to_aruba(page: Page, live_server_url: str):
+    """Translate a Cisco config WITH usernames → Aruba, return the
+    MigratePage instance on results view.  Separate from the
+    default migrate_with_cisco_to_aruba fixture because the base
+    config has no username lines — the local-users pane needs at
+    least one source user to enumerate."""
+    mp = MigratePage(page)
+    page.goto(live_server_url + "/migrate")
+    mp.source_select.wait_for(state="visible", timeout=5_000)
+    mp.pick_source("cisco_iosxe_cli")
+    mp.pick_target("aruba_aoss")
+    mp.fill_raw(_CISCO_WITH_USERS_SRC)
+    mp.submit_and_wait()
+    return mp
+
+
+class TestRenameModalLocalUsersPane:
+    """P2C4 added a third rail category for local-user renaming.
+    Structural parallel to the VLAN pane — enumerates every user
+    declared in the source, offers free-text rename + drop actions."""
+
+    def test_rail_button_renders_with_count(
+        self, migrate_with_cisco_users_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        btn = page.locator('[data-testid="migrate-rename-rail-local-users"]')
+        expect(btn).to_be_visible()
+        count = page.locator(
+            '[data-testid="migrate-rename-rail-local-users-count"]'
+        )
+        # Cisco fixture declares 3 users (admin / operator / svc-backup-2019).
+        expect(count).to_have_text("3")
+
+    def test_clicking_rail_activates_local_users_pane(
+        self, migrate_with_cisco_users_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        ports_pane = page.locator('[data-testid="migrate-rename-ports-pane"]')
+        users_pane = page.locator('[data-testid="migrate-rename-local-users-pane"]')
+        expect(users_pane).to_be_visible()
+        assert "active" in (users_pane.get_attribute("class") or "")
+        assert "active" not in (ports_pane.get_attribute("class") or "")
+
+    def test_user_row_renders_for_source_user(
+        self, migrate_with_cisco_users_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        row = page.locator(
+            '[data-testid="migrate-rename-local-user-row-admin"]'
+        )
+        expect(row).to_be_visible()
+        override = page.locator(
+            '[data-testid="migrate-rename-local-user-override-admin"]'
+        )
+        expect(override).to_be_visible()
+
+    def test_override_updates_summary(
+        self, migrate_with_cisco_users_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        page.locator(
+            '[data-testid="migrate-rename-local-user-override-admin"]'
+        ).fill("netadmin")
+        sub = page.locator(
+            '[data-testid="migrate-rename-summary-local-users"]'
+        )
+        expect(sub).to_be_visible()
+        expect(sub).to_contain_text("override")
+
+    def test_drop_link_cycles_states(
+        self, migrate_with_cisco_users_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        drop_link = page.locator(
+            '[data-testid="migrate-rename-local-user-drop-svc-backup-2019"]'
+        )
+        # Default state: "drop".
+        expect(drop_link).to_contain_text("drop")
+        drop_link.click()
+        # After click: "un-drop".
+        expect(drop_link).to_contain_text("un-drop")
+
+    def test_override_persists_across_reload(
+        self,
+        migrate_with_cisco_users_to_aruba: MigratePage,
+        page: Page,
+        live_server_url: str,
+    ):
+        """localStorage ack schema v1 is additive — local_users map
+        persists alongside ports + vlans under the same key."""
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        page.locator(
+            '[data-testid="migrate-rename-local-user-override-admin"]'
+        ).fill("superadmin")
+        page.wait_for_timeout(100)
+        # Reload + re-run translation + re-open modal.
+        mp = migrate_with_cisco_users_to_aruba
+        page.reload()
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("aruba_aoss")
+        mp.fill_raw(_CISCO_WITH_USERS_SRC)
+        mp.submit_and_wait()
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        restored = page.locator(
+            '[data-testid="migrate-rename-local-user-override-admin"]'
+        )
+        expect(restored).to_have_value("superadmin")
+        # Status line reflects user-count in restore notice.
+        status = page.locator('[data-testid="migrate-rename-status"]')
+        expect(status).to_contain_text("user")

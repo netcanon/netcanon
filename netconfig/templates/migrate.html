@@ -560,6 +560,15 @@
         <span id="mig-rename-rail-vlans-count" class="rail-count"
               data-testid="migrate-rename-rail-vlans-count">0</span>
       </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-local-users"
+              data-category="local_users"
+              onclick="showRenameCategory('local_users')">
+        <span>Local users</span>
+        <span id="mig-rename-rail-local-users-count" class="rail-count"
+              data-testid="migrate-rename-rail-local-users-count">0</span>
+      </button>
     </nav>
 
     <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
@@ -593,6 +602,21 @@
         </div>
         <div id="mig-rename-vlans-sections"
              data-testid="migrate-rename-vlans-sections"></div>
+      </div>
+
+      <!-- Local-users category pane — user-name rewrite table.
+           Populated by renderLocalUserRenameTable() from the
+           local-user-rename-table partial. -->
+      <div id="mig-rename-local-users-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-local-users-pane">
+        <div id="mig-rename-local-users-empty"
+             data-testid="migrate-rename-local-users-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No local users found in the source config.
+        </div>
+        <div id="mig-rename-local-users-sections"
+             data-testid="migrate-rename-local-users-sections"></div>
       </div>
     </div>
 
@@ -634,6 +658,8 @@
  *   _partials/rename-table.js    — renderRenameTable (per-kind sections)
  *   _partials/vlan-rename-table.js — renderVlanRenameTable (VLAN-pane
  *                                  rows under the left-rail nav; P2C3)
+ *   _partials/local-user-rename-table.js — renderLocalUserRenameTable
+ *                                  (third per-pane category; P2C4)
  *   _partials/rename-panel.js    — renderRenamePreview + renderRenameSummary
  *   _partials/fit-check.js       — renderFitCheck hardware-capacity banner
  *   _partials/rename-apply.js    — renameModalApply + drag handlers +
@@ -1266,7 +1292,8 @@
   var _lastJob = null;               // last MigrationJob from the server
   var _renameUserMap = {};           // source_name -> target_name (user overrides)
   var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
-  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans'
+  var _renameLocalUserMap = {};      // source_username -> target_username | null
+  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
 
   // Kind ordering in the modal (drives the collapsible section order).
@@ -1479,12 +1506,15 @@
    * and bump _ACK_SCHEMA_VERSION so any old entries get ignored on
    * next load (cheap migration — the entries are strictly optional).
    *
-   * Schema:
+   * Schema (v1 — additive-only; new category maps can be added as
+   * new keys without bumping the version because missing keys load
+   * as empty):
    *   localStorage["netconfig.rename-ack.v1:<src>:<tgt>:<hostname>"]
    *   = JSON({
-   *       ports: {src_name: tgt_name | null},
-   *       vlans: {src_id: tgt_id | null},
-   *       ts:    ISO-8601 string,
+   *       ports:       {src_name: tgt_name | null},
+   *       vlans:       {src_id: tgt_id | null},
+   *       local_users: {src_username: tgt_username | null},
+   *       ts:          ISO-8601 string,
    *     })
    */
   var _ACK_SCHEMA_VERSION = 'v1';
@@ -1525,12 +1555,14 @@
     var payload = {
       ports: Object.assign({}, _renameUserMap),
       vlans: Object.assign({}, _renameVlanUserMap),
+      local_users: Object.assign({}, _renameLocalUserMap),
       ts: new Date().toISOString(),
     };
-    // Skip writes when both maps are empty — keeps localStorage
+    // Skip writes when all maps are empty — keeps localStorage
     // clean after a Reset-all rather than leaving an empty marker.
     if (!Object.keys(payload.ports).length
-        && !Object.keys(payload.vlans).length) {
+        && !Object.keys(payload.vlans).length
+        && !Object.keys(payload.local_users).length) {
       try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
       return;
     }
@@ -1567,13 +1599,19 @@
         if (!isNaN(n)) _renameVlanUserMap[n] = ack.vlans[k];
       });
     }
+    if (ack.local_users && typeof ack.local_users === 'object') {
+      // Usernames are string-keyed, no coercion needed.
+      _renameLocalUserMap = Object.assign({}, ack.local_users);
+    }
     var portCount = Object.keys(_renameUserMap).length;
     var vlanCount = Object.keys(_renameVlanUserMap).length;
+    var userCount = Object.keys(_renameLocalUserMap).length;
     var status = document.getElementById('mig-rename-status');
-    if (status && (portCount || vlanCount)) {
+    if (status && (portCount || vlanCount || userCount)) {
       var bits = [];
       if (portCount) bits.push(portCount + ' port');
       if (vlanCount) bits.push(vlanCount + ' VLAN');
+      if (userCount) bits.push(userCount + ' user');
       status.textContent = 'Restored prior overrides ('
         + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
       status.setAttribute('data-testid-state', 'ack-restored');
@@ -1603,18 +1641,23 @@
     _renameCategory = cat;
     var portsPane = document.getElementById('mig-rename-ports-pane');
     var vlansPane = document.getElementById('mig-rename-vlans-pane');
+    var localUsersPane = document.getElementById('mig-rename-local-users-pane');
     if (portsPane) portsPane.classList.toggle('active', cat === 'ports');
     if (vlansPane) vlansPane.classList.toggle('active', cat === 'vlans');
+    if (localUsersPane) localUsersPane.classList.toggle('active', cat === 'local_users');
     document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.category === cat);
     });
     // Re-render the newly-visible pane so it reflects any state
-    // changes the operator made in the other category (cross-
+    // changes the operator made in the other categories (cross-
     // category interactions are rare but non-zero: VLAN drops can
     // detach ports from SVIs, affecting the ports pane's dropped-
     // VLAN detachment warnings once those ship).
     if (cat === 'vlans' && typeof renderVlanRenameTable === 'function') {
       renderVlanRenameTable();
+    } else if (cat === 'local_users'
+               && typeof renderLocalUserRenameTable === 'function') {
+      renderLocalUserRenameTable();
     } else if (cat === 'ports') {
       renderRenameTable();
     }
@@ -1630,6 +1673,7 @@
     if (!_lastJob) return;
     var portsCount = document.getElementById('mig-rename-rail-ports-count');
     var vlansCount = document.getElementById('mig-rename-rail-vlans-count');
+    var usersCount = document.getElementById('mig-rename-rail-local-users-count');
     if (portsCount) {
       var applied = _lastJob.port_renames
         ? Object.keys(_lastJob.port_renames).length : 0;
@@ -1642,6 +1686,10 @@
       var v = (_lastJob.source_vlans || []).length;
       vlansCount.textContent = String(v);
     }
+    if (usersCount) {
+      var u = (_lastJob.source_local_users || []).length;
+      usersCount.textContent = String(u);
+    }
   }
 
   /** Call from renderResult: remember the job + request body so the
@@ -1651,6 +1699,7 @@
     _lastJob = job;
     _renameUserMap = {};
     _renameVlanUserMap = {};
+    _renameLocalUserMap = {};
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
@@ -1710,11 +1759,12 @@
       vsel.value = suggestedVendor;
     }
     populateRenameModelDropdown(vsel.value);
-    // Initial render from the current job.  Render both category
+    // Initial render from the current job.  Render ALL category
     // panes so rail counts are accurate before the operator clicks
-    // anything; the active-pane rule then hides the inactive one.
+    // anything; the active-pane rule then hides the inactive ones.
     renderRenameTable();
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
@@ -1729,6 +1779,7 @@
   window.renameModalResetAll = function() {
     _renameUserMap = {};
     _renameVlanUserMap = {};
+    _renameLocalUserMap = {};
     // Clear the persisted entry so a subsequent modal-open for the
     // same (source, target, hostname) doesn't restore what the
     // operator just reset.  renderRenameSummary below will write an
@@ -1737,6 +1788,7 @@
     clearRenameAck();
     renderRenameTable();
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
@@ -1749,6 +1801,9 @@
 
   /* ── VLAN-rename pane renderer (extracted to _partials/vlan-rename-table.js) ── */
   {% include "_partials/vlan-rename-table.js" %}
+
+  /* ── Local-user rename pane renderer (extracted to _partials/local-user-rename-table.js) ── */
+  {% include "_partials/local-user-rename-table.js" %}
 
   /* ── Rename-modal preview + summary (extracted to _partials/rename-panel.js) ── */
   {% include "_partials/rename-panel.js" %}
