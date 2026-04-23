@@ -146,6 +146,7 @@ def run_plan_with_overrides(
     target: CodecBase,
     raw_text: str,
     port_rename_map: dict[str, str | None] | None = None,
+    vlan_rename_map: dict[int, int | None] | None = None,
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
@@ -165,9 +166,10 @@ def run_plan_with_overrides(
     Current category support:
       * ``port_rename_map`` — see
         :func:`netconfig.migration.canonical.port_names.build_port_rename_transform`.
+      * ``vlan_rename_map`` — see
+        :func:`netconfig.migration.canonical.vlan_names.build_vlan_rename_transform`.
 
     Planned future-commit categories:
-      * ``vlan_rename_map`` — VLAN ID mapping (P2C2)
       * ``local_user_rename_map`` — username mapping (P2C5+)
       * ``snmp_override_map`` — community / trap-host mapping (P2C5+)
 
@@ -192,6 +194,12 @@ def run_plan_with_overrides(
             into the rename-aware pipeline with no explicit overrides
             — this is what the UI sends when the operator has
             selected a target profile but not yet customised any row.
+        vlan_rename_map: Optional source_vlan_id → target_vlan_id
+            override map.  Same None-vs-{} sentinel semantics as
+            ``port_rename_map``.  Entries with ``None`` values drop
+            the VLAN entirely + detach every referring interface.
+            Collisions (two source IDs → same target ID) trigger
+            merge-by-union of port memberships.
         transforms: Additional transforms applied AFTER all override
             transforms.
         transform_specs: Serialisable transform record.
@@ -203,13 +211,17 @@ def run_plan_with_overrides(
         was engaged:
           * ``port_renames`` / ``port_drops`` / ``warnings`` when
             ``port_rename_map is not None``.
+          * ``vlan_renames`` / ``vlan_drops`` / ``warnings`` when
+            ``vlan_rename_map is not None``.
     """
-    # Lazy import to avoid circular dependency at module import time
-    # (port_names imports CodecBase; this module imports CodecBase).
+    # Lazy imports to avoid circular dependency at module import time
+    # (these modules import CodecBase; this module imports CodecBase).
     from ..migration.canonical.port_names import build_port_rename_transform
+    from ..migration.canonical.vlan_names import build_vlan_rename_transform
 
     override_transforms: list[TransformCallable] = []
     rename_result = None
+    vlan_result = None
 
     # Port-rename category.  Engaged when the caller explicitly opts
     # in by passing a dict (even an empty one).  None means "don't
@@ -219,6 +231,15 @@ def run_plan_with_overrides(
             source, target, rename_map=port_rename_map
         )
         override_transforms.append(rename_transform)
+
+    # VLAN-rename category.  Same None-vs-dict sentinel semantics.
+    # Runs AFTER port rename so port-name rewrites don't have to
+    # worry about VLAN-ID references still changing underneath them.
+    if vlan_rename_map is not None:
+        vlan_transform, vlan_result = build_vlan_rename_transform(
+            rename_map=vlan_rename_map
+        )
+        override_transforms.append(vlan_transform)
 
     combined_transforms = override_transforms + list(transforms or [])
 
@@ -244,6 +265,14 @@ def run_plan_with_overrides(
             job.warnings.extend(rename_result.warnings)
         if rename_result.dropped:
             job.port_drops = list(rename_result.dropped)
+
+    if vlan_result is not None:
+        if vlan_result.applied:
+            job.vlan_renames = dict(vlan_result.applied)
+        if vlan_result.warnings:
+            job.warnings.extend(vlan_result.warnings)
+        if vlan_result.dropped:
+            job.vlan_drops = list(vlan_result.dropped)
 
     return job
 

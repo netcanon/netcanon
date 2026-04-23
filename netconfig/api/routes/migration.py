@@ -275,6 +275,62 @@ def plan_migration_ports(
 
 
 @router.post(
+    "/plan/vlans",
+    response_model=MigrationJob,
+    summary="Per-pane override endpoint: VLAN ID renames",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid adapter name or input specification"},
+    },
+)
+def plan_migration_vlans(
+    body: MigrationPlanRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> MigrationJob:
+    """VLAN-rename-only entry into the migration pipeline.
+
+    Second concrete per-pane override endpoint (ports was the first,
+    see ``POST /plan/ports``).  Accepts the same
+    :class:`MigrationPlanRequest` body and dispatches to
+    :func:`run_plan_with_overrides` with only ``vlan_rename_map``
+    populated.
+
+    VLAN mapping is an integer → integer rewrite applied across the
+    canonical tree (``CanonicalVlan.id``, ``access_vlan``,
+    ``trunk_allowed_vlans``, ``trunk_native_vlan``, ``voice_vlan``).
+    ``None`` as a map value drops the VLAN entirely and detaches any
+    interface that was assigned to it — operator gets per-affected-
+    interface warnings in :attr:`MigrationJob.warnings`.
+
+    Collision semantics: when two source IDs map to the same target
+    ID (or when an operator maps a VLAN to an ID that already exists
+    in the tree), the canonical VLAN entries are merged by union
+    (tagged/untagged port lists) and SVI-address concatenation.
+    Merge events emit warnings so the operator notices.
+
+    Ignores other override maps if the body carries them — hitting
+    ``/plan/vlans`` applies the VLAN category only.  Use
+    ``POST /plan`` for multi-category overrides in a single call.
+    """
+    source = _resolve_adapter_or_422(body.source, side="source")
+    target = _resolve_adapter_or_422(body.target, side="target")
+    raw_text = _resolve_input_text(body, storage)
+    job = run_plan_with_overrides(
+        source, target, raw_text,
+        vlan_rename_map=body.vlan_rename_map or {},
+        force=body.force,
+    )
+    logger.info(
+        "Migration plan/vlans %s: %s -> %s = %s",
+        job.id[:8],
+        body.source,
+        body.target,
+        job.status.value,
+    )
+    return job
+
+
+@router.post(
     "/render",
     response_model=MigrationJob,
     summary="Alias of /plan — included for API symmetry and future split",

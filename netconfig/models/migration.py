@@ -366,6 +366,24 @@ class MigrationJob(BaseModel):
     #: ``None``.
     port_drops: list[str] = Field(default_factory=list)
 
+    #: Source VLAN ID → target VLAN ID rewrites applied during
+    #: :func:`run_plan_with_overrides` when the caller supplied a
+    #: ``vlan_rename_map``.  Parallels :attr:`port_renames` for the
+    #: VLAN-mapping per-pane override in the Tier-3 modal.  Keys
+    #: and values are both integers 1-4094.  Unchanged VLAN IDs are
+    #: not included — only actual rewrites.  Empty dict when the
+    #: caller didn't pass a ``vlan_rename_map`` at all.
+    vlan_renames: dict[int, int] = Field(default_factory=dict)
+
+    #: VLAN IDs the operator explicitly marked "don't render" via
+    #: ``None`` values in the rename map.  The canonical tree had
+    #: every reference to these IDs stripped before render —
+    #: ``CanonicalVlan`` entry removed, ``access_vlan``
+    #: detached, ``trunk_allowed_vlans`` entries removed,
+    #: ``trunk_native_vlan`` / ``voice_vlan`` cleared on affected
+    #: interfaces.
+    vlan_drops: list[int] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
@@ -437,6 +455,35 @@ class MigrationPlanRequest(BaseModel):
     tells the rename modal which of the module's uplink port-ids to
     offer in the target-name dropdown.  Advisory only (mirrors
     ``target_profile`` semantics — does not affect rendering)."""
+
+    vlan_rename_map: dict[int, int | None] | None = None
+    """Optional VLAN ID → target VLAN ID override map.  Parallel
+    surface to :attr:`port_rename_map` for the VLAN-mapping per-pane
+    override in the Tier-3 modal.
+
+    Entry value semantics:
+
+    * ``int`` — rewrite this VLAN's ID to the target ID across the
+      canonical tree (the ``CanonicalVlan`` itself + every
+      ``access_vlan`` / ``trunk_native_vlan`` / ``voice_vlan`` /
+      ``trunk_allowed_vlans`` reference).
+    * ``None`` — DROP the VLAN entirely.  Every reference is
+      stripped; interfaces whose ``access_vlan`` was this ID get
+      detached (``access_vlan = None``, switchport_mode unchanged
+      — operator typically wants to re-assign manually afterwards).
+    * key NOT in map — VLAN passes through unchanged.
+
+    IDs outside 1-4094 trigger warnings and are skipped (the entry
+    is discarded before any tree mutation).  Mapping multiple
+    source IDs to the same target ID triggers a merge: port lists
+    are unioned, SVI addresses concatenated.  Mapping to an ID
+    that already exists in the source tree also merges.
+
+    Backwards-compatible: callers that don't set this get the
+    legacy behaviour (VLAN IDs pass through unchanged).  Callers
+    that set it to ``{}`` opt into the VLAN-rename pipeline with
+    no explicit overrides (useful when the UI wants to surface
+    "no VLAN overrides applied" in the response shape)."""
 
 
 class CodecInfo(BaseModel):

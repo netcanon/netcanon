@@ -425,6 +425,113 @@ class TestPlanPortsEndpoint:
         assert plan["port_renames"] == plan_ports["port_renames"]
 
 
+class TestPlanVlansEndpoint:
+    """``POST /api/v1/migration/plan/vlans`` — second per-pane
+    override endpoint.  Exercises the ``vlan_rename_map`` surface
+    end-to-end through the integration stack.
+
+    Same structural parity with ``/plan/ports`` — each category
+    endpoint accepts the full MigrationPlanRequest body and
+    dispatches to ``run_plan_with_overrides`` with only its
+    category's map populated."""
+
+    _IOSXE_WITH_VLANS = """\
+hostname TestCisco
+!
+vlan 10
+ name USERS
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_vlan_rename_map_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Applied rewrite shows up as int → int.  Note that JSON
+        # serialisation turns dict keys into strings, so the
+        # wire-level shape is {"10": 100}; pydantic coerces back
+        # to int keys on deserialisation.
+        applied = body["vlan_renames"]
+        # Key may be "10" (string) or 10 (int) depending on serialisation.
+        if "10" in applied:
+            assert applied["10"] == 100
+        elif 10 in applied:
+            assert applied[10] == 100
+        else:
+            pytest.fail(f"vlan_renames does not contain 10: {applied!r}")
+
+    def test_vlan_drop_appears_in_vlan_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: None},
+            },
+        )
+        assert resp.status_code == 200
+        assert 10 in resp.json()["vlan_drops"]
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_plan_vlans_ignores_port_rename_map(self, client):
+        """Per-pane endpoints apply their category only.  If the
+        operator sends a port_rename_map to /plan/vlans, it's
+        silently dropped — documented contract, not a bug."""
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+                "port_rename_map": {
+                    "GigabitEthernet1/0/1": "GigabitEthernet99",
+                },
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # VLAN applied, port NOT applied.
+        vlan_renames = body["vlan_renames"]
+        assert "10" in vlan_renames or 10 in vlan_renames
+        assert body["port_renames"] == {}
+
+
 class TestRenderEndpoint:
     """/render is currently an alias for /plan.  These tests lock that
     fact in so a future split gets a visible PR."""
