@@ -460,8 +460,8 @@ Promotion path to `certified`:
 | Fixture | Lines | hostname | interfaces | vlans | routes | users | snmp | Notes |
 |---|---:|---:|---:|---:|---:|---:|---|
 | `buraglio_netlab_junos184.set` | 28 | 1 | 2 | 0 | 0 | 0 | 0 | Real **Junos 18.4R1-S1.1** set-form from ES.net netlab-ns demo.  em0 + lo0 with IPv4 addresses + IPv6/ISO/MPLS families parse-and-ignore.  Root-authentication parse-and-ignore (not a user declaration).  BGP / IS-IS / MPLS / LLDP / topology-export all exercise the parse-tolerance path. |
-| `ksator_labmgmt_qfx5100_junos173.set` | 106 | 0 | 11 | 16 | 0 | 0 | 0 | Real **Junos 17.3R1.10** set-form from ksator/lab_management (MIT, (c) Juniper Networks 2018).  QFX5100 DC access/leaf switch: `ae0`/`ae1` aggregated-ethernet LAGs, 2× `et-0/0/48-49` 40G uplinks, 16 `set vlans V<N>` declarations, `apply-groups POC_Lab` inheritance pattern (host-name lives under `set groups POC_Lab system host-name` — parse-and-ignore until v2b), RADIUS + SSH.  Hostname shows as empty because the `set groups` apply-groups path isn't wired yet. |
-| `ksator_labmgmt_ex4550_junos151.set` | 52 | 0 | 3 | 6 | 0 | 0 | 0 | Real **Junos 15.1R6.7** set-form from ksator/lab_management.  EX4550 campus/DC access switch with 3× `xe-0/0/0-2` trunk ports (`unit 0 family ethernet-switching port-mode trunk` + `vlan members`), 6 `set vlans V<N>`, `chassis aggregated-devices ethernet device-count 2`, same apply-groups pattern.  Oldest Junos major in the corpus. |
+| `ksator_labmgmt_qfx5100_junos173.set` | 106 | 1 | 11 | 16 | 0 | 0 | 0 | Real **Junos 17.3R1.10** set-form from ksator/lab_management (MIT, (c) Juniper Networks 2018).  QFX5100 DC access/leaf switch: `ae0`/`ae1` aggregated-ethernet LAGs, 2× `et-0/0/48-49` 40G uplinks, 16 `set vlans V<N>` declarations, `apply-groups POC_Lab` inheritance pattern (host-name lives under `set groups POC_Lab system host-name` — **populates intent.hostname as of GAP 4**), RADIUS + SSH. |
+| `ksator_labmgmt_ex4550_junos151.set` | 52 | 1 | 3 | 6 | 0 | 0 | 0 | Real **Junos 15.1R6.7** set-form from ksator/lab_management.  EX4550 campus/DC access switch with 3× `xe-0/0/0-2` trunk ports (`unit 0 family ethernet-switching port-mode trunk` + `vlan members`), 6 `set vlans V<N>`, `chassis aggregated-devices ethernet device-count 2`, same apply-groups pattern (hostname `EX4550-190` populates via GAP 4).  Oldest Junos major in the corpus. |
 
 ### Findings
 
@@ -477,7 +477,7 @@ Parse-tolerance validated across three fixtures covering `set protocols bgp / is
 
 Promotion path to `certified`:
   * ≥2 more real captures — ideally from newer majors (Junos 20.x / 21.x / 22.x / 23.x LTS).  Public ``.set`` corpora are thin; user contributions remain the realistic path.
-  * Plus the GAP 4 routing-instances + apply-groups wire-up (currently parse-and-ignore for both); once codec-level apply-groups inheritance is implemented, the hostname field will populate correctly from fixtures that declare host-name under `set groups <name> system host-name` + `set apply-groups <name>` (both ksator fixtures do this today).
+  * GAP 4 apply-groups host-name inheritance + sub-interface materialisation shipped (the ksator fixtures now populate hostname correctly; unit 1+ entries become `<parent>.<N>` canonical interfaces).  Still pending: routing-instances canonical model, richer apply-groups inheritance (interface config / protocols / SNMP), per-unit VLAN tagging, block-form input parsing.
 
 Strategic:
   * Junos v1 unlocks **migration FROM Junos** — the primary customer direction (Juniper-core → Cisco/Arista replacement in DC refreshes, SP-to-enterprise moves).

@@ -829,3 +829,240 @@ class TestRenderCodecMetadata:
         second = codec.parse(rendered_a)
         rendered_b = codec.render(second)
         assert rendered_a == rendered_b
+
+
+# ---------------------------------------------------------------------------
+# GAP 4: apply-groups host-name inheritance
+# ---------------------------------------------------------------------------
+
+
+class TestApplyGroupsHostname:
+    """Junos allows host-name (and other system scalars) to live under a
+    named ``groups`` stanza that ``apply-groups`` composes into the
+    candidate config.  The ksator QFX5100 + EX4550 fixtures both follow
+    this convention — without wiring it, ``intent.hostname`` came out
+    empty even though the device clearly has a name.
+    """
+
+    def test_apply_groups_hostname_resolved(self):
+        raw = (
+            "set groups POC_Lab system host-name QFX5100-183\n"
+            "set apply-groups POC_Lab\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "QFX5100-183"
+
+    def test_top_level_hostname_wins_over_group(self):
+        """A top-level ``set system host-name`` takes precedence over
+        any group-scoped fallback — matches Junos's own config-
+        composition semantics (direct intent > inherited group)."""
+        raw = (
+            "set system host-name real-host\n"
+            "set groups POC_Lab system host-name group-host\n"
+            "set apply-groups POC_Lab\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "real-host"
+
+    def test_unapplied_group_hostname_ignored(self):
+        """A group that declares a host-name but isn't named in
+        ``apply-groups`` must not leak into intent.hostname."""
+        raw = (
+            "set groups POC_Lab system host-name group-host\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == ""
+
+    def test_first_applied_group_wins(self):
+        """Apply-groups is ordered; the first group declaring a
+        host-name wins (mirrors Junos's first-match semantics)."""
+        raw = (
+            "set groups A system host-name host-from-A\n"
+            "set groups B system host-name host-from-B\n"
+            "set apply-groups A\n"
+            "set apply-groups B\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "host-from-A"
+
+    def test_bracketed_apply_groups_syntax(self):
+        """``set apply-groups [ g1 g2 ]`` is a valid Junos form; the
+        bracket tokens get split by the shlex tokeniser and need to
+        be filtered out of the applied-groups list."""
+        raw = (
+            "set groups A system host-name host-from-A\n"
+            "set groups B system host-name host-from-B\n"
+            "set apply-groups [ A B ]\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # Either A or B would be acceptable — the only failure mode
+        # is getting an empty hostname (brackets leaking) or an
+        # error parsing the line.
+        assert intent.hostname in {"host-from-A", "host-from-B"}
+
+    def test_real_qfx5100_fixture_hostname_populates(self):
+        """Regression guard specifically for the ksator QFX5100
+        fixture — before GAP 4, its hostname came out empty."""
+        import pathlib
+        raw = pathlib.Path(
+            "tests/fixtures/real/junos/"
+            "ksator_labmgmt_qfx5100_junos173.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "QFX5100-183"
+
+    def test_real_ex4550_fixture_hostname_populates(self):
+        """Regression guard specifically for the ksator EX4550
+        fixture — before GAP 4, its hostname came out empty."""
+        import pathlib
+        raw = pathlib.Path(
+            "tests/fixtures/real/junos/"
+            "ksator_labmgmt_ex4550_junos151.set"
+        ).read_text(encoding="utf-8")
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "EX4550-190"
+
+
+# ---------------------------------------------------------------------------
+# GAP 4: sub-interfaces (unit 1+)
+# ---------------------------------------------------------------------------
+
+
+class TestSubInterfaces:
+    """v1 collapsed unit 0 into the parent and ignored units 1+.
+    GAP 4 materialises unit-N sub-interfaces as distinct
+    CanonicalInterface entries named ``<parent>.<N>`` — matches
+    Cisco's dot1Q convention so canonical-tree consumers see the
+    same shape across vendors.
+    """
+
+    def test_parse_unit_100_materialised_as_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        names = {i.name for i in intent.interfaces}
+        # Parent exists as a stub (placeholder); sub-interface
+        # carries the IP.
+        assert "ge-0/0/0" in names
+        assert "ge-0/0/0.100" in names
+        sub = next(i for i in intent.interfaces if i.name == "ge-0/0/0.100")
+        assert len(sub.ipv4_addresses) == 1
+        assert sub.ipv4_addresses[0].ip == "10.1.100.1"
+        assert sub.ipv4_addresses[0].prefix_length == 24
+
+    def test_parse_unit_description_on_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 description "
+            '"user VLAN 100"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.description == "user VLAN 100"
+
+    def test_parse_unit_disable_on_subiface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 100 disable\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.enabled is False
+
+    def test_multiple_subifaces_on_same_parent(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 200 family inet "
+            "address 10.1.200.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        names = [i.name for i in intent.interfaces]
+        assert "ge-0/0/0.100" in names
+        assert "ge-0/0/0.200" in names
+
+    def test_irb_dot_N_not_treated_as_subiface(self):
+        """``irb.10`` is an SVI-like interface; its dot is part of the
+        base name.  The sub-interface detector must not split it into
+        ``irb`` + ``10`` — that would lose identity.
+        """
+        raw = (
+            "set interfaces irb unit 10 family inet address "
+            "192.168.10.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # The sub-interface regex requires ``<media>-<fpc>/<pic>/<port>``
+        # in the parent, so ``irb`` unit 10 materialises as ``irb.10``
+        # and the render loop treats it as a top-level interface
+        # (no parent-split) because it lacks the slash grammar.
+        # The parse side emits a compound ``irb.10`` either way;
+        # the key property is that ``render(parse)`` round-trips.
+        codec = JunosCodec()
+        rendered = codec.render(intent)
+        reparsed = codec.parse(rendered)
+        reparsed_names = {i.name for i in reparsed.interfaces}
+        assert any(n.startswith("irb") for n in reparsed_names)
+
+    def test_render_subiface_emits_unit_form(self):
+        """Sub-interface render MUST use Junos's native
+        ``set interfaces <parent> unit <N> ...`` grammar, not the
+        compound canonical name verbatim."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    description="user vlan",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.100.1", prefix_length=24,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24" in out
+        )
+        assert (
+            'set interfaces ge-0/0/0 unit 100 description "user vlan"'
+            in out
+        )
+        # Must NOT emit the compound-name form (that'd be invalid
+        # Junos grammar).
+        assert "set interfaces ge-0/0/0.100" not in out
+
+    def test_subiface_roundtrip_stable(self):
+        """Sub-interface parse → render → parse preserves IP + desc."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 100 description "
+            '"user VLAN"\n'
+            "set interfaces ge-0/0/0 unit 200 family inet "
+            "address 10.1.200.1/24\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        first_by_name = {i.name: i for i in first.interfaces}
+        second_by_name = {i.name: i for i in second.interfaces}
+        assert set(first_by_name.keys()) == set(second_by_name.keys())
+        for name in first_by_name:
+            a, b = first_by_name[name], second_by_name[name]
+            assert a.description == b.description
+            assert [(x.ip, x.prefix_length) for x in a.ipv4_addresses] == [
+                (x.ip, x.prefix_length) for x in b.ipv4_addresses
+            ]

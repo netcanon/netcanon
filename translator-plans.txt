@@ -737,6 +737,46 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] JUNOS APPLY-GROUPS HOST-NAME + SUB-INTERFACES (GAP 4):
+    # Two additions to the Junos codec:
+    #
+    # 1. Apply-groups host-name inheritance.  Junos allows host-name
+    #    + other system scalars to live under a named `groups` stanza
+    #    that `apply-groups` composes into the candidate config.
+    #    The ksator QFX5100 + EX4550 fixtures both use this pattern;
+    #    before GAP 4 their intent.hostname parsed as empty.  Parse
+    #    now collects group-scoped host-names and resolves the first
+    #    applied group that declared one.  Direct `set system
+    #    host-name X` still wins over group fallback.  Bracketed
+    #    `set apply-groups [ g1 g2 ]` form tolerated (bracket tokens
+    #    filtered out).
+    #
+    # 2. Per-unit sub-interfaces (unit 1+).  v1 ignored units 1+;
+    #    GAP 4 materialises them as distinct CanonicalInterface
+    #    entries named `<parent>.<unit>` (e.g. `ge-0/0/0.100`) —
+    #    matching Cisco's dot1Q convention so canonical-tree
+    #    consumers see the same shape across vendors.  Render splits
+    #    compound canonical name back into native Junos grammar
+    #    (`set interfaces <parent> unit <N> ...`).  `irb.N` /
+    #    `vlan.N` preserved as top-level SVI names (not mis-split)
+    #    via a slash-requiring sub-interface regex.
+    #
+    # What's NOT in GAP 4 (deferred):
+    #   * Routing-instances (VRF equivalent) — needs a canonical
+    #     VRF model first.  Separate commit.
+    #   * Richer apply-groups inheritance — currently only system
+    #     host-name flows through.  Interface config / protocols /
+    #     SNMP / RADIUS / etc. inheritance is future work.
+    #   * Per-unit VLAN tagging (`unit N vlan-id 100`) — sub-
+    #     interfaces materialise without tag info today.
+    #   * Block-form (curly-brace) parse — reserved for a dedicated
+    #     commit since the transformation is well-defined.
+    #
+    # Covered by tests/unit/migration/test_juniper_junos.py
+    # (TestApplyGroupsHostname + TestSubInterfaces, 14 tests) plus
+    # test_real_captures.py round-trip on the ksator fixtures with
+    # populated hostname fields.
+
 [SHIPPED] ARISTA + JUNOS BEST_EFFORT PROMOTION (GAP 3):
     # Adds 3 real-capture fixtures closing the ≥2-version gap for
     # both arista_eos and juniper_junos:

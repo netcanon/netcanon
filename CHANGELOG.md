@@ -7,6 +7,60 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 4 — Junos apply-groups host-name inheritance + per-unit sub-interfaces)
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+  handles `set groups <gname> system host-name <X>` + `set apply-
+  groups <gname>` pairs, populating `intent.hostname` from the
+  first applied group that declared a host-name (mirrors Junos's
+  own first-match composition order).  Direct `set system
+  host-name X` still wins over group-scoped fallback when both
+  are present.  Bracketed `set apply-groups [ g1 g2 ]` form
+  tolerated: the bracket tokens are filtered out of the
+  applied-groups list.
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+  materialises per-unit sub-interfaces (unit 1+) as distinct
+  `CanonicalInterface` entries named `<parent>.<unit>` (e.g.
+  `ge-0/0/0.100`), matching Cisco's dot1Q convention so canonical
+  consumers see the same shape across vendors.  IPv4 address +
+  description + disable on the sub-interface all populate on the
+  child entry; unit 0 still collapses into the parent.  Render
+  splits the compound name back into native Junos grammar
+  (`set interfaces <parent> unit <N> ...`) — the compound name
+  never appears in emitted set-lines.
+- Helper `_split_subiface_name(name)` distinguishes Junos physical
+  sub-interfaces (parent contains `<media>-<fpc>/<pic>/<port>`
+  slashes, e.g. `ge-0/0/0.100`) from SVI-like interfaces whose
+  dot is part of the base name (`irb.10`, `vlan.100`).  The
+  slash requirement prevents mis-splitting irb/vlan identities.
+
+### Changed (GAP 4 — ksator fixture hostnames now populate)
+
+- `tests/fixtures/real/RESULTS.md`: Junos ksator QFX5100 + EX4550
+  coverage-matrix rows updated from `hostname=0` to `hostname=1`
+  each; explanatory note replaced with "**populates intent.hostname
+  as of GAP 4**" marker.
+- `tests/fixtures/real/RESULTS.md`: Junos promotion-path paragraph
+  updated — apply-groups host-name and sub-interface materialisation
+  are no longer pending; richer apply-groups inheritance (interface
+  config, protocols, SNMP) + routing-instances + block-form + per-
+  unit VLAN tagging remain the outstanding work before `certified`.
+
+### Tests (GAP 4)
+
+- `tests/unit/migration/test_juniper_junos.py::TestApplyGroupsHostname`
+  — 7 tests covering the happy path, top-level-wins-over-group,
+  unapplied group ignored, first-applied-group-wins ordering,
+  bracketed `[ g1 g2 ]` syntax, and two real-fixture regression
+  guards (ksator QFX5100 + EX4550) asserting the specific
+  hostname string.
+- `tests/unit/migration/test_juniper_junos.py::TestSubInterfaces`
+  — 7 tests covering unit-N materialisation with IP + description
+  + disable, multi-subiface on same parent, `irb.N` preservation
+  (not mis-split as `irb`+unit), render emits native
+  `<parent> unit <N>` grammar (never the compound-name form), and
+  round-trip stability through parse → render → parse.
+
 ### Added (GAP 3 — real-capture fixtures promoting Arista + Junos to best_effort)
 
 - `tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt`

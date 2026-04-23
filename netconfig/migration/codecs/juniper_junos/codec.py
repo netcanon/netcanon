@@ -133,11 +133,26 @@ class JunosCodec(CodecBase):
             LossyPath(
                 path="/interfaces/interface/subinterfaces/subinterface",
                 reason=(
-                    "Junos models per-unit sub-interfaces explicitly "
-                    "(``interface em0 unit 0``).  v1 collapses unit "
-                    "0 into the parent and ignores units 1+ — a "
-                    "future enrichment pass will populate "
-                    "CanonicalInterface.subinterfaces properly."
+                    "Unit 0 collapses into the parent (common case "
+                    "— most Junos interfaces have exactly one unit).  "
+                    "GAP 4 materialises units 1+ as distinct "
+                    "CanonicalInterface entries named "
+                    "``<parent>.<unit>``; per-unit VLAN tagging "
+                    "(``unit N vlan-id 100``) still parses-and-"
+                    "ignores pending a canonical tagged-subinterface "
+                    "model."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/groups",
+                reason=(
+                    "Apply-groups inheritance is wired only for "
+                    "``set groups <g> system host-name X`` + "
+                    "``set apply-groups <g>`` (GAP 4).  Richer "
+                    "group-scoped inheritance (interfaces, "
+                    "protocols, SNMP, radius-server) parses-and-"
+                    "ignores in v1."
                 ),
                 severity="warn",
             ),
@@ -226,6 +241,16 @@ class JunosCodec(CodecBase):
         # config across many lines; we collect per-iface state
         # before materialising CanonicalInterface objects.
         iface_state: dict[str, dict[str, Any]] = {}
+        # GAP 4: apply-groups host-name inheritance.  Junos allows
+        # host-name + other system scalars to live under a named
+        # ``group`` stanza; the ``apply-groups`` command composes
+        # them into the candidate config.  We collect group-scoped
+        # host-names into ``group_hostnames`` and the apply-groups
+        # list into ``applied_groups``; if ``intent.hostname`` is
+        # still empty after the main pass, walk applied_groups in
+        # order and use the first group that declared a host-name.
+        group_hostnames: dict[str, str] = {}
+        applied_groups: list[str] = []
 
         for raw_line in raw.splitlines():
             line = raw_line.strip()
@@ -238,9 +263,27 @@ class JunosCodec(CodecBase):
             tokens = _tokenise_set(line[4:])
             if not tokens:
                 continue
-            _dispatch_set(tokens, intent, iface_state)
+            _dispatch_set(
+                tokens, intent, iface_state,
+                group_hostnames=group_hostnames,
+                applied_groups=applied_groups,
+            )
+
+        # GAP 4: resolve apply-groups host-name if the top-level
+        # ``set system host-name`` didn't fire.  First applied-group
+        # declaring a host-name wins — matches Junos's own
+        # "first-in-apply-groups-list" evaluation order.
+        if not intent.hostname:
+            for gname in applied_groups:
+                if gname in group_hostnames:
+                    intent.hostname = group_hostnames[gname]
+                    break
 
         # Materialise CanonicalInterface records from the accumulator.
+        # GAP 4: sub-interfaces (unit 1+) are materialised as distinct
+        # CanonicalInterface entries with compound name ``<parent>.<N>``
+        # — matches Cisco's per-port dot1Q convention
+        # (``GigabitEthernet0/1.100`` is its own CanonicalInterface).
         for name in sorted(iface_state.keys()):
             state = iface_state[name]
             iface = CanonicalInterface(
@@ -257,13 +300,16 @@ class JunosCodec(CodecBase):
 
         logger.debug(
             "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
-            "routes=%d users=%d snmp=%s (input=%d chars)",
+            "routes=%d users=%d snmp=%s groups=%d apply_groups=%d "
+            "(input=%d chars)",
             intent.hostname,
             len(intent.interfaces),
             len(intent.vlans),
             len(intent.static_routes),
             len(intent.local_users),
             "yes" if intent.snmp else "no",
+            len(group_hostnames),
+            len(applied_groups),
             len(raw),
         )
         return intent
@@ -340,6 +386,35 @@ class JunosCodec(CodecBase):
                 or (not iface.enabled)
                 or bool(iface.ipv4_addresses)
             )
+            # GAP 4: sub-interface naming.  The parse side materialises
+            # ``set interfaces <parent> unit N ...`` (N>0) as a
+            # CanonicalInterface named ``<parent>.<N>``.  Render has to
+            # split the compound name back into parent + unit so the
+            # emitted set-lines use Junos's native grammar.
+            parent, unit_num = _split_subiface_name(name)
+            if parent is not None and unit_num is not None:
+                # Sub-interface — emit under parent / unit <N>.
+                if iface.description:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num} "
+                        f"description {_quote_always(iface.description)}"
+                    )
+                if not iface.enabled:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num} disable"
+                    )
+                for addr in iface.ipv4_addresses:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num} "
+                        f"family inet address "
+                        f"{addr.ip}/{addr.prefix_length}"
+                    )
+                if not has_renderable_attr:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num}"
+                    )
+                continue
+            # Regular (unit-0 or non-unitised) interface.
             if iface.description:
                 out.append(
                     f"set interfaces {name} description "
@@ -509,11 +584,19 @@ def _dispatch_set(
     tokens: list[str],
     intent: CanonicalIntent,
     iface_state: dict[str, dict[str, Any]],
+    *,
+    group_hostnames: dict[str, str] | None = None,
+    applied_groups: list[str] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
     Dispatches on the first 1-3 tokens to find the applier.  Unknown
     paths silently no-op (Tier-3 tolerance).
+
+    ``group_hostnames`` and ``applied_groups`` are the GAP 4
+    apply-groups accumulators; callers in the tight parse loop pass
+    both, but they're optional so legacy tests calling
+    ``_dispatch_set`` directly without them still work.
     """
     if not tokens:
         return
@@ -528,9 +611,44 @@ def _dispatch_set(
         _apply_routing_options(tokens[1:], intent)
     elif head == "snmp":
         _apply_snmp(tokens[1:], intent)
+    elif head == "groups":
+        if group_hostnames is not None:
+            _apply_groups_stanza(tokens[1:], group_hostnames)
+    elif head == "apply-groups":
+        if applied_groups is not None and len(tokens) >= 2:
+            # Junos allows ``set apply-groups [ g1 g2 g3 ]`` or plain
+            # ``set apply-groups g1``; shlex has already stripped the
+            # brackets — everything after the head is an entry.
+            for group_name in tokens[1:]:
+                if group_name in ("[", "]"):
+                    continue
+                if group_name not in applied_groups:
+                    applied_groups.append(group_name)
     # All other top-level paths (protocols / firewall / policy-options /
-    # routing-instances / groups / security / forwarding-options /
-    # chassis / services) — parse-and-ignore.
+    # routing-instances / security / forwarding-options / chassis /
+    # services) — parse-and-ignore.
+
+
+def _apply_groups_stanza(
+    tokens: list[str],
+    group_hostnames: dict[str, str],
+) -> None:
+    """Extract group-scoped settings we care about.
+
+    Currently only ``set groups <gname> system host-name <X>`` feeds
+    apply-groups inheritance.  Everything else under ``groups <gname>``
+    parses-and-ignores for now — richer inheritance (interface config,
+    protocols, SNMP) is future work.
+    """
+    if len(tokens) < 4:
+        return
+    gname = tokens[0]
+    if (
+        tokens[1] == "system"
+        and tokens[2] == "host-name"
+        and len(tokens) >= 4
+    ):
+        group_hostnames[gname] = tokens[3]
 
 
 def _apply_system(tokens: list[str], intent: CanonicalIntent) -> None:
@@ -600,13 +718,18 @@ def _apply_interfaces(
             return
         if len(tokens) < 4:
             return
-        # v1: collapse unit 0 into parent (most common case).
-        # Units 1+ on non-physical interfaces are sub-interfaces we
-        # don't currently model — parse-and-ignore with an optional
-        # warning in a future enrichment pass.
-        if unit_num != 0:
-            return
-        # ``unit 0 family inet address <ip>/<prefix>``
+        # GAP 4: Units 1+ materialise as distinct CanonicalInterface
+        # entries with compound name ``<parent>.<unit>`` — matches
+        # Cisco's dot1Q sub-interface convention (e.g.
+        # ``GigabitEthernet0/1.100``).  Unit 0 still collapses into
+        # the parent because that's the non-tagged L3 pathway and
+        # every Junos interface has one.
+        if unit_num == 0:
+            target_state = state
+        else:
+            sub_name = f"{name}.{unit_num}"
+            target_state = iface_state.setdefault(sub_name, {})
+        # ``unit <N> family inet address <ip>/<prefix>``
         if (
             len(tokens) >= 7
             and tokens[3] == "family"
@@ -618,16 +741,21 @@ def _apply_interfaces(
                 ip_str, prefix_str = addr.split("/", 1)
                 try:
                     prefix = int(prefix_str)
-                    state.setdefault("ipv4", []).append((ip_str, prefix))
+                    target_state.setdefault("ipv4", []).append(
+                        (ip_str, prefix)
+                    )
                 except ValueError:
                     pass
-        # ``unit 0 description "<desc>"`` — some configs place it here.
+        # ``unit <N> description "<desc>"`` — some configs place it here.
         if (
             len(tokens) >= 5
             and tokens[3] == "description"
-            and not state.get("description")
+            and not target_state.get("description")
         ):
-            state["description"] = tokens[4]
+            target_state["description"] = tokens[4]
+        # ``unit <N> disable`` — disable on the sub-interface level.
+        if len(tokens) >= 4 and tokens[3] == "disable":
+            target_state["enabled"] = False
 
 
 def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
@@ -699,6 +827,28 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
 
 
 _QUOTE_NEEDED_RE = re.compile(r"[\s\"';$`\\]")
+
+# ``<parent>.<unit>`` — e.g. ``ge-0/0/0.100``.  ``parent`` must
+# contain a slash (``ge-0/0/0``) to distinguish from normal names
+# like ``irb.10`` where the dot is part of the base port name.
+_SUBIFACE_RE = re.compile(r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+)\.(?P<unit>\d+)$")
+
+
+def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
+    """Return ``(parent, unit)`` if *name* looks like a Junos physical
+    sub-interface (``ge-0/0/0.100``), else ``(None, None)``.
+
+    ``irb.N`` / ``vlan.N`` are excluded by the parent-slash requirement
+    — those are SVI-like interfaces that keep the dot in their
+    canonical name (rendered as top-level entries, not sub-interfaces).
+    """
+    m = _SUBIFACE_RE.match(name)
+    if m is None:
+        return (None, None)
+    try:
+        return (m.group("parent"), int(m.group("unit")))
+    except ValueError:
+        return (None, None)
 
 
 def _quote_if_needed(s: str) -> str:
