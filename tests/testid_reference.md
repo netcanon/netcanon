@@ -507,6 +507,7 @@ when the picked profile declares `modules:` in its YAML:
 | `migrate-rename-target-vendor-select` | `<select>` | Stage 1 — vendor family |
 | `migrate-rename-target-model-select`  | `<select>` | Stage 2 — chassis model; cascades to reset the module dropdown |
 | `migrate-rename-target-module-select` | `<select>` | Stage 3 — swappable uplink module (NM-8X, NM-2Q, JL083A, …); hidden when `profile.modules == {}` |
+| `migrate-rename-target-profile-group` | `<span>`   | Wrapper around the three vendor / model / module dropdowns — hidden (`display:none`) when active rail category is not `ports`, since profile data drives only the ports pane's dropdown-vs-freetext rows and the fit-check banner |
 
 **Per-kind row table** (driven by `_RENAME_KIND_ORDER` in
 migrate.html):

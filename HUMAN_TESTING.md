@@ -33,6 +33,47 @@ list, don't delete).
       probe declaration — backup picks the family-base definition
       (same as pre-P1C3 behaviour).
 
+## Migration — Post-P2C4 UX polish (ship-fresh)
+
+- [ ] **Target-profile dropdowns pane-scoped**: open the rename
+      modal on a Cisco→Aruba translation.  Vendor/model dropdowns
+      visible at top.  Click VLANs rail button — dropdowns
+      disappear.  Click Local Users — still hidden.  Click Ports
+      — they come back.  (No need to re-pick the profile after
+      switching panes; the dropdown STATE is preserved, only the
+      VISIBILITY toggles.)
+- [ ] **Fit-check banner pane-scoped**: with a target profile
+      picked (vendor + model both selected), the fit-check banner
+      shows on ports pane but disappears on VLANs / Local Users.
+      Returning to ports re-shows it.
+- [ ] **VLAN collision disables Apply**: translate Cisco config
+      with 2+ VLANs.  Open modal → VLANs pane.  Override VLAN 10
+      → 30, VLAN 20 → 30.  Both rows show ⛔.  Apply button is
+      now DISABLED (previous behaviour let it through; server
+      would merge silently).  Resolve one and Apply re-enables.
+- [ ] **User collision disables Apply**: same as above but with
+      usernames — rename admin → manager AND operator → manager.
+      Apply disabled until collision resolved.
+- [ ] **VLAN rename preview live-updates**: on VLANs pane, type
+      a new target ID (e.g. VLAN 10 → 999).  Preview pane on the
+      right shows `999` where `10` used to appear.  No Apply
+      needed — this is client-side approximation.
+- [ ] **User rename preview live-updates**: same — rename admin
+      → superadmin, preview shows `username superadmin …`
+      substituted in-place.
+- [ ] **Preview is approximate, Apply is truth**: drop a VLAN in
+      the VLANs pane.  Preview does NOT remove the VLAN's lines
+      (client-side can't do multi-line removal safely).  Click
+      Apply — now the rendered output is re-fetched from server
+      and lines are gone.  Expected behaviour; preview header
+      already labels itself as "approximation".
+- [ ] **OPNsense probe works**: add a `probe:` block to an
+      OPNsense definition (e.g. `command: uname -r`, `patterns:
+      {detected_os_version: "(\\d+\\.\\d+)"}`), run a backup
+      against a real OPNsense box.  Device-edit form's
+      detected_facts panel populates.  No probe? Backup still
+      completes (legacy behaviour unchanged).
+
 ## Migration — Rename modal Local-Users pane (P2C4, ship-fresh)
 
 - [ ] **Rail button appears**: translate a Cisco config declaring

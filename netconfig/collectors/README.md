@@ -101,9 +101,10 @@ uses the result for two purposes:
 
 **Default behaviour is no-op:** `BaseCollector.probe` returns `{}` so
 collectors that haven't wired probing support keep working unchanged.
-`NetmikoCollector` has a concrete override; `ParamikoShellCollector`
-does not (OPNsense's menu-driven shell needs custom handling —
-tracked as follow-up).
+Both `NetmikoCollector` and `ParamikoShellCollector` ship concrete
+overrides — the Paramiko variant handles the OPNsense console menu
+opt-in and uses tighter idle + timeout bounds suitable for small
+"show version" style output.
 
 Probe failure is NEVER fatal:
 

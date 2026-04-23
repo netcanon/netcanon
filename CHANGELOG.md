@@ -7,6 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (post-P2C4 rename-modal UX polish + OPNsense probe support)
+
+- **Target-profile dropdowns scoped to ports pane.**  The vendor /
+  model / module selects in the modal toolbar + the fit-check
+  banner drive ports-pane-specific behaviour only.  Previously
+  visible on all panes, misleading operators into thinking they
+  needed to pick a profile before renaming VLANs or users.  Now
+  hidden when the active rail category isn't `ports`.  New
+  testid: `migrate-rename-target-profile-group`.
+- **Collision blocks Apply across all panes.**  Pre-fix, ports-
+  pane collisions disabled Apply but VLAN + local-user collisions
+  only showed the ⛔ icon while letting Apply proceed (server
+  would auto-merge).  Fixed for feature parity — any-pane
+  collision now disables Apply so operators must explicitly
+  resolve rather than silently ship a merged output.
+- **Preview pane extended to VLAN + user renames.**  The client-
+  side approximation (whole-word substitution) now covers all
+  three categories' rename operations.  Drops still rely on the
+  server-side re-render (Apply) since multi-line stanza removal
+  isn't safe client-side.
+- **ParamikoShellCollector.probe() implementation.**  OPNsense
+  backups can now populate `detected_facts` — the paramiko_shell
+  strategy finally has a probe override.  Handles the console
+  menu opt-in; short-lived separate session with tighter idle +
+  timeout bounds (~1.6s idle, 30s absolute).  Failure modes still
+  never-fatal; family-base fallback unchanged.
+
 ### Added (P2C4 — local-users rename pane + three-category composition fix)
 
 - Third per-pane override category after ports + VLANs.  New
