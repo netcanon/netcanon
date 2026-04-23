@@ -34,6 +34,19 @@ class DeviceProfile(BaseModel):
         password: SSH login password (plaintext in memory; encrypted on disk).
         enable_password: Privileged-exec password; ``None`` if not required.
         notes: Optional free-text notes about the device.
+        os_version: Operator-pinned OS version (e.g. ``"17.12"``) used
+            to select a version-specific definition overlay at backup
+            time.  ``None`` = use the family-base definition.
+        model: Operator-pinned hardware model (e.g. ``"C9300-48P"``).
+            ``None`` = any model.  Bridge to the migration subsystem's
+            target-profile registry, which keys on the same slug.
+        detected_facts: Dict of facts extracted by a probe phase on a
+            previous backup — typically ``{detected_os_version,
+            detected_model, firmware_build, probe_timestamp,
+            probe_codec_version}``.  Populated by the backup pipeline
+            (not user-editable in the API).  Surfaced read-only in the
+            device edit form so operators can cross-reference their
+            pinned values against what the device actually reports.
         created_at: UTC time the profile was created.
     """
 
@@ -46,6 +59,9 @@ class DeviceProfile(BaseModel):
     password: str
     enable_password: str | None = None
     notes: str | None = None
+    os_version: str | None = None
+    model: str | None = None
+    detected_facts: dict[str, str] | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
     @field_validator("host")
@@ -66,6 +82,11 @@ class DeviceProfileCreate(BaseModel):
         password: SSH login password.
         enable_password: Privileged-exec password; ``None`` if not required.
         notes: Optional free-text notes.
+        os_version: Optional pin for version-specific definition
+            overlay selection.  ``None`` = use the family-base
+            definition.
+        model: Optional pin for hardware-model-specific overlay.
+            ``None`` = any model.
     """
 
     name: str
@@ -76,6 +97,8 @@ class DeviceProfileCreate(BaseModel):
     password: str
     enable_password: str | None = None
     notes: str | None = None
+    os_version: str | None = None
+    model: str | None = None
 
     @field_validator("host")
     @classmethod
@@ -97,6 +120,9 @@ class DeviceProfileUpdate(BaseModel):
         password: New SSH login password.
         enable_password: New privileged-exec password; pass ``None`` to clear.
         notes: New free-text notes; pass ``None`` to clear.
+        os_version: New OS-version pin; pass ``None`` to clear the pin
+            (reverts to family-base lookup).
+        model: New model pin; pass ``None`` to clear.
     """
 
     name: str | None = None
@@ -107,6 +133,8 @@ class DeviceProfileUpdate(BaseModel):
     password: str | None = None
     enable_password: str | None = None
     notes: str | None = None
+    os_version: str | None = None
+    model: str | None = None
 
     @field_validator("host")
     @classmethod

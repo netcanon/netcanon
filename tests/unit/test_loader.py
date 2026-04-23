@@ -257,3 +257,197 @@ class TestLoaderPriority:
         (tmp_path / "z_override.yaml").write_text(z_def, encoding="utf-8")
         profiles = DefinitionLoader(tmp_path).load_all()
         assert profiles["Cisco"].os == "Z"
+
+
+# ---------------------------------------------------------------------------
+# Longest-match resolver (layered definitions, Project 1 commit 1)
+# ---------------------------------------------------------------------------
+
+BASE_CISCO = textwrap.dedent("""\
+    vendor: Cisco
+    os: IOS-XE
+    type_key: Cisco
+    priority: 10
+    file_extension: cfg
+    connection:
+      needs_enable: true
+      cisco_more_paging: true
+    commands:
+      config: "show running-config"
+    collector:
+      strategy: netmiko
+      netmiko_device_type: cisco_xe
+    notes: family base
+""")
+
+OVERLAY_1712 = textwrap.dedent("""\
+    vendor: Cisco
+    os: IOS-XE
+    type_key: Cisco
+    priority: 20
+    os_version: "17.12"
+    file_extension: cfg
+    connection:
+      needs_enable: true
+      cisco_more_paging: true
+    commands:
+      config: "show running-config"
+    collector:
+      strategy: netmiko
+      netmiko_device_type: cisco_xe
+    notes: overlay 17.12
+""")
+
+OVERLAY_1712_C9300 = textwrap.dedent("""\
+    vendor: Cisco
+    os: IOS-XE
+    type_key: Cisco
+    priority: 30
+    os_version: "17.12"
+    model: "C9300-48P"
+    file_extension: cfg
+    connection:
+      needs_enable: true
+      cisco_more_paging: true
+    commands:
+      config: "show running-config"
+    collector:
+      strategy: netmiko
+      netmiko_device_type: cisco_xe
+    notes: overlay 17.12 + C9300-48P
+""")
+
+OVERLAY_MODEL_ONLY = textwrap.dedent("""\
+    vendor: Cisco
+    os: IOS-XE
+    type_key: Cisco
+    priority: 25
+    model: "C9300-48P"
+    file_extension: cfg
+    connection:
+      needs_enable: true
+      cisco_more_paging: true
+    commands:
+      config: "show running-config"
+    collector:
+      strategy: netmiko
+      netmiko_device_type: cisco_xe
+    notes: overlay C9300-48P any version
+""")
+
+
+class TestOverlayIsolation:
+    """Overlays (entries with os_version or model set) must not pollute
+    the family-base map returned by load_all().  Back-compat: callers
+    that iterate load_all() see exactly one entry per type_key."""
+
+    def test_overlay_excluded_from_legacy_map(self, tmp_path: Path):
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "overlay.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        profiles = loader.load_all()
+        # Only family-base entry present; overlay invisible here.
+        assert list(profiles.keys()) == ["Cisco"]
+        assert profiles["Cisco"].notes == "family base"
+        assert profiles["Cisco"].os_version is None
+
+    def test_two_overlays_dont_collide_in_legacy_map(self, tmp_path: Path):
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "1712.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        (tmp_path / "1712_9300.yaml").write_text(
+            OVERLAY_1712_C9300, encoding="utf-8"
+        )
+        profiles = DefinitionLoader(tmp_path).load_all()
+        assert len(profiles) == 1
+
+
+class TestResolveLongestMatch:
+    """``DefinitionLoader.resolve`` picks the most-specific matching
+    definition using the fallback ladder documented in the module
+    docstring.  Each test covers one rung of the ladder."""
+
+    def test_resolve_exact_triple_match(self, tmp_path: Path):
+        """Pin both os_version + model → exact-triple overlay wins."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "v.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        (tmp_path / "vm.yaml").write_text(OVERLAY_1712_C9300, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        hit = loader.resolve("Cisco", os_version="17.12", model="C9300-48P")
+        assert hit is not None
+        assert hit.notes == "overlay 17.12 + C9300-48P"
+
+    def test_resolve_version_pin_model_wildcard(self, tmp_path: Path):
+        """Pin os_version only → version-overlay wins even when a
+        triple-overlay exists for a different model."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "v.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        (tmp_path / "vm.yaml").write_text(OVERLAY_1712_C9300, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        hit = loader.resolve("Cisco", os_version="17.12")
+        assert hit is not None
+        assert hit.notes == "overlay 17.12"
+
+    def test_resolve_version_pin_falls_through_to_base(self, tmp_path: Path):
+        """Pin an os_version with no matching overlay → family base."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "v.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        # 17.9 has no overlay — falls back to base.
+        hit = loader.resolve("Cisco", os_version="17.9")
+        assert hit is not None
+        assert hit.notes == "family base"
+
+    def test_resolve_model_pin_only(self, tmp_path: Path):
+        """Pin model only, overlay exists for that model → overlay wins."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "m.yaml").write_text(OVERLAY_MODEL_ONLY, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        hit = loader.resolve("Cisco", model="C9300-48P")
+        assert hit is not None
+        assert hit.notes == "overlay C9300-48P any version"
+
+    def test_resolve_no_pin_returns_family_base(self, tmp_path: Path):
+        """No pins → family-base wins even when overlays exist."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "v.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        hit = loader.resolve("Cisco")
+        assert hit is not None
+        assert hit.notes == "family base"
+
+    def test_resolve_unknown_type_key_returns_none(self, tmp_path: Path):
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        assert loader.resolve("Juniper") is None
+
+    def test_resolve_before_load_all_returns_none(self, tmp_path: Path):
+        """Defensive: resolve() called before load_all() has no data
+        to consult.  Returning None (rather than raising) matches how
+        a missing definition is handled downstream."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        # NOTE: intentionally not calling load_all()
+        assert loader.resolve("Cisco") is None
+
+    def test_resolve_version_pin_prefers_version_over_model(self, tmp_path: Path):
+        """When both an os_version overlay and a model overlay could
+        apply (neither has the full triple), version wins — matches
+        the tier ordering in the resolver docstring."""
+        (tmp_path / "base.yaml").write_text(BASE_CISCO, encoding="utf-8")
+        (tmp_path / "v.yaml").write_text(OVERLAY_1712, encoding="utf-8")
+        (tmp_path / "m.yaml").write_text(OVERLAY_MODEL_ONLY, encoding="utf-8")
+        loader = DefinitionLoader(tmp_path)
+        loader.load_all()
+        # Both overlays match if we relaxed tiers, but tier-2 (version
+        # pin) wins over tier-3 (model pin).
+        hit = loader.resolve("Cisco", os_version="17.12", model="C9300-48P")
+        # With both a v-only and m-only overlay but no triple, the
+        # tier-2 match (os_version=17.12, model=None) is preferred.
+        assert hit is not None
+        assert hit.notes == "overlay 17.12"

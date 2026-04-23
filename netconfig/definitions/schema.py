@@ -116,12 +116,28 @@ class DeviceDefinition(BaseModel):
             post-connection for future automatic selection.  Defaults to
             ``".*"`` (matches any version).
         type_key: Primary lookup key.  Must be unique across all loaded
-            definitions (higher-priority files win on collision).  This
-            is the value users pass as ``type_key`` in device lists.
-        priority: Load order for conflict resolution.  Higher numbers are
-            loaded later and override lower-priority definitions that share
-            the same ``type_key``.  Use ``0`` for base definitions and
-            larger values for model- or version-specific overrides.
+            definitions (higher-priority files win on collision within
+            the family-base set).  This is the value users pass as
+            ``type_key`` in device lists.
+        priority: Load order for conflict resolution among family-base
+            entries (those with ``os_version`` and ``model`` both unset).
+            Higher numbers are loaded later and override lower-priority
+            definitions sharing the same ``type_key``.  Overlays —
+            entries with ``os_version`` or ``model`` set — do NOT
+            participate in priority-based overriding; they live in a
+            parallel variant registry accessible via
+            :meth:`DefinitionLoader.resolve`.
+        os_version: Specific OS version this definition targets
+            (e.g. ``"17.12"``).  ``None`` = family-base, applies to any
+            version.  Used by :meth:`DefinitionLoader.resolve` for
+            longest-match lookup: a pinned target with
+            ``os_version="17.12"`` picks the ``17.12`` overlay when it
+            exists; falls back to the family base when it doesn't.
+        model: Specific hardware model this definition targets (e.g.
+            ``"C9300-48P"``).  ``None`` = any model.  Same longest-match
+            semantics as ``os_version`` — rarely needed since CLI
+            backup behaviour almost never varies by model, but
+            available for the edge case.
         file_extension: Output file extension without the leading dot.
         connection: SSH session flags.
         commands: Pre/config/post command sequence.
@@ -137,6 +153,8 @@ class DeviceDefinition(BaseModel):
     version_match: str = ".*"
     type_key: str
     priority: int = 0
+    os_version: str | None = None
+    model: str | None = None
     file_extension: str = "cfg"
     connection: ConnectionConfig
     commands: CommandConfig

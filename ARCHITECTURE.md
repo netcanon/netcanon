@@ -79,6 +79,29 @@ conflated in vendor-specific tooling:
 - Default `device_class` declaration
 - Shared taxonomy anchor with the backup layer's `type_key` field
 
+**Layered definitions (backup side).**  The `DeviceDefinition` schema
+in `netconfig/definitions/schema.py` supports two-level lookup:
+
+* **Family-base** entries (`os_version` and `model` both unset) form
+  the default `dict[type_key, DeviceDefinition]` returned by
+  `DefinitionLoader.load_all()`.  Existing callers that don't know
+  about variants hit exactly these entries.
+* **Overlays** (entries with `os_version` or `model` set) live in a
+  parallel variant registry reachable via `DefinitionLoader.resolve(
+  type_key, os_version=None, model=None)`.  The resolver does
+  longest-match: exact triple → version-pin → model-pin → family base.
+
+Operators pin the axes they know by setting `os_version` and/or
+`model` on their `DeviceProfile`.  The backup pipeline passes the
+pins through `DeviceTarget`; unpinned targets fall back to the
+family base automatically.  Probe-driven auto-detection (future
+commit) writes back to `DeviceProfile.detected_facts`, which operators
+see read-only in the device edit panel so they can reconcile their
+pins against what the device actually reports.
+
+See [`definitions/README.md`](definitions/README.md) for the full
+authoring guide.
+
 ### Layer 2 — Format Codec
 
 **Where:** `netconfig/migration/codecs/<vendor>/codec.py`

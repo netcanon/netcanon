@@ -1,0 +1,66 @@
+# Cisco IOS-XE 17.12 — version-specific overlay
+#
+# Sits alongside the family-base 17.x.yaml.  When a DeviceTarget or
+# DeviceProfile is pinned to os_version="17.12" the definition
+# loader's longest-match resolver picks this file; un-pinned targets
+# continue to get 17.x.yaml via the family-base lookup.
+#
+# What makes it an overlay:
+#   * os_version: "17.12" is set (family base leaves it None)
+#   * Everything else can diverge from the base as needed
+#
+# Concrete delta from the family base:
+#   * Tighter prompts.trailing: the 17.12 Cat 9300 prompt includes
+#     the ``\S+\(config\)#`` form we've seen in user-contributed
+#     captures (e.g. user_contrib_cat9300_iosxe1712.txt), narrower
+#     than the broad ``^\S+[#>]\s*$`` in 17.x.yaml.  Tighter pattern
+#     → fewer false-positive strip-offs on the tail of captured
+#     config blocks that contain ``(config)``-adjacent lines.
+#
+# This file exists primarily as a proof-of-concept for the overlay
+# pattern.  Commit 1 ships the machinery; later commits demonstrate
+# value by migrating known per-version quirks from anecdotal
+# source-comments into structured overlay data.
+
+vendor: Cisco
+os: IOS-XE
+version_match: "^17\\.12(\\.\\d+)*$"
+type_key: Cisco
+priority: 20               # higher than family base so the legacy
+                           # map resolver would pick us IF we
+                           # weren't gated out of the base map by
+                           # os_version != None.  Kept high for
+                           # intention clarity.
+os_version: "17.12"        # overlay qualifier — engages the
+                           # longest-match path in resolve().
+# model: (unset — this overlay applies to any IOS-XE 17.12 device)
+
+file_extension: cfg
+
+connection:
+  needs_enable: true
+  cisco_more_paging: true
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+[#>]\s*$'          # generic enable/user prompt
+    - '^\S+\(config[^)]*\)#\s*$'   # IOS-XE 17.12 config-mode prompt
+                                   # (subconfigs like config-if /
+                                   # config-vrf / config-line all
+                                   # match via the character class)
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: cisco_xe
+
+notes: >
+  IOS-XE 17.12 overlay.  Adds config-mode prompt capture narrowing
+  seen on Cat 9300 captures.  All other behaviour inherits the
+  family-base semantics (needs_enable + cisco_more_paging) since
+  the 17.x platform behaviour didn't shift between 17.9 and 17.12.

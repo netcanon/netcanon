@@ -40,6 +40,15 @@ class DeviceTarget(BaseModel):
         credentials: Login credentials.
         device_profile_id: UUID of the linked DeviceProfile, or None for
             ad-hoc backups.
+        os_version: Optional pin for version-specific definition
+            overlay selection (e.g. ``"17.12"``).  When set, the
+            backup pipeline resolves the matching overlay via
+            :meth:`DefinitionLoader.resolve`; when unset, falls back
+            to the family base.  Typically sourced from a linked
+            :class:`DeviceProfile` but can be overridden per-backup.
+        model: Optional pin for hardware-model-specific overlay
+            selection (e.g. ``"C9300-48P"``).  Rarely needed —
+            backup CLI behaviour almost never varies by model.
     """
 
     type_key: str = Field(..., description="Must match a loaded definition type_key")
@@ -47,6 +56,8 @@ class DeviceTarget(BaseModel):
     port: int = Field(22, ge=1, le=65535)
     credentials: DeviceCredentials
     device_profile_id: str | None = None
+    os_version: str | None = None
+    model: str | None = None
 
     @field_validator("host")
     @classmethod

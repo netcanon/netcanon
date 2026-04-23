@@ -26,7 +26,14 @@ vendor: Cisco                      # Human-readable vendor name (shown in UI)
 os: IOS-XE                         # OS or firmware name
 version_match: "^17\\."            # Regex matched against detected version (future)
 type_key: Cisco                    # Lookup key; must be unique (priority wins on collision)
-priority: 10                       # Higher values override lower on type_key collision
+priority: 10                       # Higher values override lower within the family-base set
+
+# ── Overlay qualifiers (layered definitions) ────────────────────────────────
+# Leave both unset (None) for a family-base entry.  Setting either makes
+# this file an "overlay" — it is not visible in the legacy family-base
+# lookup map and is reachable only via DefinitionLoader.resolve().
+os_version:                        # Pin to a specific OS version (e.g. "17.12")
+model:                             # Pin to a specific hardware model (e.g. "C9300-48P")
 
 # ── Output file ─────────────────────────────────────────────────────────────
 file_extension: cfg                # Extension without leading dot (cfg / xml / rsc / …)
@@ -75,21 +82,50 @@ notes: >
 
 ## Priority and Override Resolution
 
-The loader uses a two-pass algorithm:
+Two lookup surfaces exist, both served by the same definition tree:
+
+### Family-base map (legacy surface — `loader.load_all()`)
+
+Returns `dict[type_key, DeviceDefinition]` with exactly one entry per
+`type_key`.  Entries with `os_version` or `model` set are **excluded**
+from this map; they live in the parallel variant registry instead.
+
+Within the family-base set the loader uses a two-pass algorithm:
 
 1. **Parse all files** — validate each `*.yaml` against the schema; skip failures.
 2. **Sort by priority ascending** — apply definitions in order; higher-priority
    definitions are applied last and therefore win on `type_key` collision.
 
-This allows a base definition at `priority: 0` to serve as a sensible default
-while a model-specific file at `priority: 20` can override individual fields
-without duplicating the entire definition.
+```
+cisco/ios-xe/base.yaml        priority: 0   ← family-base baseline
+cisco/ios-xe/17.x.yaml        priority: 10  ← higher priority wins among bases
+```
+
+### Longest-match resolver — `loader.resolve(type_key, os_version=None, model=None)`
+
+For callers aware of the `(type_key, os_version, model)` triple (the
+backup pipeline, the device form with operator-pinned variants,
+future probe-driven refinement).  Returns the most-specific
+overlay that matches, falling through to the family base:
+
+| Tier | Match | Example |
+|---|---|---|
+| 1 | Exact triple | `resolve("Cisco", "17.12", "C9300-48P")` → triple-overlay if one exists |
+| 2 | Version pin, model wildcard | `resolve("Cisco", "17.12")` → `os_version=17.12` overlay |
+| 3 | Model pin, version wildcard | `resolve("Cisco", None, "C9300-48P")` → `model=...` overlay |
+| 4 | Family base | `resolve("Cisco")` → plain family base |
+
+Within a tier, the highest-priority matching file wins.
 
 ```
-cisco/ios-xe/base.yaml        priority: 0   ← loaded first, forms the baseline
-cisco/ios-xe/17.x.yaml        priority: 10  ← overrides base for IOS-XE 17
-cisco/ios-xe/models/ASR1K.yaml priority: 20 ← overrides both for ASR1000 series
+cisco/ios-xe/17.x.yaml            family base  (os_version=None, model=None)
+cisco/ios-xe/17.12.yaml           overlay      (os_version="17.12")
+cisco/ios-xe/models/C9300-48P.yaml overlay     (model="C9300-48P")
 ```
+
+The two surfaces never contradict each other: family-base entries are
+both in `load_all()` AND resolvable at tier 4; overlays are visible
+only via `resolve()`.
 
 ## Vendor-Specific Notes
 
