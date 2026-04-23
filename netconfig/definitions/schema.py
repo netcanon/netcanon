@@ -68,6 +68,50 @@ class PromptConfig(BaseModel):
     trailing: list[str] = Field(default_factory=list)
 
 
+class ProbeConfig(BaseModel):
+    """Pre-backup probe command + regex-based fact extraction.
+
+    Runs a lightweight "show version" style command BEFORE the main
+    config collection and parses the output with vendor-specific
+    regex patterns to populate :attr:`DeviceProfile.detected_facts`.
+
+    Two use cases:
+
+    1. **Operator visibility** — the device reports its actual OS
+       version and model.  Surfaces on the device edit form's
+       detected-facts panel so operators can cross-reference their
+       pinned values.
+    2. **Layered definition selection** — detected facts feed
+       :meth:`DefinitionLoader.resolve` so a backup against a 17.12
+       box picks the ``cisco_iosxe@17.12`` overlay when one exists,
+       falling back to the family base when it doesn't.  The
+       operator-pinned ``os_version`` / ``model`` on the profile
+       still wins — detected facts are consulted only as a fallback
+       when the operator left the pins empty.
+
+    Probe failure is non-fatal: the pipeline logs and proceeds with
+    the family-base definition.  Operators can always override with
+    explicit pins if the probe regex is too flaky for a given fleet.
+
+    Attributes:
+        command: Pre-backup command to run (e.g. ``"show version"``).
+            Empty string disables the probe for this definition —
+            the backup pipeline skips straight to the main config
+            command.
+        patterns: Map of fact name → regex pattern.  The regex is
+            applied to the probe command's stdout; the first capture
+            group becomes the fact value.  Supported fact names today
+            are ``detected_os_version`` and ``detected_model`` — these
+            feed :meth:`DefinitionLoader.resolve`'s ``os_version`` and
+            ``model`` parameters when the operator hasn't pinned
+            them.  Other keys are preserved on
+            :attr:`DeviceProfile.detected_facts` for display only.
+    """
+
+    command: str = ""
+    patterns: dict[str, str] = Field(default_factory=dict)
+
+
 class CollectorConfig(BaseModel):
     """Specifies which collection strategy to use for this definition.
 
@@ -143,6 +187,11 @@ class DeviceDefinition(BaseModel):
         commands: Pre/config/post command sequence.
         prompts: Trailing-prompt patterns for output cleaning.
         collector: Collector strategy selection.
+        probe: Pre-backup probe command + regex extractors.  When
+            configured, runs before the main config command and
+            populates :attr:`DeviceProfile.detected_facts`.
+            Default = no-op (empty command, no patterns) — existing
+            definitions continue to work unchanged.
         notes: Free-text notes visible in the web UI and ``--verbose``
             loader output.  Document known quirks here.
         source_file: Set by the loader; not present in YAML files.
@@ -160,5 +209,6 @@ class DeviceDefinition(BaseModel):
     commands: CommandConfig
     prompts: PromptConfig = Field(default_factory=PromptConfig)
     collector: CollectorConfig = Field(default_factory=CollectorConfig)
+    probe: ProbeConfig = Field(default_factory=ProbeConfig)
     notes: str = ""
     source_file: Path | None = Field(None, exclude=True)
