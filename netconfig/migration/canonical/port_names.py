@@ -29,6 +29,7 @@ implementing the two methods; zero edits here.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Callable, Literal
 
 from pydantic import BaseModel, Field
@@ -36,6 +37,8 @@ from pydantic import BaseModel, Field
 if TYPE_CHECKING:
     from ..codecs.base import CodecBase
     from .intent import CanonicalIntent
+
+logger = logging.getLogger(__name__)
 
 
 PortKind = Literal[
@@ -288,6 +291,20 @@ def translate_port_names(
     # ``AttributeError: 'dict' object has no attribute 'interfaces'``
     # which surfaces in the UI as a spurious "status: failed" job.
     from .intent import CanonicalIntent
+
+    # Entry log fires on EVERY call — including no-op paths — so
+    # "did the orchestrator run at all?" is answerable from logs
+    # even against a mock tree or when the operator's map is empty.
+    # Outcome counts are summarised at the exit log below.
+    logger.debug(
+        "translate_port_names: entry %s → %s rename_map=%s "
+        "source_ifaces=%d",
+        source_codec.name, target_codec.name,
+        "None" if rename_map is None
+        else f"{len(rename_map)}-entry dict",
+        len(getattr(intent, "interfaces", []) or []),
+    )
+
     if not isinstance(intent, CanonicalIntent):
         return PortRenameResult(applied={}, warnings=[], dropped=[])
 
@@ -430,6 +447,14 @@ def translate_port_names(
     if dropped_set:
         _strip_dropped_ports(intent, dropped_set)
 
+    logger.debug(
+        "translate_port_names: exit %s → %s applied=%d dropped=%d "
+        "warnings=%d",
+        source_codec.name, target_codec.name,
+        len(applied),
+        len(dropped_set),
+        len(warnings),
+    )
     return PortRenameResult(
         applied=applied,
         warnings=warnings,

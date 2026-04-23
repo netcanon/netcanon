@@ -196,6 +196,135 @@ class TestRunPlanLogging:
         )
 
 
+class TestOrchestratorDebugUniformity:
+    """Phase 10 audit finding: per-pane orchestrators (port_names,
+    vlan_names, local_user_names, snmp_names) were silent at runtime
+    — the ``warnings`` list in the Result struct was the only
+    post-run signal, and that only reaches the UI on a successful
+    pipeline run.  Each orchestrator now emits two DEBUG records —
+    one at entry (fires on EVERY call including no-op guard-return
+    paths), one at exit (summarises applied/dropped/warnings).
+    This pair answers both "was the orchestrator even invoked?"
+    and "what did it produce?" from logs.
+
+    Uniformity test: a future orchestrator that skips either line
+    would fail CI.  Entry-log is asserted against a no-op call
+    (empty map / empty tree) so the guarantee is "fires EVERY
+    time", not just "fires on the happy path".
+    """
+
+    def test_port_rename_emits_entry_debug(self, caplog):
+        from netconfig.migration.canonical.port_names import (
+            translate_port_names,
+        )
+        from netconfig.migration.canonical.intent import CanonicalIntent
+
+        with caplog.at_level(
+            "DEBUG", logger="netconfig.migration.canonical.port_names",
+        ):
+            translate_port_names(
+                CanonicalIntent(), MockCodec(), MockCodec(),
+            )
+        entries = [
+            r for r in caplog.records
+            if r.levelname == "DEBUG"
+            and "translate_port_names: entry" in r.getMessage()
+        ]
+        assert entries, (
+            "expected entry DEBUG; got: "
+            + "; ".join(r.getMessage() for r in caplog.records)
+        )
+
+    def test_vlan_rename_emits_entry_debug(self, caplog):
+        """Uses an EMPTY map so the no-op early-return fires — the
+        entry log must still appear (this is exactly the scenario
+        the prior exit-only log regressed on)."""
+        from netconfig.migration.canonical.vlan_names import (
+            translate_vlan_ids,
+        )
+        from netconfig.migration.canonical.intent import CanonicalIntent
+
+        with caplog.at_level(
+            "DEBUG", logger="netconfig.migration.canonical.vlan_names",
+        ):
+            translate_vlan_ids(CanonicalIntent(), rename_map={})
+        entries = [
+            r for r in caplog.records
+            if r.levelname == "DEBUG"
+            and "translate_vlan_ids: entry" in r.getMessage()
+        ]
+        assert entries, "expected entry DEBUG on no-op call"
+
+    def test_local_user_rename_emits_entry_debug(self, caplog):
+        from netconfig.migration.canonical.local_user_names import (
+            translate_local_user_names,
+        )
+        from netconfig.migration.canonical.intent import CanonicalIntent
+
+        with caplog.at_level(
+            "DEBUG",
+            logger="netconfig.migration.canonical.local_user_names",
+        ):
+            translate_local_user_names(CanonicalIntent(), rename_map={})
+        entries = [
+            r for r in caplog.records
+            if r.levelname == "DEBUG"
+            and "translate_local_user_names: entry" in r.getMessage()
+        ]
+        assert entries
+
+    def test_snmp_rename_emits_entry_debug(self, caplog):
+        """Entry log fires EVEN on the empty-map / no-snmp-block
+        no-op path — same uniformity guarantee as the siblings."""
+        from netconfig.migration.canonical.snmp_names import (
+            translate_snmp_community,
+        )
+        from netconfig.migration.canonical.intent import CanonicalIntent
+
+        with caplog.at_level(
+            "DEBUG", logger="netconfig.migration.canonical.snmp_names",
+        ):
+            translate_snmp_community(CanonicalIntent(), rename_map={})
+        entries = [
+            r for r in caplog.records
+            if r.levelname == "DEBUG"
+            and "translate_snmp_community: entry" in r.getMessage()
+        ]
+        assert entries
+
+    def test_exit_debug_fires_on_completed_rename(self, caplog):
+        """Rounds out the entry-log tests: on a non-no-op call, BOTH
+        entry AND exit DEBUG records should fire, with exit carrying
+        applied/dropped/warnings counts.  Uses snmp since the happy
+        path is most compact (single-row scalar rename)."""
+        from netconfig.migration.canonical.snmp_names import (
+            translate_snmp_community,
+        )
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalSNMP,
+        )
+
+        intent = CanonicalIntent(snmp=CanonicalSNMP(community="public"))
+        with caplog.at_level(
+            "DEBUG", logger="netconfig.migration.canonical.snmp_names",
+        ):
+            translate_snmp_community(
+                intent, rename_map={"public": "monitoring-ro"},
+            )
+        messages = [
+            r.getMessage() for r in caplog.records
+            if r.levelname == "DEBUG"
+        ]
+        assert any(
+            "translate_snmp_community: entry" in m for m in messages
+        )
+        assert any(
+            "translate_snmp_community: exit" in m
+            and "applied=1" in m
+            for m in messages
+        )
+
+
 class TestCodecParseEndDebugUniformity:
     """Phase 8 audit finding: codec parse paths were silent, making
     "why is my tree empty?" debugging require either response-body

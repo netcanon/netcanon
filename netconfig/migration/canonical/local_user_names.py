@@ -50,12 +50,15 @@ Intentionally NOT in scope:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from .intent import CanonicalIntent, CanonicalLocalUser
+
+logger = logging.getLogger(__name__)
 
 
 class LocalUserRenameResult(BaseModel):
@@ -110,6 +113,17 @@ def translate_local_user_names(
         :class:`LocalUserRenameResult` summarising the changes.
     """
     from .intent import CanonicalIntent  # for isinstance guard
+
+    # Entry log fires on EVERY call — mirrors the pattern used by
+    # the other three orchestrators so the pane-engaged trace is
+    # uniform across categories.
+    logger.debug(
+        "translate_local_user_names: entry rename_map=%s "
+        "source_users=%d",
+        "None" if rename_map is None
+        else f"{len(rename_map)}-entry dict",
+        len(getattr(intent, "local_users", []) or []),
+    )
 
     result = LocalUserRenameResult()
 
@@ -200,6 +214,13 @@ def translate_local_user_names(
             by_target_name[new_name] = u
     intent.local_users = kept
 
+    logger.debug(
+        "translate_local_user_names: exit applied=%d dropped=%d "
+        "warnings=%d",
+        len(result.applied),
+        len(result.dropped),
+        len(result.warnings),
+    )
     return result
 
 

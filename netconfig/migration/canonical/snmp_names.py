@@ -67,12 +67,15 @@ Rename semantics quirk (single-value field):
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
 
 if TYPE_CHECKING:
     from .intent import CanonicalIntent
+
+logger = logging.getLogger(__name__)
 
 
 class SnmpRenameResult(BaseModel):
@@ -137,6 +140,17 @@ def translate_snmp_community(
         :class:`SnmpRenameResult` summarising the change.
     """
     from .intent import CanonicalIntent  # isinstance guard
+
+    # Entry log — uniform across all four per-pane orchestrators.
+    current_community = ""
+    if isinstance(intent, CanonicalIntent) and intent.snmp is not None:
+        current_community = intent.snmp.community or ""
+    logger.debug(
+        "translate_snmp_community: entry rename_map=%s current=%r",
+        "None" if rename_map is None
+        else f"{len(rename_map)}-entry dict",
+        current_community,
+    )
 
     result = SnmpRenameResult()
 
@@ -212,6 +226,14 @@ def translate_snmp_community(
             intent.snmp.community = tgt
         matched = True
 
+    logger.debug(
+        "translate_snmp_community: exit applied=%d dropped=%d "
+        "warnings=%d matched=%s",
+        len(result.applied),
+        len(result.dropped),
+        len(result.warnings),
+        "yes" if matched else "no",
+    )
     return result
 
 

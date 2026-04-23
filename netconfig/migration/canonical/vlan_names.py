@@ -59,9 +59,12 @@ on the client side before posting.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Callable
 
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from .intent import CanonicalIntent
@@ -124,6 +127,20 @@ def translate_vlan_ids(
         :class:`VlanRenameResult` summarising the changes.
     """
     from .intent import CanonicalIntent  # for isinstance guard
+
+    # Entry log fires on EVERY call — including no-op paths — so
+    # "did the orchestrator run at all?" is answerable from logs
+    # even when the operator's map is empty or the tree is a mock.
+    # Outcome (applied/dropped/warnings counts) is logged by
+    # run_plan_with_overrides's post-run summary; this line
+    # answers the orthogonal "was I even invoked?" question.
+    logger.debug(
+        "translate_vlan_ids: entry with rename_map=%s "
+        "source_vlans=%d",
+        "None" if rename_map is None
+        else f"{len(rename_map)}-entry dict",
+        len(getattr(intent, "vlans", []) or []),
+    )
 
     result = VlanRenameResult()
 
@@ -277,6 +294,12 @@ def translate_vlan_ids(
                     new_list.append(new_vid)
             iface.trunk_allowed_vlans = new_list
 
+    logger.debug(
+        "translate_vlan_ids: exit applied=%d dropped=%d warnings=%d",
+        len(result.applied),
+        len(result.dropped),
+        len(result.warnings),
+    )
     return result
 
 
