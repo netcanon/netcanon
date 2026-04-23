@@ -12,7 +12,7 @@ matching `tests/unit/migration/test_<vendor>.py`.
 
 ## Shape of a codec
 
-Five codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`, `aruba_aoss`,
+Six codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`, `aruba_aoss`,
 `opnsense`, `mikrotik_routeros`, `fortigate_cli` (plus `_mock`).  The
 first one you should copy is whichever vendor is closest in structure
 to yours:
@@ -26,13 +26,48 @@ to yours:
 | NETCONF XML | `cisco_iosxe` |
 | Banner + positional port lists | `aruba_aoss` |
 
-Each codec subpackage contains:
+Each codec subpackage contains at minimum:
 
 ```
 netconfig/migration/codecs/<vendor>/
 ├── __init__.py         # exports the codec class; usually one line
-└── codec.py            # everything — parse/render/probe/metadata
+└── codec.py            # parse + render + probe + metadata
 ```
+
+Larger codecs additionally split out pure helpers into sibling
+modules — this is an established repo-wide convention, not optional
+flair.  The `codec.py` stays focused on I/O orchestration; the
+helpers stay easy to unit-test in isolation:
+
+```
+netconfig/migration/codecs/<vendor>/
+├── codec.py            # orchestration — parse, render, probe
+├── port_names.py       # pure classify_port_name + format_port_identity
+│                       # (ALL four CLI codecs have this — mandatory
+│                       # when the codec participates in the Tier-3
+│                       # rename orchestrator; see cross-vendor mesh
+│                       # in netconfig/migration/canonical/port_names.py)
+├── vlan_heuristics.py  # (fortigate_cli) shared parse/render helpers
+│                       # for VLAN iface-name detection
+└── _svi_absorption.py  # (aruba_aoss) documents the 3-codepath rule
+                        # that absorbs SVI L3 into VLAN stanzas
+```
+
+**`port_names.py` is mandatory** for any codec that participates in
+the rename-modal flow.  The cross-vendor orchestrator at
+`netconfig/migration/canonical/port_names.py` imports each codec's
+pair of pure functions directly — a codec that inlines them inside
+`codec.py` blocks on circular imports.  The four CLI codecs
+(`cisco_iosxe_cli`, `aruba_aoss`, `mikrotik_routeros`,
+`fortigate_cli`) all follow the split; copy the closest one.
+
+**`_svi_absorption.py`-style doc modules** are encouraged when a
+codec has a cross-cutting invariant spanning 3+ code paths.  The
+Aruba example documents why three different methods need to agree
+on a constant — a future contributor changing one without the
+others would silently break round-trip.  See
+`netconfig/migration/codecs/aruba_aoss/_svi_absorption.py` for the
+shape.
 
 ---
 

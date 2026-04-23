@@ -427,6 +427,87 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-detect-banner`               | `<div>`    | Shown after `POST /api/v1/migration/detect` returns a candidate.  Carries `data-detected-codec` + `data-detected-confidence` attrs.  Green when the user has already picked the detected codec; blue when a switch is offered |
 | `migrate-detect-use-btn`              | `<button>` | "Use this source" — clicking sets `migrate-source-select` to the detected codec.  Only rendered when the currently-selected source differs from the detected one |
 
+### Rendered-output actions
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-download-output-btn`         | `<button>` | Downloads the rendered text as a file (uses the extension from the target codec's `output_extension`) |
+
+### Validation-details headings
+
+Inside each `migrate-paths-<bucket>` container:
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-paths-supported-heading`     | `<h4>` / `<summary>` | Heading for the supported-paths bucket |
+| `migrate-paths-lossy-heading`         | `<h4>` / `<summary>` | Heading for the lossy-paths bucket |
+| `migrate-paths-unsupported-heading`   | `<h4>` / `<summary>` | Heading for the unsupported-paths bucket |
+
+### Tier-3 rename modal
+
+Interactive port-name override surface opened from the migration
+result banner.  JS lives in two partials that migrate.html pulls in
+via Jinja `{% include %}`: `_partials/rename-table.js` (the
+per-kind expandable sections) and `_partials/rename-panel.js`
+(preview + summary), with `_partials/fit-check.js` rendering the
+hardware-capacity banner and `_partials/classify.js` housing the
+shared `_guessKind` / `_looksLikeUplink` classifiers both renderers
+reuse.  The modal is re-rendered whenever the user changes any
+override, drop, or selector.
+
+**Open / trigger:**
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-open-btn`             | `<button>` | "Rename port names" — opens the modal; only rendered when the result has at least one `port_renames` entry or a port-name warning |
+| `migrate-rename-badge-count`          | `<span>`   | Small badge on the open button showing the server's auto-renamed count |
+
+**Modal chrome:**
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-modal`                | `<div>`    | Outer modal container; `role="dialog"`. Has `open` class when visible; CSS `transform: translateX(-50%)` flips to absolute positioning during drag |
+| `migrate-rename-modal-header`         | `<div>`    | Drag handle; `mousedown` on header starts the modal drag. Buttons inside the header are excluded from the drag hit region |
+| `migrate-rename-modal-close`          | `<button>` | × — closes without applying |
+| `migrate-rename-modal-reset`          | `<button>` | "Clear all" — wipes `_renameUserMap` and re-renders |
+| `migrate-rename-apply-btn`            | `<button>` | "Apply" — re-POSTs to `/api/v1/migration/plan` with `port_rename_map`; disabled when any collisions exist |
+| `migrate-rename-cancel-btn`           | `<button>` | "Cancel" — closes the modal |
+| `migrate-rename-status`               | `<div>`    | Inline status line ("Applying…", "Applied. Rendered output refreshed.", etc.) |
+
+**Three-stage target-profile selector** (vendor → model → module).
+The module dropdown is hidden for legacy profiles and surfaces only
+when the picked profile declares `modules:` in its YAML:
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-target-vendor-select` | `<select>` | Stage 1 — vendor family |
+| `migrate-rename-target-model-select`  | `<select>` | Stage 2 — chassis model; cascades to reset the module dropdown |
+| `migrate-rename-target-module-select` | `<select>` | Stage 3 — swappable uplink module (NM-8X, NM-2Q, JL083A, …); hidden when `profile.modules == {}` |
+
+**Per-kind row table** (driven by `_RENAME_KIND_ORDER` in
+migrate.html):
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-table-pane`           | `<div>`    | Left pane holding the kind sections and the empty-state message |
+| `migrate-rename-sections`             | `<div>`    | Container the renderer clears and rebuilds on each call |
+| `migrate-rename-section-<kind>`       | `<details>`| One per non-empty kind; `<kind>` is one of `physical`, `breakout`, `lag`, `svi`, `loopback`, `tunnel`, `mgmt`, `hw_aggregate`, `virtual`, `unknown` |
+| `migrate-rename-row-<source>`         | `<tr>`     | One per port; `<source>` is the literal source-side port name (e.g. `GigabitEthernet1/0/1`).  CSS classes `has-warning` / `has-collision` / `has-override` / `has-drop` / `has-auto-drop` signal row state |
+| `migrate-rename-override-<source>`    | `<select>` or `<input>` | Target-name dropdown when a profile is selected; free-form input when not.  The dropdown's first option is "(auto: X)" / "(auto-dropped)" and lists the profile's valid port IDs filtered by kind |
+| `migrate-rename-drop-<source>`        | `<span>`   | Inline link beside free-form inputs.  Text cycles "drop" / "un-drop" / "keep verbatim" based on the row's drop state |
+| `migrate-rename-table-empty`          | `<div>`    | Empty-state message when no renames or warnings exist |
+
+**Supplementary panels:**
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-preview-pane`         | `<div>`    | Right pane holding preview + summary + fit-check |
+| `migrate-rename-preview`              | `<pre>`    | Client-side approximation of the target output with user overrides applied via whole-word replacement; informational only — the Apply button re-runs the server-side render for the authoritative result |
+| `migrate-rename-summary`              | `<div>`    | Inline summary above Apply: "N auto / M override / K drops / W ⚠ / C collisions". Collision count disables the Apply button |
+| `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state |
+| `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` |
+| `migrate-fitcheck-module-note`        | `<span>`   | "(module: NM-8X)" suffix on the banner when a module SKU is selected; omitted for legacy profiles |
+
 ### RESERVED for Phase 2 (transforms + deploy)
 
 | `data-testid` (planned)               | Purpose |

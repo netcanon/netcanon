@@ -530,6 +530,27 @@
  * Thin wiring over the already-shipped migration API.  Zero custom
  * widgets: validation banner reuses the diff-page palette, rendered
  * output reuses the config-viewer's _cvRenderHighlighted highlighter.
+ *
+ * Contents map (large blocks extracted to _partials/ — included via
+ * Jinja include directives; each partial shares module-scope state
+ * with the rest of this IIFE):
+ *
+ *   _partials/classify.js     — _guessKind + _looksLikeUplink
+ *                               (shared between rename table + fit-check)
+ *   _partials/rename-table.js — renderRenameTable (per-kind sections,
+ *                               432 LOC lifted out in commit 250b13f)
+ *   _partials/rename-panel.js — renderRenamePreview + renderRenameSummary
+ *                               (commit 8e8f443)
+ *   _partials/fit-check.js    — renderFitCheck hardware-capacity banner
+ *                               (commit 949577c)
+ *
+ * Still inline in this file (deferred slices): renameModalApply,
+ * drag handlers, form wiring (sourceSel / targetSel / submit),
+ * auto-detect, validation-banner rendering, path-list fill, result
+ * rendering, escapeHtml.
+ *
+ * Every interactive element gets a data-testid — see
+ * tests/testid_reference.md for the full inventory.
  */
 (function() {
   var sourceSel  = document.getElementById('mig-source');

@@ -97,6 +97,37 @@ When adding a feature, verify all of the following before committing:
 
 ---
 
+## Documentation Sync Checklist
+
+Code and docs drift silently — the only reliable defence is to treat
+docs as part of the definition of "done".  When you change something,
+update its documentation in the SAME commit, not a follow-up.  The
+mapping below is concrete; audit every applicable row before you run
+`git commit`.
+
+| If you change / add … | Then touch … |
+|---|---|
+| A new interactive HTML element (button, input, link, row) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section |
+| A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
+| A new codec under `netconfig/migration/codecs/<vendor>/` | `netconfig/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
+| A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netconfig/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
+| A new target-profile YAML under `definitions/target_profiles/` | Per-profile unit test in `tests/unit/migration/test_target_profiles.py` asserting exact port-name list + count (regression guard against copy-paste mistakes) |
+| A target-profile gains `modules:` (migrates to module-variant shape) | Update BOTH `MODULE_VARIANT_PROFILES` allowlists — one in `tests/unit/migration/test_target_profiles.py`, one in `tests/integration/test_migration_target_profiles_api.py` (kept in sync manually) |
+| A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
+| A new hard rule / cross-cutting invariant surfaced by a bug | This file (`CLAUDE.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
+| A codec is promoted to `best_effort` or `certified` | `tests/fixtures/real/RESULTS.md` — update the coverage matrix and certification decision; ARCHITECTURE.md's cert paragraph intentionally defers to RESULTS.md as source of truth |
+| A new real-capture fixture under `tests/fixtures/real/<vendor>/` | `tests/fixtures/real/NOTICE.md` — provenance + attribution; `tests/fixtures/real/RESULTS.md` — coverage matrix row |
+| A function gains a new parameter or changes return shape | Its docstring (Google-style sections for Args / Returns / Raises) |
+| A pipeline-stage signature (anywhere in `migration_pipeline.py`) | **DON'T.**  These are frozen (see Hard Rules).  Add a NEW function instead; the module docstring tracks which are frozen |
+| The module-variant schema gets a new field on `TargetProfile` / `TargetModule` | The class docstring in `netconfig/migration/target_profiles.py` — it includes a worked YAML example that must stay accurate |
+| In-file references like "see commit abc1234" in a partial or module comment | Fine to include for load-bearing rationale; don't rely on them for discoverability — put the same info in a nearby README if other contributors need it |
+
+Rule of thumb: if a future contributor could plausibly search for the
+thing you just added and not find its rationale, there's a doc gap
+to close.
+
+---
+
 ## Code Organisation
 
 ```
@@ -127,6 +158,14 @@ tests use these exclusively — never CSS classes or element structure.  See
   via `connection.cisco_more_paging: true` in the YAML definition.
 - **Never** commit real credentials, device IPs, or secrets.
 - **Never** skip `data-testid` attributes on new interactive template elements.
+- **Never** land a code change without updating the docs it renders stale.
+  The "Documentation Sync Checklist" above is concrete — if a row applies
+  to your change, touch the listed doc in the same commit.  Follow-up
+  doc-only commits are acceptable for retroactive audits of pre-existing
+  drift (e.g. the audit that added this rule), NOT for fresh code that
+  shipped without its docs.  Stale docs are a bug; they just don't crash
+  loud enough to be caught by CI, which is why the discipline has to live
+  in the workflow.
 - **Never** patch `ConnectHandler` or `paramiko.SSHClient` directly in tests —
   patch `netconfig.api.routes.backups.get_collector` instead (the single
   factory used by the backup route).

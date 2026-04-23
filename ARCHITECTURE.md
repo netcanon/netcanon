@@ -159,9 +159,10 @@ it is:
 | `best_effort` | ≥1 real fixture round-trips clean | Staging only — UI shows yellow banner |
 | `certified` | ≥3 real captures from ≥2 OS versions, all round-trip stable | Yes — UI shows green chip |
 
-The bar is intentionally strict.  As of this writing, only
-`mikrotik_routeros` has hit `certified`.  Per-codec status tracked in
-[`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md).
+The bar is intentionally strict.  Per-codec status is tracked in
+[`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) —
+consult it as the source of truth, not this doc (this paragraph goes
+stale as codecs promote).
 
 ---
 
@@ -197,6 +198,44 @@ raw config text.  Each codec's `probe(raw_prefix)` returns
 returns a ranked list.  Structural markers that discriminate vendors:
 `! J####A Configuration Editor` (Aruba), `# ... by RouterOS` (MikroTik),
 `<opnsense>` root element, `config system global` (FortiOS), etc.
+
+---
+
+## Template organisation
+
+Jinja2 templates live in `netconfig/templates/`.  The base layout is
+`base.html`; each page is an extending template.
+
+**Large page templates split into partials.**  `migrate.html` and
+`base.html` both use the `{% include "_partials/<name>.js" %}` pattern
+to factor long `<script>` blocks out into reusable partial files:
+
+```
+netconfig/templates/
+├── migrate.html              # 1,601 LOC — outer HTML + script
+├── base.html                 #   ~520 LOC — outer chrome + global JS
+└── _partials/
+    ├── classify.js           # shared _guessKind / _looksLikeUplink
+    ├── config-viewer.js      # modal viewer + search (base.html)
+    ├── fit-check.js          # hardware-capacity banner (migrate.html)
+    ├── job-progress.js       # floating job widget (base.html)
+    ├── rename-panel.js       # rename-modal preview + summary
+    └── rename-table.js       # rename-modal per-kind table renderer
+```
+
+**Why include-splice rather than ES-modules?** The templates embed
+inline `<script>` blocks that share lexical scope with the rest of the
+page's client JS (state vars like `_lastJob`, `_renameUserMap`, and
+cross-function references).  Jinja `{% include %}` splices the partial
+verbatim into that scope at render time — no module boundary to cross,
+no export/import plumbing, no build step.  Downside: the partials
+aren't unit-testable in isolation; e2e tests via `data-testid`
+selectors are the safety net.
+
+**Selector discipline** (CLAUDE.md hard rule): every interactive
+element in every template — including content generated inside
+partials — carries a `data-testid` attribute.  The full inventory
+lives in [`tests/testid_reference.md`](tests/testid_reference.md).
 
 ---
 
