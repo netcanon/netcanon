@@ -1769,6 +1769,17 @@
               profile.display_name || (profile.vendor + ' ' + profile.model)
             ) + ')';
       } else {
+        // OVER-capacity is ADVISORY only by design — Apply stays
+        // enabled.  Rationale: capacity overflow is a device-side
+        // error (the target will reject), not a migration-side one,
+        // and operators may knowingly push an over-capacity config
+        // to trigger the device's own error message as a diagnostic
+        // step.  FLAG: revisit this policy once we have operator
+        // telemetry on whether silent device-side errors caused
+        // real pain — if yes, tie the Apply button disable-logic
+        // in rename-panel.js to fit-check state the same way it
+        // ties to collisions.  Deferred follow-up on the session
+        // todo list.
         var over = sourceCount - maxValue;
         el.className = 'mig-banner mig-banner-block';
         el.innerHTML =
