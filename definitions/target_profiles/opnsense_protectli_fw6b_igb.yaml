@@ -1,0 +1,17 @@
+# Protectli FW6B — 6x 1GbE I210/I211 (FW6A/B/C/D/E family)
+# FreeBSD driver: igb(4)
+# Default BSD iface names: igb0, igb1, igb2, igb3, igb4, igb5
+#
+# The FW6A/B/C/D/E lineage shares silicon; this profile covers the
+# whole family since they expose the same 6x igb iface set.
+#
+# Validation: Protectli KB authoritative for FW6 family.  HIGH
+# confidence.
+vendor: opnsense
+model: Protectli-FW6B-IGB
+display_name: "Protectli FW6B (6x igb 1GbE — FW6A/B/C/D/E family)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-5", kind: physical, speed: gig, notes: "Intel I210/I211 1GbE"}
+lags: {max: 6, prefix: lagg}

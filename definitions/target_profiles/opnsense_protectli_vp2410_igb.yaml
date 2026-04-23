@@ -1,0 +1,16 @@
+# Protectli Vault VP2410 — 4x 1GbE I210/I211 (Gen-1 igb variant)
+# FreeBSD driver: igb(4) — Intel I210/I211 Gigabit
+# Default BSD iface names: igb0, igb1, igb2, igb3
+#
+# Validation: Protectli's own KB (kb.protectli.com "Vault Network
+# Interface Card Details & Drivers") authoritatively names the
+# NIC-per-port assignment.  I210 and I211 both bind to `igb(4)` so
+# no profile split is needed on naming alone.  HIGH confidence.
+vendor: opnsense
+model: Protectli-VP2410-IGB
+display_name: "Protectli Vault VP2410 (4x igb 1GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I210/I211 1GbE"}
+lags: {max: 4, prefix: lagg}

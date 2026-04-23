@@ -1,0 +1,18 @@
+# Protectli FW4B — 4x 1GbE I210/I211 (incl. FW2B sibling)
+# FreeBSD driver: igb(4)
+# Default BSD iface names: igb0, igb1, igb2, igb3
+#
+# The FW4B and FW2B share silicon; FW2B ships with 2 NICs populated
+# of a 4-NIC board, but both expose igb0..igb3 when all slots are
+# populated.  For FW2B operators with only 2 NICs, the fit-check
+# banner will flag unused igb2/igb3 — that's correct UX.
+#
+# Validation: Protectli KB authoritative.  HIGH confidence.
+vendor: opnsense
+model: Protectli-FW4B-IGB
+display_name: "Protectli FW4B/FW2B (4x igb 1GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I210/I211 1GbE"}
+lags: {max: 4, prefix: lagg}

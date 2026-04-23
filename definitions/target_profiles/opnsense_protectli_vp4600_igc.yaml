@@ -1,0 +1,19 @@
+# Protectli VP4600 series — 6x 2.5GbE I225-V / I226-V
+# Covers VP4630 / VP4650 / VP4670 (same board, different CPU)
+# FreeBSD driver: igc(4)
+# Default BSD iface names: igc0, igc1, igc2, igc3, igc4, igc5
+#
+# Silicon disclosure: Protectli's KB + coreboot docs confirm
+# 6x i225-V (pre-June 2024) / i226-V (post-June 2024).  Both
+# bind to `igc(4)` so no split needed.
+#
+# Validation: Protectli KB + coreboot documentation corroborate.
+# HIGH confidence.
+vendor: opnsense
+model: Protectli-VP4600-IGC
+display_name: "Protectli VP4630/4650/4670 (6x igc 2.5GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-5", kind: physical, speed: 2.5gig, notes: "Intel I225-V/I226-V 2.5GbE"}
+lags: {max: 6, prefix: lagg}

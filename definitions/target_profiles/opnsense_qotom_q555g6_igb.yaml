@@ -1,0 +1,19 @@
+# Qotom Q555G6 — 6x 1GbE Intel I211
+# FreeBSD driver: igb(4)
+# Default BSD iface names: igb0, igb1, igb2, igb3, igb4, igb5
+#
+# Sibling of the Q355G4; same I211-AT silicon, two extra NICs
+# on a PCIe switch.  Lane sharing documented (6 NICs on fewer
+# total PCIe lanes than Q355G4's 4) but driver naming unchanged.
+#
+# Validation: HIGH confidence by analogy to Q355G4 (same silicon
+# family, confirmed by vendor listings).  No single dmesg paste
+# shows all 6 together publicly but the naming is deterministic.
+vendor: opnsense
+model: Qotom-Q555G6-IGB
+display_name: "Qotom Q555G6 (6x igb 1GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-5", kind: physical, speed: gig, notes: "Intel I211-AT 1GbE"}
+lags: {max: 6, prefix: lagg}

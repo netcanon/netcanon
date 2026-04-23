@@ -1,0 +1,31 @@
+# Netgate SG-5100 — 2x 1GbE I210 + 4x 1GbE X553 (fused-down)
+# Intel Atom C3558 "Denverton" platform
+# FreeBSD drivers:
+#   igb(4) → 2x discrete Intel I210 chips        — igb0, igb1
+#   ix(4)  → 4x X553 (fused to 1G in C3558 SoC)  — ix0..ix3
+#
+# IMPORTANT: the X553 NICs load the `ix(4)` (ixgbe family) driver
+# despite being 1G-fused in this SKU.  The chipset is normally 10G
+# but Intel's C3558 Atom variant fuses them down to 1G — they still
+# bind to `ix(4)` because that's the driver family for X5xx.  Do
+# NOT use `igb(4)` names for them.
+#
+# Layout convention (per Netgate community):
+#   igb0, igb1     — typically WAN + management
+#   ix0, ix1, ix2, ix3 — 4-port OPT/LAN bank on the C3558 SoC
+# Operator-assigned WAN/LAN/OPT aliases in OPNsense config.xml
+# resolve back to these iface names.
+#
+# Validation: two independent bsd-hardware.info probes
+# (f3d0538565 OPNsense 21.7.6, 8336fb3a61 pfSense 2.4.5) show
+# identical pciconf + ifconfig output — real-dmesg-grade HIGH
+# confidence.
+vendor: opnsense
+model: Netgate-SG5100
+display_name: "Netgate SG-5100 (2x igb + 4x ix, all 1GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-1", kind: physical, speed: gig, notes: "Intel I210 discrete 1GbE (WAN/mgmt)"}
+  - {range: "ix0-3", kind: physical, speed: gig, notes: "Intel X553 fused to 1G (C3558 SoC)"}
+lags: {max: 6, prefix: lagg}

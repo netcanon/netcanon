@@ -1,0 +1,20 @@
+# Protectli Vault VP2420 — 4x 2.5GbE I225-V / I226-V
+# FreeBSD driver: igc(4) — Intel I225/I226 2.5GbE
+# Default BSD iface names: igc0, igc1, igc2, igc3
+#
+# Silicon transition note: Protectli cut over from I225-V to I226-V
+# in June 2024.  Both bind to `igc(4)` so the profile covers both
+# revisions — any user on either chipset gets correct port names.
+# The I225-V had well-publicised packet-drop errata; I226-V fixed
+# most of them.  This profile doesn't distinguish (users can check
+# their own `pciconf -lv` for device ID).
+#
+# Validation: Protectli KB authoritative.  HIGH confidence.
+vendor: opnsense
+model: Protectli-VP2420-IGC
+display_name: "Protectli Vault VP2420 (4x igc 2.5GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-3", kind: physical, speed: 2.5gig, notes: "Intel I225-V/I226-V 2.5GbE"}
+lags: {max: 4, prefix: lagg}

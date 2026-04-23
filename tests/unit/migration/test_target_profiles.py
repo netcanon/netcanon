@@ -733,6 +733,83 @@ class TestRealProfilesShipped:
         assert p.port_count == 4
         assert p.port_ids() == ["hn0", "hn1", "hn2", "hn3"]
 
+    # ------------------------------------------------------------------
+    # OPNsense appliance profiles (Protectli, Qotom, Netgate)
+    # Grounded in research-agent findings (KB docs + dmesg probes).
+    # Each profile uses the chipset-in-name convention established by
+    # the Deciso batch so "VP2410" and "VP2420" can't silently collide
+    # despite sharing the "Vault" product line.
+    # ------------------------------------------------------------------
+
+    @pytest.mark.parametrize("model,ids", [
+        # Protectli FW/VP series
+        ("Protectli-VP2410-IGB", [f"igb{n}" for n in range(4)]),
+        ("Protectli-VP2420-IGC", [f"igc{n}" for n in range(4)]),
+        ("Protectli-FW4B-IGB",   [f"igb{n}" for n in range(4)]),
+        ("Protectli-FW4C-IGC",   [f"igc{n}" for n in range(4)]),
+        ("Protectli-FW6B-IGB",   [f"igb{n}" for n in range(6)]),
+        ("Protectli-VP4600-IGC", [f"igc{n}" for n in range(6)]),
+        ("Protectli-VP6600-IGC-IXL",
+            [f"igc{n}" for n in range(4)] + ["ixl0", "ixl1"]),
+        # Qotom mini-PC series
+        ("Qotom-Q355G4-IGB",  [f"igb{n}" for n in range(4)]),
+        ("Qotom-Q555G6-IGB",  [f"igb{n}" for n in range(6)]),
+        ("Qotom-Q750G5-IGC",  [f"igc{n}" for n in range(5)]),
+        ("Qotom-Q20331G9-IGC-IX",
+            [f"igc{n}" for n in range(5)] + [f"ix{n}" for n in range(4)]),
+        # Netgate SG
+        ("Netgate-SG5100", ["igb0", "igb1", "ix0", "ix1", "ix2", "ix3"]),
+    ])
+    def test_opnsense_appliance_port_ids_exact(self, model, ids):
+        """Each appliance profile declares the exact driver-level
+        port-name sequence the research agents confirmed.  Regression
+        guard against copy-paste drift between sibling SKUs — e.g.
+        VP2410-IGB and VP2420-IGC share a chassis name prefix but
+        use different drivers, and mixing them up would offer
+        operators invalid dropdown options."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles[f"opnsense/{model}"]
+        assert p.device_class == "firewall"
+        assert p.port_ids() == ids
+        assert p.port_count == len(ids)
+
+    def test_opnsense_vp6600_has_ixl_not_ix(self):
+        """Protectli VP6600's SFP+ cages use the X710-BM2 chip,
+        which binds to `ixl(4)` — NOT `ix(4)` (ixgbe family).  This
+        distinguishes VP6600 from the Qotom Q20331G9 which uses
+        X553 via `ix(4)`.  Missing this distinction would silently
+        offer the wrong port names in the rename modal."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Protectli-VP6600-IGC-IXL"]
+        uplinks = [pt for pt in p.ports if pt.kind == "uplink"]
+        assert [pt.id for pt in uplinks] == ["ixl0", "ixl1"]
+        # Regression guard: the ix* names belong to a sibling SKU.
+        for wrong in ("ix0", "ix1"):
+            assert p.lookup_port(wrong) is None, (
+                f"VP6600 must not expose {wrong} — that's Q20331G9's "
+                f"naming (X553 via ixgbe); VP6600 uses X710-BM2 via ixl"
+            )
+
+    def test_opnsense_sg5100_has_mixed_drivers(self):
+        """Netgate SG-5100 exposes 6 ports across TWO drivers —
+        2x igb (discrete I210) + 4x ix (X553 fused to 1G).  Common
+        authoring mistake would be declaring all 6 as igb since
+        they're all 1G copper; the X553 binds to `ix(4)` (ixgbe
+        family) despite its fused-down speed."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netgate-SG5100"]
+        assert p.port_count == 6
+        igb_ids = [pt.id for pt in p.ports if pt.id.startswith("igb")]
+        ix_ids = [pt.id for pt in p.ports if pt.id.startswith("ix")]
+        assert igb_ids == ["igb0", "igb1"]
+        assert ix_ids == ["ix0", "ix1", "ix2", "ix3"]
+        # All 6 report speed=gig (X553 fused-down — NOT 10gig).
+        for pt in p.ports:
+            assert pt.speed == "gig", (
+                f"SG-5100 port {pt.id} should be gig (X553 fused-down), "
+                f"got {pt.speed!r}"
+            )
+
     def test_opnsense_deciso_a8_i211_older(self):
         """Deciso Netboard A8 older 1GbE revision: 4x I211 via
         igb(4).  The "A8" name was reused across two electrical

@@ -1,0 +1,23 @@
+# Qotom Q750G5 — 5x 2.5GbE Intel I225-V / I226-V
+# FreeBSD driver: igc(4)
+# Default BSD iface names: igc0, igc1, igc2, igc3, igc4
+#
+# Early Q750G5 shipped with I225-V B1/B2 stepping (had FreeBSD
+# issues pre-OPNsense 22.1); later shipments ship I225-V B3 or
+# I226-V — all bind to `igc(4)` with identical naming.  This
+# profile intentionally doesn't split on stepping since the
+# iface naming is invariant.
+#
+# Port count is 5, NOT 6 — a common authoring mistake.  The
+# "G5" suffix means 5 NICs, not "Generation 5".
+#
+# Validation: ServeTheHome review + 0x2142.com deployment notes
+# + Amazon listings all confirm 5x 2.5GbE.  HIGH confidence.
+vendor: opnsense
+model: Qotom-Q750G5-IGC
+display_name: "Qotom Q750G5 (5x igc 2.5GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-4", kind: physical, speed: 2.5gig, notes: "Intel I225-V/I226-V 2.5GbE"}
+lags: {max: 5, prefix: lagg}

@@ -1,0 +1,23 @@
+# Qotom Q355G4 — 4x 1GbE Intel I211
+# FreeBSD driver: igb(4) — Intel I211-AT
+# Default BSD iface names: igb0, igb1, igb2, igb3
+#
+# The "G4" in the model name = 4 NICs.  Silicon is I211-AT across
+# all CPU variants (i3-4005U / i5-5200U / i5-5300U / i5-7200U) —
+# CPU differs, NIC does not.  Each NIC on its own PCIe bridge
+# (pcib1..pcib4); no lane sharing.
+#
+# Known erratum: Intel I211-AT has a historical FreeBSD issue
+# ("igb link-gone") unrelated to naming — included here as
+# awareness, not as a profile issue.
+#
+# Validation: Netgate forum dmesg pastes + vendor listings
+# confirm 4x I211-AT consistently.  HIGH confidence.
+vendor: opnsense
+model: Qotom-Q355G4-IGB
+display_name: "Qotom Q355G4 (4x igb 1GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igb0-3", kind: physical, speed: gig, notes: "Intel I211-AT 1GbE"}
+lags: {max: 4, prefix: lagg}

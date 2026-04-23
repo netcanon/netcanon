@@ -1,0 +1,16 @@
+# Protectli FW4C — 4x 2.5GbE I225-V / I226-V
+# FreeBSD driver: igc(4)
+# Default BSD iface names: igc0, igc1, igc2, igc3
+#
+# Same I225→I226 June 2024 cutover as the VP2420; both bind to
+# `igc(4)` so this profile covers either revision.
+#
+# Validation: Protectli KB authoritative.  HIGH confidence.
+vendor: opnsense
+model: Protectli-FW4C-IGC
+display_name: "Protectli FW4C (4x igc 2.5GbE)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-3", kind: physical, speed: 2.5gig, notes: "Intel I225-V/I226-V 2.5GbE"}
+lags: {max: 4, prefix: lagg}

@@ -1,0 +1,28 @@
+# Qotom Q20331G9 — 5x 2.5GbE + 4x 10G SFP+
+# Denverton-class (Atom C3000 family) 9-port mini-PC
+# FreeBSD drivers:
+#   igc(4) → 5x Intel I226-V 2.5GbE copper — igc0..igc4
+#   ix(4)  → 4x Intel X553 SFP+ 10GbE      — ix0..ix3
+#
+# IMPORTANT — driver distinction: the 10G ports on Q20331G9 use
+# `ix(4)` (ixgbe family) via Intel X553, NOT `ixl(4)` like
+# Protectli's X710-BM2.  Both are "SFP+ 10G" but different chipsets
+# and different FreeBSD drivers.  The X553 often needs
+# `hw.ix.unsupported_sfp=1` sysctl for some transceivers.
+#
+# Some Qotom listings on AliExpress/Amazon sell the same board
+# with I225-V instead of I226-V on the 2.5GbE side — both bind
+# to `igc(4)` so naming is unchanged.
+#
+# Validation: OPNsense forum thread (topic 41589) confirms X553→ix
+# + sysctl requirement.  HIGH confidence on naming, MEDIUM on the
+# exact 2.5G silicon stepping.
+vendor: opnsense
+model: Qotom-Q20331G9-IGC-IX
+display_name: "Qotom Q20331G9 (5x igc 2.5GbE + 4x ix 10G SFP+)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-4", kind: physical, speed: 2.5gig, notes: "Intel I225-V/I226-V 2.5GbE"}
+  - {range: "ix0-3", kind: uplink, speed: 10gig, sfp: true, notes: "Intel X553 SFP+ (may need hw.ix.unsupported_sfp=1)"}
+lags: {max: 9, prefix: lagg}

@@ -1,0 +1,27 @@
+# Protectli VP6600 series — 4x 2.5GbE + 2x 10G SFP+
+# Covers VP6650 / VP6670 (same board, different CPU)
+# FreeBSD drivers:
+#   igc(4) → 4x Intel I226-V 2.5GbE copper — igc0..igc3
+#   ixl(4) → 2x Intel X710-BM2 SFP+ 10GbE  — ixl0, ixl1
+#
+# IMPORTANT: the SFP+ cages are Intel X710 via `ixl(4)` — NOT
+# `ix(4)` (which is the ixgbe driver family for X540/X550/X553).
+# Protectli's official KB names them `ixl0`/`ixl1` and assigns
+# them as WAN / LAN by default.
+#
+# This is the first OPNsense profile in the corpus to use the
+# ixl driver — validates the port_names.py classifier's 10gig-
+# class prefix list (includes `ixl` in _TEN_GIG_DRIVERS).
+#
+# Validation: Protectli KB + homenetworkguy.com review
+# independently confirm X710-BM2 SFP+ chipset on VP6650.  HIGH
+# confidence.
+vendor: opnsense
+model: Protectli-VP6600-IGC-IXL
+display_name: "Protectli VP6650/6670 (4x igc 2.5GbE + 2x ixl 10G SFP+)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-3", kind: physical, speed: 2.5gig, notes: "Intel I226-V 2.5GbE copper"}
+  - {range: "ixl0-1", kind: uplink, speed: 10gig, sfp: true, notes: "Intel X710-BM2 SFP+ (default WAN/LAN)"}
+lags: {max: 6, prefix: lagg}
