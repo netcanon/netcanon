@@ -191,6 +191,9 @@ def list_migration_adapters(request: Request) -> list[CodecInfo]:
                 description=getattr(codec, "description", ""),
                 sample_input=getattr(codec, "sample_input", ""),
                 output_extension=getattr(codec, "output_extension", ""),
+                unsupported_rename_categories=sorted(
+                    getattr(codec, "unsupported_rename_categories", frozenset())
+                ),
             )
         )
     return result

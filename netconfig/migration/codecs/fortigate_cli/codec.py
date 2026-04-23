@@ -77,6 +77,15 @@ class FortiGateCLICodec(CodecBase):
     )
     output_extension: ClassVar[str] = "conf"
 
+    # FortiGate CLI parses + renders interfaces + VLANs but doesn't
+    # yet wire CanonicalLocalUser round-trip (``config system admin``
+    # blocks currently land in ``raw_sections`` as Tier-3
+    # informational data).  See the parallel OPNsense declaration
+    # for the same rationale — removed when Option A ships.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset(
+        {"local_users"}
+    )
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="fortigate_cli",
         vendor_id="fortigate",

@@ -586,3 +586,10 @@ class CodecInfo(BaseModel):
     description: str = ""
     sample_input: str = ""
     output_extension: str = ""
+
+    # Categories the codec's parse+render path doesn't currently
+    # round-trip.  UI shows a per-pane compatibility banner when
+    # the TARGET codec's list includes the active category.
+    # Values come from :attr:`CodecBase.unsupported_rename_categories`.
+    # Empty list (default) = codec handles every category.
+    unsupported_rename_categories: list[str] = Field(default_factory=list)

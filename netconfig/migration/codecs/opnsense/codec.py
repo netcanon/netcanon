@@ -102,6 +102,19 @@ class OPNsenseCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "xml"
 
+    # OPNsense parses + renders port + VLAN state but doesn't yet
+    # wire CanonicalLocalUser round-trip (users live in
+    # ``<system><user>`` blocks that currently land in
+    # ``raw_sections`` as Tier-3 informational data).  Declared
+    # here so the rename modal's local-users pane shows a compat
+    # banner up-front rather than letting operators apply a
+    # rename that silently vanishes from rendered output.  Remove
+    # this declaration when Option A (parser + renderer wiring for
+    # users) ships.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset(
+        {"local_users"}
+    )
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
         vendor_id="opnsense",

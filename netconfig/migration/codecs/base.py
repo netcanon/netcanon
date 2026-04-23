@@ -179,6 +179,28 @@ class CodecBase(ABC):
     #: path — there's just no port-name to rename.
     absorbs_svi_into_vlan: ClassVar[bool] = False
 
+    #: Canonical categories this codec does NOT round-trip.  Populates
+    #: the rename-modal's per-pane compatibility banner so operators
+    #: see up-front that a given override pane will have no effect on
+    #: the target.  Names must match the per-pane rail categories
+    #: (currently: ``"ports"``, ``"vlans"``, ``"local_users"``;
+    #: extends with SNMP + RADIUS as those panes ship).
+    #:
+    #: Empty default means "codec round-trips every category that
+    #: reaches the canonical tree".  Codecs whose parse() never
+    #: populates ``intent.local_users`` (and therefore whose render()
+    #: can't emit user stanzas) list ``"local_users"`` here; the UI
+    #: uses that to surface an amber warning on the affected pane.
+    #:
+    #: This is a DECLARATIVE hint, not a gate — the pipeline still
+    #: runs the override transform; the rename map still populates
+    #: the job response.  What's missing is the render: the rewritten
+    #: users vanish from output because the codec has no emit path.
+    #: Option A (wiring the parse + render paths for these categories)
+    #: is tracked as follow-up work and will clear the declarations
+    #: from the affected codec classes when shipped.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
+
     @property
     @abstractmethod
     def capabilities(self) -> CapabilityMatrix:

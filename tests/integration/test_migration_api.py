@@ -73,6 +73,25 @@ class TestListMigrationAdapters:
             assert "input_format" in entry
             assert isinstance(entry["input_format"], str)
 
+    def test_unsupported_rename_categories_exposed(self, client):
+        """Codecs that don't round-trip a per-pane category declare
+        it in ``unsupported_rename_categories``.  Surfaces via the
+        adapters endpoint so the rename modal can show an amber
+        compat banner on the affected pane."""
+        resp = client.get("/api/v1/migration/adapters")
+        by_name = {a["name"]: a for a in resp.json()}
+        for info in by_name.values():
+            assert "unsupported_rename_categories" in info
+            assert isinstance(info["unsupported_rename_categories"], list)
+        # OPNsense + FortiGate don't round-trip local_users (Tier-3
+        # raw_sections passthrough only).
+        assert "local_users" in by_name["opnsense"]["unsupported_rename_categories"]
+        assert "local_users" in by_name["fortigate_cli"]["unsupported_rename_categories"]
+        # Cisco CLI + Aruba + MikroTik DO round-trip local_users.
+        assert "local_users" not in by_name["cisco_iosxe_cli"]["unsupported_rename_categories"]
+        assert "local_users" not in by_name["aruba_aoss"]["unsupported_rename_categories"]
+        assert "local_users" not in by_name["mikrotik_routeros"]["unsupported_rename_categories"]
+
     def test_ui_metadata_fields_surface(self, client):
         """R5 follow-up (UI metadata migration): every entry exposes
         description + sample_input + output_extension so the client
