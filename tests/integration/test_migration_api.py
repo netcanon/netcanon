@@ -532,6 +532,107 @@ interface GigabitEthernet1/0/1
         assert body["port_renames"] == {}
 
 
+class TestSourceShapeCapture:
+    """P2C3 M1 exposed source_vlans + source_hostname on the job so
+    the rename-modal VLAN pane can enumerate source VLANs and scope
+    localStorage persistence by device.  These tests lock in the
+    capture contract against future pipeline changes that might
+    reorder transforms."""
+
+    _IOSXE_WITH_VLANS = """\
+hostname CoreSw01
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name VOICE
+!
+vlan 99
+ name MGMT
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_source_vlans_populated_on_ports_endpoint(self, client):
+        """Every per-pane endpoint flows through run_plan_with_overrides
+        which always runs the capture transform — so /plan/ports
+        populates source_vlans even though its pane doesn't use them."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_vlans_populated_on_vlans_endpoint(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_hostname_populated(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_hostname"] == "CoreSw01"
+
+    def test_source_hostname_empty_when_not_declared(self, client):
+        """Cisco config with no hostname line → hostname field empty."""
+        resp = client.post(
+            "/api/v1/migration/plan/ports",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": "vlan 10\n name FOO\n!\n",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["source_hostname"] == ""
+
+    def test_source_vlans_captured_before_rename_transform(self, client):
+        """Capture runs AHEAD of rename transforms (first in the
+        override_transforms list).  Renaming VLAN 10 → 100 mutates
+        the tree, but source_vlans still reflects the pre-mutation
+        state so the UI enumerates what the operator had originally."""
+        resp = client.post(
+            "/api/v1/migration/plan/vlans",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_VLANS,
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Pre-rename ids: 10 remains in source_vlans even though the
+        # vlan_renames map shows 10 → 100.
+        assert 10 in body["source_vlans"]
+        assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+
 class TestRenderEndpoint:
     """/render is currently an alias for /plan.  These tests lock that
     fact in so a future split gets a visible PR."""

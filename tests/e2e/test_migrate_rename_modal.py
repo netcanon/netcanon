@@ -585,3 +585,131 @@ class TestRenameModalFitCheck:
         )
         # Note element never gets rendered for legacy profiles.
         expect(note).to_have_count(0)
+
+
+class TestRenameModalLeftRail:
+    """P2C3 added a left-rail category nav with Ports + VLANs panes.
+    Clicking a rail button swaps the visible category pane; counts
+    on the rail buttons reflect each category's row count."""
+
+    def test_rail_renders_with_ports_active_by_default(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        rail = page.locator('[data-testid="migrate-rename-rail"]')
+        expect(rail).to_be_visible()
+        # Ports pane starts active; VLANs pane starts hidden.
+        ports_pane = page.locator('[data-testid="migrate-rename-ports-pane"]')
+        vlans_pane = page.locator('[data-testid="migrate-rename-vlans-pane"]')
+        # "active" CSS class drives visibility via the
+        # .mig-rename-category-pane.active { display:block; } rule.
+        ports_cls = ports_pane.get_attribute("class") or ""
+        vlans_cls = vlans_pane.get_attribute("class") or ""
+        assert "active" in ports_cls
+        assert "active" not in vlans_cls
+
+    def test_clicking_vlans_rail_activates_vlans_pane(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        # Active class flips.
+        ports_pane = page.locator('[data-testid="migrate-rename-ports-pane"]')
+        vlans_pane = page.locator('[data-testid="migrate-rename-vlans-pane"]')
+        expect(vlans_pane).to_be_visible()
+        ports_cls = ports_pane.get_attribute("class") or ""
+        vlans_cls = vlans_pane.get_attribute("class") or ""
+        assert "active" in vlans_cls
+        assert "active" not in ports_cls
+
+    def test_vlan_row_renders_for_source_vlan(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        # VLAN 10 is declared in the Cisco fixture; row should render.
+        row = page.locator('[data-testid="migrate-rename-vlan-row-10"]')
+        expect(row).to_be_visible()
+        override = page.locator('[data-testid="migrate-rename-vlan-override-10"]')
+        expect(override).to_be_visible()
+
+    def test_vlan_rail_count_matches_source_vlans(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        count = page.locator(
+            '[data-testid="migrate-rename-rail-vlans-count"]'
+        )
+        # The Cisco fixture declares exactly one VLAN (id 10).
+        expect(count).to_have_text("1")
+
+    def test_vlan_override_updates_summary(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        # Override VLAN 10 → 100.
+        page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        ).fill("100")
+        # VLAN sub-summary appears with the override count.
+        sub = page.locator('[data-testid="migrate-rename-summary-vlans"]')
+        expect(sub).to_be_visible()
+        expect(sub).to_contain_text("override")
+
+
+class TestRenameModalLocalStoragePersistence:
+    """Overrides persist across page reloads under a hostname-scoped
+    localStorage key.  Reset-all clears the saved state."""
+
+    def test_override_persists_across_reload(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page, live_server_url: str,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        ).fill("555")
+        # Wait a tick so the input handler writes to localStorage.
+        page.wait_for_timeout(100)
+        # Reload the page, re-run the same translation, re-open the modal.
+        # localStorage survives the reload and should restore the 555 override.
+        mp = migrate_with_cisco_to_aruba
+        page.reload()
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("aruba_aoss")
+        mp.fill_raw(_CISCO_SRC)
+        mp.submit_and_wait()
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        restored = page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        )
+        expect(restored).to_have_value("555")
+        # Status line tells the operator that prior state was restored.
+        status = page.locator('[data-testid="migrate-rename-status"]')
+        expect(status).to_contain_text("Restored")
+
+    def test_reset_all_clears_persisted_state(
+        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
+    ):
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator('[data-testid="migrate-rename-rail-vlans"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        ).fill("777")
+        page.wait_for_timeout(100)
+        # Reset clears the user maps + the saved ack.
+        page.locator('[data-testid="migrate-rename-modal-reset"]').click()
+        override = page.locator(
+            '[data-testid="migrate-rename-vlan-override-10"]'
+        )
+        expect(override).to_have_value("")
+        # localStorage should no longer have the ack entry.
+        remaining = page.evaluate(
+            "() => { var hits = []; for (var i = 0; i < localStorage.length; i++) "
+            "{ var k = localStorage.key(i); if (k && k.indexOf('netconfig.rename-ack.') === 0) "
+            "hits.push(k); } return hits; }"
+        )
+        assert remaining == []
