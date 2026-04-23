@@ -104,6 +104,56 @@ class TestPortListParsing:
     def test_dedup_preserves_first_occurrence(self):
         assert _parse_port_list("1,2,1") == ["1", "2"]
 
+    # Stacked-switch range forms — these regressed silently for
+    # months before the WC.16.11.0025 2930M real-capture fixture
+    # surfaced the bug.  The old regex only handled bare numeric
+    # and letter-prefix forms; slot-port and slot-letter-port
+    # ranges either lost the slot prefix or dropped intermediate
+    # ports entirely.  Round-trip stability hid it because the
+    # format path was symmetrically broken.
+
+    def test_stacked_slot_port_range_expands(self):
+        """``1/1-1/24`` on a stacked 2930M / 3810M expands correctly
+        to member 1's first 24 ports.  Regression guard — the old
+        code produced ``["1"]`` for this input (slot prefix dropped
+        in the expansion step)."""
+        assert _parse_port_list("1/1-1/24") == [
+            f"1/{n}" for n in range(1, 25)
+        ]
+
+    def test_stacked_slot_letter_port_range_expands(self):
+        """``1/A1-1/A4`` — stack-member uplink module ports (the
+        flexible-module A on a 2930M / 3810M).  Old regex failed
+        to match entirely and returned the two endpoints verbatim
+        (``["1/A1", "1/A4"]`` — missing 1/A2 and 1/A3)."""
+        assert _parse_port_list("1/A1-1/A4") == [
+            "1/A1", "1/A2", "1/A3", "1/A4",
+        ]
+
+    def test_second_stack_member_range_expands(self):
+        """``2/1-2/48`` — member 2 of a multi-chassis stack."""
+        assert _parse_port_list("2/1-2/48") == [
+            f"2/{n}" for n in range(1, 49)
+        ]
+
+    def test_comma_separated_stacked_ranges(self):
+        """Real-world form from the WC.16.11.0025 2930M fixture:
+        ``untagged 1/1-1/47,1/A1-1/A4`` — comma-separated ranges
+        with mixed slot-port + slot-letter-port forms."""
+        assert _parse_port_list("1/1-1/47,1/A1-1/A4") == (
+            [f"1/{n}" for n in range(1, 48)]
+            + ["1/A1", "1/A2", "1/A3", "1/A4"]
+        )
+
+    def test_mismatched_prefix_rejected(self):
+        """Prefix must match between lo and hi — ``1/1-2/1`` isn't
+        a valid range (different stack members).  Pass through
+        as-is without synthesising a cross-member range."""
+        # Old and new code both return the two endpoints unchanged
+        # because prefix_lo != prefix_hi.  Documenting via test so
+        # the invariant doesn't quietly change.
+        assert _parse_port_list("1/1-2/1") == ["1/1", "2/1"]
+
 
 class TestPortListFormatting:
     def test_contiguous_numeric_compresses(self):

@@ -346,6 +346,23 @@ class ArubaAOSSCodec(CodecBase):
             # Unrecognised top-level line — skip.
             i += 1
 
+        # LAG-member linkage post-pass.  The inline linking at the
+        # ``trunk`` line above only catches members whose
+        # ``interface <name>`` stanzas appeared EARLIER in the
+        # source text.  AOS-S's native export orders interfaces
+        # before trunks so the inline path works for same-vendor
+        # round-trip on device-captured configs.  Our own renderer
+        # (and some cross-vendor source orderings) emit trunks
+        # first, so we re-link exhaustively here once both lists
+        # are fully populated.  Idempotent — skip members that
+        # already carry a linkage.
+        iface_by_name = {i.name: i for i in intent.interfaces}
+        for lag in intent.lags:
+            for member in lag.members:
+                m_iface = iface_by_name.get(member)
+                if m_iface is not None and m_iface.lag_member_of is None:
+                    m_iface.lag_member_of = lag.name
+
         return intent
 
     # -----------------------------------------------------------------
@@ -776,11 +793,33 @@ def _parse_port_list(text: str) -> list[str]:
 
 
 def _expand_port_range(lo: str, hi: str) -> list[str]:
-    """Expand ``1-24`` or ``A1-A4`` into individual port names."""
-    m_lo = re.match(r"^([A-Za-z]*)(\d+)(?:/(\d+))?$", lo)
-    m_hi = re.match(r"^([A-Za-z]*)(\d+)(?:/(\d+))?$", hi)
+    """Expand an AOS-S port range into individual port names.
+
+    Handles every real-world AOS-S port-naming form surfaced by the
+    real-capture corpus:
+
+      * ``1-24``        — pure numeric (2920, 2930F standalone)
+      * ``A1-A4``       — letter-prefix uplinks (same-member letter slot)
+      * ``1/1-1/24``    — stacked switch, member/port (2930M + 3810M stacks)
+      * ``1/A1-1/A4``   — stacked switch, member/letter-port (uplink module
+                          on a stack member)
+      * ``2/1-2/48``    — second stack member
+
+    Trailing digits vary; everything else must match between lo and
+    hi.  Pre-:commit: WC.16.11.0025 2930M fixture landing, the old
+    regex ``^([A-Za-z]*)(\\d+)(?:/(\\d+))?$`` silently dropped the
+    slot prefix when expanding ``1/1-1/47`` (produced ``["1"]``) and
+    failed to match ``1/A1-1/A4`` at all (returned the two endpoints
+    verbatim, losing intermediate ports).  Both bugs had slipped
+    past the round-trip-stable invariant because the format path
+    was symmetrically broken.  Symptomatic VLANs in several shipped
+    Aruba fixtures had near-empty port-membership lists on parse;
+    the canonical coverage was materially under-reported.
+    """
+    m_lo = re.match(r"^(.*?)(\d+)$", lo)
+    m_hi = re.match(r"^(.*?)(\d+)$", hi)
     if not m_lo or not m_hi:
-        return [lo, hi]   # can't expand — pass through as-is
+        return [lo, hi]   # no trailing digits — pass through as-is
     prefix_lo, num_lo = m_lo.group(1), int(m_lo.group(2))
     prefix_hi, num_hi = m_hi.group(1), int(m_hi.group(2))
     if prefix_lo != prefix_hi or num_hi < num_lo:

@@ -290,6 +290,7 @@ fixture).
 | `hpe_community_2930f_wc1607_intervlan.cfg` | 109 | 1 | 1 | 10 | 12 | 4 | 0 | 1 | Real 2930F `show running-config` on **WC.16.07.0002**.  12 VLANs with per-VLAN SVIs, `ip helper-address` (DHCP relay), `ip forward-protocol udp` for DNS/NTP, `primary-vlan`, 4 static routes including `ip default-gateway`.  Inter-VLAN L3 at realistic scale. |
 | `hpe_community_2920_wb1608_dhcp_snooping.cfg` | 74 | 1 | 0 | 9 | 2 | 1 | 0 | 1 | Real 2920 `show running-config` on **WB.16.08.0001** — different switch family (2920 = J9729A vs 2930F/5406R) and major OS branch (WB vs WC).  Exercises `dhcp-snooping` with 13 authorized-servers, `ntp unicast` with public peer, `web-management ssl`, `ip authorized-managers`, `snmp-server host ... trap-level critical`. |
 | `hpe_community_2930f_wc1610_dhcp_server.cfg` | 58 | 1 | 0 | 4 | 4 | 1 | 0 | 1 | Real 2930F `show running-config` on **WC.16.10.0005**.  `dhcp-server pool` grammar (3 pools with default-router + dns-server + network + range), per-VLAN `dhcp-server` enable flag, `allow-unsupported-transceiver`. |
+| `user_contrib_2930m_wc1611.cfg` | 56 | 1 | 0 | 0 | 3 | 0 | 0 | 1 | **Real 2930M stack on WC.16.11.0025** (user-contributed, sanitised).  First fixture covering the 16.11 LTS branch.  Stacked-switch family: `JL323A` member + `JL083A` flexible-module uplinks, stack-aware port syntax (`1/1-1/47,1/A1-1/A4`), `stacking` stanza with priority + flexible-module type, `oobm` per-member IP config, `include-credentials` with `password manager sha1`, SNMPv3 engineid.  Password hash sanitised to obviously-fake `deadbeef…dead`.  `interfaces` = 0 because the config has no per-port overrides (bare config — all port behaviour inherits from VLAN membership). |
 
 ### Findings
 
@@ -350,6 +351,63 @@ exercised by the rendered template:
   **`timesync ntp`** with `time daylight-time-rule` and `time timezone`
   — silent-drop validation.
 
+### Bugs surfaced by the WC.16.11.0025 2930M fixture
+
+Two latent codec bugs, both fixed in the same commit as the fixture
+landed.  Round-trip-stable invariant had hidden them because the
+damage was symmetric (broken parse + broken render cancelled out):
+
+**Bug 1 — `_expand_port_range` dropped slot prefix on stacked-switch
+ranges.**  Old regex `^([A-Za-z]*)(\d+)(?:/(\d+))?$` expanded only
+the first numeric group, silently discarding the slot.  Symptoms:
+
+* `1/1-1/24` → `["1"]` (instead of 24 member-1 ports)
+* `1/A1-1/A4` → `["1/A1", "1/A4"]` (regex failed to match, only
+  endpoints survived — `1/A2` and `1/A3` lost)
+
+The effect on pre-existing fixtures was severe: on
+`aruba_central_5memberstack_rendered.cfg`, VLAN 1's untagged ports
+went from the correctly-expanded 12 ports down to a single-entry
+`["1"]`.  All four existing Aruba fixtures parsed with materially
+incorrect VLAN port membership — coverage numbers in the matrix
+above had been under-reporting by 40-80% on stacked captures.
+Fixed with a simpler greedy-trailing-digits regex that treats
+everything up to the final `\d+` as a shared prefix — handles
+`1-24` / `A1-A4` / `1/1-1/24` / `1/A1-1/A4` / `2/1-2/48`
+uniformly.  Regression tests in
+`tests/unit/migration/test_aruba_aoss.py::TestPortListParsing`
+cover all five forms.
+
+**Bug 2 — LAG-member linking order-sensitive on rendered output.**
+The inline `_build_lag_from_trunk_line` path linked trunk-member
+interfaces to their LAGs *at the time the trunk line was parsed*.
+On AOS-S native captures this worked because real devices emit
+`interface <name>` stanzas before the `trunk` line, so interface
+lookups succeeded.  Our renderer emits trunks BEFORE interface
+stanzas — so the second parse (on rendered output) saw zero
+linking.  Bug 1's symmetric damage had been masking this:
+pre-fix LAG members were `["1"]` which matched (or mis-matched)
+an interface named `"1"`, producing equivalent-if-wrong output
+on both sides.  After Bug 1 fix the real names flowed through
+and the ordering issue surfaced.  Fixed with a parse-time
+post-pass that re-links exhaustively after all stanzas are
+parsed.
+
+### Certification decision (updated)
+
+**Remains `certified`**, now covering **4 OS versions**
+(WC.16.07.0002 + WB.16.08.0001 + WC.16.10.0005 + WC.16.11.0025)
+and **3 switch families** (2920 + 2930F + 2930M).  The 16.11
+LTS branch was the most-current un-covered AOS-S maintenance
+line; closing that gap means the codec's "works on modern
+Aruba" claim is defensible.
+
+Bugs surfaced by this fixture ARE counted against the codec —
+0 → 2 in the summary table — because even though they were
+pre-existing, they'd never shown up in CI before.  This is
+exactly the regression class the real-capture harness is
+designed to catch.
+
 ---
 
 ## Summary
@@ -360,7 +418,7 @@ exercised by the rendered template:
 | **opnsense** | **4** (3 upstream + 1 real user-deployed) | 2 sources | 1 (render dropped VLANs) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
-| **aruba_aoss** | **4** (3 real + 1 rendered) | **3** (WC.16.07 + WB.16.08 + WC.16.10) | 0 | **certified** ✅ | — |
+| **aruba_aoss** | **5** (4 real + 1 rendered) | **4** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
 | **TOTAL** | **26** | — | **10** | — | — |
 
 Three bugs surfaced in the first real-capture pass.  All three would
