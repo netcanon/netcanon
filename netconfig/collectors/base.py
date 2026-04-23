@@ -25,6 +25,13 @@ class BaseCollector(ABC):
     should raise informative exceptions on failure rather than returning
     empty strings — the backup runner catches ``Exception`` broadly and
     records the message in ``BackupResult.error``.
+
+    Optional: subclasses MAY override :meth:`probe` to extract
+    ``detected_facts`` (OS version, model) from a pre-backup "show
+    version" style command.  The default implementation returns an
+    empty dict — subclasses that don't support probing keep working
+    unchanged, and the pipeline gracefully falls back to the
+    family-base definition.
     """
 
     @abstractmethod
@@ -47,6 +54,49 @@ class BaseCollector(ABC):
             Exception: Any exception from the underlying SSH library
                 propagates up and is caught by the backup runner.
         """
+
+    def probe(
+        self, device: DeviceTarget, definition: DeviceDefinition
+    ) -> dict[str, str]:
+        """Run the definition's probe command against *device* and extract
+        :attr:`DeviceProfile.detected_facts`.
+
+        Default implementation returns an empty dict — subclasses that
+        haven't wired probing support keep working unchanged (the
+        pipeline treats an empty probe result as "no detected_facts
+        available" and falls back to the family-base definition).
+
+        Concrete subclasses that override this method should:
+
+        * Return an empty dict when ``definition.probe.command`` is
+          empty — no probe configured means no work to do.
+        * Catch exceptions and return an empty dict rather than
+          raising.  Probe failure is non-fatal; backup should
+          proceed.  Errors should be logged at WARNING, not re-raised.
+        * Parse the command's stdout via
+          :func:`netconfig.collectors.probe.parse_probe_output` for
+          regex handling + timestamp attachment.
+
+        Cost note: this typically opens a second SSH session (first
+        for probe, second for the main collect).  Acceptable for
+        P1C3 — probe output is tiny, session setup is bounded by
+        ``conn_timeout=30``, and the double-auth cost only affects
+        definitions that opt in by declaring ``probe.command``.
+        Single-session optimisation (probe inside the main session)
+        is a future refinement.
+
+        Args:
+            device: Connection target.
+            definition: Device definition supplying the probe
+                command + regex map.  Only ``definition.probe`` is
+                consulted; other fields are passed through in case
+                future overrides need connection parameters.
+
+        Returns:
+            Dict of ``{fact_name: value}``.  Empty when probe isn't
+            configured, the probe failed, or no regex matched.
+        """
+        return {}
 
 
 def get_collector(definition: DeviceDefinition) -> BaseCollector:
