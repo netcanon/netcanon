@@ -174,4 +174,10 @@
     // means every summary call-site automatically refreshes the
     // banner without touching all 9 chains.
     renderFitCheck();
+
+    // localStorage ack persistence — strict super-set of every
+    // override-mutating callsite, so wiring save here means
+    // partials don't need persistence awareness.  Idempotent on
+    // equal state; safe to call freely.
+    if (typeof saveRenameAck === 'function') saveRenameAck();
   }

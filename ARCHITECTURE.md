@@ -211,6 +211,82 @@ stages stay frozen.  See the module docstring.
 
 ---
 
+## Per-pane overrides (Tier-3 rename modal)
+
+**Where:** `run_plan_with_overrides` in
+`netconfig/services/migration_pipeline.py` +
+`netconfig/migration/canonical/{port_names,vlan_names}.py` +
+`netconfig/api/routes/migration.py` (per-pane POST endpoints) +
+the left-rail category nav in `netconfig/templates/migrate.html`
+with per-category partials under `_partials/`.
+
+**What:** The Tier-3 rename modal lets operators override the
+auto-heuristic for individual canonical categories without
+leaving the translate workflow.  Each category (Ports, VLANs, and
+future local_users / SNMP / RADIUS) has:
+
+1. **An orchestrator** under `netconfig/migration/canonical/`
+   that walks the canonical tree and applies a caller-supplied
+   override map.  Returns a result struct with `applied`,
+   `dropped`, and `warnings` lists so the UI can show exactly
+   what happened.
+2. **A per-pane API endpoint** — `POST /api/v1/migration/plan/ports`,
+   `POST /api/v1/migration/plan/vlans` — that accepts only its
+   category's override map and delegates to
+   `run_plan_with_overrides` with the other categories' maps
+   defaulted to `None`.
+3. **A rail button + category pane** in the modal UI.  Panes are
+   mutually exclusive (one visible at a time); the preview on
+   the right stays cross-category.
+
+**Growth-safe engine:** `run_plan_with_overrides` is the one
+function new per-pane categories extend.  New parameters go there
+as optional maps defaulting to `None`; `run_plan` and
+`run_plan_with_rename` signatures stay frozen.  Adding a new
+category (e.g. `local_user_rename_map`) follows the established
+three-step recipe: orchestrator module → wire into
+`run_plan_with_overrides` under a None-vs-dict sentinel guard →
+add endpoint + rail button + pane partial.
+
+**Sentinel semantics (all override maps):**
+
+* `None` — don't engage the category's transform at all (legacy
+  behaviour).
+* `{}` — engage with auto-heuristic only.  The UI sends this on
+  first translate to turn the rename pipeline on without yet
+  specifying overrides.
+* `{src: tgt, ...}` — engage with explicit per-entry overrides.
+  Values may include `None` to drop.
+
+**Cross-category ordering:** port rename runs BEFORE VLAN rename
+in `run_plan_with_overrides` so port-name rewrites don't race
+with VLAN-ID references changing underneath them.  Adding a
+future category requires deciding its order relative to the
+existing transforms; document the choice in both
+`run_plan_with_overrides` and the orchestrator module.
+
+**localStorage ack persistence (UI):** operator overrides are
+persisted under
+`netconfig.rename-ack.v1:<source_codec>:<target_codec>:<hostname>`.
+Moving to a different device (different hostname), different
+codec pair, or pressing Reset-all clears or scopes away saved
+state.  Version segments for source/target are omitted until
+parsers start populating `CanonicalIntent.source_version`.
+
+**Source-shape capture:** `run_plan_with_overrides` injects a
+capture-first transform that populates `MigrationJob.source_vlans`
+and `source_hostname` from the post-parse, pre-transform tree.
+This is load-bearing for the VLAN pane (it has no "auto-rewritten"
+rows to fall back on if the operator hasn't already sent
+overrides) and for the localStorage key (hostname).
+
+See [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
+for the codec-authorship side of this (every codec must expose
+`classify_port_name` / `format_port_identity` to participate in
+the port-rename mesh; VLAN orchestrator is codec-agnostic).
+
+---
+
 ## Auto-detection
 
 **Where:** `netconfig/services/migration_detect.py` + per-codec `probe()`
@@ -346,6 +422,9 @@ the source of truth):
 * **rename-panel.js** — rename-modal preview + summary renderer.
 * **rename-table.js** — rename-modal per-kind expandable sections
   with per-row override dropdowns, collision detection, drop links.
+* **vlan-rename-table.js** — rename-modal VLAN-category pane
+  renderer; structurally parallels rename-table.js but simpler
+  (integer IDs, no per-kind sections, no target-profile dropdown).
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the

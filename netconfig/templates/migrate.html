@@ -1464,6 +1464,137 @@
     return base.concat(modulePorts);
   }
 
+  /* ── localStorage ack persistence ──
+   * Persists the operator's rename-modal overrides across page
+   * reloads.  Keyed on the (source_codec, target_codec, hostname)
+   * triple — moving to a different device, different migration
+   * direction, or codec/version change loads a fresh slate instead
+   * of clobbering the operator's prior work.
+   *
+   * Versioning (source_version / target_version) is intentionally
+   * NOT part of the key today — the canonical parsers don't yet
+   * populate source_version, so folding empty strings into the key
+   * adds noise without discrimination.  When per-OS-version parsers
+   * land (P1C3+), extend _ackKey to append @<version> for each side
+   * and bump _ACK_SCHEMA_VERSION so any old entries get ignored on
+   * next load (cheap migration — the entries are strictly optional).
+   *
+   * Schema:
+   *   localStorage["netconfig.rename-ack.v1:<src>:<tgt>:<hostname>"]
+   *   = JSON({
+   *       ports: {src_name: tgt_name | null},
+   *       vlans: {src_id: tgt_id | null},
+   *       ts:    ISO-8601 string,
+   *     })
+   */
+  var _ACK_SCHEMA_VERSION = 'v1';
+  var _ACK_PREFIX = 'netconfig.rename-ack.';
+
+  function _ackKey(job) {
+    if (!job) return '';
+    var host = job.source_hostname || '';
+    return _ACK_PREFIX + _ACK_SCHEMA_VERSION + ':'
+         + (job.source_codec || '') + ':'
+         + (job.target_codec || '') + ':'
+         + host;
+  }
+
+  /** Load saved overrides for the current job, if any.  Returns the
+   *  parsed object on hit or ``null`` on miss.  Swallows parse
+   *  errors silently — a corrupt entry is treated as a miss rather
+   *  than blocking the modal from opening. */
+  function loadRenameAck(job) {
+    if (!job) return null;
+    try {
+      var raw = window.localStorage.getItem(_ackKey(job));
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /** Write the current user-override maps to localStorage.  Called on
+   *  every override change so a page reload mid-session doesn't lose
+   *  work.  Silently no-ops when localStorage is unavailable (private
+   *  browsing, quota exceeded) — persistence is a nice-to-have. */
+  function saveRenameAck() {
+    if (!_lastJob) return;
+    var payload = {
+      ports: Object.assign({}, _renameUserMap),
+      vlans: Object.assign({}, _renameVlanUserMap),
+      ts: new Date().toISOString(),
+    };
+    // Skip writes when both maps are empty — keeps localStorage
+    // clean after a Reset-all rather than leaving an empty marker.
+    if (!Object.keys(payload.ports).length
+        && !Object.keys(payload.vlans).length) {
+      try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
+      return;
+    }
+    try {
+      window.localStorage.setItem(_ackKey(_lastJob), JSON.stringify(payload));
+    } catch (_) {
+      // Quota / security errors — best-effort.
+    }
+  }
+
+  /** Remove the saved ack for the current job.  Called from the
+   *  "Reset all" button so the saved state disappears along with
+   *  the in-memory state. */
+  function clearRenameAck() {
+    if (!_lastJob) return;
+    try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
+  }
+
+  /** Apply a loaded ack payload into the user maps.  Surfaces a
+   *  status-line notice telling the operator their prior state was
+   *  restored — silently re-populating the table would be
+   *  surprising ("why does this already have overrides?"). */
+  function applyLoadedRenameAck(ack) {
+    if (!ack) return;
+    if (ack.ports && typeof ack.ports === 'object') {
+      _renameUserMap = Object.assign({}, ack.ports);
+    }
+    if (ack.vlans && typeof ack.vlans === 'object') {
+      // localStorage round-trips int keys as strings; coerce back
+      // to int so lookups against source_vlans (int ids) match.
+      _renameVlanUserMap = {};
+      Object.keys(ack.vlans).forEach(function(k) {
+        var n = parseInt(k, 10);
+        if (!isNaN(n)) _renameVlanUserMap[n] = ack.vlans[k];
+      });
+    }
+    var portCount = Object.keys(_renameUserMap).length;
+    var vlanCount = Object.keys(_renameVlanUserMap).length;
+    var status = document.getElementById('mig-rename-status');
+    if (status && (portCount || vlanCount)) {
+      var bits = [];
+      if (portCount) bits.push(portCount + ' port');
+      if (vlanCount) bits.push(vlanCount + ' VLAN');
+      status.textContent = 'Restored prior overrides ('
+        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
+      status.setAttribute('data-testid-state', 'ack-restored');
+    }
+  }
+
+  function _friendlyTime(iso) {
+    if (!iso) return 'earlier session';
+    try {
+      var then = new Date(iso).getTime();
+      var now  = Date.now();
+      var diff = (now - then) / 1000;
+      if (diff < 60)        return 'just now';
+      if (diff < 3600)      return Math.round(diff / 60) + 'm ago';
+      if (diff < 86400)     return Math.round(diff / 3600) + 'h ago';
+      return Math.round(diff / 86400) + 'd ago';
+    } catch (_) {
+      return 'earlier session';
+    }
+  }
+
   /** Switch the active rail category.  Mutually exclusive — exactly
    *  one category pane is visible at a time.  Preview pane stays
    *  visible regardless so the operator can see how per-category
@@ -1492,7 +1623,9 @@
   /** Update the rail buttons' count badges.  Called whenever the
    *  underlying state shifts (job swap, user override, reset all).
    *  Counts reflect "rows in this category" — for ports that's
-   *  applied + warnings; for VLANs that's source_vlans.length. */
+   *  applied + warnings; for VLANs that's source_vlans.length.
+   *  Persistence lives on renderRenameSummary, which is a strict
+   *  super-set of this function's callers. */
   function renderRenameRailCounts() {
     if (!_lastJob) return;
     var portsCount = document.getElementById('mig-rename-rail-ports-count');
@@ -1563,6 +1696,12 @@
     var modal = document.getElementById('mig-rename-modal');
     modal.classList.add('open');
     modal.style.display = 'flex';
+    // Restore persisted overrides for this (source, target, hostname)
+    // triple, if any.  Runs BEFORE the initial render so the
+    // restored state is visible on first paint rather than flashing
+    // blank then snapping to the restored state.
+    var ack = loadRenameAck(_lastJob);
+    if (ack) applyLoadedRenameAck(ack);
     // Seed vendor dropdown with an auto-suggestion; model left
     // un-picked so the operator explicitly commits to hardware.
     var vsel = document.getElementById('mig-rename-target-vendor');
@@ -1590,6 +1729,12 @@
   window.renameModalResetAll = function() {
     _renameUserMap = {};
     _renameVlanUserMap = {};
+    // Clear the persisted entry so a subsequent modal-open for the
+    // same (source, target, hostname) doesn't restore what the
+    // operator just reset.  renderRenameSummary below will write an
+    // empty-maps save — which saveRenameAck() short-circuits to a
+    // removeItem — but we also clear eagerly here as belt-and-braces.
+    clearRenameAck();
     renderRenameTable();
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     renderRenameRailCounts();

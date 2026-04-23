@@ -528,9 +528,29 @@ migrate.html):
 | `migrate-rename-preview-pane`         | `<div>`    | Right pane holding preview + summary + fit-check |
 | `migrate-rename-preview`              | `<pre>`    | Client-side approximation of the target output with user overrides applied via whole-word replacement; informational only — the Apply button re-runs the server-side render for the authoritative result |
 | `migrate-rename-summary`              | `<div>`    | Inline summary above Apply: "N auto / M override / K drops / W ⚠ / C collisions". Collision count disables the Apply button |
+| `migrate-rename-summary-vlans`        | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "VLAN: A auto / B overrides / C drops".  Only present when any VLAN-category state exists (server-applied rewrites or user overrides/drops); absent from port-only sessions |
 | `migrate-rename-fitcheck`             | `<div>`    | Hardware fit-check banner.  CSS class `fit-ok` / `fit-warn` / `fit-block` encodes overall state |
 | `migrate-fitcheck-kind-<kind>`        | `<span>`   | Per-kind count line ("access: 24 / 24"); `<kind>` is one of `physical`, `uplink`, `mgmt` — **closed enumeration** as of this writing (fit-check.js hardcodes the list in `KIND_ORDER`).  Adding a new kind requires touching both the partial and this doc |
 | `migrate-fitcheck-module-note`        | `<span>`   | "(module: NM-8X)" suffix on the banner when a module SKU is selected; omitted for legacy profiles |
+
+**Left-rail category nav + VLAN pane** (P2C3 — per-category override
+surfaces under a shared left-rail navigation):
+
+| `data-testid`                         | Element    | Notes |
+|---------------------------------------|------------|-------|
+| `migrate-rename-rail`                 | `<nav>`    | Left rail — vertical list of category buttons.  `aria-label="Rename modal categories"` |
+| `migrate-rename-rail-ports`           | `<button>` | Activates the Ports category pane.  Carries `data-category="ports"` and `active` CSS class when selected |
+| `migrate-rename-rail-ports-count`     | `<span>`   | Row-count badge on the Ports rail button (applied + warned rows) |
+| `migrate-rename-rail-vlans`           | `<button>` | Activates the VLANs category pane.  `data-category="vlans"` |
+| `migrate-rename-rail-vlans-count`     | `<span>`   | Row-count badge on the VLANs rail button (source_vlans.length) |
+| `migrate-rename-ports-pane`           | `<div>`    | Ports category pane wrapper — holds the per-kind rename sections.  `active` CSS class when visible |
+| `migrate-rename-vlans-pane`           | `<div>`    | VLANs category pane wrapper.  `active` CSS class when visible |
+| `migrate-rename-vlans-empty`          | `<div>`    | Empty-state message when the source config declared no VLANs |
+| `migrate-rename-vlans-sections`       | `<div>`    | Container the VLAN pane renderer clears and rebuilds on each call |
+| `migrate-rename-vlans-table`          | `<table>`  | The single VLAN rewrite table — no per-kind sections, since VLAN IDs don't have a physical taxonomy |
+| `migrate-rename-vlan-row-<id>`        | `<tr>`     | One per source VLAN; `<id>` is the literal integer source VLAN ID (e.g. `10`, `4094`).  CSS classes `has-override` / `has-drop` / `has-auto-drop` / `has-collision` signal row state |
+| `migrate-rename-vlan-override-<id>`   | `<input>`  | Integer target-ID input.  `type="number"` with `min=1 max=4094`; blank = accept auto default.  Typing invalid input (non-numeric, out-of-range) silently no-ops rather than storing the bad value |
+| `migrate-rename-vlan-drop-<id>`       | `<span>`   | Inline drop / un-drop / keep-verbatim link beside the override input — same three-state logic as port rows |
 
 ### RESERVED for Phase 2 (transforms + deploy)
 
