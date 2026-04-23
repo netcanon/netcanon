@@ -543,11 +543,16 @@
  *                               (commit 8e8f443)
  *   _partials/fit-check.js    — renderFitCheck hardware-capacity banner
  *                               (commit 949577c)
+ *   _partials/rename-apply.js — renameModalApply + drag handlers +
+ *                               modal-specific DOMContentLoaded wiring
+ *                               (this completes the rename-modal split)
  *
- * Still inline in this file (deferred slices): renameModalApply,
- * drag handlers, form wiring (sourceSel / targetSel / submit),
+ * Still inline in this file (non-rename-modal): form wiring
+ * (sourceSel / targetSel / submit / force checkbox / input mode),
  * auto-detect, validation-banner rendering, path-list fill, result
- * rendering, escapeHtml.
+ * rendering, escapeHtml utility, rename-target-profile fetch +
+ * vendor/model/module dropdown populators (depend on inline state
+ * that hasn't been extracted yet).
  *
  * Every interactive element gets a data-testid — see
  * tests/testid_reference.md for the full inventory.
@@ -1119,10 +1124,16 @@
     }).join('');
   }
 
+  /** HTML-escape a string for injection into innerHTML or attribute
+   *  contexts.  Escapes ``"`` to ``&quot;`` so the same function is
+   *  safe inside ``title="..."``-style attributes — the rename-table
+   *  partial's collision / warning icons rely on this. */
   function escapeHtml(s) {
-    return String(s).replace(/&/g, '&amp;')
-                    .replace(/</g, '&lt;')
-                    .replace(/>/g, '&gt;');
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
   }
 
   /** Copy the rendered output to clipboard (global so onclick can reach it). */
@@ -1451,145 +1462,8 @@
   /* ── Shared client-side classifiers (extracted to _partials/classify.js) ── */
   {% include "_partials/classify.js" %}
 
-  /** POST to /plan again with the user's map, then swap in the new
-   *  rendered output + refresh the modal table. */
-  window.renameModalApply = async function() {
-    if (!_lastJobBody || !_lastJob) return;
-    var applyBtn = document.getElementById('mig-rename-apply-btn');
-    var status = document.getElementById('mig-rename-status');
-    var origText = applyBtn.textContent;
-    applyBtn.disabled = true;
-    applyBtn.textContent = 'Applying…';
-    if (status) status.textContent = '';
-    var body = JSON.parse(JSON.stringify(_lastJobBody));
-    body.port_rename_map = Object.assign({}, _renameUserMap);
-    var profileKey = currentRenameProfileKey();
-    if (profileKey) body.target_profile = profileKey;
-    // Only send target_module when the profile actually has
-    // modules — prevents noise in the request for legacy profiles.
-    var moduleSku = currentRenameModuleSku();
-    if (moduleSku) body.target_module = moduleSku;
-    try {
-      var resp = await fetch('/api/v1/migration/plan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!resp.ok) {
-        var err = await resp.json().catch(function() { return {}; });
-        showToast('Request rejected: '
-          + (typeof err.detail === 'string' ? err.detail
-             : JSON.stringify(err.detail || err)), 'error');
-        return;
-      }
-      var newJob = await resp.json();
-      _lastJob = newJob;
-      _lastJobBody = body;
-      renderResult(newJob);
-      // Re-render the modal from the refreshed job.
-      renderRenameTable();
-      renderRenamePreview();
-      renderRenameSummary();
-      if (status) status.textContent = 'Applied. Rendered output refreshed.';
-      showToast('Rename applied; output regenerated.', 'success');
-    } catch (e) {
-      showToast('Network error: ' + e.message, 'error');
-    } finally {
-      applyBtn.disabled = false;
-      applyBtn.textContent = origText;
-    }
-  };
-
-  /* ── Drag behaviour on the modal header ── */
-  function onRenameDragStart(e) {
-    var modal = document.getElementById('mig-rename-modal');
-    if (!modal.classList.contains('open')) return;
-    // Only drag when the mousedown originated on the header itself
-    // (not one of its buttons).
-    if (e.target.closest('button')) return;
-    var rect = modal.getBoundingClientRect();
-    _renameDragState = {
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-    };
-    // Switch to absolute positioning so translateX(-50%) no longer
-    // affects drag math.
-    modal.style.transform = 'none';
-    modal.style.left = rect.left + 'px';
-    modal.style.top  = rect.top + 'px';
-    e.preventDefault();
-  }
-  function onRenameDragMove(e) {
-    if (!_renameDragState) return;
-    var modal = document.getElementById('mig-rename-modal');
-    modal.style.left = (e.clientX - _renameDragState.offsetX) + 'px';
-    modal.style.top  = (e.clientY - _renameDragState.offsetY) + 'px';
-  }
-  function onRenameDragEnd() { _renameDragState = null; }
-
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
-
-  // Wire drag + two-stage target-profile change.
-  document.addEventListener('DOMContentLoaded', function() {
-    var header = document.getElementById('mig-rename-modal-header');
-    if (header) header.addEventListener('mousedown', onRenameDragStart);
-    document.addEventListener('mousemove', onRenameDragMove);
-    document.addEventListener('mouseup', onRenameDragEnd);
-
-    var vsel = document.getElementById('mig-rename-target-vendor');
-    var msel = document.getElementById('mig-rename-target-model');
-    var modsel = document.getElementById('mig-rename-target-module');
-
-    if (vsel) {
-      vsel.addEventListener('change', function() {
-        // Re-populate the model dropdown whenever the vendor changes.
-        // Model resets to "(pick model)" — user must explicitly commit
-        // to hardware; we don't guess.  populateRenameModelDropdown
-        // cascades into populateRenameModuleDropdown, so the module
-        // dropdown gets reset in the same step.
-        populateRenameModelDropdown(vsel.value);
-        renderRenameTable();
-        renderRenamePreview();
-        renderRenameSummary();
-      });
-    }
-    if (msel) {
-      msel.addEventListener('change', function() {
-        // Re-populate the module dropdown when the model changes —
-        // different chassis have different NM-slot inventories (or
-        // none at all for legacy profiles).  User overrides that
-        // pointed at a port in the PREVIOUS profile's namespace are
-        // preserved but surfaced as "(custom: X — not in profile)"
-        // rows in the dropdown — operator can then see what's
-        // orphaned and decide to keep or re-pick.  See
-        // renderRenameTable().
-        populateRenameModuleDropdown(vsel ? vsel.value : '', msel.value);
-        renderRenameTable();
-        renderRenamePreview();
-        renderRenameSummary();
-      });
-    }
-    if (modsel) {
-      modsel.addEventListener('change', function() {
-        // Module swap (e.g. Cat 9300 NM-8X → NM-2Q).  Existing user
-        // overrides persist; if they referenced a port that only
-        // existed under the previous module, the orphaned-override
-        // dropdown logic in renderRenameTable() surfaces them as
-        // "(custom: X — not in profile)" so the operator can re-pick
-        // or keep.  No state reset — operator intent survives module
-        // churn, consistent with profile-change behaviour.
-        renderRenameTable();
-        renderRenamePreview();
-        renderRenameSummary();
-      });
-    }
-  });
+  /* ── Rename-modal apply flow + drag + selector wiring (extracted to _partials/rename-apply.js) ── */
+  {% include "_partials/rename-apply.js" %}
 
   // Event wiring
   sourceSel.addEventListener('change', function() {
