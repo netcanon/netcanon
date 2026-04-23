@@ -246,6 +246,20 @@ class TestRealProfilesShipped:
         assert len(opnsense_profiles) >= 16  # at least what we shipped
         for key, p in opnsense_profiles.items():
             assert p.max_vlans == 4094, key
+        # Arista EOS family uniformly 4094 (modern EOS releases
+        # support the full VLAN space).
+        arista_profiles = {k: p for k, p in profiles.items()
+                           if k.startswith("arista_eos/")}
+        assert len(arista_profiles) >= 4   # 7050SX, 7050CX3, 7280CR3, 7060CX
+        for key, p in arista_profiles.items():
+            assert p.max_vlans == 4094, key
+        # Juniper Junos family uniformly 4094 (Junos EX/QFX
+        # platforms support the full VLAN space).
+        junos_profiles = {k: p for k, p in profiles.items()
+                          if k.startswith("juniper_junos/")}
+        assert len(junos_profiles) >= 3   # EX4300, EX4600, QFX5120
+        for key, p in junos_profiles.items():
+            assert p.max_vlans == 4094, key
 
     def test_fortigate_profiles_declare_max_vlans_source(self):
         """Version-tuning provenance lock-in: every shipped FortiGate
@@ -874,6 +888,137 @@ class TestRealProfilesShipped:
         # revisions.
         for wrong in ("igc0", "igc1", "ax0"):
             assert p.lookup_port(wrong) is None
+
+    # ------------------------------------------------------------------
+    # Arista EOS target profiles (Phase 13)
+    # ------------------------------------------------------------------
+
+    def test_arista_dcs_7050sx_64(self):
+        """Arista DCS-7050SX-64 — 48x 10G SFP+ + 4x 40G QSFP+ TOR.
+        Flat Ethernet<N> naming, no stacking, Port-Channel prefix
+        for LAGs (capital C, distinct from Cisco's Port-channel)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["arista_eos/DCS-7050SX-64"]
+        assert p.device_class == "switch"
+        assert p.stacking == ""   # no traditional stacking on Arista
+        # 48 x 10G + 4 x 40G + 1 mgmt = 53 ports.
+        assert p.port_count == 53
+        # First physical port is Ethernet1, last is Ethernet52;
+        # Management1 is the mgmt port.
+        ids = p.port_ids()
+        assert "Ethernet1" in ids
+        assert "Ethernet48" in ids
+        assert "Ethernet49" in ids   # first QSFP+
+        assert "Ethernet52" in ids
+        assert "Management1" in ids
+        # Ethernet49-52 are uplink kind (40G).
+        for n in (49, 50, 51, 52):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.kind == "uplink"
+            assert pt.speed == "40gig"
+        # Ethernet1-48 are physical 10G.
+        for n in (1, 24, 48):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.kind == "physical"
+            assert pt.speed == "10gig"
+        # LAG prefix is the Arista-canonical capital-C form.
+        assert p.lags.prefix == "Port-Channel"
+
+    def test_arista_dcs_7050cx3_32s(self):
+        """DCS-7050CX3-32S — 32x 100G QSFP28 leaf/spine + 2x 10G
+        admin cages.  100G-fabric shape distinct from the 7050SX's
+        10G access role."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["arista_eos/DCS-7050CX3-32S"]
+        # 32 x 100G + 2 x 10G + 1 mgmt = 35.
+        assert p.port_count == 35
+        for n in range(1, 33):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.speed == "100gig"
+            assert pt.kind == "uplink"
+
+    def test_arista_dcs_7280cr3_32p4(self):
+        """7280CR3-32P4 — spine-class with 32x 100G + 4x 400G.
+        Deep-buffer platform; 400G QSFP-DD is the distinguishing
+        feature vs the 7050 / 7060 TOR line."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["arista_eos/DCS-7280CR3-32P4"]
+        # 32 x 100G + 4 x 400G + 1 mgmt = 37.
+        assert p.port_count == 37
+        for n in range(33, 37):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.speed == "400gig"
+
+    def test_arista_dcs_7060cx_32s(self):
+        """DCS-7060CX-32S — Tomahawk-era 100G TOR (predecessor of
+        the 7050CX3 with different silicon).  32 ports uniform."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["arista_eos/DCS-7060CX-32S"]
+        assert p.port_count == 33   # 32 x 100G + 1 mgmt
+        for n in range(1, 33):
+            pt = p.lookup_port(f"Ethernet{n}")
+            assert pt is not None and pt.speed == "100gig"
+
+    # ------------------------------------------------------------------
+    # Juniper Junos target profiles (Phase 13)
+    # ------------------------------------------------------------------
+
+    def test_juniper_ex4300_48t(self):
+        """Juniper EX4300-48T — 48 x 1GbE + 4 x 10G SFP+.  Campus-
+        access workhorse with Virtual Chassis stacking capability.
+        Junos port naming: ge-0/0/N for access (1G), xe-0/2/N for
+        uplinks (10G), me0 for management."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["juniper_junos/EX4300-48T"]
+        assert p.device_class == "switch"
+        assert p.stacking == "virtual-chassis"
+        # 48 x ge + 4 x xe + 1 mgmt = 53.
+        assert p.port_count == 53
+        # Access ports are ge-0/0/0..47 (not ge-0/0/1..48; Junos is
+        # 0-indexed).
+        for n in (0, 24, 47):
+            pt = p.lookup_port(f"ge-0/0/{n}")
+            assert pt is not None and pt.speed == "gig"
+            assert pt.kind == "physical"
+        # Uplinks are xe-0/2/0..3 (uplink PIC = 2 on EX4300).
+        for n in range(4):
+            pt = p.lookup_port(f"xe-0/2/{n}")
+            assert pt is not None and pt.speed == "10gig"
+            assert pt.kind == "uplink"
+        assert p.lookup_port("me0") is not None
+        # Junos LAG prefix is `ae`.
+        assert p.lags.prefix == "ae"
+
+    def test_juniper_ex4600_40f(self):
+        """EX4600-40F — campus-aggregation / small-DC leaf: 24x 10G
+        + 4x 40G uplinks.  Grammar note: me0 is the OOBM port,
+        distinct from the em0/em1 expansion slots (which carry
+        optional 8x10G or 4x40G modules — deferred from v1)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["juniper_junos/EX4600-40F"]
+        assert p.port_count == 29   # 24 xe + 4 et + 1 mgmt
+        # 10G fixed at xe-0/0/0..23.
+        for n in (0, 12, 23):
+            pt = p.lookup_port(f"xe-0/0/{n}")
+            assert pt is not None and pt.speed == "10gig"
+        # 40G uplinks at et-0/1/0..3 (PIC 1 for the uplink bank).
+        for n in range(4):
+            pt = p.lookup_port(f"et-0/1/{n}")
+            assert pt is not None and pt.speed == "40gig"
+
+    def test_juniper_qfx5120_48y(self):
+        """QFX5120-48Y — DC leaf: 48x 25G SFP28 + 8x 100G QSFP28.
+        25G access grammar is distinct (``xle-`` prefix for
+        25GBASE-CR1)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["juniper_junos/QFX5120-48Y"]
+        assert p.port_count == 57   # 48 xle + 8 et + 1 mgmt
+        for n in (0, 24, 47):
+            pt = p.lookup_port(f"xle-0/0/{n}")
+            assert pt is not None and pt.speed == "25gig"
+        for n in range(48, 56):
+            pt = p.lookup_port(f"et-0/0/{n}")
+            assert pt is not None and pt.speed == "100gig"
 
 # ---------------------------------------------------------------------------
 # Module-variant support (schema-first Option B, milestone-1)

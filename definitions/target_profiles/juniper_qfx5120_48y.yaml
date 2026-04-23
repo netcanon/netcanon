@@ -1,0 +1,19 @@
+# Juniper QFX5120-48Y
+# 48 x 25G SFP28 + 8 x 100G QSFP28 uplinks.  DC leaf/spine
+# workhorse; common replacement for Cisco Nexus 9300-FX2 and
+# Arista 7050SX3 in EVPN-VXLAN fabrics.  Each 100G QSFP28 supports
+# 4x25G breakout (Ethernet<parent>:<lane> in Junos native form,
+# modelled as et-0/0/<N>:<M> sub-notation not exposed in v1).
+vendor: juniper_junos
+model: QFX5120-48Y
+display_name: "Juniper QFX5120-48Y (48x 25G + 8x 100G)"
+device_class: switch
+stacking: virtual-chassis
+ports:
+  - {range: "xle-0/0/0-47", kind: physical, speed: 25gig, sfp: true, notes: "25G SFP28 access"}
+  - {range: "et-0/0/48-55", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28 uplink (4x25G breakout capable)"}
+  - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM"}
+lags: {max: 128, prefix: ae}
+
+max_vlans: 4094
+max_vlans_source: "Junos 18.x+ VLAN capacity (QFX platform datasheet)"

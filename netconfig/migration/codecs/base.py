@@ -93,6 +93,7 @@ INPUT_FORMATS = frozenset({
     "cli-aruba-aoss",   # ArubaOS-Switch `show running-config` text
     "cli-fortigate",    # FortiGate CLI `config` blocks
     "cli-mikrotik",     # MikroTik `/export` text
+    "cli-junos-set",    # Junos `show configuration | display set` text
     "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
     "unknown",          # experimental adapter with no declared format
 })

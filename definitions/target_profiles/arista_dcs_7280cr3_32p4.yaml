@@ -1,0 +1,17 @@
+# Arista DCS-7280CR3-32P4
+# 32 x 100GbE QSFP28 + 4 x 400GbE QSFP-DD.  Spine-class routing
+# platform with deep buffers, common in SP + large-enterprise DCs.
+# Each 100G QSFP28 port supports 4x25G breakout; each 400G QSFP-DD
+# supports 4x100G or 8x50G breakout.
+vendor: arista_eos
+model: DCS-7280CR3-32P4
+display_name: "Arista DCS-7280CR3-32P4 (32x 100G + 4x 400G)"
+device_class: switch
+stacking: ""
+ports:
+  - {range: "Ethernet1-32", kind: uplink, speed: 100gig, sfp: true, notes: "100G QSFP28 (4x25G breakout capable)"}
+  - {range: "Ethernet33-36", kind: uplink, speed: 400gig, sfp: true, notes: "400G QSFP-DD (4x100G / 8x50G breakout capable)"}
+  - {id: "Management1", kind: mgmt, speed: gig, notes: "OOBM"}
+lags: {max: 128, prefix: Port-Channel}
+max_vlans: 4094
+max_vlans_source: "Arista EOS 4.x VLAN capacity per platform datasheet"

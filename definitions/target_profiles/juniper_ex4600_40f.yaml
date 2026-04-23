@@ -1,0 +1,21 @@
+# Juniper EX4600-40F
+# 24 x 10G SFP+ fixed + 4 x 40G QSFP+ fixed + 2 x expansion module
+# slots.  Campus-aggregation / small-DC leaf class.  The two
+# expansion slots (labelled em0 / em1 — NOT the management em0
+# confusingly) can host 8x10G SFP+ or 4x40G QSFP+ modules.
+# v1 ships the base chassis ports; expansion-slot modules deferred
+# (future commit can migrate this profile to the `modules:` schema
+# in the same shape as Cisco C9300 / Aruba 3810M).
+vendor: juniper_junos
+model: EX4600-40F
+display_name: "Juniper EX4600-40F (24x 10G + 4x 40G + 2 expansion slots)"
+device_class: switch
+stacking: virtual-chassis
+ports:
+  - {range: "xe-0/0/0-23", kind: physical, speed: 10gig, sfp: true, notes: "10G SFP+ fixed"}
+  - {range: "et-0/1/0-3", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ fixed (4x10G breakout capable)"}
+  - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM (confusingly distinct from the EX4600's em0/em1 expansion slots)"}
+lags: {max: 128, prefix: ae}
+
+max_vlans: 4094
+max_vlans_source: "Junos 18.x+ VLAN capacity (EX platform datasheet)"

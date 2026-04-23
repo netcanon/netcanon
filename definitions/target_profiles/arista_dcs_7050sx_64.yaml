@@ -1,0 +1,25 @@
+# Arista DCS-7050SX-64-CL
+# 48 x 10GbE SFP+ + 4 x 40GbE QSFP+ (break-outable to 4x10GbE).
+# Fixed-configuration TOR switch, no modular uplinks.
+# Matches the real-capture fixture at
+# tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt
+# (actually a 7150S-64 with 64 ports at 10G — the 7050SX-64 has 48
+# SFP+ + 4 QSFP+ in a similar TOR shape).  Interface naming is flat
+# Ethernet<N> with Ethernet<parent>/<lane> for QSFP breakout children.
+vendor: arista_eos
+model: DCS-7050SX-64
+display_name: "Arista DCS-7050SX-64 (48x 10G + 4x 40G)"
+device_class: switch
+stacking: ""   # Arista doesn't support traditional stacking; MLAG +
+               # EVPN are the scale-out patterns.
+ports:
+  - {range: "Ethernet1-48", kind: physical, speed: 10gig, sfp: true, notes: "10G SFP+ cage"}
+  - {range: "Ethernet49-52", kind: uplink, speed: 40gig, sfp: true, notes: "40G QSFP+ cage (4x10G breakout capable)"}
+  - {id: "Management1", kind: mgmt, speed: gig, notes: "OOBM"}
+lags: {max: 64, prefix: Port-Channel}
+
+# EOS supports up to 4094 active VLANs on modern platforms.
+# max_local_users unset — EOS allows an effectively-unbounded
+# number of usernames; fit-check banner stays hidden.
+max_vlans: 4094
+max_vlans_source: "Arista EOS 4.x VLAN capacity per platform datasheet"

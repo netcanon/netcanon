@@ -1,0 +1,22 @@
+# Juniper EX4300-48T
+# 48 x 10/100/1000BASE-T + 4 x 10G SFP+ uplinks.  Campus-access
+# workhorse — the dominant Junos fixed-form factor deployed in
+# enterprise wiring closets.  Supports Virtual Chassis (stacking
+# via dedicated VC ports on the rear of the unit, not modelled
+# here as renamable ports).
+vendor: juniper_junos
+model: EX4300-48T
+display_name: "Juniper EX4300-48T (48x 1G + 4x 10G SFP+)"
+device_class: switch
+stacking: virtual-chassis
+ports:
+  - {range: "ge-0/0/0-47", kind: physical, speed: gig, notes: "10/100/1000BASE-T"}
+  - {range: "xe-0/2/0-3", kind: uplink, speed: 10gig, sfp: true, notes: "10G SFP+ uplink cage"}
+  - {id: "me0", kind: mgmt, speed: gig, notes: "OOBM"}
+lags: {max: 128, prefix: ae}
+
+# Junos supports up to 4094 VLANs on EX platforms.
+# max_local_users unset — Junos's ``system login user`` table is
+# effectively unbounded.
+max_vlans: 4094
+max_vlans_source: "Junos 18.x+ VLAN capacity (EX platform datasheet)"

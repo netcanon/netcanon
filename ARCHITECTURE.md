@@ -571,7 +571,7 @@ that have shipped:
 
 - **Phase 0** — codec scaffold + mock adapter (`run_plan`, capability matrix)
 - **Phase 0.5** — canonical intent model + pluggable CIMs
-- **Phase 1** — 6 real codecs (Cisco NETCONF + CLI, Aruba AOS-S, OPNsense, MikroTik, FortiGate, Arista EOS)
+- **Phase 1** — 7 real codecs (Cisco NETCONF + CLI, Aruba AOS-S, OPNsense, MikroTik, FortiGate, Arista EOS, Juniper Junos parse-only)
 - **R5** — auto-detection probe
 - **R6/7** — real-capture validation harness + fixture corpus
 - **Tier 2 wire-throughs** — SNMP, LAGs, local_users, DHCP pools, RADIUS, MTU

@@ -12,10 +12,10 @@ matching `tests/unit/migration/test_<vendor>.py`.
 
 ## Shape of a codec
 
-Seven codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`,
+Eight codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`,
 `aruba_aoss`, `opnsense`, `mikrotik_routeros`, `fortigate_cli`,
-`arista_eos` (plus `_mock`).  The first one you should copy is
-whichever vendor is closest in structure to yours:
+`arista_eos`, `juniper_junos` (plus `_mock`).  The first one you
+should copy is whichever vendor is closest in structure to yours:
 
 | Wire format | Reference codec |
 |---|---|
@@ -25,6 +25,7 @@ whichever vendor is closest in structure to yours:
 | XML (config.xml dialect) | `opnsense` |
 | NETCONF XML | `cisco_iosxe` |
 | Banner + positional port lists | `aruba_aoss` |
+| Flat `set`-form command text (Junos) | `juniper_junos` |
 
 For Cisco-family dialects (EOS, NX-OS, IOS-XR), start from
 `arista_eos` rather than `cisco_iosxe_cli` — the Arista codec is

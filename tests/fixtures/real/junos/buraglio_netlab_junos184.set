@@ -1,0 +1,28 @@
+set version 18.4R1-S1.1
+set groups global system services ssh
+set system root-authentication encrypted-password "$6$oJIg7Fw3$ZPzZRNcM0xQEP2LIoAtvbbOGpOybn0Lc6hJb1a656762nfypRkUgLUuABFAcH/ICqY3io/bRpQ9ocp.UkXiSJ/"
+set system services ssh root-login allow
+set system host-name netlab-ns-junos.es.net
+set system syslog user * any emergency
+set system syslog file messages any notice
+set system syslog file messages authorization info
+set system syslog file interactive-commands interactive-commands any
+set interfaces em0 unit 0 family inet address 172.22.0.253/24
+set interfaces em0 unit 0 family iso
+set interfaces em0 unit 0 family inet6 address 2001:db8:293:b33f::fd/64
+set interfaces em0 unit 0 family mpls
+set interfaces lo0 unit 0 family inet address 100.64.0.253/32
+set interfaces lo0 unit 0 family iso address 49.0001.0010.0100.2939.00
+set interfaces lo0 unit 0 family inet6 address 2001:db8:293:1::fd/128
+set routing-options autonomous-system 65505
+set protocols bgp group bgp-te type internal
+set protocols bgp group bgp-te local-address 172.22.0.253
+set protocols bgp group bgp-te family traffic-engineering unicast
+set protocols bgp group bgp-te neighbor 172.22.0.1
+set protocols isis level 1 disable
+set protocols isis interface em0.0 disable
+set protocols isis interface em0.0 level 2 metric 100
+set protocols isis interface lo0.0 disable
+set protocols topology-export
+set protocols mpls interface em0.0
+set protocols lldp interface all

@@ -87,6 +87,11 @@ def _arista_eos_codec() -> Any:
     return AristaEOSCodec()
 
 
+def _junos_codec() -> Any:
+    from netconfig.migration.codecs.juniper_junos import JunosCodec
+    return JunosCodec()
+
+
 _VENDOR_TO_CODEC = {
     "cisco_iosxe": _cisco_iosxe_cli_codec,
     "aruba_aoss": _aruba_aoss_codec,
@@ -94,6 +99,7 @@ _VENDOR_TO_CODEC = {
     "opnsense": _opnsense_codec,
     "mikrotik": _mikrotik_codec,
     "arista_eos": _arista_eos_codec,
+    "junos": _junos_codec,
 }
 
 # (fixture_path, reason) pairs where we KNOW the file exercises a codec
@@ -132,8 +138,11 @@ def _discover_fixtures() -> list[tuple[str, Path]]:
             if path.name.startswith("."):
                 continue
             # Per-vendor native extensions.  .rsc = RouterOS export,
-            # .conf = FortiOS-style, .cfg = Aruba/IOS, .xml = OPNsense.
-            if path.suffix.lower() not in {".txt", ".cfg", ".xml", ".conf", ".rsc"}:
+            # .conf = FortiOS-style, .cfg = Aruba/IOS, .xml = OPNsense,
+            # .set = Junos set-form (``show configuration | display set``).
+            if path.suffix.lower() not in {
+                ".txt", ".cfg", ".xml", ".conf", ".rsc", ".set",
+            }:
                 continue
             out.append((codec_key, path))
     return out

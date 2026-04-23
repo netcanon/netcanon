@@ -7,6 +7,95 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Phase 13 — Juniper Junos codec v1 [parse-only] + 7 switching target profiles)
+
+- `netconfig/migration/codecs/juniper_junos/` package — first
+  hierarchical-grammar vendor in the portfolio.  v1 parses
+  ``set``-form configuration text (output of
+  ``show configuration | display set`` on Junos EX/QFX/MX/SRX).
+  Direction: parse_only — render-side Junos requires commit /
+  apply-groups / candidate-config handling that warrants a
+  dedicated follow-up commit.  Strategic use case: migration
+  FROM Junos TO Cisco / Arista / Aruba (DC refreshes, SP-to-
+  enterprise moves).
+- Supported grammar:
+  - ``set system host-name``
+  - ``set system login user <name> class <class>`` (super-user →
+    privilege 15; read-only → privilege 1)
+  - ``set system login user <name> authentication
+    encrypted-password "<hash>"`` (hash preserved under
+    ``junos:<hash>`` vendor tag)
+  - ``set interfaces <iface> unit <N> family inet address
+    <ip>/<prefix>`` (unit 0 collapsed into parent in v1;
+    unit 1+ deferred)
+  - ``set interfaces <iface> description "<desc>"`` (top-level
+    or unit-scoped)
+  - ``set interfaces <iface> disable``
+  - ``set vlans <NAME> vlan-id <N>``
+  - ``set routing-options static route <dest> next-hop <gw>``
+  - ``set snmp community <name> authorization read-only``
+  - ``set snmp location "<loc>"`` / ``set snmp contact "<c>"``
+  - ``set snmp trap-group <name> targets <ip>``
+- Parse-tolerance (silently ignored Tier-3 stanzas):
+  ``set protocols bgp`` / ``isis`` / ``ospf`` / ``mpls``,
+  ``set routing-instances``, ``set groups`` + apply-groups,
+  ``set firewall``, ``set policy-options``, block-form
+  (curly-brace) input rejected with a helpful error hinting at
+  ``| display set``.
+- Port-name identity bridge: Junos media prefixes
+  (``ge-`` / ``xe-`` / ``et-`` / ``fe-`` / ``mge-`` / ``xle-``)
+  encode speed hints; FPC/PIC/port 3-part naming maps to
+  stack/module/port; management (``em0`` / ``me0`` / ``fxp0``)
+  → kind=mgmt; ``ae<N>`` → kind=lag; ``irb.<N>`` → kind=svi.
+  Cross-vendor: Cisco ``GigabitEthernet1/0/24`` →
+  ``ge-1/0/24``; Cisco ``TenGigabitEthernet1/0/48`` →
+  ``xe-1/0/48``.
+- Real-capture fixture
+  `tests/fixtures/real/junos/buraglio_netlab_junos184.set` —
+  Junos 18.4R1-S1.1 set-form from ES.net netlab-ns demo.  28
+  lines, exercises `em0` + `lo0` with IPv4 + IPv6/ISO/MPLS
+  families + root-authentication + BGP + IS-IS + MPLS + LLDP.
+- 7 new switching target profiles (feature parity with other
+  shipped codecs):
+  - Arista: DCS-7050SX-64 (10G TOR, matches the real fixture
+    class), DCS-7050CX3-32S (100G leaf), DCS-7280CR3-32P4
+    (100G + 400G spine), DCS-7060CX-32S (Tomahawk 100G TOR).
+  - Juniper: EX4300-48T (1G campus access + VC stacking),
+    EX4600-40F (10G/40G campus aggregation), QFX5120-48Y
+    (25G/100G DC leaf).
+- Tests (+61 new):
+  - 40 unit tests in `tests/unit/migration/test_juniper_junos.py`
+    covering parse scalars / interfaces / VLANs / users / routes
+    / SNMP / validation / tolerance / probe / port-names.
+  - 7 per-profile shipped-profile lock-in tests in
+    `test_target_profile_shipped.py`.
+  - Cross-vendor port-name-translation tests: Cisco → Junos for
+    ``ge-`` and ``xe-`` media prefixes via speed-hint routing.
+  - Real-captures harness extended: new `junos` dispatch entry;
+    `.set` extension allowlist added.
+  - `max_vlans` lock-in extended for the Arista + Junos
+    families (all 7 new profiles declare 4094).
+- Docs synced per CLAUDE.md Documentation Sync Checklist:
+  - `CHANGELOG` — this entry
+  - `ARCHITECTURE.md` — codec count 6 → 7
+  - `netconfig/migration/codecs/README.md` — wire-format table
+    gains "Flat set-form command text (Junos)" row
+  - `codecs/base.py` INPUT_FORMATS — new `cli-junos-set` entry
+  - `vendors/juniper_junos.yaml` — vendor declaration
+  - `migrate.html` _VENDOR_LABELS — `juniper_junos: 'Juniper Junos'`
+  - `tests/fixtures/real/NOTICE.md` — fixture provenance
+  - `tests/fixtures/real/RESULTS.md` — new juniper_junos section
+    + summary table (30 → 31 fixtures)
+
+Strategic note on canonical-model extensibility: the Junos port-
+name bridge illustrates the ``stack+module+port`` mapping
+working for a non-Cisco hierarchical naming scheme — useful
+precedent when NX-OS / IOS-XR get added later.  Canonical gaps
+exposed that warrant follow-up: ``routing-instances`` (Junos's
+VRF equivalent with richer semantics than Cisco's ``ip vrf``),
+``groups`` / ``apply-groups`` inheritance, firewall filters,
+and per-unit sub-interface modelling.
+
 ### Added (Phase 12 — Arista EOS codec v1: 6th shipped vendor, first DC-switching-native)
 
 - `netconfig/migration/codecs/arista_eos/` package — bidirectional

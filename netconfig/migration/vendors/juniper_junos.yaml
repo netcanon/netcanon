@@ -1,0 +1,20 @@
+# Juniper Junos — 18.x+ firmware, EX / QFX / MX / SRX series.
+# Codecs: juniper_junos (show configuration | display set text,
+# parse-only in v1).
+id: juniper_junos
+display_name: "Juniper Junos"
+device_classes:
+  - switch
+  - router
+  - firewall
+default_timeout: 30
+notes: >
+  Junos is a hierarchical configuration system.  Operators commit
+  changes from a candidate config, and ``show configuration`` emits
+  the curly-brace block form by default.  The ``| display set``
+  pipe modifier produces the flat ``set``-command form consumed by
+  v1 of this codec.  Block-form parsing deferred to a follow-up
+  commit.  Primary migration direction v1: Junos → Cisco IOS-XE /
+  Arista EOS / Aruba AOS-S (data-center refreshes + SP-to-
+  enterprise moves).  Render-side Junos (migrate TO Junos) is
+  higher-complexity and deferred to a future commit.
