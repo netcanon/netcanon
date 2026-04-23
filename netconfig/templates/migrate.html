@@ -150,10 +150,53 @@
   #mig-rename-modal-body {
     flex:1; display:flex; overflow:hidden;
   }
+  /* Left rail — category navigation.  Narrow vertical list of panes
+     the operator can switch between (Ports / VLANs today; more join
+     as additional per-pane override categories land under P2C4+).
+     Stays visible regardless of the active pane so operators can
+     flip between categories without losing context. */
+  #mig-rename-rail {
+    flex:0 0 auto; width:140px; overflow-y:auto;
+    border-right:1px solid #e0e0e8;
+    background:#fafafc; padding:.4rem .25rem;
+    display:flex; flex-direction:column; gap:.2rem;
+  }
+  .mig-rename-rail-btn {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:.4rem .55rem; border:1px solid transparent;
+    background:transparent; border-radius:4px; cursor:pointer;
+    font-size:.82rem; color:#333; text-align:left;
+    font-family:inherit;
+  }
+  .mig-rename-rail-btn:hover {
+    background:#eef;
+  }
+  .mig-rename-rail-btn.active {
+    background:#1a1a2e; color:#eee; border-color:#1a1a2e;
+    font-weight:700;
+  }
+  .mig-rename-rail-btn .rail-count {
+    font-size:.68rem; font-family:monospace;
+    background:rgba(0,0,0,.08); padding:.05rem .4rem;
+    border-radius:8px; margin-left:.4rem;
+  }
+  .mig-rename-rail-btn.active .rail-count {
+    background:rgba(255,255,255,.18); color:#fff;
+  }
+  .mig-rename-rail-btn .rail-badge-warn {
+    background:#fd7e14; color:#fff; font-weight:700;
+    margin-left:.3rem; padding:.05rem .4rem; border-radius:8px;
+    font-size:.68rem; font-family:monospace;
+  }
   #mig-rename-table-pane {
     flex:1.1; overflow:auto; padding:.6rem .8rem; border-right:1px solid #e0e0e8;
     min-width:400px;
   }
+  /* Category panes live inside the table pane and swap visibility
+     when the rail button is clicked.  Only one is visible at a time
+     — rail navigation is mutually exclusive. */
+  .mig-rename-category-pane { display:none; }
+  .mig-rename-category-pane.active { display:block; }
   #mig-rename-preview-pane {
     flex:1; overflow:auto; background:#1e1e1e; padding:.6rem .8rem;
     min-width:300px;
@@ -492,16 +535,67 @@
        aria-label="Hardware fit check — source vs target port counts"></div>
 
   <div id="mig-rename-modal-body">
+    <!-- Left rail: category navigation.  Each button activates one
+         of the category panes in the centre column; the preview on
+         the right stays visible regardless of which category is
+         active.  Counts + badges surface at-a-glance how many rows
+         each category carries so the operator can prioritise. -->
+    <nav id="mig-rename-rail" data-testid="migrate-rename-rail"
+         aria-label="Rename modal categories">
+      <button type="button"
+              class="mig-rename-rail-btn active"
+              data-testid="migrate-rename-rail-ports"
+              data-category="ports"
+              onclick="showRenameCategory('ports')">
+        <span>Ports</span>
+        <span id="mig-rename-rail-ports-count" class="rail-count"
+              data-testid="migrate-rename-rail-ports-count">0</span>
+      </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-vlans"
+              data-category="vlans"
+              onclick="showRenameCategory('vlans')">
+        <span>VLANs</span>
+        <span id="mig-rename-rail-vlans-count" class="rail-count"
+              data-testid="migrate-rename-rail-vlans-count">0</span>
+      </button>
+    </nav>
+
     <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
-      <div id="mig-rename-table-empty"
-           data-testid="migrate-rename-table-empty"
-           style="display:none;color:#888;font-size:.85rem;padding:1rem">
-        No port names recognised in the translated output.
+      <!-- Ports category pane — existing rename table lives here;
+           extracted into its own wrapper so it can be hidden when
+           the VLANs pane is active. -->
+      <div id="mig-rename-ports-pane"
+           class="mig-rename-category-pane active"
+           data-testid="migrate-rename-ports-pane">
+        <div id="mig-rename-table-empty"
+             data-testid="migrate-rename-table-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No port names recognised in the translated output.
+        </div>
+        <!-- Kind sections rendered here by renderRenameTable() -->
+        <div id="mig-rename-sections"
+             data-testid="migrate-rename-sections"></div>
       </div>
-      <!-- Kind sections rendered here by renderRenameTable() -->
-      <div id="mig-rename-sections"
-           data-testid="migrate-rename-sections"></div>
+
+      <!-- VLANs category pane — VLAN-ID rewrite table.  Parallel
+           structural shape to the ports pane (empty state + sections
+           container) populated by renderVlanRenameTable() from the
+           vlan-rename-table partial. -->
+      <div id="mig-rename-vlans-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-vlans-pane">
+        <div id="mig-rename-vlans-empty"
+             data-testid="migrate-rename-vlans-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No VLANs found in the source config.
+        </div>
+        <div id="mig-rename-vlans-sections"
+             data-testid="migrate-rename-vlans-sections"></div>
+      </div>
     </div>
+
     <div id="mig-rename-preview-pane" data-testid="migrate-rename-preview-pane">
       <span class="preview-label">Target output preview</span>
       <pre id="mig-rename-preview" data-testid="migrate-rename-preview"></pre>
@@ -535,17 +629,15 @@
  * Jinja include directives; each partial shares module-scope state
  * with the rest of this IIFE):
  *
- *   _partials/classify.js     — _guessKind + _looksLikeUplink
- *                               (shared between rename table + fit-check)
- *   _partials/rename-table.js — renderRenameTable (per-kind sections,
- *                               432 LOC lifted out in commit 250b13f)
- *   _partials/rename-panel.js — renderRenamePreview + renderRenameSummary
- *                               (commit 8e8f443)
- *   _partials/fit-check.js    — renderFitCheck hardware-capacity banner
- *                               (commit 949577c)
- *   _partials/rename-apply.js — renameModalApply + drag handlers +
- *                               modal-specific DOMContentLoaded wiring
- *                               (this completes the rename-modal split)
+ *   _partials/classify.js        — _guessKind + _looksLikeUplink
+ *                                  (shared between rename table + fit-check)
+ *   _partials/rename-table.js    — renderRenameTable (per-kind sections)
+ *   _partials/vlan-rename-table.js — renderVlanRenameTable (VLAN-pane
+ *                                  rows under the left-rail nav; P2C3)
+ *   _partials/rename-panel.js    — renderRenamePreview + renderRenameSummary
+ *   _partials/fit-check.js       — renderFitCheck hardware-capacity banner
+ *   _partials/rename-apply.js    — renameModalApply + drag handlers +
+ *                                  modal-specific DOMContentLoaded wiring
  *
  * Still inline in this file (non-rename-modal): form wiring
  * (sourceSel / targetSel / submit / force checkbox / input mode),
@@ -1173,6 +1265,8 @@
   var _lastJobBody = null;           // last POST body that produced an output
   var _lastJob = null;               // last MigrationJob from the server
   var _renameUserMap = {};           // source_name -> target_name (user overrides)
+  var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
+  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
 
   // Kind ordering in the modal (drives the collapsible section order).
@@ -1370,12 +1464,60 @@
     return base.concat(modulePorts);
   }
 
+  /** Switch the active rail category.  Mutually exclusive — exactly
+   *  one category pane is visible at a time.  Preview pane stays
+   *  visible regardless so the operator can see how per-category
+   *  overrides affect the final rendered output. */
+  window.showRenameCategory = function(cat) {
+    _renameCategory = cat;
+    var portsPane = document.getElementById('mig-rename-ports-pane');
+    var vlansPane = document.getElementById('mig-rename-vlans-pane');
+    if (portsPane) portsPane.classList.toggle('active', cat === 'ports');
+    if (vlansPane) vlansPane.classList.toggle('active', cat === 'vlans');
+    document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.category === cat);
+    });
+    // Re-render the newly-visible pane so it reflects any state
+    // changes the operator made in the other category (cross-
+    // category interactions are rare but non-zero: VLAN drops can
+    // detach ports from SVIs, affecting the ports pane's dropped-
+    // VLAN detachment warnings once those ship).
+    if (cat === 'vlans' && typeof renderVlanRenameTable === 'function') {
+      renderVlanRenameTable();
+    } else if (cat === 'ports') {
+      renderRenameTable();
+    }
+  };
+
+  /** Update the rail buttons' count badges.  Called whenever the
+   *  underlying state shifts (job swap, user override, reset all).
+   *  Counts reflect "rows in this category" — for ports that's
+   *  applied + warnings; for VLANs that's source_vlans.length. */
+  function renderRenameRailCounts() {
+    if (!_lastJob) return;
+    var portsCount = document.getElementById('mig-rename-rail-ports-count');
+    var vlansCount = document.getElementById('mig-rename-rail-vlans-count');
+    if (portsCount) {
+      var applied = _lastJob.port_renames
+        ? Object.keys(_lastJob.port_renames).length : 0;
+      var warned = (_lastJob.warnings || []).filter(function(w) {
+        return /'[^']+'/.test(w);
+      }).length;
+      portsCount.textContent = String(applied + warned);
+    }
+    if (vlansCount) {
+      var v = (_lastJob.source_vlans || []).length;
+      vlansCount.textContent = String(v);
+    }
+  }
+
   /** Call from renderResult: remember the job + request body so the
    *  modal can use them, and toggle the rename-open button. */
   function captureJobForRename(body, job) {
     _lastJobBody = body;
     _lastJob = job;
     _renameUserMap = {};
+    _renameVlanUserMap = {};
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
@@ -1429,8 +1571,12 @@
       vsel.value = suggestedVendor;
     }
     populateRenameModelDropdown(vsel.value);
-    // Initial render from the current job.
+    // Initial render from the current job.  Render both category
+    // panes so rail counts are accurate before the operator clicks
+    // anything; the active-pane rule then hides the inactive one.
     renderRenameTable();
+    if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
   };
@@ -1443,7 +1589,10 @@
 
   window.renameModalResetAll = function() {
     _renameUserMap = {};
+    _renameVlanUserMap = {};
     renderRenameTable();
+    if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
     var status = document.getElementById('mig-rename-status');
@@ -1452,6 +1601,9 @@
 
   /* ── Rename-modal table renderer (extracted to _partials/rename-table.js) ── */
   {% include "_partials/rename-table.js" %}
+
+  /* ── VLAN-rename pane renderer (extracted to _partials/vlan-rename-table.js) ── */
+  {% include "_partials/vlan-rename-table.js" %}
 
   /* ── Rename-modal preview + summary (extracted to _partials/rename-panel.js) ── */
   {% include "_partials/rename-panel.js" %}

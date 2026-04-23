@@ -124,6 +124,22 @@
       if (targetCounts[t] > 1) collisions += targetCounts[t];
     });
 
+    // VLAN-category totals — parallel port stats.  Counted from
+    // the user map so the summary moves with the operator's edits
+    // BEFORE they click Apply (post-Apply, the server's job.vlan_*
+    // fields also populate).
+    var vlanOverrides = 0, vlanDrops = 0;
+    if (typeof _renameVlanUserMap === 'object' && _renameVlanUserMap) {
+      Object.keys(_renameVlanUserMap).forEach(function(k) {
+        if (_renameVlanUserMap[k] === null) vlanDrops += 1;
+        else vlanOverrides += 1;
+      });
+    }
+    // Server-side auto-applied VLAN rewrites (from a prior Apply
+    // round-trip) count toward the summary too.
+    var vlanAuto = (_lastJob && _lastJob.vlan_renames)
+      ? Object.keys(_lastJob.vlan_renames).length : 0;
+
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
     if (drops) html += ' / <span class="mig-rename-summary-drop">'
@@ -133,6 +149,18 @@
     if (collisions) html += ' / <span class="mig-rename-summary-collision">'
                           + collisions + ' collision' + (collisions > 1 ? 's' : '')
                           + '</span>';
+    // VLAN-category sub-summary — only surfaces when something
+    // VLAN-related is happening, so port-only sessions don't see
+    // extra noise.
+    if (vlanAuto || vlanOverrides || vlanDrops) {
+      html += ' &middot; <span data-testid="migrate-rename-summary-vlans">'
+        + 'VLAN: ' + vlanAuto + ' auto';
+      if (vlanOverrides) html += ' / ' + vlanOverrides + ' override'
+        + (vlanOverrides > 1 ? 's' : '');
+      if (vlanDrops) html += ' / <span class="mig-rename-summary-drop">'
+        + vlanDrops + ' drop' + (vlanDrops > 1 ? 's' : '') + '</span>';
+      html += '</span>';
+    }
     summ.innerHTML = html;
 
     // Disable Apply when collisions exist.

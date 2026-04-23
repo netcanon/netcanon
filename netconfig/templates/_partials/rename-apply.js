@@ -29,6 +29,17 @@
     if (status) status.textContent = '';
     var body = JSON.parse(JSON.stringify(_lastJobBody));
     body.port_rename_map = Object.assign({}, _renameUserMap);
+    // VLAN category — send the map ONLY when the operator has
+    // actually touched a VLAN row.  Empty-map sends are harmless
+    // (server normalises to no-op) but surface as "VLAN pane
+    // engaged" in the job response even when nothing changed,
+    // which is confusing telemetry.  Gating on non-empty keeps
+    // the response shape aligned with operator intent.
+    if (typeof _renameVlanUserMap === 'object'
+        && _renameVlanUserMap
+        && Object.keys(_renameVlanUserMap).length > 0) {
+      body.vlan_rename_map = Object.assign({}, _renameVlanUserMap);
+    }
     var profileKey = currentRenameProfileKey();
     if (profileKey) body.target_profile = profileKey;
     // Only send target_module when the profile actually has
@@ -54,6 +65,8 @@
       renderResult(newJob);
       // Re-render the modal from the refreshed job.
       renderRenameTable();
+      if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+      if (typeof renderRenameRailCounts === 'function') renderRenameRailCounts();
       renderRenamePreview();
       renderRenameSummary();
       if (status) status.textContent = 'Applied. Rendered output refreshed.';
