@@ -1,0 +1,85 @@
+!
+hostname R1
+!
+!
+interface GigabitEthernet0/0
+no ip address
+shutdown
+duplex auto
+speed auto
+media-type rj45
+!
+interface GigabitEthernet0/1
+no ip address
+duplex auto
+speed auto
+media-type rj45
+!
+interface GigabitEthernet0/1.100
+encapsulation dot1Q 100
+ip address 192.168.100.1 255.255.255.0
+!
+interface GigabitEthernet0/1.200
+encapsulation dot1Q 200
+ip address 192.168.200.1 255.255.255.0
+!
+interface GigabitEthernet0/2
+ip address 10.12.12.1 255.255.255.0
+ip ospf cost 100
+duplex auto
+speed auto
+media-type rj45
+!
+interface GigabitEthernet0/3
+ip address 10.13.13.1 255.255.255.0
+duplex auto
+speed auto
+media-type rj45
+!
+interface GigabitEthernet0/4
+ip address 10.14.14.1 255.255.255.0
+ip ospf cost 110
+duplex auto
+speed auto
+media-type rj45
+!
+router ospf 1
+router-id 1.1.1.1
+passive-interface GigabitEthernet0/1
+network 10.12.12.0 0.0.0.255 area 0
+network 10.13.13.0 0.0.0.255 area 0
+network 10.14.14.0 0.0.0.255 area 0
+network 192.168.100.0 0.0.0.255 area 0
+network 192.168.200.0 0.0.0.255 area 0
+!
+!
+banner exec ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner incoming ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+banner login ^C
+**************************************************************************
+* IOSv is strictly limited to use for evaluation, demonstration and IOS  *
+* education. IOSv is provided as-is and is not supported by Cisco's      *
+* Technical Advisory Center. Any use or disclosure, in whole or in part, *
+* of the IOSv Software or Documentation to any third party for any       *
+* purposes is expressly prohibited except as otherwise authorized by     *
+* Cisco in writing.                                                      *
+**************************************************************************^C
+!
+!
+end

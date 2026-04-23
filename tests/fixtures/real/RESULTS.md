@@ -39,6 +39,7 @@ equal trees).
 | `racc_cat8000v_iosxe179_netconf.txt` | 343 | 1 | 7 | 0 | 1 | 0 | 0 | 1 | Real `show run` from Cat8000V on **IOS-XE 17.9 LTS**.  `ip nat inside source list ... overload`, `telemetry ietf subscription` (YANG-push over grpc-tcp), app-hosting guestshell, RESTCONF + NETCONF-YANG, `username X secret 9 $9$...` type-9 hash. |
 | `user_contrib_cat9300_iosxe1712.txt` | 491 | 1 | 47 | 6 | 1 | 3 | 0 | 2 | **Real physical Cat 9300-24UX on IOS-XE 17.12** (user-contributed, sanitised).  `switch 1 provision c9300-24ux`, Gi/TenG/FortyG/TwentyFiveG/AppG + Port-channel1-3 + Vlan SVIs + Mgmt-vrf, 3 LACP EtherChannels (`channel-group N mode active`), `switchport mode trunk/access` + `switchport trunk allowed vlan <list>` + `switchport trunk native vlan`, full Cat9k `class-map system-cpp-police-*` + `policy-map system-cpp-policy` CPP grammar, 28 × `privilege exec level 5 show X` delegation, multiple `line vty` ranges. |
 | `cml_saumur_iosxe1712_pvrstp.txt` | 147 | 1 | 4 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual `ioll2-xe` on **IOS-XE 17.12**.  Uses `Ethernet0/N` IOL port notation (not physical `Gi1/0/N`) but the spanning-tree grammar is authentic: `spanning-tree mode rapid-pvst`, `spanning-tree pathcost method long`, `spanning-tree vlan 1-4094 priority 4096`, `spanning-tree link-type point-to-point`, `spanning-tree cost 2000000`.  Closes PVRST+ cost-tuning grammar coverage the Cat9300 fixture doesn't exercise. |
+| `cml_basic_forwarding_iosv_r1_ospf.txt` | 85 | 1 | 7 | 0 | 0 | 0 | 0 | 0 | Real `show run` from a CML virtual **Cisco IOSv** router node — first fixture exercising **OSPFv2 single-area multi-feature grammar** across the whole corpus: `router ospf 1` + `router-id 1.1.1.1` + `passive-interface <iface>` + 5 `network <addr> <wildcard> area 0` statements, per-interface `ip ospf cost 100` / `ip ospf cost 110` metric tuning, plus `encapsulation dot1Q <vlan>` on two subinterfaces (`GigabitEthernet0/1.100` + `.200`).  IOSv grammar is a subset of IOS-XE (no LACP, no switchport on physical routers); parse-and-ignore of the banner blocks + OSPF-protocol-network statements validates the codec's "unknown top-level stanza" tolerance. |
 
 ### Findings
 
@@ -291,6 +292,7 @@ fixture).
 | `hpe_community_2920_wb1608_dhcp_snooping.cfg` | 74 | 1 | 0 | 9 | 2 | 1 | 0 | 1 | Real 2920 `show running-config` on **WB.16.08.0001** — different switch family (2920 = J9729A vs 2930F/5406R) and major OS branch (WB vs WC).  Exercises `dhcp-snooping` with 13 authorized-servers, `ntp unicast` with public peer, `web-management ssl`, `ip authorized-managers`, `snmp-server host ... trap-level critical`. |
 | `hpe_community_2930f_wc1610_dhcp_server.cfg` | 58 | 1 | 0 | 4 | 4 | 1 | 0 | 1 | Real 2930F `show running-config` on **WC.16.10.0005**.  `dhcp-server pool` grammar (3 pools with default-router + dns-server + network + range), per-VLAN `dhcp-server` enable flag, `allow-unsupported-transceiver`. |
 | `user_contrib_2930m_wc1611.cfg` | 56 | 1 | 0 | 0 | 3 | 0 | 0 | 1 | **Real 2930M stack on WC.16.11.0025** (user-contributed, sanitised).  First fixture covering the 16.11 LTS branch.  Stacked-switch family: `JL323A` member + `JL083A` flexible-module uplinks, stack-aware port syntax (`1/1-1/47,1/A1-1/A4`), `stacking` stanza with priority + flexible-module type, `oobm` per-member IP config, `include-credentials` with `password manager sha1`, SNMPv3 engineid.  Password hash sanitised to obviously-fake `deadbeef…dead`.  `interfaces` = 0 because the config has no per-port overrides (bare config — all port behaviour inherits from VLAN membership). |
+| `hpe_community_5406rzl2_kb1515.cfg` | 30 | 1 | 0 | 3 | 0 | 0 | 1 | 0 | **Real 5406Rzl2 (J9850A) modular-chassis on KB.15.15.0008** (HPE Community forum share).  First fixture on the **KB software branch** (distinct from WC/WB already covered) and first fixture on the **modular-chassis class** (5400R series vs the 2920/2930F/2930M desktop/stackable boxes).  Exercises `module A type j9534a` + `module B type j9537a` line-card declarations, letter-slot-port ranges (`A1-A24`, `B1-B24`, comma-joined forms like `A2-A6,A8-A10,A12-A24`), `oobm` with `no ip address`, `ip helper-address` on multiple VLANs, inter-VLAN L3 with `ip routing`.  `interfaces` = 0 because the bare config has no per-port overrides (all port behaviour inherits from VLAN membership, same pattern as the 2930M fixture above). |
 
 ### Findings
 
@@ -414,12 +416,12 @@ designed to catch.
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
-| **cisco_iosxe_cli** | **11** (6 grammar-test + 5 real) | **4 LTS** (16.9 + 17.3 + 17.9 + 17.12) | 1 (LAG member dedup) | **certified** ✅ | — |
+| **cisco_iosxe_cli** | **12** (6 grammar-test + 6 real) | **4 LTS + IOSv 15.x** (16.9 + 17.3 + 17.9 + 17.12 + IOSv) | 1 (LAG member dedup) | **certified** ✅ | — |
 | **opnsense** | **4** (3 upstream + 1 real user-deployed) | 2 sources | 1 (render dropped VLANs) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
-| **aruba_aoss** | **5** (4 real + 1 rendered) | **4** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **TOTAL** | **26** | — | **10** | — | — |
+| **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
+| **TOTAL** | **28** | — | **10** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our
