@@ -24,3 +24,10 @@ stacking: ""
 ports:
   - {range: "vtnet0-3", kind: physical, speed: 10gig, notes: "VirtIO paravirtual (reports 10G)"}
 lags: {max: 8, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  max_local_users
+# intentionally unset \u2014 the OPNsense codec doesn't yet round-trip
+# <system><user> blocks, so the local-users pane surfaces a compat
+# banner (codec.unsupported_rename_categories) rather than a fit-check.
+max_vlans: 4094

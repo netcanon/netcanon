@@ -28,3 +28,8 @@ ports:
 # the name) — no vendor-native prefix.  Leave prefix empty to signal
 # "free-form LAG name" to the UI; max lifted from FortiOS 7.x limits.
 lags: {max: 16, prefix: ""}
+# Per Fortinet's FortiOS 7.x "Maximum Values Table", FG-100E supports
+# up to 1024 VLANs across all VDOMs — the mid-range bump over the
+# 40F/60F's 512 cap.  max_local_users intentionally unset — see
+# fortigate_40f.yaml for rationale.
+max_vlans: 1024

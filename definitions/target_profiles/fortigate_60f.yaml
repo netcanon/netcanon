@@ -30,3 +30,8 @@ ports:
   - {id: "b", kind: physical, speed: gig, notes: "FortiLink default"}
   - {id: "dmz", kind: physical, speed: gig}
 lags: {max: 8, prefix: ""}
+# Per Fortinet's FortiOS 7.x "Maximum Values Table", FG-60F supports
+# up to 512 VLANs across all VDOMs.  max_local_users intentionally
+# unset \u2014 see fortigate_40f.yaml for rationale (codec round-trip
+# gap + compat banner).
+max_vlans: 512

@@ -29,3 +29,10 @@ ports:
   - {range: "igb0-2", kind: physical, speed: gig, notes: "Intel I210/I211 copper GbE"}
   - {range: "ax0-1", kind: uplink, speed: 10gig, sfp: true, notes: "AMD XGMAC SFP+ (EPYC 3201 integrated)"}
 lags: {max: 5, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  max_local_users
+# intentionally unset \u2014 the OPNsense codec doesn't yet round-trip
+# <system><user> blocks, so the local-users pane surfaces a compat
+# banner (codec.unsupported_rename_categories) rather than a fit-check.
+max_vlans: 4094

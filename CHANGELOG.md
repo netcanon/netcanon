@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (data enrichment — soft-limit `max_vlans` populated across MikroTik / OPNsense / FortiGate)
+
+- Every shipped target profile now declares `max_vlans` so the
+  VLAN-pane fit-check banner renders something for every
+  selectable target.  New per-vendor distribution:
+    - MikroTik RouterOS (2 profiles): 4094 — 802.1Q protocol
+      ceiling supported universally on modern RouterOS.
+    - OPNsense (24 profiles): 4094 — FreeBSD netgraph VLANs,
+      protocol ceiling is the only hard limit.
+    - FortiGate: 40F = 512, 60F = 512, 100E = 1024 (from
+      Fortinet's FortiOS 7.x "Maximum Values Table").
+  Aruba + Cisco values from prior commit unchanged.
+- `max_local_users` intentionally STAYS unset on MikroTik /
+  OPNsense / FortiGate profiles:
+    - MikroTik: software-unbounded, no meaningful fit-check.
+    - OPNsense / FortiGate: codecs don't yet round-trip
+      CanonicalLocalUser, so the local-users pane surfaces a
+      compat banner (see Item 1B) instead — setting the fit-check
+      limit would visually overlap with that banner and confuse
+      operators.
+- New shipped-profile lock-in tests (3 cases) guard against
+  silent drift: every profile declares `max_vlans`, distinct
+  values match the documented per-vendor rationale, and
+  `max_local_users` stays unset on the three soft-limit vendor
+  families.
+
 ### Added (per-pane capacity fit-check banners — `TargetProfile.max_vlans` + `max_local_users`)
 
 - Two new optional fields on `TargetProfile`:

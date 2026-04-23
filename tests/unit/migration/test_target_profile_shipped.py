@@ -157,6 +157,98 @@ class TestRealProfilesShipped:
                 f"empty; update YAML or remove from allowlist"
             )
 
+    def test_every_shipped_profile_declares_max_vlans(self):
+        """Data-enrichment lock-in: every shipped profile must declare
+        ``max_vlans`` so the VLAN pane's fit-check banner renders
+        something for every selectable target.  Profiles that omit the
+        field fall through to the "no limit declared = banner hidden"
+        branch, producing a worse operator experience than picking a
+        conservative ceiling.  If a new profile ships without one,
+        this test flags it at review time."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        missing = [
+            key for key, p in profiles.items() if p.max_vlans is None
+        ]
+        assert missing == [], (
+            f"profiles without max_vlans: {missing}.  Populate with a "
+            f"datasheet-backed value (or the protocol ceiling 4094 for "
+            f"software-VLAN devices) before committing."
+        )
+
+    def test_shipped_max_vlans_values_lock(self):
+        """Lock in the per-vendor distribution so accidental drift
+        (e.g. bulk-set everyone to 4094 when they shouldn't be) shows
+        up at review.  Values rationale:
+          * Aruba 2930F family: 2048 (AOS-S 16.11 datasheet)
+          * Aruba 3810M / 6300M / Cisco C9x00: 4094 (protocol ceiling,
+            device enforces at full range)
+          * MikroTik / OPNsense (all): 4094 (protocol ceiling)
+          * FortiGate 40F / 60F: 512 (FortiOS 7.x Max Values Table)
+          * FortiGate 100E: 1024 (ditto)
+        """
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        # Aruba 2930F family — lower cap.
+        for key in (
+            "aruba_aoss/2930F-24G",
+            "aruba_aoss/2930F-24G-PoEP",
+            "aruba_aoss/2930F-48G",
+            "aruba_aoss/2930F-48G-PoEP",
+        ):
+            assert profiles[key].max_vlans == 2048, key
+        # Aruba 3810M / 6300M — full protocol range.
+        for key in (
+            "aruba_aoss/3810M-24G-PoEP",
+            "aruba_aoss/3810M-48G-PoEP",
+            "aruba_aoss/6300M-48G-PoE4-SFP56",
+        ):
+            assert profiles[key].max_vlans == 4094, key
+        # FortiGate model-specific.
+        assert profiles["fortigate/40F"].max_vlans == 512
+        assert profiles["fortigate/60F"].max_vlans == 512
+        assert profiles["fortigate/100E"].max_vlans == 1024
+        # MikroTik universal.
+        assert profiles["mikrotik_routeros/CRS310-8G+2S+"].max_vlans == 4094
+        assert profiles["mikrotik_routeros/CCR2004-1G-12S+2XS"].max_vlans == 4094
+        # Cisco C9300 family uniformly 4094.
+        for key, p in profiles.items():
+            if key.startswith("cisco_iosxe/C9300-"):
+                assert p.max_vlans == 4094, key
+        # Every OPNsense profile ships 4094.
+        opnsense_profiles = {k: p for k, p in profiles.items()
+                             if k.startswith("opnsense/")}
+        assert len(opnsense_profiles) >= 16  # at least what we shipped
+        for key, p in opnsense_profiles.items():
+            assert p.max_vlans == 4094, key
+
+    def test_max_local_users_unset_on_soft_limit_vendors(self):
+        """Contract lock-in: MikroTik / OPNsense / FortiGate profiles
+        intentionally leave ``max_local_users`` unset.
+          * MikroTik: RouterOS is software-unbounded — a fit-check
+            banner would be noise.
+          * OPNsense / FortiGate: their codecs don't round-trip
+            CanonicalLocalUser yet, so the local-users pane shows a
+            compatibility banner (from codec.unsupported_rename_categories)
+            rather than a fit-check.  Setting max_local_users here
+            would overlap with the compat banner and confuse the
+            operator.
+        Aruba AOS-S / Cisco IOS-XE profiles DO declare
+        ``max_local_users`` where the datasheet numbers are reliable
+        (AOS-S 16.11 = 16-64; Cisco intentionally unset because the
+        IOS-XE limit is functionally unbounded)."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        for key, p in profiles.items():
+            if key.startswith((
+                "mikrotik_routeros/",
+                "opnsense/",
+                "fortigate/",
+            )):
+                assert p.max_local_users is None, (
+                    f"{key} unexpectedly declares max_local_users="
+                    f"{p.max_local_users!r}; the compat-banner + "
+                    f"software-unbounded rationale in shipped YAMLs "
+                    f"says this should stay unset"
+                )
+
     @pytest.mark.parametrize(
         "model,chassis_access,chassis_total,upoe",
         [

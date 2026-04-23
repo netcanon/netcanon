@@ -404,11 +404,27 @@ fit-check: no profile selected = no banner; no limit on a profile
 
 Values should come from vendor datasheets and be hedged
 conservatively — silently-wrong limits are worse than missing
-ones because they let bad migrations look safe.  Well-known
-numbers (Aruba 2930F max_vlans = 2048, Cisco IOS-XE max_vlans =
-4094) are populated in the shipped profile YAMLs; softer numbers
-(MikroTik, OPNsense, FortiGate user limits) are intentionally
-left unset.
+ones because they let bad migrations look safe.  Every shipped
+profile currently declares `max_vlans`; per-vendor rationale:
+
+* Aruba 2930F family — 2048 (AOS-S 16.11 datasheet).
+* Aruba 3810M / 6300M + Cisco C9300 / C9500 — 4094 (enforced
+  protocol ceiling).
+* MikroTik RouterOS + OPNsense — 4094 (protocol ceiling;
+  software-VLAN stacks have no hardware cap).
+* FortiGate 40F / 60F — 512; 100E — 1024 (FortiOS 7.x
+  "Maximum Values Table").
+
+`max_local_users` is declared only where the datasheet number is
+small enough to matter and the codec actually round-trips users
+(Aruba 2930F family = 16; 6300M = 64).  OPNsense + FortiGate
+profiles leave it unset because their codecs list `local_users`
+in `unsupported_rename_categories` — the compatibility banner
+handles that UX.  MikroTik leaves it unset because RouterOS's
+user count is software-unbounded.  Shipped-profile lock-in tests
+in
+[`tests/unit/migration/test_target_profile_shipped.py`](tests/unit/migration/test_target_profile_shipped.py)
+guard against drift on both fields.
 
 ### Relationship to backup-side device definitions
 

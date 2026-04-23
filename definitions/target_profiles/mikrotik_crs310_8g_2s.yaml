@@ -17,3 +17,9 @@ ports:
   - {range: "ether1-8", kind: physical, speed: 2.5gig, poe: true}
   - {range: "sfp-sfpplus1-2", kind: uplink, speed: 10gig, sfp: true}
 lags: {max: 16, prefix: bond}
+
+# RouterOS 7.x supports the full 802.1Q range (1-4094) on every
+# modern MikroTik; switch chips expose the same ceiling via sw-VLANs.
+# max_local_users left unset \u2014 RouterOS user count is software-
+# unbounded and not a useful fit-check signal.
+max_vlans: 4094

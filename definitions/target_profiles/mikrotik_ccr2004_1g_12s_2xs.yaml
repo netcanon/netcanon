@@ -24,3 +24,9 @@ ports:
   - {id: "sfp28-1", kind: uplink, speed: 25gig, sfp: true, notes: "SFP28 cage"}
   - {id: "sfp28-2", kind: uplink, speed: 25gig, sfp: true, notes: "SFP28 cage"}
 lags: {max: 16, prefix: bond}
+
+# RouterOS 7.x supports the full 802.1Q range (1-4094) on every
+# modern MikroTik; switch chips expose the same ceiling via sw-VLANs.
+# max_local_users left unset \u2014 RouterOS user count is software-
+# unbounded and not a useful fit-check signal.
+max_vlans: 4094
