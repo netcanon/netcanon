@@ -532,6 +532,199 @@ interface GigabitEthernet1/0/1
         assert body["port_renames"] == {}
 
 
+class TestPlanLocalUsersEndpoint:
+    """``POST /api/v1/migration/plan/local_users`` — third per-pane
+    override endpoint (P2C4).  Exercises the ``local_user_rename_map``
+    surface end-to-end through the integration stack."""
+
+    _IOSXE_WITH_USERS = """\
+hostname TestCisco
+!
+username admin privilege 15 secret 5 $1$abc$fake
+username operator privilege 5 secret 5 $1$def$fake
+username svc-backup-2019 privilege 1 secret 5 $1$ghi$fake
+!
+interface GigabitEthernet1/0/1
+ description uplink
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # Source-shape capture still reflects the pre-rename tree.
+        assert "admin" in body["source_local_users"]
+
+    def test_drop_appears_in_local_user_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"svc-backup-2019": None},
+            },
+        )
+        assert resp.status_code == 200
+        assert "svc-backup-2019" in resp.json()["local_user_drops"]
+
+    def test_422_for_unknown_source_codec(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "not_an_adapter",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_ignores_port_and_vlan_maps(self, client):
+        """Per-pane endpoints apply their category only."""
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_USERS,
+                "local_user_rename_map": {"admin": "netadmin"},
+                "port_rename_map": {
+                    "GigabitEthernet1/0/1": "GigabitEthernet99",
+                },
+                "vlan_rename_map": {10: 100},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # Neither port nor VLAN maps engaged.
+        assert body["port_renames"] == {}
+        assert body["vlan_renames"] == {}
+
+
+class TestPlanMultiCategoryRouting:
+    """The top-level POST /plan endpoint accepts any combination of
+    per-category maps and engages the rename-aware pipeline when any
+    is present.  Locks in the P2C4 fix that previously saw VLAN +
+    local-user maps silently dropped unless port_rename_map was also
+    set."""
+
+    _IOSXE = """\
+hostname MultiTest
+!
+vlan 10
+ name USERS
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+
+    def test_plan_with_only_vlan_map_engages_vlan_transform(self, client):
+        """Pre-P2C4 bug: /plan with only vlan_rename_map silently
+        used run_plan (no overrides).  Fixed: vlan_renames populates."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "vlan_rename_map": {10: 200},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        renames = body["vlan_renames"]
+        assert ("10" in renames and renames["10"] == 200) or (
+            10 in renames and renames[10] == 200
+        )
+
+    def test_plan_with_only_local_user_map_engages_user_transform(
+        self, client,
+    ):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+
+    def test_plan_with_all_three_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # VLAN rewrite applied.
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+        # Local-user rewrite applied.
+        assert body["local_user_renames"] == {"admin": "netadmin"}
+        # Port overrides empty-map means auto-heuristic only — no
+        # user overrides applied, but source_vlans still populates.
+        assert "source_vlans" in body
+
+    def test_plan_without_any_override_still_works(self, client):
+        """Legacy behaviour: no override maps, no target profile →
+        plain run_plan path.  Source-shape fields stay empty because
+        the capture only fires in the overrides engine."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # No overrides → empty renames.
+        assert body["port_renames"] == {}
+        assert body["vlan_renames"] == {}
+        assert body["local_user_renames"] == {}
+
+
 class TestSourceShapeCapture:
     """P2C3 M1 exposed source_vlans + source_hostname on the job so
     the rename-modal VLAN pane can enumerate source VLANs and scope
@@ -631,6 +824,47 @@ interface GigabitEthernet1/0/1
         # vlan_renames map shows 10 → 100.
         assert 10 in body["source_vlans"]
         assert sorted(body["source_vlans"]) == [10, 20, 99]
+
+    def test_source_local_users_populated(self, client):
+        """P2C4 extends the capture to include local_users names."""
+        cfg_with_users = (
+            "hostname CoreSw01\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n"
+            "username backup privilege 1 secret 5 $1$def$fake\n"
+            "!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg_with_users,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert sorted(body["source_local_users"]) == ["admin", "backup"]
+
+    def test_source_local_users_captured_before_rename(self, client):
+        """Same pre-mutation contract as source_vlans — the UI pane
+        should see 'admin' even after a rename rewrites it."""
+        cfg = (
+            "hostname CoreSw01\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n!\n"
+        )
+        resp = client.post(
+            "/api/v1/migration/plan/local_users",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": cfg,
+                "local_user_rename_map": {"admin": "netadmin"},
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "admin" in body["source_local_users"]
+        assert body["local_user_renames"] == {"admin": "netadmin"}
 
 
 class TestRenderEndpoint:

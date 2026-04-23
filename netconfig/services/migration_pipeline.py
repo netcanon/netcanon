@@ -147,6 +147,7 @@ def run_plan_with_overrides(
     raw_text: str,
     port_rename_map: dict[str, str | None] | None = None,
     vlan_rename_map: dict[int, int | None] | None = None,
+    local_user_rename_map: dict[str, str | None] | None = None,
     transforms: list[TransformCallable] | None = None,
     transform_specs: list[TransformSpec] | None = None,
     force: bool = False,
@@ -168,10 +169,12 @@ def run_plan_with_overrides(
         :func:`netconfig.migration.canonical.port_names.build_port_rename_transform`.
       * ``vlan_rename_map`` — see
         :func:`netconfig.migration.canonical.vlan_names.build_vlan_rename_transform`.
+      * ``local_user_rename_map`` — see
+        :func:`netconfig.migration.canonical.local_user_names.build_local_user_rename_transform`.
 
     Planned future-commit categories:
-      * ``local_user_rename_map`` — username mapping (P2C5+)
       * ``snmp_override_map`` — community / trap-host mapping (P2C5+)
+      * ``radius_override_map`` — host / key mapping (P2C5+)
 
     Cross-device-class guard + validate stage are unchanged from
     :func:`run_plan`; this function composes the override transforms
@@ -200,6 +203,11 @@ def run_plan_with_overrides(
             the VLAN entirely + detach every referring interface.
             Collisions (two source IDs → same target ID) trigger
             merge-by-union of port memberships.
+        local_user_rename_map: Optional source_name → target_name
+            override map for :class:`CanonicalLocalUser.name`.
+            Same None-vs-{} sentinel semantics.  ``None`` values
+            drop the user entirely.  Collisions merge on highest
+            privilege_level + first-wins role + first-wins hash.
         transforms: Additional transforms applied AFTER all override
             transforms.
         transform_specs: Serialisable transform record.
@@ -213,31 +221,43 @@ def run_plan_with_overrides(
             ``port_rename_map is not None``.
           * ``vlan_renames`` / ``vlan_drops`` / ``warnings`` when
             ``vlan_rename_map is not None``.
+          * ``local_user_renames`` / ``local_user_drops`` /
+            ``warnings`` when ``local_user_rename_map is not None``.
 
-        Capture-only fields always populate (both are needed by
+        Capture-only fields always populate (all are needed by
         the Tier-3 rename modal even when no overrides engaged):
           * ``source_vlans`` — VLAN IDs as parsed from source
             config, before any rewrites.
+          * ``source_local_users`` — local-user names as parsed
+            from source config, before any rewrites.
           * ``source_hostname`` — canonical hostname, feeds the
             modal's localStorage ack key.
     """
     # Lazy imports to avoid circular dependency at module import time
     # (these modules import CodecBase; this module imports CodecBase).
+    from ..migration.canonical.local_user_names import (
+        build_local_user_rename_transform,
+    )
     from ..migration.canonical.port_names import build_port_rename_transform
     from ..migration.canonical.vlan_names import build_vlan_rename_transform
 
     override_transforms: list[TransformCallable] = []
     rename_result = None
     vlan_result = None
+    local_user_result = None
 
     # Capture-first transform — snapshots the post-parse canonical
-    # tree's VLAN IDs + hostname for the UI's rename modal BEFORE
-    # any user overrides rewrite them.  The result flows back onto
-    # the job via ``source_vlans`` / ``source_hostname`` so the
-    # VLAN-rename pane can enumerate every id the operator could
+    # tree's VLAN IDs + local-user names + hostname for the UI's
+    # rename modal BEFORE any user overrides rewrite them.  The
+    # result flows back onto the job via source_* fields so each
+    # rename pane can enumerate every entity the operator could
     # rewrite/drop, and so localStorage persistence keys stay
     # stable across page reloads.
-    captured: dict[str, Any] = {"vlan_ids": [], "hostname": ""}
+    captured: dict[str, Any] = {
+        "vlan_ids": [],
+        "local_user_names": [],
+        "hostname": "",
+    }
 
     def _capture_source_shape(tree: Any) -> Any:
         # Duck-typed access — mock adapters produce plain dicts that
@@ -246,6 +266,13 @@ def run_plan_with_overrides(
         vlans = getattr(tree, "vlans", None) or []
         captured["vlan_ids"] = [getattr(v, "id", None) for v in vlans]
         captured["vlan_ids"] = [i for i in captured["vlan_ids"] if i is not None]
+        users = getattr(tree, "local_users", None) or []
+        captured["local_user_names"] = [
+            getattr(u, "name", "") for u in users
+        ]
+        captured["local_user_names"] = [
+            n for n in captured["local_user_names"] if n
+        ]
         captured["hostname"] = getattr(tree, "hostname", "") or ""
         return tree
 
@@ -268,6 +295,19 @@ def run_plan_with_overrides(
             rename_map=vlan_rename_map
         )
         override_transforms.append(vlan_transform)
+
+    # Local-user-rename category.  Same None-vs-dict sentinel.
+    # Ordering is independent of ports/VLANs — usernames don't
+    # reference either — so this can run at any point.  Placing
+    # it last in the override chain keeps the ordering invariant
+    # documented in the docstring stable (ports → vlans → users).
+    if local_user_rename_map is not None:
+        local_user_transform, local_user_result = (
+            build_local_user_rename_transform(
+                rename_map=local_user_rename_map,
+            )
+        )
+        override_transforms.append(local_user_transform)
 
     combined_transforms = override_transforms + list(transforms or [])
 
@@ -302,10 +342,19 @@ def run_plan_with_overrides(
         if vlan_result.dropped:
             job.vlan_drops = list(vlan_result.dropped)
 
+    if local_user_result is not None:
+        if local_user_result.applied:
+            job.local_user_renames = dict(local_user_result.applied)
+        if local_user_result.warnings:
+            job.warnings.extend(local_user_result.warnings)
+        if local_user_result.dropped:
+            job.local_user_drops = list(local_user_result.dropped)
+
     # Source-shape fields — ALWAYS populated when the capture ran
-    # (which it did, unconditionally).  Empty vlan list is fine —
-    # the UI handles that by hiding the VLAN pane's empty state.
+    # (which it did, unconditionally).  Empty lists are fine —
+    # the UI handles that by showing each pane's empty state.
     job.source_vlans = list(captured.get("vlan_ids", []))
+    job.source_local_users = list(captured.get("local_user_names", []))
     job.source_hostname = captured.get("hostname", "") or ""
 
     return job

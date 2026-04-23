@@ -402,6 +402,28 @@ class MigrationJob(BaseModel):
     #: config didn't declare a hostname.
     source_hostname: str = ""
 
+    #: Source→target local-user-name rewrites applied during
+    #: :func:`run_plan_with_overrides` when the caller supplied a
+    #: ``local_user_rename_map``.  Third per-pane category after
+    #: ``port_renames`` + ``vlan_renames``.  Keys are source
+    #: usernames; values are target usernames.  Unchanged names
+    #: are not included — only actual rewrites.
+    local_user_renames: dict[str, str] = Field(default_factory=dict)
+
+    #: Local-user names the operator explicitly marked "don't
+    #: render" via ``None`` values in the rename map.  The
+    #: ``CanonicalLocalUser`` entry was removed from
+    #: ``intent.local_users`` before render.
+    local_user_drops: list[str] = Field(default_factory=list)
+
+    #: Source-tree local-user names captured post-parse, pre-
+    #: transform.  Lets the Tier-3 rename modal's local-users pane
+    #: enumerate every user the operator could rename or drop —
+    #: parallel to ``source_vlans`` for the VLAN pane.  Populated
+    #: by :func:`run_plan_with_overrides` via the same capture
+    #: transform.  Empty on legacy :func:`run_plan` calls.
+    source_local_users: list[str] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
@@ -473,6 +495,29 @@ class MigrationPlanRequest(BaseModel):
     tells the rename modal which of the module's uplink port-ids to
     offer in the target-name dropdown.  Advisory only (mirrors
     ``target_profile`` semantics — does not affect rendering)."""
+
+    local_user_rename_map: dict[str, str | None] | None = None
+    """Optional source-username → target-username override map.
+    Third per-pane surface after :attr:`port_rename_map` and
+    :attr:`vlan_rename_map`.
+
+    Entry value semantics:
+
+    * ``str`` — rewrite the user's ``name`` across the canonical
+      tree.
+    * ``None`` — DROP the user entirely from
+      :attr:`CanonicalIntent.local_users`.
+    * key NOT in map — user passes through unchanged.
+
+    Collision semantics (two source names mapped to the same
+    target, or a target name that already exists): merge into a
+    single user with the higher ``privilege_level``, the first
+    non-empty ``role``, and the first ``hashed_password``.
+
+    Backwards-compatible: callers that don't set this get the
+    legacy behaviour (usernames unchanged).  Callers that set it
+    to ``{}`` opt into the rename-aware pipeline with no
+    explicit overrides."""
 
     vlan_rename_map: dict[int, int | None] | None = None
     """Optional VLAN ID → target VLAN ID override map.  Parallel

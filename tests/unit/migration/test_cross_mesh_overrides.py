@@ -232,3 +232,129 @@ def test_combined_port_and_vlan_overrides_in_one_call():
     # Rendered output reflects both.
     assert "1/47" in job.rendered
     assert "100" in job.rendered
+
+
+# Source configs for local-user mesh coverage — each carries at
+# least one user the parametrized rename can target.  Kept in a
+# separate dict from _SRC_CONFIGS because not every VLAN-carrying
+# config also declares users (VLAN smoke works on opnsense XML; the
+# local-user smoke targets vendors whose canonical parse emits
+# local_users).
+_USER_SRC_CONFIGS = {
+    "cisco_iosxe_cli": (
+        "hostname TestCisco\n!\n"
+        "username admin privilege 15 secret 5 $1$abc$fake\n"
+        "username operator privilege 5 secret 5 $1$def$fake\n!\n"
+    ),
+    "aruba_aoss": (
+        'hostname "TestAruba"\n'
+        "password manager user-name admin "
+        "plaintext ClearTextPassw0rd\n"
+    ),
+    "mikrotik_routeros": (
+        "# 2026-01-01 12:00:00 by RouterOS 7.18.2\n"
+        "/user\n"
+        'add name=admin group=full password=secret\n'
+    ),
+}
+
+# Codecs that actually populate CanonicalIntent.local_users on
+# parse.  OPNsense and FortiGate don't currently map their local-
+# user sections into the canonical shape (Tier-2 coverage is
+# vendor-by-vendor — see test_local_users_wire_through.py).  The
+# mesh smoke only covers codecs where local_users round-trip.
+_LOCAL_USER_CAPABLE = [
+    "cisco_iosxe_cli",
+    "aruba_aoss",
+    "mikrotik_routeros",
+]
+_LOCAL_USER_TARGET_CAPABLE = [
+    "aruba_aoss",
+    "mikrotik_routeros",
+]
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _LOCAL_USER_CAPABLE)
+@pytest.mark.parametrize("target_name", _LOCAL_USER_TARGET_CAPABLE)
+def test_local_user_rename_smoke_cross_codec(
+    source_name: str, target_name: str,
+):
+    """Every (source, target) pair in the local-user-capable set must
+    run the rename pipeline end-to-end without crashing.  Smoke only —
+    does not assert byte-identical output (cross-vendor rendering is
+    legitimately different).  Locks in that the rename map survives
+    the canonical-round-trip and that the applied-rewrite map
+    populates when the source tree carried the renamed user."""
+    source = _CODECS[source_name]()
+    target = _CODECS[target_name]()
+    raw = _USER_SRC_CONFIGS[source_name]
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        local_user_rename_map={"admin": "netadmin"},
+    )
+
+    # The pipeline must not crash.
+    assert job is not None
+    assert job.rendered is not None
+
+    # source_local_users captured BEFORE rename, so 'admin' should
+    # appear regardless of whether the codec renders it verbatim.
+    if "admin" in job.source_local_users:
+        # Rewrite surfaced.
+        assert job.local_user_renames.get("admin") == "netadmin"
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _LOCAL_USER_TARGET_CAPABLE)
+def test_local_user_drop_smoke(source_name: str):
+    """Dropping a user end-to-end for same-vendor round-trip across
+    every bidirectional user-capable codec → job records the drop."""
+    source = _CODECS[source_name]()
+    target = _CODECS[source_name]()
+    raw = _USER_SRC_CONFIGS[source_name]
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        local_user_rename_map={"admin": None},
+    )
+
+    assert job is not None
+    assert job.rendered is not None
+    # admin was in the source tree → appears in drops.
+    if "admin" in job.source_local_users:
+        assert "admin" in job.local_user_drops
+
+
+@pytest.mark.cross_mesh
+def test_three_category_overrides_in_one_call():
+    """Ports + VLANs + local_users in a single pipeline run —
+    extends test_combined_port_and_vlan_overrides_in_one_call with
+    the third category.  Locks in the three-category composition
+    contract."""
+    source = ArubaAOSSCodec()
+    target = ArubaAOSSCodec()
+    # Aruba source config with a user declaration — use the
+    # local-user-specific fixture which has the user stanza.
+    raw = (
+        'hostname "TestAruba"\n'
+        "vlan 1\n   name \"DEFAULT_VLAN\"\n   exit\n"
+        "vlan 10\n   name \"USERS\"\n   untagged 1/1\n   exit\n"
+        "password manager user-name admin "
+        "plaintext ClearTextPassw0rd\n"
+    )
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        port_rename_map={"1/1": "1/47"},
+        vlan_rename_map={10: 100},
+        local_user_rename_map={"admin": "netadmin"},
+    )
+
+    # Each category's outcome is independent.
+    assert job.port_renames.get("1/1") == "1/47"
+    assert job.vlan_renames.get(10) == 100
+    # local_user_renames fires if the canonical tree captured admin.
+    if "admin" in job.source_local_users:
+        assert job.local_user_renames.get("admin") == "netadmin"

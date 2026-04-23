@@ -14,9 +14,10 @@ Translation pipeline entries:
     POST /api/v1/migration/plan
         → everything-at-once entry.  Accepts a MigrationPlanRequest
           with any combination of per-category override maps
-          (``port_rename_map``, ``vlan_rename_map``); engages the
-          rename-aware pipeline when either is present or when a
-          target_profile is selected.
+          (``port_rename_map``, ``vlan_rename_map``,
+          ``local_user_rename_map``); engages the rename-aware
+          pipeline when any is present or when a target_profile is
+          selected.
 
     POST /api/v1/migration/plan/ports
         → per-pane override endpoint for port-name rewrites
@@ -29,6 +30,13 @@ Translation pipeline entries:
           with only vlan_rename_map engaged.  Drop via None value +
           collision merge-by-union.  See the endpoint's own
           docstring for full semantics.
+
+    POST /api/v1/migration/plan/local_users
+        → per-pane override endpoint for local-user name rewrites
+          (introduced P2C4).  Dispatches to run_plan_with_overrides
+          with only local_user_rename_map engaged.  Drop via None
+          value; collision merge keeps highest privilege_level +
+          first-wins role + first-wins hashed_password.
 
     POST /api/v1/migration/render
         → current alias of /plan, retained for API symmetry and a
@@ -51,9 +59,9 @@ Target profiles (for the Tier-3 rename modal's dropdown population):
 All POST endpoints accept the same :class:`MigrationPlanRequest`
 body (input mode is raw_text XOR source_filename) and return a
 :class:`MigrationJob`.  Future per-pane categories
-(``local_users``, ``snmp``, ...) will extend the endpoint set by
-adding siblings under ``/plan/<category>`` per the pattern
-established by /plan/ports and /plan/vlans.
+(``snmp``, ``radius``, ...) will extend the endpoint set by adding
+siblings under ``/plan/<category>`` per the pattern established by
+/plan/ports, /plan/vlans, and /plan/local_users.
 
 Deploy-time endpoints (``/deploy`` and associated MigrationJob
 persistence analogous to ``FileJobStore``) are not yet shipped and
@@ -242,14 +250,31 @@ def plan_migration(
     target = _resolve_adapter_or_422(body.target, side="target")
     raw_text = _resolve_input_text(body, storage)
     # Route to the rename-aware pipeline when the caller supplied
-    # either an explicit rename map OR a target profile selection
+    # ANY per-category override map OR a target profile selection
     # (target-profile alone means "run auto-heuristic + return
     # diagnostics the UI can render").  Legacy callers that supply
-    # neither get ``run_plan`` unchanged.
-    if body.port_rename_map is not None or body.target_profile is not None:
-        job = run_plan_with_rename(
+    # none of these get ``run_plan`` unchanged.
+    has_any_override = (
+        body.port_rename_map is not None
+        or body.vlan_rename_map is not None
+        or body.local_user_rename_map is not None
+        or body.target_profile is not None
+    )
+    if has_any_override:
+        # Dispatch directly to run_plan_with_overrides so EVERY
+        # category map threads through — run_plan_with_rename is
+        # signature-frozen and only accepts port_rename_map, so
+        # calling it here would silently drop VLAN / local-user
+        # overrides posted in the same body.
+        job = run_plan_with_overrides(
             source, target, raw_text,
-            port_rename_map=body.port_rename_map or {},
+            port_rename_map=(
+                body.port_rename_map
+                if body.port_rename_map is not None
+                else ({} if body.target_profile is not None else None)
+            ),
+            vlan_rename_map=body.vlan_rename_map,
+            local_user_rename_map=body.local_user_rename_map,
             force=body.force,
         )
     else:
@@ -369,6 +394,70 @@ def plan_migration_vlans(
     )
     logger.info(
         "Migration plan/vlans %s: %s -> %s = %s",
+        job.id[:8],
+        body.source,
+        body.target,
+        job.status.value,
+    )
+    return job
+
+
+@router.post(
+    "/plan/local_users",
+    response_model=MigrationJob,
+    summary="Per-pane override endpoint: local-user renames",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid adapter name or input specification"},
+    },
+)
+def plan_migration_local_users(
+    body: MigrationPlanRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> MigrationJob:
+    """Local-user-rename-only entry into the migration pipeline.
+
+    Third concrete per-pane override endpoint (ports + vlans came
+    first, see ``POST /plan/ports`` and ``POST /plan/vlans``).
+    Accepts the same :class:`MigrationPlanRequest` body and
+    dispatches to :func:`run_plan_with_overrides` with only
+    ``local_user_rename_map`` populated.
+
+    Local-user rename is a string → string rewrite applied to
+    :attr:`CanonicalLocalUser.name` across ``intent.local_users``.
+    ``None`` as a map value drops the user entirely; the rest of
+    the account (privilege level, role, hashed password) follows
+    the user — or disappears with them.
+
+    Collision semantics: when two source names map to the same
+    target name (or when an operator maps a user to a name that
+    already exists in the tree), the user entries are merged on a
+    best-effort basis — highest privilege_level wins, first non-
+    empty role wins, first hashed_password wins (hashes aren't
+    composable).  Merge events emit warnings so the operator
+    notices.
+
+    Explicitly NOT in scope:
+        * Rewriting usernames inside Tier-3 raw_sections (ACL
+          text, AAA rules) — those pass through verbatim.
+        * Changing privilege levels / roles — the rename map is
+          strictly name-to-name.
+
+    Ignores other override maps if the body carries them — hitting
+    ``/plan/local_users`` applies the local-users category only.
+    Use ``POST /plan`` for multi-category overrides in a single
+    call.
+    """
+    source = _resolve_adapter_or_422(body.source, side="source")
+    target = _resolve_adapter_or_422(body.target, side="target")
+    raw_text = _resolve_input_text(body, storage)
+    job = run_plan_with_overrides(
+        source, target, raw_text,
+        local_user_rename_map=body.local_user_rename_map or {},
+        force=body.force,
+    )
+    logger.info(
+        "Migration plan/local_users %s: %s -> %s = %s",
         job.id[:8],
         body.source,
         body.target,
