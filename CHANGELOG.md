@@ -7,6 +7,40 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (deferred item 3 — more target profiles: Netgate ARM + Deciso DEC600)
+
+- `opnsense_netgate_sg1100.yaml` — 3-port ARM desktop firewall,
+  Marvell Armada 3720 + MV88E6141 switch chip.  Interface layout
+  follows pfSense's published DSA + VLAN-tag convention
+  (`mvneta0.4090` WAN, `mvneta0.4091` LAN, `mvneta0.4092` OPT).
+- `opnsense_netgate_sg3100.yaml` — 5-port ARM desktop firewall
+  (1 direct WAN + 4 switch LAN), Marvell Armada 38x.  Uses the
+  VLAN-tag convention for the 4 LAN ports on `mvneta2`.
+- `opnsense_deciso_dec600_igc.yaml` — 5-port 2.5GbE desktop
+  appliance, Intel i226-V via `igc(4)`.  Complements the
+  existing Netboard A-series (embedded PCB form-factor) with
+  Deciso's current desktop-chassis line.
+- **Caveat:** both Netgate profiles are tagged LOWER-CONFIDENCE.
+  The SG-1100 and SG-3100 are primarily pfSense platforms; OPNsense
+  on ARM is community-grade and interface naming may vary on stock
+  FreeBSD arm64 OPNsense.  Operators running a non-Netgate-branded
+  build should file an override profile if their `ifconfig`
+  output disagrees.
+- 3 new shipped-profile lock-in tests cover port-id list,
+  kind-classification, max_vlans/max_local_users values.
+
+### Changed (stale-comment sweep on existing OPNsense + FortiGate profiles)
+
+- All 24 existing OPNsense profile YAMLs had a comment claiming
+  "the OPNsense codec doesn't yet round-trip `<system><user>`
+  blocks, so the local-users pane surfaces a compat banner".
+  Option A cleared the false declaration and verified the round-
+  trip works; the comment was stale.  Replaced with an accurate
+  post-Option-A rationale (unbounded-limit, not codec gap).
+- FortiGate 40F profile comment analogously refreshed; 60F and
+  100E cross-reference 40F so they inherit the update via the
+  existing `see fortigate_40f.yaml for rationale` pointers.
+
 ### Fixed (Option A — strip false `unsupported_rename_categories` on OPNsense + FortiGate)
 
 - Both codecs already round-trip `CanonicalLocalUser` end-to-end

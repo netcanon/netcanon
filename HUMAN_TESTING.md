@@ -10,6 +10,29 @@ list, don't delete).
 
 ---
 
+## Migration — New target profiles (Netgate ARM + DEC600, ship-fresh)
+
+- [ ] **Netgate SG-1100 profile picker**: translate any Cisco/Aruba
+      config → OPNsense.  Open rename modal.  Target-profile
+      dropdown: select vendor "OPNsense", model "Netgate SG-1100".
+      Override dropdowns should list exactly three port ids:
+      `mvneta0.4090`, `mvneta0.4091`, `mvneta0.4092`.  VLAN fit-
+      check banner shows "VLAN fit: N / 4094".
+- [ ] **Netgate SG-3100 profile picker**: same flow but pick the
+      SG-3100 model.  Override dropdowns list `mvneta0` +
+      `mvneta2.4091`..`mvneta2.4094` (5 ports total — 1 WAN + 4
+      LAN).  First port is classified uplink, rest physical.
+- [ ] **Deciso DEC600 profile picker**: pick model "Deciso DEC600
+      (5x i226 2.5GbE desktop)".  Override dropdowns list
+      `igc0`..`igc4`.  Ports all 2.5gig speed.
+- [ ] **Lower-confidence Netgate disclaimer**: read the YAML
+      comment block in `opnsense_netgate_sg1100.yaml` and
+      `opnsense_netgate_sg3100.yaml`.  Both documents note that
+      OPNsense on Netgate ARM hardware is community-grade and
+      interface naming may differ on stock FreeBSD arm64 builds.
+      If your actual SG-1100 / SG-3100 exposes different names,
+      that's an expected variance — file an override profile.
+
 ## Backup — Probe phase + layered definitions (P1C3, ship-fresh)
 
 - [ ] **Definition probe opt-in** (now ships by default for Cisco

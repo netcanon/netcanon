@@ -220,17 +220,75 @@ class TestRealProfilesShipped:
         for key, p in opnsense_profiles.items():
             assert p.max_vlans == 4094, key
 
+    def test_netgate_sg1100_shape(self):
+        """Netgate SG-1100 ARM profile — 3 switch ports exposed as
+        VLAN-tagged children of mvneta0.  Interface naming follows
+        pfSense's DSA + uplink-VLAN convention (OPNsense on ARM is
+        community-grade; lower-confidence than x86 peers).  Locks
+        in the expected port-id list so accidental copy-paste drift
+        (e.g. swapping mvneta0 for mvneta1, or inverting VLAN IDs)
+        is caught at review."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netgate-SG1100"]
+        assert p.port_count == 3
+        assert p.port_ids() == [
+            "mvneta0.4090", "mvneta0.4091", "mvneta0.4092",
+        ]
+        # WAN default is the first port (uplink kind).
+        assert p.lookup_port("mvneta0.4090").kind == "uplink"
+        assert p.lookup_port("mvneta0.4091").kind == "physical"
+        assert p.lookup_port("mvneta0.4092").kind == "physical"
+        assert p.max_vlans == 4094
+        assert p.max_local_users is None
+
+    def test_netgate_sg3100_shape(self):
+        """Netgate SG-3100 — 1 dedicated WAN (direct SoC MAC) + 4
+        LAN switch ports (VLAN-tagged children of mvneta2).  Same
+        ARM-hardware caveat as SG-1100."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/Netgate-SG3100"]
+        assert p.port_count == 5
+        assert p.port_ids() == [
+            "mvneta0",
+            "mvneta2.4091", "mvneta2.4092",
+            "mvneta2.4093", "mvneta2.4094",
+        ]
+        # WAN is the standalone SoC MAC.
+        assert p.lookup_port("mvneta0").kind == "uplink"
+        # The four LAN ports are all physical-kind.
+        for i in range(1, 5):
+            port = p.lookup_port(f"mvneta2.409{i}")
+            assert port is not None, f"mvneta2.409{i} missing"
+            assert port.kind == "physical"
+        assert p.max_vlans == 4094
+        assert p.max_local_users is None
+
+    def test_deciso_dec600_shape(self):
+        """Deciso DEC600 — 5x 2.5GbE desktop appliance.  Intel i226-V
+        via igc(4).  Distinct from the Netboard A-series (embedded
+        PCBs); DEC600 is the desktop-chassis follow-on."""
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        p = profiles["opnsense/DEC600-IGC"]
+        assert p.port_count == 5
+        assert p.port_ids() == ["igc0", "igc1", "igc2", "igc3", "igc4"]
+        # Every port is 2.5GbE (i226-V).
+        for port in p.ports:
+            assert port.speed == "2.5gig", port.id
+            assert port.kind == "physical", port.id
+        assert p.max_vlans == 4094
+        assert p.max_local_users is None
+
     def test_max_local_users_unset_on_soft_limit_vendors(self):
         """Contract lock-in: MikroTik / OPNsense / FortiGate profiles
         intentionally leave ``max_local_users`` unset.
           * MikroTik: RouterOS is software-unbounded — a fit-check
             banner would be noise.
-          * OPNsense / FortiGate: their codecs don't round-trip
-            CanonicalLocalUser yet, so the local-users pane shows a
-            compatibility banner (from codec.unsupported_rename_categories)
-            rather than a fit-check.  Setting max_local_users here
-            would overlap with the compat banner and confuse the
-            operator.
+          * OPNsense / FortiGate: post-Option-A both codecs DO
+            round-trip CanonicalLocalUser, but the limit isn't a
+            reliable datasheet number (OPNsense is functionally
+            unbounded; FortiGate's admin-account cap varies by
+            FortiOS version and isn't worth a fit-check).  Leaving
+            unset hides the banner on those panes.
         Aruba AOS-S / Cisco IOS-XE profiles DO declare
         ``max_local_users`` where the datasheet numbers are reliable
         (AOS-S 16.11 = 16-64; Cisco intentionally unset because the

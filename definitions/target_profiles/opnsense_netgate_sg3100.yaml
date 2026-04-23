@@ -1,0 +1,46 @@
+# Netgate SG-3100 (ARM-based desktop firewall)
+# Marvell Armada 38x SoC (dual-core Cortex-A9 @ 1.6 GHz)
+# 1 × 1GbE WAN (direct SoC MAC) + 4 × 1GbE LAN (switched via
+#   Marvell MV88E6141 DSA + VLAN uplink)
+# Netgate front-panel: WAN / LAN1 / LAN2 / LAN3 / LAN4
+#
+# IMPORTANT: same ARM / pfSense-centric caveat as SG-1100 —
+# OPNsense on this hardware is community-grade; interface naming
+# here follows pfSense's published DSA + VLAN-tag convention and
+# may vary on stock FreeBSD arm OPNsense.  File an override
+# profile if your ifconfig output disagrees.
+#
+# Switch-VLAN layout (per Netgate docs + forum):
+#   mvneta0        → WAN       (direct SoC MAC, no switch)
+#   mvneta2.4091   → LAN1      (front port 1)
+#   mvneta2.4092   → LAN2      (front port 2)
+#   mvneta2.4093   → LAN3      (front port 3)
+#   mvneta2.4094   → LAN4      (front port 4)
+#   mvneta2 itself is the switch-uplink MAC; the four LAN ports
+#   appear as VLAN-tagged children.
+#
+# Operators who bridge all four LAN ports together in OPNsense
+# create a bridge interface over the four mvneta2.40xx tagged
+# children; the profile lists the children individually so the
+# rename modal can target specific ports.
+vendor: opnsense
+model: Netgate-SG3100
+display_name: "Netgate SG-3100 (1x WAN + 4x LAN switch via mvneta2 VLAN tags)"
+device_class: firewall
+stacking: ""
+ports:
+  - {id: "mvneta0", kind: uplink, speed: gig, notes: "WAN — direct SoC MAC"}
+  - {id: "mvneta2.4091", kind: physical, speed: gig, notes: "LAN1 switch port"}
+  - {id: "mvneta2.4092", kind: physical, speed: gig, notes: "LAN2 switch port"}
+  - {id: "mvneta2.4093", kind: physical, speed: gig, notes: "LAN3 switch port"}
+  - {id: "mvneta2.4094", kind: physical, speed: gig, notes: "LAN4 switch port"}
+lags: {max: 4, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  As with
+# the SG-1100, VLAN 4091-4094 are RESERVED by the Marvell DSA
+# driver for front-port-to-SoC uplink tagging — operator-defined
+# VLANs should pick IDs outside that range.
+# max_local_users intentionally unset — OPNsense user config is
+# software-unbounded and not a useful fit-check signal.
+max_vlans: 4094

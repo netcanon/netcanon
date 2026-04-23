@@ -1,0 +1,50 @@
+# Netgate SG-1100 (ARM-based desktop firewall)
+# Marvell Armada 3720 SoC (dual-core Cortex-A53 @ 1.2 GHz)
+# 3 × 1GbE switched via Marvell MV88E6141 switch chip + DSA
+# Netgate front-panel: WAN / LAN / OPT
+#
+# IMPORTANT: the SG-1100 is primarily a **pfSense** platform.  OPNsense
+# ships an ARMv7/AArch64 image but community reports indicate this
+# hardware is more commonly operated under pfSense's Netgate-branded
+# build.  The interface-naming convention below follows pfSense's
+# DSA + VLAN-tag layout (most frequently cited in Netgate forum
+# posts); OPNsense builds with the DSA driver should see the same
+# shape, but operators running a stock FreeBSD arm64 OPNsense may
+# find alternative ifconfig output.  Lower confidence than x86
+# OPNsense appliances — if you're running on SG-1100 and the names
+# below don't match your ifconfig, file an override profile under
+# a tagged model name (e.g. ``SG-1100-stock-freebsd``).
+#
+# Switch-VLAN layout:
+#   mvneta0 is the SoC MAC that uplinks to the Marvell switch chip.
+#   OPNsense / pfSense expose the three front-panel ports as VLAN-
+#   tagged sub-interfaces of mvneta0:
+#     mvneta0.4090  → WAN   (front port 0)
+#     mvneta0.4091  → LAN   (front port 1)
+#     mvneta0.4092  → OPT   (front port 2)
+#   The rename modal's dropdown exposes these names so operators
+#   can map source-vendor port ids (GigabitEthernet1/0/1 etc.) to
+#   the actual OPNsense-facing name.
+vendor: opnsense
+model: Netgate-SG1100
+display_name: "Netgate SG-1100 (3x GbE switch via mvneta0 VLAN tags)"
+device_class: firewall
+stacking: ""
+ports:
+  - {id: "mvneta0.4090", kind: uplink, speed: gig, notes: "front port 0 — WAN default"}
+  - {id: "mvneta0.4091", kind: physical, speed: gig, notes: "front port 1 — LAN default"}
+  - {id: "mvneta0.4092", kind: physical, speed: gig, notes: "front port 2 — OPT default"}
+# Very few LAGs fit on a 3-port appliance; keep the prefix
+# consistent with the other OPNsense profiles.
+lags: {max: 2, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).  Note that
+# VLAN 4090-4092 are RESERVED by the Marvell DSA switch driver for
+# the front-port-to-SoC uplink tagging; operators migrating here
+# should avoid using those IDs for their own VLANs (the rename
+# modal's vlan-rename pane doesn't currently warn about this —
+# future enhancement to declare reserved VLAN IDs per profile).
+# max_local_users intentionally unset — OPNsense's AAA/users
+# config is unbounded in practice and not a useful fit-check signal.
+max_vlans: 4094

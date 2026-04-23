@@ -1,0 +1,35 @@
+# Deciso DEC600 — desktop 5-port 2.5GbE appliance
+# 5 × 2.5GbE via Intel i226-V (successor to i225-V)
+# Aluminium-chassis, fanless; Celeron N5105 SoC generation
+#
+# FreeBSD driver: igc(4) — Intel I225/I226 2.5GbE
+# Default BSD iface names: igc0, igc1, igc2, igc3, igc4
+#
+# Distinct from the Netboard A-series (which uses the i211/i210
+# 1GbE igb(4) or the i225/i226 2.5GbE igc(4) for the newer
+# revisions but ships on an embedded PCB form-factor).  The
+# DEC600 is Deciso's desktop-chassis follow-on aimed at SMB
+# OPNsense deployments.
+#
+# Validation: interface-naming lifted from Deciso's published
+# DEC600 datasheet + multiple OPNsense-forum reports (Celeron
+# N5105 + 5x i226 is the shipping SKU as of OPNsense 24.x).
+# HIGH confidence on interface naming under the igc(4) driver.
+# Port-count + kind assignment is conservative — no vendor-
+# assigned WAN/LAN default since Deciso ships the unit with the
+# OPNsense installer mapping the first port as WAN by convention
+# only; operator re-assigns in config.xml.
+vendor: opnsense
+model: DEC600-IGC
+display_name: "Deciso DEC600 (5x i226 2.5GbE desktop)"
+device_class: firewall
+stacking: ""
+ports:
+  - {range: "igc0-4", kind: physical, speed: 2.5gig, notes: "Intel i226-V 2.5GbE"}
+lags: {max: 4, prefix: lagg}
+
+# OPNsense runs FreeBSD's netgraph VLAN stack; the only hard limit
+# on VLAN IDs is the 802.1Q protocol ceiling (1-4094).
+# max_local_users intentionally unset — OPNsense user config is
+# software-unbounded and not a useful fit-check signal.
+max_vlans: 4094
