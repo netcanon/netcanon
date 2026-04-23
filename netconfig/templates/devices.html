@@ -69,6 +69,24 @@
         <input name="port" type="number" value="22" min="1" max="65535"
                style="width:72px;margin-top:.25rem" data-testid="device-port-input">
       </details>
+      <!-- OS-version / Model pins under Advanced.  Layered-definitions
+           overlay selection: set os_version to pick a version-specific
+           definition (e.g. "17.12" → cisco/ios-xe/17.12.yaml); leave
+           blank for family-base (17.x.yaml) fallback.  Model pin is
+           rarely needed — backup CLI behaviour almost never varies by
+           model within a single OS family. -->
+      <details class="port-details" style="align-self:flex-end">
+        <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                        user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Pin</summary>
+        <div style="display:flex;gap:.5rem;margin-top:.25rem">
+          <input name="os_version" type="text" placeholder="OS ver (opt)"
+                 style="width:110px" data-testid="device-os-version-input"
+                 title="Optional pin — e.g. 17.12 — selects a version-specific definition overlay when one exists">
+          <input name="model" type="text" placeholder="Model (opt)"
+                 style="width:120px" data-testid="device-model-input"
+                 title="Optional pin — e.g. C9300-48P — selects a model-specific overlay">
+        </div>
+      </details>
     </div>
     <div class="form-row" style="margin-top:.75rem">
       <button type="submit" id="device-submit-btn" class="btn-primary"
@@ -183,7 +201,45 @@
                    style="width:72px;margin-top:.25rem"
                    data-testid="device-edit-port-input">
           </details>
+          <details class="port-details" style="align-self:flex-end"
+                   {% if profile.os_version or profile.model %}open{% endif %}>
+            <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                            user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Pin</summary>
+            <div style="display:flex;gap:.5rem;margin-top:.25rem">
+              <input name="os_version" type="text" value="{{ profile.os_version or '' }}"
+                     placeholder="OS ver (opt)" style="width:110px"
+                     data-testid="device-edit-os-version-input"
+                     title="Optional pin — selects a version-specific definition overlay when one exists">
+              <input name="model" type="text" value="{{ profile.model or '' }}"
+                     placeholder="Model (opt)" style="width:120px"
+                     data-testid="device-edit-model-input"
+                     title="Optional pin — selects a model-specific overlay">
+            </div>
+          </details>
         </div>
+        {# Detected facts — read-only panel, shown only when the probe
+           phase has populated the field.  Populated server-side, not
+           editable by the operator; surfaced here so operators can
+           reconcile their pinned values (OS version / model inputs
+           above) against what the device actually reported on its
+           last successful probe. #}
+        {% if profile.detected_facts %}
+        <div class="form-row" data-testid="device-edit-detected-facts"
+             style="margin-top:.5rem;padding:.5rem;background:#f0f4f8;
+                    border-left:3px solid #7eb8f7;border-radius:3px">
+          <div style="font-size:.75rem;font-weight:600;color:#6b7280;
+                      width:100%;margin-bottom:.25rem">
+            Detected facts (from last probe) &mdash; read-only
+          </div>
+          {% for key, value in profile.detected_facts.items() %}
+          <div style="font-size:.8rem;margin-right:1.5rem"
+               data-testid="device-edit-detected-fact-{{ key | replace('_', '-') }}">
+            <span style="color:#6b7280">{{ key | replace('_', ' ') }}:</span>
+            <span style="font-family:monospace">{{ value }}</span>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
         <div class="form-row" style="margin-top:.5rem">
           <button type="submit" class="btn-primary" style="font-size:.85rem"
                   data-testid="device-edit-save-btn">Save</button>
@@ -309,6 +365,12 @@ deviceForm.addEventListener('submit', async function(e) {
   if (ep) body.enable_password = ep;
   var notes = g('notes');
   if (notes) body.notes = notes;
+  // Layered-definitions pins: only include when populated so the
+  // server sees explicit None → falls back to family-base.
+  var osv = g('os_version');
+  if (osv) body.os_version = osv;
+  var mdl = g('model');
+  if (mdl) body.model = mdl;
 
   try {
     var res = await fetch('/api/v1/devices/', {
@@ -385,6 +447,15 @@ async function saveEditDevice(e, profileId) {
   });
   var portInput = form.querySelector('[name="port"]');
   if (portInput && portInput.value) body.port = parseInt(portInput.value, 10);
+  // Layered-definitions pins.  Blank = "keep existing" per the
+  // same pattern as enable_password / notes (the PUT handler
+  // filters out None-valued fields).  Operators who need to CLEAR
+  // a pin after setting it must do so via the API directly — a
+  // rare enough case that the UI simplification is worth it.
+  ['os_version', 'model'].forEach(function(f) {
+    var input = form.querySelector('[name="' + f + '"]');
+    if (input && input.value.trim()) body[f] = input.value.trim();
+  });
 
   try {
     var res = await fetch('/api/v1/devices/' + profileId, {

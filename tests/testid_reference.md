@@ -308,6 +308,8 @@ useful for E2E assertions):
 | `device-enable-input`      | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
 | `device-notes-input`       | `<input>` | Optional notes |
 | `device-port-input`        | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
+| `device-os-version-input`  | `<input>` | Optional OS-version pin (e.g. ``17.12``).  Layered-definitions overlay selector — when set, the backup pipeline's `DefinitionLoader.resolve()` picks a matching overlay YAML instead of the family base.  Inside a collapsed `<details>` labelled "Pin" |
+| `device-model-input`       | `<input>` | Optional hardware-model pin (e.g. ``C9300-48P``).  Same overlay-selection semantics as ``device-os-version-input`` — rarely needed since backup CLI behaviour almost never varies by model |
 | `device-submit-btn`        | `<button type="submit">` | Create device profile |
 
 ### Existing device profile cards
@@ -348,6 +350,10 @@ useful for E2E assertions):
 | `device-edit-enable-input`     | `<input type="password">` | New enable password; leave blank to keep existing |
 | `device-edit-notes-input`      | `<input>` | Notes |
 | `device-edit-port-input`       | `<input type="number">` | SSH port (inside collapsed `<details>`) |
+| `device-edit-os-version-input` | `<input>` | Edit the OS-version pin.  Inside a collapsed `<details>` labelled "Pin"; the `<details>` is auto-opened when the profile already has a pin set.  Blank = "keep existing" (same pattern as ``enable_password`` / ``notes``) |
+| `device-edit-model-input`      | `<input>` | Edit the model pin |
+| `device-edit-detected-facts`   | `<div>` | Read-only panel shown only when ``profile.detected_facts`` is non-null.  Populated by a server-side probe on a previous backup (P1C3 wiring); operators cross-reference against their pinned OS-version / model above.  Contents are per-fact child spans; not editable |
+| `device-edit-detected-fact-<key>` | `<div>` | One per-fact display row inside ``device-edit-detected-facts``.  ``<key>`` is the fact key with underscores converted to hyphens (e.g. ``device-edit-detected-fact-os-version``, ``device-edit-detected-fact-firmware-build``, ``device-edit-detected-fact-probe-timestamp``) |
 | `device-edit-save-btn`         | `<button type="submit">` | Save changes |
 | `device-edit-cancel-btn`       | `<button type="button">` | Cancel and close edit panel |
 
