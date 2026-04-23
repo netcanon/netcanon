@@ -284,16 +284,23 @@ local-users panes (they have no "auto-rewritten" rows to fall
 back on if the operator hasn't already sent overrides) and for
 the localStorage key (hostname).
 
-**Target-codec compatibility banners:** each codec declares
+**Target-codec compatibility banners:** each codec exposes
 `unsupported_rename_categories: frozenset[str]` listing per-pane
-categories it doesn't round-trip (e.g. OPNsense + FortiGate list
-`local_users` because their parse keeps user blocks in
-`raw_sections` as Tier-3 passthrough).  The rename modal surfaces
-an amber warning on the affected pane when the operator's active
+categories it can't round-trip.  The rename modal surfaces an
+amber warning on the affected pane when the operator's active
 target is in the declaring set — prevents the ghost-success bug
 where rename overrides apply to the canonical tree but vanish
-from rendered output.  When the codec's Tier-2 parse+render path
-catches up, remove the declaration and the banner disappears.
+from rendered output.
+
+**Current state:** every shipped bidirectional codec has the
+attribute empty (post-Option-A).  Earlier `OPNsenseCodec` and
+`FortiGateCLICodec` declared `{"local_users"}` under an incorrect
+assumption that those codecs kept user blocks in `raw_sections`;
+verified otherwise (both round-trip `CanonicalLocalUser` end-to-end
+and always did — see `test_local_users_wire_through.py`).  The
+attribute stays wired as an extension point — the next codec
+that genuinely ships without a Tier-2 round-trip for a category
+declares it and gets the banner for free.
 
 **Per-pane capacity fit-checks:** each pane renders its own
 fit-check banner (separate from the ports fit-check in

@@ -59,17 +59,28 @@ list, don't delete).
       profiles intentionally don't declare max_local_users
       (IOS-XE's effective limit is 65k+, not worth showing).
       Banner stays hidden.
-- [ ] **OPNsense local-users compat banner**: translate Cisco →
-      OPNsense.  Source has at least one `username` line.  Open
-      modal → Local Users pane.  Amber banner at top: "Target
-      codec doesn't render local users.  OPNsense parses +
-      renders interfaces and VLANs but local users are currently
-      Tier-3 passthrough…".  Override inputs + drop links still
-      work but rendered output has no user stanzas after Apply.
-- [ ] **FortiGate local-users compat banner**: same as above
-      but target = FortiGate.  Same amber banner.
-- [ ] **Aruba / Cisco / MikroTik local-users — NO compat banner**:
-      those codecs DO round-trip local_users, so no banner.
+- [ ] **No compat banner on any shipped target (post-Option-A)**:
+      every currently-shipped bidirectional codec round-trips
+      local_users.  Translate Cisco → Aruba, Cisco → MikroTik,
+      Cisco → OPNsense, Cisco → FortiGate — in all four cases
+      open the rename modal's Local Users pane, there should be
+      NO amber banner.  Before Option A, OPNsense + FortiGate
+      incorrectly listed `local_users` in `unsupported_rename_categories`
+      and their banners fired; that false declaration has been
+      cleared.  Banner mechanism is still wired as an extension
+      point — tested via the integration test
+      `test_unsupported_rename_categories_exposed` which locks
+      in the "all empty" post-Option-A state.
+- [ ] **OPNsense user round-trip**: translate Cisco with a
+      `username admin privilege 15 secret 5 $1$abc$fake` line to
+      OPNsense.  Rendered output's `<system>` block should have
+      a `<user>` element with the admin name, `<groupname>admins</groupname>`,
+      and the password hash under `<password>` (tagged bcrypt in
+      canonical; stripped to raw on render).
+- [ ] **FortiGate user round-trip**: same translation but target
+      = FortiGate.  Rendered output should have a
+      `config system admin` block with `edit "admin" / set
+      password ENC <hash> / set accprofile "super_admin"`.
 - [ ] **Rename button appears on user-only source**: paste a
       Cisco config with ONLY `username` lines (no interfaces, no
       VLANs).  Click Translate.  "Interface rename" button still
@@ -135,11 +146,15 @@ list, don't delete).
 - [ ] **Drop a user**: click "drop" next to svc-backup-2019 row.
       Row dims + strikes through.  After Apply, that user is
       absent from rendered output entirely.
-- [ ] **Collision is informational only**: rename admin → manager
-      AND operator → manager.  Both rows highlight but Apply is
-      NOT disabled (unlike the ports pane).  After Apply, one
-      merged `manager` user appears with the highest privilege
-      level of the two sources.
+- [ ] **Collision disables Apply (post-item-4)**: rename admin →
+      manager AND operator → manager.  Both rows highlight; Apply
+      button is now DISABLED (this was changed in item-4 polish
+      for feature parity with the ports pane — server auto-merges
+      on the backend but silent merging is confusing, so the UI
+      forces the operator to resolve first).  Resolve one side
+      and Apply re-enables; after Apply, one merged `manager`
+      user appears with the highest privilege level of the two
+      sources.
 - [ ] **Persistence round-trips**: rename admin → superadmin;
       reload page; re-translate same config; re-open modal;
       click Local Users rail button.  Override input pre-populated

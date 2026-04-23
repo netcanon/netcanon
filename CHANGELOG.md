@@ -7,6 +7,34 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (Option A — strip false `unsupported_rename_categories` on OPNsense + FortiGate)
+
+- Both codecs already round-trip `CanonicalLocalUser` end-to-end
+  (OPNsense parses + renders `<system><user>` blocks; FortiGate
+  parses + renders `config system admin` blocks — 26 wire-through
+  tests cover both in `test_local_users_wire_through.py`).  The
+  earlier `unsupported_rename_categories = {"local_users"}`
+  declarations were based on an incorrect session-compact-prompt
+  assumption that users kept landing in `raw_sections`.  Cleared.
+- Integration test `test_unsupported_rename_categories_exposed`
+  rewritten to lock in the post-Option-A invariant — no shipped
+  bidirectional codec lists any category as unsupported.  The
+  attribute stays wired as an extension point for future codecs
+  with genuine Tier-3-only surfaces (RADIUS, SNMP panes when
+  those ship).
+- Both codec capability matrices gain three supported xpaths for
+  `/aaa/authentication/users/user/config/{username,password,role}`
+  so the validate-stage classifier correctly reports users as
+  supported rather than implicit-default.
+- E2E test restructure: `TestRenameModalCompatBanner` now covers
+  Cisco → {Aruba, OPNsense, FortiGate} all asserting the banner
+  stays hidden; pre-fix it asserted the OPNsense banner was
+  visible (now wrong post-Option-A).  The renderer's
+  limit-undeclared branch for the fit-check banner is instead
+  covered by the schema unit tests — dropped the stale e2e case
+  that assumed OPNsense profiles omit `max_vlans` (item-7
+  enrichment populated every OPNsense profile's `max_vlans=4094`).
+
 ### Added (ship `probe:` block for Cisco IOS-XE family-base + overlay inheritance note)
 
 - `definitions/cisco/ios-xe/17.x.yaml` now declares a `probe:` block
