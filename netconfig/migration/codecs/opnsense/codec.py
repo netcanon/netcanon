@@ -102,18 +102,16 @@ class OPNsenseCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "xml"
 
-    # OPNsense parses + renders port + VLAN state but doesn't yet
-    # wire CanonicalLocalUser round-trip (users live in
-    # ``<system><user>`` blocks that currently land in
-    # ``raw_sections`` as Tier-3 informational data).  Declared
-    # here so the rename modal's local-users pane shows a compat
-    # banner up-front rather than letting operators apply a
-    # rename that silently vanishes from rendered output.  Remove
-    # this declaration when Option A (parser + renderer wiring for
-    # users) ships.
-    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset(
-        {"local_users"}
-    )
+    # unsupported_rename_categories is intentionally empty — OPNsense's
+    # parse() + render() both round-trip CanonicalLocalUser via
+    # ``<system><user>`` blocks (see the ``for user_el in
+    # sys_el.findall("user")`` loop in parse() and the matching
+    # render() emit path below).  Coverage locked in by
+    # ``tests/unit/migration/test_local_users_wire_through.py``
+    # (TestOPNsenseLocalUsersParseRender).  A prior pre-Option-A
+    # declaration had this list as ``{"local_users"}`` under the
+    # incorrect assumption that OPNsense's user handling was
+    # Tier-3-only — cleared as part of Option A.
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
@@ -137,6 +135,14 @@ class OPNsenseCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            # Tier 2 — local users (OPNsense <system><user> blocks).
+            # Parse maps <groupname="admins"> → privilege 15; render
+            # emits name / password / scope / groupname.  Hashes are
+            # passed through verbatim under a ``bcrypt:`` tag so
+            # target renderers can route appropriately.
+            "/aaa/authentication/users/user/config/username",
+            "/aaa/authentication/users/user/config/password",
+            "/aaa/authentication/users/user/config/role",
         ],
         lossy=[
             LossyPath(

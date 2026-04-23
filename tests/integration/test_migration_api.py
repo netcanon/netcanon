@@ -77,20 +77,33 @@ class TestListMigrationAdapters:
         """Codecs that don't round-trip a per-pane category declare
         it in ``unsupported_rename_categories``.  Surfaces via the
         adapters endpoint so the rename modal can show an amber
-        compat banner on the affected pane."""
+        compat banner on the affected pane.
+
+        As of Option A (this commit's series), ALL shipped
+        bidirectional codecs round-trip local_users — the field
+        stays wired as an extension point but every current codec
+        ships with it empty.  Re-populate only when a new codec
+        lands with a genuine Tier-3 passthrough gap."""
         resp = client.get("/api/v1/migration/adapters")
         by_name = {a["name"]: a for a in resp.json()}
         for info in by_name.values():
             assert "unsupported_rename_categories" in info
             assert isinstance(info["unsupported_rename_categories"], list)
-        # OPNsense + FortiGate don't round-trip local_users (Tier-3
-        # raw_sections passthrough only).
-        assert "local_users" in by_name["opnsense"]["unsupported_rename_categories"]
-        assert "local_users" in by_name["fortigate_cli"]["unsupported_rename_categories"]
-        # Cisco CLI + Aruba + MikroTik DO round-trip local_users.
-        assert "local_users" not in by_name["cisco_iosxe_cli"]["unsupported_rename_categories"]
-        assert "local_users" not in by_name["aruba_aoss"]["unsupported_rename_categories"]
-        assert "local_users" not in by_name["mikrotik_routeros"]["unsupported_rename_categories"]
+        # Every bidirectional codec round-trips local_users after
+        # Option A — nobody lists it.
+        for name in (
+            "opnsense",
+            "fortigate_cli",
+            "cisco_iosxe_cli",
+            "aruba_aoss",
+            "mikrotik_routeros",
+        ):
+            assert "local_users" not in by_name[name]["unsupported_rename_categories"], (
+                f"{name}: unexpectedly declares local_users as unsupported; "
+                f"either Option A's cleanup missed this codec or a "
+                f"genuine Tier-3 gap was introduced — if the latter, "
+                f"update this test with the reason"
+            )
 
     def test_ui_metadata_fields_surface(self, client):
         """R5 follow-up (UI metadata migration): every entry exposes

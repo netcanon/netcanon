@@ -77,14 +77,16 @@ class FortiGateCLICodec(CodecBase):
     )
     output_extension: ClassVar[str] = "conf"
 
-    # FortiGate CLI parses + renders interfaces + VLANs but doesn't
-    # yet wire CanonicalLocalUser round-trip (``config system admin``
-    # blocks currently land in ``raw_sections`` as Tier-3
-    # informational data).  See the parallel OPNsense declaration
-    # for the same rationale — removed when Option A ships.
-    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset(
-        {"local_users"}
-    )
+    # unsupported_rename_categories is intentionally empty — the
+    # FortiGate CLI codec round-trips CanonicalLocalUser through
+    # ``config system admin`` blocks (see ``_apply_system_admin`` and
+    # the matching render path that emits ``edit "NAME" / set
+    # password ENC ... / set accprofile "..."``).  Coverage locked in
+    # by ``tests/unit/migration/test_local_users_wire_through.py``
+    # (TestFortiGateLocalUsersParseRender).  A prior pre-Option-A
+    # declaration had this list as ``{"local_users"}`` under the
+    # incorrect assumption that user handling was Tier-3-only —
+    # cleared as part of Option A.
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="fortigate_cli",
@@ -109,6 +111,14 @@ class FortiGateCLICodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            # Tier 2 — local admin users.  FortiGate admin accounts
+            # map to CanonicalLocalUser: super_admin accprofile →
+            # privilege 15; other profiles → privilege 1 with the
+            # profile name preserved in ``role`` for lossless intra-
+            # vendor round-trip.  Hashes carry the ``fortios:`` tag.
+            "/aaa/authentication/users/user/config/username",
+            "/aaa/authentication/users/user/config/password",
+            "/aaa/authentication/users/user/config/role",
         ],
         lossy=[
             LossyPath(

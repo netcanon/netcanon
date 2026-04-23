@@ -850,46 +850,48 @@ class TestRenameModalPerPaneFitCheck:
         cls = banner.get_attribute("class") or ""
         assert "mig-banner-ok" in cls
 
-    def test_vlan_fitcheck_hidden_when_limit_undeclared(
-        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
-    ):
-        """OPNsense profiles don't declare max_vlans — banner stays
-        hidden even though a profile is picked (graceful fallback)."""
-        page.locator('[data-testid="migrate-rename-open-btn"]').click()
-        page.locator(
-            '[data-testid="migrate-rename-target-vendor-select"]'
-        ).select_option(value="opnsense")
-        # Pick any model; OPNsense profiles don't declare max_vlans.
-        options = page.locator(
-            '[data-testid="migrate-rename-target-model-select"] option'
-        ).all_text_contents()
-        # Fallback to ANY non-blank option so the test isn't tied
-        # to a specific model name.
-        real_opts = [o for o in options if o and "pick" not in o.lower()]
-        if real_opts:
-            page.locator(
-                '[data-testid="migrate-rename-target-model-select"]'
-            ).select_option(label=real_opts[0])
-        page.locator(
-            '[data-testid="migrate-rename-rail-vlans"]'
-        ).click()
-        banner = page.locator(
-            '[data-testid="migrate-rename-vlans-fitcheck"]'
-        )
-        expect(banner).to_be_hidden()
+    # The previously-shipped ``test_vlan_fitcheck_hidden_when_limit_undeclared``
+    # test selected an OPNsense profile under the assumption that OPNsense
+    # profiles left ``max_vlans`` unset.  The item-7 data-enrichment
+    # commit (``3f311b5``) populated max_vlans=4094 on every OPNsense
+    # profile, making the scenario unreachable through shipped profiles.
+    # The renderer's "limit undeclared → hidden" branch is still
+    # covered by the schema unit tests in
+    # ``tests/unit/migration/test_target_profile_schema.py`` (which
+    # test ``TargetProfile(max_vlans=None)`` directly) and by the
+    # ``test_vlan_fitcheck_hidden_without_profile`` sibling test
+    # above (which exercises the no-profile-picked branch that the
+    # renderer treats identically).  Deleting this test rather than
+    # re-writing it against a synthetic unset-limit profile — less
+    # fiddly and equally well covered.
 
 
 class TestRenameModalCompatBanner:
     """Target-codec compatibility banner on the local-users pane.
-    OPNsense + FortiGate don't round-trip CanonicalLocalUser; the
-    banner warns operators up-front so they don't apply a rename
-    that silently vanishes from rendered output."""
 
-    def test_banner_hidden_when_target_supports_local_users(
+    **Post-Option-A state (current):** every shipped bidirectional
+    codec round-trips CanonicalLocalUser, so no banner should fire
+    on any target.  The banner element + renderer stay in the UI
+    as an extension point for future codecs that genuinely DON'T
+    round-trip a category (SNMP, RADIUS, etc. when their rename
+    panes ship) — the ``renderCompatBanners`` JS reads
+    ``CodecInfo.unsupported_rename_categories`` which is currently
+    empty on every shipped codec.
+
+    **Pre-Option-A state:** OPNsense + FortiGate listed
+    ``{"local_users"}`` under their ``unsupported_rename_categories``
+    class attr because an earlier incorrect assumption said those
+    codecs kept user blocks in raw_sections.  In fact both already
+    parse + render users end-to-end (see
+    test_local_users_wire_through.py).  Option A removed those
+    false declarations; the integration test
+    ``test_unsupported_rename_categories_exposed`` now locks in
+    the all-empty state."""
+
+    def test_banner_hidden_cisco_to_aruba(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
-        """Cisco → Aruba: both codecs round-trip local_users, so
-        no banner on the local-users pane."""
+        """Baseline: Cisco → Aruba, no shipped compat issues."""
         page.locator('[data-testid="migrate-rename-open-btn"]').click()
         page.locator(
             '[data-testid="migrate-rename-rail-local-users"]'
@@ -899,18 +901,17 @@ class TestRenameModalCompatBanner:
         )
         expect(banner).to_be_hidden()
 
-    def test_banner_visible_when_target_omits_local_users(
+    def test_banner_hidden_cisco_to_opnsense(
         self, page: Page, live_server_url: str,
     ):
-        """Cisco → OPNsense: OPNsense doesn't round-trip local_users,
-        so the banner should surface."""
+        """Post-Option-A: OPNsense round-trips local_users.  Pre-
+        fix this test asserted the banner was VISIBLE; fixed to
+        assert hidden now that the false declaration is cleared."""
         mp = MigratePage(page)
         page.goto(live_server_url + "/migrate")
         mp.source_select.wait_for(state="visible", timeout=5_000)
         mp.pick_source("cisco_iosxe_cli")
         mp.pick_target("opnsense")
-        # Source config that declares a user so the local-users
-        # pane has at least one row to warn about.
         mp.fill_raw(
             "hostname test-sw\n!\n"
             "username admin privilege 15 secret 5 $1$abc$fake\n!\n"
@@ -923,9 +924,30 @@ class TestRenameModalCompatBanner:
         banner = page.locator(
             '[data-testid="migrate-rename-local-users-compat"]'
         )
-        expect(banner).to_be_visible()
-        expect(banner).to_contain_text("doesn't render")
-        expect(banner).to_contain_text("local users")
+        expect(banner).to_be_hidden()
+
+    def test_banner_hidden_cisco_to_fortigate(
+        self, page: Page, live_server_url: str,
+    ):
+        """Post-Option-A: FortiGate round-trips local_users."""
+        mp = MigratePage(page)
+        page.goto(live_server_url + "/migrate")
+        mp.source_select.wait_for(state="visible", timeout=5_000)
+        mp.pick_source("cisco_iosxe_cli")
+        mp.pick_target("fortigate_cli")
+        mp.fill_raw(
+            "hostname test-sw\n!\n"
+            "username admin privilege 15 secret 5 $1$abc$fake\n!\n"
+        )
+        mp.submit_and_wait()
+        page.locator('[data-testid="migrate-rename-open-btn"]').click()
+        page.locator(
+            '[data-testid="migrate-rename-rail-local-users"]'
+        ).click()
+        banner = page.locator(
+            '[data-testid="migrate-rename-local-users-compat"]'
+        )
+        expect(banner).to_be_hidden()
 
 
 class TestRenameModalLocalUsersPane:
