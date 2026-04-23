@@ -384,6 +384,24 @@ class MigrationJob(BaseModel):
     #: interfaces.
     vlan_drops: list[int] = Field(default_factory=list)
 
+    #: Source-tree VLAN IDs captured post-parse, pre-transform.
+    #: Lets the Tier-3 rename modal's VLAN pane enumerate every
+    #: VLAN the operator could rewrite or drop — without this field
+    #: the UI has no way to surface VLANs that the operator hasn't
+    #: already touched.  Populated by
+    #: :func:`run_plan_with_overrides` via a capture transform that
+    #: runs ahead of any user-supplied overrides; empty on legacy
+    #: :func:`run_plan` calls that bypass the overrides engine.
+    source_vlans: list[int] = Field(default_factory=list)
+
+    #: Canonical hostname captured post-parse.  Feeds the Tier-3
+    #: rename modal's localStorage persistence key so a given
+    #: (source_codec, target_codec, hostname) triple has its own
+    #: override memory — moving between devices doesn't clobber
+    #: saved overrides for the previous one.  Empty when the source
+    #: config didn't declare a hostname.
+    source_hostname: str = ""
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)

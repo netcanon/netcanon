@@ -213,6 +213,13 @@ def run_plan_with_overrides(
             ``port_rename_map is not None``.
           * ``vlan_renames`` / ``vlan_drops`` / ``warnings`` when
             ``vlan_rename_map is not None``.
+
+        Capture-only fields always populate (both are needed by
+        the Tier-3 rename modal even when no overrides engaged):
+          * ``source_vlans`` — VLAN IDs as parsed from source
+            config, before any rewrites.
+          * ``source_hostname`` — canonical hostname, feeds the
+            modal's localStorage ack key.
     """
     # Lazy imports to avoid circular dependency at module import time
     # (these modules import CodecBase; this module imports CodecBase).
@@ -222,6 +229,27 @@ def run_plan_with_overrides(
     override_transforms: list[TransformCallable] = []
     rename_result = None
     vlan_result = None
+
+    # Capture-first transform — snapshots the post-parse canonical
+    # tree's VLAN IDs + hostname for the UI's rename modal BEFORE
+    # any user overrides rewrite them.  The result flows back onto
+    # the job via ``source_vlans`` / ``source_hostname`` so the
+    # VLAN-rename pane can enumerate every id the operator could
+    # rewrite/drop, and so localStorage persistence keys stay
+    # stable across page reloads.
+    captured: dict[str, Any] = {"vlan_ids": [], "hostname": ""}
+
+    def _capture_source_shape(tree: Any) -> Any:
+        # Duck-typed access — mock adapters produce plain dicts that
+        # don't have ``.vlans``; canonical trees do.  Either way we
+        # fall through with empty defaults rather than crashing.
+        vlans = getattr(tree, "vlans", None) or []
+        captured["vlan_ids"] = [getattr(v, "id", None) for v in vlans]
+        captured["vlan_ids"] = [i for i in captured["vlan_ids"] if i is not None]
+        captured["hostname"] = getattr(tree, "hostname", "") or ""
+        return tree
+
+    override_transforms.append(_capture_source_shape)
 
     # Port-rename category.  Engaged when the caller explicitly opts
     # in by passing a dict (even an empty one).  None means "don't
@@ -273,6 +301,12 @@ def run_plan_with_overrides(
             job.warnings.extend(vlan_result.warnings)
         if vlan_result.dropped:
             job.vlan_drops = list(vlan_result.dropped)
+
+    # Source-shape fields — ALWAYS populated when the capture ran
+    # (which it did, unconditionally).  Empty vlan list is fine —
+    # the UI handles that by hiding the VLAN pane's empty state.
+    job.source_vlans = list(captured.get("vlan_ids", []))
+    job.source_hostname = captured.get("hostname", "") or ""
 
     return job
 
