@@ -28,8 +28,23 @@ ports:
 # the name) — no vendor-native prefix.  Leave prefix empty to signal
 # "free-form LAG name" to the UI; max lifted from FortiOS 7.x limits.
 lags: {max: 16, prefix: ""}
-# Per Fortinet's FortiOS 7.x "Maximum Values Table", FG-100E supports
-# up to 1024 VLANs across all VDOMs — the mid-range bump over the
-# 40F/60F's 512 cap.  max_local_users intentionally unset — see
-# fortigate_40f.yaml for rationale.
+# FortiGate 100E VLAN cap: 1024 VLAN interfaces, *per-VDOM*, sourced
+# from Fortinet's Maximum Values Table
+# (https://docs.fortinet.com/max-value-table → FortiGate 100E,
+# `system.interface` row filtered by `type=vlan`).  Mid-range bump
+# from the 40F/60F's 512.  Grounded by the real FG-100E capture at
+# tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf —
+# FortiOS 7.2.13, used to certify the fortigate_cli codec — which
+# gives us a concrete 7.2-series datapoint for this model.
+# Sibling FG-100F at FortiOS 7.x has been community-quoted at 4095
+# for `system.interface` (ALL types combined — physical + VLAN +
+# LAG + hw-switch); the `type=vlan` subset is lower, and 1024 is the
+# conservative FortiOS 7.x floor.  Re-verify on firmware upgrades —
+# Fortinet publishes a fresh Max Values Table per release and values
+# can drift by ±1 between 7.0 / 7.2 / 7.4 / 7.6.  Earlier comment
+# said "across all VDOMs" — corrected to per-VDOM.
+#
+# max_local_users intentionally unset — see fortigate_40f.yaml for
+# rationale.
 max_vlans: 1024
+max_vlans_source: "FortiOS 7.2 Maximum Values Table (grounded by user_contrib_fg100e_fos7213 capture), per-VDOM system.interface type vlan"

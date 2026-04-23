@@ -66,6 +66,22 @@ modules, e.g. Cisco Cat 9300 NM slot, Aruba 3810M expansion slot)::
 Modules are ADDITIVE: selecting a module adds its ports to the base
 ``ports:`` list.  Profiles with no ``modules:`` key behave exactly as
 before (zero modules → UI module dropdown hidden).
+
+Per-vendor capacity limits (optional)::
+
+    max_vlans: 512
+    max_vlans_source: "FortiOS 7.2 Maximum Values Table, per-VDOM system.interface type vlan"
+    max_local_users: 16
+
+``max_vlans`` + ``max_local_users`` drive the per-pane fit-check
+banners in the rename modal.  ``max_vlans_source`` is an optional
+free-text provenance string pinning which firmware version / datasheet
+the cap was sourced from — currently populated for FortiGate profiles
+(whose caps are FortiOS-version-scoped; Fortinet publishes a fresh
+Max Values Table per release and entry-class values drift ±1 between
+7.0 / 7.2 / 7.4 / 7.6).  Convention for other vendors is the same
+shape ("``<vendor> <release> <document-name>``") but populating it is
+opportunistic — only done when a vendor's caps get revisited.
 """
 
 from __future__ import annotations
@@ -224,6 +240,22 @@ class TargetProfile(BaseModel):
     (default) means "no limit known / declared" and hides the
     banner on this pane — same discipline as ports (no profile =
     no fit-check)."""
+
+    max_vlans_source: str = ""
+    """Human-readable provenance string for :attr:`max_vlans` — cites
+    the FortiOS version, Aruba firmware release, Cisco IOS-XE train,
+    MikroTik RouterOS branch, etc. against which the cap was
+    validated (e.g. ``"FortiOS 7.2 Maximum Values Table, per-VDOM
+    system.interface type vlan"`` or ``"Aruba AOS-S 16.11
+    datasheet"``).  Empty string (default) means the cap was
+    populated without a specific version-pin — historically most
+    profiles fell into this bucket.  Structured provenance makes
+    per-vendor version-tuning passes (e.g. "bump FortiGate caps for
+    FortiOS 7.4+") mechanically auditable via ``grep`` and enables
+    the UI to surface the source in a banner tooltip.  Optional so
+    non-FortiGate profiles don't all have to be backfilled in one
+    go; populate opportunistically as each vendor's caps get
+    revisited."""
 
     max_local_users: int | None = None
     """Maximum number of local user accounts.  Real examples:

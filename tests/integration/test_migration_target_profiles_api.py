@@ -255,6 +255,58 @@ class TestModulesFieldSerialization:
         assert body["modules"] == {}
 
 
+class TestMaxVlansSourceSerialization:
+    """Per-vendor version-tuning provenance (``max_vlans_source``)
+    ships through the API so the UI's VLAN-pane fit-check banner can
+    surface a tooltip naming the FortiOS version the cap was sourced
+    from.  Optional field — empty string on profiles that haven't
+    been through a version-tuning pass yet."""
+
+    def test_fortigate_profiles_surface_version_pinned_source(
+        self, client: TestClient,
+    ):
+        """All shipped FortiGate profiles pin a specific FortiOS
+        minor (e.g. ``FortiOS 7.2``) in the source string so the UI
+        tooltip can explain which firmware the cap was validated
+        against.  Regression guard — if a future YAML edit forgets
+        the provenance, the fit-check tooltip would read "no source
+        provided" which defeats the feature."""
+        resp = client.get("/api/v1/migration/target-profiles")
+        assert resp.status_code == 200
+        data = resp.json()
+        fortigate = [p for p in data if p["vendor"] == "fortigate"]
+        assert len(fortigate) >= 3
+        for p in fortigate:
+            assert "max_vlans_source" in p, (
+                f"fortigate/{p['model']}: max_vlans_source missing "
+                f"from API response"
+            )
+            assert p["max_vlans_source"], (
+                f"fortigate/{p['model']}: max_vlans_source empty "
+                f"— YAML must populate it"
+            )
+            assert "FortiOS 7." in p["max_vlans_source"], (
+                f"fortigate/{p['model']}: source should pin a "
+                f"specific FortiOS minor; got "
+                f"{p['max_vlans_source']!r}"
+            )
+
+    def test_unset_source_serializes_as_empty_string(
+        self, client: TestClient,
+    ):
+        """Profiles that haven't been through a version-tuning pass
+        yet (most vendors) serialize ``max_vlans_source`` as the
+        empty string — NOT ``null`` / missing key.  The UI tooltip
+        hides itself on empty-string, and the wire contract stays
+        stable for clients that don't branch on null."""
+        resp = client.get(
+            "/api/v1/migration/target-profiles/aruba_aoss/2930F-48G-PoEP"
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body.get("max_vlans_source") == ""
+
+
 class TestPlanAcceptsTargetModule:
     """POST /plan accepts the new ``target_module`` field without
     422-ing, even though the pipeline treats it as advisory (like

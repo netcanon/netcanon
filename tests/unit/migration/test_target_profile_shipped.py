@@ -201,8 +201,17 @@ class TestRealProfilesShipped:
           * Aruba 3810M / 6300M / Cisco C9x00: 4094 (protocol ceiling,
             device enforces at full range)
           * MikroTik / OPNsense (all): 4094 (protocol ceiling)
-          * FortiGate 40F / 60F: 512 (FortiOS 7.x Max Values Table)
-          * FortiGate 100E: 1024 (ditto)
+          * FortiGate 40F / 60F: 512 (FortiOS 7.2 Max Values Table,
+            per-VDOM `system.interface type=vlan`; conservative floor
+            for the 7.x line, may drift ±1 on 7.4/7.6)
+          * FortiGate 100E: 1024 (ditto; grounded by the FG-100E /
+            FortiOS 7.2.13 real capture used for codec certification)
+
+        FortiGate provenance is additionally asserted via
+        :meth:`test_fortigate_profiles_declare_max_vlans_source` —
+        the new ``max_vlans_source`` field pins which FortiOS version
+        the cap was sourced from so future version-tuning passes are
+        mechanically auditable (grep-able).
         """
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
         # Aruba 2930F family — lower cap.
@@ -237,6 +246,44 @@ class TestRealProfilesShipped:
         assert len(opnsense_profiles) >= 16  # at least what we shipped
         for key, p in opnsense_profiles.items():
             assert p.max_vlans == 4094, key
+
+    def test_fortigate_profiles_declare_max_vlans_source(self):
+        """Version-tuning provenance lock-in: every shipped FortiGate
+        profile must declare ``max_vlans_source`` so future
+        Maximum-Values-Table re-verification passes (e.g. "FortiOS
+        7.6 tightened `system.interface type=vlan` to 500 on the 40F
+        class") are grep-able.  Catches drive-by YAML edits that
+        tune ``max_vlans`` without updating the provenance string
+        (common copy-paste hazard now that the field exists).
+
+        Non-FortiGate profiles are intentionally NOT required to
+        populate the field — it's optional and opportunistic.  When
+        Aruba / Cisco / MikroTik / OPNsense caps get revisited the
+        authoring session SHOULD populate it then, but until that
+        revisit happens the empty default is legitimate.
+        """
+        profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
+        fortigate = {
+            k: p for k, p in profiles.items() if k.startswith("fortigate/")
+        }
+        assert len(fortigate) >= 3, (
+            "expected at least 3 shipped FortiGate profiles "
+            "(40F / 60F / 100E); got: " + ", ".join(sorted(fortigate))
+        )
+        for key, p in fortigate.items():
+            assert p.max_vlans_source, (
+                f"{key}: max_vlans_source is empty — set it when "
+                f"tuning max_vlans so the FortiOS version-pin is "
+                f"auditable.  Format: '<FortiOS X.Y Max Values Table>, "
+                f"per-VDOM <row-identifier>'."
+            )
+            # Must name a specific FortiOS minor (not just "FortiOS
+            # 7.x") so version-drift passes can rebind mechanically.
+            assert "FortiOS 7." in p.max_vlans_source, (
+                f"{key}: max_vlans_source should pin a specific "
+                f"FortiOS minor version (e.g. 'FortiOS 7.2' not "
+                f"'FortiOS 7.x'); got: {p.max_vlans_source!r}"
+            )
 
     def test_netgate_sg1100_shape(self):
         """Netgate SG-1100 ARM profile — 3 switch ports exposed as

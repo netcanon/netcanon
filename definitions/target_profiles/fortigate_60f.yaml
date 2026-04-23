@@ -30,8 +30,18 @@ ports:
   - {id: "b", kind: physical, speed: gig, notes: "FortiLink default"}
   - {id: "dmz", kind: physical, speed: gig}
 lags: {max: 8, prefix: ""}
-# Per Fortinet's FortiOS 7.x "Maximum Values Table", FG-60F supports
-# up to 512 VLANs across all VDOMs.  max_local_users intentionally
-# unset \u2014 see fortigate_40f.yaml for rationale (codec round-trip
-# gap + compat banner).
+# FortiGate 60F VLAN cap: 512 VLAN interfaces, *per-VDOM*, sourced
+# from Fortinet's Maximum Values Table
+# (https://docs.fortinet.com/max-value-table → FortiGate 60F,
+# `system.interface` row filtered by `type=vlan`).  Same class as
+# the 40F: entry-desktop hardware with a 512 cap across the FortiOS
+# 7.x line.  See fortigate_40f.yaml for the full version-scoping
+# rationale (Max Values Table is per-FortiOS-release; 512 is the
+# conservative FortiOS 7.2 value, may drift ±1 on 7.4/7.6 — re-
+# verify when operators report mismatches).  Earlier comment said
+# "across all VDOMs" — corrected to per-VDOM.
+#
+# max_local_users intentionally unset — see fortigate_40f.yaml for
+# rationale.
 max_vlans: 512
+max_vlans_source: "FortiOS 7.2 Maximum Values Table, per-VDOM system.interface type vlan"

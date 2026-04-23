@@ -75,6 +75,17 @@ list, don't delete).
 - [ ] **VLAN fit-check hidden on MikroTik**: target MikroTik
       profile (no max_vlans declared).  Banner gone even though
       a profile is picked.
+- [ ] **FortiGate `max_vlans_source` API spot-check**: from a
+      terminal, curl
+      `http://127.0.0.1:<port>/api/v1/migration/target-profiles/fortigate/100E`
+      and confirm the JSON includes a `max_vlans_source` key
+      pinning `"FortiOS 7.2 Maximum Values Table..."`.  Other
+      profiles (e.g. `aruba_aoss/2930F-48G-PoEP`) return
+      `max_vlans_source: ""` — that's the legitimate
+      "not yet version-tuned" default.  This field isn't
+      surfaced in the rename-modal UI yet; the API-level smoke
+      check proves the wire-contract is stable for when a future
+      commit wires it into a fit-check banner tooltip.
 - [ ] **Local-users fit-check OK**: source with 3 users to
       Aruba 2930F (max_local_users=16).  Green banner
       "Local-user fit: 3 / 16".

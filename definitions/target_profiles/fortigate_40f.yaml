@@ -26,12 +26,26 @@ ports:
 # FortiGate LAGs are user-named; leave prefix empty to signal
 # "free-form LAG name".
 lags: {max: 4, prefix: ""}
-# Per Fortinet's FortiOS 7.x "Maximum Values Table", FG-40F supports
-# up to 512 VLANs across all VDOMs.  max_local_users intentionally
-# unset — the FortiGate admin-account cap varies materially by
-# FortiOS version and isn't a reliable datasheet number.
+# FortiGate 40F VLAN cap: 512 VLAN interfaces, *per-VDOM*, sourced
+# from Fortinet's Maximum Values Table
+# (https://docs.fortinet.com/max-value-table → FortiGate 40F,
+# `system.interface` row filtered by `type=vlan`).  The Max Values
+# Table is a FortiOS-version-scoped document — Fortinet publishes a
+# fresh table for each firmware release (7.0 / 7.2 / 7.4 / 7.6) and
+# values can drift by ±1 between releases.  512 is the conservative
+# floor for the FortiOS 7.x line on the 40F class and matches the
+# FortiOS 7.2 publication; re-verify against the live Max Values
+# Table if operators report their device accepting more VLANs than
+# the fit-check banner suggests.  Earlier comment incorrectly said
+# "across all VDOMs" — Max Values Table rows are per-VDOM limits,
+# clarified here.
+#
+# max_local_users intentionally unset — the FortiGate admin-account
+# cap varies materially by FortiOS version and isn't a reliable
+# datasheet number.
 # (Post-Option-A note: the fortigate_cli codec DOES round-trip
 # CanonicalLocalUser via ``config system admin`` blocks, so renames
 # reach rendered output.  The earlier compat-banner rationale for
 # leaving this unset no longer applies.)
 max_vlans: 512
+max_vlans_source: "FortiOS 7.2 Maximum Values Table, per-VDOM system.interface type vlan"

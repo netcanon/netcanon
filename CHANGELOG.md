@@ -7,6 +7,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (deferred item — FortiGate `max_vlans` version-tuning + `max_vlans_source` provenance field)
+
+- New optional `TargetProfile.max_vlans_source: str` field carrying a
+  free-text provenance string for `max_vlans` — pins which firmware
+  release / datasheet the cap was validated against (e.g.
+  `"FortiOS 7.2 Maximum Values Table, per-VDOM system.interface type
+  vlan"`).  Makes version-tuning passes mechanically auditable via
+  `grep` and lets the UI surface the source in a fit-check banner
+  tooltip.
+- All 3 shipped FortiGate profiles (40F / 60F / 100E) populated with
+  `max_vlans_source` pinning FortiOS 7.2 as the Max Values Table
+  reference.  FG-100E additionally calls out the
+  `user_contrib_fg100e_fos7213.conf` real capture as the grounding
+  datapoint — same capture that certifies the `fortigate_cli` codec.
+- YAML comment sweep on the 3 FortiGate profiles: expanded the
+  provenance block to name a specific FortiOS minor version, cite
+  the Max Values Table URL, and explain that values can drift ±1
+  between 7.0 / 7.2 / 7.4 / 7.6 so operators should re-verify on
+  firmware upgrades.
+- **Factual fix:** earlier comments said "up to N VLANs across all
+  VDOMs".  Fortinet's Max Values Table publishes rows *per-VDOM*,
+  not VDOM-aggregate — corrected across all three FortiGate
+  profiles.  No numeric change, just clarified scoping.
+- New unit test `test_fortigate_profiles_declare_max_vlans_source`
+  enforces every shipped FortiGate profile declares the field and
+  pins a specific FortiOS minor (rejects `"FortiOS 7.x"`-style
+  vague strings).
+- New integration test class `TestMaxVlansSourceSerialization`
+  proves API serialization: FortiGate profiles surface
+  `max_vlans_source` with a FortiOS version pin; profiles that
+  haven't opted in serialize the field as `""` (not `null`).
+- Other vendors (Aruba / Cisco / MikroTik / OPNsense) intentionally
+  leave `max_vlans_source` empty for now — populate opportunistically
+  when each vendor's caps get revisited.  The field is optional +
+  defaulted so no mass-backfill is required.
+- Numbers themselves unchanged: 40F / 60F still 512, 100E still 1024.
+  This commit is a provenance tune, not a value tune — the existing
+  values were the correct conservative floor for FortiOS 7.x; the
+  improvement is that future value changes will now carry an
+  audit-trail.
+
 ### Changed (kill module-variant allowlist manual-sync tax)
 
 - The `MODULE_VARIANT_PROFILES` set was duplicated as two identical
