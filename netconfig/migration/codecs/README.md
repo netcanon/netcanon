@@ -96,6 +96,15 @@ class MyVendorCodec(CodecBase):
     sample_input: ClassVar[str] = "hostname myvendor-01\n...\n"
     output_extension: ClassVar[str] = "cfg"
 
+    # Per-pane round-trip gaps.  List any category the Tier-3 rename
+    # modal exposes that this codec's parse+render doesn't yet wire
+    # (currently: ports / vlans / local_users; SNMP + RADIUS later).
+    # The UI shows an amber compatibility banner on the affected
+    # pane so operators see up-front that overrides won't reach
+    # rendered output.  Remove entries as the codec gains each
+    # category's round-trip coverage.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
+
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         vendor_id="myvendor",
         device_classes=[DeviceClass.switch, DeviceClass.router],

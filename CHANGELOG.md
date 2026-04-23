@@ -7,6 +7,58 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (per-pane capacity fit-check banners — `TargetProfile.max_vlans` + `max_local_users`)
+
+- Two new optional fields on `TargetProfile`:
+    - `max_vlans: int | None` — active-VLAN limit for the device.
+    - `max_local_users: int | None` — local-account limit.
+- Each rename-modal pane (VLANs, local_users) renders its own
+  fit-check banner sourced from these fields.  Three states:
+  hidden (no profile picked OR limit undeclared) / green OK
+  ("VLAN fit: N / limit") / red block ("VLAN OVER capacity — K
+  over, pick a larger model").
+- Pane-scoped: the ports fit-check banner (driven by per-kind
+  capacity counts) stays in its own element; each new category's
+  banner is a sibling, not an overload.  Adding a future SNMP /
+  RADIUS fit-check banner follows the same pattern.
+- Shipped profiles populated where datasheet numbers are
+  reliable:
+    - Aruba 2930F family (4 profiles): max_vlans=2048, max_local_users=16
+    - Aruba 3810M (2): max_vlans=4094, max_local_users=16
+    - Aruba 6300M (1): max_vlans=4094, max_local_users=64
+    - Cisco C9300 family (6) + C9500 (2): max_vlans=4094
+  Softer-limit vendors (MikroTik / OPNsense / FortiGate) left
+  unset — populating them with best-guess values would mislead
+  operators more than helping.
+- 5 new unit tests (TargetProfile schema) + 3 new e2e tests
+  (TestRenameModalPerPaneFitCheck).
+
+### Added (Item 1 Option B — target-codec compatibility banners on rename panes)
+
+- `CodecBase.unsupported_rename_categories: frozenset[str]`
+  declares per-pane categories the codec doesn't round-trip.
+  OPNsense + FortiGate both declare `{"local_users"}` because
+  their parse+render path currently leaves user blocks in
+  `raw_sections` as Tier-3 passthrough.
+- `CodecInfo.unsupported_rename_categories` exposes the list via
+  `GET /api/v1/migration/adapters`; UI caches it alongside the
+  existing adapter metadata.
+- Rename modal's local-users pane now shows an amber banner
+  up-front when the active target is in the declaring set.
+  Warns operators that rename overrides apply to the canonical
+  tree but won't reach rendered output.  Kills the
+  ghost-success bug where `job.local_user_renames` populates but
+  the rendered config has no user stanzas.
+- Rename-open button gate broadened (was ports-only): now shows
+  when ANY pane has content (port renames/warnings, source_vlans,
+  source_local_users).  Pre-P2C4 gap — becomes visible once the
+  VLAN/users panes started carrying non-port-dependent content.
+- Deferred: **Option A** — full parser+render wiring for
+  local_users on OPNsense + FortiGate.  Tracked for the
+  "certified-tier Tier-2 parity" sweep; remove the codec
+  declarations when it ships.
+- 2 new integration tests + 2 new e2e tests.
+
 ### Fixed (post-P2C4 rename-modal UX polish + OPNsense probe support)
 
 - **Target-profile dropdowns scoped to ports pane.**  The vendor /

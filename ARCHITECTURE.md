@@ -284,6 +284,26 @@ local-users panes (they have no "auto-rewritten" rows to fall
 back on if the operator hasn't already sent overrides) and for
 the localStorage key (hostname).
 
+**Target-codec compatibility banners:** each codec declares
+`unsupported_rename_categories: frozenset[str]` listing per-pane
+categories it doesn't round-trip (e.g. OPNsense + FortiGate list
+`local_users` because their parse keeps user blocks in
+`raw_sections` as Tier-3 passthrough).  The rename modal surfaces
+an amber warning on the affected pane when the operator's active
+target is in the declaring set — prevents the ghost-success bug
+where rename overrides apply to the canonical tree but vanish
+from rendered output.  When the codec's Tier-2 parse+render path
+catches up, remove the declaration and the banner disappears.
+
+**Per-pane capacity fit-checks:** each pane renders its own
+fit-check banner (separate from the ports fit-check in
+`_partials/fit-check.js`).  Banner state is a pure function of
+the active target profile's capacity fields
+(`TargetProfile.max_vlans`, `TargetProfile.max_local_users`) and
+the corresponding source count — no cross-pane coupling.  Hidden
+when the profile doesn't declare the limit, same discipline as
+the ports fit-check's "no profile = no banner" rule.
+
 See [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
 for the codec-authorship side of this (every codec must expose
 `classify_port_name` / `format_port_identity` to participate in
@@ -370,6 +390,25 @@ allowlists in
 and [`tests/integration/test_migration_target_profiles_api.py`](tests/integration/test_migration_target_profiles_api.py)
 guard against silent drift — a profile listed there must actually
 declare `modules:`, and a legacy profile must keep `modules: {}`.
+
+### Per-category capacity limits
+
+Profiles may declare `max_vlans` and/or `max_local_users` to
+drive per-pane fit-check banners in the rename modal (VLAN pane +
+local-users pane each render their own banner when the active
+profile declares the corresponding limit).  Both fields are
+optional — `None` means "no limit known / declared" and hides the
+banner for that pane.  Same discipline as the existing ports
+fit-check: no profile selected = no banner; no limit on a profile
+= no banner for that category.
+
+Values should come from vendor datasheets and be hedged
+conservatively — silently-wrong limits are worse than missing
+ones because they let bad migrations look safe.  Well-known
+numbers (Aruba 2930F max_vlans = 2048, Cisco IOS-XE max_vlans =
+4094) are populated in the shipped profile YAMLs; softer numbers
+(MikroTik, OPNsense, FortiGate user limits) are intentionally
+left unset.
 
 ### Relationship to backup-side device definitions
 

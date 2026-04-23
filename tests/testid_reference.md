@@ -562,6 +562,9 @@ surfaces under a shared left-rail navigation):
 | `migrate-rename-local-user-override-<username>` | `<input>` | Free-text target-username input.  `type="text"`; blank = accept auto default / keep unchanged.  Non-empty value triggers a rename on Apply |
 | `migrate-rename-local-user-drop-<username>` | `<span>` | Inline drop / un-drop / keep-verbatim link — same three-state logic as port + VLAN rows |
 | `migrate-rename-summary-local-users`  | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "Users: A auto / B overrides / C drops".  Only present when any local-user-category state exists |
+| `migrate-rename-local-users-compat`   | `<div>`    | Amber target-codec compatibility banner inside the local-users pane.  Shows when the active target codec's `unsupported_rename_categories` list includes `local_users`.  Warns the operator that rename overrides will apply to the canonical tree but won't reach rendered output until the codec's Tier-2 parse+render path ships |
+| `migrate-rename-vlans-fitcheck`       | `<div>`    | Per-pane fit-check banner inside the VLANs pane.  Shows when the active target profile declares `max_vlans`.  Three CSS states: hidden (no profile / no limit), `mig-banner-ok` (source count ≤ limit), `mig-banner-block` (source count > limit) |
+| `migrate-rename-local-users-fitcheck` | `<div>`    | Per-pane fit-check banner inside the local-users pane.  Same three-state contract as the VLAN banner, driven by target profile's `max_local_users` field |
 
 ### RESERVED for Phase 2 (transforms + deploy)
 

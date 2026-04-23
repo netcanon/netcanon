@@ -33,6 +33,49 @@ list, don't delete).
       probe declaration — backup picks the family-base definition
       (same as pre-P1C3 behaviour).
 
+## Migration — Per-pane fit-check banners + target compat warnings (ship-fresh)
+
+- [ ] **VLAN fit-check OK**: translate a Cisco config to Aruba.
+      Open modal.  Pick **Aruba 2930F-48G-PoEP (JL256A)** from the
+      target-profile dropdowns.  Click VLANs rail button.
+      Green "VLAN fit: N / 2048 (Aruba 2930F-48G-PoEP)" banner at
+      top of pane, where N is the number of VLANs in your source.
+- [ ] **VLAN fit-check OVER**: paste a Cisco config with 2500+
+      VLANs (easy: synthesize with a shell loop).  Same
+      translation + Aruba 2930F profile.  Banner turns RED:
+      "VLAN OVER capacity: 2500 / 2048 (452 over)".  Apply
+      button still works (server will cap at device limit or
+      error out — this is advisory).
+- [ ] **VLAN fit-check hidden without profile**: same source,
+      don't pick a vendor/model.  Banner gone.
+- [ ] **VLAN fit-check hidden on MikroTik**: target MikroTik
+      profile (no max_vlans declared).  Banner gone even though
+      a profile is picked.
+- [ ] **Local-users fit-check OK**: source with 3 users to
+      Aruba 2930F (max_local_users=16).  Green banner
+      "Local-user fit: 3 / 16".
+- [ ] **Local-users fit-check hidden on Cisco**: Cisco C9300
+      profiles intentionally don't declare max_local_users
+      (IOS-XE's effective limit is 65k+, not worth showing).
+      Banner stays hidden.
+- [ ] **OPNsense local-users compat banner**: translate Cisco →
+      OPNsense.  Source has at least one `username` line.  Open
+      modal → Local Users pane.  Amber banner at top: "Target
+      codec doesn't render local users.  OPNsense parses +
+      renders interfaces and VLANs but local users are currently
+      Tier-3 passthrough…".  Override inputs + drop links still
+      work but rendered output has no user stanzas after Apply.
+- [ ] **FortiGate local-users compat banner**: same as above
+      but target = FortiGate.  Same amber banner.
+- [ ] **Aruba / Cisco / MikroTik local-users — NO compat banner**:
+      those codecs DO round-trip local_users, so no banner.
+- [ ] **Rename button appears on user-only source**: paste a
+      Cisco config with ONLY `username` lines (no interfaces, no
+      VLANs).  Click Translate.  "Interface rename" button still
+      appears after the translation — pre-P2C4 this was hidden
+      because the gate was ports-only.  Clicking it opens the
+      modal; Local Users pane is the only one with content.
+
 ## Migration — Post-P2C4 UX polish (ship-fresh)
 
 - [ ] **Target-profile dropdowns pane-scoped**: open the rename
