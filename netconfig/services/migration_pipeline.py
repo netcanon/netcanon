@@ -12,6 +12,7 @@ Pure function — no I/O, no global state.
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Callable
 
@@ -22,6 +23,8 @@ from ..models.migration import (
     TransformSpec,
 )
 from .migration_validate import check_class_compat, validate_against
+
+logger = logging.getLogger(__name__)
 
 
 #: A transform is any callable that accepts a tree and returns a new
@@ -77,6 +80,16 @@ def run_plan(
         transforms=transform_specs or [],
     )
 
+    logger.debug(
+        "run_plan %s: entry %s → %s (raw=%d bytes, transforms=%d, force=%s)",
+        job.id[:8],
+        source.name,
+        target.name,
+        len(raw_text),
+        len(transforms or []),
+        force,
+    )
+
     # Stage 0 — device-class compatibility guard.  Runs BEFORE parse
     # so a mismatched pair fails instantly without spending any
     # collector or parser time.
@@ -89,37 +102,70 @@ def run_plan(
             + " Pass force=True to override (NOT recommended)."
         )
         job.completed_at = datetime.now(timezone.utc)
+        # WARNING rather than ERROR — the guard working as designed
+        # isn't a system fault; operator may have legitimately made
+        # a picker mistake the UI surfaces back to them.  Logs give
+        # ops a breadcrumb when customer tickets reference "my
+        # translation refused" without detail.
+        logger.warning(
+            "run_plan %s: device-class guard refused %s → %s: %s",
+            job.id[:8], source.name, target.name,
+            " ".join(class_compat.reasons),
+        )
         return job
 
     try:
         # Stage 2 — parse
         job.status = MigrationJobStatus.parsing
+        logger.debug("run_plan %s: stage=parse", job.id[:8])
         tree = source.parse(raw_text)
 
         # Stage 3 — transforms
         job.status = MigrationJobStatus.transforming
+        logger.debug(
+            "run_plan %s: stage=transform (%d transform(s))",
+            job.id[:8], len(transforms or []),
+        )
         for fn in transforms or []:
             tree = fn(tree)
 
         # Stage 4 — validate
         job.status = MigrationJobStatus.validating
+        logger.debug("run_plan %s: stage=validate", job.id[:8])
         # Pass the source adapter so the validator can walk adapter-
         # specific tree shapes via ``CodecBase.iter_xpaths``.
         job.validation = validate_against(tree, target, source=source)
 
         # Stage 5 — render
         job.status = MigrationJobStatus.rendering
+        logger.debug("run_plan %s: stage=render", job.id[:8])
         job.rendered = target.render(tree)
 
     except ParseError as exc:
         job.status = MigrationJobStatus.failed
         job.error = f"parse failed: {exc}"
+        logger.exception(
+            "run_plan %s: parse failed for %s → %s",
+            job.id[:8], source.name, target.name,
+        )
     except RenderError as exc:
         job.status = MigrationJobStatus.failed
         job.error = f"render failed: {exc}"
+        logger.exception(
+            "run_plan %s: render failed for %s → %s",
+            job.id[:8], source.name, target.name,
+        )
     except Exception as exc:  # noqa: BLE001 — honest catch-all
+        # Preserve the stage the job was in at the moment of failure —
+        # ``job.status`` holds the in-progress enum when the exception
+        # fires, so capture it BEFORE reassigning to ``failed``.
+        failing_stage = job.status.value
         job.status = MigrationJobStatus.failed
-        job.error = f"unexpected error in stage {job.status.value}: {exc}"
+        job.error = f"unexpected error in stage {failing_stage}: {exc}"
+        logger.exception(
+            "run_plan %s: unexpected error in stage=%s for %s → %s",
+            job.id[:8], failing_stage, source.name, target.name,
+        )
     else:
         # Terminal success: mirror the BackupJob three-way convention.
         # Phase 0 has no partial condition — validate.severity == "block"
@@ -138,6 +184,14 @@ def run_plan(
             job.status = MigrationJobStatus.completed
 
     job.completed_at = datetime.now(timezone.utc)
+    logger.debug(
+        "run_plan %s: terminal status=%s (rendered=%d bytes, "
+        "validation=%s)",
+        job.id[:8],
+        job.status.value,
+        len(job.rendered or ""),
+        job.validation.severity if job.validation else "n/a",
+    )
     return job
 
 
@@ -263,6 +317,30 @@ def run_plan_with_overrides(
         build_snmp_community_rename_transform,
     )
     from ..migration.canonical.vlan_names import build_vlan_rename_transform
+
+    # Summarise which categories the caller opted into BEFORE any
+    # transforms run so a subsequent failure has a breadcrumb for
+    # "what was the operator actually trying to do?".  None = not
+    # engaged; {} = engaged with auto-heuristic only; {k: v, ...} =
+    # explicit overrides.
+    engaged_categories: dict[str, int | str] = {}
+    if port_rename_map is not None:
+        engaged_categories["port"] = len(port_rename_map) or "auto"
+    if vlan_rename_map is not None:
+        engaged_categories["vlan"] = len(vlan_rename_map) or "auto"
+    if local_user_rename_map is not None:
+        engaged_categories["local_user"] = (
+            len(local_user_rename_map) or "auto"
+        )
+    if snmp_community_rename_map is not None:
+        engaged_categories["snmp_community"] = (
+            len(snmp_community_rename_map) or "auto"
+        )
+    logger.debug(
+        "run_plan_with_overrides: %s → %s engaged=%s",
+        source.name, target.name,
+        engaged_categories or "none (capture-only)",
+    )
 
     override_transforms: list[TransformCallable] = []
     rename_result = None
@@ -408,6 +486,31 @@ def run_plan_with_overrides(
     job.source_snmp_community = captured.get("snmp_community", "") or ""
     job.source_hostname = captured.get("hostname", "") or ""
 
+    # Post-run DEBUG summary — mirrors the per-category outcome
+    # fields the UI will read.  Useful for post-hoc debugging when
+    # a customer says "my rename didn't fire": the debug log shows
+    # whether the override transform ran AND how many entries
+    # actually applied.
+    logger.debug(
+        "run_plan_with_overrides %s: %s → %s captured "
+        "vlans=%d users=%d snmp=%s hostname=%r | applied "
+        "ports=%d vlans=%d users=%d snmp=%d | drops "
+        "ports=%d vlans=%d users=%d snmp=%d",
+        job.id[:8],
+        source.name, target.name,
+        len(job.source_vlans),
+        len(job.source_local_users),
+        "yes" if job.source_snmp_community else "no",
+        job.source_hostname,
+        len(job.port_renames),
+        len(job.vlan_renames),
+        len(job.local_user_renames),
+        len(job.snmp_community_renames),
+        len(job.port_drops),
+        len(job.vlan_drops),
+        len(job.local_user_drops),
+        len(job.snmp_community_drops),
+    )
     return job
 
 
