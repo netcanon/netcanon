@@ -12,13 +12,14 @@ list, don't delete).
 
 ## Backup — Probe phase + layered definitions (P1C3, ship-fresh)
 
-- [ ] **Definition probe opt-in**: edit a Cisco IOS-XE definition
-      YAML and add `probe: { command: "show version", patterns:
-      { detected_os_version: "Version\\s+([\\d.]+)", detected_model:
-      "Model Number\\s+:\\s+(\\S+)" } }`.  Restart the server, run
-      a backup against a real Cisco switch.  The devices page edit
-      form's "Detected facts" panel should populate with the
-      current OS version + model + probe_timestamp.
+- [ ] **Definition probe opt-in** (now ships by default for Cisco
+      IOS-XE 17.x — `definitions/cisco/ios-xe/17.x.yaml` carries the
+      `probe:` block; edit the regex/command only if your fleet's
+      `show version` output differs).  Run a backup against a real
+      Cisco switch.  The devices page edit form's "Detected facts"
+      panel should populate with the current OS version + model +
+      probe_timestamp.  Adapt the same pattern to other vendors by
+      adding an analogous `probe:` block to their family-base YAMLs.
 - [ ] **Probe failure is non-fatal**: point the probe at a device
       where auth would fail (wrong port/creds).  Backup should
       still run against the family-base definition; server log

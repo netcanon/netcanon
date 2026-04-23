@@ -29,6 +29,28 @@ collector:
   strategy: netmiko
   netmiko_device_type: cisco_xe
 
+probe:
+  # Pre-backup "show version" probe.  Populates DeviceProfile.detected_facts
+  # and feeds DefinitionLoader.resolve() so the correct version-specific
+  # overlay (e.g. 17.12.yaml) is picked when the device reports it.
+  #
+  # Probe is the family-base's responsibility: the backup pipeline calls
+  # probe() on the family-base collector BEFORE resolving overlays, so
+  # 17.12.yaml (and any future 17.x overlay) inherits this behaviour
+  # without duplicating the block.
+  #
+  # Failure is non-fatal — a probe exception or no-match silently falls
+  # back to this family-base definition.
+  command: "show version"
+  patterns:
+    # Capture major.minor ONLY (e.g. "17.12" from "Version 17.12.03").
+    # The resolver's os_version match is exact-string against the overlay's
+    # `os_version: "17.12"` pin; capturing the full patch level would miss.
+    detected_os_version: "Version\\s+(\\d+\\.\\d+)"
+    # Hardware model (e.g. "C9300-48P") from the "Model Number" line of
+    # `show version` output on Catalyst 9000-series and similar platforms.
+    detected_model: "Model Number\\s+:\\s+(\\S+)"
+
 notes: >
   IOS-XE 17.x. Requires enable mode. Uses space-injection for --More-- paging;
   terminal length 0 is avoided — unreliable on this platform.

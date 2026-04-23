@@ -7,6 +7,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (ship `probe:` block for Cisco IOS-XE family-base + overlay inheritance note)
+
+- `definitions/cisco/ios-xe/17.x.yaml` now declares a `probe:` block
+  — the first shipped definition to opt into the P1C3 probe-phase
+  machinery.  Command is `show version`; two regex patterns feed
+  `DefinitionLoader.resolve()` and `DeviceProfile.detected_facts`:
+    - `detected_os_version: "Version\\s+(\\d+\\.\\d+)"` — captures
+      major.minor (e.g. `17.12`) from `Version 17.12.03, RELEASE …`.
+      Major.minor is deliberate: the 17.12 overlay pins
+      `os_version: "17.12"` and the resolver's match is exact-string,
+      so capturing the full patch level (`17.12.03`) would MISS
+      the overlay.
+    - `detected_model: "Model Number\\s+:\\s+(\\S+)"` — captures
+      hardware model (e.g. `C9300-48P`) from the `Model Number` line
+      of Catalyst 9000 `show version` output.
+- `definitions/cisco/ios-xe/17.12.yaml` intentionally does NOT
+  declare its own `probe:` block.  The backup pipeline runs probe()
+  on the family-base collector BEFORE resolving overlays, so the
+  overlay inherits the family-base probe behaviour without
+  duplication.  Inline comment in the overlay YAML documents this
+  so a future contributor doesn't "helpfully" copy the block down.
+- New integration tests in `tests/integration/test_backup_probe_wiring.py`
+  (`TestShippedCiscoIOSXEProbeBlock`) lock in that the shipped
+  family-base carries a non-empty `probe.command` with both
+  `detected_os_version` + `detected_model` patterns, and that the
+  17.12 overlay ships with NO probe block of its own.
+
 ### Changed (data enrichment — soft-limit `max_vlans` populated across MikroTik / OPNsense / FortiGate)
 
 - Every shipped target profile now declares `max_vlans` so the

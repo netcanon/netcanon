@@ -349,3 +349,61 @@ class TestLegacyDefinitionsUnchanged:
                 job_id = resp.json()["id"]
                 job = client.get(f"/api/v1/backups/{job_id}").json()
         assert job["status"] == "completed"
+
+
+class TestShippedCiscoIOSXEProbeBlock:
+    """Locks in the shipped probe block on the Cisco IOS-XE family
+    base.  P1C3 M1-M3 shipped the machinery; this test guards the
+    first shipped opt-in so a later edit doesn't silently remove
+    the probe config from the YAML.
+
+    Loads ``definitions/`` directly from disk via DefinitionLoader
+    rather than going through the test_app fixture (which uses its
+    own minimal definition set) — we're asserting on what SHIPS.
+    """
+
+    def test_cisco_iosxe_family_base_declares_probe(self):
+        from netconfig.definitions.loader import DefinitionLoader
+
+        # Project-root definitions/ directory — the shipped set.
+        repo_root = Path(__file__).resolve().parents[2]
+        defs_dir = repo_root / "definitions"
+        loader = DefinitionLoader(defs_dir)
+        definitions = loader.load_all()
+
+        assert "Cisco" in definitions, (
+            f"Cisco type_key missing from shipped definitions: "
+            f"{sorted(definitions.keys())}"
+        )
+        cisco = definitions["Cisco"]
+        # Family base — no os_version / model pin.
+        assert cisco.os_version is None
+        assert cisco.model is None
+        # Probe opted in.
+        assert cisco.probe.command, (
+            "Cisco IOS-XE family-base definition must ship a non-empty "
+            "probe.command so layered-definition resolution can use the "
+            "detected OS version."
+        )
+        # Fact patterns cover both feeds of DefinitionLoader.resolve().
+        assert "detected_os_version" in cisco.probe.patterns
+        assert "detected_model" in cisco.probe.patterns
+
+    def test_cisco_iosxe_1712_overlay_inherits_probe_from_family_base(self):
+        """Overlay intentionally does NOT declare its own probe block.
+        Probe runs on the family-base collector before resolve()."""
+        from netconfig.definitions.loader import DefinitionLoader
+
+        repo_root = Path(__file__).resolve().parents[2]
+        defs_dir = repo_root / "definitions"
+        loader = DefinitionLoader(defs_dir)
+        # resolve() needs load_all() to populate the variant registry.
+        loader.load_all()
+
+        overlay = loader.resolve("Cisco", os_version="17.12")
+        assert overlay is not None
+        assert overlay.os_version == "17.12"
+        # Overlay ships with no probe block of its own — probe runs
+        # on the family-base before overlay resolution.
+        assert overlay.probe.command == ""
+        assert overlay.probe.patterns == {}

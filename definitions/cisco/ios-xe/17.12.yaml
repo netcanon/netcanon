@@ -59,6 +59,14 @@ collector:
   strategy: netmiko
   netmiko_device_type: cisco_xe
 
+# No `probe:` block here — intentionally.  The backup pipeline runs
+# probe() on the FAMILY-BASE collector (17.x.yaml) BEFORE resolving
+# to this overlay, so this overlay inherits the probe behaviour
+# without duplication.  If a future IOS-XE 17.12 quirk requires a
+# version-specific probe command, override here; otherwise leave
+# this commented note in place so a contributor doesn't "helpfully"
+# copy the family-base probe block down.
+
 notes: >
   IOS-XE 17.12 overlay.  Adds config-mode prompt capture narrowing
   seen on Cat 9300 captures.  All other behaviour inherits the
