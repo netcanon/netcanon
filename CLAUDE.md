@@ -107,16 +107,20 @@ mapping below is concrete; audit every applicable row before you run
 
 | If you change / add … | Then touch … |
 |---|---|
-| A new interactive HTML element (button, input, link, row) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section |
+| A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
 | A new codec under `netconfig/migration/codecs/<vendor>/` | `netconfig/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
 | A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netconfig/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
-| A new target-profile YAML under `definitions/target_profiles/` | Per-profile unit test in `tests/unit/migration/test_target_profiles.py` asserting exact port-name list + count (regression guard against copy-paste mistakes) |
-| A target-profile gains `modules:` (migrates to module-variant shape) | Update BOTH `MODULE_VARIANT_PROFILES` allowlists — one in `tests/unit/migration/test_target_profiles.py`, one in `tests/integration/test_migration_target_profiles_api.py` (kept in sync manually) |
+| A new target-profile YAML under `definitions/target_profiles/` | Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes) |
+| A target-profile gains `modules:` (migrates to module-variant shape) | Update BOTH `MODULE_VARIANT_PROFILES` allowlists — one in `tests/unit/migration/test_target_profile_shipped.py`, one in `tests/integration/test_migration_target_profiles_api.py` (kept in sync manually) |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
+| A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netconfig/api/routes/migration.py`, `netconfig/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
 | A new hard rule / cross-cutting invariant surfaced by a bug | This file (`CLAUDE.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
 | A codec is promoted to `best_effort` or `certified` | `tests/fixtures/real/RESULTS.md` — update the coverage matrix and certification decision; ARCHITECTURE.md's cert paragraph intentionally defers to RESULTS.md as source of truth |
 | A new real-capture fixture under `tests/fixtures/real/<vendor>/` | `tests/fixtures/real/NOTICE.md` — provenance + attribution; `tests/fixtures/real/RESULTS.md` — coverage matrix row |
+| A new pytest marker in `pyproject.toml` (`[tool.pytest.ini_options] markers = [...]`) or a new conftest fixture that meaningfully changes how a whole test tier runs | `tests/README.md` — the markers table and/or the "How to run" section.  Markers without doc entries are invisible to contributors running `pytest -m <name>`. |
+| A file-tree listing or "contents map" in any doc (`ARCHITECTURE.md` partial inventories, migrate.html header comment, sub-README directory trees) | Either update the listing in the same commit as the new file, OR convert the listing to a pointer ("see `netconfig/templates/_partials/` for the current set").  Exhaustive inventories that enumerate every file become a maintenance tax — prefer one-line pointers unless the enumeration carries load-bearing explanation. |
+| A fourth or subsequent commit shipping pieces of the *same* new conceptual subsystem (e.g. target profiles, module variants, per-pane overrides, cross-mesh validation) | `ARCHITECTURE.md` — at the Nth commit of a thematic series, ask: "does the architecture doc have a section describing this concept, or only the piecemeal mechanics?"  If the concept is absent, add a short section in that same commit.  N is a judgement call but 3-5 commits is the rough threshold. |
 | A function gains a new parameter or changes return shape | Its docstring (Google-style sections for Args / Returns / Raises) |
 | A pipeline-stage signature (anywhere in `migration_pipeline.py`) | **DON'T.**  These are frozen (see Hard Rules).  Add a NEW function instead; the module docstring tracks which are frozen |
 | The module-variant schema gets a new field on `TargetProfile` / `TargetModule` | The class docstring in `netconfig/migration/target_profiles.py` — it includes a worked YAML example that must stay accurate |
@@ -125,6 +129,25 @@ mapping below is concrete; audit every applicable row before you run
 Rule of thumb: if a future contributor could plausibly search for the
 thing you just added and not find its rationale, there's a doc gap
 to close.
+
+---
+
+## Cross-reference discipline
+
+Every doc in `tests/`, `docs/`, and top-level `*.md` should open with
+(or end with) a "See also" line pointing to its two or three closest
+peers.  Concretely:
+
+* `tests/README.md` → `testid_reference.md`, `fixtures/real/RESULTS.md`,
+  `fixtures/real/NOTICE.md`
+* `ARCHITECTURE.md` → `definitions/README.md`,
+  `netconfig/migration/codecs/README.md`, `translator-plans.txt`
+* `README.md` → `ARCHITECTURE.md`, `CLAUDE.md`, `tests/README.md`
+
+A contributor who lands on one doc should be one hop from the others.
+When you add a new sibling doc, add the reciprocal link in the
+existing peers in the same commit — one-way cross-references rot
+faster than numbers do.
 
 ---
 
@@ -166,6 +189,17 @@ tests use these exclusively — never CSS classes or element structure.  See
   shipped without its docs.  Stale docs are a bug; they just don't crash
   loud enough to be caught by CI, which is why the discipline has to live
   in the workflow.
+- **Never** hard-code a count, LOC figure, or test tally in prose
+  documentation (`README.md`, `ARCHITECTURE.md`, sub-READMEs) unless the
+  same commit adds a CI or test guard that keeps the number honest.
+  Use qualitative phrasing ("the largest template in the app", "dozens
+  of target profiles across six vendors") or link to the authoritative
+  source (`pytest --collect-only`, the file itself, `RESULTS.md`).
+  Numbers in *test assertions* fail loudly and are fine; numbers in
+  *prose* rot silently.  Retroactive purge of existing stale numbers is
+  encouraged — removal counts as fixing.  Archival records in
+  `CHANGELOG.md` (as-of-this-commit pass counts, historical LOC deltas)
+  are exempt — they're timestamps, not current-state claims.
 - **Never** patch `ConnectHandler` or `paramiko.SSHClient` directly in tests —
   patch `netconfig.api.routes.backups.get_collector` instead (the single
   factory used by the backup route).

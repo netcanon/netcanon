@@ -319,18 +319,33 @@ to factor long `<script>` blocks out into reusable partial files:
 
 ```
 netconfig/templates/
-├── migrate.html              # ~1,500 LOC — outer HTML + script
-├── base.html                 #   ~520 LOC — outer chrome + global JS
-└── _partials/
-    ├── classify.js           # shared _guessKind / _looksLikeUplink
-    ├── config-viewer.js      # modal viewer + search (base.html)
-    ├── fit-check.js          # hardware-capacity banner (migrate.html)
-    ├── job-progress.js       # floating job widget (base.html)
-    ├── rename-apply.js       # rename-modal apply flow + drag handlers
-    │                         #   + vendor/model/module selector wiring
-    ├── rename-panel.js       # rename-modal preview + summary
-    └── rename-table.js       # rename-modal per-kind table renderer
+├── migrate.html              # outer HTML + script — the largest
+│                             # page template, hosts the Tier-3
+│                             # rename modal that depends on the
+│                             # partials below
+├── base.html                 # outer chrome + global JS
+└── _partials/                # see the directory for the current set;
+                              # included via Jinja `{% include %}`
 ```
+
+Current partials (at time of writing — contents of `_partials/` is
+the source of truth):
+
+* **classify.js** — shared `_guessKind` / `_looksLikeUplink`
+  client-side port classifiers, used by both rename-table.js and
+  fit-check.js.
+* **config-viewer.js** — modal viewer with syntax highlighting +
+  search, mounted globally from base.html.
+* **fit-check.js** — hardware-capacity banner on the rename modal
+  (access/uplink/mgmt per-kind overage indicators).
+* **job-progress.js** — floating job-status widget, mounted
+  globally from base.html; survives page navigation via
+  localStorage.
+* **rename-apply.js** — rename-modal Apply-button flow + drag
+  handlers + vendor/model/module selector wiring.
+* **rename-panel.js** — rename-modal preview + summary renderer.
+* **rename-table.js** — rename-modal per-kind expandable sections
+  with per-row override dropdowns, collision detection, drop links.
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the

@@ -43,10 +43,11 @@ pytest                       # unit + integration + desktop (fast)
 pytest -m e2e                # Playwright browser tests (slower)
 ```
 
-Current test state: **~1,410 unit+integration + 143 e2e passing**
-across unit / integration / e2e / desktop / real-capture-validation
-layers.  Exact counts drift as commits land; source of truth is the
-CI output.
+Tests run across five layers: unit (pure functions, no I/O),
+integration (TestClient + mocked SSH), e2e (Playwright against a live
+Uvicorn), desktop (PySide6 + pystray mocked), and real-capture
+validation (codec fixtures under `tests/fixtures/real/`).  CI output
+is the source of truth for pass counts.
 
 ---
 
@@ -100,17 +101,20 @@ scripts/                One-off utilities (Aruba template renderer, …)
 Per-codec certainty (read from `CanonicalCodec.certainty` at module
 load, surfaced via `GET /api/v1/migration/adapters`):
 
-| Codec | Certainty | Real fixtures |
-|---|---|---:|
-| mikrotik_routeros | **certified** ✅ | 4 across 3 OS versions |
-| aruba_aoss | **certified** ✅ | 4 (3 real + 1 rendered) across 3 OS versions |
-| cisco_iosxe_cli | **certified** ✅ | 11 (6 grammar-test + 5 real, incl. physical Cat 9300-24UX) across 4 LTS OS versions |
-| opnsense | **certified** ✅ | 4 (3 upstream + 1 real user-deployed) across 2 sources |
-| fortigate_cli | **certified** ✅ | 3 (incl. real physical FG100E) across 2 OS versions |
-| cisco_iosxe (NETCONF) | best_effort | — |
+| Codec | Certainty |
+|---|---|
+| mikrotik_routeros | **certified** ✅ |
+| aruba_aoss | **certified** ✅ |
+| cisco_iosxe_cli | **certified** ✅ |
+| opnsense | **certified** ✅ |
+| fortigate_cli | **certified** ✅ |
+| cisco_iosxe (NETCONF) | best_effort |
 
-See `tests/fixtures/real/RESULTS.md` for the full matrix, per-fixture
-coverage, and per-codec "what blocks promotion to certified" notes.
+See [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md)
+for the full matrix — per-fixture coverage, OS-version distribution,
+bugs surfaced, and per-codec "what blocks promotion" notes.  That
+file is the source of truth; counts here are intentionally omitted
+to avoid drift.
 
 ---
 
