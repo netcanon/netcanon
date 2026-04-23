@@ -222,8 +222,8 @@ with per-category partials under `_partials/`.
 
 **What:** The Tier-3 rename modal lets operators override the
 auto-heuristic for individual canonical categories without
-leaving the translate workflow.  Each category (Ports, VLANs, and
-future local_users / SNMP / RADIUS) has:
+leaving the translate workflow.  Each category (Ports, VLANs,
+Local Users today; future SNMP / RADIUS) has:
 
 1. **An orchestrator** under `netconfig/migration/canonical/`
    that walks the canonical tree and applies a caller-supplied
@@ -231,8 +231,9 @@ future local_users / SNMP / RADIUS) has:
    `dropped`, and `warnings` lists so the UI can show exactly
    what happened.
 2. **A per-pane API endpoint** — `POST /api/v1/migration/plan/ports`,
-   `POST /api/v1/migration/plan/vlans` — that accepts only its
-   category's override map and delegates to
+   `POST /api/v1/migration/plan/vlans`,
+   `POST /api/v1/migration/plan/local_users` — that accepts only
+   its category's override map and delegates to
    `run_plan_with_overrides` with the other categories' maps
    defaulted to `None`.
 3. **A rail button + category pane** in the modal UI.  Panes are
@@ -243,10 +244,12 @@ future local_users / SNMP / RADIUS) has:
 function new per-pane categories extend.  New parameters go there
 as optional maps defaulting to `None`; `run_plan` and
 `run_plan_with_rename` signatures stay frozen.  Adding a new
-category (e.g. `local_user_rename_map`) follows the established
-three-step recipe: orchestrator module → wire into
+category follows the established three-step recipe (proven by
+ports → vlans → local_users): orchestrator module → wire into
 `run_plan_with_overrides` under a None-vs-dict sentinel guard →
-add endpoint + rail button + pane partial.
+add endpoint + rail button + pane partial.  Each new category
+also extends the capture transform if the UI pane needs to
+enumerate source-tree entities (VLAN IDs, usernames, etc.).
 
 **Sentinel semantics (all override maps):**
 
@@ -274,11 +277,12 @@ state.  Version segments for source/target are omitted until
 parsers start populating `CanonicalIntent.source_version`.
 
 **Source-shape capture:** `run_plan_with_overrides` injects a
-capture-first transform that populates `MigrationJob.source_vlans`
-and `source_hostname` from the post-parse, pre-transform tree.
-This is load-bearing for the VLAN pane (it has no "auto-rewritten"
-rows to fall back on if the operator hasn't already sent
-overrides) and for the localStorage key (hostname).
+capture-first transform that populates `MigrationJob.source_vlans`,
+`source_local_users`, and `source_hostname` from the post-parse,
+pre-transform tree.  This is load-bearing for the VLAN +
+local-users panes (they have no "auto-rewritten" rows to fall
+back on if the operator hasn't already sent overrides) and for
+the localStorage key (hostname).
 
 See [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
 for the codec-authorship side of this (every codec must expose
@@ -425,6 +429,10 @@ the source of truth):
 * **vlan-rename-table.js** — rename-modal VLAN-category pane
   renderer; structurally parallels rename-table.js but simpler
   (integer IDs, no per-kind sections, no target-profile dropdown).
+* **local-user-rename-table.js** — rename-modal local-users
+  category pane renderer (P2C4); third per-pane category after
+  ports + VLANs.  Free-text rewrite, collision warning is
+  informational (server merges on max privilege + first-wins role).
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the

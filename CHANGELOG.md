@@ -7,6 +7,48 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (P2C4 — local-users rename pane + three-category composition fix)
+
+- Third per-pane override category after ports + VLANs.  New
+  orchestrator `netconfig/migration/canonical/local_user_names.py`
+  walks `CanonicalIntent.local_users` and applies a string → string
+  (or string → None for drop) rewrite map.  Collision merge:
+  highest `privilege_level` wins, first non-empty `role` wins,
+  first `hashed_password` wins (hashes aren't composable).
+- `run_plan_with_overrides` gains `local_user_rename_map`
+  parameter.  `MigrationJob` gains `local_user_renames` +
+  `local_user_drops` + `source_local_users` fields.  Capture
+  transform now snapshots user names alongside VLAN IDs + hostname.
+- New endpoint `POST /api/v1/migration/plan/local_users` follows
+  the per-pane pattern — delegates to `run_plan_with_overrides`
+  with only its category's map populated.
+- **Latent /plan routing fix:** `/plan` previously only engaged
+  the rename-aware pipeline when `port_rename_map` or
+  `target_profile` was set.  A client posting `vlan_rename_map`
+  (shipped P2C2) or `local_user_rename_map` WITHOUT also setting
+  `port_rename_map` silently dropped the override.  Fixed:
+  `/plan` now dispatches directly to `run_plan_with_overrides`
+  whenever ANY override map is present and threads every category
+  through.
+- UI: left rail gains a "Local users" button + category pane
+  rendered by new `_partials/local-user-rename-table.js`
+  (structural copy of vlan-rename-table.js, string keys, free-text
+  rewrite).  Every operator override is persisted to localStorage
+  under the same `netconfig.rename-ack.v1:…` key as the other
+  categories — additive schema, old payloads load unchanged.
+- Apply flow: `local_user_rename_map` included in the POST body
+  only when the operator actually touched a user row (gate-on-
+  non-empty — same pattern as VLANs).
+- 10 new testids under
+  `tests/testid_reference.md` → "Left-rail category nav + VLAN pane"
+  section now also covers local-users rows, override inputs, drop
+  links, and the summary chip.
+- 16 new unit tests (`tests/unit/migration/test_local_user_names.py`)
+  + 16 new integration tests (`TestPlanLocalUsersEndpoint`,
+  `TestPlanMultiCategoryRouting`, source-shape capture) + 9 new
+  cross-mesh smoke cases + 6 new e2e tests
+  (`TestRenameModalLocalUsersPane`).
+
 ### Added (P1C3 — pre-backup probe phase + layered-definition resolver wiring)
 
 - New `ProbeConfig` block on `DeviceDefinition` (optional `command:` +

@@ -33,6 +33,41 @@ list, don't delete).
       probe declaration — backup picks the family-base definition
       (same as pre-P1C3 behaviour).
 
+## Migration — Rename modal Local-Users pane (P2C4, ship-fresh)
+
+- [ ] **Rail button appears**: translate a Cisco config declaring
+      local users (e.g. `username admin privilege 15 secret 5
+      $1$abc$fake`) to Aruba.  Open the rename modal.  Left rail
+      shows Ports / VLANs / Local users with user-count badge
+      matching the number of `username` lines.
+- [ ] **Switch to Local users pane**: click the rail button.
+      Center pane swaps to a table showing one row per source
+      user.  Ports + VLANs panes hide.
+- [ ] **Rename a user**: type `netadmin` in admin's override
+      input.  Summary shows "Users: 0 auto / 1 override".  Click
+      Apply — rendered output's `username admin …` becomes
+      `username netadmin …`.
+- [ ] **Drop a user**: click "drop" next to svc-backup-2019 row.
+      Row dims + strikes through.  After Apply, that user is
+      absent from rendered output entirely.
+- [ ] **Collision is informational only**: rename admin → manager
+      AND operator → manager.  Both rows highlight but Apply is
+      NOT disabled (unlike the ports pane).  After Apply, one
+      merged `manager` user appears with the highest privilege
+      level of the two sources.
+- [ ] **Persistence round-trips**: rename admin → superadmin;
+      reload page; re-translate same config; re-open modal;
+      click Local Users rail button.  Override input pre-populated
+      with "superadmin", status line says "Restored prior
+      overrides (... , 1 user) from just now".
+- [ ] **Reset clears local-users too**: Reset All button wipes
+      all three categories' in-memory state AND the localStorage
+      entry (verify via DevTools → Application → Local Storage).
+- [ ] **/plan routing fix**: send `POST /api/v1/migration/plan`
+      with `vlan_rename_map` + `local_user_rename_map` but NO
+      `port_rename_map`.  Response should show both maps applied
+      (pre-P2C4 this was silently dropping the non-port maps).
+
 ## Migration — Rename modal VLAN pane + persistence (P2C3, ship-fresh)
 
 - [ ] **Left-rail renders**: translate a Cisco config with multiple

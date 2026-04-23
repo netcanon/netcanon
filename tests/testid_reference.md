@@ -551,6 +551,16 @@ surfaces under a shared left-rail navigation):
 | `migrate-rename-vlan-row-<id>`        | `<tr>`     | One per source VLAN; `<id>` is the literal integer source VLAN ID (e.g. `10`, `4094`).  CSS classes `has-override` / `has-drop` / `has-auto-drop` / `has-collision` signal row state |
 | `migrate-rename-vlan-override-<id>`   | `<input>`  | Integer target-ID input.  `type="number"` with `min=1 max=4094`; blank = accept auto default.  Typing invalid input (non-numeric, out-of-range) silently no-ops rather than storing the bad value |
 | `migrate-rename-vlan-drop-<id>`       | `<span>`   | Inline drop / un-drop / keep-verbatim link beside the override input — same three-state logic as port rows |
+| `migrate-rename-rail-local-users`     | `<button>` | Activates the Local Users category pane.  `data-category="local_users"` |
+| `migrate-rename-rail-local-users-count` | `<span>` | Row-count badge on the Local Users rail button (source_local_users.length) |
+| `migrate-rename-local-users-pane`     | `<div>`    | Local-users category pane wrapper.  `active` CSS class when visible |
+| `migrate-rename-local-users-empty`    | `<div>`    | Empty-state message when the source config declared no local users |
+| `migrate-rename-local-users-sections` | `<div>`    | Container the local-users pane renderer clears and rebuilds on each call |
+| `migrate-rename-local-users-table`    | `<table>`  | The single local-user rewrite table — no per-kind sections (users are uncategorised strings) |
+| `migrate-rename-local-user-row-<username>` | `<tr>` | One per source local user; `<username>` is the literal source username (alphanumerics, hyphens, etc. preserved verbatim).  CSS classes `has-override` / `has-drop` / `has-auto-drop` / `has-collision` signal row state |
+| `migrate-rename-local-user-override-<username>` | `<input>` | Free-text target-username input.  `type="text"`; blank = accept auto default / keep unchanged.  Non-empty value triggers a rename on Apply |
+| `migrate-rename-local-user-drop-<username>` | `<span>` | Inline drop / un-drop / keep-verbatim link — same three-state logic as port + VLAN rows |
+| `migrate-rename-summary-local-users`  | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "Users: A auto / B overrides / C drops".  Only present when any local-user-category state exists |
 
 ### RESERVED for Phase 2 (transforms + deploy)
 
