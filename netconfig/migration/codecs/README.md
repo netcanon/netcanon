@@ -12,19 +12,25 @@ matching `tests/unit/migration/test_<vendor>.py`.
 
 ## Shape of a codec
 
-Six codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`, `aruba_aoss`,
-`opnsense`, `mikrotik_routeros`, `fortigate_cli` (plus `_mock`).  The
-first one you should copy is whichever vendor is closest in structure
-to yours:
+Seven codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`,
+`aruba_aoss`, `opnsense`, `mikrotik_routeros`, `fortigate_cli`,
+`arista_eos` (plus `_mock`).  The first one you should copy is
+whichever vendor is closest in structure to yours:
 
 | Wire format | Reference codec |
 |---|---|
-| Line-oriented indented CLI with `!` delimiters | `cisco_iosxe_cli` |
+| Line-oriented indented CLI with `!` delimiters (Cisco-family) | `cisco_iosxe_cli`, `arista_eos` |
 | Line-oriented CLI with section headers like `/ip address` | `mikrotik_routeros` |
 | Nested `config/edit/set/next/end` CLI | `fortigate_cli` |
 | XML (config.xml dialect) | `opnsense` |
 | NETCONF XML | `cisco_iosxe` |
 | Banner + positional port lists | `aruba_aoss` |
+
+For Cisco-family dialects (EOS, NX-OS, IOS-XR), start from
+`arista_eos` rather than `cisco_iosxe_cli` — the Arista codec is
+lighter-weight (no Cat9k CPP grammar, no type-9 password variants)
+and the shape is closer to what you'll need for other
+IOS-dialect vendors.
 
 Each codec subpackage contains at minimum:
 

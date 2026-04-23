@@ -27,16 +27,24 @@ pytestmark = pytest.mark.unit
 
 
 class TestBuiltInVendors:
-    def test_loads_six_vendors(self):
+    def test_loads_all_built_in_vendors(self):
         """Cisco IOS-XE, OPNsense, MikroTik RouterOS, Aruba AOS-S,
-        Fortinet FortiGate, + the mock."""
+        Fortinet FortiGate, Arista EOS, + the mock.  Assert ≥7
+        rather than ==N so adding a new vendor doesn't force this
+        test to update — individual per-vendor ``*_present`` tests
+        lock in identity of each one."""
         vendors = load_vendors()
-        assert len(vendors) == 6
+        assert len(vendors) >= 7
 
     def test_aruba_aoss_present(self):
         v = load_vendors()
         assert "aruba_aoss" in v
         assert v["aruba_aoss"].display_name == "Aruba AOS-S"
+
+    def test_arista_eos_present(self):
+        v = load_vendors()
+        assert "arista_eos" in v
+        assert v["arista_eos"].display_name == "Arista EOS"
 
     def test_fortigate_present(self):
         v = load_vendors()

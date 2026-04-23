@@ -1,0 +1,19 @@
+# Arista EOS — 4.20+ firmware, 7000 / 7050 / 7280 / 7500 series.
+# Codecs: arista_eos (show running-config text, bidirectional).
+id: arista_eos
+display_name: "Arista EOS"
+device_classes:
+  - switch
+  - router
+default_timeout: 20
+notes: >
+  Arista EOS CLI is a deliberate Cisco IOS dialect with several
+  divergences: ``Ethernet<N>`` flat port naming (no speed prefix),
+  CIDR ``ip address 10.0.0.1/31`` form, ``username X role <name>``
+  instead of Cisco's ``privilege <N>``, and capitalised
+  ``Port-Channel<N>`` for LAGs.  The codec models hostname /
+  interfaces / VLANs / static-routes / SNMP / local-users; BGP /
+  OSPF / MLAG / VXLAN / eAPI-over-HTTP stanzas parse-and-ignore.
+  Primary customer use case: Cisco DC (Catalyst 9K / Nexus) →
+  Arista (7050SX / 7280R / 7500R) migrations — the #1 cross-vendor
+  DC switch migration corridor in enterprise networks.

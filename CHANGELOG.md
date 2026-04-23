@@ -7,6 +7,89 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Phase 12 — Arista EOS codec v1: 6th shipped vendor, first DC-switching-native)
+
+- `netconfig/migration/codecs/arista_eos/` package — bidirectional
+  codec for Arista EOS ``show running-config`` text.  Closes the
+  biggest cross-vendor DC migration corridor in enterprise networks
+  (Cisco Catalyst 9K / Nexus → Arista 7050 / 7280 / 7500).
+- New vendor YAML `netconfig/migration/vendors/arista_eos.yaml`.
+- New INPUT_FORMATS entry `cli-arista` in `codecs/base.py`.
+- UI vendor-labels dropdown gains `arista_eos: 'Arista EOS'` so the
+  rename-modal vendor picker surfaces Arista as a target.
+- Codec scope:
+  - Parses hostname / dns / ntp / snmp community+location+contact+host
+    / interfaces (Ethernet<N>, Ethernet<N>/<M> QSFP breakout,
+    Management<N>, Loopback<N>, Vlan<N>, Port-Channel<N>) with
+    CIDR `ip address 10.0.0.1/31`, quoted descriptions, shutdown,
+    no switchport, switchport access/trunk allowed, channel-group
+    membership / vlans / static routes / local users with
+    `role <name>` and `secret <alg> <hash>` algorithms.
+  - Renders all the above bidirectionally; round-trips the first
+    real capture cleanly.
+  - BGP / OSPF / MLAG / VXLAN / eAPI-over-HTTP / spanning-tree /
+    aaa / daemon parse-and-ignore (Tier-3 grammar).
+- Real-capture fixture
+  `tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt` —
+  real DCS-7150S-64-CL on EOS 4.22.4M-2GB (256 lines, 66 ifaces,
+  5 admins across 3 password-mode variants, QSFP breakouts, BGP
+  + MLAG stanzas exercised as parse-ignore).  Certainty ships at
+  `experimental` — promotion to `best_effort` after ≥1 additional
+  capture from a different EOS version.
+- Bugs surfaced + fixed during codec v1 development:
+  1. Username regex `\s+` bled across newlines, causing users
+     disappearing from finditer on multi-user blocks following a
+     `secret sha512 $6$...` line.  Fixed via `[^\S\n]+`
+     non-newline whitespace matcher.
+  2. Render emitted `secret sha512:$6$...` (colon-separated
+     canonical form) instead of `secret sha512 $6$...` (wire
+     format).  Re-parse then missed the hash.  Fixed to split
+     canonical tail into `alg` + `hash` on `:` and emit
+     space-separated.
+  Both caught by round-tripping the real fixture — textbook
+  real-capture-harness validation.
+- Port-name identity bridge (`arista_eos/port_names.py`) translates
+  cross-vendor: Cisco `GigabitEthernet1/0/24` → Arista `Ethernet24`
+  (drops stack+module indices, documented collision trade-off).
+  `Port-Channel` canonical capitalisation (distinct from Cisco's
+  `Port-channel`).
+- Tests (+76 new):
+  - 45 unit tests in `tests/unit/migration/test_arista_eos.py`
+    covering parse scalars / SNMP / users / interfaces+VLANs /
+    input-validation / render / round-trip / port-names / probe.
+  - Real-captures harness extended with `arista_eos` in the
+    `_VENDOR_TO_CODEC` dispatch map; 3 auto-discovered tests for
+    the ksator fixture.
+- Docs synced per CLAUDE.md Documentation Sync Checklist:
+  - `tests/fixtures/real/NOTICE.md` — fixture provenance row
+  - `tests/fixtures/real/RESULTS.md` — new arista_eos section
+    with coverage matrix + findings + cert decision;
+    summary table updated (28 → 30 fixtures total, 10 → 12
+    bugs surfaced)
+  - Vendor-count test loosened to `>= 7` rather than `== 6`
+    so adding a future codec doesn't force a mechanical edit
+    (individual per-vendor presence tests lock in identity)
+- Strategic note: adding Arista exposes canonical gaps in EVPN
+  type-2/type-5 routes and VXLAN VNI-to-VLAN mapping — both are
+  first-class in EOS and currently unmodelled in CanonicalIntent.
+  Parse-and-ignore for v1; schema extension deferred to a follow-
+  up commit (unblocks Arista ↔ NX-OS ↔ Junos EVPN-fabric
+  migrations).
+
+### Added (Phase 11 — 2 real-capture fixtures for grammar diversity)
+
+- `tests/fixtures/real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg`
+  — first fixture on the KB software branch + first fixture on
+  the 5400R modular-chassis class.  Exercises `module A type j9534a`
+  line-card declarations + letter-slot port ranges + multi-VLAN
+  `ip helper-address` grammar.  Source: HPE Community forum thread
+  6935784.
+- `tests/fixtures/real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt`
+  — first OSPFv2 multi-feature-grammar fixture in the corpus.
+  `router ospf 1` + `router-id` + `passive-interface` + 5 `network`
+  statements + per-interface `ip ospf cost` tuning + dot1Q
+  subinterfaces.  Source: CiscoDevNet/cml-community under BSD-3-Clause.
+
 ### Changed (god-file cleanup — fortigate_cli codec split into parse.py + render.py)
 
 - `netconfig/migration/codecs/fortigate_cli/codec.py` was the 4th-

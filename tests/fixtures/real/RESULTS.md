@@ -412,6 +412,38 @@ designed to catch.
 
 ---
 
+## arista_eos
+
+**Codec:** `netconfig.migration.codecs.arista_eos.AristaEOSCodec`
+**Direction:** `bidirectional`
+**Certainty:** `experimental` — first real capture just landed; promotion to `best_effort` after a second real fixture from a different EOS version.
+
+### Coverage matrix
+
+| Fixture | Lines | hostname | dns | interfaces | vlans | routes | users | snmp | Notes |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| `ksator_dcs_7150s64_eos4224.txt` | 256 | 1 | 1 | 66 | 0 | 1 | 5 | 1 | Real **DCS-7150S-64-CL** `show running-config` on **EOS 4.22.4M-2GB**.  52 × `Ethernet<N>` + 16 × QSFP-breakout `Ethernet<N>/<M>` + `Loopback0` + `Management1`; mix of `username ... nopassword` / `secret sha512 $6$` / `secret 5 $1$` across 5 admins; `snmp-server community public ro` + `private rw` (first wins); `spanning-tree mode mstp` + `management api http-commands` + `daemon TerminAttr` all parse-and-ignore. |
+
+### Findings
+
+**Bugs surfaced + fixed during codec v1 development:**
+
+1. **Username-regex newline bleed.** The `\s+` whitespace matcher inside the optional ``pwmode`` alternation of the ``username`` parse regex consumed `\nusername` from the next line on multi-user blocks — causing cvp-infra (and any user whose preceding row ended with a `secret sha512 $6$...` hash) to disappear from finditer.  Fixed by switching every intra-line whitespace matcher to `[^\S\n]+` (non-newline whitespace).  Regression test: `TestParseUsers::test_multiple_users_no_line_bleed`.
+
+2. **Render hash-delimiter drift.** The canonical-to-render path was emitting `secret sha512:$6$...` (colon separator — internal canonical form) instead of `secret sha512 $6$...` (space separator — EOS wire format).  Re-parse of rendered output then failed to match the two-token `secret <alg> <hash>` shape, dropping password info on round-trip.  Fixed to `.partition(":")` the tail of the canonical `arista:sha512:$6$...` string into `alg` + `hash` and emit space-separated.  Regression test: `TestRender::test_render_user_with_hash_roundtrips`.
+
+Both bugs found by round-tripping the ksator fixture — parse → render → parse divergence surfaced missing users.  Textbook justification for the real-capture harness.
+
+### Certification decision
+
+**Ships at `experimental`** (not `best_effort` — needs ≥1 more real capture from a different EOS version).  The ksator fixture parses + round-trips clean after the two bugs fixed above; 45 unit tests + cross-codec mesh tests all pass.  Arista grammar is a deliberate IOS dialect so cross-vendor rename pairing with Cisco IOS-XE is expected to be the strongest — the port-name identity bridge auto-drops stack + module indices when translating Cisco `GigabitEthernet1/0/24` → Arista `Ethernet24` (documented collision trade-off).
+
+Promotion path:
+  * `best_effort` — ≥1 more real fixture (EOS 4.25+ / 4.27+ / 4.30+)
+  * `certified` — ≥3 real fixtures from ≥2 EOS versions, all round-trip clean
+
+---
+
 ## Summary
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
@@ -421,7 +453,8 @@ designed to catch.
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **TOTAL** | **28** | — | **10** | — | — |
+| **arista_eos** | **1** real | **1** (EOS 4.22.4M) | 2 (username regex line-bleed; render hash-delimiter drift) | **experimental** 🧪 | needs ≥1 more real capture from a different EOS version |
+| **TOTAL** | **30** | — | **12** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our

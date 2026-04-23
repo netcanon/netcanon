@@ -89,6 +89,7 @@ INPUT_FORMATS = frozenset({
     "xml-opnsense",     # OPNsense config.xml
     "xml-panos",        # Palo Alto PAN-OS XML (reserved — no adapter yet)
     "cli-ios",          # `show running-config` text — Cisco IOS-XE
+    "cli-arista",       # Arista EOS `show running-config` text
     "cli-aruba-aoss",   # ArubaOS-Switch `show running-config` text
     "cli-fortigate",    # FortiGate CLI `config` blocks
     "cli-mikrotik",     # MikroTik `/export` text

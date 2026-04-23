@@ -82,12 +82,18 @@ def _mikrotik_codec() -> Any:
     return MikroTikRouterOSCodec()
 
 
+def _arista_eos_codec() -> Any:
+    from netconfig.migration.codecs.arista_eos import AristaEOSCodec
+    return AristaEOSCodec()
+
+
 _VENDOR_TO_CODEC = {
     "cisco_iosxe": _cisco_iosxe_cli_codec,
     "aruba_aoss": _aruba_aoss_codec,
     "fortigate": _fortigate_codec,
     "opnsense": _opnsense_codec,
     "mikrotik": _mikrotik_codec,
+    "arista_eos": _arista_eos_codec,
 }
 
 # (fixture_path, reason) pairs where we KNOW the file exercises a codec
