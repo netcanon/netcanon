@@ -218,15 +218,34 @@ class JunosCodec(CodecBase):
                 "a different codec.",
                 snippet=stripped[:120],
             )
-        if stripped.startswith("{"):
-            # Could be block-form Junos ({ system { ... } }).  v1
-            # doesn't parse block-form; hint operator toward
-            # ``| display set``.
+        # Detect block-form input: first non-comment meaningful
+        # content contains a curly-brace at a sensible location.
+        # We convert block-form → set-form here and feed the
+        # resulting text through the normal set-form parser below.
+        if _looks_like_blockform(raw):
+            try:
+                raw = _blockform_to_setform(raw)
+            except ParseError:
+                raise
+            except Exception as e:  # noqa: BLE001
+                raise ParseError(
+                    "juniper_junos: block-form input conversion "
+                    "failed.  Consider running `show configuration "
+                    "| display set` on your Junos device to get "
+                    "set-form output directly.",
+                    snippet=stripped[:120],
+                ) from e
+        elif stripped.startswith("{"):
+            # Starts with `{` but doesn't pattern-match block-form
+            # (bare `{`, or JSON-shaped ``"key": ...``) — reject
+            # explicitly rather than silently producing an empty
+            # tree via set-form fallthrough.
             raise ParseError(
-                "juniper_junos: input looks like Junos block-form "
-                "(curly-brace hierarchical) or JSON.  v1 parses set-"
-                "form only — run `show configuration | display set` "
-                "on your Junos device and paste that output.",
+                "juniper_junos: input starts with `{` but isn't "
+                "recognisable Junos block-form.  If this is JSON, "
+                "use a different codec; if it's Junos, run `show "
+                "configuration | display set` on your device to "
+                "get set-form output directly.",
                 snippet=stripped[:120],
             )
 
@@ -743,6 +762,193 @@ def _tokenise_set(payload: str) -> list[str]:
         return shlex.split(payload, posix=True)
     except ValueError:
         return payload.split()
+
+
+# ---------------------------------------------------------------------------
+# Block-form (curly-brace hierarchical) → set-form conversion (GAP 9a)
+# ---------------------------------------------------------------------------
+
+
+_BLOCKFORM_COMMENT_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _looks_like_blockform(raw: str) -> bool:
+    """Heuristic: does *raw* look like Junos block-form (hierarchical
+    curly-brace) rather than set-form?
+
+    Signals:
+      * Strip comments + leading whitespace; the first meaningful line
+        starts with a word followed by ``{`` (and NOT with ``set``).
+      * The text contains at least one ``{``-terminated line AND at
+        least one statement-terminator ``;``.
+    """
+    # Remove /* ... */ comments for the heuristic (they can confuse
+    # detection on block-form configs that lead with a comment).
+    cleaned = _BLOCKFORM_COMMENT_RE.sub("", raw)
+    stripped = cleaned.lstrip()
+    if stripped.startswith("set ") or stripped.startswith("version "):
+        return False
+    # At least one opening curly on a line that isn't a comment.
+    has_open_brace = bool(re.search(r"\{\s*$", cleaned, re.MULTILINE))
+    has_semi = ";" in cleaned
+    if not has_open_brace or not has_semi:
+        return False
+    # First non-empty non-comment line must end with ``{`` AND
+    # have content BEFORE the `{` (block-form sections look like
+    # ``system {`` or ``interfaces {``; JSON starts with bare ``{``).
+    # ``"key":`` in the same line is a strong JSON signal; Junos
+    # values don't use ``:`` as a key/value separator at the block
+    # level.
+    for line in cleaned.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        # Reject lines that look like JSON (key:value shape).
+        if '"' in line and ":" in line:
+            return False
+        if line.endswith("{") and len(line) > 1:
+            return True
+        if line == "{":
+            # Bare ``{`` as the first meaningful line — ambiguous
+            # (could be JSON or a bare Junos block).  Favour
+            # rejection so callers get a clearer error via the
+            # normal set-form parse path.
+            return False
+        # A top-level statement before any brace means set-form.
+        return False
+    return False
+
+
+def _tokenise_blockform(raw: str) -> list[str]:
+    """Tokenise Junos block-form into a flat list with ``{``, ``}``,
+    and ``;`` as standalone tokens.  Quoted strings stay intact.
+    """
+    # Strip comments first — Junos allows /* ... */ anywhere.
+    cleaned = _BLOCKFORM_COMMENT_RE.sub(" ", raw)
+    tokens: list[str] = []
+    i = 0
+    n = len(cleaned)
+    while i < n:
+        ch = cleaned[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch in "{};":
+            tokens.append(ch)
+            i += 1
+            continue
+        if ch == '"':
+            # Quoted string — preserve the quotes for later rendering.
+            end = i + 1
+            while end < n and cleaned[end] != '"':
+                if cleaned[end] == "\\" and end + 1 < n:
+                    end += 2
+                    continue
+                end += 1
+            if end >= n:
+                raise ParseError(
+                    "juniper_junos: unterminated quoted string in "
+                    "block-form input",
+                    snippet=cleaned[i:i + 80],
+                )
+            tokens.append(cleaned[i:end + 1])
+            i = end + 1
+            continue
+        # Bare word: run of non-delim chars.
+        end = i
+        while end < n and not cleaned[end].isspace() and cleaned[end] not in "{};\"":
+            end += 1
+        tokens.append(cleaned[i:end])
+        i = end
+    return tokens
+
+
+def _blockform_to_setform(raw: str) -> str:
+    """Convert Junos block-form config text to set-form.
+
+    Walks the curly-brace hierarchy maintaining a path stack; emits
+    ``set <path...> <leaf-value>`` for each leaf statement.  Supports
+    apply-groups (both ``apply-groups G;`` and
+    ``apply-groups [ G1 G2 ];`` forms).
+
+    Raises ParseError if braces are unbalanced or the input isn't
+    recognisable block-form.  Conversion is grammar-agnostic beyond
+    that — the set-form output feeds the normal parser, which
+    handles Tier-3 tolerance of unknown paths.
+    """
+    tokens = _tokenise_blockform(raw)
+    out_lines: list[str] = []
+    path_stack: list[str] = []
+    pos = 0
+
+    def emit_leaf(words: list[str]) -> None:
+        if not words:
+            return
+        line = "set " + " ".join(path_stack + words)
+        out_lines.append(line)
+
+    def parse_block(is_top_level: bool) -> None:
+        nonlocal pos
+        while True:
+            if pos >= len(tokens):
+                # EOF inside a nested block is an unbalanced-braces
+                # error; at the top level it's the natural end.
+                if not is_top_level:
+                    raise ParseError(
+                        "juniper_junos: unbalanced braces in "
+                        "block-form input (EOF inside a nested "
+                        "block — missing `}`)",
+                        snippet=raw[:120],
+                    )
+                return
+            tok = tokens[pos]
+            if tok == "}":
+                pos += 1
+                return
+            # Read a statement: sequence of word tokens up to ; or {.
+            words: list[str] = []
+            while pos < len(tokens) and tokens[pos] not in ("{", "}", ";"):
+                words.append(tokens[pos])
+                pos += 1
+            if pos >= len(tokens):
+                # EOF.  At the top level this is expected; inside a
+                # nested block it means unbalanced braces — raise.
+                if not is_top_level:
+                    raise ParseError(
+                        "juniper_junos: unbalanced braces in "
+                        "block-form input (reached EOF inside a "
+                        "nested block)",
+                        snippet=raw[:120],
+                    )
+                # Top-level trailing words without ; — emit as leaf
+                # for tolerance, though this is unusual.
+                emit_leaf(words)
+                return
+            if tokens[pos] == ";":
+                emit_leaf(words)
+                pos += 1
+            elif tokens[pos] == "{":
+                # Block: push all words onto the path and recurse.
+                pos += 1
+                push_count = len(words)
+                path_stack.extend(words)
+                parse_block(is_top_level=False)
+                for _ in range(push_count):
+                    path_stack.pop()
+            elif tokens[pos] == "}":
+                # Closing brace with leftover words — malformed;
+                # emit as leaf and let the outer loop close.
+                emit_leaf(words)
+                return
+
+    parse_block(is_top_level=True)
+    if path_stack:
+        raise ParseError(
+            "juniper_junos: unbalanced braces in block-form input "
+            f"(path_stack at end: {path_stack})",
+            snippet=raw[:120],
+        )
+    return "\n".join(out_lines) + ("\n" if out_lines else "")
 
 
 def _dispatch_set(

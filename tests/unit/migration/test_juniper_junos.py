@@ -265,12 +265,14 @@ class TestParseValidation:
         with pytest.raises(ParseError, match="XML"):
             JunosCodec().parse("<config/>")
 
-    def test_block_form_rejected_with_helpful_hint(self):
-        """v1 doesn't parse block-form.  Rejection message must tell
-        the operator to run `| display set` on their device."""
-        raw = "{\n    system {\n        host-name sw1;\n    }\n}\n"
-        with pytest.raises(ParseError, match="display set"):
-            JunosCodec().parse(raw)
+    def test_block_form_now_accepted_via_gap_9a_conversion(self):
+        """GAP 9a: block-form (curly-brace hierarchical) input now
+        parses via automatic conversion to set-form.  The earlier
+        rejection-with-helpful-hint behaviour was removed in the
+        v2b commit."""
+        raw = "system {\n    host-name sw1;\n}\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
 
     def test_render_rejects_non_canonical_tree(self):
         """Render is strict: anything other than a CanonicalIntent is a
@@ -1199,3 +1201,150 @@ class TestPerUnitVlanTagging:
         )
         assert parent is not None
         assert parent.access_vlan == 42
+
+
+# ---------------------------------------------------------------------------
+# GAP 9a: block-form (curly-brace hierarchical) parse
+# ---------------------------------------------------------------------------
+
+
+class TestBlockFormParse:
+    """v1 rejected block-form with a helpful hint; v2b (GAP 9a) now
+    auto-converts block-form → set-form internally and feeds it
+    through the normal parser.  The conversion is grammar-agnostic
+    beyond brace balancing; unknown sub-trees still parse-tolerate
+    via Tier-3 fall-through.
+    """
+
+    def test_system_host_name(self):
+        raw = "system {\n    host-name sw1;\n}\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_nested_blocks(self):
+        raw = (
+            "system {\n"
+            "    host-name router1;\n"
+            "    login {\n"
+            "        user admin {\n"
+            "            class super-user;\n"
+            "            authentication {\n"
+            '                encrypted-password "$6$fake$hash";\n'
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "router1"
+        assert len(intent.local_users) == 1
+        u = intent.local_users[0]
+        assert u.name == "admin"
+        assert u.role == "super-user"
+        assert u.privilege_level == 15
+        assert u.hashed_password == "junos:$6$fake$hash"
+
+    def test_interface_with_ip(self):
+        raw = (
+            "interfaces {\n"
+            "    ge-0/0/0 {\n"
+            '        description "uplink";\n'
+            "        unit 0 {\n"
+            "            family inet {\n"
+            "                address 10.0.0.1/24;\n"
+            "            }\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        assert iface.description == "uplink"
+        assert iface.ipv4_addresses[0].ip == "10.0.0.1"
+        assert iface.ipv4_addresses[0].prefix_length == 24
+
+    def test_vlan_with_vxlan_vni(self):
+        raw = (
+            "vlans {\n"
+            "    V100 {\n"
+            "        vlan-id 100;\n"
+            "        vxlan {\n"
+            "            vni 10100;\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert any(v.id == 100 and v.name == "V100" for v in intent.vlans)
+        assert len(intent.vxlan_vnis) == 1
+        assert intent.vxlan_vnis[0].vlan_id == 100
+        assert intent.vxlan_vnis[0].vni == 10100
+
+    def test_routing_instance_vrf(self):
+        raw = (
+            "routing-instances {\n"
+            "    TENANT_A {\n"
+            "        instance-type vrf;\n"
+            "        route-distinguisher 1.1.1.1:100;\n"
+            "        vrf-target target:65000:100;\n"
+            "        interface ge-0/0/1.0;\n"
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        ri = next(r for r in intent.routing_instances if r.name == "TENANT_A")
+        assert ri.instance_type == "vrf"
+        assert ri.route_distinguisher == "1.1.1.1:100"
+        assert ri.rt_imports == ["65000:100"]
+        assert ri.rt_exports == ["65000:100"]
+
+    def test_apply_groups_inheritance_in_blockform(self):
+        raw = (
+            "groups {\n"
+            "    G {\n"
+            "        system {\n"
+            "            host-name from-group;\n"
+            "        }\n"
+            "    }\n"
+            "}\n"
+            "apply-groups G;\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "from-group"
+
+    def test_quoted_strings_preserved(self):
+        raw = (
+            "interfaces {\n"
+            "    ge-0/0/0 {\n"
+            '        description "contains spaces and $specials";\n'
+            "    }\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        assert iface.description == "contains spaces and $specials"
+
+    def test_comments_stripped(self):
+        raw = (
+            "/* top-level comment */\n"
+            "system {\n"
+            "    /* inline comment */\n"
+            "    host-name sw1;\n"
+            "}\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.hostname == "sw1"
+
+    def test_mixed_input_still_rejected_if_not_blockform(self):
+        """JSON-shaped input still raises (starts with `{` but isn't
+        Junos hierarchical)."""
+        from netconfig.migration.codecs.base import ParseError
+        raw = '{"hostname": "not-junos"}'
+        with pytest.raises(ParseError):
+            JunosCodec().parse(raw)
+
+    def test_unbalanced_braces_raises(self):
+        from netconfig.migration.codecs.base import ParseError
+        raw = "system {\n    host-name sw1;\n"  # no closing `}`
+        with pytest.raises(ParseError):
+            JunosCodec().parse(raw)

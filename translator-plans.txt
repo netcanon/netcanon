@@ -737,6 +737,33 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] JUNOS BLOCK-FORM PARSE (GAP 9a):
+    # Converts Junos curly-brace hierarchical config to set-form
+    # via a grammar-agnostic recursive-descent walker, then feeds
+    # the resulting set-lines through the existing parse pipeline.
+    # No duplicated parse logic — one dispatcher, two input
+    # grammars.
+    #
+    # New helpers (module scope):
+    #   _looks_like_blockform(raw): heuristic detection (first
+    #     meaningful line ends with `{` + content before it;
+    #     `"key":` patterns rejected as JSON).
+    #   _tokenise_blockform(raw): `{` / `}` / `;` as standalone
+    #     tokens; strips /* ... */ comments; preserves quoted
+    #     strings including escaped inner quotes.
+    #   _blockform_to_setform(raw): walks the hierarchy, emits
+    #     `set <path...> <value>` per leaf, raises ParseError on
+    #     unbalanced braces.
+    #
+    # Removed: the v1-era rejection with helpful hint (GAP 4 era).
+    # Operators no longer need `show configuration | display set`
+    # to feed block-form output through NetConfig.
+    #
+    # Covered by TestBlockFormParse in test_juniper_junos.py
+    # (10 tests including nested-5-deep, quoted strings, comments,
+    # apply-groups in block-form, JSON rejection, unbalanced-brace
+    # error).
+
 [SHIPPED] RICHER JUNOS APPLY-GROUPS INHERITANCE (GAP 8):
     # Refactors Junos parse to a full two-pass model:
     #

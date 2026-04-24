@@ -7,6 +7,64 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 9a — Junos block-form (curly-brace hierarchical) parse)
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+  auto-detects block-form (hierarchical curly-brace) input and
+  converts it to set-form internally via a grammar-agnostic
+  walker.  The same `_dispatch_set` pipeline then applies the
+  resulting set-lines to the canonical tree — no duplicated
+  parse logic.
+- New helpers at module scope:
+  - ``_looks_like_blockform(raw)`` — heuristic detection: first
+    meaningful line ends with ``{`` AND has content before it,
+    lines containing ``"key":`` patterns get rejected as likely
+    JSON.
+  - ``_tokenise_blockform(raw)`` — tokeniser with ``{``/``}``/
+    ``;`` as standalone tokens; strips ``/* ... */`` comments
+    (multiline tolerated); preserves quoted strings including
+    escaped inner quotes.
+  - ``_blockform_to_setform(raw)`` — recursive-descent walker
+    that maintains a path stack, emits ``set <path...> <value>``
+    for each ``;``-terminated leaf statement, raises
+    ``ParseError`` on unbalanced braces.
+- JSON and malformed `{`-leading input still raise ``ParseError``
+  with a helpful hint pointing at ``| display set`` for real
+  Junos operators.
+- Previously, the codec rejected block-form with a helpful error
+  message (v1 behaviour — GAP 4 commit); GAP 9a removes that
+  rejection and ships the conversion.  Operators no longer need
+  to run ``| display set`` on their device to feed block-form
+  output into NetConfig.
+
+### Tests (GAP 9a)
+
+- ``tests/unit/migration/test_juniper_junos.py::TestBlockFormParse``
+  — 10 tests:
+  - ``test_system_host_name``: simplest case.
+  - ``test_nested_blocks``: ``system / login / user / class /
+    authentication / encrypted-password`` nested 5 deep.
+  - ``test_interface_with_ip``: ``interfaces / ge-0/0/0 /
+    description`` + ``unit 0 / family inet / address``.
+  - ``test_vlan_with_vxlan_vni``: block-form VLAN + nested
+    ``vxlan / vni``.
+  - ``test_routing_instance_vrf``: full VRF declaration in
+    block-form.
+  - ``test_apply_groups_inheritance_in_blockform``: `set
+    groups G { ... }` + `set apply-groups G;` wiring through
+    the GAP 8 two-pass machinery.
+  - ``test_quoted_strings_preserved``: descriptions with spaces
+    and `$`-special chars.
+  - ``test_comments_stripped``: ``/* ... */`` both multi-line
+    and inline.
+  - ``test_mixed_input_still_rejected_if_not_blockform``: JSON
+    input (``{"hostname": ...}``) still raises ``ParseError``.
+  - ``test_unbalanced_braces_raises``: missing ``}`` raises
+    with helpful message.
+- ``test_block_form_rejected_with_helpful_hint`` (v1 path) has
+  been swapped to ``test_block_form_now_accepted_via_gap_9a_conversion``
+  to lock in the new behaviour.
+
 ### Added (GAP 8 — richer Junos apply-groups inheritance)
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — full
