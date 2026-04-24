@@ -1,0 +1,83 @@
+! Command: show running-config
+! Time: Sat Jun 26 15:23:13 2021
+! device: A-EOS1 (vEOS, EOS-4.26.0.1F)
+!
+! boot system flash:/vEOS-lab.swi
+!
+switchport default mode routed
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model multi-agent
+!
+hostname EOS1
+!
+spanning-tree mode mstp
+!
+service running-config timestamp
+!
+aaa authorization serial-console
+aaa authorization exec default local
+!
+no aaa root
+!
+username aaa privilege 15 secret sha512 $6$1b/rOJXKhrCHmRXC$CZwapm2wW/hSXzssnE8Mgdv/VXNzKvhwlp0mifzQxiAj5YpLC/BHyE2Dt9/hlJcwPBL/dJxms9pxNwaTjNrPr.
+!
+vlan 100
+   name Tenant_100
+!
+interface Ethernet1
+   no switchport
+   ip address 10.0.0.7/31
+!
+interface Ethernet2
+   no switchport
+   ip address 10.0.0.8/31
+!
+interface Loopback0
+   ip address 10.0.255.33/32
+!
+interface Management1
+   ip address 192.168.100.62/24
+   ipv6 address fc00:192:168:100::62/64
+!
+interface Vxlan1
+   vxlan source-interface Loopback0
+   vxlan udp-port 4789
+   vxlan vlan 100 vni 100
+!
+ip routing
+!
+ip prefix-list PL_LO seq 10 permit 10.0.255.0/24 eq 32
+!
+ipv6 unicast-routing
+!
+ip route 0.0.0.0/0 192.168.100.1
+!
+route-map RP_PASS_LO permit 10
+   match ip address prefix-list PL_LO
+!
+route-map RP_PASS_LO deny 9999
+!
+router bgp 65033
+   router-id 10.0.255.33
+   neighbor 10.0.0.6 remote-as 65022
+   neighbor 10.0.0.9 remote-as 65044
+   redistribute connected route-map RP_PASS_LO
+   !
+   vlan 100
+      rd 10.0.255.33:100
+      route-target both 65000:100
+      redistribute learned
+   !
+   address-family evpn
+      no neighbor 10.0.0.8 activate
+      neighbor 10.0.0.9 activate
+   !
+   address-family ipv4
+      neighbor 10.0.0.6 route-map RP_PASS_LO in
+      neighbor 10.0.0.6 route-map RP_PASS_LO out
+      neighbor 10.0.0.9 route-map RP_PASS_LO in
+      neighbor 10.0.0.9 route-map RP_PASS_LO out
+!
+end

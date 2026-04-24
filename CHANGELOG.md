@@ -7,6 +7,32 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Arista EOS 4.26 real fixture — 4th EOS major)
+
+- `tests/fixtures/real/arista_eos/karneliuk_a_eos1_eos4260.txt` —
+  real **A-EOS1** vEOS fixture on **EOS-4.26.0.1F** from Anton
+  Karneliuk's Batfish MVP demo (BSD-3-Clause, karneliuk-com/
+  batfish-mvp @ `62e8ce7`).  82 lines covering the post-GAP-6
+  canonical surface: `service routing protocols model multi-agent`,
+  VLAN 100 + `Vxlan1 vni 100`, Management1 with IPv4+IPv6, router
+  bgp 65033 with two eBGP neighbours + `address-family evpn` +
+  `evpn redistribute-learned`, route-maps permit+deny, ip prefix-
+  list.  Fourth distinct EOS major in the Arista corpus
+  (4.21 + 4.22 + 4.23 + 4.26).
+- `tests/fixtures/real/RESULTS.md`: Arista section gains the new
+  matrix row; certification-decision paragraph updated to reflect
+  the 4.26 fixture; summary-table row updated 3→4 fixtures / 3→4
+  versions.  TOTAL row 37→38 fixtures.  Promotion-path paragraph
+  replaced with "even-newer EOS LTS 4.28+/4.30+ fixture" as
+  remaining nice-to-have.
+- `tests/fixtures/real/NOTICE.md`: provenance row added for the
+  new fixture with repo + commit SHA + license + grammar
+  summary.  Also documents the fixture-hunt dead-ends: batfish/
+  lab-validation caps out at 4.23; ksator/arista_eos_audit at
+  4.22.4M; aristanetworks/avd lacks `! device:` version banners;
+  newer 4.28+/4.30+ configs require authenticated GitHub search
+  or lab-owned containerlab captures.
+
 ### Added (Structural apply-groups collapse — Junos interface-range)
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — parse now

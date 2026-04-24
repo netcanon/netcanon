@@ -416,7 +416,7 @@ designed to catch.
 
 **Codec:** `netconfig.migration.codecs.arista_eos.AristaEOSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `certified` ✅ — three real captures across three EOS majors (4.21 + 4.22 + 4.23), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
+**Certainty:** `certified` ✅ — four real captures across four EOS majors (4.21 + 4.22 + 4.23 + 4.26), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
 
 ### Coverage matrix
 
@@ -425,6 +425,7 @@ designed to catch.
 | `ksator_dcs_7150s64_eos4224.txt` | 256 | 1 | 1 | 66 | 0 | 1 | 5 | 1 | Real **DCS-7150S-64-CL** `show running-config` on **EOS 4.22.4M-2GB**.  52 × `Ethernet<N>` + 16 × QSFP-breakout `Ethernet<N>/<M>` + `Loopback0` + `Management1`; mix of `username ... nopassword` / `secret sha512 $6$` / `secret 5 $1$` across 5 admins; `snmp-server community public ro` + `private rw` (first wins); `spanning-tree mode mstp` + `management api http-commands` + `daemon TerminAttr` all parse-and-ignore. |
 | `batfish_labval_dc1_leaf2a_eos4230.txt` | 429 | 1 | 0 | 40 | 15 | 0 | 0 | 0 | Real **DC1-LEAF2A** (vEOS EVPN leaf, from Arista's EVPN L3 Design Guide lab validation) on **EOS-4.23.0.1F**.  DC-fabric kitchen-sink: MLAG peer-link + MLAG across 5 Port-Channels (`channel-group` 3/6/7/10/11), VXLAN1 overlay (`interface Vxlan1` + `vxlan source-interface Loopback0` + per-VNI bindings — currently parse-and-ignore pending GAP 1 codec wire-up), 15 tenant VLANs (zones 110-4094), `router bgp 65102` + EVPN address-family (parse-and-ignore), VRF definitions (`Tenant_A_OP_Zone` + `WEB_Zone`), `interface Vlan3009` with VARP virtual-router MAC, 40 interfaces spanning Ethernet1-11 + Port-Channel3/6/7/10/11 + Loopback0/1 + Management1. |
 | `batfish_duplicateprivate_eos4211.txt` | 64 | 1 | 0 | 17 | 0 | 0 | 1 | 0 | Real **DuplicatePrivate** (vEOS BGP fixture from Batfish's Arista private-ASN snapshot) on **EOS-4.21.1.1F**.  Third EOS major in the corpus.  Light grammar: 1× `username admin secret sha512 $6$...`, 1× routed `interface Ethernet1` with `/24`, Ethernet2-16 + Loopback123 stubs, `router bgp 65001` with duplicate-private-ASN neighbours (parse-and-ignore).  Value: oldest EOS major we cover — regression surface against pre-4.22 grammar quirks. |
+| `karneliuk_a_eos1_eos4260.txt` | 82 | 1 | 0 | 4 | 1 | 1 | 1 | 0 | Real **A-EOS1** vEOS fixture on **EOS-4.26.0.1F** from Anton Karneliuk's Batfish MVP demo (BSD-3-Clause).  **Fourth EOS major** covering the post-GAP-6 canonical surface: `service routing protocols model multi-agent`, VLAN 100 + `Vxlan1 vni 100` (populates CanonicalVxlan), Management1 with IPv4+IPv6, router bgp 65033 with two eBGP neighbours + `address-family evpn` + `evpn redistribute-learned`, route-maps permit+deny, ip prefix-list.  The 4.26 grammar is recent enough to exercise the EVPN-signal grammar GAP 6 targets while staying within the Arista-canonical surface our codec models; any not-yet-modeled stanzas (route-maps, prefix-lists) parse-and-ignore cleanly. |
 
 ### Findings
 
@@ -442,11 +443,10 @@ All three bugs found by round-tripping real fixtures — parse → render → pa
 
 ### Certification decision
 
-**Promotes to `certified` ✅.**  Three real captures from three different EOS majors (4.21 + 4.22 + 4.23) all round-trip cleanly.  3 bugs surfaced + fixed over the promotion path (the two phase-12 username regex + hash-delimiter bugs, plus the LAG render bug surfaced by the 4.23 EVPN fixture) — each with its regression test in place.
+**Ships at `certified` ✅.**  Four real captures from four different EOS majors (4.21 + 4.22 + 4.23 + 4.26) all round-trip cleanly.  3 bugs surfaced + fixed over the promotion path (the two phase-12 username regex + hash-delimiter bugs, plus the LAG render bug surfaced by the 4.23 EVPN fixture) — each with its regression test in place.  The 4.26 fixture was added post-cert to exercise the GAP 6 EVPN/VXLAN codec wire-up against grammar from a more recent LTS branch.
 
-Post-cert items (not gating):
-  * A newer EOS LTS fixture (4.25+ / 4.27+ / 4.30+) remains a nice-to-have; 4.21 is on the older side of EOS support.  Recommend sourcing from an Arista SE lab export, containerlab CI artifact, or direct `show running-config` capture if a newer LTS fixture becomes available.
-  * GAP 6 EVPN-VXLAN codec wire-up (currently parse-and-ignore, declared Unsupported).  The 4.23 EVPN leaf fixture will exercise the intended semantic path once Arista parses + renders VXLAN VNIs + EVPN Type-5.
+Nice-to-have follow-ups (not gating):
+  * Even-newer EOS LTS fixture (4.28+ / 4.30+) — would require authenticated GitHub code-search or a lab-owned containerlab capture; public unauthenticated search surfaced nothing newer than 4.26 with a clean license.
 
 ---
 
@@ -500,9 +500,9 @@ Strategic:
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **arista_eos** | **3** real | **3** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (post-cert: newer LTS 4.25+ fixture nice-to-have; GAP 6 EVPN-VXLAN codec wire-up) |
+| **arista_eos** | **4** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
 | **juniper_junos** | **5** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
-| **TOTAL** | **37** | — | **16** | — | — |
+| **TOTAL** | **38** | — | **16** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our
