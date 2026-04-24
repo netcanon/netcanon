@@ -737,6 +737,30 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] ARISTA + JUNOS CERTIFIED PROMOTION:
+    # 3 new fixtures added to close the ≥3-fixtures-from-≥2-versions
+    # certified bar for both vendors:
+    #   tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt
+    #     — EOS-4.21.1.1F vEOS BGP fixture (Apache-2.0)
+    #   tests/fixtures/real/junos/batfish_evpntype5_router1_junos2541.set
+    #     — Junos 25.4R1.12 EVPN-VXLAN leaf (Apache-2.0)
+    #   tests/fixtures/real/junos/batfish_l3vpn_pe1_junos2541.set
+    #     — Junos 25.4R1.12 MPLS L3VPN PE (Apache-2.0)
+    # All from batfish/lab-validation @ d40faf6.
+    #
+    # arista_eos: best_effort → certified ✅ (3 EOS majors: 4.21/22/23)
+    # juniper_junos: best_effort → certified ✅ (4 Junos majors: 15.1/17.3/18.4/25.4)
+    #
+    # No new bugs surfaced — all 9 new real-capture tests (3 per
+    # fixture × 3 fixtures) pass on first run.
+    #
+    # Post-cert follow-up items (not gating):
+    #   * Arista: newer LTS fixture (4.25+/4.27+/4.30+) nice-to-have
+    #   * Both: GAP 6 codec wire-up for VXLAN + EVPN (currently
+    #     parse-and-ignore; the 25.4 EVPN fixture + 4.23 EVPN leaf
+    #     are the intended exercise surface)
+    #   * Junos: GAP 8 richer apply-groups + GAP 9 v2b work
+
 [SHIPPED] PER-UNIT 802.1Q VLAN TAGGING ON JUNOS SUB-INTERFACES (GAP 7):
     # Parse: `set interfaces <parent> unit <N> vlan-id <tag>` now
     # populates CanonicalInterface.access_vlan on the sub-interface

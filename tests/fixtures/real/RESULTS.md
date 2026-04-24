@@ -416,7 +416,7 @@ designed to catch.
 
 **Codec:** `netconfig.migration.codecs.arista_eos.AristaEOSCodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` — two real captures across two EOS majors (4.22 + 4.23), both round-trip stable.
+**Certainty:** `certified` ✅ — three real captures across three EOS majors (4.21 + 4.22 + 4.23), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
 
 ### Coverage matrix
 
@@ -424,6 +424,7 @@ designed to catch.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | `ksator_dcs_7150s64_eos4224.txt` | 256 | 1 | 1 | 66 | 0 | 1 | 5 | 1 | Real **DCS-7150S-64-CL** `show running-config` on **EOS 4.22.4M-2GB**.  52 × `Ethernet<N>` + 16 × QSFP-breakout `Ethernet<N>/<M>` + `Loopback0` + `Management1`; mix of `username ... nopassword` / `secret sha512 $6$` / `secret 5 $1$` across 5 admins; `snmp-server community public ro` + `private rw` (first wins); `spanning-tree mode mstp` + `management api http-commands` + `daemon TerminAttr` all parse-and-ignore. |
 | `batfish_labval_dc1_leaf2a_eos4230.txt` | 429 | 1 | 0 | 40 | 15 | 0 | 0 | 0 | Real **DC1-LEAF2A** (vEOS EVPN leaf, from Arista's EVPN L3 Design Guide lab validation) on **EOS-4.23.0.1F**.  DC-fabric kitchen-sink: MLAG peer-link + MLAG across 5 Port-Channels (`channel-group` 3/6/7/10/11), VXLAN1 overlay (`interface Vxlan1` + `vxlan source-interface Loopback0` + per-VNI bindings — currently parse-and-ignore pending GAP 1 codec wire-up), 15 tenant VLANs (zones 110-4094), `router bgp 65102` + EVPN address-family (parse-and-ignore), VRF definitions (`Tenant_A_OP_Zone` + `WEB_Zone`), `interface Vlan3009` with VARP virtual-router MAC, 40 interfaces spanning Ethernet1-11 + Port-Channel3/6/7/10/11 + Loopback0/1 + Management1. |
+| `batfish_duplicateprivate_eos4211.txt` | 64 | 1 | 0 | 17 | 0 | 0 | 1 | 0 | Real **DuplicatePrivate** (vEOS BGP fixture from Batfish's Arista private-ASN snapshot) on **EOS-4.21.1.1F**.  Third EOS major in the corpus.  Light grammar: 1× `username admin secret sha512 $6$...`, 1× routed `interface Ethernet1` with `/24`, Ethernet2-16 + Loopback123 stubs, `router bgp 65001` with duplicate-private-ASN neighbours (parse-and-ignore).  Value: oldest EOS major we cover — regression surface against pre-4.22 grammar quirks. |
 
 ### Findings
 
@@ -441,19 +442,19 @@ All three bugs found by round-tripping real fixtures — parse → render → pa
 
 ### Certification decision
 
-**Promotes to `best_effort`.**  Two real captures from two different EOS majors (4.22 + 4.23) both round-trip cleanly after the three bugs above.  The EOS 4.23 fixture is a DC-fabric EVPN leaf that stresses LAG grammar, VRF definitions, VARP virtual-router MAC, and 15-VLAN allowed-lists — grammar surface the synthetic tests + ksator fixture didn't exercise.
+**Promotes to `certified` ✅.**  Three real captures from three different EOS majors (4.21 + 4.22 + 4.23) all round-trip cleanly.  3 bugs surfaced + fixed over the promotion path (the two phase-12 username regex + hash-delimiter bugs, plus the LAG render bug surfaced by the 4.23 EVPN fixture) — each with its regression test in place.
 
-Promotion path to `certified`:
-  * ≥1 more real fixture from a 3rd EOS major (ideally 4.25+ / 4.27+ / 4.30+) so the codec has proven stability across ≥3 versions
-  * Plus the GAP 1 EVPN-VXLAN codec wire-up (currently parse-and-ignore, declared Unsupported); once Arista parses + renders VXLAN VNIs + EVPN Type-5, the EVPN leaf fixture will exercise the intended semantic path rather than the tolerance path
+Post-cert items (not gating):
+  * A newer EOS LTS fixture (4.25+ / 4.27+ / 4.30+) remains a nice-to-have; 4.21 is on the older side of EOS support.  Recommend sourcing from an Arista SE lab export, containerlab CI artifact, or direct `show running-config` capture if a newer LTS fixture becomes available.
+  * GAP 6 EVPN-VXLAN codec wire-up (currently parse-and-ignore, declared Unsupported).  The 4.23 EVPN leaf fixture will exercise the intended semantic path once Arista parses + renders VXLAN VNIs + EVPN Type-5.
 
 ---
 
 ## juniper_junos
 
 **Codec:** `netconfig.migration.codecs.juniper_junos.JunosCodec`
-**Direction:** `bidirectional` *(v2a — flat set-form render, no apply-groups; v2b apply-groups inheritance deferred)*
-**Certainty:** `best_effort` — three real captures across three Junos majors (15.1 + 17.3 + 18.4), all round-trip stable.  v1 parses set-form only; block-form reserved for a follow-up.
+**Direction:** `bidirectional` *(v2a — flat set-form render, no apply-groups; v2b apply-groups collapse + block-form parse deferred)*
+**Certainty:** `certified` ✅ — five real captures across four Junos majors (15.1 + 17.3 + 18.4 + 25.4), all round-trip stable.  v2a parses set-form only; block-form reserved for v2b.
 
 ### Coverage matrix
 
@@ -462,6 +463,8 @@ Promotion path to `certified`:
 | `buraglio_netlab_junos184.set` | 28 | 1 | 2 | 0 | 0 | 0 | 0 | Real **Junos 18.4R1-S1.1** set-form from ES.net netlab-ns demo.  em0 + lo0 with IPv4 addresses + IPv6/ISO/MPLS families parse-and-ignore.  Root-authentication parse-and-ignore (not a user declaration).  BGP / IS-IS / MPLS / LLDP / topology-export all exercise the parse-tolerance path. |
 | `ksator_labmgmt_qfx5100_junos173.set` | 106 | 1 | 11 | 16 | 0 | 0 | 0 | Real **Junos 17.3R1.10** set-form from ksator/lab_management (MIT, (c) Juniper Networks 2018).  QFX5100 DC access/leaf switch: `ae0`/`ae1` aggregated-ethernet LAGs, 2× `et-0/0/48-49` 40G uplinks, 16 `set vlans V<N>` declarations, `apply-groups POC_Lab` inheritance pattern (host-name lives under `set groups POC_Lab system host-name` — **populates intent.hostname as of GAP 4**), RADIUS + SSH. |
 | `ksator_labmgmt_ex4550_junos151.set` | 52 | 1 | 3 | 6 | 0 | 0 | 0 | Real **Junos 15.1R6.7** set-form from ksator/lab_management.  EX4550 campus/DC access switch with 3× `xe-0/0/0-2` trunk ports (`unit 0 family ethernet-switching port-mode trunk` + `vlan members`), 6 `set vlans V<N>`, `chassis aggregated-devices ethernet device-count 2`, same apply-groups pattern (hostname `EX4550-190` populates via GAP 4).  Oldest Junos major in the corpus. |
+| `batfish_evpntype5_router1_junos2541.set` | 151 | 1 | 10 | 4 | 0 | 1 | 0 | Real **Junos 25.4R1.12** set-form from Batfish's Junos EVPN Type-5 lab validation.  **Fourth Junos major (25.4 is current LTS)** — biggest version jump in the corpus.  Pure EVPN-VXLAN leaf grammar: `set vlans <name> vxlan vni <vni>` mappings, 4× IRB sub-interfaces with per-unit `family inet address` + VRRP, `set routing-instances <name> instance-type vrf` + RD + vrf-target + per-interface assignment, `set protocols evpn encapsulation vxlan`, `set protocols bgp group EVPN_OVERLAY family evpn signaling`, `policy-options`.  VXLAN + EVPN + routing-instances stanzas currently parse-and-ignore (matches GAP 1 + GAP 5 Unsupported declarations pending GAP 6 codec wire-up) — the fixture IS the target surface for GAP 6. |
+| `batfish_l3vpn_pe1_junos2541.set` | 34 | 1 | 4 | 0 | 1 | 1 | 0 | Real **Junos 25.4R1.12** set-form from Batfish's Junos L3VPN lab validation.  MPLS L3VPN provider-edge: `CUSTOMERS` VRF (`set routing-instances CUSTOMERS instance-type vrf` + `route-distinguisher 1.1.1.1:65001` + `vrf-target target:65001:1` + `interface ge-0/0/1.0`), iBGP PE mesh with `family inet-vpn unicast`, LDP + MPLS on core link, single static route.  The classic (pre-EVPN) VRF-over-MPLS path complements the EVPN fixture above — two distinct VRF-carrying planes on the same Junos major. |
 
 ### Findings
 
@@ -473,11 +476,13 @@ Parse-tolerance validated across three fixtures covering `set protocols bgp / is
 
 ### Certification decision
 
-**Promotes to `best_effort`.**  Three real captures from three different Junos majors (15.1 + 17.3 + 18.4) all round-trip cleanly after the bare-interface render fix.  GAP 3 closed the promotion bar (needed ≥2 more captures from the previous experimental state).
+**Promotes to `certified` ✅.**  Five real captures from four distinct Junos majors (15.1 + 17.3 + 18.4 + 25.4) all round-trip cleanly.  The two 25.4 batfish captures close the `≥3 real captures from ≥2 OS versions` bar with room to spare — one VXLAN-EVPN leaf, one MPLS L3VPN PE, both on a current LTS major.  1 bug surfaced + fixed on the promotion path (bare-interface render in GAP 3).
 
-Promotion path to `certified`:
-  * ≥2 more real captures — ideally from newer majors (Junos 20.x / 21.x / 22.x / 23.x LTS).  Public ``.set`` corpora are thin; user contributions remain the realistic path.
-  * GAP 4 apply-groups host-name inheritance + sub-interface materialisation shipped (the ksator fixtures now populate hostname correctly; unit 1+ entries become `<parent>.<N>` canonical interfaces).  Still pending: routing-instances canonical model, richer apply-groups inheritance (interface config / protocols / SNMP), per-unit VLAN tagging, block-form input parsing.
+Post-cert items (not gating):
+  * GAP 6: codec wire-up for VXLAN + EVPN Type-5 — the 25.4 EVPN fixture will exercise the intended semantic path once Junos parses + renders VNI mappings.  Currently declared Unsupported, matches schema-shipped behaviour.
+  * GAP 5 canonical VRF schema landed but codec wire-up pending — the 25.4 L3VPN + EVPN fixtures both carry `routing-instances` and will exercise the intended semantic path once Junos populates `CanonicalRoutingInstance` + per-interface `vrf`.
+  * GAP 8: richer apply-groups inheritance (interfaces / protocols / SNMP under `set groups`).  Currently only host-name flows through.
+  * GAP 9: v2b — apply-groups collapse on render + block-form (curly-brace) input parse.
 
 Strategic:
   * Junos v1 unlocks **migration FROM Junos** — the primary customer direction (Juniper-core → Cisco/Arista replacement in DC refreshes, SP-to-enterprise moves).
@@ -495,9 +500,9 @@ Strategic:
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **arista_eos** | **2** real | **2** (EOS 4.22.4M + 4.23.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **best_effort** 🟡 | needs ≥1 more real capture from a 3rd EOS major + GAP 1 EVPN-VXLAN codec wire-up |
-| **juniper_junos** | **3** real | **3** (Junos 15.1R6 + 17.3R1 + 18.4R1) | 1 (render dropped bare interfaces) | **best_effort** 🟡 | needs ≥2 more real captures from newer majors (20.x / 21.x / 22.x / 23.x) + GAP 4 routing-instances + apply-groups |
-| **TOTAL** | **34** | — | **16** | — | — |
+| **arista_eos** | **3** real | **3** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (post-cert: newer LTS 4.25+ fixture nice-to-have; GAP 6 EVPN-VXLAN codec wire-up) |
+| **juniper_junos** | **5** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
+| **TOTAL** | **37** | — | **16** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our

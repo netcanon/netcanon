@@ -1,0 +1,151 @@
+set version 25.4R1.12
+set system host-name router1
+set system root-authentication encrypted-password "$6$sr/SJsLZ$n1stApaAKubyIZNKxJxnfIfdW4/ohw9GsO7QbQSxS09jHzhNoXRy4qzfIOZZN2iza3lKfeN9wN90.cNEkIY1y/"
+set system login user admin uid 2000
+set system login user admin class super-user
+set system login user admin authentication encrypted-password "$6$KegR.zg0$k3Y/SRgCrs/fjCXyHNGcxg.hi8qjQjd9GARqRsrRGIRF4qJzO19oq2s/W4hF/QhIb4wCBL2BasNU68o.uQc/W1"
+set system services netconf ssh
+set system services ssh root-login allow
+set system management-instance
+set chassis fpc 0 pic 0 number-of-ports 56
+set interfaces ge-0/0/1 description "to node2-1 (spine1)"
+set interfaces ge-0/0/1 mtu 9192
+set interfaces ge-0/0/1 unit 0 family inet address 172.16.254.8/31
+set interfaces ge-0/0/2 description "to node2-2 (spine2)"
+set interfaces ge-0/0/2 mtu 9192
+set interfaces ge-0/0/2 unit 0 family inet address 172.16.254.10/31
+set interfaces ge-0/0/3 description "to edge1 - p2p link"
+set interfaces ge-0/0/3 unit 0 family inet address 10.99.0.0/31
+set interfaces fxp0 unit 0 family inet address 10.0.0.15/24
+set interfaces fxp0 unit 0 family inet6 address 2001:db8::2/64
+set interfaces irb unit 100 family inet address 172.16.100.3/24 virtual-gateway-address 172.16.100.100
+set interfaces irb unit 200 family inet address 172.16.200.3/24 virtual-gateway-address 172.16.200.100
+set interfaces irb unit 300 family inet address 172.16.101.3/24 virtual-gateway-address 172.16.101.100
+set interfaces irb unit 400 family inet address 172.16.201.3/24 virtual-gateway-address 172.16.201.100
+set interfaces lo0 unit 0 family inet address 172.16.0.100/32
+set forwarding-options storm-control-profiles default all
+set policy-options policy-statement TENANT-A-export term default-route from protocol static
+set policy-options policy-statement TENANT-A-export term default-route from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement TENANT-A-export term default-route then community add TENANT-A-community
+set policy-options policy-statement TENANT-A-export term default-route then community add gateway-community
+set policy-options policy-statement TENANT-A-export term default-route then accept
+set policy-options policy-statement TENANT-A-export term evpn then community add TENANT-A-community
+set policy-options policy-statement TENANT-A-export term evpn then accept
+set policy-options policy-statement TENANT-A-import term evpn from community TENANT-A-community
+set policy-options policy-statement TENANT-A-import term evpn then accept
+set policy-options policy-statement TENANT-B-export term default-route from protocol static
+set policy-options policy-statement TENANT-B-export term default-route from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement TENANT-B-export term default-route then community add TENANT-B-community
+set policy-options policy-statement TENANT-B-export term default-route then community add gateway-community
+set policy-options policy-statement TENANT-B-export term default-route then accept
+set policy-options policy-statement TENANT-B-export term evpn then community add TENANT-B-community
+set policy-options policy-statement TENANT-B-export term evpn then accept
+set policy-options policy-statement TENANT-B-import term evpn from community TENANT-B-community
+set policy-options policy-statement TENANT-B-import term evpn then accept
+set policy-options policy-statement export-to-edge term tenant-a-subnets from protocol direct
+set policy-options policy-statement export-to-edge term tenant-a-subnets from protocol evpn
+set policy-options policy-statement export-to-edge term tenant-a-subnets from protocol bgp
+set policy-options policy-statement export-to-edge term tenant-a-subnets then accept
+set policy-options policy-statement export-to-edge term deny then reject
+set policy-options policy-statement export-underlay term loopbacks from protocol direct
+set policy-options policy-statement export-underlay term loopbacks from route-filter 172.16.0.0/24 orlonger
+set policy-options policy-statement export-underlay term loopbacks then accept
+set policy-options policy-statement export-underlay term p2p from protocol direct
+set policy-options policy-statement export-underlay term p2p from route-filter 172.16.254.0/24 orlonger
+set policy-options policy-statement export-underlay term p2p then accept
+set policy-options policy-statement export-underlay term default-route from protocol static
+set policy-options policy-statement export-underlay term default-route from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement export-underlay term default-route then accept
+set policy-options policy-statement export-underlay term deny then reject
+set policy-options policy-statement import-from-edge term accept-all then accept
+set policy-options policy-statement import-underlay term loopbacks from route-filter 172.16.0.0/24 orlonger
+set policy-options policy-statement import-underlay term loopbacks then accept
+set policy-options policy-statement import-underlay term p2p from route-filter 172.16.254.0/24 orlonger
+set policy-options policy-statement import-underlay term p2p then accept
+set policy-options policy-statement import-underlay term deny then reject
+set policy-options policy-statement load-balance-per-flow then load-balance per-packet
+set policy-options community TENANT-A-community members target:65000:10000
+set policy-options community TENANT-B-community members target:65000:20000
+set policy-options community gateway-community members target:65000:99
+set routing-instances TENANT-A instance-type vrf
+set routing-instances TENANT-A routing-options multipath
+set routing-instances TENANT-A routing-options auto-export
+set routing-instances TENANT-A protocols bgp group edge type external
+set routing-instances TENANT-A protocols bgp group edge import import-from-edge
+set routing-instances TENANT-A protocols bgp group edge family inet unicast
+set routing-instances TENANT-A protocols bgp group edge export export-to-edge
+set routing-instances TENANT-A protocols bgp group edge neighbor 10.99.0.1 description edge1
+set routing-instances TENANT-A protocols bgp group edge neighbor 10.99.0.1 peer-as 65200
+set routing-instances TENANT-A protocols evpn irb-symmetric-routing vni 50000
+set routing-instances TENANT-A protocols evpn ip-prefix-routes advertise direct-nexthop
+set routing-instances TENANT-A protocols evpn ip-prefix-routes encapsulation vxlan
+set routing-instances TENANT-A protocols evpn ip-prefix-routes vni 50000
+set routing-instances TENANT-A interface ge-0/0/3.0
+set routing-instances TENANT-A interface irb.100
+set routing-instances TENANT-A interface irb.200
+set routing-instances TENANT-A route-distinguisher 172.16.0.100:10000
+set routing-instances TENANT-A vrf-target target:65000:10000
+set routing-instances TENANT-A vrf-table-label
+set routing-instances TENANT-B instance-type vrf
+set routing-instances TENANT-B routing-options multipath
+set routing-instances TENANT-B routing-options auto-export
+set routing-instances TENANT-B protocols evpn irb-symmetric-routing vni 50001
+set routing-instances TENANT-B protocols evpn ip-prefix-routes advertise direct-nexthop
+set routing-instances TENANT-B protocols evpn ip-prefix-routes encapsulation vxlan
+set routing-instances TENANT-B protocols evpn ip-prefix-routes vni 50001
+set routing-instances TENANT-B interface irb.300
+set routing-instances TENANT-B interface irb.400
+set routing-instances TENANT-B route-distinguisher 172.16.0.100:20000
+set routing-instances TENANT-B vrf-target target:65000:20000
+set routing-instances TENANT-B vrf-table-label
+set routing-instances mgmt_junos routing-options rib mgmt_junos.inet6.0 static route ::/0 next-hop 2001:db8::1
+set routing-instances mgmt_junos routing-options static route 0.0.0.0/0 next-hop 10.0.0.2
+set routing-options router-id 172.16.0.100
+set routing-options autonomous-system 65100
+set routing-options forwarding-table export load-balance-per-flow
+set routing-options forwarding-table ecmp-fast-reroute
+set protocols bgp group underlay type external
+set protocols bgp group underlay mtu-discovery
+set protocols bgp group underlay import import-underlay
+set protocols bgp group underlay family inet unicast
+set protocols bgp group underlay export export-underlay
+set protocols bgp group underlay local-as 65100
+set protocols bgp group underlay multipath multiple-as
+set protocols bgp group underlay bfd-liveness-detection minimum-interval 350
+set protocols bgp group underlay bfd-liveness-detection multiplier 3
+set protocols bgp group underlay bfd-liveness-detection session-mode single-hop
+set protocols bgp group underlay neighbor 172.16.254.9 description node2-1
+set protocols bgp group underlay neighbor 172.16.254.9 peer-as 65011
+set protocols bgp group underlay neighbor 172.16.254.11 description node2-2
+set protocols bgp group underlay neighbor 172.16.254.11 peer-as 65012
+set protocols bgp group overlay type internal
+set protocols bgp group overlay local-address 172.16.0.100
+set protocols bgp group overlay mtu-discovery
+set protocols bgp group overlay family evpn signaling
+set protocols bgp group overlay local-as 65000
+set protocols bgp group overlay multipath
+set protocols bgp group overlay neighbor 172.16.0.11 description node2-1
+set protocols bgp group overlay neighbor 172.16.0.12 description node2-2
+set protocols bgp group overlay vpn-apply-export
+set protocols bgp log-updown
+set protocols bgp graceful-restart
+set protocols evpn encapsulation vxlan
+set protocols evpn default-gateway no-gateway-community
+set protocols evpn extended-vni-list all
+set protocols lldp port-id-subtype interface-name
+set protocols lldp interface all
+set switch-options vtep-source-interface lo0.0
+set switch-options route-distinguisher 172.16.0.100:1
+set switch-options vrf-target target:65000:9999
+set vlans VLAN100 vlan-id 100
+set vlans VLAN100 l3-interface irb.100
+set vlans VLAN100 vxlan vni 10100
+set vlans VLAN200 vlan-id 200
+set vlans VLAN200 l3-interface irb.200
+set vlans VLAN200 vxlan vni 10200
+set vlans VLAN300 vlan-id 300
+set vlans VLAN300 l3-interface irb.300
+set vlans VLAN300 vxlan vni 10300
+set vlans VLAN400 vlan-id 400
+set vlans VLAN400 l3-interface irb.400
+set vlans VLAN400 vxlan vni 10400

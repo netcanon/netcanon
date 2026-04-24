@@ -1,0 +1,64 @@
+! Command: show running-config
+! device: DuplicatePrivate (vEOS, EOS-4.21.1.1F)
+!
+! boot system flash:/vEOS-lab.swi
+!
+transceiver qsfp default-mode 4x10G
+!
+hostname DuplicatePrivate
+!
+spanning-tree mode mstp
+!
+no aaa root
+!
+username admin privilege 15 role network-admin secret sha512 $6$MFlXkMnX0HvcL4ud$rLVaIBK38AJF.mowTzZ38vD/o0pGAzkRluMt4QmctLuSMHjwnti99Z4cwohb4yYGjL5W6o42aSM7S27gVpTW90
+!
+interface Ethernet1
+   no switchport
+   ip address 10.20.10.1/24
+!
+interface Ethernet2
+!
+interface Ethernet3
+!
+interface Ethernet4
+!
+interface Ethernet5
+!
+interface Ethernet6
+!
+interface Ethernet7
+!
+interface Ethernet8
+!
+interface Ethernet9
+!
+interface Ethernet10
+!
+interface Ethernet11
+!
+interface Ethernet12
+!
+interface Ethernet13
+!
+interface Ethernet14
+!
+interface Ethernet15
+!
+interface Loopback123
+   ip address 192.168.123.8/32
+!
+interface Management1
+!
+ip routing
+!
+router bgp 65100
+   neighbor 10.20.10.2 remote-as 100
+   neighbor 10.20.10.2 allowas-in 3
+   neighbor 10.20.10.2 maximum-routes 12000
+   !
+   address-family ipv4
+      neighbor 10.20.10.2 activate
+      network 192.168.123.8/32
+!
+end

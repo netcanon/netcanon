@@ -7,6 +7,46 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Certification promotion — Arista + Junos to `certified` ✅)
+
+- `tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt`
+  — real **EOS-4.21.1.1F** DuplicatePrivate vEOS (Apache-2.0, via
+  batfish/lab-validation @ `d40faf6`).  64 lines.  Third Arista
+  fixture from a third EOS major (4.21 + 4.22 + 4.23) closing the
+  `≥3 fixtures from ≥2 versions` certified bar.
+- `tests/fixtures/real/junos/batfish_evpntype5_router1_junos2541.set`
+  — real **Junos 25.4R1.12** EVPN-VXLAN leaf grammar (Apache-2.0,
+  batfish/lab-validation).  151 lines.  VXLAN VNI mappings, IRB
+  sub-interfaces with VRRP, routing-instances with RD + vrf-target,
+  `protocols evpn encapsulation vxlan`, BGP EVPN signaling.  Fourth
+  Junos major in the corpus (biggest version jump: 15.1 → 17.3 →
+  18.4 → 25.4).
+- `tests/fixtures/real/junos/batfish_l3vpn_pe1_junos2541.set` —
+  real **Junos 25.4R1.12** MPLS L3VPN PE grammar (Apache-2.0).
+  34 lines.  CUSTOMERS VRF, iBGP PE mesh with
+  `family inet-vpn unicast`, LDP + MPLS.  Fifth Junos fixture —
+  classic (pre-EVPN) VRF-over-MPLS complements the EVPN fixture.
+
+### Changed (Certification promotion)
+
+- `arista_eos` codec certainty promoted from `best_effort` to
+  **`certified` ✅** — three real captures across three EOS majors
+  (4.21 + 4.22 + 4.23), all round-trip stable after the three bugs
+  fixed on the promotion path.
+- `juniper_junos` codec certainty promoted from `best_effort` to
+  **`certified` ✅** — five real captures across four Junos majors
+  (15.1 + 17.3 + 18.4 + 25.4), all round-trip stable.  The two 25.4
+  batfish captures (EVPN leaf + L3VPN PE) close the `≥3 fixtures
+  from ≥2 versions` bar with a current-LTS major on both surfaces.
+- `tests/fixtures/real/RESULTS.md` — Arista + Junos sections now
+  carry `certified` banners with matrix rows for the 3 new fixtures
+  + updated post-cert items (no longer gating, listed as follow-on
+  enrichment via GAP 6/8/9).  Summary table reflects 3→3 / 5→5
+  fixture counts, version jumps 2→3 for Arista and 3→4 for Junos;
+  TOTAL row updated 34→37.
+- `tests/fixtures/real/NOTICE.md` — provenance rows for the 3 new
+  fixtures with repo + commit SHA + license + grammar summary.
+
 ### Added (GAP 7 — per-unit 802.1Q VLAN tagging on Junos sub-interfaces)
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — parse now

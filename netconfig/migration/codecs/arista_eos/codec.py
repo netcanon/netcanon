@@ -129,7 +129,7 @@ class AristaEOSCodec(CodecBase):
     version_hint: ClassVar[str | None] = "EOS 4.20+"
     input_format: ClassVar[str] = "cli-arista"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Arista EOS "

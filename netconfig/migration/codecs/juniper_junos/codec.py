@@ -74,7 +74,7 @@ class JunosCodec(CodecBase):
     version_hint: ClassVar[str | None] = "Junos 18.x+"
     input_format: ClassVar[str] = "cli-junos-set"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste Junos `set`-form configuration text — the output of "
