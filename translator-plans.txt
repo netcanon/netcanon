@@ -737,6 +737,37 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] STRUCTURAL APPLY-GROUPS COLLAPSE (interface-range):
+    # Junos interface-range grammar: parse + render + auto-detect.
+    #
+    # Parse: `set interfaces interface-range <rname> ...`
+    #   - member <iface> (collects members)
+    #   - description / mtu / disable / unit 0 family inet address
+    #     (shared attrs applied to each member at materialisation)
+    #   - Per-member config overrides range-level defaults
+    #   - Unknown sub-paths silently parse-and-ignore
+    #
+    # Top-level `set interfaces X mtu N` also wired (was previously
+    # unparsed despite CanonicalInterface.mtu existing on the model).
+    #
+    # Render: auto-detect >=3 interfaces sharing identical
+    # (mtu, description, enabled) tuples with at least one non-
+    # default value; emit `set interfaces interface-range
+    # AUTO-RANGE-<N>` blocks + suppress per-interface emission of
+    # the shared attrs.  Skips VRF-bound / switchport / trunk /
+    # access-vlan / sub-interface / all-default cases (richer
+    # semantics warrant per-interface emission).
+    #
+    # Complementary to GAP 9b:
+    #   * GAP 9b preserves OPERATOR-AUTHORED group structure
+    #     (`set groups G` + `set apply-groups G`).
+    #   * This commit synthesises interface-range blocks for raw
+    #     per-interface sharing the operator didn't collapse.
+    # Operators get compact Junos-native output on render.
+    #
+    # Covered by tests/unit/migration/test_junos_interface_range.py
+    # (15 tests across parse / render / round-trip).
+
 [SHIPPED] JUNOS APPLY-GROUPS STATEMENT + BODY PRESERVATION (GAP 9b):
     # Two new fields on CanonicalIntent:
     #   apply_groups: list[str]

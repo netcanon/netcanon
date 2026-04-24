@@ -269,6 +269,14 @@ class JunosCodec(CodecBase):
         # config across many lines; we collect per-iface state
         # before materialising CanonicalInterface objects.
         iface_state: dict[str, dict[str, Any]] = {}
+        # Structural-collapse accumulator: Junos's ``set interfaces
+        # interface-range <name>`` grammar declares shared config
+        # across multiple physical interfaces.  We collect members
+        # + shared attrs per range, then apply to each member at
+        # materialisation time so the canonical tree looks the
+        # same whether the operator wrote interface-range blocks
+        # or flat per-interface lines.
+        range_state: dict[str, dict[str, Any]] = {}
         # GAP 8: two-pass parse for richer apply-groups inheritance.
         # Junos's ``set groups <g> ...`` + ``set apply-groups <g>``
         # grammar composes inherited config from named groups into
@@ -328,12 +336,12 @@ class JunosCodec(CodecBase):
         # apply-grouped silently drops.
         for gname in reversed(applied_groups):
             for tokens in group_lines.get(gname, []):
-                _dispatch_set(tokens, intent, iface_state)
+                _dispatch_set(tokens, intent, iface_state, range_state)
         # Pass 2b: apply top-level content.  Scalars set by group
         # content get overwritten; list-shaped fields accumulate
         # (duplicate-add protection lives in each _apply_* function).
         for tokens in top_level_lines:
-            _dispatch_set(tokens, intent, iface_state)
+            _dispatch_set(tokens, intent, iface_state, range_state)
 
         # GAP 9b: preserve both the apply-groups STATEMENT and the
         # GROUP CONTENT so render can re-emit `set groups <G> ...`
@@ -354,6 +362,39 @@ class JunosCodec(CodecBase):
             if gname in group_lines
         }
 
+        # Structural collapse: before materialising, fold each
+        # interface-range's shared attrs onto every member that was
+        # declared via `... interface-range X member <iface>`.  Each
+        # member still gets its per-interface state from iface_state
+        # (if any); range attrs act as defaults that per-interface
+        # lines can overwrite.  Record per-member the range name so
+        # render can re-emit the collapsed block.
+        range_membership: dict[str, str] = {}
+        for rname, rstate in range_state.items():
+            attrs = rstate.get("attrs", {})
+            for member in rstate.get("members", []):
+                member_state = iface_state.setdefault(member, {})
+                range_membership[member] = rname
+                # Shared scalars default when member-state doesn't
+                # override.  member_state wins on conflict.
+                if "description" in attrs and not member_state.get("description"):
+                    member_state["description"] = attrs["description"]
+                if "mtu" in attrs and "mtu" not in member_state:
+                    member_state["mtu"] = attrs["mtu"]
+                if attrs.get("enabled") is False and "enabled" not in member_state:
+                    member_state["enabled"] = False
+                for addr in attrs.get("ipv4", []):
+                    if "/" in addr:
+                        ip_str, prefix_str = addr.split("/", 1)
+                        try:
+                            prefix = int(prefix_str)
+                            existing = member_state.setdefault("ipv4", [])
+                            pair = (ip_str, prefix)
+                            if pair not in existing:
+                                existing.append(pair)
+                        except ValueError:
+                            pass
+
         # Materialise CanonicalInterface records from the accumulator.
         # GAP 4: sub-interfaces (unit 1+) are materialised as distinct
         # CanonicalInterface entries with compound name ``<parent>.<N>``
@@ -370,6 +411,11 @@ class JunosCodec(CodecBase):
                 # CanonicalInterface.access_vlan.  None = untagged
                 # (the common case for unit 0) or not-specified.
                 access_vlan=state.get("access_vlan"),
+                # interface-range / structural collapse: mtu may
+                # have been populated from a ``set interfaces
+                # interface-range <r> mtu <N>`` line via the
+                # range-fold pass.
+                mtu=state.get("mtu"),
             )
             for ip, prefix in state.get("ipv4", []):
                 iface.ipv4_addresses.append(
@@ -504,6 +550,88 @@ class JunosCodec(CodecBase):
                     f"{_quote_always(hsh)}"
                 )
 
+        # --- structural collapse detection (render-side auto-
+        #     synthesise interface-range blocks for ≥3 interfaces
+        #     sharing identical shared-attr tuples) ---
+        #
+        # Only applies to "simple" interfaces (not sub-interfaces,
+        # not VRF-bound, not LAG members) since those have richer
+        # per-interface semantics.  Shared attrs we collapse on:
+        # mtu + description.  Emit `set interfaces interface-range
+        # <auto-name> member <iface>` + one line per shared attr.
+        # Per-interface render SUPPRESSES the shared attrs when the
+        # interface is a range member.
+        range_emit_by_name: dict[str, list[str]] = {}
+        iface_range_membership: dict[str, str] = {}
+        collapsed_iface_count = 0
+        _candidates: dict[tuple, list[str]] = {}
+        for iface in tree.interfaces:
+            # Skip sub-interfaces (they emit under parent/unit).
+            _parent, _unit = _split_subiface_name(iface.name)
+            if _parent is not None and _unit is not None:
+                continue
+            # Skip VRF-bound interfaces (per-VRF semantics matter
+            # too much to auto-collapse across them).
+            if iface.vrf:
+                continue
+            # Skip access-vlan / switchport / trunk-configured
+            # interfaces.  Collapse only ROUTED or BARE interfaces.
+            if (
+                iface.access_vlan is not None
+                or iface.switchport_mode is not None
+                or iface.trunk_allowed_vlans
+            ):
+                continue
+            # Collapse key: (mtu, description, enabled).  We DON'T
+            # include IP addresses — those are per-interface.
+            key = (iface.mtu, iface.description, iface.enabled)
+            # Skip all-default tuples — nothing worth collapsing.
+            if key == (None, "", True):
+                continue
+            _candidates.setdefault(key, []).append(iface.name)
+        # Promote candidate groups with ≥3 members into
+        # interface-range emissions.
+        _next_range_id = 1
+        for key, members in sorted(_candidates.items(), key=lambda kv: (
+            # Sort by member count descending so AUTO-RANGE-1 is the
+            # biggest group.
+            -len(kv[1]), sorted(kv[1])[0] if kv[1] else "",
+        )):
+            if len(members) < 3:
+                continue
+            range_name = f"AUTO-RANGE-{_next_range_id}"
+            _next_range_id += 1
+            lines: list[str] = []
+            for m in members:
+                lines.append(
+                    f"set interfaces interface-range {range_name} "
+                    f"member {m}"
+                )
+                iface_range_membership[m] = range_name
+            mtu, description, enabled = key
+            if description:
+                lines.append(
+                    f"set interfaces interface-range {range_name} "
+                    f"description {_quote_always(description)}"
+                )
+            if mtu is not None:
+                lines.append(
+                    f"set interfaces interface-range {range_name} "
+                    f"mtu {mtu}"
+                )
+            if not enabled:
+                lines.append(
+                    f"set interfaces interface-range {range_name} "
+                    f"disable"
+                )
+            range_emit_by_name[range_name] = lines
+            collapsed_iface_count += len(members)
+
+        # Emit interface-range blocks FIRST so operators see the
+        # shared config before per-interface specifics.
+        for _rname, lines in range_emit_by_name.items():
+            out.extend(lines)
+
         # --- interfaces ---
         for iface in tree.interfaces:
             name = iface.name
@@ -512,6 +640,16 @@ class JunosCodec(CodecBase):
                 or (not iface.enabled)
                 or bool(iface.ipv4_addresses)
             )
+            # Structural collapse: if this interface is a member of
+            # an auto-synthesised range, suppress the shared-attr
+            # emission (description + mtu + disable).  Per-interface
+            # specifics (IP addresses) still emit.
+            is_range_member = name in iface_range_membership
+            emit_description = (
+                bool(iface.description) and not is_range_member
+            )
+            emit_mtu = (iface.mtu is not None) and not is_range_member
+            emit_disable = (not iface.enabled) and not is_range_member
             # GAP 4: sub-interface naming.  The parse side materialises
             # ``set interfaces <parent> unit N ...`` (N>0) as a
             # CanonicalInterface named ``<parent>.<N>``.  Render has to
@@ -555,13 +693,15 @@ class JunosCodec(CodecBase):
                     )
                 continue
             # Regular (unit-0 or non-unitised) interface.
-            if iface.description:
+            if emit_description:
                 out.append(
                     f"set interfaces {name} description "
                     f"{_quote_always(iface.description)}"
                 )
-            if not iface.enabled:
+            if emit_disable:
                 out.append(f"set interfaces {name} disable")
+            if emit_mtu:
+                out.append(f"set interfaces {name} mtu {iface.mtu}")
             # IPv4 addresses — emit under unit 0 (v1's convention).
             for addr in iface.ipv4_addresses:
                 out.append(
@@ -572,9 +712,12 @@ class JunosCodec(CodecBase):
             # for every ``set interfaces <name> ...`` line, even when
             # the trailing tokens land entirely in unmodelled (Tier-3)
             # grammar like ``unit 0 family ethernet-switching ...``.
-            # Without this, round-trip would drop interfaces that
-            # exist in the tree but carry no canonical attributes.
-            if not has_renderable_attr:
+            # Or: the interface IS range-collapsed with no per-
+            # interface specifics (no IP) — still need a placeholder
+            # so round-trip keeps the interface in the canonical
+            # tree even when the range block alone carries all its
+            # attributes.
+            if not has_renderable_attr and not is_range_member:
                 out.append(f"set interfaces {name}")
 
         # --- vlans + VLAN-to-VNI mappings (GAP 6) ---
@@ -1013,6 +1156,7 @@ def _dispatch_set(
     tokens: list[str],
     intent: CanonicalIntent,
     iface_state: dict[str, dict[str, Any]],
+    range_state: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
@@ -1023,6 +1167,9 @@ def _dispatch_set(
     the parse() two-pass structure (GAP 8) intercepts those at the
     file-line level and replays group content through this dispatcher
     with the group-name token stripped.
+
+    ``range_state`` is the interface-range accumulator (optional —
+    callers in isolated tests may omit it).
     """
     if not tokens:
         return
@@ -1030,7 +1177,7 @@ def _dispatch_set(
     if head == "system":
         _apply_system(tokens[1:], intent)
     elif head == "interfaces":
-        _apply_interfaces(tokens[1:], iface_state)
+        _apply_interfaces(tokens[1:], iface_state, range_state)
     elif head == "vlans":
         _apply_vlans(tokens[1:], intent)
     elif head == "routing-options":
@@ -1113,9 +1260,24 @@ def _apply_system(tokens: list[str], intent: CanonicalIntent) -> None:
 def _apply_interfaces(
     tokens: list[str],
     iface_state: dict[str, dict[str, Any]],
+    range_state: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    """Parse ``interfaces <name> ...`` variants."""
+    """Parse ``interfaces <name> ...`` variants.
+
+    Special case: ``interfaces interface-range <rname> ...`` routes to
+    the structural-collapse accumulator so shared attrs apply to each
+    member interface at materialisation time.
+    """
     if not tokens:
+        return
+    # Interface-range special case: ``interfaces interface-range
+    # <rname> ...`` declares shared config across multiple members.
+    if (
+        tokens[0] == "interface-range"
+        and len(tokens) >= 2
+        and range_state is not None
+    ):
+        _apply_interface_range(tokens[1:], range_state)
         return
     name = tokens[0]
     state = iface_state.setdefault(name, {})
@@ -1135,6 +1297,15 @@ def _apply_interfaces(
     # ``interfaces <name> description "<desc>"``
     if second == "description" and len(tokens) >= 3:
         state["description"] = tokens[2]
+        return
+
+    # ``interfaces <name> mtu <N>`` — shared attribute the
+    # structural-collapse render auto-detects.
+    if second == "mtu" and len(tokens) >= 3:
+        try:
+            state["mtu"] = int(tokens[2])
+        except ValueError:
+            pass
         return
 
     # ``interfaces <name> unit <N> ...``
@@ -1198,6 +1369,64 @@ def _apply_interfaces(
                 target_state["access_vlan"] = int(tokens[4])
             except ValueError:
                 pass
+
+
+def _apply_interface_range(
+    tokens: list[str],
+    range_state: dict[str, dict[str, Any]],
+) -> None:
+    """Parse ``interfaces interface-range <rname> ...`` variants.
+
+    Supported sub-paths (subset of Junos full grammar — we capture
+    the attributes the render side auto-collapses, plus members):
+
+    * ``interface-range <rname> member <iface>``
+    * ``interface-range <rname> description "<desc>"``
+    * ``interface-range <rname> mtu <N>``
+    * ``interface-range <rname> disable``
+    * ``interface-range <rname> unit 0 family inet address <ip>/<prefix>``
+
+    Collected state gets applied to each member interface at
+    materialisation time so the canonical tree looks identical
+    whether the operator wrote interface-range blocks or flat
+    per-interface lines.  Unknown sub-paths parse-and-ignore.
+    """
+    if not tokens:
+        return
+    rname = tokens[0]
+    state = range_state.setdefault(rname, {"members": [], "attrs": {}})
+    if len(tokens) < 2:
+        return
+    sub = tokens[1]
+    if sub == "member" and len(tokens) >= 3:
+        member = tokens[2]
+        if member not in state["members"]:
+            state["members"].append(member)
+        return
+    if sub == "description" and len(tokens) >= 3:
+        state["attrs"]["description"] = tokens[2]
+        return
+    if sub == "mtu" and len(tokens) >= 3:
+        try:
+            state["attrs"]["mtu"] = int(tokens[2])
+        except ValueError:
+            pass
+        return
+    if sub == "disable":
+        state["attrs"]["enabled"] = False
+        return
+    # ``unit 0 family inet address <ip>/<prefix>`` — shared IP
+    # across members is rare but legal; collect for post-pass.
+    if (
+        sub == "unit"
+        and len(tokens) >= 7
+        and tokens[2] == "0"
+        and tokens[3] == "family"
+        and tokens[4] == "inet"
+        and tokens[5] == "address"
+    ):
+        state["attrs"].setdefault("ipv4", []).append(tokens[6])
+    # Everything else parses-and-ignores.
 
 
 def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:

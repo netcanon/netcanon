@@ -7,6 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Structural apply-groups collapse — Junos interface-range)
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+  handles ``set interfaces interface-range <rname> ...`` grammar.
+  Supported sub-paths: ``member <iface>``, ``description``,
+  ``mtu``, ``disable``, ``unit 0 family inet address``.  Shared
+  attrs apply to each member interface at materialisation time so
+  the canonical tree looks identical whether the operator wrote
+  interface-range blocks or flat per-interface lines.  Per-member
+  config overrides range-level defaults (member wins on conflict).
+- Top-level ``set interfaces <X> mtu <N>`` also now parses and
+  populates :attr:`CanonicalInterface.mtu` (previously the MTU
+  field existed on the model but Junos parse didn't populate it).
+- Render-side structural collapse: auto-detects ≥3 interfaces
+  sharing identical ``(mtu, description, enabled)`` tuples with
+  at least one non-default value and emits
+  ``set interfaces interface-range AUTO-RANGE-<N>`` blocks.
+  Per-interface emission of the shared attrs gets suppressed; per-
+  interface specifics (IPv4 addresses, etc.) still emit normally.
+- Collapse heuristics deliberately skip VRF-bound interfaces,
+  switchport / trunk interfaces, access-VLAN-carrying interfaces,
+  and sub-interfaces — their richer semantics warrant per-
+  interface emission.  Default-everything interfaces also skip
+  (nothing to hoist to the range).
+- Render MTU emission newly added: ``set interfaces <X> mtu <N>``
+  emits when `iface.mtu` is set and the interface isn't a range
+  member (suppression via the collapse-detection pass).
+- Structural collapse is COMPLEMENTARY to GAP 9b's apply-groups
+  preservation: operator-authored group structure (via
+  ``set groups G`` + ``set apply-groups G``) round-trips verbatim;
+  auto-synthesis kicks in only for raw per-interface sharing the
+  operator didn't themselves collapse.
+
+### Tests (structural collapse)
+
+- ``tests/unit/migration/test_junos_interface_range.py`` — 15 tests:
+  - ``TestInterfaceRangeParse`` (5 tests): member collection +
+    shared mtu/description/disable application + per-interface
+    override wins + unknown sub-paths tolerated.
+  - ``TestInterfaceRangeRender`` (7 tests): ≥3-member collapse
+    happy path, 2-member no-collapse (threshold), multiple
+    collapse groups with distinct tuples, per-interface
+    specifics still emit, VRF-bound skipped, all-default
+    skipped, sub-interfaces skipped.
+  - ``TestInterfaceRangeRoundTrip`` (3 tests): flat→collapsed→
+    reparse stability, range-form input survives the render
+    round-trip, top-level mtu parse.
+
 ### Changed (EVPN Type-5 per-prefix path: Unsupported → Lossy)
 
 - Moved `/evpn-type5-routes/route` from ``Unsupported`` to ``Lossy``
