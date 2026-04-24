@@ -7,6 +7,91 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (Global dark mode with sun/moon toggle on top nav)
+
+- `netconfig/templates/base.html` — light + dark themes via CSS
+  custom properties toggled on `<html data-theme>`.  Single source
+  of truth: `:root` block declares light-mode tokens; a mirrored
+  `[data-theme="dark"]` block overrides for dark mode.  Tokens
+  cover page background, surfaces (base + alt + elevated +
+  hover), text (primary + muted + faint), borders, accent +
+  focus-ring, button variants (primary + secondary + danger),
+  status-badge colour pairs (failed / running / pending /
+  completed / partial), alerts, shadows, `<pre>` chrome, and
+  the nav bar itself.  CSS declarations across the base template
+  now reference `var(--token)` rather than raw hex for the
+  high-visibility surfaces.
+- **FOUC-prevention boot script** inlined in `<head>` *before*
+  the `<style>` block — a tiny IIFE reads
+  `localStorage["netconfig.theme.v1"]` (user override), falls
+  back to `window.matchMedia('(prefers-color-scheme: dark)')`,
+  and sets `data-theme` on `documentElement` synchronously.
+  Blocks CSS parse, no flash of wrong theme on reload.
+- **Sun/moon toggle button** (`data-testid="nav-theme-toggle"`)
+  right-aligned on the nav via a flex spacer.  Always visible
+  on every page (lives in `base.html`).  CSS attribute-selector
+  swap between `&#x263D;` (moon glyph, shown in light mode →
+  click to go dark) and `&#x2600;` (sun glyph, shown in dark
+  mode → click to go light).  No DOM mutation on toggle —
+  glyphs flip via CSS alone.
+- **Accessibility**: `<button>` (not `<input type="checkbox">`)
+  with live-updating `aria-label` ("Switch to dark theme" /
+  "Switch to light theme") and `aria-pressed` (`true`/`false`)
+  describing the ACTION not the current state — clearer for
+  screen readers than a static "dark mode on/off" label.
+- **localStorage persistence** under `netconfig.theme.v1`
+  (matches the existing `netconfig.X.v1` key convention used by
+  the rename-ack and active-job state).
+- `netconfig/templates/_partials/theme-toggle.js` — new partial
+  containing the `toggleTheme()` function +
+  `_updateThemeToggleAriaLabel()` + DOMContentLoaded aria
+  initialiser.  Included from `base.html` alongside the
+  existing `config-viewer.js` + `job-progress.js` partials.
+- **Cross-cutting cleanups**:
+  - `showToast()` now applies CSS classes (`.toast-info` /
+    `.toast-error` / `.toast-success`) driven by theme tokens
+    instead of writing inline `element.style.background` hex —
+    dark mode inherits the semantic colour pair automatically.
+  - Job-progress panel + toast + config-viewer-modal outer
+    chrome migrated to theme tokens.
+  - 150ms transition scoped to colour properties (background /
+    color / border-color) so theme flip is smooth without
+    juddering unrelated animations.
+
+### Docs (dark mode)
+
+- `tests/testid_reference.md` — added `nav-theme-toggle` to the
+  Navigation section with full semantic description (aria
+  semantics + localStorage key).
+- `ARCHITECTURE.md` — new "Theming (dark mode)" subsection under
+  Template organisation documenting the three load-bearing
+  rules: inline-blocking boot script, JS-driven theme apply
+  (not `@media` CSS-only), theme-aware toast/alert colour pairs
+  via CSS class (never inline style).  `_partials/` inventory
+  extends with `theme-toggle.js`.
+- `CLAUDE.md` Documentation Sync Checklist gains a new row: "A
+  new CSS colour added to `base.html`" → use `var(--token)`
+  from the theme set; add to BOTH `:root` and
+  `[data-theme="dark"]` if no existing token fits.  Points at
+  ARCHITECTURE "Theming (dark mode)" section for full rationale.
+
+### Tests (dark mode)
+
+- `tests/integration/test_ui_routes.py::TestThemeToggleRendered`
+  — 6 server-side sanity tests: `<html data-theme="light">`
+  default on 5 pages, boot script inlined in `<head>`,
+  `nav-theme-toggle` button renders on every page, sun + moon
+  glyphs both in markup, theme-toggle partial included,
+  `:root`/`[data-theme="dark"]` CSS tokens present.  Cheaper
+  than Playwright; catches template regressions early.
+- `tests/e2e/test_navigation.py::TestThemeToggle` — 6
+  Playwright tests: button visible on dashboard + jobs, click
+  flips both `data-theme` attr + localStorage, reload persists
+  the stored theme, `aria-label`/`aria-pressed` update to
+  reflect next-action, body background colour actually changes
+  on click (guards against the `var(--)` resolution regression
+  class).
+
 ### Added (Arista EOS 4.26 real fixture — 4th EOS major)
 
 - `tests/fixtures/real/arista_eos/karneliuk_a_eos1_eos4260.txt` —

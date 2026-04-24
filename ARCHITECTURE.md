@@ -529,6 +529,14 @@ the source of truth):
   table for visual parity with the list-oriented panes.
   "Clear" replaces "drop" semantically — clearing the community
   causes the render path to omit the entire SNMP block.
+* **theme-toggle.js** — global light/dark mode toggle wired to
+  the `nav-theme-toggle` button.  Flips `<html data-theme>`
+  between `light`/`dark`, persists to
+  `localStorage["netconfig.theme.v1"]`, updates `aria-label` +
+  `aria-pressed` to reflect the next-action.  The inline boot
+  script in `base.html`'s `<head>` (NOT this partial) sets the
+  initial theme synchronously before CSS parses — required for
+  FOUC prevention.
 
 **Why include-splice rather than ES-modules?** The templates embed
 inline `<script>` blocks that share lexical scope with the rest of the
@@ -543,6 +551,44 @@ selectors are the safety net.
 element in every template — including content generated inside
 partials — carries a `data-testid` attribute.  The full inventory
 lives in [`tests/testid_reference.md`](tests/testid_reference.md).
+
+**Theming (dark mode).**  The app supports light + dark modes via
+CSS custom properties toggled on `<html data-theme>`.  One source
+of truth: the `:root` block in `base.html` defines light-mode
+tokens; the `[data-theme="dark"]` selector overrides the same
+names with dark-mode values.  All themed CSS declarations use
+`var(--token)` — never raw hex.  Tokens are curated for the
+80/20 high-visibility surfaces (page / surface / text / border /
+badges / buttons / nav); incremental migration of edge-case
+declarations is tolerated.
+
+Three rules keep the pattern robust:
+
+1. **Inline boot script, blocking, in `<head>`.**  The tiny IIFE
+   in `base.html`'s `<head>` reads `localStorage["netconfig.theme.v1"]`
+   (user override) then falls back to `prefers-color-scheme` and
+   sets the `data-theme` attribute on `documentElement`
+   *synchronously* before any CSS parses.  This prevents FOUC
+   (flash of unstyled content) on reload.  Do NOT move the boot
+   script to an external `<script src=>`; it must block.
+2. **JS-driven theme apply, not `@media (prefers-color-scheme)`.**
+   One `[data-theme]` selector is the sole theme gate; the media
+   query is read ONCE by the boot script, not by CSS.  This
+   lets localStorage cleanly override the system preference
+   without duplicated rule blocks or cascade-order headaches.
+3. **Theme-aware toast/alert colour pairs via CSS class, never
+   inline style.**  `showToast()` assigns a CSS class
+   (`.toast-info` / `.toast-error` / `.toast-success`) instead
+   of writing `element.style.background = '#...'` — the class
+   resolves to `var(--badge-*-bg)` / `var(--badge-*-fg)` so
+   dark mode inherits the semantic pair automatically.
+
+The global toggle is a single icon button
+(`data-testid="nav-theme-toggle"`) right-aligned on the nav; sun
+glyph in dark mode, moon glyph in light mode, swap via CSS
+attribute-selectors so JS never mutates the button content.  See
+`_partials/theme-toggle.js` for the toggle function +
+`aria-label` updater.
 
 ---
 

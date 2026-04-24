@@ -16,6 +16,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-configs`      | `<a>`   | Link to `/configs`; active on Configs page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
+| `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netconfig.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
 | `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
 
 ## Dashboard (`index.html`)

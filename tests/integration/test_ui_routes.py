@@ -199,3 +199,87 @@ class TestJobScheduleFields:
         """POST /api/v1/backups sets schedule_name=None on the completed job."""
         job = _post_and_get_job(client)
         assert job["schedule_name"] is None
+
+
+# ---------------------------------------------------------------------------
+# TestThemeToggleRendered — server-side sanity that the dark-mode
+# toggle button + boot script render on every page.  Cheaper than
+# Playwright; catches template regressions before e2e runs.
+# ---------------------------------------------------------------------------
+
+
+class TestThemeToggleRendered:
+    """Dark-mode wiring is in base.html, so EVERY page that extends
+    it should carry:
+
+    * ``<html data-theme="light">`` default on the root element
+      (boot script overrides on the client before CSS paints).
+    * Inline boot script reading ``localStorage`` + prefers-color-
+      scheme.
+    * The ``nav-theme-toggle`` button with sun + moon glyphs.
+    * The theme-toggle partial inclusion.
+
+    Sample the dashboard + jobs + configs pages — if one extends
+    base.html differently, this catches it.
+    """
+
+    _PAGES = ["/", "/jobs", "/schedules", "/configs", "/definitions"]
+
+    def test_html_has_data_theme_attribute(self, client: TestClient) -> None:
+        for path in self._PAGES:
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            assert 'data-theme="light"' in resp.text, (
+                f"{path} missing default data-theme on <html>"
+            )
+
+    def test_boot_script_present(self, client: TestClient) -> None:
+        """FOUC-prevention: the boot script MUST be inline in <head>
+        (not an external <script src>) so it runs synchronously
+        before CSS parses."""
+        resp = client.get("/")
+        assert "netconfig.theme.v1" in resp.text
+        assert "prefers-color-scheme" in resp.text
+        # Boot script references documentElement (not body/DOM) —
+        # required so the attribute is set before the body renders.
+        assert "document.documentElement.setAttribute" in resp.text
+
+    def test_nav_theme_toggle_button_present(
+        self, client: TestClient,
+    ) -> None:
+        for path in self._PAGES:
+            resp = client.get(path)
+            assert 'data-testid="nav-theme-toggle"' in resp.text, (
+                f"{path} missing nav-theme-toggle"
+            )
+
+    def test_sun_and_moon_glyphs_both_present(
+        self, client: TestClient,
+    ) -> None:
+        """The glyph swap happens via CSS, not DOM mutation — both
+        spans are in the markup, one hidden by the data-theme
+        selector rules."""
+        resp = client.get("/")
+        # Sun (U+2600) + moon (U+263D) — HTML entities, mixed case
+        # tolerated (the template uses lowercase hex).
+        assert "&#x263D;" in resp.text or "&#x263d;" in resp.text
+        assert "&#x2600;" in resp.text
+
+    def test_toggle_partial_included(self, client: TestClient) -> None:
+        """``_partials/theme-toggle.js`` inclusion means
+        ``toggleTheme`` + aria-label updater both reach the page."""
+        resp = client.get("/")
+        assert "function toggleTheme()" in resp.text
+        assert "_updateThemeToggleAriaLabel" in resp.text
+
+    def test_css_variables_declared(self, client: TestClient) -> None:
+        """Dark-mode CSS tokens must be present (regression guard
+        against someone accidentally removing the :root or
+        [data-theme=\"dark\"] block)."""
+        resp = client.get("/")
+        assert "--page-bg:" in resp.text
+        assert '[data-theme="dark"]' in resp.text
+        # Spot-check a few tokens; no need to enumerate all.
+        assert "--surface:" in resp.text
+        assert "--text-primary:" in resp.text
+        assert "--nav-bg:" in resp.text
