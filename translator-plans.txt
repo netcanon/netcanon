@@ -737,6 +737,30 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] CANONICAL VRF / ROUTING-INSTANCE SCHEMA (GAP 5, ship-before-wire):
+    # Adds CanonicalRoutingInstance + CanonicalInterface.vrf field +
+    # top-level routing_instances[] list on CanonicalIntent.
+    # Cross-vendor VRF primitive:
+    #   * Cisco IOS / IOS-XE: `vrf definition <name>` with `rd` +
+    #     `address-family ipv4 / route-target import/export`
+    #   * Cisco NX-OS: `vrf context <name>` (same sub-commands)
+    #   * Arista EOS: `vrf instance <name>` + `ip routing vrf <name>`
+    #     (RD/RTs under `router bgp`)
+    #   * Juniper Junos: `set routing-instances <name> instance-type
+    #     vrf` + `route-distinguisher` + `vrf-target` + `interface`
+    #
+    # Per-interface VRF membership lives on CanonicalInterface.vrf
+    # (back-pointer pattern, matches lag_member_of).
+    # CanonicalRoutingInstance holds metadata only: name, instance_type
+    # (vrf / virtual-router / l2vpn / mac-vrf), route_distinguisher,
+    # rt_imports[], rt_exports[], description.
+    #
+    # No codec populates these in v1 — each DC codec's
+    # CapabilityMatrix lists /routing-instances/instance under
+    # `unsupported` until wired up.  Foundational for GAP 6
+    # (EVPN Type-5 references a VRF) and GAP 8 (richer apply-groups
+    # inheritance can carry per-iface VRF assignment).
+
 [SHIPPED] JUNOS APPLY-GROUPS HOST-NAME + SUB-INTERFACES (GAP 4):
     # Two additions to the Junos codec:
     #

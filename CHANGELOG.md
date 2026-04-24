@@ -7,6 +7,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 5 — canonical VRF / routing-instance schema [ship-before-wire])
+
+- `CanonicalRoutingInstance` model in
+  `netconfig/migration/canonical/intent.py`.  Cross-vendor VRF
+  primitive modelling Cisco `vrf definition`, Arista `vrf instance`,
+  and Juniper `routing-instances`.  Fields: `name`,
+  `instance_type` (defaults to ``"vrf"``; Junos variants
+  ``virtual-router`` / ``l2vpn`` / ``mac-vrf`` also accepted),
+  `route_distinguisher`, `rt_imports`, `rt_exports`, `description`.
+- `CanonicalInterface.vrf` field — per-interface VRF membership
+  (back-pointer pattern, matches `lag_member_of`).  Empty string
+  = global / default VRF.  Source of truth for membership;
+  `CanonicalRoutingInstance` carries metadata only.
+- `CanonicalIntent.routing_instances` top-level Tier-2 list.
+- Ship-before-wire: Arista EOS, Juniper Junos, and Cisco IOS-XE CLI
+  capability matrices gain ``UnsupportedPath`` entries for
+  ``/routing-instances/instance`` so the pipeline's validate stage
+  surfaces "VRF detected but not translated" in the UI banner.
+- Documentation: ``ARCHITECTURE.md`` Layer-3 CIM table's "Tier 2
+  (ship-before-wire)" row extends to include VRF schema.
+  ``translator-plans.txt`` DEFERRED ROADMAP gains a ``[SHIPPED]``
+  entry for GAP 5.
+- Tests: ``tests/unit/migration/test_routing_instance_schema.py``
+  — 20 tests covering model construction, defaults, full-field
+  construct, Junos `instance_type` variants, name-required
+  validation, `<ip>:<nn>` RD form, per-interface `vrf` defaults +
+  serialisation, intent-level `routing_instances` round-trip,
+  and the ship-before-wire contract (parametrised check that
+  every DC codec declares the new path as ``unsupported``).
+
 ### Added (GAP 4 — Junos apply-groups host-name inheritance + per-unit sub-interfaces)
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — parse now

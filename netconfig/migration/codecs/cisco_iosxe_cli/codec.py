@@ -161,6 +161,18 @@ class CiscoIOSXECLICodec(CodecBase):
                     "wire-up deferred."
                 ),
             ),
+            UnsupportedPath(
+                path="/routing-instances/instance",
+                reason=(
+                    "VRF declarations (`vrf definition <name>` with "
+                    "`rd` + `address-family ipv4` + "
+                    "`route-target import/export`) and per-interface "
+                    "`vrf forwarding <name>` parse-and-ignore in "
+                    "v1.  CanonicalRoutingInstance + "
+                    "CanonicalInterface.vrf schema exists; IOS-XE "
+                    "wire-up deferred."
+                ),
+            ),
         ],
     )
 

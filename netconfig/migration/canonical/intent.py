@@ -42,7 +42,10 @@ Scope (Tier 3 — parse for display, never auto-render):
 Schema extensions (ship-before-wire):
     ``vxlan_vnis`` and ``evpn_type5_routes`` are top-level Tier 2 lists
     added to support EVPN-VXLAN fabric migrations (Arista ↔ NX-OS ↔
-    Junos).  No codec populates them in v1 — each codec's
+    Junos).  ``routing_instances`` + :attr:`CanonicalInterface.vrf`
+    are the cross-vendor VRF primitive (Junos ``routing-instances``,
+    Cisco ``vrf definition``, Arista ``vrf instance``).  No codec
+    populates any of these in v1 — each codec's
     :class:`CapabilityMatrix` lists them under ``unsupported`` until
     wired up.  This lets the UI's Unsupported-path banner surface the
     gap even before any codec knows how to parse the bytes.
@@ -95,6 +98,11 @@ class CanonicalInterface(BaseModel):
     voice_vlan: int | None = None
     lag_member_of: str | None = None            # LAG/port-channel name if bundled
     dhcp_client: bool = False
+    vrf: str = ""                               # VRF / routing-instance membership;
+                                                # empty = global / default VRF.
+                                                # Matches a
+                                                # ``CanonicalRoutingInstance.name``
+                                                # declared at the top level.
 
 
 class CanonicalVlan(BaseModel):
@@ -214,6 +222,50 @@ class CanonicalVxlan(BaseModel):
     flood_list: list[str] = Field(default_factory=list)
 
 
+class CanonicalRoutingInstance(BaseModel):
+    """A VRF / routing-instance declaration.
+
+    Cross-vendor model for the L3 isolation primitive that every
+    enterprise router + DC switch carries under a different name:
+
+    * Cisco IOS / IOS-XE: ``vrf definition <name>`` with
+      ``rd <rd>`` + ``address-family ipv4 / route-target import/export``.
+    * Cisco NX-OS: ``vrf context <name>`` with the same sub-commands.
+    * Arista EOS: ``vrf instance <name>`` + ``ip routing vrf <name>``
+      (RD + RTs live under ``router bgp`` per address-family).
+    * Juniper Junos: ``set routing-instances <name> instance-type
+      vrf`` + ``route-distinguisher <rd>`` + ``vrf-target target:<rt>``
+      + ``interface <iface>``.
+
+    Per-interface VRF membership lives on :attr:`CanonicalInterface.vrf`
+    rather than a redundant ``interfaces`` list here — matches the
+    ``lag_member_of`` pattern (interface carries the back-pointer;
+    codec render walks ``tree.interfaces`` to synthesise the parent-
+    side stanza).  Empty ``CanonicalRoutingInstance.name`` means
+    global / default VRF (never emitted as a record).
+
+    Attributes:
+        name: VRF / routing-instance identifier (opaque string).
+        instance_type: Junos-facing classification — ``vrf``,
+            ``virtual-router``, ``l2vpn``, ``mac-vrf``.  Defaults to
+            ``"vrf"`` (the cross-vendor baseline).  Codecs that don't
+            model the variants emit / accept only ``"vrf"``.
+        route_distinguisher: BGP RD (``<asn>:<nn>`` or ``<ip>:<nn>``
+            form), or empty if the VRF is local (no MP-BGP export).
+        rt_imports: BGP Route-Target import communities.
+        rt_exports: BGP Route-Target export communities.
+        description: Free-text description; preserved verbatim on
+            round-trip for vendors that support it (Junos, Cisco).
+    """
+
+    name: str
+    instance_type: str = "vrf"
+    route_distinguisher: str = ""
+    rt_imports: list[str] = Field(default_factory=list)
+    rt_exports: list[str] = Field(default_factory=list)
+    description: str = ""
+
+
 class CanonicalEvpnType5Route(BaseModel):
     """An EVPN Type-5 (IP Prefix) advertisement.
 
@@ -293,6 +345,11 @@ class CanonicalIntent(BaseModel):
     # lists them under ``unsupported`` until wired up per-vendor.
     vxlan_vnis: list[CanonicalVxlan] = Field(default_factory=list)
     evpn_type5_routes: list[CanonicalEvpnType5Route] = Field(default_factory=list)
+    # ── Tier 2 (ship-before-wire) — VRF / routing-instance schema ──
+    # Cross-vendor VRF model; see CanonicalRoutingInstance docstring
+    # for the vendor-shape comparison.  Per-interface membership
+    # lives on CanonicalInterface.vrf, not a redundant list here.
+    routing_instances: list[CanonicalRoutingInstance] = Field(default_factory=list)
 
     # ── Tier 3 — informational only (never auto-rendered) ──
     raw_sections: dict[str, str] = Field(default_factory=dict)

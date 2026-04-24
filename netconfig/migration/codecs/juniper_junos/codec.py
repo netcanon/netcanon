@@ -196,6 +196,18 @@ class JunosCodec(CodecBase):
                     "support."
                 ),
             ),
+            UnsupportedPath(
+                path="/routing-instances/instance",
+                reason=(
+                    "VRF / routing-instances (`set routing-"
+                    "instances <name> instance-type vrf` + "
+                    "`route-distinguisher` + `vrf-target` + "
+                    "`interface`) parse-and-ignore in v1.  "
+                    "CanonicalRoutingInstance + "
+                    "CanonicalInterface.vrf schema exists; Junos "
+                    "wire-up pending."
+                ),
+            ),
         ],
     )
 

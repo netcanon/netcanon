@@ -234,6 +234,17 @@ class AristaEOSCodec(CodecBase):
                     "codec wire-up pending."
                 ),
             ),
+            UnsupportedPath(
+                path="/routing-instances/instance",
+                reason=(
+                    "VRF declarations (`vrf instance <name>` + `ip "
+                    "routing vrf <name>`) and per-interface VRF "
+                    "membership (`vrf <name>`) parse-and-ignore in "
+                    "v1.  CanonicalRoutingInstance + "
+                    "CanonicalInterface.vrf schema exists; codec "
+                    "wire-up pending."
+                ),
+            ),
         ],
     )
 

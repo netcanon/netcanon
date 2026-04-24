@@ -146,7 +146,7 @@ with fields tiered by semantic stability:
 |---|---|---|
 | **Tier 1** | Every vendor models it, stable cross-vendor semantics | `hostname`, `dns_servers`, `ntp_servers`, `interfaces[]` with ipv4_addresses, `vlans[]` with tagged/untagged port lists, `static_routes[]` |
 | **Tier 2** | Common enough to model, vendor mappings are lossy | `snmp`, `lags[]`, `local_users[]`, `dhcp_servers[]`, `radius_servers[]`, per-port `mtu` |
-| **Tier 2 (ship-before-wire)** | Schema shipped ahead of any codec populating it; DC codecs declare the xpath under `unsupported` so the UI banner surfaces the gap | `vxlan_vnis[]` (VLAN↔VNI mappings), `evpn_type5_routes[]` (BGP-EVPN IP-prefix advertisements) |
+| **Tier 2 (ship-before-wire)** | Schema shipped ahead of any codec populating it; DC codecs declare the xpath under `unsupported` so the UI banner surfaces the gap | `vxlan_vnis[]` (VLAN↔VNI mappings), `evpn_type5_routes[]` (BGP-EVPN IP-prefix advertisements), `routing_instances[]` + per-interface `vrf` (VRF / routing-instance declarations) |
 | **Tier 3** | Opaque carry-through, never auto-rendered | `raw_sections[]` — firewall rules, PKI chains, QoS policies, vendor-specific |
 
 **The design bet:** most cross-vendor translation value lives in
