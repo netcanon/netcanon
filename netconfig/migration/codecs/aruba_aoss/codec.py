@@ -25,6 +25,7 @@ from ...canonical.intent import (
     CanonicalLocalUser,
     CanonicalRADIUSServer,
     CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -109,6 +110,7 @@ class ArubaAOSSCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            "/snmp/v3-user",
         ],
         lossy=[
             LossyPath(
@@ -218,6 +220,64 @@ class ArubaAOSSCodec(CodecBase):
                 if intent.snmp is None:
                     intent.snmp = CanonicalSNMP()
                 intent.snmp.trap_hosts.append(snmp_host.group(1))
+                i += 1
+                continue
+
+            # SNMPv3 user line: ``snmpv3 user "<name>" auth <p> "<k>"
+            # priv <p> "<k>"``.  Group binding comes on a separate
+            # ``snmpv3 group`` line — order agnostic.  If a group
+            # binding processed earlier created a stub record for
+            # this name, we merge instead of appending.
+            v3u = _SNMPV3_USER_RE.match(stripped_line)
+            if v3u:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                name, auth_p, auth_pw, priv_p, priv_pw = v3u.groups()
+                priv_norm = ""
+                if priv_p:
+                    pl = priv_p.lower()
+                    priv_norm = "aes128" if pl == "aes" else pl
+                existing = next(
+                    (u for u in intent.snmp.v3_users if u.name == name),
+                    None,
+                )
+                if existing is not None:
+                    existing.auth_protocol = (auth_p or "").lower()
+                    existing.auth_passphrase = auth_pw or ""
+                    existing.priv_protocol = priv_norm
+                    existing.priv_passphrase = priv_pw or ""
+                else:
+                    intent.snmp.v3_users.append(CanonicalSNMPv3User(
+                        name=name,
+                        auth_protocol=(auth_p or "").lower(),
+                        auth_passphrase=auth_pw or "",
+                        priv_protocol=priv_norm,
+                        priv_passphrase=priv_pw or "",
+                    ))
+                i += 1
+                continue
+
+            # SNMPv3 group binding — attach the group to the matching
+            # user record.  Order-agnostic: group lines may appear
+            # before or after the user declaration in real configs.
+            v3g = _SNMPV3_GROUP_BIND_RE.match(stripped_line)
+            if v3g:
+                if intent.snmp is None:
+                    intent.snmp = CanonicalSNMP()
+                group_name, user_name = v3g.groups()
+                found = False
+                for u in intent.snmp.v3_users:
+                    if u.name == user_name:
+                        u.group = group_name
+                        found = True
+                        break
+                if not found:
+                    # Group declared for user we haven't seen yet —
+                    # create a stub; later ``snmpv3 user`` merges.
+                    intent.snmp.v3_users.append(CanonicalSNMPv3User(
+                        name=user_name,
+                        group=group_name,
+                    ))
                 i += 1
                 continue
 
@@ -415,6 +475,7 @@ class ArubaAOSSCodec(CodecBase):
         if tree.snmp is not None and (
             tree.snmp.community or tree.snmp.location
             or tree.snmp.contact or tree.snmp.trap_hosts
+            or tree.snmp.v3_users
         ):
             if tree.snmp.community:
                 lines.append(
@@ -429,6 +490,27 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append(
                     f'snmp-server host {host} community "{comm}"'
                 )
+            # SNMPv3 users — emit the user line + (if group bound)
+            # the group-binding line.  ``aes128`` canonical → ``aes``
+            # on AOS-S wire (platform-natural default when unsuffixed).
+            for u in tree.snmp.v3_users:
+                parts = [f'snmpv3 user "{u.name}"']
+                if u.auth_protocol:
+                    parts.append(
+                        f'auth {u.auth_protocol} "{u.auth_passphrase}"'
+                    )
+                if u.priv_protocol:
+                    wire_priv = (
+                        "aes" if u.priv_protocol == "aes128"
+                        else u.priv_protocol
+                    )
+                    parts.append(f'priv {wire_priv} "{u.priv_passphrase}"')
+                lines.append(" ".join(parts))
+                if u.group:
+                    lines.append(
+                        f'snmpv3 group "{u.group}" user "{u.name}" '
+                        f'sec-model ver3'
+                    )
 
         # RADIUS servers (Tier 2).  Emit one ``radius-server host``
         # line per server, with the inline key form (keeps each
@@ -667,6 +749,27 @@ _SNMP_LOCATION_RE = re.compile(
 )
 _SNMP_CONTACT_RE = re.compile(
     r'^snmp-server\s+contact\s+(.+)$', re.IGNORECASE,
+)
+# SNMPv3 user grammar on Aruba AOS-S (observed on 2930F/3810M/6300):
+#
+#   snmpv3 user "<name>" auth {md5|sha} "<pass>" priv {des|aes} "<pass>"
+#   snmpv3 group "<group>" user "<name>" sec-model ver3
+#
+# The grammar uses an `snmpv3` keyword (not `snmp-server`) and
+# quotes the user + passphrase tokens.  Auth/priv clauses both
+# optional — noAuthNoPriv expressible.  The group binding is on a
+# separate line; parser collects both lines and merges.
+_SNMPV3_USER_RE = re.compile(
+    r'^snmpv3\s+user\s+"?([^"\s]+)"?'
+    r'(?:\s+auth\s+(md5|sha|sha256)\s+"?([^"\s]+)"?)?'
+    r'(?:\s+priv\s+(des|aes|aes128|aes192|aes256)\s+"?([^"\s]+)"?)?'
+    r'\s*$',
+    re.IGNORECASE,
+)
+_SNMPV3_GROUP_BIND_RE = re.compile(
+    r'^snmpv3\s+group\s+"?([^"\s]+)"?\s+user\s+"?([^"\s]+)"?'
+    r'\s+sec-model\s+ver3\s*$',
+    re.IGNORECASE,
 )
 _SNMP_HOST_RE = re.compile(
     r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)', re.IGNORECASE,

@@ -737,6 +737,145 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] SNMPv3 USM CROSS-MESH (P2C6):
+    # Fifth per-pane override category after ports / vlans /
+    # local_users / snmp_community.  New canonical type:
+    #   CanonicalSNMPv3User (name, group, auth_protocol,
+    #   auth_passphrase, priv_protocol, priv_passphrase, engine_id)
+    # New field: CanonicalSNMP.v3_users: list[CanonicalSNMPv3User].
+    #
+    # Codec wire-up (parse + render):
+    #   * arista_eos — native `aes` / `aes256` single-token form
+    #     + Cisco-pasted `aes 128` two-token tolerated on ingest
+    #   * aruba_aoss — `snmpv3 user "X" auth {md5|sha} "K" priv
+    #     {des|aes} "K"` + separate `snmpv3 group "G" user "X"
+    #     sec-model ver3` binding line (merged by name, order-
+    #     agnostic)
+    #   * cisco_iosxe_cli — parse-only; `snmp-server user <n>
+    #     <g> v3 auth <p> <k> priv <c> <keybits?> <k>`
+    #   * fortigate_cli — `config system snmp user / edit <n>
+    #     / set security-level / set auth-proto / set auth-pwd
+    #     ENC <hash> / set priv-proto / set priv-pwd ENC <hash>`
+    #   * juniper_junos — `set snmp v3 usm local-engine user <n>
+    #     authentication-<p> authentication-key "<k>"` + matching
+    #     `privacy-<c> privacy-key` + VACM `security-to-group`
+    #     binding; multi-line parse merges by name
+    #   * mikrotik_routeros — `/snmp community` section overloaded
+    #     (v1/v2c communities vs v3 users disambiguated by
+    #     `authentication-protocol=` presence)
+    #
+    # OPNsense + cisco_iosxe (NETCONF stub) declare /snmp/v3-user
+    # Unsupported + add "snmpv3" to unsupported_rename_categories
+    # for the UI compat banner.
+    #
+    # Orchestrator: netconfig/migration/canonical/snmpv3_user_names.py
+    # Pipeline:  run_plan_with_overrides(snmpv3_user_rename_map=...)
+    # Endpoint:  POST /api/v1/migration/plan/snmpv3
+    # UI pane:   migrate.html + _partials/snmpv3-user-rename-table.js,
+    #            rail button data-testid=migrate-rename-rail-snmpv3
+    # Job fields: snmpv3_user_renames / snmpv3_user_drops /
+    #             source_snmpv3_users
+    #
+    # Covered by tests/unit/migration/test_snmpv3_user_names.py (13),
+    # test_snmpv3_wire_through.py (25), cross_mesh additions in
+    # test_cross_mesh_overrides.py (+9), integration
+    # test_migration_api.py TestPlanSnmpV3Endpoint +
+    # TestPlanMultiCategoryRoutingSnmpV3 (+8).
+    #
+    # Rename semantic: identity-only.  auth / priv keys + group
+    # + engine_id follow the renamed user; collisions merge on
+    # first-wins (keys NEVER combined across users — hash-by-union
+    # would produce incoherent crypto).
+
+[CROSS-MESH VIABILITY AUDIT] MANAGEMENT-PLANE CATEGORIES:
+    # Per-audit after P2C6 SNMPv3 ship: which other management-plane
+    # surfaces already have per-codec parse+render coverage and are
+    # therefore viable candidates for the same per-pane override
+    # treatment.  None require new codec work — the canonical surface
+    # already populates on parse; the work is orchestrator + pipeline
+    # wiring + UI pane.
+    #
+    # Viable (ordered smallest → largest effort):
+    #
+    # [P2C7] NTP SERVER RENAME — list of IP / hostname strings on
+    #   CanonicalIntent.ntp_servers.  Populated today by arista_eos,
+    #   aruba_aoss, cisco_iosxe_cli, fortigate_cli, juniper_junos,
+    #   mikrotik_routeros (6/8 codecs).  OPNsense + cisco_iosxe
+    #   NETCONF don't populate — declare snmpv3-style Unsupported.
+    #   Rename semantic: pure string rewrite (10.0.0.1 →
+    #   ntp.corp.example).  Orchestrator ntp_server_names.py ~50
+    #   LOC; pipeline param ntp_server_rename_map; UI pane
+    #   ntp-rename-table.js; 1 session.
+    #
+    # [P2C8] DNS SERVER RENAME — list on
+    #   CanonicalIntent.dns_servers.  Populated by all 7 non-stub
+    #   codecs (8/8 minus cisco_iosxe NETCONF).  Effectively
+    #   identical shape to NTP — same orchestrator template.  Can
+    #   land in the same session as NTP if desired (two very small
+    #   orchestrators + one common UI pattern).
+    #
+    # [P2C9] SYSLOG SERVER RENAME — list on
+    #   CanonicalIntent.syslog_servers.  CURRENT CAVEAT: only
+    #   juniper_junos populates on parse today (per the codec
+    #   grep audit).  Before shipping the rename mesh, need to
+    #   extend parse on the other five bidirectional codecs:
+    #     - arista_eos: `logging host <ip>` / `logging vrf <n>
+    #       host <ip>`
+    #     - aruba_aoss: `logging <ip>` / `logging <ip> <severity>`
+    #     - cisco_iosxe_cli: `logging host <ip>` / `logging
+    #       server <ip>`
+    #     - fortigate_cli: `config log syslogd setting / set
+    #       server <ip>` (plus per-backend syslog-d1..d3
+    #       distinct blocks)
+    #     - mikrotik_routeros: `/system logging action` +
+    #       target=remote with `remote=<ip>`
+    #     - opnsense: `<syslog><destinations>` XML nesting
+    #   Landing this is ~2 sessions: 1 session = parse+render
+    #   wire-through on 5 codecs; 1 session = orchestrator + UI.
+    #
+    # [P2C10] SNMP TRAP-HOST RENAME — list on
+    #   CanonicalSNMP.trap_hosts.  Populated by all 6 v3-capable
+    #   codecs (same coverage set as v3 users; OPNsense's trap
+    #   hosts ARE in the XML config.xml so it populates too).
+    #   Rename semantic: string rewrite of IPs; drops remove the
+    #   trap-host entry.  Orchestrator ~50 LOC; pipeline param
+    #   snmp_trap_host_rename_map.  Same 1-session recipe as v2c
+    #   community.
+    #
+    # [P2C11] RADIUS SERVER HOST RENAME — list of
+    #   CanonicalRADIUSServer on CanonicalIntent.radius_servers.
+    #   Populated by 6/8 codecs.  Rename surface is the .host
+    #   field; .key passes through verbatim.  Drops remove the
+    #   server entry; collisions merge on first-wins .key (keys
+    #   never combined across hosts).  Shape = shipped SNMPv3
+    #   user mesh minus the auth/priv complexity.  1 session.
+    #
+    # Not viable today (need codec work first):
+    #
+    # [BLOCKED] DHCP POOL RENAME — CanonicalDHCPPool has many
+    #   fields (network, start_ip, end_ip, gateway, dns_servers,
+    #   lease_time, domain_name).  Rename surface ambiguous
+    #   ("rename a pool" could mean rewrite .interface, rewrite
+    #   .network, rewrite .gateway, rewrite .dns_servers
+    #   individually).  Would need a per-field sub-pane rather
+    #   than a flat map — out of scope for the ports/vlans/
+    #   local_users/snmp/snmpv3 three-step recipe.  Revisit when
+    #   a concrete operator use case surfaces.
+    #
+    # [BLOCKED] TIMEZONE / DOMAIN RENAME — scalar fields
+    #   (CanonicalIntent.timezone, .domain) but the cross-vendor
+    #   rename use case is weak: timezone is usually corrected
+    #   by refresh ("America/New_York" → "America/Los_Angeles"
+    #   is a re-configuration, not a rename) and domain rename
+    #   is rare enough it's not worth a pane.  Operators edit
+    #   these server-side in their CMDB.
+    #
+    # Dependency ordering:  P2C7 + P2C8 are smallest (pure string-
+    # list rename, no codec work); pair them in one session.
+    # P2C10 + P2C11 are medium (canonical population already in
+    # place).  P2C9 needs codec work first — ship the parse/render
+    # wire-through session, THEN the orchestrator session.
+
 [SHIPPED] STRUCTURAL APPLY-GROUPS COLLAPSE (interface-range):
     # Junos interface-range grammar: parse + render + auto-detect.
     #

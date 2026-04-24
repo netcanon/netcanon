@@ -167,6 +167,7 @@ def render_intent(tree: Any) -> str:
     if tree.snmp is not None and (
         tree.snmp.community or tree.snmp.location
         or tree.snmp.contact or tree.snmp.trap_hosts
+        or tree.snmp.v3_users
     ):
         out.append("config system snmp sysinfo")
         out.append("    set status enable")
@@ -187,6 +188,54 @@ def render_intent(tree: Any) -> str:
                     out.append("            next")
                 out.append("        end")
             out.append("    next")
+            out.append("end")
+        # SNMPv3 users.  security-level derives from auth/priv
+        # presence (noAuthNoPriv / auth-no-priv / auth-priv — the
+        # three FortiOS-accepted values).  Canonical priv_protocol
+        # back to FortiOS: aes128 → aes; aes256 / aes192 / des
+        # preserved.  Unknown / empty auth_protocol → sha fallback
+        # to satisfy FortiOS validation when security-level implies
+        # auth.
+        _CAN_TO_FG_AUTH = {
+            "md5": "md5", "sha": "sha", "sha224": "sha256",
+            "sha256": "sha256", "sha384": "sha384", "sha512": "sha512",
+        }
+        _CAN_TO_FG_PRIV = {
+            "des": "des", "aes": "aes", "aes128": "aes",
+            "aes192": "aes192", "aes256": "aes256", "3des": "aes",
+        }
+        if tree.snmp.v3_users:
+            out.append("config system snmp user")
+            for u in tree.snmp.v3_users:
+                out.append(f'    edit "{u.name}"')
+                if u.auth_protocol and u.priv_protocol:
+                    out.append("        set security-level auth-priv")
+                elif u.auth_protocol:
+                    out.append("        set security-level auth-no-priv")
+                else:
+                    out.append("        set security-level no-auth-no-priv")
+                if u.auth_protocol:
+                    fg_auth = _CAN_TO_FG_AUTH.get(u.auth_protocol, "sha")
+                    out.append(f"        set auth-proto {fg_auth}")
+                    if u.auth_passphrase:
+                        # Preserve operator-supplied hash verbatim.
+                        # Source-joined ``ENC <hash>`` round-trips as-is;
+                        # cross-vendor hashes get an ENC prefix.
+                        val = u.auth_passphrase
+                        if val.startswith("ENC "):
+                            out.append(f'        set auth-pwd "{val}"')
+                        else:
+                            out.append(f'        set auth-pwd "ENC {val}"')
+                if u.priv_protocol:
+                    fg_priv = _CAN_TO_FG_PRIV.get(u.priv_protocol, "aes")
+                    out.append(f"        set priv-proto {fg_priv}")
+                    if u.priv_passphrase:
+                        val = u.priv_passphrase
+                        if val.startswith("ENC "):
+                            out.append(f'        set priv-pwd "{val}"')
+                        else:
+                            out.append(f'        set priv-pwd "ENC {val}"')
+                out.append("    next")
             out.append("end")
 
     # --- system admin (Tier 2 local users) ---

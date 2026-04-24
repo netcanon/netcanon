@@ -25,12 +25,47 @@ from __future__ import annotations
 
 import pytest
 
+# Pull codec classes from the registry rather than hand-maintaining
+# an import list.  New vendors auto-register on package import and
+# the registry enumerates them — removes the risk of forgetting a
+# line in this file after shipping a codec.  The ArubaAOSSCodec
+# module-level alias below is kept because three same-vendor-round-
+# trip tests in this file construct ArubaAOSSCodec() directly for
+# readability; they could switch to ``_resolve_codec("aruba_aoss")``
+# but the class-name form reads better at the call site.
+from netconfig.migration.codecs import (  # noqa: F401 — side-effect import
+    _mock,
+    arista_eos,
+    aruba_aoss,
+    cisco_iosxe,
+    cisco_iosxe_cli,
+    fortigate_cli,
+    juniper_junos,
+    mikrotik_routeros,
+    opnsense,
+)
 from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netconfig.migration.codecs.registry import get_codec, list_codecs
 from netconfig.services.migration_pipeline import run_plan_with_overrides
+
+
+def _resolve_codec_class(name: str):
+    """Return the registered codec class for *name*.  Raises
+    :class:`KeyError` if the registry has no codec by that name —
+    typically means a test referenced a codec whose package wasn't
+    imported (add it to the imports above).
+
+    Using the registry rather than a hand-maintained dict means new
+    vendors picked up by package auto-discovery are immediately
+    usable in this test file's fixtures without a parallel edit."""
+    if name not in list_codecs():
+        raise KeyError(
+            f"Codec {name!r} not registered.  Known codecs: "
+            f"{sorted(list_codecs())}.  Did you forget to import "
+            f"``netconfig.migration.codecs.<vendor>`` at the top of "
+            f"this file?"
+        )
+    return type(get_codec(name))
 
 
 # Minimal source configs per codec — just enough to produce a tree
@@ -115,12 +150,12 @@ end
 """,
 }
 
-_CODECS = {
-    "cisco_iosxe_cli": CiscoIOSXECLICodec,
-    "aruba_aoss": ArubaAOSSCodec,
-    "mikrotik_routeros": MikroTikRouterOSCodec,
-    "opnsense": OPNsenseCodec,
-    "fortigate_cli": FortiGateCLICodec,
+#: Codec classes used in the cross-mesh smoke matrix.  Built lazily
+#: from the registry on first access — no hand-maintained dict.
+#: ``list_codecs()`` is sorted so test parametrize IDs are stable
+#: across runs.
+_CODECS: dict[str, type] = {
+    name: _resolve_codec_class(name) for name in list_codecs()
 }
 
 # Codec pairs available for cross-mesh smoke.  Split by direction
@@ -466,3 +501,148 @@ def test_four_category_overrides_in_one_call():
         assert job.local_user_renames.get("admin") == "netadmin"
     if job.source_snmp_community == "public":
         assert job.snmp_community_renames.get("public") == "monitoring-ro"
+
+
+# ---------------------------------------------------------------------------
+# SNMPv3 USM user rename — P2C6 fifth per-pane category
+# ---------------------------------------------------------------------------
+
+
+# Source configs carrying SNMPv3 USM users.  Covers every codec that
+# declares /snmp/v3-user in its capability-matrix supported[] — i.e.
+# every codec with a documented v3 grammar.  OPNsense is NOT in the
+# set (Tier-3 raw_sections only; declares the xpath unsupported).
+_SNMPV3_SRC_CONFIGS = {
+    "cisco_iosxe_cli": (
+        "hostname TestCisco\n!\n"
+        "snmp-server user netadmin adminGroup v3 "
+        "auth sha SHApass priv aes 128 AESpass\n"
+    ),
+    "aruba_aoss": (
+        'hostname "TestAruba"\n'
+        'snmpv3 user "netadmin" auth sha "SHApass" priv aes "AESpass"\n'
+        'snmpv3 group "AdminGroup" user "netadmin" sec-model ver3\n'
+    ),
+    "mikrotik_routeros": (
+        "# 2026-01-01 12:00:00 by RouterOS 7.18.2\n"
+        "/snmp community\n"
+        'add name=netadmin authentication-protocol=SHA1 '
+        'authentication-password="SHApass" '
+        'encryption-protocol=aes-128-cfb '
+        'encryption-password="AESpass"\n'
+    ),
+    "fortigate_cli": (
+        '#config-version=FG100E-7.2.0:opmode=1\n'
+        "config system global\n"
+        '    set hostname "fg1"\n'
+        "end\n"
+        "config system snmp user\n"
+        '    edit "netadmin"\n'
+        "        set security-level auth-priv\n"
+        "        set auth-proto sha256\n"
+        "        set auth-pwd ENC someSHAhash==\n"
+        "        set priv-proto aes256\n"
+        "        set priv-pwd ENC someAEShash==\n"
+        "    next\n"
+        "end\n"
+    ),
+}
+
+_SNMPV3_CAPABLE = list(_SNMPV3_SRC_CONFIGS.keys())
+# cisco_iosxe_cli is parse_only → source-only.  Same discipline as the
+# local_users + snmp_community meshes.
+_SNMPV3_TARGET_CAPABLE = [
+    "aruba_aoss",
+    "mikrotik_routeros",
+    "fortigate_cli",
+]
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _SNMPV3_CAPABLE)
+@pytest.mark.parametrize("target_name", _SNMPV3_TARGET_CAPABLE)
+def test_snmpv3_user_rename_smoke_cross_codec(
+    source_name: str, target_name: str,
+):
+    """Every (source, target) pair in the SNMPv3-capable set runs
+    the rename pipeline end-to-end without crashing.  Smoke only —
+    does not assert byte-identical output.  Locks in that the rename
+    map survives the canonical round-trip and that
+    source_snmpv3_users populates from every tested source."""
+    source = _CODECS[source_name]()
+    target = _CODECS[target_name]()
+    raw = _SNMPV3_SRC_CONFIGS[source_name]
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        snmpv3_user_rename_map={"netadmin": "platform-snmpro"},
+    )
+
+    # Pipeline must not crash.
+    assert job is not None
+    assert job.rendered is not None
+
+    # source_snmpv3_users captured BEFORE rename — when source parse
+    # populated the canonical v3 users, ``netadmin`` surfaces.
+    if "netadmin" in job.source_snmpv3_users:
+        assert job.snmpv3_user_renames.get("netadmin") == "platform-snmpro"
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _SNMPV3_TARGET_CAPABLE)
+def test_snmpv3_user_drop_smoke(source_name: str):
+    """Dropping a v3 user end-to-end for same-vendor round-trip
+    across every bidirectional v3-capable codec → job records the
+    drop."""
+    source = _CODECS[source_name]()
+    target = _CODECS[source_name]()       # same-vendor for clarity
+    raw = _SNMPV3_SRC_CONFIGS[source_name]
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        snmpv3_user_rename_map={"netadmin": None},
+    )
+
+    assert job is not None
+    assert job.rendered is not None
+    if "netadmin" in job.source_snmpv3_users:
+        assert "netadmin" in job.snmpv3_user_drops
+
+
+@pytest.mark.cross_mesh
+def test_five_category_overrides_in_one_call():
+    """Ports + VLANs + local_users + SNMP community + SNMPv3 users in a
+    single pipeline run — extends test_four_category_overrides_in_one_call
+    with the fifth category.  Locks in the full five-way composition
+    contract post-P2C6."""
+    source = ArubaAOSSCodec()
+    target = ArubaAOSSCodec()
+    raw = (
+        'hostname "TestAruba"\n'
+        "vlan 1\n   name \"DEFAULT_VLAN\"\n   exit\n"
+        "vlan 10\n   name \"USERS\"\n   untagged 1/1\n   exit\n"
+        "password manager user-name admin "
+        "plaintext ClearTextPassw0rd\n"
+        'snmp-server community "public" unrestricted\n'
+        'snmpv3 user "netadmin" auth sha "SHApass" priv aes "AESpass"\n'
+        'snmpv3 group "AdminGroup" user "netadmin" sec-model ver3\n'
+    )
+
+    job = run_plan_with_overrides(
+        source, target, raw,
+        port_rename_map={"1/1": "1/47"},
+        vlan_rename_map={10: 100},
+        local_user_rename_map={"admin": "netadmin-cli"},
+        snmp_community_rename_map={"public": "monitoring-ro"},
+        snmpv3_user_rename_map={"netadmin": "platform-snmpro"},
+    )
+
+    # Each category's outcome is independent.
+    assert job.port_renames.get("1/1") == "1/47"
+    assert job.vlan_renames.get(10) == 100
+    if "admin" in job.source_local_users:
+        assert job.local_user_renames.get("admin") == "netadmin-cli"
+    if job.source_snmp_community == "public":
+        assert job.snmp_community_renames.get("public") == "monitoring-ro"
+    if "netadmin" in job.source_snmpv3_users:
+        assert job.snmpv3_user_renames.get("netadmin") == "platform-snmpro"

@@ -448,6 +448,30 @@ class MigrationJob(BaseModel):
     #: or a bare SNMP block without a community configured.
     source_snmp_community: str = ""
 
+    #: Source→target SNMPv3 user-name rewrites applied during
+    #: :func:`run_plan_with_overrides` when the caller supplied a
+    #: ``snmpv3_user_rename_map``.  Fifth per-pane category after
+    #: ``port_renames`` / ``vlan_renames`` / ``local_user_renames``
+    #: / ``snmp_community_renames``.  Rename is by USM securityName
+    #: identity — auth / priv keys + group / engine_id follow the
+    #: renamed record.  Keys are source usernames; values are target
+    #: usernames.  Unchanged names are not included.
+    snmpv3_user_renames: dict[str, str] = Field(default_factory=dict)
+
+    #: SNMPv3 user names the operator explicitly marked "don't
+    #: render" via ``None`` values in the rename map.  The
+    #: corresponding :class:`CanonicalSNMPv3User` records were
+    #: removed from ``intent.snmp.v3_users`` before render.
+    snmpv3_user_drops: list[str] = Field(default_factory=list)
+
+    #: Source-tree SNMPv3 user names captured post-parse, pre-
+    #: transform.  Lets the Tier-3 rename modal's SNMPv3 pane
+    #: enumerate every v3 user the operator could rename or drop —
+    #: parallel to ``source_local_users`` for the local-admin pane.
+    #: Populated by :func:`run_plan_with_overrides` via the capture
+    #: transform.  Empty list when source config had v1/v2c only.
+    source_snmpv3_users: list[str] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)
@@ -576,9 +600,8 @@ class MigrationPlanRequest(BaseModel):
     """Optional SNMP-community rename map.  Fourth per-pane surface
     after :attr:`port_rename_map` / :attr:`vlan_rename_map` /
     :attr:`local_user_rename_map`.  Only affects
-    :attr:`CanonicalSNMP.community` (v1/v2c string) — SNMPv3 user
-    identities are NOT modelled in the canonical schema and are not
-    renameable by this map.
+    :attr:`CanonicalSNMP.community` (v1/v2c string); SNMPv3 user
+    identities have their own :attr:`snmpv3_user_rename_map`.
 
     Entry value semantics:
 
@@ -599,6 +622,37 @@ class MigrationPlanRequest(BaseModel):
     to ``{}`` opt into the SNMP-rename pipeline with no explicit
     overrides (useful for surfacing "no SNMP overrides applied"
     in the response shape)."""
+
+    snmpv3_user_rename_map: dict[str, str | None] | None = None
+    """Optional SNMPv3 USM user-name rename map.  Fifth per-pane
+    surface after ports / vlans / local_users / snmp_community.
+    Operates on :attr:`CanonicalSNMP.v3_users` — the list of
+    USM users populated by every codec with a documented v3
+    grammar (Arista EOS, Aruba AOS-S, FortiGate CLI, MikroTik
+    RouterOS, Juniper Junos) plus the Cisco IOS-XE CLI parse-
+    only codec.  OPNsense and the Cisco IOS-XE NETCONF codec
+    list ``/snmp/v3-user`` as unsupported on their capability
+    matrices — rename overrides against those sources / targets
+    produce the standard Unsupported-path banner.
+
+    Entry value semantics:
+
+    * ``str`` — rewrite the user's ``name`` (securityName) to
+      this value.  Auth / priv / group / engine_id stay with
+      the renamed record.
+    * ``None`` — drop the user entirely from the canonical tree.
+    * key NOT matching any user name → advisory-only warning.
+
+    Collisions (two source names mapped to the same target, or
+    a target that already exists) merge on FIRST-WINS — later
+    records silently drop with a warning.  Auth / priv keys are
+    NEVER combined across users (different crypto keys per
+    securityName is the whole point of USM).
+
+    Backwards-compatible: callers that don't set this get the
+    legacy behaviour (v3 users pass through unchanged).  Callers
+    that set it to ``{}`` opt into the SNMPv3-rename pipeline
+    with no explicit overrides."""
 
 
 class CodecInfo(BaseModel):

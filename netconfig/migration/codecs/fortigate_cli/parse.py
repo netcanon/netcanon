@@ -427,6 +427,96 @@ def _apply_snmp_community(
                 intent.snmp.trap_hosts.append(first_token)
 
 
+def _apply_snmp_user(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config system snmp user`` — SNMPv3 USM users.
+
+    FortiOS grammar (7.0+ stable; 7.2+ keeps same knobs with added
+    SHA-256/384/512 support):
+
+    .. code-block:: text
+
+        config system snmp user
+            edit "netadmin"
+                set security-level auth-priv
+                set auth-proto sha256
+                set auth-pwd ENC encrypted-hash-blob==
+                set priv-proto aes256
+                set priv-pwd ENC encrypted-hash-blob==
+            next
+        end
+
+    FortiOS doesn't carry an explicit "group" surface — each user is
+    self-grouped by its security-level.  ``group`` lands empty on
+    canonical; renderers that require one (Cisco, Junos, Aruba)
+    synthesise a default.
+
+    The ``ENC`` prefix on password fields is FortiOS's encrypted-
+    blob marker.  We carry it verbatim: shlex keeps ``ENC <hash>``
+    together as one quoted string when the operator exported with
+    quotes, or as two tokens otherwise.  Either shape round-trips
+    because the renderer re-quotes on output.
+    """
+    for edit in block.edits:
+        name_tokens = [edit.edit_id] if edit.edit_id else (
+            edit.settings.get("name") or []
+        )
+        if not name_tokens:
+            continue
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        name = name_tokens[0]
+        from ...canonical.intent import CanonicalSNMPv3User
+        # FortiOS auth-proto → canonical.
+        _FG_AUTH_MAP = {
+            "md5": "md5",
+            "sha": "sha",
+            "sha1": "sha",
+            "sha224": "sha224",
+            "sha256": "sha256",
+            "sha384": "sha384",
+            "sha512": "sha512",
+        }
+        # FortiOS priv-proto → canonical.  ``aes`` on older FOS =
+        # AES-128; newer ``aes256`` / ``aes256cisco`` are distinct.
+        _FG_PRIV_MAP = {
+            "des": "des",
+            "aes": "aes128",
+            "aes128": "aes128",
+            "aes192": "aes192",
+            "aes256": "aes256",
+            # ``aes256cisco`` is an interop mode — treat as aes256
+            # on the canonical (lossy) and let operators re-key on
+            # non-FortiGate targets.
+            "aes256cisco": "aes256",
+        }
+        auth_proto_tokens = edit.settings.get("auth-proto") or [""]
+        priv_proto_tokens = edit.settings.get("priv-proto") or [""]
+        auth_proto = _FG_AUTH_MAP.get(
+            auth_proto_tokens[0].lower(), "",
+        )
+        priv_proto = _FG_PRIV_MAP.get(
+            priv_proto_tokens[0].lower(), "",
+        )
+        # FortiOS exports ``set auth-pwd ENC <hash>`` as two tokens
+        # when unquoted, or a single quoted string when the operator
+        # exported with `show full-configuration`.  Join with space
+        # so the canonical passphrase carries the ``ENC`` marker
+        # + hash verbatim, matching the local-user pattern above.
+        auth_pwd_tokens = edit.settings.get("auth-pwd") or []
+        priv_pwd_tokens = edit.settings.get("priv-pwd") or []
+        auth_passphrase = " ".join(auth_pwd_tokens) if auth_pwd_tokens else ""
+        priv_passphrase = " ".join(priv_pwd_tokens) if priv_pwd_tokens else ""
+        intent.snmp.v3_users.append(CanonicalSNMPv3User(
+            name=name,
+            auth_protocol=auth_proto,
+            auth_passphrase=auth_passphrase,
+            priv_protocol=priv_proto,
+            priv_passphrase=priv_passphrase,
+        ))
+
+
 def _apply_router_static(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
@@ -632,6 +722,7 @@ _DISPATCH: ClassVar[dict[str, object]] = {
     "router static": _apply_router_static,
     "system snmp sysinfo": _apply_snmp_sysinfo,
     "system snmp community": _apply_snmp_community,
+    "system snmp user": _apply_snmp_user,
     "system admin": _apply_system_admin,
     "system dhcp server": _apply_system_dhcp_server,
     "user radius": _apply_user_radius,

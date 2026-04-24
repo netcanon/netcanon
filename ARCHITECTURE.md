@@ -257,13 +257,14 @@ RADIUS) has:
 function new per-pane categories extend.  New parameters go there
 as optional maps defaulting to `None`; `run_plan` and
 `run_plan_with_rename` signatures stay frozen.  Adding a new
-category follows the established three-step recipe (proven four
-times over: ports → vlans → local_users → snmp_community):
-orchestrator module → wire into `run_plan_with_overrides` under
-a None-vs-dict sentinel guard → add endpoint + rail button +
-pane partial.  Each new category also extends the capture
-transform if the UI pane needs to enumerate source-tree entities
-(VLAN IDs, usernames, SNMP community, etc.).
+category follows the established three-step recipe (proven five
+times over: ports → vlans → local_users → snmp_community →
+snmpv3_users): orchestrator module → wire into
+`run_plan_with_overrides` under a None-vs-dict sentinel guard →
+add endpoint + rail button + pane partial.  Each new category
+also extends the capture transform if the UI pane needs to
+enumerate source-tree entities (VLAN IDs, usernames, SNMP
+community, SNMPv3 user names, etc.).
 
 **Scalar vs list canonical surfaces:** ports / VLANs / local_users
 are list-like (many rows per pane, collision detection, merge
@@ -287,13 +288,14 @@ class fit the same recipe; the map shape is uniformly
 **Cross-category ordering:** port rename runs BEFORE VLAN rename
 in `run_plan_with_overrides` so port-name rewrites don't race
 with VLAN-ID references changing underneath them.  Current order
-is ports → vlans → local_users → snmp_community; the last three
-are independent of each other (VLANs don't reference users, users
-don't reference SNMP, SNMP doesn't reference ports/VLANs) so
-only the ports-first constraint is load-bearing.  Adding a future
-category requires deciding its order relative to the existing
-transforms; document the choice in both `run_plan_with_overrides`
-and the orchestrator module.
+is ports → vlans → local_users → snmp_community → snmpv3_users;
+the last four are independent of each other (VLANs don't
+reference users, users don't reference SNMP, SNMP doesn't
+reference ports/VLANs, SNMPv3 users are orthogonal to v1/v2c
+community) so only the ports-first constraint is load-bearing.
+Adding a future category requires deciding its order relative to
+the existing transforms; document the choice in both
+`run_plan_with_overrides` and the orchestrator module.
 
 **localStorage ack persistence (UI):** operator overrides are
 persisted under
@@ -565,6 +567,12 @@ the source of truth):
   table for visual parity with the list-oriented panes.
   "Clear" replaces "drop" semantically — clearing the community
   causes the render path to omit the entire SNMP block.
+* **snmpv3-user-rename-table.js** — rename-modal SNMPv3 USM user
+  pane renderer (P2C6); fifth per-pane category.  List-oriented
+  sibling of the local-users pane — one row per source USM user.
+  Rename is identity-only: auth / priv / group / engine_id
+  follow the renamed record.  Collisions merge on first-wins
+  (auth/priv keys are NEVER combined across users).
 * **theme-toggle.js** — global light/dark mode toggle wired to
   the `nav-theme-toggle` button.  Flips `<html data-theme>`
   between `light`/`dark`, persists to
@@ -677,8 +685,11 @@ What's queued:
 - Fidelity polish bucket (VRFs, STP globals, PKI chains → Tier 3)
 - Deploy phase (transport layer wiring for migration output push)
 - Additional canonical models (firewall-specific, wireless-specific CIMs)
-- Per-pane overrides for **SNMP trap-hosts** + **RADIUS** following
-  the ports / VLANs / local_users / SNMP-community three-step recipe
-  (orchestrator → pipeline → pane).  SNMP community rename shipped
-  in P2C5; trap-hosts is the list-surface extension, RADIUS is the
-  next category after that.
+- Per-pane overrides for **NTP servers**, **DNS servers**,
+  **syslog servers**, **SNMP trap-hosts**, and **RADIUS** — all
+  list-oriented cross-vendor-stable management-plane surfaces with
+  per-codec parse+render already in place.  Following the same
+  three-step recipe (orchestrator → pipeline → pane) as ports /
+  VLANs / local_users / SNMP-community / SNMPv3-users.  See
+  [`translator-plans.txt`](translator-plans.txt) for viability
+  audit + ordering decisions.

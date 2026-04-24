@@ -45,6 +45,7 @@ from ...canonical.intent import (
     CanonicalVxlan,
     CanonicalLocalUser,
     CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -90,6 +91,27 @@ _SNMP_CONTACT_RE = re.compile(
 _SNMP_HOST_RE = re.compile(
     r"^snmp-server host\s+(\d+\.\d+\.\d+\.\d+)",
     re.MULTILINE,
+)
+# SNMPv3 user on Arista EOS.  Canonical grammar accepts both native
+# EOS forms and Cisco-ish pasted forms:
+#
+#   snmp-server user <name> <group> v3 [auth {md5|sha|...} <pass>]
+#                                     [priv {des|aes|aes128|aes192|
+#                                     aes256} [keybits?] <pass>]
+#
+# EOS natively uses ``aes`` (AES-128 default) / ``aes192`` /
+# ``aes256`` as single tokens but tolerates the Cisco-style
+# ``aes 128`` two-token form on ingest.  The keybits group is
+# optional to match both.  The pre-hashed ``localized <engineID>
+# <hex>`` form is out of scope for v1 — parse-and-ignore, rendered
+# back from canonical in plain form.
+_SNMP_V3_USER_RE = re.compile(
+    r"^snmp-server\s+user\s+(\S+)\s+(\S+)\s+v3"
+    r"(?:\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+))?"
+    r"(?:\s+priv\s+(des|3des|aes|aes128|aes192|aes256)"
+    r"(?:\s+(128|192|256))?\s+(\S+))?"
+    r"\s*$",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 #: Username grammar (EOS flavour).  Three observed forms:
@@ -186,6 +208,7 @@ class AristaEOSCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            "/snmp/v3-user",
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
@@ -321,6 +344,32 @@ class AristaEOSCodec(CodecBase):
             snmp_hit = True
         for host_m in _SNMP_HOST_RE.finditer(raw):
             snmp.trap_hosts.append(host_m.group(1))
+            snmp_hit = True
+        # SNMPv3 users — seven-group regex.  priv token normalises
+        # via the (priv_proto, priv_bits) pair: ``aes`` + ``None`` →
+        # aes128 (EOS default); ``aes`` + ``128`` → aes128 (Cisco-
+        # style paste); ``aes128`` → aes128 (EOS native single-token);
+        # ``aes192`` / ``aes256`` preserve bits.  ``des`` / ``3des``
+        # ignore the bits group if present (unusual but tolerated).
+        for v3_m in _SNMP_V3_USER_RE.finditer(raw):
+            name, group, auth_p, auth_pw, priv_p, priv_bits, priv_pw = (
+                v3_m.groups()
+            )
+            priv_norm = ""
+            if priv_p:
+                priv_low = priv_p.lower()
+                if priv_low == "aes":
+                    priv_norm = f"aes{priv_bits}" if priv_bits else "aes128"
+                else:
+                    priv_norm = priv_low
+            snmp.v3_users.append(CanonicalSNMPv3User(
+                name=name,
+                group=group,
+                auth_protocol=(auth_p or "").lower(),
+                auth_passphrase=auth_pw or "",
+                priv_protocol=priv_norm,
+                priv_passphrase=priv_pw or "",
+            ))
             snmp_hit = True
         if snmp_hit:
             intent.snmp = snmp
@@ -769,9 +818,28 @@ class AristaEOSCodec(CodecBase):
                 out.append(f"snmp-server contact {tree.snmp.contact}")
             for host in tree.snmp.trap_hosts:
                 out.append(f"snmp-server host {host}")
+            # SNMPv3 users.  ``aes128`` canonical → ``aes`` on EOS wire
+            # (Arista accepts both but the bare form is the
+            # platform-natural default); ``aes192`` / ``aes256`` emit
+            # one-token form.  Users with no auth / no priv emit the
+            # bare ``v3`` line — noAuthNoPriv is a valid USM mode.
+            for u in tree.snmp.v3_users:
+                parts = [f"snmp-server user {u.name} {u.group or 'v3group'} v3"]
+                if u.auth_protocol:
+                    parts.append(
+                        f"auth {u.auth_protocol} {u.auth_passphrase}"
+                    )
+                if u.priv_protocol:
+                    wire_priv = (
+                        "aes" if u.priv_protocol == "aes128"
+                        else u.priv_protocol
+                    )
+                    parts.append(f"priv {wire_priv} {u.priv_passphrase}")
+                out.append(" ".join(parts))
             if (
                 tree.snmp.community or tree.snmp.location
                 or tree.snmp.contact or tree.snmp.trap_hosts
+                or tree.snmp.v3_users
             ):
                 out.append("!")
 

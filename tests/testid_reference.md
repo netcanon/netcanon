@@ -631,6 +631,17 @@ surfaces under a shared left-rail navigation):
 | `migrate-rename-snmp-community-drop`  | `<span>`   | Inline clear / un-clear / keep-verbatim link.  "clear" is the SNMP equivalent of "drop" — renders the SNMP block out entirely rather than removing an identity |
 | `migrate-rename-summary-snmp`         | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "SNMP: A auto / B overrides / C clears".  Only present when any SNMP-category state exists |
 | `migrate-rename-snmp-compat`          | `<div>`    | Amber target-codec compatibility banner inside the SNMP pane.  Shows when the active target codec's `unsupported_rename_categories` list includes `snmp`.  Mirrors the local-users pane's banner pattern |
+| `migrate-rename-rail-snmpv3`          | `<button>` | Activates the SNMPv3 category pane.  `data-category="snmpv3"`.  Fifth per-pane category (P2C6) |
+| `migrate-rename-rail-snmpv3-count`    | `<span>`   | Row-count badge on the SNMPv3 rail button.  Shows source USM user count — list-oriented surface, parallel to local_users |
+| `migrate-rename-snmpv3-pane`          | `<div>`    | SNMPv3 category pane wrapper.  `active` CSS class when visible |
+| `migrate-rename-snmpv3-empty`         | `<div>`    | Empty-state message when the source config has no SNMPv3 users (v1/v2c-only source, or no SNMP block at all) |
+| `migrate-rename-snmpv3-sections`      | `<div>`    | Container the SNMPv3 pane renderer clears and rebuilds.  Holds the per-user rename table |
+| `migrate-rename-snmpv3-table`         | `<table>`  | The SNMPv3 USM user rewrite table — structural sibling of `migrate-rename-local-users-table` (list-oriented, one row per user) |
+| `migrate-rename-snmpv3-user-row-<name>` | `<tr>`   | One per source SNMPv3 user; `<name>` is the literal USM securityName.  CSS classes `has-override` / `has-drop` / `has-auto-drop` / `has-collision` signal row state |
+| `migrate-rename-snmpv3-user-override-<name>` | `<input>` | Free-text target-securityName input.  `type="text"`; blank = keep unchanged; non-empty = rename on Apply.  Auth / priv / group / engine_id follow the renamed record |
+| `migrate-rename-snmpv3-user-drop-<name>` | `<span>` | Inline drop / un-drop / keep-verbatim link — three-state logic parallel to the local-users pane |
+| `migrate-rename-summary-snmpv3`       | `<span>`   | Nested sub-summary inside `migrate-rename-summary` — "SNMPv3: A auto / B overrides / C drops".  Only present when any v3-category state exists |
+| `migrate-rename-snmpv3-compat`        | `<div>`    | Amber target-codec compatibility banner inside the SNMPv3 pane.  Shows when the active target codec's `unsupported_rename_categories` list includes `snmpv3` (OPNsense, Cisco IOS-XE NETCONF stub) |
 
 ### RESERVED for Phase 2 (transforms + deploy)
 

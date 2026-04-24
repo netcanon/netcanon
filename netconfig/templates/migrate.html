@@ -587,6 +587,15 @@
         <span id="mig-rename-rail-snmp-count" class="rail-count"
               data-testid="migrate-rename-rail-snmp-count">0</span>
       </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-snmpv3"
+              data-category="snmpv3"
+              onclick="showRenameCategory('snmpv3')">
+        <span>SNMPv3</span>
+        <span id="mig-rename-rail-snmpv3-count" class="rail-count"
+              data-testid="migrate-rename-rail-snmpv3-count">0</span>
+      </button>
     </nav>
 
     <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
@@ -686,6 +695,30 @@
         </div>
         <div id="mig-rename-snmp-sections"
              data-testid="migrate-rename-snmp-sections"></div>
+      </div>
+
+      <!-- SNMPv3 USM user-rename category pane — fifth per-pane
+           override after ports / VLANs / local_users / snmp_community.
+           List-oriented sibling of the local-users pane: one row per
+           source v3 user.  Rename is identity-only: auth / priv /
+           group / engine_id follow the renamed record; crypto keys
+           are NEVER combined across users.  Unsupported target
+           codecs (OPNsense, cisco_iosxe NETCONF) surface the
+           Unsupported-path compatibility banner. -->
+      <div id="mig-rename-snmpv3-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-snmpv3-pane">
+        <div id="mig-rename-snmpv3-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-snmpv3-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-snmpv3-empty"
+             data-testid="migrate-rename-snmpv3-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No SNMPv3 users found in the source config.
+        </div>
+        <div id="mig-rename-snmpv3-sections"
+             data-testid="migrate-rename-snmpv3-sections"></div>
       </div>
     </div>
 
@@ -1366,7 +1399,8 @@
   var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
   var _renameLocalUserMap = {};      // source_username -> target_username | null
   var _renameSnmpCommunityMap = {};  // source_community -> target_community | null (effectively single-entry)
-  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp'
+  var _renameSnmpV3UserMap = {};     // source_v3_name -> target_v3_name | null
+  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp' | 'snmpv3'
   var _renameDragState = null;       // { offsetX, offsetY } while dragging
 
   // Kind ordering in the modal (drives the collapsible section order).
@@ -1386,18 +1420,26 @@
     unknown:       'Unclassified',
   };
 
-  // Vendor-id → display-name map for the first-stage dropdown.
-  // Keeps the dropdown readable without requiring every vendor
-  // definition YAML to be fetched just to resolve display names.
-  var _VENDOR_LABELS = {
-    cisco_iosxe:         'Cisco IOS-XE',
-    aruba_aoss:          'Aruba AOS-S',
-    mikrotik_routeros:   'MikroTik RouterOS',
-    opnsense:            'OPNsense',
-    fortigate:           'FortiGate',
-    arista_eos:          'Arista EOS',
-    juniper_junos:       'Juniper Junos',
-  };
+  /** Vendor-id → display-name lookup.  Derived on-demand from the
+   *  ``adapters`` cache populated by ``loadAdapters()`` at page load;
+   *  each CodecInfo carries its vendor's display_name resolved by the
+   *  server from ``netconfig/migration/vendors/<vendor>.yaml``.
+   *
+   *  Previously this was a hardcoded 7-entry dict maintained by hand
+   *  in this template — removed because it meant adding a new vendor
+   *  required editing this template AND the vendors/ YAML, a silent
+   *  drift risk.  The server-side vendors/*.yaml + CodecInfo response
+   *  is the single source of truth.
+   *
+   *  Returns the vendor_id verbatim when no adapter is registered
+   *  under that vendor (shouldn't happen in practice because the
+   *  target-profiles endpoint only ships vendors with at least one
+   *  codec), preserving the existing fallback behaviour. */
+  function _vendorLabel(vendor_id) {
+    if (!vendor_id) return '';
+    var a = adapters.find(function(x) { return x.vendor_id === vendor_id; });
+    return (a && a.vendor_display_name) || vendor_id;
+  }
 
   async function loadRenameTargetProfiles() {
     try {
@@ -1421,14 +1463,12 @@
     var vendors = Array.from(new Set(_renameProfiles.map(function(p) {
       return p.vendor;
     }))).sort(function(a, b) {
-      var la = _VENDOR_LABELS[a] || a;
-      var lb = _VENDOR_LABELS[b] || b;
-      return la.localeCompare(lb);
+      return _vendorLabel(a).localeCompare(_vendorLabel(b));
     });
     vendors.forEach(function(vendor) {
       var opt = document.createElement('option');
       opt.value = vendor;
-      opt.textContent = _VENDOR_LABELS[vendor] || vendor;
+      opt.textContent = _vendorLabel(vendor);
       vsel.appendChild(opt);
     });
   }
@@ -1632,6 +1672,7 @@
       vlans: Object.assign({}, _renameVlanUserMap),
       local_users: Object.assign({}, _renameLocalUserMap),
       snmp_community: Object.assign({}, _renameSnmpCommunityMap),
+      snmpv3_users: Object.assign({}, _renameSnmpV3UserMap),
       ts: new Date().toISOString(),
     };
     // Skip writes when all maps are empty — keeps localStorage
@@ -1639,7 +1680,8 @@
     if (!Object.keys(payload.ports).length
         && !Object.keys(payload.vlans).length
         && !Object.keys(payload.local_users).length
-        && !Object.keys(payload.snmp_community).length) {
+        && !Object.keys(payload.snmp_community).length
+        && !Object.keys(payload.snmpv3_users).length) {
       try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
       return;
     }
@@ -1685,17 +1727,23 @@
       // no-coercion story as local_users.
       _renameSnmpCommunityMap = Object.assign({}, ack.snmp_community);
     }
+    if (ack.snmpv3_users && typeof ack.snmpv3_users === 'object') {
+      // String-keyed securityName map; no coercion needed.
+      _renameSnmpV3UserMap = Object.assign({}, ack.snmpv3_users);
+    }
     var portCount = Object.keys(_renameUserMap).length;
     var vlanCount = Object.keys(_renameVlanUserMap).length;
     var userCount = Object.keys(_renameLocalUserMap).length;
     var snmpCount = Object.keys(_renameSnmpCommunityMap).length;
+    var v3Count = Object.keys(_renameSnmpV3UserMap).length;
     var status = document.getElementById('mig-rename-status');
-    if (status && (portCount || vlanCount || userCount || snmpCount)) {
+    if (status && (portCount || vlanCount || userCount || snmpCount || v3Count)) {
       var bits = [];
       if (portCount) bits.push(portCount + ' port');
       if (vlanCount) bits.push(vlanCount + ' VLAN');
       if (userCount) bits.push(userCount + ' user');
       if (snmpCount) bits.push(snmpCount + ' SNMP');
+      if (v3Count) bits.push(v3Count + ' SNMPv3');
       status.textContent = 'Restored prior overrides ('
         + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
       status.setAttribute('data-testid-state', 'ack-restored');
@@ -1743,6 +1791,7 @@
       vlans: 'VLANs',
       ports: 'port names',
       snmp: 'SNMP community',
+      snmpv3: 'SNMPv3 USM users',
     };
     // PANE_ID_BY_CATEGORY: extend here when new categories gain
     // compat banners.  Value is the element id of the banner div
@@ -1750,6 +1799,7 @@
     var paneIdByCategory = {
       local_users: 'mig-rename-local-users-compat',
       snmp: 'mig-rename-snmp-compat',
+      snmpv3: 'mig-rename-snmpv3-compat',
     };
     Object.keys(paneIdByCategory).forEach(function(cat) {
       var el = document.getElementById(paneIdByCategory[cat]);
@@ -1870,10 +1920,12 @@
     var vlansPane = document.getElementById('mig-rename-vlans-pane');
     var localUsersPane = document.getElementById('mig-rename-local-users-pane');
     var snmpPane = document.getElementById('mig-rename-snmp-pane');
+    var snmpv3Pane = document.getElementById('mig-rename-snmpv3-pane');
     if (portsPane) portsPane.classList.toggle('active', cat === 'ports');
     if (vlansPane) vlansPane.classList.toggle('active', cat === 'vlans');
     if (localUsersPane) localUsersPane.classList.toggle('active', cat === 'local_users');
     if (snmpPane) snmpPane.classList.toggle('active', cat === 'snmp');
+    if (snmpv3Pane) snmpv3Pane.classList.toggle('active', cat === 'snmpv3');
     document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.category === cat);
     });
@@ -1913,6 +1965,9 @@
     } else if (cat === 'snmp'
                && typeof renderSnmpRenameTable === 'function') {
       renderSnmpRenameTable();
+    } else if (cat === 'snmpv3'
+               && typeof renderSnmpV3UserRenameTable === 'function') {
+      renderSnmpV3UserRenameTable();
     } else if (cat === 'ports') {
       renderRenameTable();
     }
@@ -1930,6 +1985,7 @@
     var vlansCount = document.getElementById('mig-rename-rail-vlans-count');
     var usersCount = document.getElementById('mig-rename-rail-local-users-count');
     var snmpCount = document.getElementById('mig-rename-rail-snmp-count');
+    var snmpv3Count = document.getElementById('mig-rename-rail-snmpv3-count');
     if (portsCount) {
       var applied = _lastJob.port_renames
         ? Object.keys(_lastJob.port_renames).length : 0;
@@ -1953,6 +2009,12 @@
       var s = (_lastJob.source_snmp_community) ? 1 : 0;
       snmpCount.textContent = String(s);
     }
+    if (snmpv3Count) {
+      // SNMPv3 count = number of source USM users.  Matches the
+      // per-row semantic used by every list-oriented pane.
+      var v = (_lastJob.source_snmpv3_users || []).length;
+      snmpv3Count.textContent = String(v);
+    }
   }
 
   /** Call from renderResult: remember the job + request body so the
@@ -1964,6 +2026,7 @@
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
     _renameSnmpCommunityMap = {};
+    _renameSnmpV3UserMap = {};
     var btn = document.getElementById('mig-rename-open-btn');
     var badge = document.getElementById('mig-rename-badge-count');
     if (!btn) return;
@@ -2026,6 +2089,20 @@
     // blank then snapping to the restored state.
     var ack = loadRenameAck(_lastJob);
     if (ack) applyLoadedRenameAck(ack);
+    // Re-populate the vendor dropdown to pick up any late adapter
+    // data.  loadAdapters() + loadRenameTargetProfiles() race at
+    // page load; if profiles landed first, vendor labels fell back
+    // to raw vendor_ids.  By modal-open time adapters is populated,
+    // so a re-populate is cheap and gives the operator the friendly
+    // labels.  Preserves the current selection (if any) so this
+    // doesn't stomp an operator's prior pick.
+    if (typeof populateRenameVendorDropdown === 'function'
+        && Array.isArray(adapters) && adapters.length) {
+      var vselEl = document.getElementById('mig-rename-target-vendor');
+      var preserved = vselEl ? vselEl.value : '';
+      populateRenameVendorDropdown();
+      if (preserved && vselEl) vselEl.value = preserved;
+    }
     // Seed vendor dropdown with an auto-suggestion; model left
     // un-picked so the operator explicitly commits to hardware.
     var vsel = document.getElementById('mig-rename-target-vendor');
@@ -2041,6 +2118,7 @@
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
+    if (typeof renderSnmpV3UserRenameTable === 'function') renderSnmpV3UserRenameTable();
     renderRenameRailCounts();
     renderCompatBanners();
     renderPerPaneFitCheck();
@@ -2059,6 +2137,7 @@
     _renameVlanUserMap = {};
     _renameLocalUserMap = {};
     _renameSnmpCommunityMap = {};
+    _renameSnmpV3UserMap = {};
     // Clear the persisted entry so a subsequent modal-open for the
     // same (source, target, hostname) doesn't restore what the
     // operator just reset.  renderRenameSummary below will write an
@@ -2069,6 +2148,7 @@
     if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
     if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
     if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
+    if (typeof renderSnmpV3UserRenameTable === 'function') renderSnmpV3UserRenameTable();
     renderRenameRailCounts();
     renderRenamePreview();
     renderRenameSummary();
@@ -2087,6 +2167,9 @@
 
   /* ── SNMP community rename pane renderer (extracted to _partials/snmp-rename-table.js) ── */
   {% include "_partials/snmp-rename-table.js" %}
+
+  /* ── SNMPv3 USM user-rename pane renderer (extracted to _partials/snmpv3-user-rename-table.js) ── */
+  {% include "_partials/snmpv3-user-rename-table.js" %}
 
   /* ── Rename-modal preview + summary (extracted to _partials/rename-panel.js) ── */
   {% include "_partials/rename-panel.js" %}

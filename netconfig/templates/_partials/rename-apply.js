@@ -57,6 +57,17 @@
         {}, _renameSnmpCommunityMap,
       );
     }
+    // SNMPv3 USM user-rename category — fifth per-pane surface.
+    // Same gate-on-non-empty pattern; auth / priv / group / engine_id
+    // fields travel with the renamed user record server-side (no
+    // separate wire surface).
+    if (typeof _renameSnmpV3UserMap === 'object'
+        && _renameSnmpV3UserMap
+        && Object.keys(_renameSnmpV3UserMap).length > 0) {
+      body.snmpv3_user_rename_map = Object.assign(
+        {}, _renameSnmpV3UserMap,
+      );
+    }
     var profileKey = currentRenameProfileKey();
     if (profileKey) body.target_profile = profileKey;
     // Only send target_module when the profile actually has

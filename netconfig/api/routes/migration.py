@@ -45,8 +45,18 @@ Translation pipeline entries:
           engaged.  Effectively single-entry rename (CanonicalSNMP
           holds one community string); drop via None value clears
           the community and render paths omit the SNMP block.
-          SNMPv3 users are NOT in scope — CanonicalSNMP models
-          v1/v2c only.
+          v1/v2c only — SNMPv3 users have their own endpoint.
+
+    POST /api/v1/migration/plan/snmpv3
+        → per-pane override endpoint for SNMPv3 USM user-name
+          rewrites (introduced P2C6).  Dispatches to
+          run_plan_with_overrides with only snmpv3_user_rename_map
+          engaged.  Rename is identity-only: auth / priv keys +
+          group + engine_id follow the renamed record.  Drop via
+          None value removes the user entirely.  Collisions merge
+          on first-wins.  Auth + priv passphrases are NEVER combined
+          across users (different crypto keys per securityName is
+          the whole point of USM).
 
     POST /api/v1/migration/render
         → current alias of /plan, retained for API symmetry and a
@@ -273,6 +283,7 @@ def plan_migration(
         or body.vlan_rename_map is not None
         or body.local_user_rename_map is not None
         or body.snmp_community_rename_map is not None
+        or body.snmpv3_user_rename_map is not None
         or body.target_profile is not None
     )
     if has_any_override:
@@ -291,6 +302,7 @@ def plan_migration(
             vlan_rename_map=body.vlan_rename_map,
             local_user_rename_map=body.local_user_rename_map,
             snmp_community_rename_map=body.snmp_community_rename_map,
+            snmpv3_user_rename_map=body.snmpv3_user_rename_map,
             force=body.force,
         )
     else:
@@ -539,6 +551,71 @@ def plan_migration_snmp(
     )
     logger.info(
         "Migration plan/snmp %s: %s -> %s = %s",
+        job.id[:8],
+        body.source,
+        body.target,
+        job.status.value,
+    )
+    return job
+
+
+@router.post(
+    "/plan/snmpv3",
+    response_model=MigrationJob,
+    summary="Per-pane override endpoint: SNMPv3 USM user rename",
+    responses={
+        404: {"description": "source_filename does not exist"},
+        422: {"description": "Invalid adapter name or input specification"},
+    },
+)
+def plan_migration_snmpv3(
+    body: MigrationPlanRequest,
+    storage: BaseConfigStore = Depends(get_storage),
+) -> MigrationJob:
+    """SNMPv3-user-rename-only entry into the migration pipeline.
+
+    Fifth concrete per-pane override endpoint after
+    ``/plan/ports``, ``/plan/vlans``, ``/plan/local_users``, and
+    ``/plan/snmp``.  Accepts the same :class:`MigrationPlanRequest`
+    body and dispatches to :func:`run_plan_with_overrides` with
+    only ``snmpv3_user_rename_map`` populated.
+
+    SNMPv3 user rename is a string → string rewrite applied to
+    :attr:`CanonicalSNMPv3User.name` (the USM securityName).  The
+    user's auth protocol + passphrase + priv protocol + passphrase
+    + group + engine_id stay with the renamed record — rename is
+    an identity-only operation, not a re-key.
+
+    Cross-vendor note: SNMPv3 auth / priv passphrases are salted
+    with vendor-specific constants.  Same-vendor round-trip is
+    lossless (the hash passes through verbatim); cross-vendor
+    migration typically requires re-keying on the target device.
+    The canonical tree carries the source's hash verbatim so the
+    loss is visible to the operator.
+
+    Explicitly NOT in scope:
+
+        * SNMP v1/v2c community rename.  Use ``/plan/snmp`` for
+          that — the two surfaces are orthogonal (v2c community
+          is a shared-secret string, v3 user is an identity).
+        * Trap-host / auth-key / priv-key rename.  Trap hosts are
+          a list surface planned as a follow-up commit; auth /
+          priv keys are not identity fields — rewriting them
+          silently would break device-side crypto state.
+
+    Ignores other override maps if the body carries them — hitting
+    ``/plan/snmpv3`` applies the SNMPv3-user category only.
+    """
+    source = _resolve_adapter_or_422(body.source, side="source")
+    target = _resolve_adapter_or_422(body.target, side="target")
+    raw_text = _resolve_input_text(body, storage)
+    job = run_plan_with_overrides(
+        source, target, raw_text,
+        snmpv3_user_rename_map=body.snmpv3_user_rename_map or {},
+        force=body.force,
+    )
+    logger.info(
+        "Migration plan/snmpv3 %s: %s -> %s = %s",
         job.id[:8],
         body.source,
         body.target,

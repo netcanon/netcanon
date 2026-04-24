@@ -157,16 +157,21 @@ class OPNsenseCodec(CodecBase):
     )
     output_extension: ClassVar[str] = "xml"
 
-    # unsupported_rename_categories is intentionally empty — OPNsense's
-    # parse() + render() both round-trip CanonicalLocalUser via
-    # ``<system><user>`` blocks (see the ``for user_el in
-    # sys_el.findall("user")`` loop in parse() and the matching
-    # render() emit path below).  Coverage locked in by
-    # ``tests/unit/migration/test_local_users_wire_through.py``
-    # (TestOPNsenseLocalUsersParseRender).  A prior pre-Option-A
-    # declaration had this list as ``{"local_users"}`` under the
-    # incorrect assumption that OPNsense's user handling was
-    # Tier-3-only — cleared as part of Option A.
+    # OPNsense doesn't round-trip SNMPv3 USM users: the XML store
+    # doesn't carry them (see /snmp/v3-user entry in capability
+    # matrix unsupported[] above).  Declaring ``"snmpv3"`` here
+    # surfaces the amber pane-compat banner when OPNsense is
+    # selected as the target so operators see the gap BEFORE
+    # committing overrides that won't render.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset({
+        "snmpv3",
+    })
+
+    # Historical note: local_users was removed from this frozenset
+    # as part of Option A — OPNsense's parse + render both
+    # round-trip CanonicalLocalUser via ``<system><user>`` blocks.
+    # Coverage locked in by ``tests/unit/migration/
+    # test_local_users_wire_through.py``.
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="opnsense",
@@ -223,6 +228,17 @@ class OPNsenseCodec(CodecBase):
                 reason=(
                     "NAT table translation needs netconfig-ext + careful "
                     "semantic mapping to target stateful engines."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user",
+                reason=(
+                    "OPNsense's SNMPv3 user store lives in the bsnmpd "
+                    "/ net-snmp plugin's own configuration format "
+                    "(``/usr/local/etc/snmpd.conf`` createUser lines), "
+                    "not in the config.xml this codec reads.  Tier-3 "
+                    "carry-through is not wired; operators re-declare "
+                    "v3 users on the target after migration."
                 ),
             ),
         ],

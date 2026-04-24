@@ -128,6 +128,7 @@ class FortiGateCLICodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            "/snmp/v3-user",
             # Tier 2 — local admin users.  FortiGate admin accounts
             # map to CanonicalLocalUser: super_admin accprofile →
             # privilege 15; other profiles → privilege 1 with the

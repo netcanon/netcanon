@@ -129,11 +129,11 @@ class MyVendorCodec(CodecBase):
 
     # Per-pane round-trip gaps.  List any category the Tier-3 rename
     # modal exposes that this codec's parse+render doesn't yet wire
-    # (currently: ports / vlans / local_users; SNMP + RADIUS later).
-    # The UI shows an amber compatibility banner on the affected
-    # pane so operators see up-front that overrides won't reach
-    # rendered output.  Remove entries as the codec gains each
-    # category's round-trip coverage.
+    # (ports / vlans / local_users / snmp / snmpv3; NTP/DNS/syslog/
+    # RADIUS + SNMP trap-hosts are planned follow-ups).  The UI shows
+    # an amber compatibility banner on the affected pane so operators
+    # see up-front that overrides won't reach rendered output.  Remove
+    # entries as the codec gains each category's round-trip coverage.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
 
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
@@ -236,7 +236,7 @@ Each field on `CanonicalIntent` / `CanonicalInterface` /
 wire-through as a worked example.
 
 Rule of thumb: one feature, one commit touching all 5 codecs.  The
-Tier 2 wire-throughs (SNMP, LAGs, local_users, DHCP, RADIUS, MTU)
+Tier 2 wire-throughs (SNMP v1/v2c + v3 USM, LAGs, local_users, DHCP, RADIUS, MTU)
 each landed as a single commit per feature with regression tests in
 a dedicated `test_<feature>_wire_through.py` file.
 

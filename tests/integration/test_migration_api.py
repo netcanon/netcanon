@@ -60,6 +60,32 @@ class TestListMigrationAdapters:
         info = next(a for a in resp.json() if a["name"] == "cisco_iosxe")
         assert info["vendor_display_name"] == "Cisco IOS-XE"
 
+    def test_every_codec_has_non_empty_vendor_display_name(self, client):
+        """Universal invariant — every shipped codec resolves to a
+        non-empty vendor_display_name.  Guards against adding a new
+        codec without registering its vendor YAML under
+        ``netconfig/migration/vendors/<vendor>.yaml``; without the
+        YAML the frontend's vendor dropdown would fall back to the
+        raw vendor_id string.
+
+        The mock codec is the only exception — it's a test-only
+        adapter that's allowed to have an empty display_name.
+        Remove it from the exemption list if mock.yaml ever ships
+        a real display_name."""
+        resp = client.get("/api/v1/migration/adapters")
+        exemptions = {"mock"}
+        bad = []
+        for entry in resp.json():
+            if entry["name"] in exemptions:
+                continue
+            if not entry["vendor_display_name"].strip():
+                bad.append(entry["name"])
+        assert not bad, (
+            f"Codecs without a resolvable vendor_display_name: "
+            f"{bad}.  Add ``netconfig/migration/vendors/<vendor>.yaml`` "
+            f"with a ``display_name:`` field for each."
+        )
+
     def test_opnsense_vendor_display_name(self, client):
         resp = client.get("/api/v1/migration/adapters")
         info = next(a for a in resp.json() if a["name"] == "opnsense")
@@ -1131,6 +1157,192 @@ username admin privilege 15 secret 5 $1$abc$fake
         # All four categories surface populated responses.
         assert body["local_user_renames"] == {"admin": "netadmin"}
         assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        vrn = body["vlan_renames"]
+        assert ("10" in vrn and vrn["10"] == 200) or (
+            10 in vrn and vrn[10] == 200
+        )
+
+
+class TestPlanSnmpV3Endpoint:
+    """``POST /api/v1/migration/plan/snmpv3`` — fifth per-pane
+    override endpoint (P2C6).  Exercises the
+    ``snmpv3_user_rename_map`` surface end-to-end.
+
+    Structural shape parallels ``/plan/local_users`` (list-oriented
+    canonical surface with collision first-wins semantics).  Covers
+    the dominant cross-mesh source pair: Cisco IOS-XE CLI → Aruba
+    AOS-S, plus representative edge cases.
+    """
+
+    _IOSXE_WITH_V3 = """\
+hostname TestCisco
+!
+snmp-server community public RO
+snmp-server user netadmin adminGroup v3 auth sha SHApass priv aes 128 AESpass
+snmp-server user monitor roGroup v3 auth md5 MDpass
+!
+"""
+
+    _IOSXE_WITHOUT_V3 = """\
+hostname TestCisco
+!
+snmp-server community public RO
+!
+"""
+
+    def test_happy_path_returns_completed_job(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "completed"
+
+    def test_source_v3_users_captured_on_response(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+            },
+        )
+        body = resp.json()
+        assert "netadmin" in body["source_snmpv3_users"]
+        assert "monitor" in body["source_snmpv3_users"]
+
+    def test_v3_user_rename_is_applied(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
+
+    def test_v3_user_drop_appears_in_drops(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {"monitor": None},
+            },
+        )
+        body = resp.json()
+        assert "monitor" in body["snmpv3_user_drops"]
+
+    def test_no_v3_users_surfaces_warning(self, client):
+        """Source has v2c community but no v3 users → rename override
+        produces advisory warning and no rewrite."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITHOUT_V3,
+                "snmpv3_user_rename_map": {"netadmin": "new-name"},
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {}
+        warnings_text = "\n".join(body["warnings"])
+        assert "no SNMPv3 users" in warnings_text
+
+    def test_ignores_other_category_maps(self, client):
+        """/plan/snmpv3 dispatches ONLY the v3 category.  Other
+        maps in the body are silently ignored — endpoint discipline."""
+        resp = client.post(
+            "/api/v1/migration/plan/snmpv3",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_WITH_V3,
+                "snmpv3_user_rename_map": {"netadmin": "new-v3"},
+                "snmp_community_rename_map": {"public": "new-community"},
+                "local_user_rename_map": {"admin": "netadmin-cli"},
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {"netadmin": "new-v3"}
+        # Other categories NOT engaged from this endpoint.
+        assert body["snmp_community_renames"] == {}
+        assert body["local_user_renames"] == {}
+
+
+class TestPlanMultiCategoryRoutingSnmpV3:
+    """``/plan`` dispatches to run_plan_with_overrides when
+    ``snmpv3_user_rename_map`` is set, exactly like the four
+    pre-P2C6 maps.  Guards against refactors that might miss the
+    v3 fork in the routing predicate."""
+
+    _IOSXE_V3_CORPUS = """\
+hostname MultiTestV3
+!
+vlan 10
+ name USERS
+!
+snmp-server community public RO
+snmp-server user netadmin adminGroup v3 auth sha SHApass priv aes 128 AESpass
+!
+username admin privilege 15 secret 5 $1$abc$fake
+!
+"""
+
+    def test_plan_with_only_v3_map_engages_v3_transform(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_V3_CORPUS,
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
+        assert "netadmin" in body["source_snmpv3_users"]
+
+    def test_plan_with_all_five_maps_applies_all(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "aruba_aoss",
+                "raw_text": self._IOSXE_V3_CORPUS,
+                "port_rename_map": {},
+                "vlan_rename_map": {10: 200},
+                "local_user_rename_map": {"admin": "netadmin-cli"},
+                "snmp_community_rename_map": {"public": "monitoring-ro"},
+                "snmpv3_user_rename_map": {
+                    "netadmin": "platform-snmpro",
+                },
+            },
+        )
+        body = resp.json()
+        # All five categories surface populated responses.
+        assert body["local_user_renames"] == {"admin": "netadmin-cli"}
+        assert body["snmp_community_renames"] == {"public": "monitoring-ro"}
+        assert body["snmpv3_user_renames"] == {
+            "netadmin": "platform-snmpro",
+        }
         vrn = body["vlan_renames"]
         assert ("10" in vrn and vrn["10"] == 200) or (
             10 in vrn and vrn[10] == 200

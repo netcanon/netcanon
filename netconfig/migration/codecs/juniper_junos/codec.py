@@ -128,6 +128,7 @@ class JunosCodec(CodecBase):
             "/snmp/community",
             "/snmp/location",
             "/snmp/contact",
+            "/snmp/v3-user",
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
@@ -835,6 +836,51 @@ class JunosCodec(CodecBase):
                 out.append(
                     f"set snmp trap-group {group_name} targets {host}"
                 )
+            # SNMPv3 users — emit USM (auth / priv keys) lines then
+            # VACM (group binding).  Inverse mappings of
+            # _JUNOS_AUTH_MAP / _JUNOS_PRIV_MAP.  Empty auth / priv
+            # emit nothing for that half — noAuthNoPriv leaves just
+            # the VACM binding (expressible on Junos too).
+            _auth_to_junos = {
+                "md5": "authentication-md5",
+                "sha": "authentication-sha",
+                "sha224": "authentication-sha224",
+                "sha256": "authentication-sha256",
+                "sha384": "authentication-sha384",
+                "sha512": "authentication-sha512",
+            }
+            _priv_to_junos = {
+                "des": "privacy-des",
+                "3des": "privacy-3des",
+                "aes": "privacy-aes128",        # canonical "aes" → aes128
+                "aes128": "privacy-aes128",
+                "aes192": "privacy-aes192",
+                "aes256": "privacy-aes256",
+            }
+            for u in tree.snmp.v3_users:
+                if u.auth_protocol and u.auth_protocol in _auth_to_junos:
+                    auth_cmd = _auth_to_junos[u.auth_protocol]
+                    out.append(
+                        f"set snmp v3 usm local-engine user "
+                        f"{_quote_if_needed(u.name)} {auth_cmd} "
+                        f"authentication-key "
+                        f"{_quote_always(u.auth_passphrase)}"
+                    )
+                if u.priv_protocol and u.priv_protocol in _priv_to_junos:
+                    priv_cmd = _priv_to_junos[u.priv_protocol]
+                    out.append(
+                        f"set snmp v3 usm local-engine user "
+                        f"{_quote_if_needed(u.name)} {priv_cmd} "
+                        f"privacy-key "
+                        f"{_quote_always(u.priv_passphrase)}"
+                    )
+                if u.group:
+                    out.append(
+                        f"set snmp v3 vacm security-to-group "
+                        f"security-model usm security-name "
+                        f"{_quote_if_needed(u.name)} group "
+                        f"{_quote_if_needed(u.group)}"
+                    )
 
         # --- apply-groups / group-content (GAP 9b) ---
         # Emit the full `set groups <G> <body...>` blocks for
@@ -1640,6 +1686,13 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
     """``set snmp community <name> authorization read-only|read-write``
     ``set snmp location "<loc>"``
     ``set snmp contact "<contact>"``
+    ``set snmp trap-group <name> targets <ip>``
+    ``set snmp v3 usm local-engine user <name> authentication-<proto>
+        authentication-key "<key>"``
+    ``set snmp v3 usm local-engine user <name> privacy-<proto>
+        privacy-key "<key>"``
+    ``set snmp v3 vacm security-to-group security-model usm
+        security-name <name> group <group>``
     """
     if not tokens:
         return
@@ -1661,6 +1714,123 @@ def _apply_snmp(tokens: list[str], intent: CanonicalIntent) -> None:
     ):
         # ``set snmp trap-group <name> targets <ip>``
         intent.snmp.trap_hosts.append(tokens[3])
+    elif head == "v3":
+        _apply_snmp_v3(tokens[1:], intent)
+
+
+# Junos authentication-* → canonical auth_protocol short form.
+_JUNOS_AUTH_MAP = {
+    "authentication-md5": "md5",
+    "authentication-sha": "sha",
+    "authentication-sha224": "sha224",
+    "authentication-sha256": "sha256",
+    "authentication-sha384": "sha384",
+    "authentication-sha512": "sha512",
+    "authentication-none": "",
+}
+# Junos privacy-* → canonical priv_protocol short form.
+_JUNOS_PRIV_MAP = {
+    "privacy-des": "des",
+    "privacy-3des": "3des",
+    "privacy-aes128": "aes128",
+    "privacy-aes192": "aes192",
+    "privacy-aes256": "aes256",
+    "privacy-none": "",
+}
+
+
+def _get_or_create_v3_user(
+    snmp: CanonicalSNMP,
+    name: str,
+) -> Any:
+    """Look up the SNMPv3 user record by name, creating a stub if
+    absent.  Merging lets the user's auth key, priv key, and VACM
+    group binding arrive in any order (``set snmp v3`` lines can be
+    scattered across the config).
+    """
+    from ...canonical.intent import CanonicalSNMPv3User
+    for u in snmp.v3_users:
+        if u.name == name:
+            return u
+    u = CanonicalSNMPv3User(name=name)
+    snmp.v3_users.append(u)
+    return u
+
+
+def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
+    """Handle ``set snmp v3 ...`` tails.
+
+    Two families:
+
+    * ``usm local-engine user <name> authentication-<proto>
+      authentication-key "<key>"`` and
+      ``usm local-engine user <name> privacy-<proto>
+      privacy-key "<key>"`` — populate auth / priv fields.
+    * ``vacm security-to-group security-model usm security-name
+      <name> group <group>`` — populate group on the matching user.
+
+    Malformed / unrecognised sub-paths are silently ignored — other
+    ``set snmp v3`` lines (trap-target, notify-view, access) are
+    Tier-3 and out of this codec's scope.
+    """
+    if intent.snmp is None:
+        intent.snmp = CanonicalSNMP()
+    # ``usm local-engine user <name> ...``
+    if (
+        len(tokens) >= 6
+        and tokens[0] == "usm"
+        and tokens[1] == "local-engine"
+        and tokens[2] == "user"
+    ):
+        name = tokens[3]
+        attr = tokens[4]
+        value = tokens[5] if len(tokens) >= 6 else ""
+        # Drop the trailing ``authentication-key`` / ``privacy-key``
+        # sentinel if present (``authentication-sha
+        # authentication-key "<hash>"`` lands as 6 tokens).
+        if attr in _JUNOS_AUTH_MAP and len(tokens) >= 7:
+            key_tok = tokens[5]
+            key_val = tokens[6]
+            if key_tok == "authentication-key":
+                u = _get_or_create_v3_user(intent.snmp, name)
+                u.auth_protocol = _JUNOS_AUTH_MAP[attr]
+                u.auth_passphrase = key_val
+                return
+        if attr in _JUNOS_PRIV_MAP and len(tokens) >= 7:
+            key_tok = tokens[5]
+            key_val = tokens[6]
+            if key_tok == "privacy-key":
+                u = _get_or_create_v3_user(intent.snmp, name)
+                u.priv_protocol = _JUNOS_PRIV_MAP[attr]
+                u.priv_passphrase = key_val
+                return
+        # Bare ``authentication-none`` / ``privacy-none`` (no key
+        # follows) — clears the corresponding field.
+        if attr == "authentication-none":
+            u = _get_or_create_v3_user(intent.snmp, name)
+            u.auth_protocol = ""
+            u.auth_passphrase = ""
+            return
+        if attr == "privacy-none":
+            u = _get_or_create_v3_user(intent.snmp, name)
+            u.priv_protocol = ""
+            u.priv_passphrase = ""
+            return
+    # ``vacm security-to-group security-model usm security-name <n>
+    # group <g>``
+    if (
+        len(tokens) >= 8
+        and tokens[0] == "vacm"
+        and tokens[1] == "security-to-group"
+        and tokens[2] == "security-model"
+        and tokens[3] == "usm"
+        and tokens[4] == "security-name"
+        and tokens[6] == "group"
+    ):
+        name = tokens[5]
+        group = tokens[7]
+        u = _get_or_create_v3_user(intent.snmp, name)
+        u.group = group
 
 
 # ---------------------------------------------------------------------------

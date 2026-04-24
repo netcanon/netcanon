@@ -136,6 +136,7 @@ class MikroTikRouterOSCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            "/snmp/v3-user",
         ],
         lossy=[
             LossyPath(
@@ -459,6 +460,7 @@ class MikroTikRouterOSCodec(CodecBase):
         if tree.snmp is not None and (
             tree.snmp.community or tree.snmp.location
             or tree.snmp.contact or tree.snmp.trap_hosts
+            or tree.snmp.v3_users
         ):
             lines.append("/snmp")
             parts = ["set", "enabled=yes"]
@@ -472,11 +474,58 @@ class MikroTikRouterOSCodec(CodecBase):
                 )
             lines.append(" ".join(parts))
             lines.append("")
-            if tree.snmp.community:
+            if tree.snmp.community or tree.snmp.v3_users:
                 lines.append("/snmp community")
-                lines.append(
-                    f"set [ find default=yes ] name={tree.snmp.community}"
-                )
+                if tree.snmp.community:
+                    lines.append(
+                        f"set [ find default=yes ] name={tree.snmp.community}"
+                    )
+                # Canonical auth/priv → RouterOS names.  RouterOS
+                # only accepts ``MD5`` / ``SHA1`` / ``SHA256`` /
+                # ``SHA512`` for auth and ``DES`` / ``AES`` (+
+                # CCM/CFB variants) for priv; ``sha`` canonical maps
+                # to ``SHA1`` on wire.  aes128 / aes192 / aes256
+                # canonical → aes-128-cfb / aes-192-cfb /
+                # aes-256-cfb (the default CFB variant).
+                _CAN_TO_MT_AUTH = {
+                    "md5": "MD5", "sha": "SHA1", "sha224": "SHA256",
+                    "sha256": "SHA256", "sha384": "SHA512",
+                    "sha512": "SHA512",
+                }
+                _CAN_TO_MT_PRIV = {
+                    "des": "DES", "aes": "AES",
+                    "aes128": "aes-128-cfb",
+                    "aes192": "aes-192-cfb",
+                    "aes256": "aes-256-cfb",
+                    "3des": "DES",      # RouterOS doesn't speak 3DES — fallback
+                }
+                for u in tree.snmp.v3_users:
+                    add_parts = ["add", f"name={u.name}"]
+                    if u.auth_protocol:
+                        mt_auth = _CAN_TO_MT_AUTH.get(
+                            u.auth_protocol, "SHA1",
+                        )
+                        add_parts.append(
+                            f"authentication-protocol={mt_auth}"
+                        )
+                        if u.auth_passphrase:
+                            add_parts.append(
+                                f'authentication-password='
+                                f'"{_escape(u.auth_passphrase)}"'
+                            )
+                    if u.priv_protocol:
+                        mt_priv = _CAN_TO_MT_PRIV.get(
+                            u.priv_protocol, "AES",
+                        )
+                        add_parts.append(
+                            f"encryption-protocol={mt_priv}"
+                        )
+                        if u.priv_passphrase:
+                            add_parts.append(
+                                f'encryption-password='
+                                f'"{_escape(u.priv_passphrase)}"'
+                            )
+                    lines.append(" ".join(add_parts))
                 lines.append("")
 
         # ----- /radius (Tier 2 RADIUS) -----
@@ -1187,14 +1236,42 @@ _CANONICAL_PRIVILEGE_TO_ROUTEROS_GROUP = {
 }
 
 
+#: RouterOS auth-protocol → canonical auth_protocol short form.
+_MT_AUTH_MAP = {
+    "md5": "md5",
+    "sha1": "sha",
+    "sha256": "sha256",
+    "sha512": "sha512",
+}
+#: RouterOS encryption-protocol → canonical priv_protocol short form.
+_MT_PRIV_MAP = {
+    "des": "des",
+    "aes": "aes128",
+    "aes-128-ccm": "aes128",
+    "aes-128-cfb": "aes128",
+    "aes-192-cfb": "aes192",
+    "aes-256-cfb": "aes256",
+}
+
+
 def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
     """Parse ``/snmp community set [ find default=yes ] name=X``
     + ``add name=Y`` lines.
+
+    RouterOS overloads the ``/snmp community`` section to carry BOTH
+    v1/v2c communities AND v3 USM users — disambiguated by the
+    presence of ``authentication-protocol=`` on the line:
+
+    * No auth-proto → v1/v2c community (populates
+      :attr:`CanonicalSNMP.community`; first wins).
+    * Has auth-proto → SNMPv3 user (populates
+      :attr:`CanonicalSNMP.v3_users`).
 
     RouterOS supports multiple community entries; we record the first
     one as the canonical community (CanonicalSNMP has a single
     community field — full multi-community is a Tier 2.5 refinement).
     """
+    from ...canonical.intent import CanonicalSNMPv3User  # lazy local import
     for line in lines:
         kv = _parse_kv(line)
         name = kv.get("name")
@@ -1202,8 +1279,25 @@ def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
             continue
         if intent.snmp is None:
             intent.snmp = CanonicalSNMP()
-        if not intent.snmp.community:
-            intent.snmp.community = name
+        auth_proto_raw = kv.get("authentication-protocol", "")
+        priv_proto_raw = kv.get("encryption-protocol", "")
+        if auth_proto_raw or priv_proto_raw:
+            # Has crypto knobs → v3 user record.
+            intent.snmp.v3_users.append(CanonicalSNMPv3User(
+                name=name,
+                auth_protocol=_MT_AUTH_MAP.get(
+                    auth_proto_raw.lower(), auth_proto_raw.lower(),
+                ),
+                auth_passphrase=kv.get("authentication-password", ""),
+                priv_protocol=_MT_PRIV_MAP.get(
+                    priv_proto_raw.lower(), priv_proto_raw.lower(),
+                ),
+                priv_passphrase=kv.get("encryption-password", ""),
+            ))
+        else:
+            # Plain v1/v2c community.
+            if not intent.snmp.community:
+                intent.snmp.community = name
 
 
 def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:

@@ -111,6 +111,14 @@
       _renameSnmpCommunityMap,
       _lastJob && _lastJob.snmp_community_renames,
     );
+    // SNMPv3 USM user rename preview — list-oriented, same
+    // whole-word-substitution as local_users.  Drops (user removal)
+    // require a server re-render since the whole user stanza
+    // disappears on render.
+    applySubstitutionPreview(
+      _renameSnmpV3UserMap,
+      _lastJob && _lastJob.snmpv3_user_renames,
+    );
 
     preview.textContent = text;
   }
@@ -276,6 +284,21 @@
       snmpAutoDrops,
     );
 
+    // SNMPv3 user totals — list-oriented, uses same counters as
+    // local_users.  Server does first-wins merge on collision
+    // (auth/priv keys never combined), so collisions here are
+    // informational-only and don't feed the Apply-disable gate
+    // (matching the local_users semantic).
+    var snmpv3Overrides = 0, snmpv3Drops = 0;
+    if (typeof _renameSnmpV3UserMap === 'object' && _renameSnmpV3UserMap) {
+      Object.keys(_renameSnmpV3UserMap).forEach(function(k) {
+        if (_renameSnmpV3UserMap[k] === null) snmpv3Drops += 1;
+        else snmpv3Overrides += 1;
+      });
+    }
+    var snmpv3Auto = (_lastJob && _lastJob.snmpv3_user_renames)
+      ? Object.keys(_lastJob.snmpv3_user_renames).length : 0;
+
     var html = auto + ' auto';
     if (overrides) html += ' / ' + overrides + ' override' + (overrides > 1 ? 's' : '');
     if (drops) html += ' / <span class="mig-rename-summary-drop">'
@@ -323,6 +346,19 @@
       if (snmpOverrides) html += ' / ' + snmpOverrides + ' override';
       if (snmpDrops) html += ' / <span class="mig-rename-summary-drop">'
         + snmpDrops + ' clear</span>';
+      html += '</span>';
+    }
+    // SNMPv3 sub-summary — list-oriented, mirrors the Users sub-
+    // summary shape.  Drops are full user removals (stanza vanishes
+    // from render output).
+    if (snmpv3Auto || snmpv3Overrides || snmpv3Drops) {
+      html += ' &middot; <span data-testid="migrate-rename-summary-snmpv3">'
+        + 'SNMPv3: ' + snmpv3Auto + ' auto';
+      if (snmpv3Overrides) html += ' / ' + snmpv3Overrides + ' override'
+        + (snmpv3Overrides > 1 ? 's' : '');
+      if (snmpv3Drops) html += ' / <span class="mig-rename-summary-drop">'
+        + snmpv3Drops + ' drop' + (snmpv3Drops > 1 ? 's' : '')
+        + '</span>';
       html += '</span>';
     }
     summ.innerHTML = html;

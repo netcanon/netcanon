@@ -49,6 +49,17 @@ Schema extensions (ship-before-wire):
     :class:`CapabilityMatrix` lists them under ``unsupported`` until
     wired up.  This lets the UI's Unsupported-path banner surface the
     gap even before any codec knows how to parse the bytes.
+
+Schema extensions (wire-through in same commit as schema):
+    :class:`CanonicalSNMPv3User` + :attr:`CanonicalSNMP.v3_users`
+    — the SNMPv3 User-based Security Model surface.  Wired on every
+    bidirectional codec that has a documented v3 grammar (Arista
+    EOS, Aruba AOS-S, FortiGate, MikroTik RouterOS, Juniper Junos)
+    as well as the Cisco IOS-XE CLI parse-only codec.  OPNsense's
+    SNMPv3 story is Tier-3 (raw ``snmpd.conf`` snippet) and not in
+    scope; its capability matrix lists ``/snmp/v3-user`` as
+    unsupported.  Rename surface (fifth per-pane category) lives
+    in :mod:`netconfig.migration.canonical.snmpv3_user_names`.
 """
 
 from __future__ import annotations
@@ -150,13 +161,112 @@ class CanonicalDHCPPool(BaseModel):
     domain_name: str = ""
 
 
+class CanonicalSNMPv3User(BaseModel):
+    """An SNMPv3 User-based Security Model (USM) user.
+
+    The v3 identity unit — where SNMPv1/v2c identity is a shared
+    community string, v3 identity is a named user with per-user
+    authentication + privacy keys.  Vendors diverge on grammar but
+    converge on the same USM surface:
+
+    * Cisco IOS / IOS-XE CLI / Arista EOS:
+      ``snmp-server user <name> <group> v3 auth {md5|sha} <pass>
+      priv {des|aes {128|192|256} | 3des} <pass>``
+    * Aruba AOS-S:
+      ``snmpv3 user <name> auth {md5|sha} <pass> priv {aes|des}
+      <pass>`` (+ ``snmpv3 group <group> user <name> sec-model ver3``).
+    * FortiGate:
+      ``config system snmp user / edit <name> / set security-level
+      {no-auth-no-priv|auth-no-priv|auth-priv} / set auth-proto
+      {md5|sha|sha224|sha256|sha384|sha512} / set auth-pwd ENC <hash>
+      / set priv-proto {aes|aes256|aes256cisco|des} / set priv-pwd
+      ENC <hash>``
+    * MikroTik RouterOS:
+      ``/snmp community / add name=<name> authentication-protocol=
+      {MD5|SHA1} authentication-password="<pass>" encryption-protocol=
+      {AES|DES} encryption-password="<pass>"`` (RouterOS overloads
+      its ``/snmp community`` section for both v1/v2c and v3).
+    * Juniper Junos:
+      ``set snmp v3 usm local-engine user <name> authentication-
+      {md5|sha|sha224|sha256} authentication-key "<key>"`` +
+      ``set snmp v3 usm local-engine user <name> privacy-{des|aes128|
+      aes192|aes256} privacy-key "<key>"`` +
+      ``set snmp v3 vacm security-to-group security-model usm
+      security-name <name> group <group>``.
+
+    Only the cross-vendor-stable surface lives on this model.
+    Per-vendor extras (Cisco views, Junos VACM access rules,
+    FortiGate trap/query ports) belong in the codec's render-path
+    logic or in ``raw_sections`` if they carry no cross-vendor
+    semantic.
+
+    Password handling mirrors :class:`CanonicalLocalUser.hashed_password`:
+    codecs preserve whatever opaque hash / encrypted blob the source
+    emitted and pass it through verbatim to the target.  Same-vendor
+    round-trip is lossless; cross-vendor migration typically
+    requires re-keying on the target device (hashes are salted with
+    vendor-specific constants).  Plaintext passwords from the source
+    are NEVER accepted — operators inject secrets via their
+    credentials manager, not via the migration tree.
+
+    Attributes:
+        name: USM securityName / username.  Opaque identity string.
+        group: SNMP group the user belongs to for VACM access
+            control.  Optional; Aruba and Cisco require a group,
+            Junos carries it via ``security-to-group``, RouterOS
+            doesn't model groups.  Empty string = "no group"
+            (codec renders a default group or omits the VACM line).
+        auth_protocol: Authentication hash algorithm.  Normalised
+            to lower-case short form: ``""`` (no auth), ``"md5"``,
+            ``"sha"`` (= SHA-1), ``"sha224"``, ``"sha256"``,
+            ``"sha384"``, ``"sha512"``.  Empty = no-auth-no-priv.
+        auth_passphrase: Opaque pre-hashed / encrypted
+            authentication key from the source config.  Never
+            plaintext.
+        priv_protocol: Privacy cipher.  Normalised to lower-case
+            short form: ``""`` (no priv), ``"des"``, ``"3des"``,
+            ``"aes"`` (= AES-128 default), ``"aes128"``,
+            ``"aes192"``, ``"aes256"``.  Empty with a non-empty
+            auth_protocol = auth-no-priv.
+        priv_passphrase: Opaque pre-hashed / encrypted privacy
+            key.  Never plaintext.
+        engine_id: Optional SNMPv3 engineID (hex string).  Most
+            vendors derive the engineID from the device; operators
+            override only in specialised environments.  Empty =
+            vendor-default engineID.
+    """
+
+    name: str
+    group: str = ""
+    auth_protocol: str = ""                         # "" | "md5" | "sha" | ...
+    auth_passphrase: str = ""                       # opaque hash, never plaintext
+    priv_protocol: str = ""                         # "" | "des" | "aes" | ...
+    priv_passphrase: str = ""                       # opaque hash, never plaintext
+    engine_id: str = ""                             # hex; empty = vendor default
+
+
 class CanonicalSNMP(BaseModel):
-    """SNMP configuration."""
+    """SNMP configuration.
+
+    Models both SNMPv1/v2c (the ``community`` string surface) and
+    SNMPv3 (the :attr:`v3_users` USM list).  The two are
+    independent — a device can carry v2c community-string
+    configuration alongside one or more v3 users — and codecs
+    parse / render them independently.
+    """
 
     community: str = ""
     location: str = ""
     contact: str = ""
     trap_hosts: list[str] = Field(default_factory=list)
+    #: SNMPv3 User-based Security Model users.  Empty list means the
+    #: source config had no v3 users (pure v1/v2c).  See
+    #: :class:`CanonicalSNMPv3User` for the per-user schema.  Rename
+    #: surface lives in
+    #: :mod:`netconfig.migration.canonical.snmpv3_user_names` (fifth
+    #: per-pane category after ports / vlans / local_users /
+    #: snmp_community).
+    v3_users: list[CanonicalSNMPv3User] = Field(default_factory=list)
 
 
 class CanonicalLAG(BaseModel):

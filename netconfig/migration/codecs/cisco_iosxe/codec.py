@@ -136,6 +136,16 @@ class CiscoIOSXECodec(CodecBase):
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
 
+    # The NETCONF/OpenConfig codec is a Phase-0.5 stub — no SNMPv3
+    # wire-up (would require Cisco-IOS-XE-snmp native YANG bridging
+    # that hasn't landed).  Declaring ``"snmpv3"`` here surfaces the
+    # amber pane-compat banner when operators select this codec as
+    # target, matching the capability-matrix ``/snmp/v3-user``
+    # ``Unsupported`` declaration below.
+    unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset({
+        "snmpv3",
+    })
+
     #: Declared capability matrix.  Paths are canonical schema paths
     #: matching what :meth:`iter_xpaths` yields on a ``CanonicalIntent``
     #: tree.  (After the canonical-bridge migration the NETCONF codec
@@ -184,6 +194,17 @@ class CiscoIOSXECodec(CodecBase):
                 reason=(
                     "Phase 0.5 covers IPv4 only — IPv6 support is queued "
                     "for Phase 1 once BGP/OSPF models land."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user",
+                reason=(
+                    "The NETCONF/OpenConfig codec is a stub (Phase 0.5 "
+                    "experimental) — SNMPv3 USM wire-up requires the "
+                    "Cisco-IOS-XE-snmp native YANG module, not covered "
+                    "today.  The ``cisco_iosxe_cli`` sibling codec "
+                    "parses v3 users from ``show running-config`` "
+                    "output instead."
                 ),
             ),
         ],

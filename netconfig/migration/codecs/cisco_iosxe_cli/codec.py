@@ -126,6 +126,7 @@ class CiscoIOSXECLICodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/trap-host",
+            "/snmp/v3-user",
         ],
         lossy=[
             LossyPath(
@@ -881,6 +882,8 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/snmp/contact"
         for _ in intent.snmp.trap_hosts:
             yield "/snmp/trap-host"
+        for _ in intent.snmp.v3_users:
+            yield "/snmp/v3-user"
 
 
 # -- SNMP parse helpers (shared via re-export for sibling codecs if needed)
@@ -896,6 +899,24 @@ _SNMP_CONTACT_RE = re.compile(
 )
 _SNMP_HOST_RE = re.compile(
     r'^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)',
+    re.IGNORECASE | re.MULTILINE,
+)
+# SNMPv3 user line.  Canonical shape on Cisco IOS-XE CLI:
+#
+#   snmp-server user <name> <group> v3 [auth {md5|sha} <pass>]
+#                                     [priv {des|3des|aes {128|192|256}} <pass>]
+#
+# The ``auth`` and ``priv`` clauses are both optional (noAuthNoPriv
+# is expressible).  ``priv aes 128/192/256`` uses two tokens for the
+# cipher; every other cipher name is a single token.  The pre-hashed
+# form ``auth sha <encrypted_hex> encrypted`` is captured verbatim via
+# lazy greedy match — the operator's ``encrypted`` trailer lands in
+# the passphrase bucket and round-trips back out on render.
+_SNMP_V3_USER_RE = re.compile(
+    r"^snmp-server\s+user\s+(\S+)\s+(\S+)\s+v3"
+    r"(?:\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+))?"
+    r"(?:\s+priv\s+(des|3des|aes)(?:\s+(128|192|256))?\s+(\S+))?"
+    r"\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -1159,8 +1180,13 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
     location_m = _SNMP_LOCATION_RE.search(raw)
     contact_m = _SNMP_CONTACT_RE.search(raw)
     hosts = _SNMP_HOST_RE.findall(raw)
-    if not (community_m or location_m or contact_m or hosts):
+    # SNMPv3 users — each match is (name, group, auth_proto, auth_pass,
+    # priv_proto, priv_keybits, priv_pass).  Last three are empty when
+    # the user is auth-no-priv; middle two empty when no-auth-no-priv.
+    v3_matches = list(_SNMP_V3_USER_RE.finditer(raw))
+    if not (community_m or location_m or contact_m or hosts or v3_matches):
         return None
+    from ...canonical.intent import CanonicalSNMPv3User  # lazy local import
     snmp = CanonicalSNMP()
     if community_m:
         snmp.community = community_m.group(1).strip()
@@ -1169,4 +1195,24 @@ def _parse_snmp(raw: str) -> CanonicalSNMP | None:
     if contact_m:
         snmp.contact = contact_m.group(1).strip().strip('"')
     snmp.trap_hosts = list(hosts)
+    for m in v3_matches:
+        name, group, auth_p, auth_pw, priv_p, priv_bits, priv_pw = m.groups()
+        # Cisco spells ``aes 128`` / ``aes 192`` / ``aes 256`` as two
+        # tokens; canonicalise to the single-token form.  ``3des`` /
+        # ``des`` are single tokens; preserved.  Missing priv_bits
+        # with ``aes`` falls back to aes128 (Cisco default).
+        if priv_p and priv_p.lower() == "aes":
+            priv_p_norm = f"aes{priv_bits}" if priv_bits else "aes128"
+        elif priv_p:
+            priv_p_norm = priv_p.lower()
+        else:
+            priv_p_norm = ""
+        snmp.v3_users.append(CanonicalSNMPv3User(
+            name=name,
+            group=group,
+            auth_protocol=(auth_p or "").lower(),
+            auth_passphrase=auth_pw or "",
+            priv_protocol=priv_p_norm,
+            priv_passphrase=priv_pw or "",
+        ))
     return snmp
