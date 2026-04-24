@@ -737,6 +737,25 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] PER-UNIT 802.1Q VLAN TAGGING ON JUNOS SUB-INTERFACES (GAP 7):
+    # Parse: `set interfaces <parent> unit <N> vlan-id <tag>` now
+    # populates CanonicalInterface.access_vlan on the sub-interface
+    # — semantically equivalent to Cisco's `encapsulation dot1Q N`.
+    # Does NOT set switchport_mode (Junos sub-interfaces are L3 on
+    # a tagged VLAN, not L2 access ports).
+    #
+    # Render: sub-interface emit path now emits
+    # `set interfaces <parent> unit <N> vlan-id <tag>` when
+    # access_vlan is populated.  A sub-interface carrying only a
+    # vlan-id (no IP, no description) still emits content; the
+    # bare-placeholder line is suppressed.
+    #
+    # unit 0 vlan-id N stores on the parent (uncommon but legal
+    # Junos, consistent with v1's unit-0-collapses-into-parent).
+    #
+    # Covered by TestPerUnitVlanTagging in test_juniper_junos.py
+    # (7 tests).
+
 [SHIPPED] CANONICAL VRF / ROUTING-INSTANCE SCHEMA (GAP 5, ship-before-wire):
     # Adds CanonicalRoutingInstance + CanonicalInterface.vrf field +
     # top-level routing_instances[] list on CanonicalIntent.

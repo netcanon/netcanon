@@ -303,6 +303,10 @@ class JunosCodec(CodecBase):
                 enabled=state.get("enabled", True),
                 description=state.get("description", ""),
                 interface_type=_infer_iface_type(name),
+                # GAP 7: per-unit 802.1Q tag surfaces on
+                # CanonicalInterface.access_vlan.  None = untagged
+                # (the common case for unit 0) or not-specified.
+                access_vlan=state.get("access_vlan"),
             )
             for ip, prefix in state.get("ipv4", []):
                 iface.ipv4_addresses.append(
@@ -406,6 +410,14 @@ class JunosCodec(CodecBase):
             parent, unit_num = _split_subiface_name(name)
             if parent is not None and unit_num is not None:
                 # Sub-interface — emit under parent / unit <N>.
+                # GAP 7: include access_vlan in the "renderable"
+                # predicate so a bare sub-interface carrying only a
+                # vlan-id (no description / no IP) still emits lines
+                # and round-trips.
+                sub_has_renderable = (
+                    has_renderable_attr
+                    or iface.access_vlan is not None
+                )
                 if iface.description:
                     out.append(
                         f"set interfaces {parent} unit {unit_num} "
@@ -415,13 +427,19 @@ class JunosCodec(CodecBase):
                     out.append(
                         f"set interfaces {parent} unit {unit_num} disable"
                     )
+                # GAP 7: per-unit 802.1Q tag.
+                if iface.access_vlan is not None:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num} "
+                        f"vlan-id {iface.access_vlan}"
+                    )
                 for addr in iface.ipv4_addresses:
                     out.append(
                         f"set interfaces {parent} unit {unit_num} "
                         f"family inet address "
                         f"{addr.ip}/{addr.prefix_length}"
                     )
-                if not has_renderable_attr:
+                if not sub_has_renderable:
                     out.append(
                         f"set interfaces {parent} unit {unit_num}"
                     )
@@ -768,6 +786,17 @@ def _apply_interfaces(
         # ``unit <N> disable`` — disable on the sub-interface level.
         if len(tokens) >= 4 and tokens[3] == "disable":
             target_state["enabled"] = False
+        # GAP 7: ``unit <N> vlan-id <tag>`` — the per-unit 802.1Q tag.
+        # Semantically equivalent to Cisco ``encapsulation dot1Q N``
+        # on a sub-interface; stores as CanonicalInterface.access_vlan
+        # (same field access-mode switchports use).  Does NOT set
+        # switchport_mode — Junos sub-interfaces are L3 on a tagged
+        # VLAN, not L2 access ports.
+        if len(tokens) >= 5 and tokens[3] == "vlan-id":
+            try:
+                target_state["access_vlan"] = int(tokens[4])
+            except ValueError:
+                pass
 
 
 def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:

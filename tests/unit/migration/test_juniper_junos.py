@@ -1066,3 +1066,136 @@ class TestSubInterfaces:
             assert [(x.ip, x.prefix_length) for x in a.ipv4_addresses] == [
                 (x.ip, x.prefix_length) for x in b.ipv4_addresses
             ]
+
+
+# ---------------------------------------------------------------------------
+# GAP 7: per-unit 802.1Q VLAN tagging
+# ---------------------------------------------------------------------------
+
+
+class TestPerUnitVlanTagging:
+    """``set interfaces <parent> unit <N> vlan-id <tag>`` is Junos's
+    per-subinterface 802.1Q tag primitive — semantically equivalent to
+    Cisco's ``encapsulation dot1Q <N>`` on a subinterface.  Stores on
+    CanonicalInterface.access_vlan (the existing field access-mode
+    switchports use) without setting switchport_mode (Junos sub-
+    interfaces are L3 on a tagged VLAN, not L2 access ports).
+    """
+
+    def test_parse_vlan_id_on_unit(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.access_vlan == 100
+        # switchport_mode stays None — this is L3 on a tagged VLAN.
+        assert sub.switchport_mode is None
+
+    def test_parse_vlan_id_alone_creates_subiface(self):
+        """A unit declared only with vlan-id (no IP) still materialises
+        as a CanonicalInterface — useful for sub-interfaces that will
+        get IPs later, and round-trip stability."""
+        raw = "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.access_vlan == 100
+
+    def test_parse_vlan_id_non_integer_rejected(self):
+        """Malformed ``vlan-id abc`` silently no-ops rather than crashing."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id not-a-number\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+        )
+        intent = JunosCodec().parse(raw)
+        sub = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0.100"),
+            None,
+        )
+        assert sub is not None
+        assert sub.access_vlan is None  # bad token silently dropped
+        # Rest of the unit's config still parses.
+        assert len(sub.ipv4_addresses) == 1
+
+    def test_render_vlan_id_on_subiface(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    access_vlan=100,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.100.1", prefix_length=24,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/0 unit 100 vlan-id 100" in out
+
+    def test_render_vlan_id_alone_emits_set_line(self):
+        """Sub-interface with only access_vlan (no IP, no description)
+        still emits the vlan-id line — it IS renderable content."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0.100",
+                    access_vlan=100,
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces ge-0/0/0 unit 100 vlan-id 100" in out
+        # Must NOT also emit the bare-placeholder line (that'd be
+        # redundant).
+        assert "set interfaces ge-0/0/0 unit 100\n" not in out
+
+    def test_vlan_id_roundtrip(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.1.100.1/24\n"
+            "set interfaces ge-0/0/0 unit 200 vlan-id 200\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        sub1_first = next(
+            i for i in first.interfaces if i.name == "ge-0/0/0.100"
+        )
+        sub1_second = next(
+            i for i in second.interfaces if i.name == "ge-0/0/0.100"
+        )
+        sub2_second = next(
+            i for i in second.interfaces if i.name == "ge-0/0/0.200"
+        )
+        assert sub1_first.access_vlan == sub1_second.access_vlan == 100
+        assert sub2_second.access_vlan == 200
+
+    def test_unit_0_vlan_id_collapses_into_parent(self):
+        """``unit 0 vlan-id N`` is uncommon but legal Junos — stores
+        on the parent interface's access_vlan (unit 0 collapses into
+        parent per the v1 convention)."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 vlan-id 42\n"
+        )
+        intent = JunosCodec().parse(raw)
+        parent = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0"),
+            None,
+        )
+        assert parent is not None
+        assert parent.access_vlan == 42

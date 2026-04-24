@@ -7,6 +7,37 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 7 — per-unit 802.1Q VLAN tagging on Junos sub-interfaces)
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+  handles `set interfaces <parent> unit <N> vlan-id <tag>`,
+  populating :attr:`CanonicalInterface.access_vlan` on the
+  sub-interface.  Semantically equivalent to Cisco's
+  ``encapsulation dot1Q <N>`` — stores on the existing
+  ``access_vlan`` field without setting ``switchport_mode``
+  (Junos sub-interfaces are L3 on a tagged VLAN, not L2 access
+  ports).  Malformed ``vlan-id <garbage>`` silently no-ops
+  rather than crashing parse.
+- Render-side: sub-interface emit path now includes
+  ``set interfaces <parent> unit <N> vlan-id <tag>`` when
+  ``access_vlan`` is populated.  A sub-interface carrying only
+  ``access_vlan`` (no IP, no description) is now considered
+  "renderable" — the vlan-id line IS the content; the bare
+  placeholder line is suppressed to avoid redundancy.
+- ``unit 0 vlan-id <N>`` (uncommon but legal) stores on the
+  PARENT interface's ``access_vlan`` — consistent with the v1
+  unit-0-collapses-into-parent convention.
+
+### Tests (GAP 7)
+
+- ``tests/unit/migration/test_juniper_junos.py::TestPerUnitVlanTagging``
+  — 7 tests covering vlan-id parse, vlan-id-alone sub-interface
+  materialisation, malformed tag silent no-op, render emits
+  native ``<parent> unit <N> vlan-id <tag>`` grammar,
+  vlan-id-alone sub-interface emits content line (not placeholder),
+  parse → render → parse round-trip stability, and unit-0 vlan-id
+  collapses into parent.
+
 ### Added (GAP 5 — canonical VRF / routing-instance schema [ship-before-wire])
 
 - `CanonicalRoutingInstance` model in
