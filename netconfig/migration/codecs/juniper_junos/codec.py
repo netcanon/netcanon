@@ -324,6 +324,25 @@ class JunosCodec(CodecBase):
         for tokens in top_level_lines:
             _dispatch_set(tokens, intent, iface_state)
 
+        # GAP 9b: preserve both the apply-groups STATEMENT and the
+        # GROUP CONTENT so render can re-emit `set groups <G> ...`
+        # + `set apply-groups <G>` blocks — the operator-facing
+        # round-trip shape matches what they pasted in.  The
+        # content also flows into the canonical tree via GAP 8's
+        # two-pass, so consumers that read the tree directly still
+        # see the flattened data.  Render-time de-dup relies on
+        # each list-shaped field's _apply_* function having
+        # idempotent semantics.
+        intent.apply_groups = list(applied_groups)
+        # Only persist groups that were actually applied — orphan
+        # groups in the source get dropped (they'd never compose
+        # into the candidate config on a real Junos either).
+        intent.group_content = {
+            gname: [list(t) for t in group_lines[gname]]
+            for gname in applied_groups
+            if gname in group_lines
+        }
+
         # Materialise CanonicalInterface records from the accumulator.
         # GAP 4: sub-interfaces (unit 1+) are materialised as distinct
         # CanonicalInterface entries with compound name ``<parent>.<N>``
@@ -662,6 +681,34 @@ class JunosCodec(CodecBase):
                 out.append(
                     f"set snmp trap-group {group_name} targets {host}"
                 )
+
+        # --- apply-groups / group-content (GAP 9b) ---
+        # Emit the full `set groups <G> <body...>` blocks for
+        # operator round-trip fidelity, followed by the matching
+        # `set apply-groups <G>` statements.  Each group body
+        # contains the exact tokens we captured on parse, preserving
+        # operator-authored structure.  This produces RE-PARSED
+        # canonical trees identical to the ORIGINAL parse (thanks
+        # to idempotent list _apply_* functions) AND makes the
+        # rendered output look like hand-written Junos again.
+        if tree.group_content:
+            for gname in tree.apply_groups:
+                body = tree.group_content.get(gname)
+                if not body:
+                    continue
+                for tokens in body:
+                    # Re-quote tokens containing whitespace or shell-
+                    # special chars so the re-parser (shlex-based)
+                    # re-tokenises to the same token list.
+                    quoted = " ".join(
+                        _quote_if_needed(t) for t in tokens
+                    )
+                    out.append(
+                        f"set groups {_quote_if_needed(gname)} "
+                        f"{quoted}"
+                    )
+        for gname in tree.apply_groups:
+            out.append(f"set apply-groups {_quote_if_needed(gname)}")
 
         result = "\n".join(out)
         if result:
@@ -1110,9 +1157,13 @@ def _apply_interfaces(
                 ip_str, prefix_str = addr.split("/", 1)
                 try:
                     prefix = int(prefix_str)
-                    target_state.setdefault("ipv4", []).append(
-                        (ip_str, prefix)
-                    )
+                    existing = target_state.setdefault("ipv4", [])
+                    # De-dup: GAP 8's two-pass and GAP 9b's group-
+                    # content render both emit the same address
+                    # line; we don't want it to accumulate.
+                    pair = (ip_str, prefix)
+                    if pair not in existing:
+                        existing.append(pair)
                 except ValueError:
                     pass
         # ``unit <N> description "<desc>"`` — some configs place it here.
@@ -1329,6 +1380,15 @@ def _apply_routing_options(
             return
         if tokens[3] == "next-hop" and len(tokens) >= 5:
             gateway = tokens[4]
+            # De-dup: if GAP 8's two-pass parse or GAP 9b's group-
+            # content render replays the same route at both levels,
+            # we don't want to double up in the canonical list.
+            already = any(
+                r.destination == dest and r.gateway == gateway
+                for r in intent.static_routes
+            )
+            if already:
+                return
             intent.static_routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,

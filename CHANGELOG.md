@@ -7,6 +7,56 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 9b — Junos apply-groups statement + body preservation on render)
+
+- Two new fields on :class:`CanonicalIntent`:
+  - ``apply_groups: list[str]`` — operator-declared apply-groups
+    statements (e.g. ``set apply-groups POC_Lab``).
+  - ``group_content: dict[str, list[list[str]]]`` — per-group
+    bucket of tokenised set-line tails, preserving operator-
+    authored group bodies verbatim.  Only groups that appear in
+    ``apply_groups`` (i.e. actually composed into the candidate
+    config) get persisted; orphan groups drop.
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse
+  populates both fields from the GAP 8 two-pass buckets.  Render
+  emits `set groups <G> <body>` lines FIRST (using
+  `_quote_if_needed` per token so multi-word quoted values like
+  banner messages round-trip exactly), followed by
+  `set apply-groups <G>` statements.
+- Operator-facing benefit: paste a Junos config with
+  ``set groups POC ...`` + ``set apply-groups POC``, render it
+  back out, and the output looks like hand-written Junos again
+  (group-structure preserved) — previously v2a flattened
+  everything into top-level lines.
+- De-dup guards added alongside:
+  - `_apply_routing_options` — static routes de-dup on
+    ``(destination, gateway)`` pair.
+  - `_apply_interfaces` unit-N IPv4 address handler — de-dup on
+    ``(ip, prefix_length)`` pair.  Both prevent duplicate
+    accumulation when GAP 9b's group-content + top-level emission
+    would otherwise double-add on re-parse.
+- Scope-cap: GAP 9b preserves what the operator wrote.  It does
+  NOT synthesise groups from shared sub-configs (auto-detecting
+  that N interfaces share an MTU value and collapsing them to a
+  group) — that's a larger refactor requiring per-entity
+  source-provenance metadata; deferred.
+
+### Tests (GAP 9b)
+
+- ``tests/unit/migration/test_junos_apply_groups_rich.py::TestApplyGroupsRenderPreservation``
+  — 8 tests covering:
+  - Parse populates `apply_groups` + `group_content`
+  - Orphan group (no apply-groups) drops from persistence
+  - Group body tokens preserve exactly
+  - Render emits `set groups <G>` BEFORE `set apply-groups <G>`
+  - Full round-trip stability (parse → render → parse produces
+    identical canonical tree)
+  - Multi-word quoted body (banner message) re-quotes correctly
+    on render so tokeniser round-trips
+  - Real-fixture regression: ksator EX4550 has 22 group-body
+    lines including a banner — round-trip preserves every line
+  - Fresh `CanonicalIntent` has empty `apply_groups` + `group_content`
+
 ### Added (GAP 9a — Junos block-form (curly-brace hierarchical) parse)
 
 - `netconfig/migration/codecs/juniper_junos/codec.py` — parse now

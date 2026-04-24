@@ -364,3 +364,15 @@ class CanonicalIntent(BaseModel):
     source_vendor: str = ""         # vendor_id of the codec that produced this
     source_format: str = ""         # input_format of the codec
     source_version: str = ""        # OS version hint from the parser
+
+    # ── Vendor-provenance hints (ship-before-wire for most codecs) ──
+    # GAP 9b (Junos): preserve both the apply-groups STATEMENT and
+    # the GROUP CONTENT on parse so render emits an equivalent
+    # structure to what the operator originally wrote.  Content is
+    # flattened into the canonical tree by GAP 8's two-pass parse
+    # AND stored here as the original group-scoped set-line tails;
+    # render uses the content-bucket to emit `set groups <G> ...`
+    # and suppresses the top-level emission of the same data to
+    # avoid duplicate semantics on re-parse.
+    apply_groups: list[str] = Field(default_factory=list)
+    group_content: dict[str, list[list[str]]] = Field(default_factory=dict)

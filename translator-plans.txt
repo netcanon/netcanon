@@ -737,6 +737,41 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] JUNOS APPLY-GROUPS STATEMENT + BODY PRESERVATION (GAP 9b):
+    # Two new fields on CanonicalIntent:
+    #   apply_groups: list[str]
+    #     — operator-declared `set apply-groups <G>` statements
+    #   group_content: dict[str, list[list[str]]]
+    #     — per-group bucket of tokenised set-line tails,
+    #     preserving operator-authored group bodies verbatim
+    #
+    # Parse: populates both fields from GAP 8's two-pass buckets.
+    # Only groups that appear in apply_groups (i.e. actually
+    # composed) get persisted — orphan groups drop.
+    #
+    # Render: emits `set groups <G> <body>` lines FIRST (quoting
+    # each token with _quote_if_needed so multi-word values like
+    # banner messages round-trip), then `set apply-groups <G>`
+    # statements.  Operators who pasted a Junos config with group
+    # structure see an equivalent structure in the rendered output.
+    #
+    # De-dup guards added alongside to prevent duplicate-accumulation
+    # on re-parse (since group-content + top-level render both emit
+    # the same data):
+    #   _apply_routing_options: dedup on (destination, gateway)
+    #   _apply_interfaces unit-N IPv4 addr: dedup on (ip, prefix)
+    #
+    # What's NOT in GAP 9b (deferred to future commit):
+    #   * Synthesise groups from shared sub-configs — detecting
+    #     N interfaces share the same MTU/description and
+    #     collapsing them to a groups stanza.  Requires per-entity
+    #     source-provenance metadata on canonical records that
+    #     doesn't exist yet.
+    #
+    # Covered by TestApplyGroupsRenderPreservation in
+    # test_junos_apply_groups_rich.py (8 tests including ksator
+    # EX4550 real-fixture round-trip regression).
+
 [SHIPPED] JUNOS BLOCK-FORM PARSE (GAP 9a):
     # Converts Junos curly-brace hierarchical config to set-form
     # via a grammar-agnostic recursive-descent walker, then feeds
