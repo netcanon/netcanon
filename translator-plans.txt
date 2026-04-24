@@ -737,6 +737,43 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] RICHER JUNOS APPLY-GROUPS INHERITANCE (GAP 8):
+    # Refactors Junos parse to a full two-pass model:
+    #
+    # Pass 1 (bucket): every set-line goes into top_level_lines or
+    # group_lines[gname] based on whether it starts with `groups
+    # <gname>`.  `apply-groups <gname>` accumulates in
+    # applied_groups (first-declared wins order).
+    #
+    # Pass 2a (group apply): for each applied_group IN REVERSE
+    # apply-groups order, replay each bucketed tokens list through
+    # _dispatch_set.  Reverse iteration gives first-declared-wins
+    # for scalars (Junos's first-match composition semantics).
+    #
+    # Pass 2b (top-level apply): dispatch top_level_lines last so
+    # direct-intent scalars overwrite group inheritance.
+    #
+    # List-shaped fields (static_routes, local_users, dns_servers,
+    # ntp_servers, syslog_servers, iface ipv4_addresses) accumulate
+    # from both sources with de-dup.
+    #
+    # Before GAP 8, only `system host-name` was inherited (GAP 4
+    # narrow path).  After GAP 8 the full dispatch surface flows:
+    # system login user, system ntp/name-server/syslog, interfaces,
+    # snmp community, routing-options static, routing-instances,
+    # vlans — all populate canonical tree via apply-groups.
+    #
+    # Also added top-level parse for `set system domain-name /
+    # name-server / ntp server [prefer] / syslog host`, which
+    # appear at top level in some configs.  Render emits the
+    # corresponding set-lines when canonical data is present.
+    #
+    # Covered by test_junos_apply_groups_rich.py (16 tests) +
+    # real-capture regression (ksator QFX5100 + EX4550 now
+    # populate hostname, user, SNMP, static routes, NTP, DNS,
+    # syslog, and vme management interface — all previously empty
+    # because everything lived under `set groups POC_Lab`).
+
 [SHIPPED] ARISTA + JUNOS VXLAN / VRF / EVPN WIRE-UP (GAP 6):
     # Parses + renders CanonicalVxlan (VLAN-to-VNI mappings) +
     # CanonicalRoutingInstance (VRF declarations with RD + RTs +

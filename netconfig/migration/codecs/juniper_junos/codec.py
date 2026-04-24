@@ -239,15 +239,24 @@ class JunosCodec(CodecBase):
         # config across many lines; we collect per-iface state
         # before materialising CanonicalInterface objects.
         iface_state: dict[str, dict[str, Any]] = {}
-        # GAP 4: apply-groups host-name inheritance.  Junos allows
-        # host-name + other system scalars to live under a named
-        # ``group`` stanza; the ``apply-groups`` command composes
-        # them into the candidate config.  We collect group-scoped
-        # host-names into ``group_hostnames`` and the apply-groups
-        # list into ``applied_groups``; if ``intent.hostname`` is
-        # still empty after the main pass, walk applied_groups in
-        # order and use the first group that declared a host-name.
-        group_hostnames: dict[str, str] = {}
+        # GAP 8: two-pass parse for richer apply-groups inheritance.
+        # Junos's ``set groups <g> ...`` + ``set apply-groups <g>``
+        # grammar composes inherited config from named groups into
+        # the candidate config.  We:
+        #
+        #   1.  Bucket every set-line into ``top_level_lines`` or
+        #       ``group_lines[gname]`` based on whether it starts
+        #       with ``groups <gname>`` or not.  ``apply-groups
+        #       <gname>`` entries accumulate in ``applied_groups``.
+        #   2.  Dispatch group content first (in apply-groups order),
+        #       then dispatch top-level content.  This gives direct-
+        #       intent-wins semantics naturally: the _apply_*
+        #       functions overwrite scalars, so the top-level pass
+        #       overwrites whatever a group set.  List-shaped fields
+        #       (static_routes, local_users, interfaces) accumulate
+        #       from both — matching Junos's own composition.
+        top_level_lines: list[list[str]] = []
+        group_lines: dict[str, list[list[str]]] = {}
         applied_groups: list[str] = []
 
         for raw_line in raw.splitlines():
@@ -261,21 +270,40 @@ class JunosCodec(CodecBase):
             tokens = _tokenise_set(line[4:])
             if not tokens:
                 continue
-            _dispatch_set(
-                tokens, intent, iface_state,
-                group_hostnames=group_hostnames,
-                applied_groups=applied_groups,
-            )
+            head = tokens[0]
+            if head == "groups" and len(tokens) >= 3:
+                # ``set groups <gname> <path...>`` — bucket the path
+                # tokens (after the group name) for later replay.
+                gname = tokens[1]
+                group_lines.setdefault(gname, []).append(tokens[2:])
+                continue
+            if head == "apply-groups" and len(tokens) >= 2:
+                # ``set apply-groups <gname>`` or bracketed list.
+                for gname in tokens[1:]:
+                    if gname in ("[", "]"):
+                        continue
+                    if gname not in applied_groups:
+                        applied_groups.append(gname)
+                continue
+            top_level_lines.append(tokens)
 
-        # GAP 4: resolve apply-groups host-name if the top-level
-        # ``set system host-name`` didn't fire.  First applied-group
-        # declaring a host-name wins — matches Junos's own
-        # "first-in-apply-groups-list" evaluation order.
-        if not intent.hostname:
-            for gname in applied_groups:
-                if gname in group_hostnames:
-                    intent.hostname = group_hostnames[gname]
-                    break
+        # Pass 2a: apply group content in REVERSE apply-groups order
+        # so that the first-declared group's scalars win (matches
+        # Junos's first-match composition semantics).  Example: for
+        # ``set apply-groups A`` + ``set apply-groups B``, we apply
+        # B first then A, so if both declare ``system host-name``
+        # the value from A overwrites B — the first-declared wins.
+        # List-shaped fields (static_routes, users) accumulate from
+        # all groups regardless of order.  Any group that wasn't
+        # apply-grouped silently drops.
+        for gname in reversed(applied_groups):
+            for tokens in group_lines.get(gname, []):
+                _dispatch_set(tokens, intent, iface_state)
+        # Pass 2b: apply top-level content.  Scalars set by group
+        # content get overwritten; list-shaped fields accumulate
+        # (duplicate-add protection lives in each _apply_* function).
+        for tokens in top_level_lines:
+            _dispatch_set(tokens, intent, iface_state)
 
         # Materialise CanonicalInterface records from the accumulator.
         # GAP 4: sub-interfaces (unit 1+) are materialised as distinct
@@ -339,15 +367,17 @@ class JunosCodec(CodecBase):
 
         logger.debug(
             "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
-            "routes=%d users=%d snmp=%s groups=%d apply_groups=%d "
-            "(input=%d chars)",
+            "vxlan_vnis=%d vrfs=%d routes=%d users=%d snmp=%s "
+            "groups=%d apply_groups=%d (input=%d chars)",
             intent.hostname,
             len(intent.interfaces),
             len(intent.vlans),
+            len(intent.vxlan_vnis),
+            len(intent.routing_instances),
             len(intent.static_routes),
             len(intent.local_users),
             "yes" if intent.snmp else "no",
-            len(group_hostnames),
+            len(group_lines),
             len(applied_groups),
             len(raw),
         )
@@ -389,6 +419,14 @@ class JunosCodec(CodecBase):
         # --- system ---
         if tree.hostname:
             out.append(f"set system host-name {_quote_if_needed(tree.hostname)}")
+        if tree.domain:
+            out.append(f"set system domain-name {_quote_if_needed(tree.domain)}")
+        for dns in tree.dns_servers:
+            out.append(f"set system name-server {dns}")
+        for ntp in tree.ntp_servers:
+            out.append(f"set system ntp server {ntp}")
+        for syslog in tree.syslog_servers:
+            out.append(f"set system syslog host {syslog} any any")
 
         # --- login users ---
         for user in tree.local_users:
@@ -711,19 +749,16 @@ def _dispatch_set(
     tokens: list[str],
     intent: CanonicalIntent,
     iface_state: dict[str, dict[str, Any]],
-    *,
-    group_hostnames: dict[str, str] | None = None,
-    applied_groups: list[str] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
     Dispatches on the first 1-3 tokens to find the applier.  Unknown
     paths silently no-op (Tier-3 tolerance).
 
-    ``group_hostnames`` and ``applied_groups`` are the GAP 4
-    apply-groups accumulators; callers in the tight parse loop pass
-    both, but they're optional so legacy tests calling
-    ``_dispatch_set`` directly without them still work.
+    ``set groups`` and ``set apply-groups`` are NOT handled here —
+    the parse() two-pass structure (GAP 8) intercepts those at the
+    file-line level and replays group content through this dispatcher
+    with the group-name token stripped.
     """
     if not tokens:
         return
@@ -742,44 +777,9 @@ def _dispatch_set(
         # GAP 6: ``set routing-instances <name> ...`` populates
         # CanonicalRoutingInstance + per-interface VRF membership.
         _apply_routing_instances(tokens[1:], intent)
-    elif head == "groups":
-        if group_hostnames is not None:
-            _apply_groups_stanza(tokens[1:], group_hostnames)
-    elif head == "apply-groups":
-        if applied_groups is not None and len(tokens) >= 2:
-            # Junos allows ``set apply-groups [ g1 g2 g3 ]`` or plain
-            # ``set apply-groups g1``; shlex has already stripped the
-            # brackets — everything after the head is an entry.
-            for group_name in tokens[1:]:
-                if group_name in ("[", "]"):
-                    continue
-                if group_name not in applied_groups:
-                    applied_groups.append(group_name)
     # All other top-level paths (protocols / firewall / policy-options /
-    # routing-instances / security / forwarding-options / chassis /
-    # services) — parse-and-ignore.
-
-
-def _apply_groups_stanza(
-    tokens: list[str],
-    group_hostnames: dict[str, str],
-) -> None:
-    """Extract group-scoped settings we care about.
-
-    Currently only ``set groups <gname> system host-name <X>`` feeds
-    apply-groups inheritance.  Everything else under ``groups <gname>``
-    parses-and-ignores for now — richer inheritance (interface config,
-    protocols, SNMP) is future work.
-    """
-    if len(tokens) < 4:
-        return
-    gname = tokens[0]
-    if (
-        tokens[1] == "system"
-        and tokens[2] == "host-name"
-        and len(tokens) >= 4
-    ):
-        group_hostnames[gname] = tokens[3]
+    # security / forwarding-options / chassis / services) — parse-
+    # and-ignore.
 
 
 def _apply_system(tokens: list[str], intent: CanonicalIntent) -> None:
@@ -787,6 +787,38 @@ def _apply_system(tokens: list[str], intent: CanonicalIntent) -> None:
         return
     if tokens[0] == "host-name" and len(tokens) >= 2:
         intent.hostname = tokens[1]
+        return
+    # GAP 8: richer system-scalar inheritance exercised primarily via
+    # apply-groups on the ksator fixtures.  These stanzas also appear
+    # at top level on some configs.
+    if tokens[0] == "domain-name" and len(tokens) >= 2:
+        intent.domain = tokens[1]
+        return
+    if tokens[0] == "name-server" and len(tokens) >= 2:
+        # ``set system name-server <ip>`` — additive list.
+        if tokens[1] not in intent.dns_servers:
+            intent.dns_servers.append(tokens[1])
+        return
+    if (
+        tokens[0] == "ntp"
+        and len(tokens) >= 3
+        and tokens[1] == "server"
+    ):
+        # ``set system ntp server <ip> [prefer]`` — additive; ignore
+        # trailing ``prefer`` / ``key`` / ``version`` options.
+        server = tokens[2]
+        if server not in intent.ntp_servers:
+            intent.ntp_servers.append(server)
+        return
+    if (
+        tokens[0] == "syslog"
+        and len(tokens) >= 3
+        and tokens[1] == "host"
+    ):
+        # ``set system syslog host <ip> [any ...]`` — additive list.
+        host = tokens[2]
+        if host not in intent.syslog_servers:
+            intent.syslog_servers.append(host)
         return
     if tokens[0] == "login" and len(tokens) >= 3 and tokens[1] == "user":
         # ``set system login user <name> class <class>``

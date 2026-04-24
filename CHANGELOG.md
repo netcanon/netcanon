@@ -7,6 +7,54 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 8 — richer Junos apply-groups inheritance)
+
+- `netconfig/migration/codecs/juniper_junos/codec.py` — full
+  two-pass parse refactor.  Every `set groups <g> <path>` line is
+  now bucketed during a first pass; the dispatcher then replays
+  group content (in REVERSE apply-groups order so the first-
+  declared group wins for scalars — matches Junos's first-match
+  composition) followed by top-level content (so direct-intent
+  overwrites group inheritance).  List-shaped fields
+  (`static_routes`, `local_users`, `dns_servers`, `ntp_servers`,
+  `syslog_servers`, interface `ipv4_addresses`) accumulate from
+  both sources with de-dup.
+- Before GAP 8, only `set groups <g> system host-name X` was
+  inherited (GAP 4 narrow path).  After GAP 8 the full dispatch
+  surface flows through: `set groups <g> system login user ...`,
+  `set groups <g> system ntp server ...`, `set groups <g> system
+  name-server ...`, `set groups <g> system syslog host ...`,
+  `set groups <g> interfaces <iface> ...`, `set groups <g> snmp
+  community ...`, `set groups <g> routing-options static route
+  ...`, `set groups <g> routing-instances ...`, `set groups <g>
+  vlans ...` — all populate canonical tree via apply-groups.
+- New top-level parse surface added alongside the refactor (these
+  also appear at top level in some configs, not just under
+  groups): `set system domain-name`, `set system name-server`,
+  `set system ntp server [prefer ...]`, `set system syslog host
+  <ip> [any ...]`.
+- Render extended: `set system domain-name / name-server / ntp
+  server / syslog host` emitted when canonical tree has the
+  corresponding data.
+
+### Tests (GAP 8)
+
+- ``tests/unit/migration/test_junos_apply_groups_rich.py`` —
+  16 tests:
+  - ``TestSyntheticGroupInheritance`` (7 tests): user, static
+    route, SNMP community, NTP server, DNS name-server, syslog
+    host, interface — each declared only inside a group and
+    surfaced via apply-groups.
+  - ``TestCompositionSemantics`` (4 tests): direct-intent
+    overrides group for scalars, first-apply-group wins among
+    groups for scalars, lists accumulate from both sources,
+    unapplied group silently drops.
+  - ``TestKsatorFixturesRichInheritance`` (5 tests): real-
+    fixture regression guards asserting that QFX5100 + EX4550
+    now surface hostname, user, SNMP, static routes, NTP, DNS,
+    syslog, and the `vme` management interface — all previously
+    empty because everything lived under `set groups POC_Lab`.
+
 ### Added (GAP 6 — Arista EOS + Juniper Junos VXLAN + VRF / EVPN codec wire-up)
 
 - `netconfig/migration/codecs/arista_eos/codec.py` — parse + render
