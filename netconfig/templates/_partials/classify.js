@@ -18,7 +18,7 @@
     if (/^(Port-channel|Trk|trk|LAG|bond|lagg)\d/i.test(name)) return 'lag';
     if (/^Vlan\d|^vlan\d/.test(name)) return 'svi';
     if (/\.\d+$/.test(name)) return 'svi';  // OPN/MT dotted form
-    if (/^Loopback\d|^lo$|^loopback\d/i.test(name)) return 'loopback';
+    if (/^Loopback\d|^lo$|^lo\d|^loopback\d/i.test(name)) return 'loopback';
     if (/^(Tunnel|wg|gre|ipip|eoip|gif|ovpn)/i.test(name)) return 'tunnel';
     if (/^VirtualPortGroup|^bridge|^br-/i.test(name)) return 'virtual';
     if (/^(ssl\.|tunnel)/i.test(name)) return 'tunnel';

@@ -47,6 +47,20 @@ import pytest
 from netconfig.migration.canonical.intent import CanonicalIntent
 from netconfig.migration.codecs.base import ParseError
 
+# Side-effect imports to auto-register every codec with the registry
+# so ``get_codec(name)`` below can look them up by name.  If you add a
+# new codec package, add its import here.
+from netconfig.migration.codecs import (  # noqa: F401
+    arista_eos,
+    aruba_aoss,
+    cisco_iosxe_cli,
+    fortigate_cli,
+    juniper_junos,
+    mikrotik_routeros,
+    opnsense,
+)
+from netconfig.migration.codecs.registry import get_codec
+
 pytestmark = pytest.mark.unit
 
 
@@ -54,52 +68,42 @@ REAL_FIXTURES_ROOT = (
     Path(__file__).resolve().parents[2] / "fixtures" / "real"
 )
 
-# Directory name (vendor) -> codec class loader.  Loaders are callables
-# so we don't import every codec eagerly when only one vendor's fixtures
-# exist.
-def _cisco_iosxe_cli_codec() -> Any:
-    from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-    return CiscoIOSXECLICodec()
+#: Fixture-directory name → registered codec name.  The fixture-tree
+#: layout uses human-short labels (``fortigate`` / ``mikrotik`` /
+#: ``junos``) while the codec registry uses format-qualified names
+#: (``fortigate_cli`` / ``mikrotik_routeros`` / ``juniper_junos``)
+#: — the mapping bridges the two vocabularies.
+#:
+#: When adding a fixture directory: add a row here.  The
+#: ``test_every_fixture_dir_has_codec_mapping`` guard below fails
+#: loud if you forget.
+_DIR_TO_CODEC_NAME: dict[str, str] = {
+    "cisco_iosxe":  "cisco_iosxe_cli",
+    "aruba_aoss":   "aruba_aoss",
+    "fortigate":    "fortigate_cli",
+    "opnsense":     "opnsense",
+    "mikrotik":     "mikrotik_routeros",
+    "arista_eos":   "arista_eos",
+    "junos":        "juniper_junos",
+}
 
 
-def _aruba_aoss_codec() -> Any:
-    from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-    return ArubaAOSSCodec()
+def _codec_for_dir(vendor_dir: str) -> Any:
+    """Return a fresh codec instance for the *vendor_dir* fixture
+    directory.  Looks up the mapping + delegates to the registry.
+    Replaces the seven near-identical loader callables this module
+    previously hand-maintained.
+    """
+    codec_name = _DIR_TO_CODEC_NAME[vendor_dir]
+    return get_codec(codec_name)
 
 
-def _fortigate_codec() -> Any:
-    from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-    return FortiGateCLICodec()
-
-
-def _opnsense_codec() -> Any:
-    from netconfig.migration.codecs.opnsense import OPNsenseCodec
-    return OPNsenseCodec()
-
-
-def _mikrotik_codec() -> Any:
-    from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-    return MikroTikRouterOSCodec()
-
-
-def _arista_eos_codec() -> Any:
-    from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-    return AristaEOSCodec()
-
-
-def _junos_codec() -> Any:
-    from netconfig.migration.codecs.juniper_junos import JunosCodec
-    return JunosCodec()
-
-
-_VENDOR_TO_CODEC = {
-    "cisco_iosxe": _cisco_iosxe_cli_codec,
-    "aruba_aoss": _aruba_aoss_codec,
-    "fortigate": _fortigate_codec,
-    "opnsense": _opnsense_codec,
-    "mikrotik": _mikrotik_codec,
-    "arista_eos": _arista_eos_codec,
-    "junos": _junos_codec,
+# Legacy alias — kept because ``test_results_md.py`` imports it by
+# name.  New code should use ``_codec_for_dir`` or the registry
+# directly.
+_VENDOR_TO_CODEC: dict[str, Any] = {
+    vendor_dir: (lambda name=codec_name: get_codec(name))
+    for vendor_dir, codec_name in _DIR_TO_CODEC_NAME.items()
 }
 
 # (fixture_path, reason) pairs where we KNOW the file exercises a codec
@@ -355,4 +359,50 @@ def test_real_capture_round_trips_stable(
     assert _compare(first) == _compare(second), (
         f"{codec_key} round-trip not stable on {path.name}: "
         f"canonical representation changed after parse->render->parse"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Drift guards — fail loud on structural mismatches between the
+# fixture tree, the codec registry, and the mapping above.
+# ---------------------------------------------------------------------------
+
+
+def test_every_fixture_dir_has_codec_mapping() -> None:
+    """Every non-hidden subdirectory under ``tests/fixtures/real/``
+    must appear in ``_DIR_TO_CODEC_NAME``.  Guard against adding a
+    new fixture directory (e.g. ``tests/fixtures/real/aos_cx/``)
+    without wiring it to a codec — the old _discover_fixtures loop
+    silently skipped unmapped directories, which means unmapped
+    fixtures got zero validation coverage.
+    """
+    if not REAL_FIXTURES_ROOT.is_dir():
+        pytest.skip(f"{REAL_FIXTURES_ROOT} does not exist")
+    subdirs = [
+        d.name for d in REAL_FIXTURES_ROOT.iterdir()
+        if d.is_dir() and not d.name.startswith(".")
+    ]
+    missing = [d for d in subdirs if d not in _DIR_TO_CODEC_NAME]
+    assert not missing, (
+        f"Fixture directories with no codec mapping: {missing}.  "
+        f"Add them to ``_DIR_TO_CODEC_NAME`` at the top of this "
+        f"file, or remove the directories.  Known mappings: "
+        f"{sorted(_DIR_TO_CODEC_NAME.keys())}"
+    )
+
+
+def test_every_mapped_codec_is_registered() -> None:
+    """Every codec name referenced by ``_DIR_TO_CODEC_NAME`` must
+    exist in the registry.  Guards against typos + against removing
+    a codec package without cleaning up this dict."""
+    from netconfig.migration.codecs.registry import list_codecs
+    registered = set(list_codecs())
+    bad = [
+        (vendor_dir, codec_name)
+        for vendor_dir, codec_name in _DIR_TO_CODEC_NAME.items()
+        if codec_name not in registered
+    ]
+    assert not bad, (
+        f"Fixture-directory mappings reference unregistered codecs: "
+        f"{bad}.  Registered codecs: {sorted(registered)}"
     )
