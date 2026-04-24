@@ -737,6 +737,58 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[SHIPPED] ARISTA + JUNOS VXLAN / VRF / EVPN WIRE-UP (GAP 6):
+    # Parses + renders CanonicalVxlan (VLAN-to-VNI mappings) +
+    # CanonicalRoutingInstance (VRF declarations with RD + RTs +
+    # L3 VNI) + CanonicalInterface.vrf (per-interface VRF
+    # membership) on both arista_eos and juniper_junos codecs.
+    #
+    # Arista grammar wired:
+    #   * `vrf instance <name>` (top-level) -> CanonicalRoutingInstance
+    #   * `interface Ethernet X / vrf <name>` -> iface.vrf
+    #   * `interface Vxlan1 / vxlan vlan X vni Y` -> CanonicalVxlan
+    #   * `interface Vxlan1 / vxlan vrf X vni Y` -> ri.l3_vni
+    #   * `router bgp <asn> / vrf <name> / rd <rd>` -> ri.route_distinguisher
+    #   * `router bgp <asn> / vrf <name> / route-target both|import|export`
+    #     -> ri.rt_imports / ri.rt_exports (strips `evpn ` prefix
+    #     in `route-target import evpn <rt>` form)
+    #
+    # Junos grammar wired:
+    #   * `set vlans <name> vxlan vni <vni>` (requires prior vlan-id)
+    #     -> CanonicalVxlan
+    #   * `set routing-instances <name> instance-type vrf` + RD +
+    #     vrf-target (shared or split import/export) + interface +
+    #     `protocols evpn ip-prefix-routes vni <N>` (-> ri.l3_vni)
+    #   * Interface assignment post-pass resolves membership after
+    #     _apply_interfaces materialises the CanonicalInterface.
+    #   * Sub-interfaces with ``.0`` suffix collapse to parent in
+    #     canonical naming; render re-adds ``.0`` to keep valid
+    #     Junos grammar in set-form output.
+    #
+    # CanonicalRoutingInstance.l3_vni field added in GAP 6 (not
+    # a separate ship-before-wire step — the only users are the
+    # codecs landing in this commit).
+    #
+    # Demoted from Unsupported to Supported on both codecs:
+    #   /vxlan-vnis/vni
+    #   /routing-instances/instance
+    # /evpn-type5-routes/route remains Unsupported with updated
+    # reason — Type-5 per-prefix records aren't populated by any
+    # codec; VRF-property modelling via l3_vni is the supported
+    # path today.
+    #
+    # Arista-specific: interface Vxlan1 is NOT materialised as a
+    # CanonicalInterface record (it's a VXLAN config container,
+    # not a real interface).  The sub-commands dispatch via a
+    # sentinel; render reconstructs the stanza from the canonical
+    # data.  Also fixed: router-bgp parser now correctly handles
+    # `!` sub-stanza separators (previously reset in_bgp mid-
+    # stanza, dropping subsequent vrf blocks).
+    #
+    # Covered by tests/unit/migration/test_vxlan_evpn_wire_through.py
+    # (35 tests) + real-capture round-trip on 3 EVPN/L3VPN fixtures
+    # (arista 4.23 + junos 25.4 Type-5 + junos 25.4 L3VPN).
+
 [SHIPPED] ARISTA + JUNOS CERTIFIED PROMOTION:
     # 3 new fixtures added to close the ≥3-fixtures-from-≥2-versions
     # certified bar for both vendors:

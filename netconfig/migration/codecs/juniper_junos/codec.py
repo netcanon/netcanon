@@ -50,9 +50,11 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLocalUser,
+    CanonicalRoutingInstance,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVxlan,
 )
 from ..base import CodecBase, ParseError
 from ..registry import register
@@ -119,6 +121,7 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/config/vrf",   # GAP 6
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -128,6 +131,8 @@ class JunosCodec(CodecBase):
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
+            "/vxlan-vnis/vni",                   # GAP 6
+            "/routing-instances/instance",       # GAP 6
         ],
         lossy=[
             LossyPath(
@@ -177,35 +182,16 @@ class JunosCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
-                path="/vxlan-vnis/vni",
-                reason=(
-                    "VLAN-to-VNI mappings (`set vlans <name> vxlan "
-                    "vni <N>`) parse-and-ignore in v1.  "
-                    "CanonicalVxlan schema landed; Junos codec "
-                    "wire-up pending render-side promotion."
-                ),
-            ),
-            UnsupportedPath(
                 path="/evpn-type5-routes/route",
                 reason=(
-                    "EVPN Type-5 advertisements (`set "
-                    "routing-instances <vrf> protocols evpn ip-"
-                    "prefix-routes`) parse-and-ignore in v1.  "
-                    "CanonicalEvpnType5Route schema exists; Junos "
-                    "wire-up deferred alongside routing-instances "
-                    "support."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing-instances/instance",
-                reason=(
-                    "VRF / routing-instances (`set routing-"
-                    "instances <name> instance-type vrf` + "
-                    "`route-distinguisher` + `vrf-target` + "
-                    "`interface`) parse-and-ignore in v1.  "
-                    "CanonicalRoutingInstance + "
-                    "CanonicalInterface.vrf schema exists; Junos "
-                    "wire-up pending."
+                    "EVPN Type-5 per-prefix records "
+                    "(CanonicalEvpnType5Route) are Unsupported; "
+                    "Type-5 announcements are modelled as a VRF "
+                    "property via CanonicalRoutingInstance.l3_vni "
+                    "(GAP 6).  The ``set routing-instances <vrf> "
+                    "protocols evpn ip-prefix-routes vni <N>`` line "
+                    "populates l3_vni on the VRF; per-prefix "
+                    "records are deferred to a future commit."
                 ),
             ),
         ],
@@ -313,6 +299,43 @@ class JunosCodec(CodecBase):
                     CanonicalIPv4Address(ip=ip, prefix_length=prefix)
                 )
             intent.interfaces.append(iface)
+
+        # GAP 6: resolve pending ``routing-instances <name> interface
+        # <iface>`` assignments now that interfaces are materialised.
+        # Each CanonicalRoutingInstance record may have a
+        # _pending_interfaces side-attribute from
+        # _apply_routing_instances; walk and set
+        # CanonicalInterface.vrf accordingly.  Falls back to
+        # creating a stub interface if the named interface never got
+        # declared (parse-tolerance — keeps the canonical tree
+        # complete).
+        iface_by_name = {i.name: i for i in intent.interfaces}
+        for ri in intent.routing_instances:
+            pending = getattr(ri, "_pending_interfaces", None)
+            if not pending:
+                continue
+            for iface_name in pending:
+                iface = iface_by_name.get(iface_name)
+                if iface is None:
+                    # Interface referenced under routing-instance but
+                    # never declared via ``set interfaces`` — create a
+                    # stub so the VRF membership doesn't silently
+                    # disappear on round-trip.
+                    iface = CanonicalInterface(
+                        name=iface_name,
+                        interface_type=_infer_iface_type(iface_name),
+                        vrf=ri.name,
+                    )
+                    intent.interfaces.append(iface)
+                    iface_by_name[iface_name] = iface
+                else:
+                    iface.vrf = ri.name
+            # Clean up the side-attribute so it doesn't leak into
+            # downstream serialisation.
+            try:
+                object.__delattr__(ri, "_pending_interfaces")
+            except AttributeError:
+                pass
 
         logger.debug(
             "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
@@ -467,12 +490,86 @@ class JunosCodec(CodecBase):
             if not has_renderable_attr:
                 out.append(f"set interfaces {name}")
 
-        # --- vlans ---
+        # --- vlans + VLAN-to-VNI mappings (GAP 6) ---
+        # Pre-index VXLAN VNIs by vlan_id for matched emission.
+        vni_by_vlan = {v.vlan_id: v.vni for v in tree.vxlan_vnis}
         for vlan in tree.vlans:
             vlan_key = vlan.name or f"VLAN-{vlan.id}"
             out.append(
                 f"set vlans {_quote_if_needed(vlan_key)} vlan-id {vlan.id}"
             )
+            if vlan.id in vni_by_vlan:
+                out.append(
+                    f"set vlans {_quote_if_needed(vlan_key)} vxlan vni "
+                    f"{vni_by_vlan[vlan.id]}"
+                )
+
+        # --- routing-instances (GAP 6) ---
+        # Build a map from vrf_name to interfaces that belong there
+        # so we can emit ``set routing-instances <name> interface
+        # <iface>`` lines.  Empty ``iface.vrf`` = global VRF, skip.
+        ifaces_by_vrf: dict[str, list[str]] = {}
+        for iface in tree.interfaces:
+            if iface.vrf:
+                ifaces_by_vrf.setdefault(iface.vrf, []).append(iface.name)
+        for ri in tree.routing_instances:
+            out.append(
+                f"set routing-instances {_quote_if_needed(ri.name)} "
+                f"instance-type {ri.instance_type}"
+            )
+            if ri.description:
+                out.append(
+                    f"set routing-instances {_quote_if_needed(ri.name)} "
+                    f"description {_quote_always(ri.description)}"
+                )
+            if ri.route_distinguisher:
+                out.append(
+                    f"set routing-instances {_quote_if_needed(ri.name)} "
+                    f"route-distinguisher {ri.route_distinguisher}"
+                )
+            # vrf-target: collapse to the compact ``target:X`` form when
+            # import + export are identical; otherwise emit separate
+            # import/export lines.
+            if (
+                ri.rt_imports == ri.rt_exports and ri.rt_imports
+            ):
+                for rt in ri.rt_imports:
+                    out.append(
+                        f"set routing-instances {_quote_if_needed(ri.name)} "
+                        f"vrf-target target:{rt}"
+                    )
+            else:
+                for rt in ri.rt_imports:
+                    out.append(
+                        f"set routing-instances {_quote_if_needed(ri.name)} "
+                        f"vrf-target import target:{rt}"
+                    )
+                for rt in ri.rt_exports:
+                    out.append(
+                        f"set routing-instances {_quote_if_needed(ri.name)} "
+                        f"vrf-target export target:{rt}"
+                    )
+            # Interface bindings.  Interfaces that are physical
+            # sub-iface compound names (``ge-0/0/1.0``) get emitted
+            # as-is; parent-only names get a ``.0`` suffix since
+            # Junos routing-instances always reference a UNIT (the
+            # codec's canonical-name convention collapses unit 0
+            # into the parent — we have to reverse that on render).
+            for iface_name in ifaces_by_vrf.get(ri.name, []):
+                if "." in iface_name:
+                    ri_iface_name = iface_name
+                else:
+                    ri_iface_name = f"{iface_name}.0"
+                out.append(
+                    f"set routing-instances {_quote_if_needed(ri.name)} "
+                    f"interface {ri_iface_name}"
+                )
+            # Type-5 L3 VNI.
+            if ri.l3_vni is not None:
+                out.append(
+                    f"set routing-instances {_quote_if_needed(ri.name)} "
+                    f"protocols evpn ip-prefix-routes vni {ri.l3_vni}"
+                )
 
         # --- routing-options ---
         for route in tree.static_routes:
@@ -641,6 +738,10 @@ def _dispatch_set(
         _apply_routing_options(tokens[1:], intent)
     elif head == "snmp":
         _apply_snmp(tokens[1:], intent)
+    elif head == "routing-instances":
+        # GAP 6: ``set routing-instances <name> ...`` populates
+        # CanonicalRoutingInstance + per-interface VRF membership.
+        _apply_routing_instances(tokens[1:], intent)
     elif head == "groups":
         if group_hostnames is not None:
             _apply_groups_stanza(tokens[1:], group_hostnames)
@@ -800,7 +901,9 @@ def _apply_interfaces(
 
 
 def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
-    """``set vlans <NAME> vlan-id <N>``"""
+    """``set vlans <NAME> vlan-id <N>``
+    ``set vlans <NAME> vxlan vni <VNI>``  (GAP 6)
+    """
     if len(tokens) < 3:
         return
     vlan_name = tokens[0]
@@ -814,6 +917,166 @@ def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
             intent.vlans.append(CanonicalVlan(id=vid, name=vlan_name))
         else:
             existing.name = vlan_name
+        return
+    if (
+        tokens[1] == "vxlan"
+        and len(tokens) >= 4
+        and tokens[2] == "vni"
+    ):
+        # GAP 6: look up VLAN by name to get its ID; if the VLAN
+        # hasn't been declared yet (Junos allows any ordering), stash
+        # the mapping to resolve in a post-pass.  For now we require
+        # the vlan-id to already be set — real configs always declare
+        # it first; if this turns out to be wrong, the post-pass fix
+        # is cheap.
+        try:
+            vni = int(tokens[3])
+        except ValueError:
+            return
+        existing_vlan = next(
+            (v for v in intent.vlans if v.name == vlan_name), None,
+        )
+        if existing_vlan is not None:
+            # Don't duplicate if already recorded.
+            already = any(
+                x.vlan_id == existing_vlan.id and x.vni == vni
+                for x in intent.vxlan_vnis
+            )
+            if not already:
+                intent.vxlan_vnis.append(CanonicalVxlan(
+                    vlan_id=existing_vlan.id, vni=vni,
+                ))
+        # else: vlan-id declaration hasn't been seen yet — skip.
+        # This is rare in practice (Junos emits vlan-id first by
+        # convention).  A future enrichment could stash pending
+        # mappings.
+        return
+
+
+def _apply_routing_instances(
+    tokens: list[str], intent: CanonicalIntent,
+) -> None:
+    """GAP 6: ``set routing-instances <name> ...`` grammar.
+
+    Supported sub-paths:
+
+    * ``routing-instances <name> instance-type <type>``
+    * ``routing-instances <name> route-distinguisher <rd>``
+    * ``routing-instances <name> vrf-target target:<rt>``  (both import + export)
+    * ``routing-instances <name> vrf-target import target:<rt>``
+    * ``routing-instances <name> vrf-target export target:<rt>``
+    * ``routing-instances <name> interface <iface>``
+    * ``routing-instances <name> description "<text>"``
+    * ``routing-instances <name> protocols evpn ip-prefix-routes vni <N>``
+      — populates :attr:`CanonicalRoutingInstance.l3_vni`.
+
+    Everything else under routing-instances (protocols bgp, routing-
+    options, policies) parses-and-ignores today — future enrichment.
+    """
+    if len(tokens) < 2:
+        return
+    ri_name = tokens[0]
+    ri = next(
+        (r for r in intent.routing_instances if r.name == ri_name), None,
+    )
+    if ri is None:
+        ri = CanonicalRoutingInstance(name=ri_name)
+        intent.routing_instances.append(ri)
+    rest = tokens[1:]
+    if not rest:
+        return
+
+    head = rest[0]
+    if head == "instance-type" and len(rest) >= 2:
+        ri.instance_type = rest[1]
+        return
+    if head == "route-distinguisher" and len(rest) >= 2:
+        ri.route_distinguisher = rest[1]
+        return
+    if head == "description" and len(rest) >= 2:
+        ri.description = rest[1]
+        return
+    if head == "vrf-target":
+        # Three variants: ``target:...`` (both), ``import target:...``,
+        # ``export target:...``.
+        if len(rest) >= 2 and rest[1].startswith("target:"):
+            rt = rest[1][len("target:"):]
+            if rt not in ri.rt_imports:
+                ri.rt_imports.append(rt)
+            if rt not in ri.rt_exports:
+                ri.rt_exports.append(rt)
+            return
+        if (
+            len(rest) >= 3
+            and rest[1] == "import"
+            and rest[2].startswith("target:")
+        ):
+            rt = rest[2][len("target:"):]
+            if rt not in ri.rt_imports:
+                ri.rt_imports.append(rt)
+            return
+        if (
+            len(rest) >= 3
+            and rest[1] == "export"
+            and rest[2].startswith("target:")
+        ):
+            rt = rest[2][len("target:"):]
+            if rt not in ri.rt_exports:
+                ri.rt_exports.append(rt)
+            return
+        return
+    if head == "interface" and len(rest) >= 2:
+        # Per-interface VRF membership — look up the interface by
+        # name (may be a sub-interface like ``ge-0/0/1.0`` or
+        # ``irb.100``) and mark it as belonging to this VRF.  If
+        # the interface doesn't exist yet (set-line ordering), we
+        # resolve later in a post-pass.  For now, stash on a
+        # sentinel key so the parse loop can resolve later.
+        iface_name = rest[1]
+        # Resolve unit-0 compound to parent name the same way the
+        # interface materialiser does — ``ge-0/0/1.0`` collapses to
+        # ``ge-0/0/1``.
+        m = re.match(r"^([A-Za-z]+-\d+/\d+/\d+)\.0$", iface_name)
+        canonical_iface_name = m.group(1) if m else iface_name
+        # Stash on the routing-instance record temporarily so the
+        # parse() main loop's materialisation pass can apply the
+        # vrf field after interfaces materialise.  We use a private
+        # mutable list via setattr since pydantic models don't have
+        # arbitrary attributes by default — but wait, they DO accept
+        # extra attributes via model_config.  Simpler: stash on
+        # intent using a private list outside CanonicalIntent.
+        # Actually simpler: apply immediately if the interface
+        # already materialised; otherwise cache.  In practice Junos
+        # emits ``set interfaces ...`` lines BEFORE
+        # ``set routing-instances ... interface ...`` so we expect
+        # the interface already exists in iface_state — but we only
+        # see intent.interfaces (already materialised) here, which
+        # won't have happened yet during the dispatch loop.  The
+        # parse() loop resolves this AFTER materialisation — see
+        # post-pass comment in parse().
+        pending = getattr(ri, "_pending_interfaces", None)
+        if pending is None:
+            pending = []
+            # Attach as a model_extra attribute; pydantic v2
+            # allows this when Config.model_config permits.  Use
+            # object.__setattr__ to bypass validation.
+            object.__setattr__(ri, "_pending_interfaces", pending)
+        pending.append(canonical_iface_name)
+        return
+    if (
+        len(rest) >= 5
+        and rest[0] == "protocols"
+        and rest[1] == "evpn"
+        and rest[2] == "ip-prefix-routes"
+        and rest[3] == "vni"
+    ):
+        try:
+            ri.l3_vni = int(rest[4])
+        except ValueError:
+            pass
+        return
+    # Other sub-paths (protocols bgp, routing-options, etc.) —
+    # parse-and-ignore.
 
 
 def _apply_routing_options(

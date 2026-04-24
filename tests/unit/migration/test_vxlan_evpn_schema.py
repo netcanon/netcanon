@@ -183,32 +183,20 @@ class TestCanonicalIntentVxlanEvpnFields:
 # ---------------------------------------------------------------------------
 
 
-class TestDCCodecsDeclareVxlanEvpnUnsupported:
-    """The ship-before-wire contract: canonical schema ships; codecs
-    must declare the new xpaths under ``unsupported`` so the pipeline's
-    validate stage surfaces the gap in the UI banner.
-
-    Every codec that targets DC switching / routing hardware is expected
-    to participate.  Access-switch codecs (Aruba AOS-S) and
-    firewall/edge codecs (FortiGate, OPNsense, MikroTik) are not
-    required to declare — their hardware class doesn't run VXLAN/EVPN
-    fabrics in meaningful deployments.
+class TestDCCodecsDeclareEvpnType5Unsupported:
+    """Per-prefix EVPN Type-5 records (`CanonicalEvpnType5Route`)
+    remain Unsupported on every DC codec after GAP 6 — real configs
+    don't use per-prefix records; Type-5 announcements are implicit
+    (any subnet in a VRF with an L3 VNI gets announced).  Covered
+    today as a VRF property via
+    :attr:`CanonicalRoutingInstance.l3_vni`; per-prefix records are
+    deferred to a future commit.
     """
 
     _DC_CODECS = [
         (AristaEOSCodec, "arista_eos"),
-        (JunosCodec, "juniper_junos"),
         (CiscoIOSXECLICodec, "cisco_iosxe_cli"),
     ]
-
-    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_declares_vxlan_unsupported(self, codec_cls, name):
-        caps = codec_cls().capabilities
-        paths = {u.path for u in caps.unsupported}
-        assert "/vxlan-vnis/vni" in paths, (
-            f"{name} missing unsupported declaration for /vxlan-vnis/vni — "
-            "ship-before-wire contract requires DC codecs to report the gap"
-        )
 
     @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
     def test_declares_evpn_type5_unsupported(self, codec_cls, name):
@@ -218,11 +206,6 @@ class TestDCCodecsDeclareVxlanEvpnUnsupported:
             f"{name} missing unsupported declaration for "
             "/evpn-type5-routes/route"
         )
-
-    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_vxlan_classify_returns_unsupported(self, codec_cls, name):
-        caps = codec_cls().capabilities
-        assert caps.classify("/vxlan-vnis/vni") == "unsupported"
 
     @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
     def test_evpn_classify_returns_unsupported(self, codec_cls, name):
@@ -235,5 +218,25 @@ class TestDCCodecsDeclareVxlanEvpnUnsupported:
         unsupported declaration must explain what's missing and why."""
         caps = codec_cls().capabilities
         by_path = {u.path: u for u in caps.unsupported}
-        assert by_path["/vxlan-vnis/vni"].reason.strip() != ""
         assert by_path["/evpn-type5-routes/route"].reason.strip() != ""
+
+
+class TestAristaJunosVxlanVniDemoted:
+    """GAP 6: arista_eos + juniper_junos both PARSE + RENDER
+    VLAN↔VNI mappings now; ``/vxlan-vnis/vni`` is supported on both."""
+
+    def test_arista_vxlan_supported(self):
+        caps = AristaEOSCodec().capabilities
+        assert caps.classify("/vxlan-vnis/vni") == "supported"
+
+    def test_arista_routing_instances_supported(self):
+        caps = AristaEOSCodec().capabilities
+        assert caps.classify("/routing-instances/instance") == "supported"
+
+    def test_junos_vxlan_supported(self):
+        caps = JunosCodec().capabilities
+        assert caps.classify("/vxlan-vnis/vni") == "supported"
+
+    def test_junos_routing_instances_supported(self):
+        caps = JunosCodec().capabilities
+        assert caps.classify("/routing-instances/instance") == "supported"

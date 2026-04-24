@@ -264,6 +264,12 @@ class CanonicalRoutingInstance(BaseModel):
     rt_imports: list[str] = Field(default_factory=list)
     rt_exports: list[str] = Field(default_factory=list)
     description: str = ""
+    # Layer-3 VNI for EVPN Type-5 (symmetric IRB) routing.  Arista
+    # emits this as ``vxlan vrf <name> vni <N>`` inside the Vxlan
+    # interface stanza; Junos emits it as ``set routing-instances
+    # <name> protocols evpn ip-prefix-routes vni <N>``.  None = no
+    # L3 VNI (the VRF doesn't participate in Type-5 announcements).
+    l3_vni: int | None = None
 
 
 class CanonicalEvpnType5Route(BaseModel):

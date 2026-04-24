@@ -174,9 +174,10 @@ class TestDCCodecsDeclareRoutingInstancesUnsupported:
     /routing-instances/instance under Unsupported so the UI banner
     surfaces the gap."""
 
+    # After GAP 6, Arista + Junos both PARSE + RENDER VRF declarations;
+    # only Cisco IOS-XE CLI remains Unsupported (no wire-up planned
+    # near-term — not a DC-fabric codec in most deployments).
     _DC_CODECS = [
-        (AristaEOSCodec, "arista_eos"),
-        (JunosCodec, "juniper_junos"),
         (CiscoIOSXECLICodec, "cisco_iosxe_cli"),
     ]
 
@@ -200,3 +201,21 @@ class TestDCCodecsDeclareRoutingInstancesUnsupported:
         caps = codec_cls().capabilities
         by_path = {u.path: u for u in caps.unsupported}
         assert by_path["/routing-instances/instance"].reason.strip() != ""
+
+
+class TestWiredCodecsClassifySupported:
+    """GAP 6: arista_eos + juniper_junos PARSE + RENDER
+    ``/routing-instances/instance`` now.  Verify the matrix
+    classifies it as ``supported`` (not leftover in the
+    ``unsupported`` list)."""
+
+    @pytest.mark.parametrize(
+        "codec_cls,name",
+        [
+            (AristaEOSCodec, "arista_eos"),
+            (JunosCodec, "juniper_junos"),
+        ],
+    )
+    def test_routing_instances_supported(self, codec_cls, name):
+        caps = codec_cls().capabilities
+        assert caps.classify("/routing-instances/instance") == "supported"

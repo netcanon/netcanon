@@ -39,7 +39,10 @@ from ...canonical.intent import (
     CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalEvpnType5Route,  # noqa: F401 — reserved for GAP 6+ follow-up
     CanonicalLAG,
+    CanonicalRoutingInstance,
+    CanonicalVxlan,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
@@ -110,6 +113,7 @@ _USERNAME_RE = re.compile(
     re.MULTILINE,
 )
 
+_VRF_INSTANCE_RE = re.compile(r"^vrf\s+instance\s+(\S+)\s*$", re.MULTILINE)
 _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
 
 # VLAN stanza: ``vlan <id>`` optionally followed by ``   name <name>``.
@@ -174,6 +178,7 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/config/vrf",   # GAP 6
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -184,6 +189,8 @@ class AristaEOSCodec(CodecBase):
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
+            "/vxlan-vnis/vni",                   # GAP 6 demoted
+            "/routing-instances/instance",       # GAP 6 demoted
         ],
         lossy=[
             LossyPath(
@@ -215,34 +222,17 @@ class AristaEOSCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
-                path="/vxlan-vnis/vni",
-                reason=(
-                    "VLAN-to-VNI mappings (`vlan X vxlan vni N`) "
-                    "parse-and-ignore in v1.  CanonicalVxlan schema "
-                    "landed but Arista codec wire-up is deferred — "
-                    "cross-vendor EVPN fabric migrations blocked "
-                    "until both Arista and the paired codec (NX-OS / "
-                    "Junos) gain parse+render."
-                ),
-            ),
-            UnsupportedPath(
                 path="/evpn-type5-routes/route",
                 reason=(
-                    "EVPN Type-5 IP-prefix advertisements (`router "
-                    "bgp / address-family evpn`) parse-and-ignore in "
-                    "v1.  CanonicalEvpnType5Route schema exists; "
-                    "codec wire-up pending."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing-instances/instance",
-                reason=(
-                    "VRF declarations (`vrf instance <name>` + `ip "
-                    "routing vrf <name>`) and per-interface VRF "
-                    "membership (`vrf <name>`) parse-and-ignore in "
-                    "v1.  CanonicalRoutingInstance + "
-                    "CanonicalInterface.vrf schema exists; codec "
-                    "wire-up pending."
+                    "EVPN Type-5 IP-prefix advertisements "
+                    "(per-prefix `route-target`/`vni` records) are "
+                    "modelled as the CanonicalEvpnType5Route schema "
+                    "but no codec emits per-prefix records yet — "
+                    "Type-5 announcements in real configs are "
+                    "implicit (any subnet in a VRF with an L3 VNI "
+                    "gets announced).  Covered as a VRF property via "
+                    "CanonicalRoutingInstance.l3_vni (GAP 6); per-"
+                    "prefix records deferred to a future commit."
                 ),
             ),
         ],
@@ -354,16 +344,30 @@ class AristaEOSCodec(CodecBase):
                 role=role,
             ))
 
-        # --- Interface + VLAN stanzas (line-scan with current-
-        #     stanza tracking, same pattern as cisco_iosxe_cli) ---
+        # --- VRF declarations (GAP 6) — ``vrf instance <name>`` top-
+        #     level lines create CanonicalRoutingInstance records.
+        #     RD + RTs get populated later from the router-bgp pass.
+        for vrf_m in _VRF_INSTANCE_RE.finditer(raw):
+            intent.routing_instances.append(
+                CanonicalRoutingInstance(name=vrf_m.group(1))
+            )
+
+        # --- Interface + VLAN + Vxlan stanzas (line-scan with
+        #     current-stanza tracking, same pattern as cisco_iosxe_cli) ---
         self._parse_stanzas(raw, intent)
+
+        # --- router bgp <asn> / vrf <name> / rd + route-target (GAP 6) ---
+        self._parse_router_bgp(raw, intent)
 
         logger.debug(
             "arista_eos parsed: hostname=%r ifaces=%d vlans=%d "
-            "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+            "vxlan_vnis=%d vrfs=%d routes=%d lags=%d users=%d "
+            "snmp=%s (input=%d chars)",
             intent.hostname,
             len(intent.interfaces),
             len(intent.vlans),
+            len(intent.vxlan_vnis),
+            len(intent.routing_instances),
             len(intent.static_routes),
             len(intent.lags),
             len(intent.local_users),
@@ -409,6 +413,23 @@ class AristaEOSCodec(CodecBase):
                 vlan_m = _VLAN_HEADER_RE.match(line)
                 if iface_m:
                     name = iface_m.group(1)
+                    # GAP 6: Vxlan<N> is a VXLAN config container, not
+                    # a real interface.  Its sub-commands populate
+                    # CanonicalVxlan records via _apply_iface_subcommand,
+                    # but we don't materialise a CanonicalInterface for
+                    # it — render rebuilds the stanza from
+                    # tree.vxlan_vnis + tree.routing_instances[].l3_vni.
+                    if name.lower().startswith("vxlan"):
+                        # Still track as current_iface so indented
+                        # ``vxlan ...`` sub-lines dispatch correctly,
+                        # but use a throwaway sentinel interface that
+                        # never joins tree.interfaces.
+                        sentinel = CanonicalInterface(name=name, enabled=True)
+                        sentinel.interface_type = _infer_iface_type(name)
+                        current_iface = sentinel
+                        current_iface_is_l3 = False
+                        current_vlan = None
+                        continue
                     iface = iface_by_name.get(name)
                     if iface is None:
                         iface = CanonicalInterface(
@@ -439,7 +460,7 @@ class AristaEOSCodec(CodecBase):
             # Indented = sub-command of the currently-open stanza.
             if current_iface is not None:
                 self._apply_iface_subcommand(
-                    current_iface, stripped, lag_members,
+                    current_iface, stripped, lag_members, intent,
                 )
                 # Track L3 flip so subsequent ``ip address`` lines are
                 # understood as routed rather than SVI-like.
@@ -472,11 +493,108 @@ class AristaEOSCodec(CodecBase):
                 if m_iface is not None and m_iface.lag_member_of is None:
                     m_iface.lag_member_of = lag_name
 
+    def _parse_router_bgp(
+        self, raw: str, intent: CanonicalIntent,
+    ) -> None:
+        """Parse ``router bgp <asn> / vrf <name> / rd <rd> /
+        route-target import|export|both <rt>`` — the pieces we care
+        about for VRF metadata.  BGP neighbor/address-family details
+        stay parse-and-ignore.
+
+        Lines in EOS `router bgp` are indented; `vrf <name>` nests
+        3-spaces deeper than the router-bgp stanza.  We track stanza
+        depth via leading-whitespace count.
+        """
+        in_bgp = False
+        current_vrf: CanonicalRoutingInstance | None = None
+        for raw_line in raw.splitlines():
+            stripped = raw_line.strip()
+            # Blank line: end of file / section.
+            if not stripped:
+                in_bgp = False
+                current_vrf = None
+                continue
+            # Top-level ``router bgp <asn>`` opens the section.
+            if raw_line.startswith("router bgp "):
+                in_bgp = True
+                current_vrf = None
+                continue
+            # ``!`` alone (possibly indented) is a sub-stanza separator
+            # inside router-bgp; close the per-vrf context but KEEP
+            # in_bgp active so the next ``vrf <name>`` block parses.
+            if stripped == "!":
+                current_vrf = None
+                continue
+            # Another top-level stanza (non-indented, non-comment)
+            # closes router-bgp.
+            if not raw_line.startswith((" ", "\t")):
+                in_bgp = False
+                current_vrf = None
+                continue
+            if not in_bgp:
+                continue
+            # Inside router-bgp: 3-space indent for top-level router
+            # subs, 6-space indent for per-vrf subs.  Count leading
+            # spaces to distinguish.
+            leading_spaces = len(raw_line) - len(raw_line.lstrip(" "))
+            if stripped.startswith("vrf "):
+                vrf_name = stripped.split(None, 1)[1].strip()
+                current_vrf = next(
+                    (r for r in intent.routing_instances if r.name == vrf_name),
+                    None,
+                )
+                if current_vrf is None:
+                    # ``router bgp X / vrf Y`` declares a VRF context
+                    # even if no standalone ``vrf instance Y`` was
+                    # seen upstream — create one so RD/RTs don't get
+                    # dropped.
+                    current_vrf = CanonicalRoutingInstance(name=vrf_name)
+                    intent.routing_instances.append(current_vrf)
+                continue
+            if current_vrf is None:
+                continue
+            # Deeper indent = sub-command of ``vrf <name>``.
+            if leading_spaces < 6:
+                # Back up to router-bgp top-level — close vrf context.
+                current_vrf = None
+                continue
+            if stripped.startswith("rd "):
+                parts = stripped.split(None, 1)
+                if len(parts) >= 2:
+                    current_vrf.route_distinguisher = parts[1].strip()
+                continue
+            if stripped.startswith("route-target both "):
+                rt = stripped.split(None, 2)[2].strip()
+                if rt not in current_vrf.rt_imports:
+                    current_vrf.rt_imports.append(rt)
+                if rt not in current_vrf.rt_exports:
+                    current_vrf.rt_exports.append(rt)
+                continue
+            if stripped.startswith("route-target import "):
+                rt = stripped.split(None, 2)[2].strip()
+                # EOS also has ``route-target import evpn <rt>`` inside
+                # ``router bgp / vrf <name>`` stanzas — the ``evpn``
+                # keyword is just marking the address-family; the
+                # actual RT follows.  Strip the ``evpn `` prefix.
+                if rt.startswith("evpn "):
+                    rt = rt[len("evpn "):].strip()
+                if rt and rt not in current_vrf.rt_imports:
+                    current_vrf.rt_imports.append(rt)
+                continue
+            if stripped.startswith("route-target export "):
+                rt = stripped.split(None, 2)[2].strip()
+                if rt.startswith("evpn "):
+                    rt = rt[len("evpn "):].strip()
+                if rt and rt not in current_vrf.rt_exports:
+                    current_vrf.rt_exports.append(rt)
+                continue
+
     def _apply_iface_subcommand(
         self,
         iface: CanonicalInterface,
         line: str,
         lag_members: dict[int, list[str]],
+        intent: CanonicalIntent,
     ) -> None:
         """Apply one indented sub-command to *iface*."""
         if line == "shutdown":
@@ -551,6 +669,56 @@ class AristaEOSCodec(CodecBase):
             # but keep the branch to avoid falling through to
             # "unrecognised" tolerance.
             return
+        # GAP 6: ``vrf <name>`` on an Ethernet / Port-Channel / Loopback /
+        # Vlan interface sets per-interface VRF membership.
+        # NOT ``vrf definition`` (that's a top-level stanza already
+        # caught by _VRF_INSTANCE_RE); we just match bare ``vrf X``.
+        if line.startswith("vrf ") and not line.startswith((
+            "vrf instance", "vrf definition",
+        )):
+            parts = line.split(None, 1)
+            if len(parts) >= 2:
+                iface.vrf = parts[1].strip()
+            return
+        # GAP 6: Vxlan interface sub-commands — VLAN↔VNI mappings and
+        # VRF↔L3-VNI mappings live here.  ``iface.name`` starts with
+        # ``Vxlan`` (``Vxlan1`` / ``Vxlan2``).
+        if iface.name.lower().startswith("vxlan"):
+            # ``vxlan vlan <vid> vni <vni>``
+            m = re.match(r"^vxlan\s+vlan\s+(\d+)\s+vni\s+(\d+)\s*$", line)
+            if m:
+                try:
+                    vid = int(m.group(1))
+                    vni = int(m.group(2))
+                    intent.vxlan_vnis.append(
+                        CanonicalVxlan(vlan_id=vid, vni=vni)
+                    )
+                except ValueError:
+                    pass
+                return
+            # ``vxlan vrf <name> vni <vni>`` — L3 VNI for Type-5.
+            m = re.match(r"^vxlan\s+vrf\s+(\S+)\s+vni\s+(\d+)\s*$", line)
+            if m:
+                vrf_name = m.group(1)
+                try:
+                    l3_vni = int(m.group(2))
+                except ValueError:
+                    return
+                ri = next(
+                    (r for r in intent.routing_instances if r.name == vrf_name),
+                    None,
+                )
+                if ri is None:
+                    ri = CanonicalRoutingInstance(
+                        name=vrf_name, l3_vni=l3_vni,
+                    )
+                    intent.routing_instances.append(ri)
+                else:
+                    ri.l3_vni = l3_vni
+                return
+            # Other ``vxlan source-interface`` / ``vxlan udp-port`` /
+            # ``vxlan virtual-router`` lines fall through to parse-
+            # and-ignore — vendor-native details we don't model.
         # Unrecognised sub-command — parse-and-ignore.
 
     # -----------------------------------------------------------------
@@ -621,6 +789,14 @@ class AristaEOSCodec(CodecBase):
                 out.append(" ".join(parts))
             out.append("!")
 
+        # --- VRF instances (GAP 6) — declare every canonical VRF via
+        #     ``vrf instance <name>``.  RD + RTs emit later under
+        #     router-bgp / vrf <name>. ---
+        if tree.routing_instances:
+            for ri in tree.routing_instances:
+                out.append(f"vrf instance {ri.name}")
+            out.append("!")
+
         # --- VLANs ---
         if tree.vlans:
             for vlan in tree.vlans:
@@ -646,6 +822,11 @@ class AristaEOSCodec(CodecBase):
                 "ethernet"
             ):
                 out.append("   no switchport")
+            # GAP 6: per-interface VRF membership.  Must emit BEFORE
+            # ``ip address`` so EOS correctly binds the IP into the
+            # VRF's routing table.
+            if iface.vrf:
+                out.append(f"   vrf {iface.vrf}")
             if iface.switchport_mode == "access":
                 out.append("   switchport mode access")
                 if iface.access_vlan is not None:
@@ -697,6 +878,56 @@ class AristaEOSCodec(CodecBase):
             if lag.name not in existing_names:
                 out.append(f"interface {lag.name}")
                 out.append("!")
+
+        # --- Vxlan1 (GAP 6) — EOS carries VLAN-to-VNI + VRF-to-L3-VNI
+        #     mappings inside a single ``interface Vxlan1`` stanza.
+        #     Source-interface defaults to Loopback0; real configs
+        #     often use a dedicated VTEP loopback but we don't model
+        #     that choice — operators can re-emit as needed.
+        has_l3_vnis = any(
+            ri.l3_vni is not None for ri in tree.routing_instances
+        )
+        if tree.vxlan_vnis or has_l3_vnis:
+            out.append("interface Vxlan1")
+            out.append("   vxlan source-interface Loopback0")
+            out.append("   vxlan udp-port 4789")
+            for v in tree.vxlan_vnis:
+                out.append(f"   vxlan vlan {v.vlan_id} vni {v.vni}")
+            for ri in tree.routing_instances:
+                if ri.l3_vni is not None:
+                    out.append(f"   vxlan vrf {ri.name} vni {ri.l3_vni}")
+            out.append("!")
+
+        # --- router bgp VRF blocks (GAP 6) — emit ``router bgp <asn> /
+        #     vrf <name> / rd / route-target import/export`` when any
+        #     VRF carries RD or RTs.  ASN defaults to a placeholder
+        #     since CanonicalIntent doesn't model BGP config beyond
+        #     what VRFs need; operators re-emit as needed.
+        vrfs_with_bgp_meta = [
+            ri for ri in tree.routing_instances
+            if ri.route_distinguisher or ri.rt_imports or ri.rt_exports
+        ]
+        if vrfs_with_bgp_meta:
+            out.append("router bgp 65000")
+            for ri in vrfs_with_bgp_meta:
+                out.append("   !")
+                out.append(f"   vrf {ri.name}")
+                if ri.route_distinguisher:
+                    out.append(f"      rd {ri.route_distinguisher}")
+                # Use ``route-target both`` for matched import/export
+                # pairs (compact + canonical-friendly); emit separate
+                # import/export lines when they diverge.
+                if (
+                    ri.rt_imports == ri.rt_exports and ri.rt_imports
+                ):
+                    for rt in ri.rt_imports:
+                        out.append(f"      route-target both {rt}")
+                else:
+                    for rt in ri.rt_imports:
+                        out.append(f"      route-target import evpn {rt}")
+                    for rt in ri.rt_exports:
+                        out.append(f"      route-target export evpn {rt}")
+            out.append("!")
 
         # --- Static routes ---
         if tree.static_routes:

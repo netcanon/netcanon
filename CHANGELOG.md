@@ -7,6 +7,70 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added (GAP 6 — Arista EOS + Juniper Junos VXLAN + VRF / EVPN codec wire-up)
+
+- `netconfig/migration/codecs/arista_eos/codec.py` — parse + render
+  now populate `CanonicalVxlan` from ``interface Vxlan1 / vxlan
+  vlan <vid> vni <vni>`` lines, and `CanonicalRoutingInstance` from
+  top-level ``vrf instance <name>`` + ``router bgp <asn> / vrf
+  <name> / rd / route-target import|export|both`` stanzas.  L3 VNI
+  (``vxlan vrf <name> vni <N>``) populates
+  :attr:`CanonicalRoutingInstance.l3_vni` for EVPN Type-5 symmetric
+  IRB routing.  Per-interface VRF membership (``vrf <name>`` on
+  Ethernet / Port-Channel / Loopback / Vlan interfaces) populates
+  :attr:`CanonicalInterface.vrf`.
+- `netconfig/migration/codecs/juniper_junos/codec.py` — parse +
+  render now populate the same canonical shapes from Junos's
+  equivalents: ``set vlans <name> vxlan vni <vni>``, ``set
+  routing-instances <name> instance-type vrf`` + ``route-distinguisher``
+  + ``vrf-target target:<rt>`` (shared or split import/export) +
+  ``interface <iface>`` + ``protocols evpn ip-prefix-routes vni
+  <N>`` (populates l3_vni).  Junos's ``set routing-instances <name>
+  interface <iface>.0`` round-trips through the codec's canonical
+  naming convention (unit-0 compound names collapse to parent in
+  CanonicalInterface.name; render re-adds ``.0`` to preserve valid
+  Junos grammar).
+- New helper `CanonicalRoutingInstance.l3_vni` field added to the
+  GAP 5 schema — matches how both vendors express Type-5
+  announcements (VRF property, not per-prefix record).  Schema
+  commit is the same as GAP 6 since it's hidden behind the codec
+  implementations; no separate ship-before-wire step needed.
+- `/vxlan-vnis/vni` and `/routing-instances/instance` demoted from
+  ``Unsupported`` to ``Supported`` on both Arista EOS and Juniper
+  Junos capability matrices.  `/evpn-type5-routes/route` remains
+  Unsupported on both with updated reason: Type-5 per-prefix
+  records aren't populated by any codec; the VRF-property
+  modelling via ``l3_vni`` is the supported path today.
+- Arista: Vxlan interface stanzas are NOT materialised as
+  CanonicalInterface records (they're VXLAN config containers, not
+  real interfaces).  Sub-commands dispatch through a sentinel
+  interface during parse; render reconstructs the whole ``interface
+  Vxlan1`` stanza from ``tree.vxlan_vnis`` +
+  ``tree.routing_instances[].l3_vni``.
+- Arista: router-bgp stanza scanner correctly handles ``!``
+  sub-stanza separators (previously would reset ``in_bgp`` mid-
+  stanza and drop subsequent ``vrf`` blocks — bug caught during
+  wire-up, regression-guard included).
+- Arista: ``route-target import evpn <rt>`` / ``export evpn <rt>``
+  inside router-bgp / vrf stanzas strip the ``evpn`` prefix to
+  extract the actual RT value.
+- Arista: the render path emits
+  ``router bgp 65000`` with a placeholder ASN when any VRF carries
+  RD / RTs — `CanonicalIntent` doesn't model BGP config beyond what
+  VRFs need, so operators re-emit the ASN as appropriate.
+
+### Tests (GAP 6)
+
+- ``tests/unit/migration/test_vxlan_evpn_wire_through.py`` — 35
+  tests covering Arista + Junos parse + render + round-trip for
+  VXLAN/VRF/L3-VNI/RD/RT, plus real-fixture regression guards
+  (batfish DC1-LEAF2A Arista, batfish EVPN-Type5 + L3VPN Junos).
+- Schema tests (``test_vxlan_evpn_schema.py``,
+  ``test_routing_instance_schema.py``) updated: the wired codecs
+  (Arista + Junos) are removed from the "must declare
+  Unsupported" parametrised list; two new test classes lock in
+  the supported classification.
+
 ### Added (Certification promotion — Arista + Junos to `certified` ✅)
 
 - `tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt`
