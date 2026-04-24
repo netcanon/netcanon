@@ -18,6 +18,7 @@ The implementation replicates the proven PowerShell script logic:
 from __future__ import annotations
 
 import logging
+import re
 import time
 
 import paramiko
@@ -38,6 +39,80 @@ _CONNECT_TIMEOUT = 30
 # latency low and the separate-session cost acceptable.
 _PROBE_IDLE_THRESHOLD = 8   # consecutive idle polls (~1.6s)
 _PROBE_MAX_SECONDS = 30
+
+
+_SHELL_PROMPT_RE = re.compile(
+    # Conservative shell prompt match anchored at end-of-buffer:
+    # `username@hostname:cwd [$#>]` with optional trailing space.
+    # The leading `^` binds it to the start of a line (via re.M
+    # when used); the preceding \r?\n in the search avoids false
+    # matches on config content that happens to end with `#`.
+    r"(?m)^[A-Za-z0-9_.\-]+@[A-Za-z0-9_.\-]+:[^\n]*[#$>]\s*$",
+)
+
+
+def _strip_command_echo(buf: str, command: str) -> str:
+    """Remove the echoed command line from the head of *buf* and
+    any residual shell prompt from the tail.
+
+    Paramiko's raw PTY shell leaks BOTH ends of the interaction
+    into the accumulated buffer:
+
+    * The **head** holds the echo of every byte the caller sent —
+      ``shell.send("cat /conf/config.xml\\n")`` makes the device's
+      terminal echo ``cat /conf/config.xml`` back at us BEFORE the
+      actual command output arrives.  Usually followed by
+      ``\\r\\r\\n`` noise (FreeBSD/OPNsense PTY style).
+    * The **tail** holds the shell prompt that returns after the
+      command completes — ``root@supergate:~ # `` appended after
+      the closing bytes of the real output.
+
+    Downstream parsers (OPNsense's ``ET.fromstring`` especially)
+    reject anything not well-formed XML, so both ends must be
+    trimmed.  Netmiko handles the same issues via
+    ``strip_command=True`` + ``strip_prompt=True``; the raw
+    paramiko-shell strategy has to do them explicitly.
+
+    The strip is conservative on both ends:
+
+    * **Head**: locate the first occurrence of *command* in the
+      first 512 bytes.  Not present → return unchanged.  Match →
+      slice to just past the command + trailing whitespace run.
+    * **Tail**: locate the last line matching a shell-prompt
+      shape (``user@host:cwd #|$|>``) within the last 512 bytes.
+      Match → slice before it (keeping trailing content that
+      isn't a prompt, like a trailing newline from the real
+      output).
+    """
+    if not buf:
+        return buf
+    # --- Head: strip echoed command ---
+    if command:
+        head = buf[:512]
+        idx = head.find(command)
+        if idx >= 0:
+            cut = idx + len(command)
+            n = len(buf)
+            while cut < n and buf[cut] in ("\r", "\n", "\t", " "):
+                cut += 1
+            buf = buf[cut:]
+    # --- Tail: strip shell prompt residue ---
+    # Look at the last 512 bytes only so we don't accidentally
+    # match a prompt-shaped config line buried in the middle of
+    # the real output.
+    tail_window = buf[-512:] if len(buf) > 512 else buf
+    m = None
+    for candidate in _SHELL_PROMPT_RE.finditer(tail_window):
+        m = candidate  # last match wins
+    if m is not None:
+        # Map the match position back into the full buffer.
+        window_start = len(buf) - len(tail_window)
+        prompt_start = window_start + m.start()
+        buf = buf[:prompt_start]
+        # Drop any trailing whitespace left over by the prompt's
+        # preceding newline run.
+        buf = buf.rstrip("\r\n\t ") + "\n" if buf.rstrip("\r\n\t ") else ""
+    return buf
 
 
 class ParamikoShellCollector(BaseCollector):
@@ -115,7 +190,10 @@ class ParamikoShellCollector(BaseCollector):
 
             logger.debug("Config command: %s", definition.commands.config)
             shell.send(f"{definition.commands.config}\n")
-            output = self._collect_output(shell, device.host)
+            output = self._collect_output(
+                shell, device.host,
+                command=definition.commands.config,
+            )
 
             for cmd in definition.commands.post:
                 logger.debug("Post-command: %s", cmd)
@@ -249,7 +327,12 @@ class ParamikoShellCollector(BaseCollector):
                 time.sleep(0.05)
         return buf
 
-    def _collect_output(self, shell: paramiko.Channel, host: str) -> str:
+    def _collect_output(
+        self,
+        shell: paramiko.Channel,
+        host: str,
+        command: str | None = None,
+    ) -> str:
         """Read config command output until idle for ``_IDLE_THRESHOLD`` polls.
 
         Uses the same two-phase strategy as the PowerShell script:
@@ -261,12 +344,27 @@ class ParamikoShellCollector(BaseCollector):
         An absolute ``_MAX_SECONDS`` cap prevents hanging forever if a
         device produces a never-ending stream.
 
+        If *command* is supplied, the accumulated buffer is post-
+        processed to strip the echoed command from the head — PTY
+        shells echo the keystrokes the caller sent (``cat
+        /conf/config.xml\\n`` on OPNsense, for example) before the
+        actual output starts.  Without this strip, downstream parsers
+        see a literal command token as the first bytes of the file
+        and reject it as malformed (the reported OPNsense parse
+        regression).  NetmikoCollector gets this behaviour for free
+        via Netmiko's ``strip_command=True``; the paramiko-shell
+        strategy has to do it explicitly.
+
         Args:
             shell: Active Paramiko channel.
             host: Used only for log messages.
+            command: The config command whose echo should be trimmed
+                off the head of the buffer.  Pass ``None`` (or omit)
+                to skip stripping.
 
         Returns:
-            Accumulated raw output string.
+            Accumulated raw output string, with any echoed command
+            line removed from the head.
 
         Raises:
             TimeoutError: If no output at all arrives within ``_MAX_SECONDS``.
@@ -302,6 +400,10 @@ class ParamikoShellCollector(BaseCollector):
             raise TimeoutError(
                 f"No output received from {host} within {_MAX_SECONDS}s"
             )
+
+        if command:
+            buf = _strip_command_echo(buf, command)
+
         return buf
 
     def _collect_probe_output(

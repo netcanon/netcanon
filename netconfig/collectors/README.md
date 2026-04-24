@@ -63,6 +63,13 @@ PowerShell idle-detection heuristic from the original script:
   complete.
 - Handles OPNsense console menu automatically when
   `connection.opnsense_shell_menu: true`.
+- Strips the echoed command from the head of the collected buffer
+  (via `_strip_command_echo`).  PTY shells echo the bytes the caller
+  sent — without this strip every paramiko-shell backup would land
+  on disk with a literal command-line preamble (e.g.
+  `cat /conf/config.xml\r\r\n`) before the actual output.  Netmiko
+  handles the same issue via `strip_command=True`; the raw paramiko
+  path has to do it explicitly.
 
 Use this strategy for devices that need custom session orchestration that
 Netmiko cannot express (numbered menus, non-standard prompts, etc.).

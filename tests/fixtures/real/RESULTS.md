@@ -111,6 +111,7 @@ the bar is met on both grammar fronts.
 | `opnsense_service_test_config.xml` | 91 | 0 | 3 | 0 | 0 | 0 | Service-layer test config with real wan/lan/opt1 zones, DHCP client + DHCPv6 prefix delegation, gateway tracking. |
 | `opnsense_acl_test_config.xml` | 239 | 1 | 2 | 0 | 1 | 5 | ACL model test — 5 users + 4 groups with distinct priv sets.  Richest local_users surface in the corpus. |
 | `user_contrib_supergate_opn25.xml` | 2,302 | 1 | 8 | 5 | per-zone | 2 | **Real deployed OPNsense instance** (user-contributed, sanitised).  8 interfaces across wan/lan/opt1-5/loopback, 5 VLANs with `<tag>` + `<descr>`, extensive per-zone DHCP static MAC reservations (~20 per zone), Unbound DNS with local overrides, IPsec, WireGuard, SNMP, NTP, self-signed cert chain. |
+| `opnsense_paramiko_shell_capture.xml` | 101 | 0 | 2 | 0 | 0 | 1 | **Regression fixture for the paramiko-shell command-echo bug.**  Synthesised by prepending `cat /conf/config.xml\r\r\n` to `opnsense_core_default.xml`'s body — reproduces the exact byte shape the pre-fix ParamikoShellCollector wrote to disk.  Exercises the `_trim_xml_prologue` rescue path: without the fix, `ET.fromstring` raises `syntax error: line 1, column 0`; with the fix, the prolog locator drops the preamble and the body parses identically to the clean fixture. |
 
 ### Findings
 
@@ -124,6 +125,42 @@ didn't exercise the `<vlans>` block at all so this bug slept until
 real-deployment contact.  Fix: added a `<vlans>` render block in
 `_render_canonical` that emits `<tag>` + `<descr>` per VLAN.
 Regression test in `TestRoundTrip::test_roundtrip_preserves_vlans`.
+
+**User-reported paramiko-shell command-echo bug (post-certification):**
+OPNsense backups collected via the paramiko-shell strategy landed
+on disk with a literal `cat /conf/config.xml\r\r\n` preamble before
+the `<?xml` prolog.  The UI's detection probe (tolerant substring
+search for `<opnsense>`) happily reported 98% confidence, but the
+subsequent parse via `ET.fromstring` refused the shape with
+`syntax error: line 1, column 0`.  Two-layer fix:
+
+1. `netconfig/collectors/paramiko_collector.py::_collect_output`
+   now strips the echoed command + trailing CRLF noise from the
+   head of the buffer before returning.  Netmiko got this for
+   free via `strip_command=True`; the raw paramiko-shell strategy
+   had to do it explicitly.  Prevents NEW backups from hitting
+   the bug.
+2. `netconfig/migration/codecs/opnsense/codec.py::_trim_xml_prologue`
+   provides a defensive prefix-trim: before `ET.fromstring`, the
+   codec locates the first `<?xml` or `<opnsense` marker within
+   the first 2 KiB and discards anything before it.  Rescues
+   legacy backups already on disk without requiring operators to
+   re-back-up every device.  The trim is bounded so truly
+   malformed input (no marker at all) still raises the expected
+   ParseError.
+
+Coverage additions:
+  * `tests/unit/test_paramiko_collector.py` — 10 tests for
+    `_strip_command_echo` covering LF-only, CRLF, tab/space mix,
+    embedded-space commands, not-in-head tolerance, empty inputs.
+  * `tests/unit/migration/test_opnsense.py::TestParseTolerancePreamble`
+    + `TestTrimXmlPrologue` — 13 tests covering cat-command,
+    banner-MOTD, prolog-less, still-fails-on-truly-malformed,
+    bounded-head-scan, and the real fixture above.
+  * `tests/integration/test_migration_api.py::TestOpnsenseParamikoShellEchoRescue`
+    — 2 end-to-end tests: legacy corrupt backup rescues to
+    `status=completed` on `POST /plan`; truly malformed file
+    still returns `failed` with a clear parse error.
 
 ### Certification decision
 
@@ -496,13 +533,13 @@ Strategic:
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
 | **cisco_iosxe_cli** | **12** (6 grammar-test + 6 real) | **4 LTS + IOSv 15.x** (16.9 + 17.3 + 17.9 + 17.12 + IOSv) | 1 (LAG member dedup) | **certified** ✅ | — |
-| **opnsense** | **4** (3 upstream + 1 real user-deployed) | 2 sources | 1 (render dropped VLANs) | **certified** ✅ | — |
+| **opnsense** | **5** (3 upstream + 1 real user-deployed + 1 paramiko-shell regression fixture) | 2 sources | 2 (render dropped VLANs; paramiko-shell command-echo broke parse) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
 | **arista_eos** | **4** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
 | **juniper_junos** | **5** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
-| **TOTAL** | **38** | — | **16** | — | — |
+| **TOTAL** | **39** | — | **17** | — | — |
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our

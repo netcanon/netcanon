@@ -66,6 +66,58 @@ from . import port_names as _port_names
 logger = logging.getLogger(__name__)
 
 
+def _trim_xml_envelope(raw: str) -> str:
+    """Strip leading + trailing non-XML noise from *raw*.
+
+    Legacy backups captured via the paramiko-shell collector (before
+    its echo-strip fix) landed on disk with BOTH:
+
+    * A leading ``cat /conf/config.xml\\r\\r\\n`` preamble before
+      the ``<?xml`` prolog (command echo from the PTY).
+    * A trailing shell prompt (e.g. ``root@supergate:~ # ``) AFTER
+      the ``</opnsense>`` closing tag.
+
+    ``ET.fromstring`` refuses both shapes with cryptic line/column
+    errors.  Rather than making operators re-back-up every device,
+    the codec tolerates a bounded amount of noise on either end by
+    locating the XML prolog/root at the head and the closing tag
+    at the tail, slicing between.
+
+    The strip is BOUNDED (head window = 2 KiB, tail scan = last
+    ``</opnsense>`` occurrence) so truly malformed input still
+    falls through to the parse error — operator visibility for
+    genuine failures is preserved.
+    """
+    if not raw:
+        return raw
+    # --- Head trim: find first <?xml or <opnsense marker ---
+    head_limit = min(len(raw), 2048)
+    head = raw[:head_limit]
+    prolog_idx = head.find("<?xml")
+    root_idx = head.find("<opnsense")
+    head_candidates = [idx for idx in (prolog_idx, root_idx) if idx >= 0]
+    if head_candidates:
+        start = min(head_candidates)
+        if start > 0:
+            raw = raw[start:]
+    # --- Tail trim: find last </opnsense> and slice after it.
+    # rfind lets us skip straight to the last occurrence; finding
+    # the closing tag alone handles both well-formed close + any
+    # trailing whitespace/prompt noise the collector left behind. ---
+    close_tag = "</opnsense>"
+    close_idx = raw.rfind(close_tag)
+    if close_idx >= 0:
+        end = close_idx + len(close_tag)
+        if end < len(raw):
+            raw = raw[:end]
+    return raw
+
+
+# Backwards-compat alias — the tighter prologue-only name was the
+# original shape; the envelope rename reflects the extended scope.
+_trim_xml_prologue = _trim_xml_envelope
+
+
 @register
 class OPNsenseCodec(CodecBase):
     """Adapter for OPNsense ``config.xml`` (25.x).
@@ -188,9 +240,19 @@ class OPNsenseCodec(CodecBase):
         """Parse an OPNsense ``config.xml`` document into a
         :class:`CanonicalIntent`.
 
+        Defensive envelope-trim: if the input has noise before the
+        XML prolog (shell command echo, banner MOTD) or after the
+        closing tag (shell prompt residue), locate the XML markers
+        and slice.  This rescues legacy backups written by a
+        pre-fix ParamikoShellCollector that stripped neither end
+        of the PTY buffer.  The strip is bounded — a marker MUST
+        be present or the input passes through unchanged so truly
+        malformed XML still raises the intended ParseError.
+
         Raises:
             ParseError: On malformed XML or missing ``<opnsense>`` root.
         """
+        raw = _trim_xml_envelope(raw)
         try:
             root = ET.fromstring(raw)
         except ET.ParseError as exc:

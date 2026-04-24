@@ -1195,6 +1195,127 @@ class TestSourceFilenameIntegration:
         assert "parse failed" in (job["error"] or "").lower()
 
 
+class TestOpnsenseParamikoShellEchoRescue:
+    """Regression guard for the user-reported bug where OPNsense
+    backups collected via the paramiko-shell collector (pre-fix)
+    landed on disk with a literal ``cat /conf/config.xml\\r\\r\\n``
+    preamble before the ``<?xml`` prolog.  ``ET.fromstring`` refused
+    that shape with ``syntax error: line 1, column 0`` even though
+    the detection probe happily reported 98% confidence.
+
+    Fix has two layers:
+
+    1. **Collector-side** (`paramiko_collector._strip_command_echo`)
+       — prevents NEW backups from landing with the preamble.
+       Covered by ``tests/unit/test_paramiko_collector.py``.
+    2. **Parser-side** (`opnsense.codec._trim_xml_prologue`) —
+       rescues LEGACY backups already on disk that were written by
+       the pre-fix collector.  This test drops such a file directly
+       into the TestClient's configs dir (simulating a legacy
+       backup) and asserts `/plan` succeeds.
+    """
+
+    _OPNSENSE_MIN_VALID = (
+        '<?xml version="1.0"?>\n'
+        "<opnsense>\n"
+        "  <system>\n"
+        "    <hostname>fw-rescued</hostname>\n"
+        "    <domain>example.test</domain>\n"
+        "  </system>\n"
+        "</opnsense>\n"
+    )
+    _CORRUPT_PREAMBLE = "cat /conf/config.xml\r\r\n"
+
+    def test_plan_rescues_legacy_corrupt_backup(
+        self, client, test_settings,
+    ):
+        """Drop a file that mimics what the pre-fix collector wrote
+        and verify ``POST /plan`` completes instead of failing."""
+        corrupt = self._CORRUPT_PREAMBLE + self._OPNSENSE_MIN_VALID
+        fname = "OPNsense_192-0-2-42_20260101_000000.xml"
+        (test_settings.configs_dir / fname).write_text(
+            corrupt, encoding="utf-8",
+        )
+
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "opnsense",
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "completed", (
+            f"parser-side rescue failed — job {job.get('error')!r}"
+        )
+        assert "parse failed" not in (job.get("error") or "").lower()
+
+    def test_plan_still_fails_on_truly_malformed_xml(
+        self, client, test_settings,
+    ):
+        """The rescue must NOT swallow real errors — a file with no
+        ``<?xml`` or ``<opnsense`` marker anywhere must still fail
+        parse cleanly, surfacing the error to the operator."""
+        fname = "OPNsense_broken_20260101_000000.xml"
+        (test_settings.configs_dir / fname).write_text(
+            "this is not xml at all\njust plain text",
+            encoding="utf-8",
+        )
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "opnsense",
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "failed"
+        assert "malformed XML" in (job.get("error") or "")
+
+    def test_plan_rescues_head_and_tail_noise_simultaneously(
+        self, client, test_settings,
+    ):
+        """The user's real file had BOTH a leading command echo AND
+        a trailing shell prompt.  Once both strips are active, the
+        file parses cleanly and the full opnsense → fortigate_cli
+        translation completes — not just opnsense → opnsense
+        (which only exercises the parser side)."""
+        corrupt = (
+            self._CORRUPT_PREAMBLE
+            + self._OPNSENSE_MIN_VALID.rstrip()
+            + "\nroot@supergate:~ # "
+        )
+        fname = "OPNsense_192-0-2-43_20260101_000001.xml"
+        (test_settings.configs_dir / fname).write_text(
+            corrupt, encoding="utf-8",
+        )
+
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "opnsense",
+                "target": "fortigate_cli",  # cross-vendor, matches user scenario
+                "source_filename": fname,
+            },
+        )
+        assert resp.status_code == 200
+        job = resp.json()
+        assert job["status"] == "completed", (
+            f"head+tail rescue failed — job error: {job.get('error')!r}"
+        )
+        # Rendered FortiGate config should contain the hostname
+        # from the source OPNsense config (fw-rescued).
+        rendered = job.get("rendered") or ""
+        assert "fw-rescued" in rendered, (
+            "translated FortiGate config should carry the source "
+            "hostname through the canonical tree"
+        )
+
+
 # ---------------------------------------------------------------------------
 # POST /api/v1/migration/detect (R5 — auto-detection)
 # ---------------------------------------------------------------------------

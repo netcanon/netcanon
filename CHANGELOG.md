@@ -7,6 +7,106 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed (OPNsense paramiko-shell backups breaking the migrate parser)
+
+User report: picking a stored OPNsense config in the Migrate UI
+returned ``parse failed: opnsense: malformed XML: syntax error:
+line 1, column 0`` even though the detection probe reported 98%
+confidence the file was OPNsense XML.  Detection tolerated leading
+noise (substring search for ``<opnsense>``); parse called
+``ET.fromstring`` which refused anything not starting with a valid
+XML prolog.
+
+**Root cause** — the paramiko-shell collector writes the raw PTY
+dump to disk without stripping BOTH:
+
+* The echoed command at the HEAD of the buffer (``cat /conf/
+  config.xml\r\r\n`` before the ``<?xml`` prolog).
+* The returning shell prompt at the TAIL of the buffer
+  (``root@supergate:~ # `` after ``</opnsense>``).
+
+Detection probe (tolerant substring search for ``<opnsense>``)
+happily reported 98% confidence, but ``ET.fromstring`` refused
+both shapes — first failing at line 1 column 0 (leading echo), and
+once the leading strip was added, failing again at line 4603
+column 4 (trailing prompt residue after the close tag).
+``NetmikoCollector`` never had either issue — Netmiko's
+``strip_command=True`` + ``strip_prompt=True`` handle both ends
+internally.  The raw paramiko path has to do them explicitly and
+didn't.
+
+**Fix** in two layers, both now trimming head + tail:
+
+1. **Collector side** (prevents new bad backups):
+   `netconfig/collectors/paramiko_collector.py::_collect_output`
+   now accepts an optional ``command`` kwarg and calls the new
+   module-level helper ``_strip_command_echo(buf, command)`` before
+   returning.  The helper:
+   - **Head**: locates the command string in the first 512 bytes
+     and drops everything up to and including the echo plus
+     trailing ``\r``/``\n``/tab/space.
+   - **Tail**: scans the last 512 bytes for a shell-prompt shape
+     (``user@host:cwd [#$>]``) via bounded regex, slices before
+     the prompt if found.
+   Call site in ``collect()`` now passes
+   ``definition.commands.config``.  Matches Netmiko's
+   ``strip_command=True`` + ``strip_prompt=True`` behaviour.
+2. **Parser side** (rescues legacy backups already on disk):
+   `netconfig/migration/codecs/opnsense/codec.py::_trim_xml_envelope`
+   (renamed from the original ``_trim_xml_prologue``; the old name
+   is kept as a backwards-compat alias).  Called at the top of
+   ``parse()``:
+   - **Head**: searches the first 2 KiB for the earliest ``<?xml``
+     or ``<opnsense`` marker; slices from there.
+   - **Tail**: locates the last ``</opnsense>`` and slices
+     everything after it.
+   If no markers are present, the input passes through unchanged
+   so truly malformed XML still raises the expected ``ParseError``
+   — the trim is bounded so operator visibility of genuine
+   failures is preserved.
+
+### Tests (OPNsense rescue)
+
+- `tests/unit/test_paramiko_collector.py` — 10 tests for
+  ``_strip_command_echo`` covering the bug-reproducing CRLF+CR
+  preamble, LF-only variant, tab+space+CR mix, no-whitespace-after-
+  echo edge case, command-not-in-head tolerance (preserves output
+  that mentions the command deeper in the file), empty/None inputs,
+  and embedded-spaces commands (``show configuration | display set``).
+- `tests/unit/migration/test_opnsense.py::TestParseTolerancePreamble`
+  (6 tests) + `::TestTrimXmlPrologue` (7 tests) — covers the
+  canonical ``cat /conf/config.xml\r\r\n`` shape, banner/MOTD
+  preamble, prolog-less input where only ``<opnsense`` marker is
+  present, bounded head-scan (markers past 2 KiB are NOT stripped),
+  and a regression check against the new real fixture.
+- `tests/integration/test_migration_api.py::TestOpnsenseParamikoShellEchoRescue`
+  — 2 end-to-end tests joining the two halves the investigation
+  agent flagged as a test-coverage gap: drops a corrupt-preamble
+  file directly into `test_settings.configs_dir`, hits
+  `POST /api/v1/migration/plan`, asserts ``status=completed``.
+  Inverse test confirms truly malformed files still return
+  ``failed`` with a clear error.
+- New fixture:
+  `tests/fixtures/real/opnsense/opnsense_paramiko_shell_capture.xml`
+  — `opnsense_core_default.xml`'s body with a
+  ``cat /conf/config.xml\r\r\n`` prefix prepended, reproducing the
+  exact byte shape the user reported.  Documented in NOTICE.md and
+  RESULTS.md as a regression fixture; derived from a BSD-2-Clause
+  upstream file.
+
+### Docs (OPNsense rescue)
+
+- `netconfig/collectors/README.md` — `paramiko_shell` section now
+  notes the command-echo stripping behaviour and points at the
+  Netmiko `strip_command=True` parallel.
+- `tests/fixtures/real/NOTICE.md` — provenance row for the new
+  paramiko-shell-capture fixture.
+- `tests/fixtures/real/RESULTS.md` — OPNsense section gains a
+  Findings paragraph for the user-reported bug; matrix row added
+  for the new fixture; summary-table row updated 4→5 fixtures and
+  1→2 bugs surfaced.  TOTAL row updated 38→39 fixtures and 16→17
+  bugs.
+
 ### Changed (Definitions page enriched with 4 browsing sections)
 
 The `/definitions` page was showing only 4 backup-side device

@@ -105,6 +105,180 @@ class TestParseErrors:
             OPNsenseCodec().parse(raw)
 
 
+class TestParseTolerancePreamble:
+    """Defensive: the parse() prefix-trim rescues OPNsense backups
+    captured with leading command-echo noise.  See
+    ``netconfig/migration/codecs/opnsense/codec.py::_trim_xml_prologue``
+    for rationale and the collector-side fix in
+    ``netconfig/collectors/paramiko_collector.py::_strip_command_echo``
+    for the upstream defect.
+    """
+
+    def test_parses_with_cat_command_preamble(self):
+        """The canonical bug shape: ``cat /conf/config.xml\\r\\r\\n``
+        precedes the XML prolog.  Must parse cleanly — previously
+        raised ``syntax error: line 1, column 0``."""
+        raw = (
+            "cat /conf/config.xml\r\r\n"
+            '<?xml version="1.0"?>\r\n'
+            "<opnsense>\r\n"
+            "  <system><hostname>fw-01</hostname></system>\r\n"
+            "</opnsense>\r\n"
+        )
+        intent = OPNsenseCodec().parse(raw)
+        assert intent.hostname == "fw-01"
+
+    def test_parses_with_banner_motd_preamble(self):
+        """Any non-XML noise before the prolog should be tolerated,
+        not just the ``cat`` command."""
+        raw = (
+            "Welcome to OPNsense 25.1.4\n"
+            "*** Use of this system is monitored ***\n\n"
+            '<?xml version="1.0"?>\n'
+            "<opnsense><system><hostname>fw</hostname></system></opnsense>"
+        )
+        intent = OPNsenseCodec().parse(raw)
+        assert intent.hostname == "fw"
+
+    def test_parses_when_only_root_element_marker_present(self):
+        """Some exports lack the ``<?xml`` prolog — strip still
+        works by locating the ``<opnsense`` root marker."""
+        raw = (
+            "cat /conf/config.xml\r\n"
+            "<opnsense><system><hostname>fw</hostname></system></opnsense>"
+        )
+        intent = OPNsenseCodec().parse(raw)
+        assert intent.hostname == "fw"
+
+    def test_truly_malformed_still_raises(self):
+        """Input with NO XML markers at all must still raise —
+        defensive strip must not swallow real errors."""
+        with pytest.raises(ParseError, match="malformed XML"):
+            OPNsenseCodec().parse("not xml at all\nnothing to see here")
+
+    def test_clean_input_passes_through_unchanged(self):
+        """Well-formed input (no preamble) must parse identically
+        to before the strip was added — zero regression on the
+        happy path."""
+        raw = _MIN  # the module's minimal-valid fixture
+        intent = OPNsenseCodec().parse(raw)
+        assert intent.hostname == "fw01"  # matches _MIN hostname
+
+    def test_parses_real_paramiko_capture_fixture(self):
+        """Regression guard: the committed
+        ``opnsense_paramiko_shell_capture.xml`` fixture — an
+        exact replica of the user-reported bug shape (cat command
+        echo + CRLF noise + valid XML body) must parse cleanly."""
+        import pathlib
+        raw = pathlib.Path(
+            "tests/fixtures/real/opnsense/"
+            "opnsense_paramiko_shell_capture.xml"
+        ).read_text(encoding="utf-8")
+        intent = OPNsenseCodec().parse(raw)
+        # Just assert parse succeeded + the tree has content —
+        # don't enumerate fields (the underlying fixture body may
+        # evolve).
+        assert intent.source_vendor == "opnsense"
+
+
+class TestTrimXmlEnvelope:
+    """Direct tests for the ``_trim_xml_envelope`` helper (formerly
+    ``_trim_xml_prologue``).  Pure function — tests it in isolation
+    from the rest of the parser.  Covers both head (prolog/root
+    location) and tail (closing-tag residue) trims."""
+
+    def test_preserves_input_with_no_marker(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = "nothing here"
+        assert _trim_xml_envelope(raw) == raw
+
+    def test_preserves_clean_xml_input(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = '<?xml version="1.0"?>\n<opnsense/>\n'
+        # Actually the function truncates to the </opnsense> close —
+        # a self-closing <opnsense/> lacks the literal close tag so
+        # no tail trim fires.  Head trim is also no-op.  Passes through.
+        assert _trim_xml_envelope(raw) == raw
+
+    def test_strips_before_xml_prolog(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = 'garbage here\n<?xml version="1.0"?>\n<opnsense></opnsense>\n'
+        out = _trim_xml_envelope(raw)
+        assert out.startswith('<?xml version="1.0"?>')
+        assert out.endswith('</opnsense>')
+
+    def test_strips_before_root_element_when_no_prolog(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = "garbage\n<opnsense><hostname>x</hostname></opnsense>"
+        out = _trim_xml_envelope(raw)
+        assert out.startswith("<opnsense>")
+
+    def test_picks_earliest_marker_when_both_present(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = 'junk\n<?xml?>\n<opnsense></opnsense>'
+        out = _trim_xml_envelope(raw)
+        assert out == '<?xml?>\n<opnsense></opnsense>'
+
+    def test_bounded_head_scan(self):
+        """Markers past the 2 KiB head-window are IGNORED."""
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = ("x" * 3000) + '<?xml?>\n<opnsense></opnsense>'
+        # Head window is 2048 bytes; marker at byte 3000 won't be
+        # found by the head trim.  Tail trim still runs and slices
+        # after </opnsense>, but that's fine — the head-untouched
+        # buffer still fails downstream parse.  For THIS test we
+        # just verify no false head strip.
+        out = _trim_xml_envelope(raw)
+        # Head is unchanged (still 3000 x's); tail may have been
+        # trimmed if a closing tag was present.
+        assert out.startswith("x" * 100)
+
+    def test_empty_input_returns_empty(self):
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        assert _trim_xml_envelope("") == ""
+
+    def test_strips_trailing_shell_prompt(self):
+        """Tail trim: shell prompt residue after </opnsense> must
+        be sliced off.  User-reported shape: after the closing
+        tag, the paramiko-shell buffer contains
+        ``root@supergate:~ # `` — breaks ET.fromstring further
+        down the line."""
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = (
+            '<?xml version="1.0"?>\n'
+            '<opnsense><system><hostname>fw</hostname></system></opnsense>\n'
+            'root@supergate:~ # '
+        )
+        out = _trim_xml_envelope(raw)
+        assert out.rstrip().endswith("</opnsense>")
+        assert "root@supergate" not in out
+
+    def test_strips_both_ends_simultaneously(self):
+        """The canonical user-reported shape: command echo at head
+        AND shell prompt at tail, both in one file."""
+        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        raw = (
+            "cat /conf/config.xml\r\r\n"
+            '<?xml version="1.0"?>\n<opnsense/>\n'
+            "root@host:~ # "
+        )
+        out = _trim_xml_envelope(raw)
+        # <opnsense/> is self-closing so tail-trim finds no
+        # </opnsense> close tag; head-trim still strips the echo.
+        # This test documents the asymmetry.
+        assert out.startswith('<?xml version="1.0"?>')
+
+    def test_legacy_alias_still_works(self):
+        """Backwards-compat: ``_trim_xml_prologue`` alias must
+        still resolve (some external test code or imports may
+        reference the old name)."""
+        from netconfig.migration.codecs.opnsense.codec import (
+            _trim_xml_envelope,
+            _trim_xml_prologue,
+        )
+        assert _trim_xml_prologue is _trim_xml_envelope
+
+
 # ---------------------------------------------------------------------------
 # Render + round-trip
 # ---------------------------------------------------------------------------
