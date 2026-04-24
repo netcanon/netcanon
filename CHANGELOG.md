@@ -7,6 +7,76 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (Definitions page enriched with 4 browsing sections)
+
+The `/definitions` page was showing only 4 backup-side device
+definitions, hiding the richer data NetConfig actually has loaded:
+1 version overlay + 54 migration target profiles (with module
+variants) + 8 vendor codec records.  The page now surfaces ALL of
+it as a browsable reference — the Tier-3 rename-modal dropdowns
+are no longer the only way to discover what hardware/capabilities
+the app supports.
+
+- `netconfig/api/routes/ui.py::definitions_page` — extended to
+  pass four context variables instead of one: `definitions`
+  (unchanged family-base backup list), `overlays` (version /
+  model-pinned variants from the loader's `_variants` registry),
+  `profiles_by_vendor` (54 target profiles grouped by vendor),
+  `vendor_rows` (8 vendors with their registered codecs +
+  certainty tier + direction + capability-matrix counts).
+- `netconfig/templates/definitions.html` — rewrote with four
+  `<section>` blocks, each with a `section-*` testid.  Native
+  `<details>`/`<summary>` disclosure for per-vendor and per-
+  profile expansion — zero custom JS for the collapsible
+  behaviour.  Port chips render per-port with kind-specific
+  border colours (uplink / mgmt / console) + tooltip with
+  speed / PoE / SFP / notes.  Module-variant cards expose SKU
+  + description + uplink port list, so the Cat 9300 NM-8X vs
+  NM-2Q choice (and similar across Aruba 3810M / FortiGate
+  SFP-cage variants) is finally visible outside the migrate
+  modal.
+- **Live filter over target profiles**: a search input at the
+  top of section 3 does DOM hide/show against a pre-lowercased
+  `data-haystack` attribute (`vendor + model + display_name`)
+  set server-side.  Vendor groups auto-collapse when all their
+  profiles are filtered out.  Live counter shows "N matches"
+  as the user types.
+- **Codec certainty / direction pills**: each codec row in the
+  vendors section renders its certainty tier as a colour-coded
+  pill (`certified` → green, `best_effort` → amber,
+  `experimental` → yellow — driven by the existing badge
+  theme tokens so dark mode just works) + a direction pill
+  (`parse_only` / `bidirectional` / `render_only`).  Side-by-
+  side summary of each vendor's codec portfolio without
+  needing to hit the API.
+- All new styles use the dark-mode theme tokens from `base.html`'s
+  `:root` / `[data-theme="dark"]` blocks — page renders correctly
+  in both themes.
+
+### Tests (Definitions page)
+
+- `tests/integration/test_ui_routes.py::TestDefinitionsPageEnriched`
+  — 11 server-side assertion tests covering:
+  - The four section containers all render
+  - Device definitions section count badge present
+  - Target-profiles section + vendor groups + profile rows all
+    populate from the real `definitions/target_profiles/`
+  - Filter input + live count elements present
+  - Module-variant cards emit when profiles have modules
+  - Base-ports chip list emits
+  - Vendors section lists all codecs with certainty + direction
+    pills using theme-token-driven CSS classes
+  - Overlays section ABSENT when loader has no overlays (the
+    default test harness)
+  - Overlays section RENDERS when an overlay YAML is dropped
+    in at runtime (regression guard against the original
+    "5 loaded / 4 displayed" user report)
+- `tests/testid_reference.md` — Definitions section rewritten
+  into four subsections (one per page section) with 30+ new
+  testid entries covering sections, filter, vendor groups,
+  profile rows, module cards, port-chip containers, vendor
+  rows, codec rows, direction/certainty pills.
+
 ### Added (Global dark mode with sun/moon toggle on top nav)
 
 - `netconfig/templates/base.html` — light + dark themes via CSS

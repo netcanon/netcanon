@@ -476,6 +476,42 @@ schema + authoring guide;
 [`netconfig/migration/target_profiles.py`](netconfig/migration/target_profiles.py)
 for the loader + accessor implementation.
 
+### The `/definitions` browsing page
+
+`/definitions` is the single browsing view for everything
+NetConfig knows about — four sections in one page:
+
+1. **Backup-side device definitions** (`section-device-definitions`):
+   the legacy table — what vendor YAMLs the backup layer
+   recognises (`Cisco`, `Fortigate`, etc.).  Excludes overlays so
+   each `type_key` appears exactly once.
+2. **Version / model overlays** (`section-overlays`, conditional):
+   the extra variants (`Cisco 17.12`) that the loader keeps in
+   its `_variants` registry but filters out of `load_all()`.
+   Explains "loaded N but showed N-M" on the startup log.
+3. **Migration target profiles** (`section-target-profiles`):
+   the 50+ hardware models with per-model port layouts, module
+   variants (NM-8X, NM-2Q, JL084A, …), stacking caps, VLAN/user
+   limits.  Previously only reachable through the Tier-3
+   rename-modal dropdown — now browsable with vendor grouping +
+   live filter.
+4. **Migration vendors + codec capabilities** (`section-vendors`):
+   each of the 8 vendors with its registered codecs, direction
+   (`parse_only` / `bidirectional`), certainty tier (`certified`
+   / `best_effort` / `experimental`), and per-codec capability-
+   matrix counts (supported / lossy / unsupported xpaths).
+
+Template: [`netconfig/templates/definitions.html`](netconfig/templates/definitions.html).
+Route: [`netconfig/api/routes/ui.py::definitions_page`](netconfig/api/routes/ui.py).
+Collapsible panels use native `<details>` / `<summary>` — zero
+JS, browser-built-in keyboard + screen-reader behaviour.
+The profile filter is a pure DOM hide/show on a pre-lowercased
+`data-haystack` attribute set server-side (vendor + model +
+display_name concatenated).  See
+[`tests/testid_reference.md`](tests/testid_reference.md) for
+the full testid inventory (one `section-*` testid per
+container, plus per-row, per-module, per-codec testids).
+
 ---
 
 ## Template organisation

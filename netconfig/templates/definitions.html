@@ -1,64 +1,585 @@
 {% extends "base.html" %}
 {% block title %}Definitions — NetConfig{% endblock %}
 
+{#
+  Definitions browser — four sections:
+    1. Backup-side device definitions (family-base YAMLs).
+    2. Version / model overlays (loaded but filtered out of load_all).
+    3. Migration target profiles (per-model hardware; 50+ entries
+       previously only accessible via the Tier-3 rename modal).
+    4. Vendors + codec capabilities (the 8 migration vendors with
+       shipped codecs, direction, certainty tier).
+
+  Every section carries a `section-<name>` testid on the container
+  so e2e tests can jump to a section without enumerating every
+  inner element.  Collapsible blocks use the native <details> /
+  <summary> elements — zero JS, browser-built-in keyboard + screen-
+  reader behaviour.  Custom colours driven by theme tokens (see
+  ARCHITECTURE.md "Theming (dark mode)").
+#}
+
 {% block content %}
-<h1>Loaded Device Definitions</h1>
+<h1>Definitions Browser</h1>
 
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem">
-  <p style="color:#666;margin:0">
-    {{ definitions | length }} definition(s) loaded from <code>definitions/</code>.
-  </p>
-  <button id="reload-defs-btn" class="btn-secondary" data-testid="def-reload-btn">
-    &#8635; Reload
-  </button>
-</div>
-
-{% if definitions %}
-<table data-testid="definitions-table">
-  <thead>
-    <tr>
-      <th>Type Key</th><th>Vendor</th><th>OS</th>
-      <th>Collection</th><th>File Ext</th><th>Priority</th><th>Notes</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for def in definitions %}
-  <tr data-testid="definition-row" data-type-key="{{ def.type_key }}">
-    <td data-testid="def-type-key"><strong>{{ def.type_key }}</strong></td>
-    <td data-testid="def-vendor">{{ def.vendor }}</td>
-    <td data-testid="def-os">{{ def.os }}</td>
-    <td data-testid="def-strategy">
-      {% if def.collector.strategy == 'netmiko' %}
-        SSH (Netmiko)
-        {% if def.collector.netmiko_device_type %}
-        <br><small style="color:#888">{{ def.collector.netmiko_device_type }}</small>
-        {% endif %}
-      {% elif def.collector.strategy == 'paramiko_shell' %}
-        SSH (Shell)
-      {% else %}
-        <code>{{ def.collector.strategy }}</code>
-      {% endif %}
-    </td>
-    <td data-testid="def-ext"><code>.{{ def.file_extension }}</code></td>
-    <td data-testid="def-priority">{{ def.priority }}</td>
-    <td data-testid="def-notes"
-        style="max-width:300px;color:#555;font-size:.85rem"
-        title="{{ def.notes }}">
-      {{ def.notes | truncate(120) }}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% else %}
-<p class="empty-msg" data-testid="no-definitions-msg">
-  No definitions loaded. Add YAML files to the <code>definitions/</code>
-  directory and click <strong>Reload</strong>.
+<p style="color:var(--text-muted);margin-bottom:1.25rem;font-size:.9rem">
+  What NetConfig knows about: backup-side device definitions
+  ({{ definitions | length }} family-base + {{ overlays | length }}
+  overlay), migration target profiles ({{ target_profile_count }}
+  hardware models across {{ profiles_by_vendor | length }}
+  vendor{{ 's' if profiles_by_vendor | length != 1 else '' }}), and
+  {{ vendor_rows | length }} vendor codec{{ 's' if vendor_rows | length != 1 else '' }}
+  with capability matrices.
 </p>
+
+<style>
+  /* Scoped styles for the definitions page only.  All colours flow
+     from theme tokens — no raw hex.  See base.html's :root for the
+     token palette. */
+  .defs-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 1.25rem;
+    box-shadow: var(--shadow-card);
+    overflow: hidden;
+  }
+  .defs-section-header {
+    padding: .75rem 1rem;
+    background: var(--surface-elev);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    flex-wrap: wrap;
+  }
+  .defs-section-header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--text-primary);
+  }
+  .defs-section-count {
+    font-size: .78rem;
+    color: var(--text-muted);
+    font-family: monospace;
+    background: var(--surface-alt);
+    padding: .1rem .5rem;
+    border-radius: 3px;
+  }
+  .defs-section-spacer { flex: 1 1 auto; }
+  .defs-section-body { padding: 1rem; }
+  .defs-section-body > table { margin: 0; }
+
+  /* Vendor + profile-detail blocks: nested <details> for
+     browser-native disclosure without custom JS.  Caret rotates
+     on open via the built-in ::marker behaviour — we don't
+     override it beyond ensuring the text stays aligned. */
+  details.defs-profile,
+  details.defs-vendor {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: .5rem;
+    background: var(--surface-alt);
+  }
+  details.defs-profile > summary,
+  details.defs-vendor > summary {
+    padding: .55rem .75rem;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: .9rem;
+    color: var(--text-primary);
+    user-select: none;
+  }
+  details.defs-profile > summary:hover,
+  details.defs-vendor > summary:hover {
+    background: var(--surface-hover);
+  }
+  details.defs-profile[open] > summary,
+  details.defs-vendor[open] > summary {
+    border-bottom: 1px solid var(--border);
+  }
+  .defs-profile-body,
+  .defs-vendor-body {
+    padding: .75rem;
+    background: var(--surface);
+    border-radius: 0 0 6px 6px;
+  }
+
+  /* Per-profile detail: two-column layout for scalar fields,
+     nested table for ports + modules. */
+  .defs-kv {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: .25rem .75rem;
+    font-size: .85rem;
+    margin-bottom: .75rem;
+  }
+  .defs-kv dt {
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .defs-kv dd {
+    color: var(--text-primary);
+    margin: 0;
+    font-family: monospace;
+  }
+  .defs-kv dd code { font-size: .82rem; }
+
+  /* Port / module inline list: space-efficient tag-style chips. */
+  .defs-port-list {
+    display: flex; flex-wrap: wrap; gap: .25rem;
+    margin: .25rem 0;
+  }
+  .defs-port-chip {
+    font-family: monospace;
+    font-size: .78rem;
+    padding: .1rem .45rem;
+    background: var(--surface-elev);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+  }
+  .defs-port-chip[data-kind="uplink"]   { border-color: var(--accent); }
+  .defs-port-chip[data-kind="mgmt"]     { border-color: var(--text-faint); }
+  .defs-port-chip[data-kind="console"]  { opacity: .7; }
+
+  .defs-subheading {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    color: var(--text-muted);
+    margin: .5rem 0 .3rem;
+  }
+
+  /* Module card — nested inside a target-profile body. */
+  .defs-module {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface-alt);
+    padding: .5rem .75rem;
+    margin-bottom: .4rem;
+  }
+  .defs-module-sku {
+    font-family: monospace;
+    font-weight: 600;
+    font-size: .88rem;
+    color: var(--accent);
+  }
+  .defs-module-desc {
+    font-size: .82rem;
+    color: var(--text-muted);
+    margin-left: .5rem;
+  }
+
+  /* Certainty + direction pills on the vendor/codec summary. */
+  .defs-pill {
+    display: inline-block;
+    font-size: .72rem;
+    padding: .08rem .45rem;
+    border-radius: 3px;
+    font-weight: 600;
+    font-family: monospace;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-right: .25rem;
+  }
+  .defs-pill-certified    { background: var(--badge-completed-bg); color: var(--badge-completed-fg); }
+  .defs-pill-best_effort  { background: var(--badge-partial-bg);   color: var(--badge-partial-fg); }
+  .defs-pill-experimental { background: var(--badge-running-bg);   color: var(--badge-running-fg); }
+  .defs-pill-direction    { background: var(--surface-elev);       color: var(--text-primary); border: 1px solid var(--border); }
+
+  /* Vendor-filter: keeps the target-profiles section usable when
+     the corpus is big.  Pure DOM filter — no JS dependency beyond
+     a short inline handler (see scripts block). */
+  #defs-profile-filter-row {
+    display: flex; gap: .5rem; align-items: center; margin-bottom: .75rem;
+    flex-wrap: wrap;
+  }
+  #defs-profile-filter-row label {
+    font-size: .8rem; font-weight: 600; color: var(--text-muted);
+  }
+  #defs-profile-filter {
+    padding: .3rem .5rem; font-size: .85rem;
+    background: var(--surface); color: var(--text-primary);
+    border: 1px solid var(--border-strong); border-radius: 4px;
+    min-width: 200px;
+  }
+  .defs-profile-hidden { display: none !important; }
+</style>
+
+{# ═════════════════ 1. Backup-side device definitions ═════════════════ #}
+<section class="defs-section" data-testid="section-device-definitions">
+  <div class="defs-section-header">
+    <h2>Backup-side device definitions</h2>
+    <span class="defs-section-count"
+          data-testid="section-device-definitions-count">
+      {{ definitions | length }}
+    </span>
+    <span class="defs-section-spacer"></span>
+    <button id="reload-defs-btn" class="btn-secondary"
+            data-testid="def-reload-btn"
+            style="padding:.3rem .7rem;font-size:.78rem">
+      &#8635; Reload from disk
+    </button>
+  </div>
+  <div class="defs-section-body">
+    {% if definitions %}
+    <table data-testid="definitions-table">
+      <thead>
+        <tr>
+          <th>Type Key</th><th>Vendor</th><th>OS</th>
+          <th>Collection</th><th>File Ext</th><th>Priority</th><th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for def in definitions %}
+      <tr data-testid="definition-row" data-type-key="{{ def.type_key }}">
+        <td data-testid="def-type-key"><strong>{{ def.type_key }}</strong></td>
+        <td data-testid="def-vendor">{{ def.vendor }}</td>
+        <td data-testid="def-os">{{ def.os }}</td>
+        <td data-testid="def-strategy">
+          {% if def.collector.strategy == 'netmiko' %}
+            SSH (Netmiko)
+            {% if def.collector.netmiko_device_type %}
+            <br><small style="color:var(--text-faint)">{{ def.collector.netmiko_device_type }}</small>
+            {% endif %}
+          {% elif def.collector.strategy == 'paramiko_shell' %}
+            SSH (Shell)
+          {% else %}
+            <code>{{ def.collector.strategy }}</code>
+          {% endif %}
+        </td>
+        <td data-testid="def-ext"><code>.{{ def.file_extension }}</code></td>
+        <td data-testid="def-priority">{{ def.priority }}</td>
+        <td data-testid="def-notes"
+            style="max-width:300px;color:var(--text-muted);font-size:.85rem"
+            title="{{ def.notes }}">
+          {{ def.notes | truncate(120) }}</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty-msg" data-testid="no-definitions-msg">
+      No definitions loaded.  Add YAML files to the
+      <code>definitions/</code> directory and click
+      <strong>Reload from disk</strong>.
+    </p>
+    {% endif %}
+  </div>
+</section>
+
+{# ═════════════════ 2. Version / model overlays ═════════════════ #}
+{% if overlays %}
+<section class="defs-section" data-testid="section-overlays">
+  <div class="defs-section-header">
+    <h2>Version / model overlays</h2>
+    <span class="defs-section-count"
+          data-testid="section-overlays-count">
+      {{ overlays | length }}
+    </span>
+  </div>
+  <div class="defs-section-body">
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:.75rem">
+      Overlays are YAML variants that pin a specific OS version or
+      model (e.g. ``Cisco 17.12``).  They're stored in the loader's
+      variant registry and resolved by
+      {# Link is informational; the actual resolve() call lives in
+         netconfig/definitions/loader.py.  Don't link-rot. #}
+      <code>DefinitionLoader.resolve()</code> during backup — longest
+      match wins.  The main definitions table above shows only the
+      family bases; this list explains the "loaded N but showed N-M"
+      split on the startup log.
+    </p>
+    <table data-testid="overlays-table">
+      <thead>
+        <tr>
+          <th>Type Key</th><th>OS Version</th><th>Model</th>
+          <th>Priority</th><th>File</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for ov in overlays %}
+      <tr data-testid="overlay-row"
+          data-type-key="{{ ov.type_key }}"
+          data-os-version="{{ ov.os_version or '' }}"
+          data-model="{{ ov.model or '' }}">
+        <td><strong>{{ ov.type_key }}</strong></td>
+        <td data-testid="overlay-os-version">
+          {% if ov.os_version %}<code>{{ ov.os_version }}</code>
+          {% else %}<span style="color:var(--text-faint)">—</span>{% endif %}
+        </td>
+        <td data-testid="overlay-model">
+          {% if ov.model %}<code>{{ ov.model }}</code>
+          {% else %}<span style="color:var(--text-faint)">—</span>{% endif %}
+        </td>
+        <td>{{ ov.priority }}</td>
+        <td style="color:var(--text-muted);font-size:.82rem;font-family:monospace">
+          {{ ov.source_file | default('', true) }}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
 {% endif %}
+
+{# ═════════════════ 3. Migration target profiles ═════════════════ #}
+<section class="defs-section" data-testid="section-target-profiles">
+  <div class="defs-section-header">
+    <h2>Migration target profiles</h2>
+    <span class="defs-section-count"
+          data-testid="section-target-profiles-count">
+      {{ target_profile_count }}
+    </span>
+  </div>
+  <div class="defs-section-body">
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:.75rem">
+      Hardware-aware profiles from
+      <code>definitions/target_profiles/</code>: per-model port
+      inventories, module variants, stacking capabilities, VLAN +
+      user limits.  The Tier-3 rename modal uses these to validate
+      port assignments; they're shown here for discovery + browsing.
+    </p>
+    {% if target_profile_count %}
+    <div id="defs-profile-filter-row">
+      <label for="defs-profile-filter">Filter by vendor / model:</label>
+      <input type="search"
+             id="defs-profile-filter"
+             data-testid="defs-profile-filter"
+             placeholder="e.g. cisco, 9300, aruba 2930…"
+             autocomplete="off" spellcheck="false">
+      <span id="defs-profile-filter-count"
+            data-testid="defs-profile-filter-count"
+            style="font-size:.78rem;color:var(--text-muted)">
+      </span>
+    </div>
+    {% for vendor_key, profiles in profiles_by_vendor %}
+    <details class="defs-vendor"
+             data-testid="profile-vendor-group"
+             data-vendor="{{ vendor_key }}">
+      <summary>
+        <span data-testid="profile-vendor-name">{{ vendor_key }}</span>
+        <span style="color:var(--text-muted);font-weight:normal;font-size:.82rem">
+          — {{ profiles | length }} profile{{ 's' if profiles | length != 1 else '' }}
+        </span>
+      </summary>
+      <div class="defs-vendor-body">
+        {% for p in profiles %}
+        <details class="defs-profile defs-profile-entry"
+                 data-testid="target-profile-row"
+                 data-vendor="{{ p.vendor }}"
+                 data-model="{{ p.model }}"
+                 data-haystack="{{ (p.vendor ~ ' ' ~ p.model ~ ' ' ~ p.display_name) | lower }}">
+          <summary>
+            <span data-testid="profile-display-name">
+              {{ p.display_name or (p.vendor ~ ' ' ~ p.model) }}
+            </span>
+            <span style="color:var(--text-muted);font-weight:normal;font-size:.82rem;margin-left:.5rem">
+              <code>{{ p.model }}</code>
+              · {{ p.device_class.value if p.device_class.value is defined else p.device_class }}
+              {% if p.has_modules %}
+                · <span data-testid="profile-module-count">{{ p.modules | length }} module variant{{ 's' if p.modules | length != 1 else '' }}</span>
+              {% endif %}
+              · {{ p.port_count }} base port{{ 's' if p.port_count != 1 else '' }}
+            </span>
+          </summary>
+          <div class="defs-profile-body">
+            <dl class="defs-kv">
+              <dt>Vendor</dt>
+              <dd><code>{{ p.vendor }}</code></dd>
+              <dt>Model</dt>
+              <dd><code>{{ p.model }}</code></dd>
+              {% if p.stacking %}
+              <dt>Stacking</dt>
+              <dd>{{ p.stacking }}</dd>
+              {% endif %}
+              <dt>Device class</dt>
+              <dd>{{ p.device_class.value if p.device_class.value is defined else p.device_class }}</dd>
+              {% if p.lags %}
+              <dt>LAGs</dt>
+              <dd>max {{ p.lags.max }}
+                  {% if p.lags.prefix %}· prefix <code>{{ p.lags.prefix }}</code>{% endif %}
+              </dd>
+              {% endif %}
+              {% if p.max_vlans is not none %}
+              <dt>Max VLANs</dt>
+              <dd>
+                {{ p.max_vlans }}
+                {% if p.max_vlans_source %}
+                <small style="color:var(--text-muted);font-style:italic">
+                  ({{ p.max_vlans_source }})
+                </small>
+                {% endif %}
+              </dd>
+              {% endif %}
+              {% if p.max_local_users is not none %}
+              <dt>Max local users</dt>
+              <dd>{{ p.max_local_users }}</dd>
+              {% endif %}
+            </dl>
+
+            {% if p.ports %}
+            <div class="defs-subheading"
+                 data-testid="profile-base-ports-heading">
+              Base ports ({{ p.ports | length }})
+            </div>
+            <div class="defs-port-list"
+                 data-testid="profile-base-ports">
+              {% for port in p.ports %}
+              <span class="defs-port-chip"
+                    data-kind="{{ port.kind }}"
+                    data-speed="{{ port.speed }}"
+                    title="{{ port.kind }}{% if port.speed %} · {{ port.speed }}{% endif %}{% if port.poe %} · PoE{% endif %}{% if port.sfp %} · SFP{% endif %}{% if port.notes %} · {{ port.notes }}{% endif %}">
+                {{ port.id }}
+              </span>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            {% if p.has_modules %}
+            <div class="defs-subheading"
+                 data-testid="profile-modules-heading">
+              Module variants ({{ p.modules | length }})
+            </div>
+            {% for sku, mod in p.modules.items() %}
+            <div class="defs-module"
+                 data-testid="profile-module"
+                 data-sku="{{ sku }}">
+              <div>
+                <span class="defs-module-sku"
+                      data-testid="profile-module-sku">{{ sku }}</span>
+                {% if mod.description %}
+                <span class="defs-module-desc">{{ mod.description }}</span>
+                {% endif %}
+              </div>
+              {% if mod.ports %}
+              <div class="defs-port-list"
+                   style="margin-top:.35rem"
+                   data-testid="profile-module-ports">
+                {% for port in mod.ports %}
+                <span class="defs-port-chip"
+                      data-kind="{{ port.kind }}"
+                      data-speed="{{ port.speed }}"
+                      title="{{ port.kind }}{% if port.speed %} · {{ port.speed }}{% endif %}{% if port.sfp %} · SFP{% endif %}">
+                  {{ port.id }}
+                </span>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endfor %}
+            {% endif %}
+          </div>
+        </details>
+        {% endfor %}
+      </div>
+    </details>
+    {% endfor %}
+    {% else %}
+    <p class="empty-msg" data-testid="no-target-profiles-msg">
+      No target profiles loaded.  The Tier-3 rename modal will
+      fall back to free-form port names.
+    </p>
+    {% endif %}
+  </div>
+</section>
+
+{# ═════════════════ 4. Vendors + codec capabilities ═════════════════ #}
+<section class="defs-section" data-testid="section-vendors">
+  <div class="defs-section-header">
+    <h2>Migration vendors + codec capabilities</h2>
+    <span class="defs-section-count"
+          data-testid="section-vendors-count">
+      {{ vendor_rows | length }}
+    </span>
+  </div>
+  <div class="defs-section-body">
+    <p style="color:var(--text-muted);font-size:.85rem;margin-bottom:.75rem">
+      Each vendor ships with one or more codecs that parse / render
+      its configuration format.  <strong>Direction</strong>:
+      parse-only vs bidirectional.  <strong>Certainty</strong> tier:
+      certified (≥3 real captures from ≥2 OS versions, all round-trip
+      stable) · best_effort (≥1 real capture round-trips clean) ·
+      experimental (synthetic fixtures only).
+    </p>
+    {% for row in vendor_rows %}
+    <details class="defs-vendor"
+             data-testid="vendor-row"
+             data-vendor-id="{{ row.info.id }}">
+      <summary>
+        <span data-testid="vendor-display-name">{{ row.info.display_name }}</span>
+        <span style="color:var(--text-muted);font-weight:normal;font-size:.82rem;margin-left:.5rem">
+          <code data-testid="vendor-id">{{ row.info.id }}</code>
+          {% if row.info.device_classes %}
+          ·
+          {% for dc in row.info.device_classes %}
+            {{ dc.value if dc.value is defined else dc }}{% if not loop.last %},{% endif %}
+          {% endfor %}
+          {% endif %}
+          · {{ row.codecs | length }} codec{{ 's' if row.codecs | length != 1 else '' }}
+        </span>
+      </summary>
+      <div class="defs-vendor-body">
+        {% if row.info.notes %}
+        <p style="font-size:.85rem;color:var(--text-muted);margin:0 0 .5rem">
+          {{ row.info.notes }}
+        </p>
+        {% endif %}
+        {% if row.codecs %}
+        <table data-testid="vendor-codecs-table"
+               style="margin-top:.25rem">
+          <thead>
+            <tr>
+              <th>Codec</th><th>Direction</th><th>Certainty</th>
+              <th>Input format</th><th>Paths</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for c in row.codecs %}
+          <tr data-testid="vendor-codec-row"
+              data-codec-name="{{ c.name }}">
+            <td><code data-testid="codec-name">{{ c.name }}</code></td>
+            <td>
+              <span class="defs-pill defs-pill-direction"
+                    data-testid="codec-direction">
+                {{ c.direction }}
+              </span>
+            </td>
+            <td>
+              <span class="defs-pill defs-pill-{{ c.certainty }}"
+                    data-testid="codec-certainty">
+                {{ c.certainty }}
+              </span>
+            </td>
+            <td><code style="font-size:.78rem">{{ c.input_format }}</code></td>
+            <td style="font-size:.78rem;color:var(--text-muted)"
+                data-testid="codec-caps-counts">
+              <span title="Supported xpaths">&#10003; {{ c.supported_count }}</span>
+              ·
+              <span title="Lossy xpaths (review-required on translate)">&#9888; {{ c.lossy_count }}</span>
+              ·
+              <span title="Unsupported xpaths (cannot be translated)">&#10007; {{ c.unsupported_count }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p style="color:var(--text-faint);font-style:italic;font-size:.85rem">
+          No codecs registered for this vendor.
+        </p>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
 <script>
+/* ── Backup-definitions reload (pre-existing) ── */
 document.getElementById('reload-defs-btn').addEventListener('click', async function() {
   var btn = this;
   btn.disabled = true;
@@ -72,13 +593,49 @@ document.getElementById('reload-defs-btn').addEventListener('click', async funct
     } else {
       showToast('Reload failed: ' + res.statusText, 'error');
       btn.disabled = false;
-      btn.textContent = '\u21BB Reload';
+      btn.textContent = '\u21BB Reload from disk';
     }
   } catch (err) {
     showToast('Reload failed: ' + err.message, 'error');
     btn.disabled = false;
-    btn.textContent = '\u21BB Reload';
+    btn.textContent = '\u21BB Reload from disk';
   }
 });
+
+/* ── Target-profile filter (DOM hide/show, no network round-trip) ── */
+/* Filters both vendor groups (by vendor-id match) and individual
+   profiles (by data-haystack match, which is pre-lowercased
+   vendor + model + display_name concatenation).  A vendor group
+   stays visible if at least one of its profiles matches.
+   A cleared filter restores everything. */
+(function() {
+  var input = document.getElementById('defs-profile-filter');
+  if (!input) return;  // empty target-profiles corpus
+  var count = document.getElementById('defs-profile-filter-count');
+  function applyFilter() {
+    var q = input.value.trim().toLowerCase();
+    var vendorGroups = document.querySelectorAll('[data-testid="profile-vendor-group"]');
+    var totalVisible = 0;
+    vendorGroups.forEach(function(group) {
+      var entries = group.querySelectorAll('.defs-profile-entry');
+      var vendorVisible = 0;
+      entries.forEach(function(entry) {
+        var hay = entry.getAttribute('data-haystack') || '';
+        var match = q === '' || hay.indexOf(q) !== -1;
+        entry.classList.toggle('defs-profile-hidden', !match);
+        if (match) vendorVisible++;
+      });
+      group.classList.toggle('defs-profile-hidden', vendorVisible === 0);
+      totalVisible += vendorVisible;
+    });
+    if (q === '') {
+      count.textContent = '';
+    } else {
+      count.textContent = totalVisible + ' match' +
+        (totalVisible === 1 ? '' : 'es');
+    }
+  }
+  input.addEventListener('input', applyFilter);
+})();
 </script>
 {% endblock %}

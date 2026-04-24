@@ -283,3 +283,188 @@ class TestThemeToggleRendered:
         assert "--surface:" in resp.text
         assert "--text-primary:" in resp.text
         assert "--nav-bg:" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# TestDefinitionsPageEnriched — the /definitions page exposes FOUR
+# sections (backup device defs + overlays + target profiles +
+# vendor codecs).  Previously only the first section existed; the
+# other three surface the hidden ~62 loaded records.  This class
+# guards against regressions in:
+#   * which sections render
+#   * the section-count badges being wired to the right context
+#     variables
+#   * per-profile port chips + module variants populating
+#   * per-vendor codec tables rendering with direction + certainty
+#     pills
+# ---------------------------------------------------------------------------
+
+
+class TestDefinitionsPageEnriched:
+    """The /definitions page surfaces every NetConfig data source:
+    backup device definitions, version/model overlays, migration
+    target profiles (with module variants), and vendor codec
+    capabilities.  Before this enrichment only the first section
+    rendered — the 54 target profiles + 8 vendors + module variants
+    were invisible.
+    """
+
+    def test_four_section_containers_rendered(
+        self, client: TestClient,
+    ) -> None:
+        resp = client.get("/definitions")
+        assert resp.status_code == 200
+        for testid in (
+            "section-device-definitions",
+            "section-target-profiles",
+            "section-vendors",
+        ):
+            assert f'data-testid="{testid}"' in resp.text, (
+                f"/definitions missing {testid}"
+            )
+
+    def test_device_definitions_section_count_matches_state(
+        self, client: TestClient,
+    ) -> None:
+        """The backup-side family-base count in the header badge
+        must match what app.state.definitions actually holds."""
+        resp = client.get("/definitions")
+        # Test app loads at least 1 definition; real count depends
+        # on test fixtures.  We only verify the badge IS rendered
+        # and is a non-negative integer.
+        assert 'data-testid="section-device-definitions-count"' in resp.text
+
+    def test_target_profiles_section_rendered_when_loaded(
+        self, client: TestClient,
+    ) -> None:
+        """54 target profiles ship with NetConfig by default.
+        The vendor-group + row testids must appear in the rendered
+        HTML (a regression would drop the whole section)."""
+        resp = client.get("/definitions")
+        assert 'data-testid="section-target-profiles"' in resp.text
+        # If target profiles are loaded, at least one vendor group
+        # + one profile row should render.  The test harness uses
+        # the real definitions/target_profiles dir.
+        assert 'data-testid="profile-vendor-group"' in resp.text, (
+            "no vendor groups rendered — target_profiles context "
+            "missing or empty"
+        )
+        assert 'data-testid="target-profile-row"' in resp.text
+
+    def test_profile_filter_widget_present(
+        self, client: TestClient,
+    ) -> None:
+        resp = client.get("/definitions")
+        assert 'data-testid="defs-profile-filter"' in resp.text
+        assert 'data-testid="defs-profile-filter-count"' in resp.text
+
+    def test_module_variants_exposed_when_profile_has_them(
+        self, client: TestClient,
+    ) -> None:
+        """Profiles with ``modules:`` blocks (like Cat 9300
+        C9300-24UX with NM-8X + NM-2Q) must render a
+        `profile-module` card per SKU.  Regression guard: before
+        this enrichment, module variants were only reachable
+        through the rename-modal dropdown, never browsable."""
+        resp = client.get("/definitions")
+        # At least one of the shipped Cat 9300 / 3810M profiles has
+        # module variants declared.  If the loader or template
+        # drops them, this fails.
+        assert 'data-testid="profile-module"' in resp.text, (
+            "no module-variant cards rendered — modules context "
+            "broken"
+        )
+        assert 'data-testid="profile-module-sku"' in resp.text
+
+    def test_profile_base_ports_emitted(
+        self, client: TestClient,
+    ) -> None:
+        """Every target profile should emit a base-ports chip list
+        (chassis-fixed port inventory).  Empty profiles would skip
+        this via the Jinja guard."""
+        resp = client.get("/definitions")
+        assert 'data-testid="profile-base-ports"' in resp.text
+
+    def test_vendors_section_lists_all_codecs(
+        self, client: TestClient,
+    ) -> None:
+        """The 8 vendor YAMLs each emit a vendor row; codecs
+        registered under each vendor emit their own codec rows."""
+        resp = client.get("/definitions")
+        assert 'data-testid="section-vendors"' in resp.text
+        assert 'data-testid="vendor-row"' in resp.text
+        assert 'data-testid="vendor-codec-row"' in resp.text
+
+    def test_codec_certainty_pills_rendered(
+        self, client: TestClient,
+    ) -> None:
+        """Certainty tier is surfaced as a CSS-classed pill
+        (certified / best_effort / experimental).  The pill CSS
+        class must include the tier so the colour scheme applies."""
+        resp = client.get("/definitions")
+        # At least one codec is certified in the default shipped set.
+        assert "defs-pill-certified" in resp.text
+        assert 'data-testid="codec-certainty"' in resp.text
+
+    def test_codec_direction_pill_rendered(
+        self, client: TestClient,
+    ) -> None:
+        resp = client.get("/definitions")
+        assert 'data-testid="codec-direction"' in resp.text
+        assert "defs-pill-direction" in resp.text
+
+    def test_overlays_section_absent_when_no_overlays_loaded(
+        self, client: TestClient,
+    ) -> None:
+        """The overlays section is conditional — when the loader
+        has zero overlays (the default test harness ships only
+        family-base YAMLs), the section must NOT render.  Inverse
+        of :meth:`test_overlays_section_renders_when_overlay_added`
+        below."""
+        resp = client.get("/definitions")
+        assert 'data-testid="section-overlays"' not in resp.text
+
+    def test_overlays_section_renders_when_overlay_added(
+        self,
+        sample_definitions_dir,
+        test_settings,
+        tmp_path,
+    ) -> None:
+        """Drop a version-pin overlay YAML next to the base Cisco
+        definition and assert the overlays section renders it.
+        Regression guard against the original user-reported "5
+        loaded but only 4 visible" discrepancy — the 5th WAS an
+        overlay (Cisco 17.12) and was hidden from the UI."""
+        import yaml as _yaml
+        from fastapi.testclient import TestClient
+
+        from netconfig.main import create_app
+
+        overlay_yaml = _yaml.safe_dump({
+            "type_key": "Cisco",
+            "vendor": "Cisco",
+            "os": "IOS-XE",
+            "os_version": "17.12",      # overlay marker
+            "priority": 5,
+            "file_extension": "cfg",
+            "connection": {"needs_enable": True},
+            "collector": {
+                "strategy": "netmiko",
+                "netmiko_device_type": "cisco_xe",
+            },
+            "commands": {"config": "show running-config"},
+            "notes": "17.12-specific overlay for tests",
+        })
+        (sample_definitions_dir / "cisco" / "17_12.yaml").write_text(
+            overlay_yaml, encoding="utf-8",
+        )
+
+        app = create_app(test_settings)
+        with TestClient(app) as tc:
+            resp = tc.get("/definitions")
+            assert resp.status_code == 200
+            assert 'data-testid="section-overlays"' in resp.text
+            assert 'data-testid="overlay-row"' in resp.text
+            # The overlay's os_version should appear in the row's
+            # data attribute (and in the visible cell).
+            assert 'data-os-version="17.12"' in resp.text

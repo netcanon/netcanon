@@ -286,14 +286,95 @@ async def devices_page(request: Request) -> HTMLResponse:
 
 @router.get("/definitions", response_class=HTMLResponse)
 async def definitions_page(request: Request) -> HTMLResponse:
-    """Definition browser: inspect all loaded device definitions."""
-    defs = sorted(
-        request.app.state.definitions.values(), key=lambda d: d.type_key
-    )
+    """Definition browser: surfaces every NetConfig data-source the
+    user cares about.  Four sections:
+
+    1. **Backup device definitions** (family-base) — the legacy view:
+       what vendor YAMLs the backup layer recognises (``Cisco``,
+       ``Fortigate`` etc.).  Excludes overlays.
+    2. **Version / model overlays** — the extra variants loaded
+       alongside family bases (e.g. ``Cisco 17.12`` version-pin).
+       Explains the "loaded 5 but only 4 top-level rows" split.
+    3. **Migration target profiles** — the 50+ hardware-aware
+       profiles under ``definitions/target_profiles/``: per-model
+       port layouts, module variants (NM-8X etc.), stacking caps,
+       VLAN/user limits.  Previously only reachable through the
+       Tier-3 rename modal's dropdown.
+    4. **Vendors + codec capabilities** — the 8 migration vendors
+       with their shipped codecs (direction, certainty tier,
+       device classes).
+    """
+    state = request.app.state
+    defs = sorted(state.definitions.values(), key=lambda d: d.type_key)
+
+    # Overlays: loaded variants that have os_version OR model set
+    # (the loader filters these out of load_all but keeps them in
+    # _variants for priority-resolve).  Absence-guarded for tests
+    # that mount a bare app.
+    overlays = []
+    loader = getattr(state, "definition_loader", None)
+    if loader is not None:
+        for variant in getattr(loader, "_variants", []):
+            if variant.os_version is not None or variant.model is not None:
+                overlays.append(variant)
+    overlays.sort(key=lambda d: (d.type_key, d.os_version or "", d.model or ""))
+
+    # Target profiles — group by vendor for readable rendering.
+    target_profiles = getattr(state, "target_profiles", {}) or {}
+    profiles_by_vendor: dict[str, list] = {}
+    for profile in target_profiles.values():
+        profiles_by_vendor.setdefault(profile.vendor, []).append(profile)
+    for vendor_key in profiles_by_vendor:
+        profiles_by_vendor[vendor_key].sort(key=lambda p: p.model.lower())
+    # Stable vendor order for the outer <details> blocks.
+    profiles_by_vendor_sorted = sorted(profiles_by_vendor.items())
+
+    # Vendors + their codec summaries.  Pull codec classes from the
+    # registry so the view lists what the app actually exposes today
+    # (no stale YAML entries without a codec).
+    from ...migration.codecs.registry import _REGISTRY as _CODEC_REGISTRY
+
+    vendors_dict = getattr(state, "vendors", {}) or {}
+    vendor_rows = []
+    for vendor_id in sorted(vendors_dict.keys()):
+        vendor = vendors_dict[vendor_id]
+        # Find codecs whose vendor_id matches this vendor.  Class-
+        # level capability attribute drives the certainty tier +
+        # direction fields; we surface those without instantiating.
+        codecs: list[dict] = []
+        for codec_name, codec_cls in sorted(_CODEC_REGISTRY.items()):
+            # vendor_id comes from the CapabilityMatrix; access
+            # without instantiating by inspecting the _CAPS
+            # ClassVar.  Fall through gracefully if a codec doesn't
+            # declare one (defensive — all shipped codecs do).
+            caps = getattr(codec_cls, "_CAPS", None)
+            if caps is None or getattr(caps, "vendor_id", "") != vendor_id:
+                continue
+            codecs.append({
+                "name": codec_name,
+                "direction": getattr(codec_cls, "direction", ""),
+                "certainty": getattr(codec_cls, "certainty", ""),
+                "input_format": getattr(codec_cls, "input_format", ""),
+                "supported_count": len(getattr(caps, "supported", []) or []),
+                "lossy_count": len(getattr(caps, "lossy", []) or []),
+                "unsupported_count": len(getattr(caps, "unsupported", []) or []),
+            })
+        vendor_rows.append({
+            "info": vendor,
+            "codecs": codecs,
+        })
+
     return _templates.TemplateResponse(
         request,
         "definitions.html",
-        {"active_page": "definitions", "definitions": defs},
+        {
+            "active_page": "definitions",
+            "definitions": defs,
+            "overlays": overlays,
+            "profiles_by_vendor": profiles_by_vendor_sorted,
+            "target_profile_count": len(target_profiles),
+            "vendor_rows": vendor_rows,
+        },
     )
 
 

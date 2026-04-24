@@ -215,8 +215,14 @@ useful for E2E assertions):
 
 ## Definitions page (`definitions.html`)
 
+The page exposes four sections — one `section-*` testid per container.
+
+### Section 1 — Backup-side device definitions
+
 | `data-testid`          | Element | Notes |
 |------------------------|---------|-------|
+| `section-device-definitions`       | `<section>` | Wraps backup-side definitions section |
+| `section-device-definitions-count` | `<span>` | Count badge in the section header |
 | `def-reload-btn`       | `<button>` | POSTs to `/api/v1/definitions/reload`; reloads page on success |
 | `definitions-table`    | `<table>` | Visible when definitions are loaded |
 | `definition-row`       | `<tr>` | One row per definition; also has `data-type-key` |
@@ -228,6 +234,54 @@ useful for E2E assertions):
 | `def-priority`         | `<td>` | Priority value |
 | `def-notes`            | `<td>` | Notes truncated at 120 chars; full text in `title` tooltip |
 | `no-definitions-msg`   | `<p>` | Shown when no definitions are loaded |
+
+### Section 2 — Version / model overlays
+
+| `data-testid`          | Element | Notes |
+|------------------------|---------|-------|
+| `section-overlays`        | `<section>` | Wraps the overlays section (only rendered when overlays exist) |
+| `section-overlays-count`  | `<span>` | Count badge in the section header |
+| `overlays-table`          | `<table>` | Table of all loaded overlays |
+| `overlay-row`             | `<tr>` | One row per overlay; also has `data-type-key`, `data-os-version`, `data-model` |
+| `overlay-os-version`      | `<td>` | OS version pin (or em-dash if absent) |
+| `overlay-model`           | `<td>` | Model pin (or em-dash if absent) |
+
+### Section 3 — Migration target profiles
+
+| `data-testid`          | Element | Notes |
+|------------------------|---------|-------|
+| `section-target-profiles`       | `<section>` | Wraps the target-profiles browsing section |
+| `section-target-profiles-count` | `<span>` | Total profile count badge |
+| `defs-profile-filter`           | `<input type="search">` | Live client-side filter over vendor + model + display name |
+| `defs-profile-filter-count`     | `<span>` | "N matches" live count while filter is active (empty when blank) |
+| `profile-vendor-group`          | `<details>` | Outer collapsible per vendor; `data-vendor` carries the vendor key |
+| `profile-vendor-name`           | `<span>` | Vendor label inside the group summary |
+| `target-profile-row`            | `<details>` | One collapsible per model; carries `data-vendor`, `data-model`, `data-haystack` (pre-lowercased for filter match) |
+| `profile-display-name`          | `<span>` | Human-readable model label inside the profile summary |
+| `profile-module-count`          | `<span>` | "N module variant(s)" hint in the summary (absent when profile has no modules) |
+| `profile-base-ports-heading`    | `<div>` | Sub-heading for the chassis-fixed port chip list |
+| `profile-base-ports`            | `<div>` | Port-chip container for the base ports |
+| `profile-modules-heading`       | `<div>` | Sub-heading for the modules section (absent when profile has no modules) |
+| `profile-module`                | `<div>` | One module card; `data-sku` carries the module SKU |
+| `profile-module-sku`            | `<span>` | SKU label inside the module card |
+| `profile-module-ports`          | `<div>` | Port-chip container for this module's uplinks |
+| `no-target-profiles-msg`        | `<p>` | Empty-state message when no profiles are loaded |
+
+### Section 4 — Migration vendors + codec capabilities
+
+| `data-testid`          | Element | Notes |
+|------------------------|---------|-------|
+| `section-vendors`       | `<section>` | Wraps the vendors section |
+| `section-vendors-count` | `<span>` | Vendor count badge |
+| `vendor-row`            | `<details>` | One collapsible per vendor; `data-vendor-id` carries the vendor ID |
+| `vendor-display-name`   | `<span>` | Human-readable vendor name in the summary |
+| `vendor-id`             | `<code>` | Stable vendor ID (e.g. `cisco_iosxe`) |
+| `vendor-codecs-table`   | `<table>` | Nested table of codecs registered under this vendor |
+| `vendor-codec-row`      | `<tr>` | One codec row; `data-codec-name` carries the codec name |
+| `codec-name`            | `<code>` | Codec identifier (matches `CodecBase.name`) |
+| `codec-direction`       | `<span class="defs-pill">` | Pill: `parse_only` / `render_only` / `bidirectional` |
+| `codec-certainty`       | `<span class="defs-pill defs-pill-<tier>">` | Pill: `certified` / `best_effort` / `experimental` |
+| `codec-caps-counts`     | `<td>` | Capability-matrix counts: `✓ N · ⚠ M · ✗ K` (supported / lossy / unsupported xpaths) |
 
 ## Jobs page (`jobs.html`)
 
