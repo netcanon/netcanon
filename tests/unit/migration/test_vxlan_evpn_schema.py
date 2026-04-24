@@ -183,42 +183,58 @@ class TestCanonicalIntentVxlanEvpnFields:
 # ---------------------------------------------------------------------------
 
 
-class TestDCCodecsDeclareEvpnType5Unsupported:
+class TestDCCodecsDeclareEvpnType5Lossy:
     """Per-prefix EVPN Type-5 records (`CanonicalEvpnType5Route`)
-    remain Unsupported on every DC codec after GAP 6 — real configs
-    don't use per-prefix records; Type-5 announcements are implicit
-    (any subnet in a VRF with an L3 VNI gets announced).  Covered
-    today as a VRF property via
-    :attr:`CanonicalRoutingInstance.l3_vni`; per-prefix records are
-    deferred to a future commit.
+    are LOSSY on every DC codec (previously Unsupported; demoted
+    post-GAP-6 as part of the Type-5-via-l3_vni-VRF-property
+    canonical model).  Real configs don't enumerate per-prefix
+    records — Type-5 announcements are implicit for any subnet
+    carried by a VRF-bound interface whose VRF has a non-None
+    l3_vni.  This test locks in the lossy classification with
+    non-empty rationale so consumers know the semantic path to
+    use.
     """
 
     _DC_CODECS = [
         (AristaEOSCodec, "arista_eos"),
         (CiscoIOSXECLICodec, "cisco_iosxe_cli"),
+        (JunosCodec, "juniper_junos"),
     ]
 
     @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_declares_evpn_type5_unsupported(self, codec_cls, name):
+    def test_declares_evpn_type5_lossy(self, codec_cls, name):
         caps = codec_cls().capabilities
-        paths = {u.path for u in caps.unsupported}
-        assert "/evpn-type5-routes/route" in paths, (
-            f"{name} missing unsupported declaration for "
+        lossy_paths = {lp.path for lp in caps.lossy}
+        assert "/evpn-type5-routes/route" in lossy_paths, (
+            f"{name} missing lossy declaration for "
             "/evpn-type5-routes/route"
         )
 
     @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_evpn_classify_returns_unsupported(self, codec_cls, name):
+    def test_evpn_classify_returns_lossy(self, codec_cls, name):
         caps = codec_cls().capabilities
-        assert caps.classify("/evpn-type5-routes/route") == "unsupported"
+        assert caps.classify("/evpn-type5-routes/route") == "lossy"
 
     @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_unsupported_reason_non_empty(self, codec_cls, name):
-        """Empty reason strings are a documentation smell — every
-        unsupported declaration must explain what's missing and why."""
+    def test_lossy_reason_non_empty(self, codec_cls, name):
+        """Every lossy declaration must explain what's lossy about
+        the path + what the supported canonical alternative is."""
         caps = codec_cls().capabilities
-        by_path = {u.path: u for u in caps.unsupported}
-        assert by_path["/evpn-type5-routes/route"].reason.strip() != ""
+        by_path = {lp.path: lp for lp in caps.lossy}
+        reason = by_path["/evpn-type5-routes/route"].reason
+        assert reason.strip() != ""
+        # Sanity: the reason should mention l3_vni as the
+        # supported alternative.
+        assert "l3_vni" in reason
+
+    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
+    def test_evpn_no_longer_in_unsupported(self, codec_cls, name):
+        """Regression guard — after the demotion, the path must
+        NOT appear in the Unsupported list (otherwise classify()
+        strictest-wins logic would call it unsupported, not lossy)."""
+        caps = codec_cls().capabilities
+        unsupported_paths = {u.path for u in caps.unsupported}
+        assert "/evpn-type5-routes/route" not in unsupported_paths
 
 
 class TestAristaJunosVxlanVniDemoted:

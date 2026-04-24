@@ -152,12 +152,36 @@ class JunosCodec(CodecBase):
             LossyPath(
                 path="/groups",
                 reason=(
-                    "Apply-groups inheritance is wired only for "
-                    "``set groups <g> system host-name X`` + "
-                    "``set apply-groups <g>`` (GAP 4).  Richer "
-                    "group-scoped inheritance (interfaces, "
-                    "protocols, SNMP, radius-server) parses-and-"
-                    "ignores in v1."
+                    "Apply-groups inheritance is wired for the full "
+                    "dispatch surface via GAP 8's two-pass parse "
+                    "(system / login / interfaces / protocols / "
+                    "SNMP / routing-options / routing-instances / "
+                    "vlans).  Unsupported surfaces under ``set "
+                    "groups <g>`` (policy-options, firewall filters, "
+                    "RADIUS server options beyond host) still "
+                    "parse-and-ignore."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 IP-prefix advertisements use a "
+                    "VRF-property canonical model: "
+                    "CanonicalRoutingInstance.l3_vni captures the "
+                    "L3 VNI (populated from ``set routing-instances "
+                    "<vrf> protocols evpn ip-prefix-routes vni "
+                    "<N>``); Type-5 announcements are IMPLICIT for "
+                    "any interface bound to the VRF via "
+                    "CanonicalInterface.vrf.  The per-prefix "
+                    "CanonicalEvpnType5Route list is a lossy-by-"
+                    "default extension point: no codec populates it "
+                    "today (would require ``set policy-options "
+                    "policy-statement`` parsing to derive which "
+                    "prefixes specific export policies select).  "
+                    "Consumers needing explicit per-prefix semantics "
+                    "should infer from VRF membership + l3_vni "
+                    "rather than relying on this list."
                 ),
                 severity="warn",
             ),
@@ -168,8 +192,8 @@ class JunosCodec(CodecBase):
                 reason=(
                     "BGP / IS-IS / OSPF / MPLS stanzas parse-and-"
                     "ignore in v1.  Junos routing-options are "
-                    "syntactically rich (groups, policy-options, "
-                    "routing-instances) and warrant a dedicated "
+                    "syntactically rich (policy-options, policy-"
+                    "statement, BFD) and warrant a dedicated "
                     "follow-up commit."
                 ),
             ),
@@ -179,19 +203,6 @@ class JunosCodec(CodecBase):
                     "Junos firewall filters are Tier-3 — the grammar "
                     "(family / term / from / then) is distinct from "
                     "ACL models in other codecs and defers."
-                ),
-            ),
-            UnsupportedPath(
-                path="/evpn-type5-routes/route",
-                reason=(
-                    "EVPN Type-5 per-prefix records "
-                    "(CanonicalEvpnType5Route) are Unsupported; "
-                    "Type-5 announcements are modelled as a VRF "
-                    "property via CanonicalRoutingInstance.l3_vni "
-                    "(GAP 6).  The ``set routing-instances <vrf> "
-                    "protocols evpn ip-prefix-routes vni <N>`` line "
-                    "populates l3_vni on the VRF; per-prefix "
-                    "records are deferred to a future commit."
                 ),
             ),
         ],

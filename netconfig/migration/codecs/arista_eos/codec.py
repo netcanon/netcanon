@@ -204,6 +204,29 @@ class AristaEOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 IP-prefix advertisements use a "
+                    "VRF-property canonical model: "
+                    "CanonicalRoutingInstance.l3_vni captures the "
+                    "L3 VNI; Type-5 announcements are IMPLICIT — "
+                    "any subnet carried by a VRF-assigned interface "
+                    "(CanonicalInterface.vrf) whose VRF has a "
+                    "non-None l3_vni gets announced.  The "
+                    "CanonicalEvpnType5Route per-prefix record is "
+                    "a lossy-by-default extension point: no codec "
+                    "populates it today (would require route-map / "
+                    "policy-statement parsing to derive which "
+                    "prefixes specific policies export); consumers "
+                    "that need explicit per-prefix semantics should "
+                    "infer from VRF membership + l3_vni rather than "
+                    "relying on this list.  Operators porting "
+                    "route-map-based prefix selection across "
+                    "vendors will see a review-required banner."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -219,20 +242,6 @@ class AristaEOSCodec(CodecBase):
                 reason=(
                     "OSPF areas / redistribution / interface-level "
                     "cost tuning parse-and-ignore in v1."
-                ),
-            ),
-            UnsupportedPath(
-                path="/evpn-type5-routes/route",
-                reason=(
-                    "EVPN Type-5 IP-prefix advertisements "
-                    "(per-prefix `route-target`/`vni` records) are "
-                    "modelled as the CanonicalEvpnType5Route schema "
-                    "but no codec emits per-prefix records yet — "
-                    "Type-5 announcements in real configs are "
-                    "implicit (any subnet in a VRF with an L3 VNI "
-                    "gets announced).  Covered as a VRF property via "
-                    "CanonicalRoutingInstance.l3_vni (GAP 6); per-"
-                    "prefix records deferred to a future commit."
                 ),
             ),
         ],

@@ -7,6 +7,38 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed (EVPN Type-5 per-prefix path: Unsupported → Lossy)
+
+- Moved `/evpn-type5-routes/route` from ``Unsupported`` to ``Lossy``
+  on all three DC codecs (Arista EOS, Juniper Junos, Cisco IOS-XE
+  CLI).  The `CanonicalEvpnType5Route` per-prefix schema is a
+  lossy-by-default extension point: no codec populates it today,
+  and the canonical semantic for Type-5 IP-prefix advertisements
+  lives on :attr:`CanonicalRoutingInstance.l3_vni` (populated via
+  GAP 6 — Arista ``vxlan vrf X vni N`` + Junos ``protocols evpn
+  ip-prefix-routes vni N``).
+- Reason strings across all three codecs now explicitly call out
+  the VRF-property canonical model as the supported alternative
+  and note that per-prefix enumeration would require route-map /
+  policy-statement parsing as a future dependency.
+- Consumers needing explicit per-prefix semantics should infer
+  from VRF membership (`CanonicalInterface.vrf`) + l3_vni rather
+  than relying on the per-prefix list.
+- Also updated the obsolete GAP 4-era Junos LossyPath note for
+  `/groups` — the "Apply-groups inheritance is wired only for
+  host-name" text was stale post-GAP-8 (two-pass parse wires the
+  full dispatch surface); reason rewritten.
+
+### Tests (Type-5 demotion)
+
+- ``tests/unit/migration/test_vxlan_evpn_schema.py`` —
+  ``TestDCCodecsDeclareEvpnType5Unsupported`` renamed to
+  ``TestDCCodecsDeclareEvpnType5Lossy``, assertions updated to
+  verify ``lossy`` classification + non-empty reason mentioning
+  `l3_vni` as the supported alternative.  New regression guard
+  confirms the path is NOT in the Unsupported list post-demotion.
+  Parametrised across Arista + Junos + Cisco IOS-XE CLI.
+
 ### Added (GAP 9b — Junos apply-groups statement + body preservation on render)
 
 - Two new fields on :class:`CanonicalIntent`:

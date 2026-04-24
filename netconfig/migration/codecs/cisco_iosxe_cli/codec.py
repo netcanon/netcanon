@@ -137,6 +137,21 @@ class CiscoIOSXECLICodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 per-prefix records are a VRF-"
+                    "property canonical model via "
+                    "CanonicalRoutingInstance.l3_vni; IOS-XE would "
+                    "derive Type-5 intent from ``router bgp / "
+                    "address-family l2vpn evpn`` + per-VRF route-"
+                    "target configuration.  No codec populates per-"
+                    "prefix records today — lossy-by-default "
+                    "extension point pending future route-map "
+                    "parsing."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -151,14 +166,6 @@ class CiscoIOSXECLICodec(CodecBase):
                     "in v1.  CanonicalVxlan schema exists; wire-up "
                     "deferred until demand arrives for Catalyst-to-"
                     "Arista migrations."
-                ),
-            ),
-            UnsupportedPath(
-                path="/evpn-type5-routes/route",
-                reason=(
-                    "EVPN Type-5 (`router bgp / address-family l2vpn "
-                    "evpn`) parse-and-ignore in v1.  Schema exists; "
-                    "wire-up deferred."
                 ),
             ),
             UnsupportedPath(
