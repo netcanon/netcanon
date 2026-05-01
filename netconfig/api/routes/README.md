@@ -101,6 +101,24 @@ documented in `tests/testid_reference.md` in the same commit.  Run
 `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before
 committing — empty output means the doc is stale.
 
+### Helper modules
+
+Routes orchestrate; non-trivial computation belongs in
+`netconfig/services/`.  When a route module accumulates request-shaping
+or response-shaping helpers that don't quite warrant a service
+(per-request validation, registry-introspection joins, predicate
+helpers consumed only by sibling routes), lift them into a sibling
+`_<router>_helpers.py` rather than letting the route file balloon.
+`migration.py` + `_migration_helpers.py` is the worked example —
+helpers extracted for adapter-name resolution (422-translation),
+input-text resolution (`raw_text` XOR `source_filename`),
+target-profile lookup, codec-info shaping, and the
+"engage-rename-aware-pipeline?" predicate.  The leading underscore
+marks the module as routes-only (don't import it from services or
+templates) and keeps the public surface — the FastAPI route handlers
+themselves — visible at the top of the corresponding non-underscore
+module.
+
 ### Per-pane migration endpoints
 
 `migration.py` exposes per-category override endpoints under

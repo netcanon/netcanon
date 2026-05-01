@@ -11,6 +11,52 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Refactored (extract `_migration_helpers.py` from `migration.py`)
+
+Final cleanup pass on the `refactor/god-file-cleanup` branch.  The
+god-file audit had flagged `netconfig/api/routes/migration.py` as the
+remaining oversized route file (~750 LOC mixing route dispatch with
+adapter resolution, input-text resolution, capability-matrix shaping,
+target-profile lookup, and override-routing predicates).  Extracted
+the helpers into a sibling `_migration_helpers.py` so the route
+module is closer to "thin glue" and the helpers acquire focussed
+unit-test coverage without spinning up a TestClient.
+
+* **Helpers lifted verbatim** — `resolve_adapter_or_422`,
+  `resolve_input_text`, `get_target_profiles`, `build_codec_info_list`,
+  `request_has_overrides_or_profile`.  Names lost the leading
+  underscore on the move because they're now first-class symbols of
+  the helper module's public surface.  Behaviour unchanged — call
+  sites updated, no signature edits, no logic rewrites.
+
+* **Frozen pipeline signatures untouched** — `run_plan`,
+  `run_plan_with_rename`, `run_plan_with_overrides` (the trio in
+  `netconfig/services/migration_pipeline.py`) stay frozen per the
+  hard-rule freeze-and-extend contract.  Extraction was purely on
+  the request-shaping / response-shaping side, one layer above the
+  pipeline.
+
+* **Tests** — new `tests/unit/api/test_migration_helpers.py`
+  covers every helper directly (23 unit tests, one class per
+  helper).  `tests/integration/test_migration_api.py` zero
+  deltas — proves the API boundary (URLs, request/response shapes,
+  status codes) is unchanged.
+
+* **Docs** — `netconfig/api/routes/README.md` gains a brief
+  "Helper modules" section establishing the
+  `_<router>_helpers.py` sibling pattern as a worked example for
+  future contributors.  Module docstring on the new helper file
+  enumerates its public functions.
+
+* **Why not refactor the per-pane handlers in the same commit?** —
+  The five `/plan/<category>` route bodies are nearly identical
+  (5 × ~20 LOC of "resolve adapters → resolve input → call
+  `run_plan_with_overrides` with one category map populated → log").
+  A `dispatch_pane_plan(category, ...)` helper would shrink the
+  route file substantially.  Deferred deliberately: lifting AND
+  refactoring in the same commit is the wrong shape of risk.  The
+  per-pane consolidation is a candidate for a follow-up commit.
+
 ### Added (EOS 4.26 EVPN/VXLAN gaps — item 3 of 5: IPv6 addresses)
 
 Third of the five deferred translator-plans EVPN/VXLAN gaps closed.

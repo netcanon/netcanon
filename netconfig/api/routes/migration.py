@@ -97,7 +97,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from pydantic import BaseModel, Field
 
-from ...migration.codecs.registry import get_codec, list_codecs
+from ...migration.codecs.registry import get_codec
 from ...models.migration import (
     CodecInfo,
     CapabilityMatrix,
@@ -113,6 +113,13 @@ from ...services.migration_pipeline import (
 )
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage
+from ._migration_helpers import (
+    build_codec_info_list,
+    get_target_profiles,
+    request_has_overrides_or_profile,
+    resolve_adapter_or_422,
+    resolve_input_text,
+)
 
 
 class MigrationDetectRequest(BaseModel):
@@ -131,52 +138,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/migration", tags=["migration"])
 
 
-def _resolve_adapter_or_422(name: str, side: str):
-    """Return the named adapter or raise a 422 with a helpful message.
-
-    Uses 422 not 404 because the adapter name is REQUEST-PAYLOAD data;
-    callers should fix their body, not their URL.
-    """
-    try:
-        return get_codec(name)
-    except LookupError as exc:
-        raise HTTPException(
-            status_code=422,
-            detail=f"unknown {side} adapter: {exc}",
-        )
-
-
-def _resolve_input_text(
-    body: MigrationPlanRequest, storage: BaseConfigStore
-) -> str:
-    """Return the raw config text referenced by *body*.
-
-    Exactly one of ``raw_text`` / ``source_filename`` MUST be set.
-    Raises:
-        HTTPException 422: If both are set or neither is set.
-        HTTPException 404: If ``source_filename`` refers to a file
-            that doesn't exist.
-    """
-    has_text = body.raw_text is not None
-    has_file = body.source_filename is not None
-    if has_text == has_file:
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                "Exactly one of `raw_text` or `source_filename` is required."
-            ),
-        )
-    if has_text:
-        return body.raw_text or ""
-    try:
-        return storage.get_content(body.source_filename or "")
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"source_filename not found: {body.source_filename!r}",
-        )
-
-
 @router.get(
     "/adapters",
     response_model=list[CodecInfo],
@@ -190,34 +151,7 @@ def list_migration_adapters(request: Request) -> list[CodecInfo]:
     without a second round-trip.
     """
     vendors = getattr(request.app.state, "vendors", {})
-    result: list[CodecInfo] = []
-    for name in list_codecs():
-        codec = get_codec(name)
-        caps = codec.capabilities
-        vendor = vendors.get(caps.vendor_id)
-        result.append(
-            CodecInfo(
-                name=caps.adapter,
-                vendor_id=caps.vendor_id,
-                vendor_display_name=vendor.display_name if vendor else "",
-                version_range=caps.version_range,
-                device_classes=list(caps.device_classes),
-                input_format=getattr(codec, "input_format", "unknown"),
-                direction=getattr(codec, "direction", "bidirectional"),
-                certainty=getattr(codec, "certainty", "experimental"),
-                canonical_model=getattr(codec, "canonical_model", "openconfig-lite"),
-                supported_count=len(caps.supported),
-                lossy_count=len(caps.lossy),
-                unsupported_count=len(caps.unsupported),
-                description=getattr(codec, "description", ""),
-                sample_input=getattr(codec, "sample_input", ""),
-                output_extension=getattr(codec, "output_extension", ""),
-                unsupported_rename_categories=sorted(
-                    getattr(codec, "unsupported_rename_categories", frozenset())
-                ),
-            )
-        )
-    return result
+    return build_codec_info_list(vendors)
 
 
 @router.get(
@@ -270,23 +204,15 @@ def plan_migration(
     Use ``force=true`` in the request body to override the stage-0
     device-class guard for deliberate cross-class experiments.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     # Route to the rename-aware pipeline when the caller supplied
     # ANY per-category override map OR a target profile selection
     # (target-profile alone means "run auto-heuristic + return
     # diagnostics the UI can render").  Legacy callers that supply
     # none of these get ``run_plan`` unchanged.
-    has_any_override = (
-        body.port_rename_map is not None
-        or body.vlan_rename_map is not None
-        or body.local_user_rename_map is not None
-        or body.snmp_community_rename_map is not None
-        or body.snmpv3_user_rename_map is not None
-        or body.target_profile is not None
-    )
-    if has_any_override:
+    if request_has_overrides_or_profile(body):
         # Dispatch directly to run_plan_with_overrides so EVERY
         # category map threads through — run_plan_with_rename is
         # signature-frozen and only accepts port_rename_map, so
@@ -353,9 +279,9 @@ def plan_migration_ports(
     ``/plan/ports`` would see the VLAN map silently dropped.
     Discipline of posting to the right URL is part of the contract.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     # Always engage the rename-aware pipeline from this endpoint —
     # hitting /plan/ports signals clear intent even when the map is
     # empty ({} = "auto-heuristic only, please").
@@ -412,9 +338,9 @@ def plan_migration_vlans(
     ``/plan/vlans`` applies the VLAN category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
         vlan_rename_map=body.vlan_rename_map or {},
@@ -476,9 +402,9 @@ def plan_migration_local_users(
     Use ``POST /plan`` for multi-category overrides in a single
     call.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
         local_user_rename_map=body.local_user_rename_map or {},
@@ -541,9 +467,9 @@ def plan_migration_snmp(
     ``/plan/snmp`` applies the SNMP category only.  Use
     ``POST /plan`` for multi-category overrides in a single call.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
         snmp_community_rename_map=body.snmp_community_rename_map or {},
@@ -606,9 +532,9 @@ def plan_migration_snmpv3(
     Ignores other override maps if the body carries them — hitting
     ``/plan/snmpv3`` applies the SNMPv3-user category only.
     """
-    source = _resolve_adapter_or_422(body.source, side="source")
-    target = _resolve_adapter_or_422(body.target, side="target")
-    raw_text = _resolve_input_text(body, storage)
+    source = resolve_adapter_or_422(body.source, side="source")
+    target = resolve_adapter_or_422(body.target, side="target")
+    raw_text = resolve_input_text(body, storage)
     job = run_plan_with_overrides(
         source, target, raw_text,
         snmpv3_user_rename_map=body.snmpv3_user_rename_map or {},
@@ -701,26 +627,6 @@ def detect_source_codec(
 # ---------------------------------------------------------------------------
 
 
-def _get_target_profiles(request: Request) -> dict[str, TargetProfile]:
-    """Pull the target-profile registry from ``request.app.state``.
-
-    Profiles are loaded once at app startup (see ``main.py`` lifespan)
-    and exposed through ``app.state.target_profiles``.  ``getattr`` with
-    a default makes this safe under the bare-app fixtures used by some
-    unit tests, which don't populate the full lifespan-loaded state —
-    those tests get an empty dict and the route returns an empty list
-    rather than raising AttributeError.
-
-    Args:
-        request: The current request; only its ``app.state`` is consulted.
-
-    Returns:
-        Mapping of ``"<vendor>/<model>"`` keys to ``TargetProfile``
-        instances.  Empty when no profiles are loaded.
-    """
-    return getattr(request.app.state, "target_profiles", {})
-
-
 @router.get(
     "/target-profiles",
     response_model=list[TargetProfile],
@@ -739,7 +645,7 @@ def list_target_profiles(
     The list may be empty if no profiles are defined — the UI falls
     back to free-form target-name entry in that case.
     """
-    profiles = _get_target_profiles(request)
+    profiles = get_target_profiles(request)
     return list(profiles.values())
 
 
@@ -755,7 +661,7 @@ def get_target_profile(
     request: Request,
 ) -> TargetProfile:
     """Return a single target profile by its ``vendor/model`` key."""
-    profiles = _get_target_profiles(request)
+    profiles = get_target_profiles(request)
     key = f"{vendor}/{model}"
     if key not in profiles:
         raise HTTPException(
