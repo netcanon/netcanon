@@ -1,0 +1,576 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> opnsense
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_cli_to_opnsense/
+#
+# Phase 3 follow-up pair.  Cisco IOS-XE is a switching/routing platform;
+# OPNsense is a FreeBSD-based router/firewall (pfSense fork).  The
+# shared canonical surface is small but clean:
+#
+#   * hostname / domain — good
+#   * DNS / NTP / syslog / timezone — lossy until OPNsense parse + render
+#     wires up the corresponding `<system>` children
+#   * interfaces (IP, MTU, enable, descr) — good
+#   * VLANs — id good; name/description collapse; port-membership and
+#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
+#     lists, no first-class SVI)
+#   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
+#     model is two-stage, codec doesn't currently render either)
+#   * DHCP server scopes — lossy (interface-keyed pool model on
+#     OPNsense, units conversion on lease time)
+#   * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in plugin's
+#     snmpd.conf, not config.xml)
+#   * Local users — lossy (bcrypt hashes incompatible with Cisco
+#     hash types; privilege number ↔ groupname collapse)
+#   * RADIUS — good
+#   * LAGs — lossy (Port-channel<N> ↔ lagg<N> rename, LACP mode
+#     collapse on OPNsense's single 'lacp' proto)
+#
+# What's firmly out of scope on OPNsense (target unsupported):
+#
+#   * switchport modes / access_vlan / trunk_allowed_vlans /
+#     trunk_native_vlan / voice_vlan — OPNsense has no switching
+#     fabric
+#   * VRF / routing-instance — OPNsense has no VRF model
+#   * VXLAN / EVPN Type-5 — OPNsense is a firewall codec
+#
+# Cisco IOS-XE side: ACLs, NAT, crypto/VPN, route-maps, BGP/OSPF/EIGRP
+# are out of canonical scope on the source codec — never reach the
+# canonical surface.
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: opnsense
+  primary_use_case: >
+    Small-network migration: Cisco IOS-XE router/L3-switch -> OPNsense
+    firewall/router.  Shared surface is hostname / domain / DNS / NTP /
+    syslog / interface IPs / VLAN tags / basic SNMP / local users /
+    RADIUS.  Switching constructs and Cisco multi-VRF/multi-protocol
+    routing are firmly out of scope on the OPNsense side.  OPNsense's
+    firewall / NAT / VPN feature set is firmly out of scope on the
+    Cisco source side.
+  certainty: medium
+  references:
+    - id: opnsense-interfaces
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/interfaces.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-vlans
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/vlans.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-dhcp
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/dhcp.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-gateways
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/static_routes.md
+      title: "OPNsense Gateways manual"
+      source_url: "https://docs.opnsense.org/manual/gateways.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-users
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/local_users.md
+      title: "OPNsense Users manual"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-snmp
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/snmp.md
+      title: "OPNsense Net-SNMP plugin reference (development docs)"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-system
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/system_services.md
+      title: "OPNsense General Settings manual"
+      source_url: "https://docs.opnsense.org/manual/settingsmenu.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-laggs
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/lags.md
+      title: "OPNsense Devices manual (LAGG tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: cisco-iface-cmd-ref
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/interfaces.md
+      title: "Cisco IOS Interface and Hardware Component Command Reference"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/interface/command/ir-cr-book/ir-s7.html"
+      retrieved: "2026-04-30"
+    - id: cisco-vlan-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/vlans.md
+      title: "Cisco IOS XE 17.14 VLAN Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9400/software/release/17-14/configuration_guide/vlan/b_1714_vlan_9400_cg/configuring_vlans.html"
+      retrieved: "2026-04-30"
+    - id: cisco-user-security
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/local_users.md
+      title: "Cisco IOS XE Security Configuration Guide — User Security"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/security/m1/sec-m1-cr-book/sec-m1-cr-book_chapter_010.html"
+      retrieved: "2026-04-30"
+    - id: switchport-unsupported
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/switchport_unsupported.md
+      title: "Switchport / spanning-tree / VTP unsupported on OPNsense"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: vrf-unsupported
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/vrf_unsupported.md
+      title: "VRF / routing-instance unsupported on OPNsense"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: firewall-out-of-scope
+      path: docs/vendor-references/cisco_iosxe_cli_to_opnsense/firewall_natively_unsupported.md
+      title: "Firewall / NAT / VPN cross-vendor scope"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  One entry per top-level CanonicalIntent field
+# (intent.py walked top-down).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Cisco ``hostname <name>`` ↔ OPNsense ``<system>/<hostname>``.
+      Both vendors model the bare short name.  Round-trip is
+      lossless.
+    references: [opnsense-system]
+
+  domain:
+    disposition: good
+    note: >
+      Cisco ``ip domain name <fqdn>`` ↔ OPNsense
+      ``<system>/<domain>``.  Both vendors model the DNS suffix as
+      a separate scalar from the hostname.
+    references: [opnsense-system]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      Cisco ``ip name-server`` lines map to OPNsense repeated
+      ``<system>/<dnsserver>`` elements.  The OPNsense codec does
+      not currently parse ``<dnsserver>`` into the canonical
+      ``dns_servers`` list (no parser branch wires it through),
+      and does not currently emit ``<dnsserver>`` on render.
+      Cross-pair drops the resolver list pending wire-up.
+    references: [opnsense-system]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Cisco ``ntp server`` lines map to OPNsense's space-separated
+      ``<system>/<timeservers>`` element (one element with
+      space-delimited host list).  OPNsense codec does not currently
+      wire ``<timeservers>`` into ``CanonicalIntent.ntp_servers``.
+      Per-server NTP options (prefer / iburst / key / source) are
+      not modelled on either side.
+    references: [opnsense-system]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Cisco ``clock timezone PST -8 0`` (offset+DST tokens) versus
+      OPNsense ``<system>/<timezone>America/Los_Angeles</timezone>``
+      (Olson zoneinfo) carry different semantics.  Operator-curated
+      mapping required for byte-for-byte fidelity.  Codec also
+      doesn't wire timezone into canonical today.
+    references: [opnsense-system]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Cisco ``logging host`` lines map to OPNsense
+      ``<system>/<syslog>/<remoteserver>``.  OPNsense codec does
+      not currently wire syslog config into the canonical
+      ``syslog_servers`` list.  Severity / facility tokens are not
+      modelled (canonical surface is host list only on both sides).
+    references: [opnsense-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips, but several per-
+      interface sub-fields are lossy or unsupported.  See the
+      ``interfaces[].*`` entries below for the per-sub-field
+      breakdown.
+    references: [opnsense-interfaces, cisco-iface-cmd-ref]
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Cisco ``GigabitEthernet0/0/0`` does not survive on OPNsense.
+      The operator-facing label on OPNsense is the zone tag
+      (``<wan>`` / ``<lan>`` / ``<optN>``); the BSD device name
+      lives in ``<if>``.  Port-rename mesh handles the conversion
+      via the codec's ``classify_port_name`` / ``format_port_identity``
+      delegates.  Canonical preserves the source string verbatim.
+    references: [opnsense-interfaces, cisco-iface-cmd-ref]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Cisco ``description`` (240-char truncation) ↔ OPNsense
+      ``<descr>`` (no length limit).  Round-trip preserves text
+      content.
+    references: [opnsense-interfaces]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Cisco ``no shutdown`` / ``shutdown`` ↔ OPNsense empty
+      ``<enable/>`` element (present = enabled, absent = disabled).
+    references: [opnsense-interfaces]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      Cisco infers from name prefix (GigabitEthernet → ethernetCsmacd,
+      Loopback → softwareLoopback).  OPNsense doesn't surface a
+      type field; the cross-pair drops the type hint.
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Cisco ``mtu <N>`` ↔ OPNsense ``<mtu>N</mtu>`` — both render
+      explicitly when set.
+    references: [opnsense-interfaces]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Cisco's dotted-mask form (``255.255.255.0``) converts
+      mechanically to OPNsense CIDR (``<subnet>24</subnet>``).
+      Multiple Cisco IPv4 addresses per interface (primary +
+      secondary) collapse to the primary only — canonical takes
+      one address.
+    references: [opnsense-interfaces]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Cisco ``ipv6 address X/N`` ↔ OPNsense ``<ipaddrv6>`` +
+      ``<subnetv6>``.  ``scope`` discriminator (global / link-
+      local) preserved.  OPNsense's non-static IPv6 keywords
+      (``dhcp6``, ``track6``, ``slaac``, ``6rd``, ``6to4``) are
+      not generated by Cisco source.
+    references: [opnsense-interfaces]
+
+  interfaces[].switchport_mode:
+    disposition: unsupported
+    reason: >
+      OPNsense has no switching fabric.  No ``switchport`` directive,
+      no access / trunk modes on physical interfaces.  Cross-pair
+      drops the field; Cisco-source ``switchport`` state is preserved
+      in the canonical tree but the OPNsense render emits no
+      switchport XML.
+    references: [switchport-unsupported]
+
+  interfaces[].access_vlan:
+    disposition: unsupported
+    reason: >
+      Same rationale as switchport_mode — OPNsense has no
+      access-VLAN concept on physical interfaces.
+    references: [switchport-unsupported]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: unsupported
+    reason: >
+      OPNsense has no per-port allowed-VLAN list.  Trunking is
+      implicit: every ``<vlans>/<vlan>`` whose ``<if>`` matches
+      a physical NIC rides that NIC.
+    references: [switchport-unsupported, opnsense-vlans]
+
+  interfaces[].trunk_native_vlan:
+    disposition: unsupported
+    reason: >
+      Same as trunk_allowed_vlans — OPNsense's "native VLAN" is
+      the parent NIC's untagged frames; not a per-port toggle.
+    references: [switchport-unsupported]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      OPNsense has no LLDP-MED voice-VLAN signalling in the base
+      OS.  Cisco's ``switchport voice vlan N`` drops on the
+      cross-pair.
+    references: [switchport-unsupported]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      Cisco ``channel-group N mode active`` on a member interface
+      back-points to ``Port-channel<N>``.  OPNsense's ``<laggs>``
+      block carries member lists by NIC name in a comma-separated
+      ``<members>`` element.  Both codecs round-trip the back-
+      pointer but the LAG name itself differs (``Port-channel10``
+      versus ``lagg0``); port-rename mesh canonicalises.
+    references: [opnsense-laggs]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      Cisco ``ip address dhcp`` ↔ OPNsense
+      ``<ipaddr>dhcp</ipaddr>``.  Neither codec currently wires
+      this into ``CanonicalInterface.dhcp_client``; cross-pair
+      drops pending wire-up.
+    references: [opnsense-interfaces]
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      OPNsense has no VRF model in ``config.xml``.  Cisco-source
+      ``vrf forwarding <name>`` is parse-and-ignored on the Cisco
+      side too (per its capability matrix), so the cross-pair
+      drops the field from both ends.
+    references: [vrf-unsupported]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      The list itself round-trips for the id field.  Per-VLAN
+      sub-fields collapse or drop — see ``vlans[].*`` entries
+      below.
+    references: [opnsense-vlans, cisco-vlan-cg]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Cisco ``vlan N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``.  Both
+      vendors share the 1-4094 range.
+    references: [opnsense-vlans, cisco-vlan-cg]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      Cisco emits ``name <X>`` (32-char truncation).  OPNsense's
+      nearest equivalent is ``<descr>`` — which is also where the
+      canonical ``description`` lands.  Two canonical fields
+      collapse to one OPNsense XML field; one drops on render.
+    references: [opnsense-vlans, cisco-vlan-cg]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Same as ``vlans[].name`` — both canonical fields share the
+      single OPNsense ``<descr>`` slot.
+    references: [opnsense-vlans]
+
+  vlans[].tagged_ports:
+    disposition: unsupported
+    reason: >
+      OPNsense has no VLAN-centric port-membership model.  A
+      VLAN exists only as a tagged sub-interface on ONE parent
+      NIC (the ``<if>`` element).  Cross-pair render emits no
+      port-membership XML; operators reconstruct trunk topology
+      manually by assigning each ``<vlan>`` to a zone.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].untagged_ports:
+    disposition: unsupported
+    reason: >
+      Same as tagged_ports — OPNsense's "untagged" traffic is
+      the parent NIC's native frames; not a per-port toggle.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      Cisco's ``interface Vlan100`` SVI with an L3 address has no
+      first-class OPNsense equivalent.  The OPNsense pattern is
+      to assign the VLAN sub-interface (``em1_vlan100``) to a
+      zone and put the address on the zone (``<opt2>``).  The
+      canonical model carries the SVI address but the OPNsense
+      render path doesn't synthesise the corresponding zone —
+      operator-curated.
+    references: [opnsense-vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      OPNsense splits static-route declaration into two blocks:
+      ``<gateways>/<gateway_item>`` (named gateways) and
+      ``<staticroutes>/<route>`` (routes referencing named
+      gateways).  The OPNsense codec does not currently parse
+      OR emit either block; canonical static_routes from a Cisco
+      source therefore drop on render.  Per-VRF static routes
+      (Cisco ``ip route vrf X ...``) are unsupported (canonical
+      lacks a VRF field on CanonicalStaticRoute).
+    references: [opnsense-gateways]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Cisco's named ``ip dhcp pool USERS`` form maps to OPNsense's
+      INTERFACE-KEYED ``<dhcpd>/<lan>``-style pools.  Pool network
+      / mask is INFERRED from the zone interface on OPNsense, not
+      stored on the pool record.  Lease time units differ (Cisco
+      d/h/m triple ↔ OPNsense seconds).  ``ip dhcp excluded-address``
+      ranges are not in the canonical schema.  OPNsense codec does
+      not currently advertise ``/dhcp/pool`` in its capability
+      matrix; cross-pair render is partial.
+    references: [opnsense-dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly — Cisco ``snmp-server community/location/
+      contact/host`` ↔ OPNsense ``<snmpd>/<rocommunity>/<syslocation>/
+      <syscontact>/<traphost>``.  v3 USM is unsupported on OPNsense
+      (lives in plugin's snmpd.conf, not config.xml — see codec's
+      ``/snmp/v3-user`` unsupported entry); ``v3_users`` records
+      drop on the cross-pair and the rename-pane shows the
+      ``snmpv3`` unsupported-category banner.
+    references: [opnsense-snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Cisco ``Port-channel<N>`` ↔ OPNsense ``lagg<N>`` (FreeBSD
+      lagg(4) driver naming).  Member lists round-trip via the
+      port-rename mesh.  LACP modes collapse: Cisco active /
+      passive both render as OPNsense ``<proto>lacp</proto>``
+      (FreeBSD always advertises actively).  Cisco static mode
+      (``on``) and PAgP (``desirable`` / ``auto``) have no LACP
+      equivalent; cross-pair degrades.  OPNsense codec parses
+      ``<laggs>`` but its capability matrix doesn't advertise
+      ``/lag/aggregate``; render is partial.
+    references: [opnsense-laggs]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Cisco type-9 (``$9$`` scrypt) and type-8 (``$4$`` PBKDF2-
+      SHA256) hashes are NOT bcrypt and OPNsense will reject them
+      on apply.  Type-5 (``$1$`` MD5-crypt) might work via PAM
+      legacy but is not the default.  Operators must reset
+      passwords on the OPNsense target.  Privilege number (1-15)
+      collapses to OPNsense's binary admin / non-admin via group
+      membership: privilege >= 15 → ``<groupname>admins</groupname>``,
+      otherwise ``<groupname>users</groupname>`` (or similar).  Both
+      codecs pass hashes through verbatim; loss surfaces in the
+      validation report.
+    references: [opnsense-users, cisco-user-security]
+
+  radius_servers:
+    disposition: good
+    note: >
+      Cisco modern ``radius server NAME / address ipv4 X
+      auth-port 1812 acct-port 1813 / key <secret>`` ↔ OPNsense
+      ``<authserver>`` with ``<type>radius</type>``,
+      ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
+      ``<radius_acct_port>``.  Round-trips host / port pair
+      cleanly.  Cisco type-7 obfuscated keys (``key 7 <hex>``)
+      land verbatim in OPNsense ``<radius_secret>`` and
+      authentication fails until the operator resets the secret —
+      a caveat in the validation report.
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      OPNsense codec capability matrix lists ``/vxlan-vnis/vni``
+      under unsupported with rationale "VXLAN not modelled —
+      OPNsense is a firewall codec."  Cisco IOS-XE codec also
+      lists ``/vxlan-vnis/vni`` as unsupported pending Catalyst
+      VXLAN demand.  Cross-pair drops VXLAN entirely.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      EVPN Type-5 is a VRF-property model (CanonicalRoutingInstance.l3_vni)
+      rather than per-prefix records.  No codec populates the
+      per-prefix list today; OPNsense doesn't model EVPN at all.
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      OPNsense has no VRF / routing-instance model in
+      ``config.xml``.  Cisco IOS-XE codec also parse-and-ignores
+      VRF declarations (per its capability matrix entry for
+      ``/routing-instances/instance``).  Cross-pair drops VRFs
+      from both ends.
+    references: [vrf-unsupported]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict by design — never auto-rendered.  Cisco-source
+      ACL / NAT / crypto stanzas may land here but OPNsense
+      target couldn't render them as XML anyway (firewall rules
+      are unsupported per codec capability matrix).
+    references: [firewall-out-of-scope]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does
+      not consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``apply-groups`` statement
+      preservation per GAP 9b).  Cisco IOS-XE source never
+      populates this list; field is always empty on this
+      cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not_applicable status for
+      Cisco source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The fundamental shape — what OPNsense models in config.xml versus
+#     what Cisco IOS-XE models in running-config — is well documented
+#     and unambiguous.  hostname / domain / interface IPs / VLAN tags /
+#     SNMP v1/v2c / RADIUS round-trip cleanly.
+#
+#   * The wire-up gaps on the OPNsense side (no DNS / NTP / syslog /
+#     timezone / static-route render path; no /dhcp/pool advertised;
+#     no /lag/aggregate advertised) push several Tier-1 fields into
+#     'lossy' rather than 'good'.  These are codec-implementation
+#     gaps, not vendor-modelling gaps, and would close as wire-up
+#     lands.
+#
+#   * The router/firewall versus router/switch role mismatch is
+#     unambiguously 'unsupported': switching state, VRF, VXLAN,
+#     EVPN are firmly outside OPNsense's wheelhouse.  Confident.
+#
+#   * The hash-format incompatibility (Cisco type-9/type-8/type-5
+#     versus OPNsense bcrypt) is documented and confidently lossy.
+#
+# Deferred items (none — all fields walked and dispositioned):
+#
+#   * (none — every CanonicalIntent top-level field carries an
+#     explicit per_field_expectation entry; sub-fields enumerated
+#     where the disposition varies by sub-field).
