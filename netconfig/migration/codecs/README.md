@@ -287,3 +287,13 @@ The cross-codec matrix validates that every xpath a codec yields via
 a test failure.  Use the shared `_walk_canonical` from
 `cisco_iosxe_cli/codec.py` when possible — it's the canonical walker
 every canonical-bridged codec reuses.
+
+---
+
+## See also
+
+- [`../canonical/README.md`](../canonical/README.md) — canonical intent model (Layer 3 sibling — every codec parses INTO and renders FROM these types)
+- [`../../../ARCHITECTURE.md`](../../../ARCHITECTURE.md) — four-layer design and where codecs sit in the migration pipeline
+- [`../../../tests/fixtures/real/RESULTS.md`](../../../tests/fixtures/real/RESULTS.md) — per-codec certification state and real-capture coverage matrix
+- [`../../../docs/adding-a-canonical-field.md`](../../../docs/adding-a-canonical-field.md) — worked example of wiring a new field through every codec
+- [`../../../docs/glossary.md`](../../../docs/glossary.md) — project-jargon reference

@@ -57,6 +57,9 @@ is the source of truth for pass counts.
 |---|---|
 | Understand the architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer model, canonical bridge, codec types |
 | Follow the contributor rules | [`CLAUDE.md`](CLAUDE.md) — hard rules, parity checklist, gotchas |
+| Look up project jargon | [`docs/glossary.md`](docs/glossary.md) — canonical, codec, mesh, ship-before-wire, target profile, etc. |
+| Read the canonical model overview | [`netconfig/migration/canonical/README.md`](netconfig/migration/canonical/README.md) — Tier 1 / 2 / 3 fields and promotion rules |
+| Add or change an HTTP route | [`netconfig/api/routes/README.md`](netconfig/api/routes/README.md) — frozen pipeline-stage signatures, endpoint inventory |
 | Add a new codec (vendor parser/renderer) | [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) |
 | Add a new device definition / target profile | [`definitions/README.md`](definitions/README.md) — layered definitions (family base + os_version / model overlays), target-profile module-variant schema |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — MTU as a worked example |

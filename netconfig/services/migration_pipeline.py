@@ -1,11 +1,93 @@
 """
-Translator pipeline orchestrator — Phase 0 skeleton.
+Translator pipeline orchestrator — load-bearing migration engine.
 
-Phase 0 scope: ``run_plan`` — parse → (transforms) → validate → render.
-No collect (caller supplies raw text), no diff, no deploy, no
-snapshot.  Each later phase will layer stages on via additional public
-functions; the existing ones should NEVER change shape to avoid
-breaking API routes and tests.
+This module is THE migration orchestrator: every code path that turns
+a parsed source-vendor canonical tree into a rendered target-vendor
+config funnels through one of the three public functions defined
+here.  API routes (``netconfig.api.routes.migration``), the desktop
+UI's preview/plan endpoints, integration tests, and dozens of unit
+tests all bind directly to these signatures.
+
+Public surface (frozen signatures — see Hard Rules below):
+
+  * :func:`run_plan` — minimal pipeline: parse → caller-supplied
+    transforms → validate → render.  No per-pane override knowledge;
+    callers compose their own transform list.
+
+  * :func:`run_plan_with_rename` — legacy wrapper that engages the
+    port-name rename pipeline unconditionally.  Preserved as a thin
+    forward to :func:`run_plan_with_overrides` so existing callers
+    (the UI's ``POST /plan`` route, integration tests, e2e suite,
+    sample code in this repo's README) keep working with their
+    original parameter shape.  New code should target
+    :func:`run_plan_with_overrides` directly.
+
+  * :func:`run_plan_with_overrides` — the main entry for per-pane
+    override flows.  Composes the five rename categories in a fixed
+    order ahead of any caller-supplied transforms, threads results
+    back onto the :class:`MigrationJob`, and snapshots source-side
+    enumerations for the UI's rename modal via the capture-first
+    transform (see below).
+
+Per-pane override categories supported on :func:`run_plan_with_overrides`
+(all SHIPPED):
+
+  1. ``port_rename_map`` — physical / logical interface-name rewrites
+     (Cisco ``Gi1/0/24`` → Aruba ``1/24``, etc.).
+  2. ``vlan_rename_map`` — VLAN-ID rewrites + drops + collision merge.
+  3. ``local_user_rename_map`` — local admin user-name rewrites + drops.
+  4. ``snmp_community_rename_map`` — v1/v2c community string rewrite or
+     clear (single-slot scalar; uses dict shape for API symmetry).
+  5. ``snmpv3_user_rename_map`` — SNMPv3 USM securityName rewrites +
+     drops.  Auth / priv keys + group + engine_id follow the renamed
+     record; first-wins on collisions.
+
+Sentinel semantics (uniform across all five categories):
+
+  * ``rename_map is None`` — pane is NOT engaged; the corresponding
+    canonical orchestrator never runs.  Result fields on the
+    :class:`MigrationJob` stay at their defaults.
+  * ``rename_map == {}`` — pane IS engaged with auto-heuristic only.
+    The orchestrator runs, captures the source enumeration, and
+    applies any built-in heuristics (e.g. port_names cross-vendor
+    classifier → formatter bridge) but the operator has not pinned
+    any explicit rewrite.  The UI sends ``{}`` when the operator
+    has selected a target profile but not yet customised any row.
+  * ``rename_map == {src: tgt}`` — explicit rewrite.  Operator
+    overrides win over any heuristic.
+  * ``rename_map == {src: None}`` — explicit drop.  Entry is removed
+    from the canonical tree (with cascading reference cleanup as
+    appropriate per category).
+
+Capture-first transform (load-bearing for the rename modal):
+
+The first transform inserted by :func:`run_plan_with_overrides`
+unconditionally snapshots the post-parse canonical tree's
+enumerations and stashes them onto the :class:`MigrationJob` as:
+
+  * ``source_vlans`` — VLAN IDs as parsed.
+  * ``source_local_users`` — local-user names as parsed.
+  * ``source_snmp_community`` — SNMP community string (empty when
+    the source had no SNMP block or no community).
+  * ``source_snmpv3_users`` — SNMPv3 USM user names as parsed.
+  * ``source_hostname`` — canonical hostname (drives the modal's
+    localStorage ack key).
+
+These fields are populated even when no overrides are engaged
+because the Tier-3 rename modal needs to enumerate every entity the
+operator could rewrite or drop, and localStorage persistence keys
+must stay stable across page reloads.
+
+Hard Rules (CLAUDE.md, repeated here for proximity):
+
+  * NEVER change the signatures of :func:`run_plan`,
+    :func:`run_plan_with_rename`, or :func:`run_plan_with_overrides`.
+    API routes and dozens of tests depend on the exact parameter
+    shape.  New rename categories grow :func:`run_plan_with_overrides`
+    as additional optional parameters defaulting to ``None`` — that
+    is a backwards-compatible signature extension, not a change.
+  * NEW pipeline behaviour goes on a NEW public function, not an
+    existing one.
 
 Pure function — no I/O, no global state.
 """

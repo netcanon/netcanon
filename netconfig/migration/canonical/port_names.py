@@ -514,19 +514,55 @@ def build_port_rename_transform(
     rename_map: "dict[str, str | None] | None" = None,
     strip_unmappable: bool = True,
 ) -> tuple[Callable[["CanonicalIntent"], "CanonicalIntent"], PortRenameResult]:
-    """Return a ``(transform, result)`` pair.
+    """Return a pipeline-compatible transform + a result accumulator
+    for cross-vendor port-name rewriting.
 
-    *transform* fits the existing ``run_plan(transforms=...)`` signature
-    — takes an intent, returns an intent.  *result* is a
-    :class:`PortRenameResult` that accumulates across any invocations
-    of the transform (in practice, just one per pipeline run).  The
-    caller can read it after the pipeline finishes to surface warnings
-    or the applied map in the UI.
+    Tier-2 factory: callers build the transform with or without a
+    user rename map and feed it into ``run_plan`` alongside any other
+    transforms.  The pipeline stays oblivious — ``run_plan`` just
+    sees another ``TransformCallable``.  Pattern is mirrored by the
+    other four per-pane orchestrators
+    (:func:`build_vlan_rename_transform`,
+    :func:`build_local_user_rename_transform`,
+    :func:`build_snmp_community_rename_transform`,
+    :func:`build_snmpv3_user_rename_transform`).
 
-    This is the Tier-2 factory: callers build the transform with or
-    without a user rename map and feed it into ``run_plan`` alongside
-    any other transforms.  The pipeline stays oblivious — ``run_plan``
-    just sees another ``TransformCallable``.
+    Args:
+        source_codec: Adapter for the source vendor — supplies
+            ``classify_port_name`` for the auto-heuristic path.
+        target_codec: Adapter for the target vendor — supplies
+            ``format_port_identity`` so the cross-vendor bridge can
+            emit native target-vendor names.
+        rename_map: Optional ``{source_name: target_name | None}``
+            override map.  Sentinel semantics (per CLAUDE.md +
+            ``run_plan_with_overrides`` docstring):
+
+              * ``None`` — pane not engaged (caller should not even
+                wrap this transform; included for symmetry).
+              * ``{}`` — engaged with auto-heuristic only; the
+                cross-vendor classifier → formatter bridge runs but
+                no explicit overrides are applied.
+              * ``{src: tgt}`` — explicit rewrite; wins over the
+                auto-heuristic.
+              * ``{src: None}`` — explicit drop; the source name is
+                stripped from every canonical-tree field that
+                referenced it (interfaces, VLAN port lists, LAGs,
+                static-route interfaces, DHCP pools).
+        strip_unmappable: When the auto-heuristic finds no target
+            equivalent for a source name, ``True`` (default) drops
+            the name from the canonical tree alongside the warning;
+            ``False`` leaves it verbatim.
+
+    Returns:
+        Tuple of ``(transform_fn, result)``.  ``transform_fn`` fits
+        the existing ``run_plan(transforms=...)`` signature — it
+        takes an intent, mutates it in-place via
+        :func:`translate_port_names`, and returns the same intent.
+        ``result`` is a :class:`PortRenameResult` that accumulates
+        applied / warnings / dropped entries across any invocations
+        of the transform (in practice, just one per pipeline run).
+        The caller reads ``result`` after the pipeline finishes to
+        surface the rewrite outcome on the :class:`MigrationJob`.
     """
     result = PortRenameResult()
 

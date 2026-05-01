@@ -3,6 +3,10 @@
 All notable changes to NetConfig are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+See also: [`README.md`](README.md) for project orientation;
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the four-layer design that
+much of the work below evolves.
+
 ---
 
 ## [Unreleased]

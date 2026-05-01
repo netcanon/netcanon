@@ -216,3 +216,11 @@ tests use these exclusively — never CSS classes or element structure.  See
   fake (e.g. `$9$fake$hash`, `ENC fakeEncodedHash==`).  Third-party
   real captures from published repos are OK — their hashes are already
   public.  See `tests/fixtures/real/NOTICE.md` for provenance conventions.
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation and quickstart
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer design and migration pipeline
+- [`tests/README.md`](tests/README.md) — test-suite layout and mocking strategy

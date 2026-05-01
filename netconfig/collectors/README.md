@@ -133,3 +133,11 @@ SSH connections occur.  **Do not patch `ConnectHandler` or
 that returns canned output.  The probe-parser lives in its own module and
 IS unit-testable in isolation (`tests/unit/test_probe_parser.py`) without
 touching any transport layer.
+
+---
+
+## See also
+
+- [`../api/routes/README.md`](../api/routes/README.md) — HTTP routes (the backup route is the single mock point for `get_collector`)
+- [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — four-layer design (collectors are Layer 1 of the backup concern)
+- [`../../definitions/README.md`](../../definitions/README.md) — device-definition schema (the `connection` block selects which collector strategy runs)

@@ -179,6 +179,20 @@ def _resolve_record(
     ``file_extension``) is what the compatibility check relies on.  A
     missing entry here means the filename was never produced by the
     backup engine, so a 404 is honest.
+
+    Args:
+        storage: Config storage backend whose ``list_configs()`` is
+            treated as the authoritative inventory.
+        filename: Bare filename as returned by the list endpoint.
+        side: Either ``"left"`` or ``"right"``; surfaced verbatim in
+            the 404 detail so the client can highlight the offending
+            field in the diff form.
+
+    Returns:
+        The matching ``ConfigRecord`` from ``storage.list_configs()``.
+
+    Raises:
+        HTTPException 404: If no record's ``filename`` matches.
     """
     for record in storage.list_configs():
         if record.filename == filename:

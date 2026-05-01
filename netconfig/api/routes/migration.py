@@ -702,7 +702,22 @@ def detect_source_codec(
 
 
 def _get_target_profiles(request: Request) -> dict[str, TargetProfile]:
-    """Dependency: pull the app-state profiles dict loaded at startup."""
+    """Pull the target-profile registry from ``request.app.state``.
+
+    Profiles are loaded once at app startup (see ``main.py`` lifespan)
+    and exposed through ``app.state.target_profiles``.  ``getattr`` with
+    a default makes this safe under the bare-app fixtures used by some
+    unit tests, which don't populate the full lifespan-loaded state —
+    those tests get an empty dict and the route returns an empty list
+    rather than raising AttributeError.
+
+    Args:
+        request: The current request; only its ``app.state`` is consulted.
+
+    Returns:
+        Mapping of ``"<vendor>/<model>"`` keys to ``TargetProfile``
+        instances.  Empty when no profiles are loaded.
+    """
     return getattr(request.app.state, "target_profiles", {})
 
 

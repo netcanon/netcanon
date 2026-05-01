@@ -456,3 +456,10 @@ a human should exercise before trusting, append a new bullet to the
 right section.  Keep items concise (one sentence plus a concrete
 paste-this / click-this instruction).  Don't remove checked items —
 they're regression reminders.
+
+---
+
+## See also
+
+- [`tests/README.md`](tests/README.md) — automated test-suite layout (this file is the manual companion)
+- [`README.md`](README.md) — project orientation and quickstart

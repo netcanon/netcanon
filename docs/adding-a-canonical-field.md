@@ -307,3 +307,12 @@ The canonical model should stay cross-vendor-clean.  Vendor-specific
 rules (FortiGate needs `mtu-override enable`; AOS-S has no per-port
 MTU at all) belong in the codec's render path, not on the canonical
 field definition.  Document the quirk in a render-side comment.
+
+---
+
+## See also
+
+- [`../netconfig/migration/canonical/README.md`](../netconfig/migration/canonical/README.md) — canonical intent model overview and Tier 1 / 2 / 3 promotion rules
+- [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) — codec authorship guide (every codec touched by a wire-through lives here)
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — four-layer design and where canonical sits in the migration pipeline
+- [`glossary.md`](glossary.md) — project-jargon reference (canonical, codec, wire-through, ship-before-wire)

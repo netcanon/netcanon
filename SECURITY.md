@@ -202,3 +202,10 @@ This file must be updated when any of the following change:
 - A new input field is accepted from untrusted sources
 - A dependency with security relevance is added or removed
 - The threat model assumption (localhost-only) changes
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation and quickstart
+- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the "never commit real credentials" hard rule

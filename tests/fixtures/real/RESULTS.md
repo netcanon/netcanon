@@ -583,3 +583,11 @@ Landing any of these is strictly opportunistic — no codec is
 blocked on them, and a grammar-diversity commit here matters less
 than fixing bugs in the lower-certainty codecs (none exist) or
 adding new canonical fields (ongoing roadmap).
+
+---
+
+## See also
+
+- [`../../README.md`](../../README.md) — test-suite layout and how the real-capture harness fits in
+- [`NOTICE.md`](NOTICE.md) — provenance, attribution, and licensing for every fixture in this corpus
+- [`../../testid_reference.md`](../../testid_reference.md) — interactive-element inventory (the migrate UI surfaces certainty tiers from this matrix)

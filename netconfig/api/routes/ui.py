@@ -39,7 +39,23 @@ _templates = Jinja2Templates(directory=_TEMPLATES_DIR)
 
 
 def _format_interval(minutes: int) -> str:
-    """Human-readable interval string for use in templates."""
+    """Render a schedule interval as a human-readable phrase.
+
+    Registered as the ``format_interval`` Jinja global so templates
+    rendering schedule rows don't have to repeat the unit conversion
+    inline.  Picks the largest whole-unit phrasing that fits — 90
+    minutes is rendered as ``Every 1 hour`` (truncating, not rounding),
+    matching the calendar-style "every <n> <unit>s" convention users
+    expect for cron-like recurrence.
+
+    Args:
+        minutes: Schedule interval, in minutes.  Must be positive.
+
+    Returns:
+        A phrase of the form ``"Every N <unit>"`` with the unit chosen
+        from ``min`` / ``hour(s)`` / ``day(s)`` / ``week(s)`` based on
+        the largest whole division that fits.
+    """
     if minutes < 60:
         return f"Every {minutes} min"
     if minutes < 1440:

@@ -179,6 +179,10 @@ def _process_one_device(
     a job uses the thread pool or executes sequentially (single-device
     jobs skip the pool for cleaner traces).
 
+    Tests patch ``netconfig.api.routes.backups.get_collector`` to mock
+    SSH/NETCONF/REST collection — see CLAUDE.md "Hard Rules".  Never
+    patch ``ConnectHandler`` or ``paramiko.SSHClient`` directly.
+
     Layered-definition resolution (P1C3):
       1. Family-base definition looked up via ``definitions[type_key]``
          is always the starting point.
@@ -198,6 +202,24 @@ def _process_one_device(
     no profile_id → no persistence.  Existing callers that don't
     supply the new optional params get legacy single-definition
     behaviour.
+
+    Args:
+        job: Parent ``BackupJob`` whose ``results[idx]`` is mutated.
+        idx: Position of this device in ``job.results``; the worker
+            for index *idx* is the only writer of that slot.
+        device: Connection target (host, type_key, credentials,
+            optional pinned os_version/model and device_profile_id).
+        definitions: Loaded family-base definition registry, keyed by
+            ``type_key``.
+        storage: Backend that persists collected config bytes.
+        definition_loader: Optional layered-definition resolver.  When
+            provided, enables probe + overlay resolution; absence
+            forces legacy single-definition behaviour.
+        device_profiles: Optional in-memory profile registry.  Required
+            alongside ``device_profile_store`` to persist
+            ``detected_facts`` for UI display.
+        device_profile_store: Optional persistence backend for the
+            profile registry.
 
     All exceptions are caught and recorded on the ``BackupResult``; this
     function therefore never raises under normal operation.  Any exception
@@ -330,10 +352,16 @@ def _run_backup_job(
 ) -> None:
     """Execute all device backups for *job* and update its state.
 
-    Runs in a background thread (via ``BackgroundTasks``).  Device work
-    is dispatched to a bounded ``ThreadPoolExecutor`` so up to
-    *max_workers* devices are processed in parallel; additional devices
-    wait in the executor's FIFO queue and start as slots free up.
+    Runs in BackgroundTasks; never returns to the route response — see
+    CLAUDE.md "Hard Rules".  ``POST /api/v1/backups`` always returns
+    ``status=pending`` and the caller polls ``GET /api/v1/backups/{id}``
+    for the terminal state this function writes.  Tests rely on
+    TestClient executing background tasks synchronously before the POST
+    response is returned.
+
+    Device work is dispatched to a bounded ``ThreadPoolExecutor`` so up
+    to *max_workers* devices are processed in parallel; additional
+    devices wait in the executor's FIFO queue and start as slots free up.
 
     Each device is processed independently; a failure on one device does
     not prevent others from running.  Job ``status`` becomes
@@ -350,6 +378,13 @@ def _run_backup_job(
         max_workers: Maximum concurrent device workers for this job.
             Clamped to ``[1, MAX_BACKUP_CONCURRENCY]`` (10).  Jobs with
             a single device bypass the pool entirely.
+        definition_loader: Optional layered-definition resolver, threaded
+            through to ``_process_one_device`` for probe + overlay
+            resolution.
+        device_profiles: Optional in-memory profile registry threaded
+            through for ``detected_facts`` persistence.
+        device_profile_store: Optional persistence backend paired with
+            ``device_profiles``.
 
     Thread safety:
         * ``job.results`` is pre-populated before dispatch and is never

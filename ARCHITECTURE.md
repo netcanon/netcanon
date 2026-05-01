@@ -693,3 +693,16 @@ What's queued:
   VLANs / local_users / SNMP-community / SNMPv3-users.  See
   [`translator-plans.txt`](translator-plans.txt) for viability
   audit + ordering decisions.
+
+---
+
+## See also
+
+- [`definitions/README.md`](definitions/README.md) — device-definition + target-profile YAML schema
+- [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) — codec authorship guide
+- [`netconfig/migration/canonical/README.md`](netconfig/migration/canonical/README.md) — canonical intent model and Tier 1 / 2 / 3 promotion rules
+- [`netconfig/api/routes/README.md`](netconfig/api/routes/README.md) — HTTP route inventory and frozen pipeline-stage signatures
+- [`docs/glossary.md`](docs/glossary.md) — project-jargon reference
+- [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — worked example: MTU wire-through across every codec
+- [`translator-plans.txt`](translator-plans.txt) — active roadmap and backlog
+- [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) — per-codec certification state

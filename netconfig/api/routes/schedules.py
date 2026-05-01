@@ -73,7 +73,40 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
 
 
 async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
-    """Inner implementation of scheduled backup (wrapped by error handler)."""
+    """Resolve targets, build a job, and dispatch ``_run_backup_job``.
+
+    The actual blocking SSH/NETCONF work in ``_run_backup_job`` is
+    dispatched via ``asyncio.to_thread`` so it never runs on the
+    APScheduler / FastAPI event loop.  Exceptions are allowed to
+    propagate; the outer ``_run_scheduled_backup`` wrapper logs and
+    swallows them so a single bad run doesn't tear down the scheduler.
+
+    Target resolution honours the new profile-based shape first
+    (``schedule.target_type_keys`` + ``schedule.target_device_ids``),
+    falling back to inline ``schedule.devices`` for backward
+    compatibility with old-style schedules.  When no targets resolve,
+    the run is skipped (logged at WARNING) rather than creating an
+    empty job.
+
+    Tests patch ``netconfig.api.routes.backups.get_collector`` to mock
+    device collection — see CLAUDE.md "Hard Rules".  The collector is
+    invoked transitively via ``_run_backup_job``.
+
+    Args:
+        schedule_id: ID of the ``BackupSchedule`` to run.  Looked up
+            against ``app.state.schedules``; missing or disabled
+            schedules return without effect.
+        app: The FastAPI ``app`` instance, used as the carrier for all
+            shared registries (``schedules``, ``device_profiles``,
+            ``jobs``, ``definitions``, ``storage``, ``scheduler``,
+            ``schedule_store``, ``settings``).
+
+    Side effects:
+        * Inserts a new ``BackupJob`` into ``app.state.jobs``.
+        * Persists the job (via ``_run_backup_job``'s ``job_store``).
+        * Updates ``schedule.last_run_at`` / ``last_job_id`` /
+          ``next_run_at`` and persists the schedule.
+    """
     # Local imports to avoid circular dependency at module load time
     from pydantic import SecretStr
 

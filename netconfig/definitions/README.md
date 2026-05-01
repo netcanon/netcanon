@@ -129,3 +129,10 @@ To add a new device:
    schema fields.
 
 See `definitions/README.md` for the full YAML schema reference.
+
+---
+
+## See also
+
+- [`../../definitions/README.md`](../../definitions/README.md) — YAML-author-facing schema reference (this directory is the loader / Pydantic model side)
+- [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — four-layer design and where definitions feed into the backup + migration concerns

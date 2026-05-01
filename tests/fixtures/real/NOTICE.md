@@ -99,3 +99,10 @@ re-discover them.
 4. The parametrized harness at `tests/unit/migration/test_real_captures.py`
    picks up every `*.txt` / `*.cfg` / `*.xml` under `<vendor>/`
    automatically — no further wiring needed.
+
+---
+
+## See also
+
+- [`RESULTS.md`](RESULTS.md) — per-codec certification state and coverage matrix derived from this corpus
+- [`../../README.md`](../../README.md) — test-suite layout (real-capture is the fifth tier alongside unit / integration / E2E / desktop)
