@@ -1,0 +1,405 @@
+# Cross-vendor fidelity expectations: fortigate_cli -> cisco_iosxe_cli
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/
+#
+# Reverse-direction sibling of cisco_iosxe_cli__fortigate_cli.yaml.
+# Per the schema README's "Reverse pairs are independent files —
+# arista_eos__juniper_junos.yaml and juniper_junos__arista_eos.yaml are
+# not assumed symmetric" rule, this file authors the dispositions
+# independently rather than mirroring.  Several fields are
+# direction-asymmetric:
+#
+#   * dns_servers: Cisco -> FortiGate is lossy (FortiGate caps at 2-3
+#     servers).  FortiGate -> Cisco is good (FortiGate-source had at
+#     most three; Cisco accepts unbounded).
+#
+#   * dhcp_client: Cisco -> FortiGate is lossy (FortiGate render does
+#     not emit ``set mode dhcp``).  FortiGate -> Cisco is good (Cisco
+#     render emits ``ip address dhcp`` correctly).
+#
+#   * dhcp_servers: Cisco -> FortiGate is lossy with caveats (model
+#     divergence).  FortiGate -> Cisco is more lossy (Cisco IOS-XE
+#     codec capability matrix does not advertise DHCP render).
+#
+#   * Switching features: in both directions, unsupported, but for
+#     opposite reasons (Cisco -> FortiGate: target absent;
+#     FortiGate -> Cisco: source absent).
+
+meta:
+  source_vendor: fortigate_cli
+  target_vendor: cisco_iosxe_cli
+  primary_use_case: >
+    FortiGate firewall edge -> Cisco IOS-XE router/switch migration.
+    Common scenario: replacing a FortiGate edge with a Cisco-shop's
+    standardised Cat 9000 / ISR 4000 platform.  L3 routing + system-
+    services translates well; FortiGate's rich firewall / UTM /
+    application-control product surface has no Cisco analogue and is
+    lost on migration.  Operators should treat the FortiGate firewall
+    config as documentation rather than a translatable artefact.
+  certainty: medium
+  references:
+    - id: system_services
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/system_services.md
+      title: "System services: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-04-30"
+    - id: interface_naming
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/interface_naming.md
+      title: "Interface naming: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-04-30"
+    - id: ip_addressing
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/ip_addressing.md
+      title: "IP addressing: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-04-30"
+    - id: vlans
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/vlans.md
+      title: "VLAN configuration: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-04-30"
+    - id: switchport
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/switchport.md
+      title: "Switching features: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/static_routes.md
+      title: "Static routes: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: snmp
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/snmp.md
+      title: "SNMP: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/local_users.md
+      title: "Local users + admin profiles: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: aaa
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/aaa.md
+      title: "AAA / RADIUS / TACACS+: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: dhcp
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/dhcp.md
+      title: "DHCP server: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: lags
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/lags.md
+      title: "LAG / aggregate / port-channel: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-04-30"
+    - id: vrf
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/vrf.md
+      title: "VRF / VDOM: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: routing_protocols
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/routing_protocols.md
+      title: "Routing protocols: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: firewall_policy
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe_cli/firewall_policy.md
+      title: "Firewall policies: FortiGate FortiOS versus Cisco IOS-XE"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      FortiOS ``set hostname "fgt-edge"`` -> Cisco ``hostname
+      fgt-edge``.  FortiOS caps at 35 characters; Cisco accepts up
+      to 63 — no truncation in this direction.
+    references: [system_services]
+
+  domain:
+    disposition: good
+    note: >
+      FortiOS ``set domain "example.com"`` (under ``config system
+      dns``) -> Cisco ``ip domain name example.com``.  Same FQDN
+      preserved.
+    references: [system_services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      FortiOS schemas DNS into primary / secondary (and a hidden
+      tertiary) — at most three servers.  Cisco accepts arbitrarily
+      many ``ip name-server`` directives, so the canonical list
+      always fits the Cisco render.  No truncation in this
+      direction.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Address list itself is preserved.  Cisco's per-server
+      ``prefer`` / ``key`` / ``source`` options are not modelled in
+      canonical (so FortiGate-source configs that could express
+      none of these don't lose anything; the lossy bit is the
+      canonical schema gap, not the cross-vendor migration).
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      FortiOS ``set timezone <NN>`` (numeric index) cannot be
+      algorithmically converted to Cisco ``clock timezone PST -8 0``
+      (offset+DST tokens) without an operator-curated lookup table.
+      Canonical preserves the source string verbatim; Cisco render
+      may emit a token Cisco accepts but with different DST
+      behaviour.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      FortiOS's three syslog backends (syslogd / syslogd2 / syslogd3)
+      collapse to the canonical list which Cisco's ``logging host``
+      directive can emit unbounded.  No truncation in this direction.
+      Severity / facility tokens not canonically modelled.
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface fields divide cleanly: name (lossy — FortiGate's
+      flat namespace forces Cisco render to invent speed prefixes
+      defaulting to ``GigabitEthernet``; rename mesh applies operator
+      overrides), description (good), enabled (good), ipv4_addresses
+      (good for primary, lossy for secondaries — FortiGate parse
+      drops them before reaching canonical), ipv6_addresses (lossy
+      on link-local scope — FortiOS source has no explicit scope
+      keyword), switchport_mode / access_vlan / trunk_allowed_vlans /
+      trunk_native_vlan / voice_vlan (unsupported — see below),
+      lag_member_of (good), dhcp_client (good — Cisco render emits
+      ``ip address dhcp``), vrf (unsupported — see below).
+    references: [interface_naming, ip_addressing, switchport, lags]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly.  FortiGate uses the interface
+      edit ID as canonical VLAN name (``VL_100``); Cisco renders
+      ``vlan 100 / name VL_100`` which is mechanical but not
+      operator-readable.  Per-VLAN description is empty after
+      FortiGate parse.  The VLAN-centric port list (``tagged_ports``
+      / ``untagged_ports``) is empty after FortiGate parse —
+      FortiGate's child-interface model encodes membership via the
+      parent's identity, not as a port list per VLAN.  Cross-vendor
+      migration on FortiGate -> Cisco loses port-membership intent;
+      the operator must manually configure ``switchport access vlan
+      X`` on the Cisco target.  vlans[].ipv4_addresses (SVI) does
+      round-trip cleanly via the FortiGate VL-iface ``set ip``.
+    references: [vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly via mask <-> CIDR
+      conversions.  ``interface`` field requires the rename mesh to
+      map FortiGate's ``port1`` to a Cisco-shape name.  Metric
+      semantics differ (FortiGate distance / AD-ordering vs Cisco
+      per-static-comparator) so the integer preserves but its
+      meaning differs.  Description (FortiGate ``set comment``) is
+      not currently parsed.  Per-VRF static routes (FortiGate ``set
+      vrf <id>``) are unsupported — canonical model lacks a vrf
+      field on CanonicalStaticRoute.
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Cisco IOS-XE codec capability matrix does NOT advertise
+      ``/dhcp/pool`` paths under supported.  Cross-vendor migration
+      on FortiGate -> Cisco emits no DHCP-pool blocks regardless of
+      how many FortiGate pools the source had.  Canonical model
+      would support the round-trip if Cisco render were wired —
+      schema gap is solvable but unscheduled in v1.  Lossy with
+      ``reason: deferred`` rather than unsupported because the
+      canonical CanonicalDHCPPool record IS populated by the
+      FortiGate codec; the loss is on the Cisco render side.
+    references: [dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly with one caveat: FortiGate's edit-table
+      can carry multiple community strings; the FortiGate codec
+      parses only the first into the canonical scalar.  Multi-
+      community FortiOS configs lose all but one on canonical-side.
+      v3 USM (v3_users): name / group / protocol enum round-trip
+      with auth-protocol enum coercion (FortiOS ``sha224``/``sha384``
+      flatten to Cisco ``sha``); auth/priv passphrases NOT cross-
+      compatible due to engineID-salting.  Cross-vendor re-keying
+      required.  ``engine_id`` field exists in canonical but not
+      wired through.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      FortiOS operator-named aggregates (``LAG_INTERNAL``) -> Cisco
+      synthetic ``Port-channel<N>`` integer ID requires invention
+      on render: canonical model has no LAG-ID field, so the Cisco
+      render picks the next available integer (operators override
+      via per-pane port-rename surface).  Members preserve via the
+      rename mesh applied to each member name.  LACP modes (active /
+      passive / static) map cleanly.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      FortiGate's named accprofile strings (``super_admin`` /
+      ``prof_admin`` / custom) collapse to Cisco's numeric privilege
+      levels (super_admin -> 15, others -> 1) — granular per-profile
+      detail is lost.  Hash formats are NOT cross-compatible:
+      FortiOS ``ENC <opaque-base64>`` is not Cisco-accepted; cross-
+      vendor migration of admin accounts requires re-setting
+      passwords on the target device.  Both codecs preserve hashes
+      verbatim with vendor tags.  ``role`` field carries the
+      accprofile name for intra-FortiGate round-trip but Cisco
+      render does not emit it (Cisco uses numeric privilege).
+    references: [local_users]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port preserve cleanly.  Shared-secret incompatible:
+      FortiOS ``ENC <opaque-base64>`` is not Cisco-accepted; cross-
+      vendor migration requires re-keying.  FortiGate codec
+      normalises FortiOS's ``set radius-port 0`` placeholder to the
+      effective default 1812 at parse-time.  Acct-port: FortiGate
+      has no separate field (canonical defaults to 1813), so
+      non-default Cisco-target requirements would need operator
+      override on render.
+    references: [aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      FortiGate codec capability matrix lists ``/vxlan-vnis/vni``
+      as unsupported (rationale: "VXLAN not modelled — FortiGate
+      is a firewall codec").  Cisco IOS-XE codec also lists VXLAN
+      as unsupported in v1.  Both codecs parse-and-ignore VXLAN
+      intent on this cross-pair; FortiGate as a firewall has no
+      EVPN data plane.
+    references: [vrf]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list per-prefix EVPN Type-5 records as parse-
+      and-ignore in v1.  FortiGate has no EVPN role; cross-vendor
+      migration is not applicable.
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      FortiGate codec does not parse ``set vrf <id>`` (per-interface
+      integer VRF, FortiOS 7.0+) into canonical
+      CanonicalRoutingInstance records in v1.  Cisco IOS-XE codec
+      capability matrix lists ``/routing-instances/instance`` as
+      unsupported.  More fundamentally, FortiGate's per-interface
+      integer VRF model (no name, no RD, no RT) cannot be expressed
+      as Cisco's named-VRF + RD + RT model without operator-curated
+      lookup tables.  VDOMs are a heavier multi-tenancy primitive
+      that requires per-VDOM canonical-tree splitting (out of v1
+      pipeline scope).
+    references: [vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Cross-vendor
+      translation is out of scope for this field.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; informational only."
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata; not a translation field."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  FortiGate and Cisco IOS-XE codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific group-scoped set-line tails.  Same
+      not_applicable status as apply_groups.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * FortiGate-source -> Cisco-target shared scalar surface is
+#     high-confidence (FortiOS CLI Reference is unambiguous; Cisco
+#     Configuration Guides match what the IOS-XE codec emits today
+#     on real-capture fixtures).
+#
+#   * Direction-asymmetric losses are well-understood and documented
+#     per-field (dns_servers / dhcp_client are good in this direction
+#     where lossy in the forward; dhcp_servers is more lossy in this
+#     direction due to Cisco render gap).
+#
+#   * Switching features (switchport / spanning-tree / voice-VLAN)
+#     are confidently unsupported — FortiGate parse never populates
+#     the canonical fields, so Cisco render emits routed-port-only
+#     configurations regardless of the FortiGate parent's intent.
+#
+#   * Firewall / NAT / UTM surfaces are confidently unsupported
+#     (canonical schema gap; out of v1 scope).
+#
+#   * VRF is confidently unsupported (both codecs parse-and-ignore
+#     in v1; FortiGate's VDOM model is not a 1:1 analogue).
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-interface FortiGate ``set vrf <id>`` parse into
+#     CanonicalRoutingInstance — deferred to subsequent audit pass
+#     when the canonical schema gains vendor-id translation tables.
+#
+#   * FortiGate firewall policy / VIP / address-object / UTM
+#     migration to Cisco ACL/ZBF — deferred indefinitely (canonical
+#     schema gap; operators must manually reconstruct).
+#
+#   * TACACS+ — no canonical model in v1.
