@@ -737,6 +737,80 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[TODO] EOS 4.26 EVPN/VXLAN GAPS — surfaced when user replayed
+       karneliuk_a_eos1_eos4260.txt through arista_eos → juniper_junos
+       and noticed dropped semantic surface.  Five separable items
+       ordered smallest → largest:
+
+  (1) ARISTA `router bgp / vlan N / rd ... / route-target both ...`
+      → CanonicalRoutingInstance (small, ~1hr).  The RD + RT data
+      IS already canonically modelled on CanonicalRoutingInstance,
+      but the Arista parser ONLY populates it from top-level
+      `vrf instance <name>` declarations.  This per-VLAN EVPN
+      binding form goes through unparsed.  Fix lives in
+      arista_eos/codec.py — extend the existing `router bgp`
+      block-walker (already present for VRF parsing under
+      `router bgp / vrf <name>`) to ALSO recognise
+      `router bgp / vlan <N>` and route the rd / route-target /
+      redistribute entries into a CanonicalRoutingInstance keyed
+      by the VLAN name (matching the CanonicalVlan.name).
+      Tests: a new fixture-driven test that asserts
+      tree.routing_instances populates RD + RT from the bgp/vlan
+      form on the karneliuk EOS 4.26 fixture.
+
+  (2) CanonicalVxlan source-interface + udp-port (~30 min).  Today
+      CanonicalVxlan has {vlan_id, vni, mcast_group, flood_list}.
+      EOS / NX-OS / Junos all emit a source-interface (loopback IP
+      that becomes the VTEP IP) + a UDP port (default 4789, but
+      operator-set values are real config).  Add two fields to
+      CanonicalVxlan, populate on Arista + Junos parse, emit on
+      both render paths, run the existing VXLAN cross-mesh tests.
+      Doc-sync: docs/adding-a-canonical-field.md MTU pattern.
+
+  (3) IPv6 ADDRESSES on interfaces (~2-3 hrs).  CanonicalIPv4Address
+      exists but no IPv6 sibling.  Add CanonicalIPv6Address (ip,
+      prefix_length, scope='global'/'link-local'), and a list field
+      ipv6_addresses on CanonicalInterface paralleling
+      ipv4_addresses.  Wire through every codec's parse + render.
+      Same shape as the existing MTU wire-through (multi-codec
+      single commit).  Cross-mesh: test_cross_mesh_overrides.py
+      gets a new "ipv6 address survives the round-trip" smoke
+      across every (source_capable, target_capable) bidir pair.
+
+  (4) FULL BGP CANONICAL MODEL — CanonicalBGPProcess
+      (multi-session).  Biggest of the five.  Schema needs:
+      * autonomous_system: int
+      * router_id: str
+      * neighbors: list[CanonicalBGPNeighbor]
+        - peer_address, remote_as, address_families,
+          route_map_in / route_map_out
+      * address_families: list[CanonicalBGPAddressFamily]
+        - name (ipv4/ipv6/evpn/vpnv4), redistribute,
+          neighbor_activations
+      * redistribute_connected_route_map (str)
+      Ship-before-wire on all DC codecs (Arista, NX-OS-future,
+      Junos), then per-codec parse+render.  Pair with the
+      CanonicalRoutingInstance work (#1 above) so RD/RT/router-id
+      compose cleanly.
+
+  (5) ROUTE-MAP + PREFIX-LIST CANONICAL MODEL (multi-session).
+      Same scope as #4 — schema first, then per-codec wire-up.
+      Without these, EVPN/MPLS migrations are perpetually
+      losing route-policy data.  Decision deferred until #4
+      ships (route-maps reference prefix-lists; need to choose
+      whether they stay as separate canonical lists or fold
+      under CanonicalBGPProcess.policies).
+
+  See also: ALL FIVE produce parse-side bugs visible only when a
+  bidirectional Arista or Junos render runs against a real EVPN
+  fixture.  The cross-mesh smoke matrix (every bidir pair) does
+  NOT detect these silently-dropped surfaces because it asserts
+  "doesn't crash" not "round-trip preserves source semantic".  A
+  generic guard could enforce: for every real-capture fixture,
+  source_field_count must equal post-parse canonical-field-count
+  (where field maps exist) — flagging silent drops when codec
+  parse misses a documented field.
+
 [SHIPPED] SNMPv3 USM CROSS-MESH (P2C6):
     # Fifth per-pane override category after ports / vlans /
     # local_users / snmp_community.  New canonical type:
@@ -2164,5 +2238,16 @@ A: Six-stage pipeline (collect -> parse -> transform -> validate ->
    YANG-native targets. Capability matrices drive pre-flight
    ValidationReports. Sits on top of NetConfig's existing collector
    and storage layers.
+
+=====================================================================
+## 16. SEE ALSO
+=====================================================================
+
+- ARCHITECTURE.md — four-layer design and migration pipeline overview
+- tests/fixtures/real/RESULTS.md — per-codec certification state and
+  real-capture coverage matrix (the "what blocks promotion" notes
+  feed back into this roadmap)
+- netconfig/migration/codecs/README.md — codec authorship guide for
+  the per-vendor parse/render adapters this plan describes
 
 # END

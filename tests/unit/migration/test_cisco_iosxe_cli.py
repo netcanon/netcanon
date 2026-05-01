@@ -46,8 +46,11 @@ end
 
 
 class TestR3Fields:
-    def test_direction_is_parse_only(self):
-        assert CiscoIOSXECLICodec.direction == "parse_only"
+    def test_direction_is_bidirectional(self):
+        # The codec was originally parse_only; render path was added
+        # so an Aruba/Junos/etc. source can target Cisco IOS-XE CLI
+        # text instead of NETCONF XML.  See render() for scope.
+        assert CiscoIOSXECLICodec.direction == "bidirectional"
 
     def test_certainty_is_certified(self):
         # Certified on a two-domain corpus:
@@ -304,14 +307,284 @@ class TestParseCLIErrors:
 
 
 # ---------------------------------------------------------------------------
-# Render — must raise (parse_only)
+# Render — emits IOS-XE running-config text
 # ---------------------------------------------------------------------------
 
 
-class TestRenderRaises:
-    def test_render_raises_render_error(self):
-        with pytest.raises(RenderError, match="parse-only"):
+class TestRender:
+    """The CLI render path emits IOS-XE-shape ``show running-config``
+    text from any :class:`CanonicalIntent`.  Spot-check the major
+    surfaces; full per-vendor cross-translation coverage lives in
+    the cross-mesh smoke tier."""
+
+    def test_render_rejects_non_canonical_input(self):
+        with pytest.raises(RenderError, match="must be a CanonicalIntent"):
             CiscoIOSXECLICodec().render({})
+
+    def test_render_emits_ios_banner_pair(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "hostname sw1\n"
+            "interface GigabitEthernet0/0\n"
+            " ip address 10.0.0.1 255.255.255.0\n!\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        # Both banners present so the round-tripped output detects
+        # back to cisco_iosxe_cli with high confidence.
+        assert "Building configuration..." in out
+        assert "service timestamps" in out
+
+    def test_render_emits_hostname_and_interface(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "hostname r1\n"
+            "interface GigabitEthernet0/0/0\n"
+            " description uplink\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "hostname r1" in out
+        assert "interface GigabitEthernet0/0/0" in out
+        assert " description uplink" in out
+        assert " ip address 10.0.0.1 255.255.255.0" in out
+
+    def test_render_emits_static_route_dotted_decimal(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "ip route 192.168.0.0 255.255.255.0 10.0.0.1\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        # Render must use dotted-decimal masks (Cisco-native form),
+        # NOT CIDR — even though the canonical tree stores prefix
+        # length internally.
+        assert "ip route 192.168.0.0 255.255.255.0 10.0.0.1" in out
+
+    def test_render_emits_default_route_correctly(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "ip default-gateway 10.0.0.1\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        # 0.0.0.0/0 → ``ip route 0.0.0.0 0.0.0.0 <gw>`` on render
+        # (Cisco's classic default-route form; not the L2-switch
+        # ``ip default-gateway`` form because the latter only works
+        # on switches with no routing).
+        assert "ip route 0.0.0.0 0.0.0.0 10.0.0.1" in out
+
+    def test_render_emits_vlan_database_and_svi(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "vlan 10\n name USERS\n!\n"
+            "interface Vlan10\n ip address 10.0.10.1 255.255.255.0\n!\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "vlan 10" in out
+        assert " name USERS" in out
+        assert "interface Vlan10" in out
+        assert " ip address 10.0.10.1 255.255.255.0" in out
+
+    def test_render_emits_snmp_community_block(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "snmp-server community public RO\n"
+            "snmp-server location HQ\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "snmp-server community public RO" in out
+        assert "snmp-server location HQ" in out
+
+    def test_render_emits_snmpv3_user_with_priv_aes(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "snmp-server user netadmin grp v3 "
+            "auth sha SHApass priv aes 128 AESpass\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        # Cisco's wire form is the two-token ``aes 128`` not the
+        # canonical-internal one-token ``aes128``.
+        assert "snmp-server user netadmin grp v3 " in out
+        assert "auth sha SHApass" in out
+        assert "priv aes 128 AESpass" in out
+
+    def test_render_emits_lag_member_channel_group(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "interface Port-channel10\n description LAG\n!\n"
+            "interface GigabitEthernet0/1\n channel-group 10 mode active\n!\n"
+        )
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "interface Port-channel10" in out
+        assert "channel-group 10 mode active" in out
+
+    def test_render_round_trip_stable_on_simple_config(self):
+        """Parse → render → re-parse → equal.  The minimal
+        round-trip invariant for a bidirectional codec.  Real-capture
+        round-trip lives in test_real_captures.py."""
+        raw = (
+            "hostname r1\n!\n"
+            "vlan 10\n name USERS\n!\n"
+            "interface GigabitEthernet0/0\n"
+            " description uplink\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+            "ip route 0.0.0.0 0.0.0.0 10.0.0.254\n"
+            "snmp-server community public RO\n"
+        )
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Field-by-field equality on the surfaces this test exercises.
+        assert first.hostname == second.hostname
+        assert [(v.id, v.name) for v in first.vlans] == \
+               [(v.id, v.name) for v in second.vlans]
+        assert [(i.name, i.description, [(a.ip, a.prefix_length)
+                for a in i.ipv4_addresses])
+                for i in first.interfaces] == \
+               [(i.name, i.description, [(a.ip, a.prefix_length)
+                for a in i.ipv4_addresses])
+                for i in second.interfaces]
+        assert [(r.destination, r.gateway) for r in first.static_routes] == \
+               [(r.destination, r.gateway) for r in second.static_routes]
+        assert (first.snmp.community if first.snmp else "") == \
+               (second.snmp.community if second.snmp else "")
+
+
+class TestRenderSynthesisesInterfacesFromVlanMembership:
+    """Regression for the Aruba 2930M user-paste bug.
+
+    When the source codec emits VLAN-centric port membership
+    (Aruba AOS-S ``vlan N / untagged 1/1-1/47`` form, OPNsense
+    ``<vlans>``-only) and there are NO explicit
+    :class:`CanonicalInterface` entries in the parsed tree, the
+    Cisco render path must synthesise interface stanzas from the
+    VLAN membership lists.  Without synthesis Cisco render emitted
+    only the VLAN-database lines + an SNMP block — the operator
+    saw 0 interfaces despite the source carrying 52 ports.
+
+    This is implemented via
+    :func:`canonical.transforms.project_vlan_to_switchport` with
+    ``synthesise_missing=True`` (default) called from the top of
+    Cisco render.  Idempotent + safe on same-vendor round-trips
+    where interfaces are already populated.
+    """
+
+    def test_synthesises_access_ports_from_vlan_untagged_list(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalVlan,
+        )
+        intent = CanonicalIntent(hostname="sw")
+        intent.vlans.append(CanonicalVlan(
+            id=10, name="USERS",
+            untagged_ports=["1/1", "1/2", "1/3"],
+        ))
+        out = CiscoIOSXECLICodec().render(intent)
+        # Three ``interface ...`` stanzas should appear.
+        assert out.count("\ninterface ") >= 3
+        # Each port emits a switchport access vlan 10 line.
+        assert out.count("switchport access vlan 10") == 3
+
+    def test_synthesises_trunk_ports_from_vlan_tagged_list(self):
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent, CanonicalVlan,
+        )
+        intent = CanonicalIntent(hostname="sw")
+        intent.vlans.append(CanonicalVlan(
+            id=10, name="USERS",
+            untagged_ports=["1/47"],
+        ))
+        intent.vlans.append(CanonicalVlan(
+            id=20, name="VOICE",
+            tagged_ports=["1/47"],
+        ))
+        out = CiscoIOSXECLICodec().render(intent)
+        # Port 1/47 is in BOTH lists — should render as trunk with
+        # native vlan 10 + allowed list including 20.
+        assert "switchport mode trunk" in out
+        assert "switchport trunk native vlan 10" in out
+        assert "switchport trunk allowed vlan" in out and "20" in out
+
+    def test_synthesis_idempotent_with_existing_interfaces(self):
+        """Same-vendor round-trips already have CanonicalInterface
+        entries; calling synthesis on them is a no-op (doesn't
+        duplicate stanzas)."""
+        raw = (
+            "hostname r1\n!\n"
+            "vlan 10\n name USERS\n!\n"
+            "interface GigabitEthernet0/0\n"
+            " switchport mode access\n"
+            " switchport access vlan 10\n"
+            "!\n"
+        )
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(raw)
+        rendered_a = codec.render(first)
+        rendered_b = codec.render(first)
+        # Render is deterministic + idempotent under repeated calls.
+        assert rendered_a == rendered_b
+        # Exactly one interface stanza, not duplicated.
+        assert rendered_a.count("\ninterface GigabitEthernet0/0\n") == 1
+
+
+class TestRenderPortIdentitySubslotLetter:
+    """Regression for the Aruba 1/A1 → Cisco GigabitEthernet1/0/1
+    collision.
+
+    Aruba AOS-S encodes uplink-module ports as ``1/A1``, ``1/A2``,
+    etc. (letter subslot).  Cisco IOS-XE encodes the equivalent as
+    ``<switch>/<module>/<port>`` with module=1+ for line-card /
+    uplink-module ports.  Letter A→module=1, B→module=2, etc.
+    Letter slots are also typically 10G+ → prefix promotes to
+    ``TenGigabitEthernet`` when no explicit speed hint is set.
+
+    Without the subslot_letter handling, ``1/A1`` collapsed to
+    ``GigabitEthernet1/0/1`` — same as Aruba's chassis port ``1/1``.
+    The rename mesh then flagged 8 collisions across the chassis
+    vs uplink ports of a 2930M+JL083A stack.
+    """
+
+    def test_aruba_letter_slot_maps_to_cisco_module_1(self):
+        from netconfig.migration.codecs.aruba_aoss.port_names import (
+            classify_port_name as a_classify,
+        )
+        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+            format_port_identity as c_format,
+        )
+        # 1/A1, 1/A2, 1/A3, 1/A4 should each get a UNIQUE Cisco
+        # name distinct from chassis 1/1, 1/2, 1/3, 1/4.
+        chassis_names = {c_format(a_classify(f"1/{n}")) for n in (1, 2, 3, 4)}
+        letter_names = {
+            c_format(a_classify(f"1/A{n}")) for n in (1, 2, 3, 4)
+        }
+        assert chassis_names.isdisjoint(letter_names), (
+            f"Aruba letter-slot ports collide with chassis ports: "
+            f"chassis={chassis_names!r} letter={letter_names!r}"
+        )
+        # All 8 names are distinct (no within-set collisions either).
+        assert len(chassis_names | letter_names) == 8
+
+    def test_letter_a_promotes_to_tengigabitethernet(self):
+        """Letter slots are typically SFP+ uplinks; prefix should
+        bump to TenGigabitEthernet when no explicit speed hint is
+        set on the canonical PortIdentity."""
+        from netconfig.migration.codecs.aruba_aoss.port_names import (
+            classify_port_name as a_classify,
+        )
+        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+            format_port_identity as c_format,
+        )
+        out = c_format(a_classify("1/A1"))
+        assert out == "TenGigabitEthernet1/1/1", (
+            f"expected TenGigabitEthernet1/1/1, got {out!r}"
+        )
+
+    def test_letter_b_maps_to_module_2(self):
+        """Module-bay B (e.g. on modular 5400 chassis) should map to
+        Cisco module=2."""
+        from netconfig.migration.canonical.port_names import PortIdentity
+        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+            format_port_identity as c_format,
+        )
+        ident = PortIdentity(
+            kind="physical", stack=1, port=24, subslot_letter="B",
+        )
+        out = c_format(ident)
+        assert "/2/24" in out, (
+            f"module bay B should map to Cisco module=2; got {out!r}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -346,9 +619,9 @@ class TestTreeShapeCompatibility:
 
 class TestPipelineWithCLICodec:
     def test_cli_to_netconf_plan_succeeds(self):
-        """CLI (source, parse_only) → NETCONF (target, bidirectional):
-        the translate pipeline should complete because source.parse works
-        and target.render works (they share the same tree shape)."""
+        """CLI (source) → NETCONF (target): the translate pipeline
+        should complete because both codecs share the canonical tree
+        shape.  Output is OpenConfig XML (from the NETCONF renderer)."""
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         cli = CiscoIOSXECLICodec()
         net = CiscoIOSXECodec()
@@ -359,13 +632,25 @@ class TestPipelineWithCLICodec:
         assert "<interfaces" in job.rendered
         assert "GigabitEthernet0/0/0" in job.rendered
 
-    def test_cli_as_target_fails_with_render_error(self):
-        """Using a parse_only codec as TARGET must produce a failed job
-        with a clear render error."""
-        raw = '{"key": "val"}'  # mock codec format
-        job = run_plan(MockCodec(), CiscoIOSXECLICodec(), raw)
-        assert job.status is MigrationJobStatus.failed
-        assert "parse-only" in (job.error or "").lower()
+    def test_cli_as_target_succeeds_with_cli_render(self):
+        """The CLI codec is now bidirectional; using it as a TARGET
+        produces IOS-XE running-config text instead of NETCONF XML.
+        Was previously expected to fail with ``parse-only`` error;
+        now expected to complete with CLI output.
+
+        Uses ``cisco_iosxe_cli`` for both source and target so the
+        canonical tree is genuinely a CanonicalIntent (the mock
+        codec returns a plain dict that the CLI render correctly
+        rejects).  Aruba → Cisco IOS-XE CLI is the real-world
+        cross-vendor case this codec was promoted to enable."""
+        raw = "hostname r1\n!\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n!\n"
+        cli = CiscoIOSXECLICodec()
+        job = run_plan(cli, cli, raw)
+        assert job.status is MigrationJobStatus.completed
+        assert job.rendered is not None
+        assert "Building configuration..." in job.rendered
+        assert "hostname r1" in job.rendered
+        assert "interface GigabitEthernet0/0" in job.rendered
 
 
 # ---------------------------------------------------------------------------

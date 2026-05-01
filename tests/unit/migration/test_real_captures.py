@@ -354,6 +354,28 @@ def test_real_capture_round_trips_stable(
         ]:
             if key in d and isinstance(d[key], list):
                 d[key] = sorted(d[key], key=lambda x: x.get(id_key, ""))
+        # Sort INNER port-membership lists on each VLAN.  These are
+        # set-semantic in canonical (port X is or isn't a member of
+        # VLAN Y; order is cosmetic).  Without this, a render that
+        # reorders interface emission (e.g. natural port-name sort)
+        # produces port lists in a different order than the source
+        # file's order, even though set membership is identical.  The
+        # round-trip property we care about is canonical *meaning*,
+        # not list ordering.
+        for v in d.get("vlans", []):
+            if isinstance(v.get("tagged_ports"), list):
+                v["tagged_ports"] = sorted(v["tagged_ports"])
+            if isinstance(v.get("untagged_ports"), list):
+                v["untagged_ports"] = sorted(v["untagged_ports"])
+        # Same for LAG members + interface trunk-allowed lists.
+        for lag in d.get("lags", []):
+            if isinstance(lag.get("members"), list):
+                lag["members"] = sorted(lag["members"])
+        for iface in d.get("interfaces", []):
+            if isinstance(iface.get("trunk_allowed_vlans"), list):
+                iface["trunk_allowed_vlans"] = sorted(
+                    iface["trunk_allowed_vlans"]
+                )
         return d
 
     assert _compare(first) == _compare(second), (

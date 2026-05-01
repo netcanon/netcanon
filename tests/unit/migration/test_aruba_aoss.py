@@ -273,6 +273,88 @@ class TestParse:
         assert "5" in ports
 
 
+class TestParseLocalUserContinuationLine:
+    """Regression for the terminal-wrap-on-paste bug.
+
+    AOS-S devices emit ``password manager user-name "X" sha1 "<hash>"``
+    on a single physical line, but the long sha1 hash means the line
+    wraps when copy-pasted from a console / browser / chat client.
+    Operators paste the wrapped form into the migrate workbench:
+
+      password manager user-name "admin" sha1
+       "deadbeef0000000000000000000000000000dead"
+
+    The original parser regex required everything on one line and
+    silently dropped the user — the rename modal then showed
+    ``Local users: 0`` even when the source clearly declared one.
+    """
+
+    def test_single_line_form_still_works(self):
+        """Same-line form is the normal AOS-S output and must keep
+        working after the continuation-line fallback ships."""
+        raw = (
+            'hostname "sw"\n'
+            'password manager user-name "admin" sha1 "ababab"\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        assert len(tree.local_users) == 1
+        assert tree.local_users[0].name == "admin"
+        assert tree.local_users[0].hashed_password == "sha1:ababab"
+
+    def test_continuation_line_form_recovered(self):
+        raw = (
+            'hostname "sw"\n'
+            'password manager user-name "admin" sha1\n'
+            ' "deadbeef0000000000000000000000000000dead"\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        assert len(tree.local_users) == 1
+        u = tree.local_users[0]
+        assert u.name == "admin"
+        assert u.privilege_level == 15
+        assert u.role == "manager"
+        assert u.hashed_password == (
+            "sha1:deadbeef0000000000000000000000000000dead"
+        )
+
+    def test_continuation_line_with_blank_separator(self):
+        """Some clipboard pipelines insert a blank line between the
+        head and the continuation.  Tolerate it."""
+        raw = (
+            'password manager user-name "admin" sha1\n'
+            '\n'
+            ' "abcdef1234567890"\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        assert len(tree.local_users) == 1
+        assert tree.local_users[0].hashed_password == "sha1:abcdef1234567890"
+
+    def test_operator_role_continuation(self):
+        """Same fallback path applies to ``password operator`` (role
+        privilege=1) — not just ``manager``."""
+        raw = (
+            'password operator user-name "monitor" sha1\n'
+            ' "1234"\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        assert len(tree.local_users) == 1
+        u = tree.local_users[0]
+        assert u.name == "monitor"
+        assert u.privilege_level == 1
+        assert u.role == "operator"
+
+    def test_head_without_continuation_emits_user_with_empty_hash(self):
+        """If the operator pasted only the head line (continuation
+        missing entirely), surface the user record with an empty
+        hash so the rename modal still shows the username — better
+        than silently dropping it."""
+        raw = 'password manager user-name "admin" sha1\n'
+        tree = ArubaAOSSCodec().parse(raw)
+        assert len(tree.local_users) == 1
+        assert tree.local_users[0].name == "admin"
+        assert tree.local_users[0].hashed_password == "sha1:"
+
+
 class TestParseErrors:
     def test_empty_input_raises(self):
         with pytest.raises(ParseError, match="empty input"):

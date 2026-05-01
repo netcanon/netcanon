@@ -148,6 +148,41 @@ config system interface
     next
 end
 """,
+    "arista_eos": """\
+hostname TestArista
+!
+vlan 10
+   name USERS
+!
+vlan 20
+   name VOICE
+!
+interface Ethernet1
+   switchport mode access
+   switchport access vlan 10
+!
+""",
+    "juniper_junos": """\
+set system host-name TestJunos
+set vlans USERS vlan-id 10
+set vlans VOICE vlan-id 20
+set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members USERS
+""",
+    # cisco_iosxe is the NETCONF/OpenConfig codec — its source-side
+    # input is XML, not CLI.  Include enough to exercise the
+    # parse → render path without claiming full grammar coverage.
+    "cisco_iosxe": (
+        '<?xml version="1.0"?>\n'
+        '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n'
+        "  <interface>\n"
+        "    <name>GigabitEthernet0/0</name>\n"
+        "    <config>\n"
+        "      <name>GigabitEthernet0/0</name>\n"
+        "      <enabled>true</enabled>\n"
+        "    </config>\n"
+        "  </interface>\n"
+        "</interfaces>\n"
+    ),
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -171,11 +206,25 @@ _SOURCE_CAPABLE = [
     "aruba_aoss",
     "mikrotik_routeros",
     "opnsense",
+    "arista_eos",
+    "juniper_junos",
+    "fortigate_cli",
+    "cisco_iosxe",
 ]
+# Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
+# every bidirectional codec is now in the smoke matrix.  The
+# bidirectionality-invariants meta-test (test_bidirectionality_
+# invariants.py::TestEveryBidirectionalTargetHasFixtureCoverage)
+# guards against this list silently shrinking.
 _TARGET_CAPABLE = [
     "aruba_aoss",
     "mikrotik_routeros",
     "opnsense",
+    "arista_eos",
+    "juniper_junos",
+    "fortigate_cli",
+    "cisco_iosxe",
+    "cisco_iosxe_cli",
 ]
 
 
@@ -210,8 +259,13 @@ def test_vlan_rename_smoke_cross_codec(source_name: str, target_name: str):
     assert job is not None
     assert job.rendered is not None
 
-    # If the source tree carried VLAN 10, the rename surfaces.
-    if 10 in (source._last_parsed_vlans if False else [10]):
+    # If the source tree carried VLAN 10, the rename surfaces.  The
+    # capture-first transform populates ``job.source_vlans`` with the
+    # post-parse pre-rewrite VLAN list — that's the authoritative
+    # "did source have it?" check, replacing an earlier
+    # always-true ``if False else [10]`` guard that fired the
+    # assertion on every codec regardless of source content.
+    if 10 in job.source_vlans:
         assert job.vlan_renames.get(10) == 100
 
     # Crude end-to-end sanity: new VLAN ID appears in the rendered
@@ -219,8 +273,11 @@ def test_vlan_rename_smoke_cross_codec(source_name: str, target_name: str):
     # cross-vendor cases).  Cross-vendor differences mean we can't
     # be strict — so this assertion only runs on the subset where
     # source == target (round-trip), which is the most sensitive
-    # silent-drop detector.
-    if source_name == target_name:
+    # silent-drop detector.  Also gated on source actually carrying
+    # VLAN 10 — codecs whose minimal source config doesn't declare
+    # any VLANs (fortigate_cli, cisco_iosxe NETCONF stub) have
+    # nothing to rename and no "100" should appear on render.
+    if source_name == target_name and 10 in job.source_vlans:
         assert "100" in job.rendered
         # Old VLAN ID shouldn't appear — use whole-word sanity
         # (skip for codecs that emit the source filename with
@@ -245,8 +302,12 @@ def test_vlan_drop_smoke(source_name: str):
 
     assert job is not None
     assert job.rendered is not None
-    # The dropped VLAN ID shows up in vlan_drops on the job.
-    assert 10 in job.vlan_drops
+    # The dropped VLAN ID shows up in vlan_drops on the job — only
+    # when the source actually had VLAN 10 to drop.  Codecs whose
+    # minimal smoke fixture has no VLANs (fortigate_cli, cisco_iosxe
+    # NETCONF stub) skip the assertion legitimately.
+    if 10 in job.source_vlans:
+        assert 10 in job.vlan_drops
 
 
 @pytest.mark.cross_mesh

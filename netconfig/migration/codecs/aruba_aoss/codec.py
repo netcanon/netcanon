@@ -304,9 +304,25 @@ class ArubaAOSSCodec(CodecBase):
 
             rt = _IP_ROUTE_RE.match(stripped_line)
             if rt:
-                dest, gateway = rt.group(1), rt.group(2)
+                # Three-form parse: see _IP_ROUTE_RE above.  Group 2
+                # is the OPTIONAL dotted-decimal mask (legacy Aruba
+                # form).  When present we expand to CIDR via the
+                # mask's prefix length; when absent the destination
+                # was already CIDR (or a bare IP defaulting to /32).
+                dest, mask, gateway = rt.group(1), rt.group(2), rt.group(3)
+                if mask is not None:
+                    try:
+                        prefix = _mask_to_prefix(mask)
+                    except Exception:
+                        # Non-contiguous mask — unusual; fall back to
+                        # /32 host-route semantic so render still
+                        # produces something parseable.
+                        prefix = 32
+                    canonical_dest = f"{dest}/{prefix}"
+                else:
+                    canonical_dest = _dest_to_cidr(dest)
                 intent.static_routes.append(CanonicalStaticRoute(
-                    destination=_dest_to_cidr(dest),
+                    destination=canonical_dest,
                     gateway=gateway,
                 ))
                 i += 1
@@ -355,6 +371,46 @@ class ArubaAOSSCodec(CodecBase):
                     name=name,
                     privilege_level=15 if role == "manager" else 1,
                     hashed_password=f"{hash_alg}:{hash_val}",
+                    role=role,
+                ))
+                i += 1
+                continue
+
+            # Continuation-line fallback for terminal-wrapped pastes
+            # where the long sha1 hash landed on the line AFTER the
+            # ``password ... <alg>`` head.  Look for an algorithm-
+            # only head line, then peek the next non-blank line for
+            # the trailing quoted hash; consume both lines on match.
+            head = _PASSWORD_HEAD_RE.match(stripped_line)
+            if head:
+                role = head.group(1).lower()
+                name = head.group(2)
+                hash_alg = head.group(3).lower()
+                # Look ahead for the continuation line carrying the
+                # quoted hash.  Tolerate a single blank line between
+                # head and continuation in case the operator's paste
+                # introduced one.
+                cont_idx = i + 1
+                while cont_idx < len(lines) and not lines[cont_idx].strip():
+                    cont_idx += 1
+                if cont_idx < len(lines):
+                    cont = _PASSWORD_HASH_CONTINUATION_RE.match(lines[cont_idx])
+                    if cont:
+                        intent.local_users.append(CanonicalLocalUser(
+                            name=name,
+                            privilege_level=15 if role == "manager" else 1,
+                            hashed_password=f"{hash_alg}:{cont.group(1)}",
+                            role=role,
+                        ))
+                        i = cont_idx + 1
+                        continue
+                # Head matched but no continuation found — emit a
+                # user record without a hash so the operator at least
+                # sees the username appearing in the rename pane.
+                intent.local_users.append(CanonicalLocalUser(
+                    name=name,
+                    privilege_level=15 if role == "manager" else 1,
+                    hashed_password=f"{hash_alg}:",
                     role=role,
                 ))
                 i += 1
@@ -799,7 +855,17 @@ _DEFAULT_GW_RE = re.compile(
     r"^ip\s+default-gateway\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE,
 )
 _IP_ROUTE_RE = re.compile(
-    r"^ip\s+route\s+(\S+)\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE,
+    # Two accepted Aruba forms (regex handles both via optional gw):
+    #   ip route DEST/PREFIX GATEWAY
+    #   ip route DEST MASK GATEWAY
+    # Group 1: destination (bare IP or CIDR).  Group 2: optional
+    # dotted-decimal mask (legacy form).  Group 3: gateway IP.  When
+    # group 2 is present, group 1 is a bare IP and the mask drives
+    # the canonical prefix length; when absent, group 1 is CIDR.
+    r"^ip\s+route\s+(\S+)"
+    r"(?:\s+(\d+\.\d+\.\d+\.\d+))?"
+    r"\s+(\d+\.\d+\.\d+\.\d+)\s*$",
+    re.IGNORECASE,
 )
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 # ``trunk <port-list> <name> <type>`` — AOS-S link-aggregation form.
@@ -820,6 +886,25 @@ _PASSWORD_LINE_RE = re.compile(
     r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
     r'(\S+)\s+"([^"]+)"\s*$',
     re.IGNORECASE,
+)
+# Continuation-line variant: when the operator pastes a config
+# whose terminal wrapped the long sha1 hash onto the next line,
+# the first line ends with the algorithm token but no quoted hash:
+#
+#   password manager user-name "admin" sha1
+#    "deadbeef0000000000000000000000000000dead"
+#
+# This regex matches the algorithm-only head line; the loop in
+# parse() then peeks the next non-blank line for the trailing
+# quoted hash.  Without this fallback the user's copy-paste from
+# `show running-config` silently drops the local-user record.
+_PASSWORD_HEAD_RE = re.compile(
+    r'^password\s+(manager|operator)\s+user-name\s+"([^"]+)"\s+'
+    r'(\S+)\s*$',
+    re.IGNORECASE,
+)
+_PASSWORD_HASH_CONTINUATION_RE = re.compile(
+    r'^\s*"([^"]+)"\s*$',
 )
 # AOS-S RADIUS forms:
 #   radius-server host <ip>

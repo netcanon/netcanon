@@ -251,6 +251,44 @@ def format_port_identity(identity: PortIdentity) -> str | None:
             prefix = _CISCO_SPEED_TO_PREFIX.get(
                 identity.name_speed_hint, "GigabitEthernet"
             )
+        # Subslot-letter handling: Aruba AOS-S encodes uplink-module
+        # bays as letters (``1/A1``-``1/A4`` for the JL083A 4-port
+        # uplink module on a 2930M; ``B1``-``B24`` etc. on modular
+        # 5400 chassis).  Cisco IOS-XE represents the equivalent as
+        # the MIDDLE digit in ``<switch>/<module>/<port>``: built-in
+        # chassis ports use module=0; uplink / line-card / network-
+        # module ports use module=1+.
+        #
+        # Map letter → module index: A→1, B→2, C→3, etc.  This is
+        # the only correct cross-vendor mapping; without it
+        # Aruba ``1/A1`` and Aruba ``1/1`` both render to
+        # ``GigabitEthernet1/0/1``, colliding catastrophically in
+        # the rename mesh — the bug shape that surfaced when an
+        # Aruba 2930M+JL083A stack rendered to IOS-XE with 4
+        # collisions across the chassis vs uplink ports.  Letter
+        # slots also typically carry SFP+ optics → bump prefix to
+        # TenGigabitEthernet when the speed hint hasn't pre-set a
+        # different prefix, since AOS-S doesn't populate
+        # ``name_speed_hint`` for letter-slot uplinks but the
+        # operator-natural Cisco-side rendering for module-bay
+        # ports is 10G.
+        if identity.subslot_letter:
+            module_from_letter = (
+                ord(identity.subslot_letter.upper()) - ord("A") + 1
+            )
+            if not identity.name_speed_hint:
+                # Honour an explicit speed hint when set; otherwise
+                # promote to TenGigabitEthernet (typical letter-
+                # slot speed on Aruba 2930M / 3810M / 5400 uplink
+                # modules).  Operators can still override per-port
+                # in the rename modal.
+                prefix = _CISCO_SPEED_TO_PREFIX.get(
+                    "10gig", "TenGigabitEthernet",
+                )
+            return (
+                f"{prefix}{identity.stack or 1}/"
+                f"{module_from_letter}/{identity.port or 0}"
+            )
         if identity.stack is not None:
             return (
                 f"{prefix}{identity.stack}/"

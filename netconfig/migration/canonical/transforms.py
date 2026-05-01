@@ -27,7 +27,42 @@ specific heuristics.  Anything more subtle belongs in the codec itself.
 
 from __future__ import annotations
 
+import re
+
 from .intent import CanonicalIntent, CanonicalVlan
+
+
+# Splits a port name into a tuple of (str, int, str, int, ...) for
+# natural sort.  Used by :func:`project_vlan_to_switchport` so
+# synthesis order is deterministic + operator-natural across vendors.
+#
+#   "1/1"     -> ("", 1, "/", 1)
+#   "1/2"     -> ("", 1, "/", 2)
+#   "1/10"    -> ("", 1, "/", 10)            <- comes after "1/2", not before
+#   "1/47"    -> ("", 1, "/", 47)
+#   "1/A1"    -> ("", 1, "/A", 1)            <- "/A" sorts after "/"
+#   "1/A4"    -> ("", 1, "/A", 4)
+#   "ether1"  -> ("ether", 1)
+#   "ge-0/0/0"-> ("ge-", 0, "/", 0, "/", 0)
+#
+# The result is a tuple suitable for ``sorted(key=...)``.  Mixed tuples
+# of (str, int, ...) compare element-wise, so all-string segments sort
+# alphabetically and all-int segments sort numerically — the standard
+# "natural sort" semantic.  Identical-length tuples compare consistently;
+# different-length tuples prefer shorter on ties (which is the
+# operator-natural behaviour: "1/1" before "1/A1" because "/" < "/A").
+_NATURAL_SORT_RE = re.compile(r"(\d+)")
+
+
+def _natural_port_sort_key(name: str) -> tuple:
+    parts = _NATURAL_SORT_RE.split(name)
+    out: list = []
+    for i, p in enumerate(parts):
+        if i % 2 == 0:
+            out.append(p)              # non-digit chunk
+        else:
+            out.append(int(p))         # digit chunk → int for numeric ordering
+    return tuple(out)
 
 
 def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
@@ -94,7 +129,10 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         # enough signal to decide membership.
 
 
-def project_vlan_to_switchport(intent: CanonicalIntent) -> None:
+def project_vlan_to_switchport(
+    intent: CanonicalIntent,
+    synthesise_missing: bool = True,
+) -> None:
     """VLAN-centric -> port-centric membership mirror.
 
     The inverse of :func:`project_switchport_to_vlan`.  For every
@@ -110,12 +148,24 @@ def project_vlan_to_switchport(intent: CanonicalIntent) -> None:
           also appears in ``untagged_ports`` on some VLAN, set that as
           ``trunk_native_vlan``.
 
-    Interfaces not found in ``intent.interfaces`` are skipped (membership
-    lists can reference ports that weren't declared as interfaces).
-    Interfaces with pre-existing switchport state are left alone — this
-    transform only fills in missing information.
+    When *synthesise_missing* is True (the default), port names
+    referenced in VLAN membership lists but absent from
+    ``intent.interfaces`` get a fresh :class:`CanonicalInterface`
+    appended.  Required for cross-vendor renders into a
+    port-centric target codec (Cisco IOS-XE CLI, Arista EOS) when
+    the source codec is VLAN-centric and emits no explicit
+    interface stanzas in its source config (Aruba AOS-S, OPNsense
+    `<vlans>`-only).  Without synthesis, those targets render
+    zero interfaces despite the canonical tree carrying full
+    port-VLAN bindings — the bug shape that surfaced when an
+    Aruba 2930M stack rendered to IOS-XE with only VLAN
+    declarations and no interfaces.
+
+    Interfaces with pre-existing switchport state are left alone —
+    this transform only fills in missing information.
 
     Idempotent and additive like :func:`project_switchport_to_vlan`.
+    Calling it twice in a row produces the same tree as one call.
     """
     iface_by_name = {i.name: i for i in intent.interfaces}
 
@@ -128,11 +178,29 @@ def project_vlan_to_switchport(intent: CanonicalIntent) -> None:
         for name in vlan.untagged_ports:
             untagged.setdefault(name, []).append(vlan.id)
 
-    names = set(tagged) | set(untagged)
+    # Iterate sorted by natural port-name order so synthesis is
+    # deterministic and operator-natural ("1/1", "1/2", ..., "1/47",
+    # "1/A1", "1/A2") rather than set-iteration random order.  The
+    # downstream renderer's per-kind sort can re-order, but starting
+    # from a stable base means same-input → same-output regardless
+    # of run.  See _natural_port_sort_key for how the key splits
+    # numeric chunks.
+    names = sorted(set(tagged) | set(untagged), key=_natural_port_sort_key)
     for name in names:
         iface = iface_by_name.get(name)
         if iface is None:
-            continue
+            if not synthesise_missing:
+                continue
+            # Synthesise a minimal CanonicalInterface so the
+            # port-centric renderer has something to emit.  Leave
+            # description / mtu / ipv4 empty — only the switchport
+            # state is derivable from VLAN membership.  The fresh
+            # iface lands at the END of intent.interfaces; ordering
+            # doesn't matter for any consumer.
+            from .intent import CanonicalInterface
+            iface = CanonicalInterface(name=name)
+            intent.interfaces.append(iface)
+            iface_by_name[name] = iface
         # Don't clobber switchport state the codec already set.
         if iface.switchport_mode is not None:
             continue

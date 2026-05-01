@@ -859,10 +859,23 @@
       targetSel.innerHTML = adapters
         .filter(function(a) { return a.direction !== 'parse_only'; })
         .map(function(a) {
+          // Show the codec's input_format alongside the vendor
+          // label.  Two reasons: (1) some vendors have multiple
+          // bidirectional codecs sharing a vendor_display_name
+          // (e.g. cisco_iosxe NETCONF and cisco_iosxe_cli CLI both
+          // surface as "Cisco IOS-XE") — without the format hint
+          // operators can't tell the dropdown options apart;
+          // (2) the format determines the render OUTPUT shape (CLI
+          // text vs XML payload) — operators picking a target
+          // should see whether they'll get something paste-able or
+          // a NETCONF push payload BEFORE clicking Translate.  The
+          // source dropdown above already shows the same hint.
+          var cert = a.certainty !== 'experimental' ? '' : ' [experimental]';
           return '<option value="' + escapeHtml(a.name) + '">'
                + escapeHtml(a.vendor_display_name || a.name)
+               + ' — ' + escapeHtml(a.input_format)
                + ' (' + a.device_classes.join(', ') + ')'
-               + '</option>';
+               + cert + '</option>';
         }).join('');
       renderAdapterInfo();
     } catch (err) {
