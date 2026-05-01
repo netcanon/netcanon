@@ -78,13 +78,15 @@ into `render.py` — one directional edge, no circular risk.
 Codecs with the split applied: **fortigate_cli** (first; Phase 1
 god-file cleanup), **opnsense** (XML wire-format reference),
 **aruba_aoss** (banner + positional port-list reference),
-**arista_eos** (Cisco-dialect parallel reference), and
+**arista_eos** (Cisco-dialect parallel reference),
+**mikrotik_routeros** (slash-prefixed CLI reference),
 **cisco_iosxe_cli** (largest render path; ``_walk_canonical`` kept
 at module level in ``codec.py`` to preserve the cross-codec import
-surface every other codec's ``iter_xpaths`` reuses).
-Remaining split candidates: mikrotik_routeros — apply
-opportunistically when each becomes painful; the pattern
-generalises cleanly.  Tests that pin internal symbols
+surface every other codec's ``iter_xpaths`` reuses), and
+**juniper_junos** (two-pass groups-then-top-level dispatch +
+block-form-to-set-form conversion both kept cohesive in
+``parse.py``).  All shipped CLI/XML codecs now follow the split;
+the pattern generalises cleanly to future codecs.  Tests that pin internal symbols
 (``_parse_blocks``, ``_prefix_to_mask``, ``_trim_xml_envelope``,
 ``_format_port_list``, ``_parse_port_list``) should import via
 re-export in `codec.py` so the split doesn't break them — see
