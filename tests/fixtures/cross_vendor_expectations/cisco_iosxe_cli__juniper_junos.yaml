@@ -1,0 +1,747 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> juniper_junos
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/
+#
+# DC / carrier-grade pair.  Both platforms model the same set of L2/L3 +
+# overlay primitives, but the structural transformation between Cisco's
+# stanza-form CLI and Junos's hierarchical set-form is substantial.
+# Keyword-stable surface (hostname / DNS / NTP / static routes / SNMP
+# v1+v2c / VLANs) round-trips cleanly; semantic-divergent surfaces
+# (interface naming, VRF, password hashes, EVPN-VXLAN) are flagged
+# lossy or unsupported.  This is one of the most-likely-real-world
+# migration directions in the industry.
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: juniper_junos
+  primary_use_case: >
+    Cisco IOS-XE -> Juniper Junos DC migration (Catalyst / ASR ->
+    QFX / EX / MX).  Stanza-to-set structural transformation is
+    the dominant cost; canonical-portable feature surface is wide.
+  certainty: medium
+  references:
+    - id: cisco-interface-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/interface-naming.md
+      title: "Cisco IOS Interface and Hardware Component Command Reference (IOS XE)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/interface/command/ir-cr-book/ir-s7.html"
+      retrieved: "2026-04-30"
+    - id: cisco-vlan-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md
+      title: "Cisco Catalyst 9300 VLAN Configuration Guide (IOS-XE 17.9)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-9/configuration_guide/vlan/b_179_vlan_9300_cg/configuring_vlans.html"
+      retrieved: "2026-04-30"
+    - id: cisco-ip-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/ip-addressing.md
+      title: "Cisco IOS-XE IP Addressing Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipaddr/configuration/xe-3se/3850/iadi-xe-3se-3850-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-ipv6-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/ip-addressing.md
+      title: "Cisco IOS-XE IPv6 Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipv6/configuration/xe-17/ipv6-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-static-routes
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/static-routes.md
+      title: "Cisco IOS-XE IP Routing Static Route Configuration"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/iproute_pi/configuration/xe-17/iri-xe-17-book/iri-static-route-support.html"
+      retrieved: "2026-04-30"
+    - id: cisco-vrf-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vrf-routing-instances.md
+      title: "Cisco IOS XE MPLS Layer 3 VPNs Configuration Guide — VRF CLI"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/mp_l3_vpns/configuration/xe-3s/mp-l3-vpns-xe-3s-book/mp-vpn-ipv4-ipv6.html"
+      retrieved: "2026-04-30"
+    - id: cisco-vrf-lite-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vrf-routing-instances.md
+      title: "Cisco Catalyst 9400 IP Routing Configuration Guide — VRF-lite (IOS-XE 17.9)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9400/software/release/17-9/configuration_guide/rtng/b_179_rtng_9400_cg/configuring_vrf_lite.html"
+      retrieved: "2026-04-30"
+    - id: cisco-snmp-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/snmp.md
+      title: "Cisco IOS-XE SNMP Configuration Guide (17.x)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/snmp/configuration/xe-17/snmp-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-username-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/local-users.md
+      title: "Cisco IOS-XE Security Command Reference — username"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/security/m1/sec-m1-cr-book/sec-cr-u1.html"
+      retrieved: "2026-04-30"
+    - id: cisco-password-types
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/local-users.md
+      title: "Cisco Knowledge Base — Differences between password / secret / type 0/4/5/8/9"
+      source_url: "https://community.cisco.com/t5/networking-knowledge-base/understanding-the-differences-between-the-cisco-password-secret/ta-p/4671523"
+      retrieved: "2026-04-30"
+    - id: cisco-fundamentals
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/system-services.md
+      title: "Cisco IOS-XE Fundamentals Configuration Guide (17.x)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/fundamentals/configuration/xe-17/fundamentals-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-evpn-vxlan-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vxlan-evpn.md
+      title: "Cisco Catalyst 9500 BGP EVPN VXLAN Configuration Guide (IOS-XE 17.9)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9500/software/release/17-9/configuration_guide/vxlan/b_179_bgp_evpn_vxlan_9500_cg.html"
+      retrieved: "2026-04-30"
+    - id: cisco-etherchannel
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/lags.md
+      title: "Cisco Catalyst 9300 Layer 2 Configuration — EtherChannels (IOS-XE 17.9)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-9/configuration_guide/lyr2/b_179_lyr2_9300_cg/configuring_etherchannels.html"
+      retrieved: "2026-04-30"
+    - id: cisco-bgp-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/routing-protocols.md
+      title: "Cisco IOS-XE BGP Configuration Guide (17.x)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/iproute_bgp/configuration/xe-17/irg-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-ospf-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/routing-protocols.md
+      title: "Cisco IOS-XE OSPF Configuration Guide (17.x)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/iproute_ospf/configuration/xe-17/iro-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: cisco-aaa-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/aaa.md
+      title: "Cisco IOS-XE Security Command Reference — radius / tacacs"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/security/m1/sec-m1-cr-book/sec-cr-r1.html"
+      retrieved: "2026-04-30"
+    - id: cisco-dhcp-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/dhcp-server.md
+      title: "Cisco IOS-XE IP Addressing — DHCP Configuration Guide (17.x)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipaddr_dhcp/configuration/xe-17/dhcp-xe-17-book.html"
+      retrieved: "2026-04-30"
+    - id: junos-iface-naming
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/interface-naming.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-04-30"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-04-30"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vlans.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/ip-addressing.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-04-30"
+    - id: junos-family-inet6
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/ip-addressing.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-04-30"
+    - id: junos-static-routing
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/static-routes.md
+      title: "Junos static-routing topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/topic-map/static-routing-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-l3vpn
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vrf-routing-instances.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-instance-type
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vrf-routing-instances.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-04-30"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/snmp.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/snmp.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-04-30"
+    - id: junos-password-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/local-users.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-04-30"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/local-users.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-04-30"
+    - id: junos-initial-config
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/system-services.md
+      title: "Junos Initial Configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/system-basics/topics/topic-map/initial-configuration-junos-os.html"
+      retrieved: "2026-04-30"
+    - id: junos-syslog-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/system-services.md
+      title: "Junos syslog overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sys-mgmt/topics/concept/syslog-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vxlan-evpn.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/vxlan-evpn.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-04-30"
+    - id: junos-lag-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/lags.md
+      title: "Junos LAG overview topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-ae-example
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/lags.md
+      title: "Junos aggregated-Ethernet configuration example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html"
+      retrieved: "2026-04-30"
+    - id: junos-bgp-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/routing-protocols.md
+      title: "Junos BGP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/bgp/topics/topic-map/bgp-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-ospf-overview
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/routing-protocols.md
+      title: "Junos OSPF overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/ospf/topics/topic-map/ospf-overview.html"
+      retrieved: "2026-04-30"
+    - id: junos-radius-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/aaa.md
+      title: "Junos radius-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/radius-server-edit-system.html"
+      retrieved: "2026-04-30"
+    - id: junos-tacplus-cli
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/aaa.md
+      title: "Junos tacplus-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/tacplus-server-edit-system.html"
+      retrieved: "2026-04-30"
+    - id: junos-dhcp-server
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/dhcp-server.md
+      title: "Junos DHCP server topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-server.html"
+      retrieved: "2026-04-30"
+    - id: junos-dhcp-local-server
+      path: docs/vendor-references/cisco_iosxe_cli_to_juniper_junos/dhcp-server.md
+      title: "Junos DHCP local-server overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/concept/dhcp-local-server-overview.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks intent.py top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Cisco's ``hostname X`` -> Junos's ``set system host-name X``.
+      Round-trip is lossless on the FQDN/short-name string.
+    references: [cisco-fundamentals, junos-initial-config]
+
+  domain:
+    disposition: good
+    note: >
+      Cisco's ``ip domain name X`` -> Junos's
+      ``set system domain-name X``.
+    references: [cisco-fundamentals, junos-initial-config]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both vendors accept multiple ``name-server`` lines.  Round-
+      trip is lossless on the address list.
+    references: [cisco-fundamentals, junos-initial-config]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Address list round-trips losslessly.  Per-server options
+      (``prefer``, ``iburst``, ``key``, ``source``) are not
+      modelled canonically and drop on cross-vendor round-trip.
+    references: [cisco-fundamentals, junos-initial-config]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Cisco emits ``clock timezone PST -8 0`` (abbreviation +
+      offset/minute tokens) plus optional ``clock summer-time`` for
+      DST; Junos emits ``set system time-zone America/Los_Angeles``
+      (Olson zoneinfo name).  Canonical preserves the source
+      string verbatim, so a Cisco-derived ``PST -8 0`` token will
+      not round-trip cleanly to Junos without operator-curated
+      translation.
+    references: [cisco-fundamentals, junos-initial-config]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Cisco's ``logging host X`` (implicit any-severity) maps to
+      Junos's ``set system syslog host X any info`` (severity
+      required).  Host list round-trips; per-facility / severity
+      filters are not modelled canonically.
+    references: [cisco-fundamentals, junos-syslog-overview]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Cisco's speed-encoded names (``GigabitEthernet1/0/1``,
+      ``HundredGigE1/0/49``) and Junos's media-prefix form
+      (``ge-0/0/0``, ``et-0/0/48``) carry the same speed
+      semantic; the port-rename mesh handles the cross-vendor
+      mapping.  Slot/sub-slot/port indices may not be 1:1
+      (Cisco sub-slot vs Junos PIC); operators override via the
+      per-pane port-rename surface.
+    references: [cisco-interface-cli, junos-iface-naming]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Both vendors accept free-form descriptions; Junos quotes
+      when whitespace present.
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Cisco's ``shutdown`` / ``no shutdown`` maps to Junos's
+      ``set interfaces X disable`` / ``delete interfaces X disable``.
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The CLI parser infers interface type from the name prefix
+      (Cisco's ``GigabitEthernet`` -> ethernetCsmacd; Junos's
+      ``ge-`` -> ethernetCsmacd) but cannot detect all IANA types.
+      Documented in the Cisco IOS-XE codec capability matrix's
+      ``/interfaces/interface/config/type`` lossy entry.
+    references: [cisco-interface-cli]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Both accept integer MTU; Cisco's ``mtu N`` maps to Junos's
+      ``set interfaces X mtu N`` (parent-interface scope).
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Cisco's ``ip address A.B.C.D MASK`` parses to canonical
+      ``CanonicalIPv4Address{ip, prefix_length}`` and renders to
+      Junos's ``set interfaces X unit 0 family inet address
+      A.B.C.D/N``.  Multiple addresses (Cisco ``secondary``) become
+      additional ``set address`` lines on Junos.
+    references: [cisco-ip-cg, junos-iface-fundamentals]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Junos uses ``family inet6`` form; canonical
+      ``scope=link-local`` discriminator preserved.  Cisco's
+      explicit ``link-local`` keyword maps to Junos's prefix-based
+      auto-detection (``fe80::/10``).
+    references: [cisco-ipv6-cg, junos-family-inet6]
+
+  interfaces[].switchport_mode:
+    disposition: good
+    note: >
+      Cisco's ``switchport mode access | trunk`` maps to Junos's
+      ``family ethernet-switching interface-mode {access | trunk}``.
+    references: [cisco-vlan-cg, junos-vlans-statement]
+
+  interfaces[].access_vlan:
+    disposition: good
+    note: >
+      Cisco's ``switchport access vlan N`` maps to Junos's
+      ``set interfaces X unit 0 family ethernet-switching vlan
+      members <name>`` where <name> is synthesised from the VLAN id.
+    references: [cisco-vlan-cg, junos-vlans-statement]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: good
+    note: >
+      Cisco's ``switchport trunk allowed vlan 100,200`` maps to
+      Junos's ``set ... family ethernet-switching vlan members
+      [ v100 v200 ]``.
+
+  interfaces[].trunk_native_vlan:
+    disposition: lossy
+    reason: >
+      Cisco's ``switchport trunk native vlan N`` lives inline on the
+      interface; Junos's ``native-vlan-id N`` lives at the parent-
+      interface hierarchy (NOT under the unit).  Round-trip
+      preserves the integer; the structural difference is internal
+      to each codec's render path.
+    references: [cisco-vlan-cg, junos-vlans-statement]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      Junos QFX/EX has no first-class voice-VLAN construct
+      equivalent to Cisco's ``switchport voice vlan N``.  LLDP-MED
+      voice-VLAN advertisement is configured per-interface under
+      ``protocols lldp-med`` with different semantics.  Canonical
+      field carried but Junos render emits a comment.
+    references: [junos-vlans-statement]
+
+  interfaces[].lag_member_of:
+    disposition: good
+    note: >
+      Cisco's ``channel-group N mode active`` maps to Junos's
+      ``set interfaces X gigether-options 802.3ad ae<N>``.
+    references: [cisco-etherchannel, junos-lag-overview]
+
+  interfaces[].dhcp_client:
+    disposition: good
+    note: >
+      Cisco's ``ip address dhcp`` maps to Junos's
+      ``set interfaces X unit 0 family inet dhcp``.
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/routing-instances/instance`` under unsupported with
+      rationale "VRF declarations and per-interface ``vrf
+      forwarding`` parse-and-ignore in v1; canonical schema
+      exists, wire-up deferred."  Junos source side has the path
+      supported (GAP 6) but Cisco-side parse is empty, so the
+      cross-pair migration silently drops the VRF binding.
+    references: [cisco-vrf-cli, cisco-vrf-lite-cg, junos-instance-type]
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Cisco's ``vlan N`` maps to Junos's ``set vlans <name>
+      vlan-id N``.  Junos addresses by name; codec render
+      synthesises a default name (typically ``vlan<N>``) when
+      the source had no explicit name.
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      Junos VLAN names allow letters, digits, hyphens, periods
+      only (up to 255 chars); Cisco accepts underscores and wider
+      character set.  Names containing ``[A-Za-z0-9.-]`` round-
+      trip losslessly; names with underscores are sanitised on
+      Junos render (typically underscore -> hyphen).
+    references: [cisco-vlan-cg, junos-vlans-statement]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Junos supports ``set vlans <name> description X``; Cisco has
+      no first-class VLAN-level description (only interface
+      descriptions).  Cisco source -> Junos preserves the empty
+      description; Junos source -> Cisco drops the description with
+      a comment in render.
+    references: [junos-vlans-statement]
+
+  vlans[].tagged_ports:
+    disposition: good
+    note: >
+      VLAN-centric port-list is canonically VLAN-centric.  Junos
+      render transposes back to per-interface ``family ethernet-
+      switching vlan members``.
+
+  vlans[].untagged_ports:
+    disposition: good
+    note: >
+      Same as tagged_ports; rendered via interface-side ``interface-
+      mode access`` + ``vlan members <name>``.
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Cisco's ``interface Vlan100 / ip address X/N`` (SVI) maps to
+      Junos's ``set interfaces irb unit 100 family inet address
+      X/N`` plus ``set vlans <name> l3-interface irb.100``.
+    references: [junos-evpn-irb-example]
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly (Cisco's
+      dotted-mask form converts to/from Junos's CIDR via codec
+      parsers).  Per-VRF static routes (``ip route vrf X ...``)
+      are parse-and-ignore in v1 (CanonicalStaticRoute lacks a
+      ``vrf`` field).  Cisco's "administrative distance" and
+      Junos's "preference" are vendor-specific scalars not 1:1;
+      ``CanonicalStaticRoute.metric`` is the operator-visible
+      metric, not preference/AD.  Junos's ``qualified-next-hop``
+      flattens to multiple canonical entries.
+    references: [cisco-static-routes, junos-static-routing]
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Cisco's single ``ip dhcp pool`` stanza (network +
+      default-router + dns-server + lease) maps to Junos's two-
+      stage ``dhcp-local-server`` + ``access address-assignment
+      pool`` model.  Basic pools round-trip; advanced options
+      (option 43 / 60 / 66 / 150) are not modelled canonically
+      and drift.  Cisco's ``ip dhcp excluded-address`` has no
+      Junos analogue (Junos uses range low/high inversion).
+    references: [cisco-dhcp-cg, junos-dhcp-server, junos-dhcp-local-server]
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: >
+      Cisco's ``snmp-server community X RO`` maps to Junos's
+      ``set snmp community X authorization read-only``.
+    references: [cisco-snmp-cg, junos-snmp-overview]
+
+  snmp.location:
+    disposition: good
+    references: [cisco-snmp-cg, junos-snmp-overview]
+
+  snmp.contact:
+    disposition: good
+    references: [cisco-snmp-cg, junos-snmp-overview]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      Cisco's ``snmp-server host X version 2c <community>`` maps to
+      Junos's ``set snmp trap-group <name> targets X`` +
+      ``version v2``.  Canonical ``trap_hosts: list[str]`` flattens
+      both forms.
+    references: [cisco-snmp-cg, junos-snmp-overview]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      USM username / group / auth-protocol / priv-protocol round-
+      trip cleanly via the canonical ``CanonicalSNMPv3User`` schema.
+      Auth/priv passphrases do NOT cross-decrypt: Cisco encrypts
+      with engineID-derived constants, Junos uses ``$9$...``
+      reversible-encrypted blobs.  Operator must re-key v3 users on
+      the target after migration.
+    references: [cisco-snmp-cg, junos-snmpv3-cg]
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: good
+    note: >
+      Cisco's ``Port-channel<N>`` maps to Junos's ``ae<N>``.  LACP
+      mode (active / passive / static) preserved.  PAgP modes
+      (``auto`` / ``desirable``) are Cisco-only; Junos source never
+      populates these.  Junos's required chassis-wide ``device-
+      count`` allocation has no Cisco analogue; render synthesises
+      a default value.
+    references: [cisco-etherchannel, junos-lag-overview, junos-ae-example]
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Hash-format compatibility is partial.  Only ``$1$`` (MD5)
+      crypts cross between Cisco's ``secret 5`` and Junos's
+      ``encrypted-password``.  Cisco's ``secret 8`` (pbkdf2) and
+      ``secret 9`` (scrypt) are Cisco-only — Junos rejects.
+      Junos's ``$6$`` (SHA-512) default is rare on Cisco today —
+      modern IOS-XE may not parse it.  Cisco's numeric
+      ``privilege 1-15`` and Junos's named ``class super-user /
+      operator / read-only`` don't 1:1; canonical preserves the
+      source string but operator-curated mapping required.  Re-key
+      after migration is the safe path.
+    references: [cisco-username-cli, cisco-password-types, junos-password-cli, junos-kb-password-format]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Both support host / secret / auth-port / acct-port.  Cisco's
+      ``key 7 <obfuscated>`` and Junos's ``$9$...``-encrypted
+      secret do NOT cross-decrypt; operator must re-set the shared
+      secret on the target.  Auth-port / acct-port preserved.
+    references: [cisco-aaa-cli, junos-radius-cli]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/vxlan-vnis/vni`` under unsupported with rationale "IOS-XE
+      VXLAN mappings (``interface nve1 / member vni <N>``) parse-
+      and-ignore in v1.  CanonicalVxlan schema exists; wire-up
+      deferred until demand arrives for Catalyst-to-Arista (or
+      Catalyst-to-Junos) migrations."  Junos codec advertises
+      ``/vxlan-vnis/vni`` as supported, so the cross-pair drops to
+      unsupported.
+    references: [cisco-evpn-vxlan-cg, junos-evpn-overview, junos-evpn-irb-example]
+
+  vxlan_vnis[].vlan_id:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+
+  vxlan_vnis[].mcast_group:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+
+  vxlan_vnis[].flood_list:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (Cisco parse-and-ignore in v1)."
+
+  vxlan_vnis[].source_interface:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/vxlan-vnis/source-interface`` under unsupported.  Same
+      scope as ``/vxlan-vnis/vni`` — both land when Catalyst VXLAN
+      demand arrives.
+
+  vxlan_vnis[].udp_port:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/vxlan-vnis/udp-port`` under unsupported.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list ``/evpn-type5-routes/route`` under lossy
+      with rationale that EVPN Type-5 is a VRF-property model
+      (``CanonicalRoutingInstance.l3_vni``) rather than per-prefix
+      records; no codec populates the per-prefix list today.
+      Effectively unsupported on the cross-pair until route-map /
+      policy-statement parsing lands.
+    references: [cisco-evpn-vxlan-cg, junos-evpn-overview]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/routing-instances/instance`` under unsupported: "VRF
+      declarations (``vrf definition <name>`` with ``rd`` +
+      ``address-family ipv4`` + ``route-target import/export``)
+      and per-interface ``vrf forwarding <name>`` parse-and-ignore
+      in v1."  Junos codec has the path supported (GAP 6) but
+      Cisco-side parse drops to empty, so cross-pair render emits
+      no ``set routing-instances`` blocks on the Junos target.
+    references: [cisco-vrf-cli, cisco-vrf-lite-cg, junos-instance-type]
+
+  routing_instances[].name:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].instance_type:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].route_distinguisher:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].rt_imports:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].rt_exports:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].description:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  routing_instances[].l3_vni:
+    disposition: unsupported
+    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private (Cisco preserves
+      ``router bgp / ospf / eigrp`` stanzas, Junos preserves
+      ``protocols / policy-options / firewall``); cross-vendor
+      migration drops the section with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``set apply-groups <G>``).  Cisco
+      source has no equivalent and never populates this list.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not-applicable status for
+      Cisco as source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence and deferred items
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * Keyword-stable surface (hostname / DNS / NTP / SNMP v1+v2c /
+#     VLANs / interfaces / static routes / IPv4-IPv6 addressing)
+#     is high-confidence — vendor docs cite identical primitives,
+#     and the Cisco IOS-XE codec parses these supports today.
+#
+#   * VRF / routing-instances + EVPN-VXLAN are confidently
+#     unsupported (Cisco capability matrix says parse-and-ignore in
+#     v1; canonical schema exists, wire-up deferred).
+#
+#   * Local user hash compatibility is well-documented across
+#     Cisco's secret 0/5/8/9 families and Junos's $1$/$5$/$6$/$sha1$
+#     forms.  Lossy with confidence.
+#
+# Deferred items:
+#
+#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
+#     (no vrf field).  Lands alongside VRF wire-up.
+#
+#   * NTP per-server options / qualified-next-hop preservation —
+#     canonical model is host-list-only / single-NH-only.
+#
+#   * TACACS+ servers — no canonical model in v1.
+#
+#   * Cisco's `address-family ipv4` per-AF route-targets under
+#     `vrf definition` — flattens to a single rt_imports/rt_exports
+#     list canonically.
