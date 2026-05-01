@@ -218,6 +218,116 @@ class TestDetectCodec:
         assert results[0].codec == "cisco_iosxe_cli"
         assert results[0].confidence >= 85
 
+    def test_aruba_running_config_with_command_echo_does_not_match_cisco(self):
+        """Regression for the user-reported bug where pasting an Aruba
+        ``show running-config`` whose head carried the Aruba prompt
+        + command echo (``Aruba-Stack-2930M# show running-config``)
+        fired Cisco's probe at 95% because the literal string
+        ``show running-config`` appeared.  ``show running-config`` is
+        a COMMAND operators run on multiple vendors, not a Cisco-
+        specific banner.  Aruba's banner (``; hpStack_WC Configuration
+        Editor``) MUST win because it's unambiguously Aruba."""
+        raw = (
+            "Aruba-Stack-2930M# show running-config\n"
+            "\n"
+            "Running configuration:\n"
+            "\n"
+            "; hpStack_WC Configuration Editor; "
+            "Created on release #WC.16.11.0025\n"
+            "; Ver #14:67.6f.f8.1d.9b.3f.bf.bb.ef.7c.59.fc:44\n"
+            "\n"
+            "stacking\n"
+            '   member 1 type "JL323A" mac-address 040973-b4f2c0\n'
+        )
+        results = detect_codec(raw)
+        assert results[0].codec == "aruba_aoss", (
+            f"expected aruba_aoss to win; got {results[0]!r}"
+        )
+        assert results[0].confidence >= 95
+        # Cisco MAY still appear as a low-confidence runner-up (the
+        # ``show running-config`` echo + ``hostname`` shape can both
+        # weakly match Cisco's probe), but it MUST NOT outrank Aruba.
+        cisco = next(
+            (c for c in results if c.codec == "cisco_iosxe_cli"), None,
+        )
+        if cisco is not None:
+            assert cisco.confidence < results[0].confidence
+
+    def test_aruba_jl_part_number_banner_detected(self):
+        """Newer Aruba part numbers use a ``JL`` letter prefix
+        (JL256A 2930F, JL323A 2930M, JL260A) rather than the older
+        all-digit ``J9850A`` form.  The probe regex must accept both.
+        Coverage gap discovered when fixing the user-reported
+        misdetection bug."""
+        raw = (
+            '; JL260A Configuration Editor; '
+            'Created on release #WC.16.07.0002\n'
+            'hostname "fw-01"\n'
+            'vlan 10\n   name "USERS"\n   exit\n'
+        )
+        results = detect_codec(raw)
+        assert results[0].codec == "aruba_aoss"
+        assert results[0].confidence >= 95
+
+    def test_aruba_hpstack_banner_detected(self):
+        """Stacked Aruba switches emit ``; hpStack_<branch>
+        Configuration Editor`` instead of the per-chassis part number.
+        The probe regex must accept this form too."""
+        raw = (
+            '; hpStack_WC Configuration Editor; '
+            'Created on release #WC.16.11.0025\n'
+            'hostname "stack-01"\n'
+            'stacking\n   member 1 type "JL323A"\n'
+        )
+        results = detect_codec(raw)
+        assert results[0].codec == "aruba_aoss"
+        assert results[0].confidence >= 95
+
+    def test_cisco_banner_pair_wins_over_show_running_phrase(self):
+        """When the input carries the ``Building configuration...`` +
+        ``Current configuration : N bytes`` Cisco-specific banner
+        pair, it MUST resolve to Cisco IOS-XE — these two strings
+        together are unambiguous Cisco output and are NOT emitted by
+        any other vendor."""
+        raw = (
+            "Building configuration...\n"
+            "\n"
+            "Current configuration : 5545 bytes\n"
+            "!\n"
+            "! Last configuration change at 10:59:41 UTC Fri\n"
+            "!\n"
+            "version 16.9\n"
+            "service timestamps debug datetime msec\n"
+            "hostname r1\n"
+            "!\n"
+        )
+        results = detect_codec(raw)
+        assert results[0].codec == "cisco_iosxe_cli"
+        assert results[0].confidence >= 95
+
+    def test_show_running_phrase_alone_does_not_max_cisco_score(self):
+        """The bare phrase ``show running-config`` without any other
+        Cisco-specific marker must NOT produce 95+ confidence — that
+        was the loose match that caused the user-reported false
+        positive on Aruba inputs.  Either the probe returns None, or
+        it returns a score below 95."""
+        raw = (
+            "Some-Device# show running-config\n"
+            "\n"
+            "Some random output that isn't a real config.\n"
+        )
+        results = detect_codec(raw)
+        # Either no match (preferred — phrase alone is not diagnostic)
+        # or a low-confidence match below the 95 threshold.
+        cisco = next(
+            (c for c in results if c.codec == "cisco_iosxe_cli"), None,
+        )
+        if cisco is not None:
+            assert cisco.confidence < 95, (
+                f"bare 'show running-config' phrase should not produce "
+                f"95+ confidence on Cisco probe — got {cisco.confidence}"
+            )
+
     def test_netconf_xml_beats_opnsense_when_namespace_present(self):
         """The openconfig namespace is a unique NETCONF signature; the
         OPNsense codec should NOT claim this input."""

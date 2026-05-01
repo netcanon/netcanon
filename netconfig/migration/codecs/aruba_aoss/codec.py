@@ -698,9 +698,23 @@ class ArubaAOSSCodec(CodecBase):
         if stripped.startswith("<") or stripped.startswith("{"):
             return None
 
-        # Unique banner: ``; J####A Configuration Editor`` or similar.
-        if re.search(r"^;\s*J\d+A\s+Configuration", raw_prefix, re.MULTILINE):
-            return (98, "AOS-S ProCurve configuration banner present")
+        # Unique banner.  Three observed shapes:
+        #   ``; J9850A Configuration Editor`` — older J-prefix part
+        #     numbers (J9729A, J9850A, etc.)
+        #   ``; JL260A Configuration Editor`` — newer JL-prefix part
+        #     numbers (JL256A, JL260A — found on 2930F / 2930M)
+        #   ``; hpStack_WC Configuration Editor`` — stacking banner
+        #     (multi-member 2930M / 5400 stacks)
+        # All three are unambiguously Aruba/HPE.  Match anywhere in
+        # the input (not just first line) because operators sometimes
+        # include the prompt-echo + ``show running-config`` command
+        # before the actual config — the banner shows up a few lines
+        # in.
+        if re.search(
+            r"^;\s*(J[A-Z]?\d+[A-Z]*|hpStack_\w+)\s+Configuration",
+            raw_prefix, re.MULTILINE,
+        ):
+            return (98, "AOS-S ProCurve / Aruba configuration banner present")
 
         # Structural: vlan stanzas with inline untagged/tagged.
         has_vlan_with_untagged = bool(re.search(

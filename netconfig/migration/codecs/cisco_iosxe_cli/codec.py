@@ -340,23 +340,65 @@ class CiscoIOSXECLICodec(CodecBase):
     def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
         """Detect Cisco IOS CLI ``show running-config`` text.
 
-        Strong signals: ``Building configuration...`` banner,
-        ``interface GigabitEthernet``, ``ip address X Y`` (dotted-
-        decimal mask), ``no shutdown``.  Weaker signals: ``!``
-        stanza delimiter, leading ``hostname``.
+        Strong signals (all Cisco-specific; ``show running-config`` is
+        intentionally NOT one of them — that phrase is the command
+        operators run on Aruba, Arista, and others, so its presence in
+        a paste means "this is some vendor's running-config" rather
+        than "this is Cisco's running-config"):
+
+          * ``Building configuration...`` banner
+          * ``Current configuration : <N> bytes`` banner
+          * ``! Last configuration change at ...`` banner line
+          * ``service timestamps`` directive (Cisco-specific syntax)
+          * ``interface GigabitEthernet`` / ``TenGigabitEthernet`` /
+            etc. — Cisco interface naming
+          * ``ip address X.X.X.X Y.Y.Y.Y`` (dotted-decimal mask form;
+            Aruba uses CIDR ``/24`` form)
+          * ``switchport`` mode keyword (Cisco specific)
+          * ``no shutdown`` form
+
+        Weaker signals: ``!`` stanza delimiter, leading ``hostname``.
         """
         lowered = raw_prefix.lower()
         # XML or JSON - not IOS CLI.
         stripped = raw_prefix.lstrip()
         if stripped.startswith("<") or stripped.startswith("{"):
             return None
-        # MikroTik or Fortigate sections share `!` but the signals
-        # below distinguish IOS.
-        if "building configuration" in lowered:
-            return (98, "'Building configuration...' banner is IOS-specific")
-        if "show running-config" in lowered:
-            return (95, "'show running-config' header present")
-        # Strong IOS-shape markers (one enough for high confidence).
+
+        # If the input carries a recognisable Aruba banner anywhere in
+        # the first few KiB, defer to Aruba's probe.  This guards the
+        # common paste case where the operator copies a full session
+        # transcript including the prompt + `show running-config` echo
+        # — the string "show running-config" is the OPERATOR'S
+        # COMMAND, not an IOS-specific banner, so reasoning from its
+        # presence alone produced false positives.  Aruba's own probe
+        # will still claim the input via its own banner match.
+        if re.search(
+            r"^;\s*(J[A-Z]?\d+[A-Z]*|hpStack_\w+)\s+Configuration",
+            raw_prefix, re.MULTILINE,
+        ):
+            return None
+
+        # Cisco-specific banners — each unambiguous on its own.  The
+        # ``show running-config`` echo is now ONLY a confidence
+        # multiplier alongside one of these; on its own it's not
+        # diagnostic.  See _IOS_BANNER_HITS for the full list.
+        cisco_banner_hits = 0
+        for pattern, weight in _IOS_BANNER_HITS:
+            if pattern in lowered:
+                cisco_banner_hits += weight
+        if cisco_banner_hits >= 4:
+            return (
+                98,
+                "multiple IOS-specific banners "
+                "(Building / Current / Last change / service timestamps)",
+            )
+        if cisco_banner_hits >= 2:
+            return (
+                95,
+                "IOS-specific banner sequence detected",
+            )
+        # Strong IOS-shape markers (one enough for medium confidence).
         strong_hits = 0
         if re.search(r"^interface\s+(gigabit|fastether|tengigabit|"
                      r"loopback|vlan|port-channel|tunnel|serial)",
@@ -371,6 +413,17 @@ class CiscoIOSXECLICodec(CodecBase):
         if re.search(r"^\s+switchport\s+",
                      raw_prefix, re.IGNORECASE | re.MULTILINE):
             strong_hits += 1
+        # If the operator's prompt-echo carries ``show running-config``
+        # AND we see at least one Cisco-shape structural marker, we
+        # have stronger evidence than structure alone.  This is the
+        # path that previously fired at 95 on bare ``show running-
+        # config`` text.
+        if "show running-config" in lowered and strong_hits >= 1:
+            return (
+                90,
+                f"'show running-config' header + "
+                f"{strong_hits} IOS structural marker(s)",
+            )
         if strong_hits >= 2:
             return (90, f"{strong_hits} strong IOS CLI markers present")
         if strong_hits == 1:
@@ -442,6 +495,31 @@ def _mask_to_prefix(mask_str: str) -> int:
             snippet=mask_str,
         )
     return bits.count("1")
+
+
+#: Cisco-specific IOS banner / directive substrings used by the
+#: detection probe.  Each entry is ``(lowered_substring, weight)``.
+#: When the cumulative weight reaches a threshold the probe returns a
+#: high-confidence detection.  Curated to be Cisco-unique (Aruba /
+#: Arista / Junos do NOT emit any of these strings):
+#:
+#:   * ``Building configuration...`` — Cisco IOS / IOS-XE banner
+#:     emitted by the device when ``show running-config`` runs
+#:   * ``Current configuration : <N> bytes`` — second-line Cisco
+#:     banner companion to ``Building configuration...``
+#:   * ``! Last configuration change at`` — Cisco's commit-history
+#:     comment (Aruba uses ``;`` for comments, not ``!``)
+#:   * ``service timestamps`` — Cisco-specific top-of-config
+#:     directive controlling logging/debug message formatting
+#:
+#: Each contributes weight 2.  The 95 threshold is "two banners
+#: present"; 98 is "all four / kitchen sink".
+_IOS_BANNER_HITS: tuple[tuple[str, int], ...] = (
+    ("building configuration", 2),
+    ("current configuration :", 2),
+    ("! last configuration change at", 2),
+    ("service timestamps", 2),
+)
 
 
 _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
