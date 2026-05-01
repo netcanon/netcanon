@@ -171,6 +171,21 @@ class MikroTikRouterOSCodec(CodecBase):
                 path="/nat/rule",
                 reason="NAT rules are Tier 3 — informational only.",
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason=(
+                    "RouterOS VXLAN exists but is rare in canonical "
+                    "scope and not modelled in v1."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/source-interface",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/udp-port",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
         ],
     )
 

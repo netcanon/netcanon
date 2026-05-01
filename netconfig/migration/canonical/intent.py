@@ -324,12 +324,29 @@ class CanonicalVxlan(BaseModel):
             dotted-quad (e.g. ``"239.1.1.100"``).
         flood_list: Explicit VTEP IPs for head-end replication, in
             preference order.  Empty when multicast-only.
+        source_interface: VTEP source interface name in operator-form
+            (Arista ``Loopback0``, Junos ``lo0.0``, NX-OS ``loopback0``).
+            Opaque string — cross-vendor renders accept whatever the
+            source codec emitted; operators rename via the existing
+            port-rename pane when crossing platforms.  Empty string
+            means undeclared and codecs should fall back to a sensible
+            default (typically ``Loopback0`` on Arista, ``lo0.0`` on
+            Junos).  This is a switch-level / global attribute on the
+            VTEP — codecs populate it on EVERY CanonicalVxlan record
+            for that switch so the value survives even when only a
+            subset of VNIs is consumed downstream.
+        udp_port: VXLAN UDP destination port.  Defaults to 4789 (the
+            IANA-assigned standard); operators occasionally override
+            (e.g. legacy 8472 from early Linux VXLAN deployments).
+            Same per-switch broadcast model as ``source_interface``.
     """
 
     vlan_id: int = Field(ge=1, le=4094)
     vni: int = Field(ge=1, le=16777215)
     mcast_group: str = ""                           # empty = no mcast; use flood_list
     flood_list: list[str] = Field(default_factory=list)
+    source_interface: str = ""                      # opaque per-vendor name (Loopback0 / lo0.0 / loopback0)
+    udp_port: int = 4789                            # IANA default; rare operator override
 
 
 class CanonicalRoutingInstance(BaseModel):

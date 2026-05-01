@@ -428,3 +428,47 @@ def test_every_mapped_codec_is_registered() -> None:
         f"Fixture-directory mappings reference unregistered codecs: "
         f"{bad}.  Registered codecs: {sorted(registered)}"
     )
+
+
+# ---------------------------------------------------------------------------
+# GAP-EVPN-2: VXLAN source-interface + udp-port survival on real captures.
+#
+# Asserts that switch-level VTEP settings (vxlan source-interface +
+# vxlan udp-port on Arista; switch-options vtep-source-interface +
+# vxlan-port on Junos) populate onto every CanonicalVxlan record at
+# parse time.  Pinpointed regression guard against the silent-drop bug
+# pattern (#2) flagged in translator-plans.txt.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "fixture_relpath,expected_source_interface",
+    [
+        # karneliuk_a_eos1_eos4260: ``vxlan source-interface Loopback0``
+        ("arista_eos/karneliuk_a_eos1_eos4260.txt", "Loopback0"),
+        # batfish_labval_dc1_leaf2a_eos4230: ``vxlan source-interface Loopback1``
+        ("arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt", "Loopback1"),
+    ],
+)
+def test_arista_vxlan_source_interface_survives_parse(
+    fixture_relpath: str, expected_source_interface: str,
+) -> None:
+    """VXLAN source-interface must populate onto every CanonicalVxlan
+    record when the fixture declares the switch-level setting."""
+    path = REAL_FIXTURES_ROOT / fixture_relpath
+    if not path.is_file():
+        pytest.skip(f"fixture {fixture_relpath} not present")
+    codec = get_codec("arista_eos")
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    intent = codec.parse(raw)
+    assert intent.vxlan_vnis, (
+        f"{fixture_relpath} produced no CanonicalVxlan records — "
+        f"VLAN-to-VNI parse regression?"
+    )
+    for rec in intent.vxlan_vnis:
+        assert rec.source_interface == expected_source_interface, (
+            f"{fixture_relpath}: VNI {rec.vni} parsed with "
+            f"source_interface={rec.source_interface!r}, expected "
+            f"{expected_source_interface!r}"
+        )
+        assert rec.udp_port == 4789  # both fixtures use the IANA default

@@ -11,6 +11,29 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (EOS 4.26 EVPN/VXLAN gaps — items 1 + 2 of 5)
+
+Two of the five deferred translator-plans EVPN/VXLAN gaps closed.
+Surfaced when an Arista EOS 4.26 → Juniper translation lost semantic
+surface; both items had stable syntax across versions (EOS 4.13+ /
+Junos 15.1+) so the wire-up regresses across the full fixture corpus,
+not just the EOS 4.26 trigger fixture.
+
+* **VXLAN source-interface + UDP port** (`CanonicalVxlan` schema +
+  Arista + Junos parse/render).  Arista's
+  `interface Vxlan1 / vxlan source-interface <name>` and
+  `vxlan udp-port <N>` now populate onto every CanonicalVxlan record
+  emitted from the stanza; Junos's
+  `set switch-options vtep-source-interface <name>` and
+  `set switch-options vxlan-port <N>` mirror the same wire-up.
+  Capability-matrix entries added across all 8 codecs.
+
+* **Arista BGP / VLAN / RD / RT EVPN MAC-VRF**
+  (CanonicalRoutingInstance with `instance_type="mac-vrf"`).  The
+  per-VLAN EVPN binding form (`router bgp / vlan N / rd ... /
+  route-target both ...`) now populates a CanonicalRoutingInstance
+  keyed by the VLAN name — previously parse-and-ignore.
+
 ### Fixed (OPNsense paramiko-shell backups breaking the migrate parser)
 
 User report: picking a stored OPNsense config in the Migrate UI

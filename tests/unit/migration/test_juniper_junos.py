@@ -1348,3 +1348,100 @@ class TestBlockFormParse:
         raw = "system {\n    host-name sw1;\n"  # no closing `}`
         with pytest.raises(ParseError):
             JunosCodec().parse(raw)
+
+
+class TestVxlanSwitchOptions:
+    """GAP-EVPN-2: ``set switch-options vtep-source-interface ...`` and
+    ``set switch-options vxlan-port ...`` are switch-level globals; they
+    stamp onto every CanonicalVxlan record."""
+
+    def test_parse_vtep_source_interface(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 1
+        rec = intent.vxlan_vnis[0]
+        assert rec.source_interface == "lo0.0"
+        assert rec.udp_port == 4789  # default
+
+    def test_parse_vxlan_port_override(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+            "set switch-options vxlan-port 8472\n"
+        )
+        intent = JunosCodec().parse(raw)
+        rec = intent.vxlan_vnis[0]
+        assert rec.source_interface == "lo0.0"
+        assert rec.udp_port == 8472
+
+    def test_parse_switch_options_before_vni_records(self):
+        # Order-independent: switch-options can precede the vlans.
+        raw = (
+            "set switch-options vtep-source-interface lo0.0\n"
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set vlans V200 vlan-id 200\n"
+            "set vlans V200 vxlan vni 10200\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 2
+        for rec in intent.vxlan_vnis:
+            assert rec.source_interface == "lo0.0"
+
+    def test_render_emits_switch_options_when_set(self):
+        from netconfig.migration.canonical.intent import CanonicalVxlan
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent as _CI,
+            CanonicalVlan as _CV,
+        )
+        intent = _CI(
+            vlans=[_CV(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(
+                vlan_id=100, vni=10100,
+                source_interface="lo0.0",
+                udp_port=4789,
+            )],
+        )
+        out = JunosCodec().render(intent)
+        assert "set switch-options vtep-source-interface lo0.0" in out
+        # 4789 is the default — should NOT be emitted.
+        assert "set switch-options vxlan-port" not in out
+
+    def test_render_emits_non_default_udp_port(self):
+        from netconfig.migration.canonical.intent import CanonicalVxlan
+        from netconfig.migration.canonical.intent import (
+            CanonicalIntent as _CI,
+            CanonicalVlan as _CV,
+        )
+        intent = _CI(
+            vlans=[_CV(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(
+                vlan_id=100, vni=10100,
+                source_interface="lo0.0",
+                udp_port=8472,
+            )],
+        )
+        out = JunosCodec().render(intent)
+        assert "set switch-options vtep-source-interface lo0.0" in out
+        assert "set switch-options vxlan-port 8472" in out
+
+    def test_round_trip_preserves_vtep_globals(self):
+        raw = (
+            "set vlans V100 vlan-id 100\n"
+            "set vlans V100 vxlan vni 10100\n"
+            "set vlans V200 vlan-id 200\n"
+            "set vlans V200 vxlan vni 10200\n"
+            "set switch-options vtep-source-interface lo0.0\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert len(second.vxlan_vnis) == 2
+        for rec in second.vxlan_vnis:
+            assert rec.source_interface == "lo0.0"

@@ -170,6 +170,23 @@ class CiscoIOSXECLICodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/vxlan-vnis/source-interface",
+                reason=(
+                    "IOS-XE VXLAN source-interface (`interface nve1 / "
+                    "source-interface Loopback<N>`) parse-and-ignore "
+                    "in v1.  Same scope as /vxlan-vnis/vni — both "
+                    "land when Catalyst VXLAN demand arrives."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/udp-port",
+                reason=(
+                    "IOS-XE VXLAN UDP port (`interface nve1 / vxlan "
+                    "udp-port <N>`) parse-and-ignore in v1.  Same "
+                    "scope as /vxlan-vnis/vni."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing-instances/instance",
                 reason=(
                     "VRF declarations (`vrf definition <name>` with "

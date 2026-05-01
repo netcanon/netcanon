@@ -241,6 +241,18 @@ class OPNsenseCodec(CodecBase):
                     "v3 users on the target after migration."
                 ),
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason="VXLAN not modelled — OPNsense is a firewall codec.",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/source-interface",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/udp-port",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
         ],
     )
 

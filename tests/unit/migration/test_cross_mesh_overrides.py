@@ -707,3 +707,69 @@ def test_five_category_overrides_in_one_call():
         assert job.snmp_community_renames.get("public") == "monitoring-ro"
     if "netadmin" in job.source_snmpv3_users:
         assert job.snmpv3_user_renames.get("netadmin") == "platform-snmpro"
+
+
+# ---------------------------------------------------------------------------
+# GAP-EVPN-2: VXLAN source-interface + udp-port survive cross-vendor
+# round-trip through the canonical tree.  Direct codec-level test (not
+# a per-pane override smoke) — verifies the canonical fields wire
+# through Arista parse → Junos render without losing data.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cross_mesh
+def test_vxlan_source_interface_survives_arista_to_junos():
+    """An Arista config declaring ``vxlan source-interface Loopback0``
+    must survive parse-to-canonical such that a Junos render emits
+    ``set switch-options vtep-source-interface Loopback0`` (or the
+    operator-renamed equivalent).  The opaque-string semantic — name
+    is preserved verbatim, operator translates Arista→Junos via the
+    port-rename pane — is the v1 contract.
+    """
+    arista = get_codec("arista_eos")
+    junos = get_codec("juniper_junos")
+    raw = (
+        "hostname leaf1\n"
+        "!\n"
+        "vlan 100\n"
+        "   name V100\n"
+        "!\n"
+        "interface Vxlan1\n"
+        "   vxlan source-interface Loopback0\n"
+        "   vxlan udp-port 4789\n"
+        "   vxlan vlan 100 vni 10100\n"
+        "!\n"
+        "end\n"
+    )
+    intent = arista.parse(raw)
+    assert len(intent.vxlan_vnis) == 1
+    assert intent.vxlan_vnis[0].source_interface == "Loopback0"
+
+    # Render via Junos.  Without a port-rename mesh entry, the
+    # source-interface name is kept as-is (operator can rename).
+    rendered = junos.render(intent)
+    assert "set switch-options vtep-source-interface Loopback0" in rendered
+    # Default UDP port (4789) is silent on Junos render.
+    assert "set switch-options vxlan-port" not in rendered
+
+
+@pytest.mark.cross_mesh
+def test_vxlan_udp_port_override_survives_arista_to_junos():
+    """Non-default UDP port (8472 — common legacy Linux VXLAN value)
+    survives Arista parse → Junos render."""
+    arista = get_codec("arista_eos")
+    junos = get_codec("juniper_junos")
+    raw = (
+        "hostname leaf1\n"
+        "!\n"
+        "interface Vxlan1\n"
+        "   vxlan source-interface Loopback0\n"
+        "   vxlan udp-port 8472\n"
+        "   vxlan vlan 100 vni 10100\n"
+        "!\n"
+        "end\n"
+    )
+    intent = arista.parse(raw)
+    assert intent.vxlan_vnis[0].udp_port == 8472
+    rendered = junos.render(intent)
+    assert "set switch-options vxlan-port 8472" in rendered

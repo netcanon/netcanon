@@ -308,6 +308,25 @@ rules (FortiGate needs `mtu-override enable`; AOS-S has no per-port
 MTU at all) belong in the codec's render path, not on the canonical
 field definition.  Document the quirk in a render-side comment.
 
+### Switch-level globals stamped onto every record
+
+Some fields are conceptually switch-level (one per device) but the
+canonical type they belong on is record-shaped (one per VLAN, one per
+VRF, etc.).  The pattern: store the same value on every record at
+parse-time, render reads the first non-empty record and emits once.
+`CanonicalVxlan.source_interface` + `CanonicalVxlan.udp_port`
+(GAP-EVPN-2) are the reference case — Arista emits both inside the
+single `interface Vxlan1` stanza alongside per-VNI mappings, while
+Junos emits them under `set switch-options ...` as siblings of the
+per-vlan mappings.  The canonical model unifies them as record-level
+fields so a tree built from N VNIs carries N copies of the value (each
+identical).  Render-side: walk the records, take the first non-default,
+emit once.  Parse-side: capture into a scratch local during the walk,
+back-patch every record at end-of-stanza (operators sometimes emit the
+global AFTER the per-VNI mappings).  This avoids inventing a per-tree
+"VTEP profile" type whose only consumer is render — keeps the
+canonical surface small.
+
 ---
 
 ## See also

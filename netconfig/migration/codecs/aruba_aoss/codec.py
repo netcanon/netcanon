@@ -132,6 +132,18 @@ class ArubaAOSSCodec(CodecBase):
                     "and not yet auto-rendered."
                 ),
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason="VXLAN not modelled — AOS-S is a campus L2/L3 codec.",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/source-interface",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/udp-port",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
         ],
     )
 

@@ -172,6 +172,18 @@ class FortiGateCLICodec(CodecBase):
                     "address/VIP objects — not auto-translatable."
                 ),
             ),
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason="VXLAN not modelled — FortiGate is a firewall codec.",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/source-interface",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
+            UnsupportedPath(
+                path="/vxlan-vnis/udp-port",
+                reason="VXLAN not modelled (see /vxlan-vnis/vni).",
+            ),
         ],
     )
 

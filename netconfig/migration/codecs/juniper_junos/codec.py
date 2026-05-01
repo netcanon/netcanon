@@ -133,6 +133,8 @@ class JunosCodec(CodecBase):
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
             "/vxlan-vnis/vni",                   # GAP 6
+            "/vxlan-vnis/source-interface",      # GAP-EVPN-2
+            "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6
         ],
         lossy=[
@@ -461,6 +463,25 @@ class JunosCodec(CodecBase):
             except AttributeError:
                 pass
 
+        # GAP-EVPN-2: stamp every CanonicalVxlan record with the
+        # switch-level vtep-source-interface + vxlan-port we observed.
+        # Both default to no-op; non-default values overwrite every
+        # record uniformly (matches Junos's switch-level semantic).
+        pending_si = getattr(intent, "_pending_vxlan_source_interface", "")
+        pending_up = getattr(intent, "_pending_vxlan_udp_port", 4789)
+        if intent.vxlan_vnis and (pending_si or pending_up != 4789):
+            for rec in intent.vxlan_vnis:
+                if pending_si and not rec.source_interface:
+                    rec.source_interface = pending_si
+                if pending_up and rec.udp_port == 4789:
+                    rec.udp_port = pending_up
+        # Clean up scratch attrs so they don't leak.
+        for attr in ("_pending_vxlan_source_interface", "_pending_vxlan_udp_port"):
+            try:
+                object.__delattr__(intent, attr)
+            except AttributeError:
+                pass
+
         logger.debug(
             "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
             "vxlan_vnis=%d vrfs=%d routes=%d users=%d snmp=%s "
@@ -734,6 +755,29 @@ class JunosCodec(CodecBase):
                     f"set vlans {_quote_if_needed(vlan_key)} vxlan vni "
                     f"{vni_by_vlan[vlan.id]}"
                 )
+
+        # GAP-EVPN-2: emit ``set switch-options vtep-source-interface ...``
+        # + ``set switch-options vxlan-port ...`` once per switch.  These
+        # are switch-level on Junos; pull from the first CanonicalVxlan
+        # record carrying a non-empty / non-default value.  Skip when no
+        # VXLAN records exist (no-op for non-VXLAN configs).
+        if tree.vxlan_vnis:
+            src_iface = ""
+            for v in tree.vxlan_vnis:
+                if v.source_interface:
+                    src_iface = v.source_interface
+                    break
+            udp_port = 4789
+            for v in tree.vxlan_vnis:
+                if v.udp_port and v.udp_port != 4789:
+                    udp_port = v.udp_port
+                    break
+            if src_iface:
+                out.append(
+                    f"set switch-options vtep-source-interface {src_iface}"
+                )
+            if udp_port != 4789:
+                out.append(f"set switch-options vxlan-port {udp_port}")
 
         # --- routing-instances (GAP 6) ---
         # Build a map from vrf_name to interfaces that belong there
@@ -1234,6 +1278,15 @@ def _dispatch_set(
         # GAP 6: ``set routing-instances <name> ...`` populates
         # CanonicalRoutingInstance + per-interface VRF membership.
         _apply_routing_instances(tokens[1:], intent)
+    elif head == "switch-options":
+        # GAP-EVPN-2: ``set switch-options vtep-source-interface <NAME>``
+        # and ``set switch-options vxlan-port <N>`` are switch-level
+        # globals that apply to every CanonicalVxlan record.  Capture
+        # into intent-level scratch state on the intent so the post-
+        # pass can stamp them onto records (which may have been
+        # appended by ``set vlans <NAME> vxlan vni <N>`` either before
+        # or after these lines).
+        _apply_switch_options(tokens[1:], intent)
     # All other top-level paths (protocols / firewall / policy-options /
     # security / forwarding-options / chassis / services) — parse-
     # and-ignore.
@@ -1526,6 +1579,41 @@ def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
         # convention).  A future enrichment could stash pending
         # mappings.
         return
+
+
+def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
+    """GAP-EVPN-2: ``set switch-options vtep-source-interface <NAME>``
+    and ``set switch-options vxlan-port <N>`` are switch-level globals
+    that apply to every CanonicalVxlan record.  Stash on a scratch
+    attribute on *intent*; a post-pass after the dispatcher finishes
+    stamps the value onto every CanonicalVxlan record.
+
+    The post-pass is needed (rather than stamping inline) because Junos
+    set-form is order-independent — operators sometimes emit
+    ``set vlans <NAME> vxlan vni <N>`` BEFORE the corresponding
+    ``set switch-options vtep-source-interface <iface>`` line.
+
+    Other sub-paths under ``switch-options`` (route-distinguisher,
+    vrf-target, vtep-remote-vtep) parse-and-ignore today.  Their
+    EVPN semantics overlap with CanonicalRoutingInstance fields but
+    on a switch-options scope rather than a routing-instances scope,
+    and the cross-vendor mapping is non-trivial enough to defer.
+    """
+    if len(tokens) < 2:
+        return
+    head = tokens[0]
+    if head == "vtep-source-interface":
+        # Stash on intent for the post-pass to consume.
+        setattr(intent, "_pending_vxlan_source_interface", tokens[1])
+        return
+    if head == "vxlan-port":
+        try:
+            port = int(tokens[1])
+        except ValueError:
+            return
+        setattr(intent, "_pending_vxlan_udp_port", port)
+        return
+    # Other switch-options paths — parse-and-ignore.
 
 
 def _apply_routing_instances(

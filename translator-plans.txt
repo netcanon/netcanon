@@ -758,14 +758,17 @@ TIER 3 — interactive rename modal in /migrate UI.
       tree.routing_instances populates RD + RT from the bgp/vlan
       form on the karneliuk EOS 4.26 fixture.
 
-  (2) CanonicalVxlan source-interface + udp-port (~30 min).  Today
-      CanonicalVxlan has {vlan_id, vni, mcast_group, flood_list}.
-      EOS / NX-OS / Junos all emit a source-interface (loopback IP
-      that becomes the VTEP IP) + a UDP port (default 4789, but
-      operator-set values are real config).  Add two fields to
-      CanonicalVxlan, populate on Arista + Junos parse, emit on
-      both render paths, run the existing VXLAN cross-mesh tests.
-      Doc-sync: docs/adding-a-canonical-field.md MTU pattern.
+  (2) [SHIPPED] CanonicalVxlan source-interface + udp-port.
+      CanonicalVxlan now carries {vlan_id, vni, mcast_group,
+      flood_list, source_interface, udp_port}.  Arista + Junos
+      parse + render fully wired; capability matrices on all 8
+      codecs declare /vxlan-vnis/source-interface and
+      /vxlan-vnis/udp-port (supported on arista_eos +
+      juniper_junos; unsupported elsewhere).  Pattern documented
+      in docs/adding-a-canonical-field.md ("Switch-level globals
+      stamped onto every record").  See test_arista_eos
+      TestVxlanSourceInterfaceUdpPort + test_juniper_junos
+      TestVxlanSwitchOptions + cross-mesh round-trip cases.
 
   (3) IPv6 ADDRESSES on interfaces (~2-3 hrs).  CanonicalIPv4Address
       exists but no IPv6 sibling.  Add CanonicalIPv6Address (ip,

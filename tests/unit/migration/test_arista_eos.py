@@ -457,6 +457,110 @@ class TestRender:
         assert "channel-group 1 mode on" in out
 
 
+class TestVxlanSourceInterfaceUdpPort:
+    """GAP-EVPN-2: ``vxlan source-interface`` + ``vxlan udp-port`` are
+    switch-level globals that apply to every CanonicalVxlan record."""
+
+    def test_parse_default_source_interface_and_udp_port(self):
+        raw = (
+            "vlan 100\n"
+            "   name Tenant_100\n"
+            "!\n"
+            "interface Vxlan1\n"
+            "   vxlan source-interface Loopback0\n"
+            "   vxlan udp-port 4789\n"
+            "   vxlan vlan 100 vni 100\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 1
+        rec = intent.vxlan_vnis[0]
+        assert rec.vlan_id == 100
+        assert rec.vni == 100
+        assert rec.source_interface == "Loopback0"
+        assert rec.udp_port == 4789
+
+    def test_parse_non_default_source_interface_back_patches_records(self):
+        # Source-interface declared AFTER VNI mapping (rare but legal).
+        # Tests the back-patch path: the record was emitted before
+        # the source-interface line was scanned.
+        raw = (
+            "vlan 110\n"
+            "   name V110\n"
+            "!\n"
+            "interface Vxlan1\n"
+            "   vxlan vlan 110 vni 10110\n"
+            "   vxlan source-interface Loopback1\n"
+            "   vxlan udp-port 8472\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 1
+        rec = intent.vxlan_vnis[0]
+        assert rec.source_interface == "Loopback1"
+        assert rec.udp_port == 8472
+
+    def test_parse_multi_vni_inherits_switch_level_settings(self):
+        raw = (
+            "interface Vxlan1\n"
+            "   vxlan source-interface Loopback99\n"
+            "   vxlan udp-port 4789\n"
+            "   vxlan vlan 10 vni 1010\n"
+            "   vxlan vlan 20 vni 1020\n"
+            "   vxlan vlan 30 vni 1030\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert len(intent.vxlan_vnis) == 3
+        for rec in intent.vxlan_vnis:
+            assert rec.source_interface == "Loopback99"
+            assert rec.udp_port == 4789
+
+    def test_render_uses_recorded_values(self):
+        from netconfig.migration.canonical.intent import CanonicalVxlan
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(
+                vlan_id=100, vni=10100,
+                source_interface="Loopback99",
+                udp_port=8472,
+            )],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface Vxlan1" in out
+        assert "vxlan source-interface Loopback99" in out
+        assert "vxlan udp-port 8472" in out
+        assert "vxlan vlan 100 vni 10100" in out
+
+    def test_render_falls_back_to_defaults_when_unset(self):
+        from netconfig.migration.canonical.intent import CanonicalVxlan
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=100, name="V100")],
+            vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "vxlan source-interface Loopback0" in out
+        assert "vxlan udp-port 4789" in out
+
+    def test_round_trip_preserves_vxlan_globals(self):
+        raw = (
+            "interface Vxlan1\n"
+            "   vxlan source-interface Loopback1\n"
+            "   vxlan udp-port 4789\n"
+            "   vxlan vlan 110 vni 10110\n"
+            "   vxlan vlan 120 vni 10120\n"
+            "!\n"
+        )
+        codec = AristaEOSCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert len(second.vxlan_vnis) == 2
+        for rec in second.vxlan_vnis:
+            assert rec.source_interface == "Loopback1"
+            assert rec.udp_port == 4789
+
+
 class TestRoundTrip:
     """Full parse → render → parse idempotency on realistic snippets."""
 

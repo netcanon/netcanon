@@ -213,6 +213,8 @@ class AristaEOSCodec(CodecBase):
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
             "/vxlan-vnis/vni",                   # GAP 6 demoted
+            "/vxlan-vnis/source-interface",      # GAP-EVPN-2
+            "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6 demoted
         ],
         lossy=[
@@ -446,6 +448,17 @@ class AristaEOSCodec(CodecBase):
         # Track pending LAG member ↔ channel-group bindings so we
         # can reverse-link after interfaces are materialised.
         lag_members: dict[int, list[str]] = {}
+        # GAP-EVPN-2: switch-level VXLAN settings are captured inside
+        # ``interface Vxlan1`` but apply globally to every CanonicalVxlan
+        # record produced from that stanza.  Stash them as parse-time
+        # locals; the per-VNI population code patches them onto each
+        # record at append-time, and a post-pass normalises any records
+        # that landed before the source-interface line was seen.
+        vxlan_state: dict[str, Any] = {
+            "source_interface": "",
+            "udp_port": 4789,
+            "records": [],     # list of CanonicalVxlan records emitted from THIS Vxlan stanza
+        }
 
         current_iface: CanonicalInterface | None = None
         current_iface_is_l3 = False   # set via ``no switchport``
@@ -519,6 +532,7 @@ class AristaEOSCodec(CodecBase):
             if current_iface is not None:
                 self._apply_iface_subcommand(
                     current_iface, stripped, lag_members, intent,
+                    vxlan_state,
                 )
                 # Track L3 flip so subsequent ``ip address`` lines are
                 # understood as routed rather than SVI-like.
@@ -527,6 +541,22 @@ class AristaEOSCodec(CodecBase):
             elif current_vlan is not None:
                 if stripped.startswith("name "):
                     current_vlan.name = stripped.split(None, 1)[1].strip()
+
+        # GAP-EVPN-2 post-pass: stamp every CanonicalVxlan record we
+        # produced with the switch-level source-interface + udp-port we
+        # observed.  Records appended BEFORE the source-interface line
+        # was scanned (legal — operators sometimes put VNI mappings
+        # ahead of the global config) get back-patched here.
+        if vxlan_state["records"]:
+            si = vxlan_state["source_interface"]
+            up = vxlan_state["udp_port"]
+            for rec in vxlan_state["records"]:
+                # Don't overwrite a value already set on this record
+                # (defensive — repeated parses or unusual ordering).
+                if si and not rec.source_interface:
+                    rec.source_interface = si
+                if up and rec.udp_port == 4789:
+                    rec.udp_port = up
 
         # Reverse-link LAG members.  For each channel-group binding
         # captured during the pass, synthesise the LAG if the child
@@ -653,6 +683,7 @@ class AristaEOSCodec(CodecBase):
         line: str,
         lag_members: dict[int, list[str]],
         intent: CanonicalIntent,
+        vxlan_state: dict[str, Any] | None = None,
     ) -> None:
         """Apply one indented sub-command to *iface*."""
         if line == "shutdown":
@@ -742,17 +773,55 @@ class AristaEOSCodec(CodecBase):
         # VRF↔L3-VNI mappings live here.  ``iface.name`` starts with
         # ``Vxlan`` (``Vxlan1`` / ``Vxlan2``).
         if iface.name.lower().startswith("vxlan"):
+            # GAP-EVPN-2: ``vxlan source-interface <NAME>`` is a
+            # switch-level setting that applies to every VNI emitted
+            # from this stanza.  Capture into vxlan_state; the parse-
+            # walk's post-pass stamps the value onto each record.
+            m = re.match(r"^vxlan\s+source-interface\s+(\S+)\s*$", line)
+            if m and vxlan_state is not None:
+                vxlan_state["source_interface"] = m.group(1)
+                # Back-patch any VNI records that were already emitted
+                # before the source-interface line (rare; supports
+                # operator orderings that put mappings before globals).
+                for rec in vxlan_state.get("records", []):
+                    if not rec.source_interface:
+                        rec.source_interface = m.group(1)
+                return
+            # GAP-EVPN-2: ``vxlan udp-port <N>`` — switch-level.
+            m = re.match(r"^vxlan\s+udp-port\s+(\d+)\s*$", line)
+            if m and vxlan_state is not None:
+                try:
+                    port = int(m.group(1))
+                except ValueError:
+                    return
+                vxlan_state["udp_port"] = port
+                for rec in vxlan_state.get("records", []):
+                    if rec.udp_port == 4789:
+                        rec.udp_port = port
+                return
             # ``vxlan vlan <vid> vni <vni>``
             m = re.match(r"^vxlan\s+vlan\s+(\d+)\s+vni\s+(\d+)\s*$", line)
             if m:
                 try:
                     vid = int(m.group(1))
                     vni = int(m.group(2))
-                    intent.vxlan_vnis.append(
-                        CanonicalVxlan(vlan_id=vid, vni=vni)
-                    )
                 except ValueError:
-                    pass
+                    return
+                rec = CanonicalVxlan(
+                    vlan_id=vid,
+                    vni=vni,
+                    source_interface=(
+                        vxlan_state["source_interface"]
+                        if vxlan_state else ""
+                    ),
+                    udp_port=(
+                        vxlan_state["udp_port"]
+                        if vxlan_state else 4789
+                    ),
+                )
+                intent.vxlan_vnis.append(rec)
+                if vxlan_state is not None:
+                    vxlan_state["records"].append(rec)
                 return
             # ``vxlan vrf <name> vni <vni>`` — L3 VNI for Type-5.
             m = re.match(r"^vxlan\s+vrf\s+(\S+)\s+vni\s+(\d+)\s*$", line)
@@ -774,9 +843,9 @@ class AristaEOSCodec(CodecBase):
                 else:
                     ri.l3_vni = l3_vni
                 return
-            # Other ``vxlan source-interface`` / ``vxlan udp-port`` /
-            # ``vxlan virtual-router`` lines fall through to parse-
-            # and-ignore — vendor-native details we don't model.
+            # Other ``vxlan virtual-router`` / ``vxlan flood vtep`` lines
+            # fall through to parse-and-ignore — vendor-native details
+            # we don't model cross-vendor today.
         # Unrecognised sub-command — parse-and-ignore.
 
     # -----------------------------------------------------------------
@@ -958,16 +1027,29 @@ class AristaEOSCodec(CodecBase):
 
         # --- Vxlan1 (GAP 6) — EOS carries VLAN-to-VNI + VRF-to-L3-VNI
         #     mappings inside a single ``interface Vxlan1`` stanza.
-        #     Source-interface defaults to Loopback0; real configs
-        #     often use a dedicated VTEP loopback but we don't model
-        #     that choice — operators can re-emit as needed.
+        #     GAP-EVPN-2: source-interface + udp-port come from the
+        #     CanonicalVxlan records (per-switch values stamped on
+        #     every VNI mapping at parse-time); fall back to
+        #     ``Loopback0`` / ``4789`` when no record carries a non-
+        #     default value (e.g. a render of a tree built purely from
+        #     a VRF / l3_vni scenario with no L2 VNIs).
         has_l3_vnis = any(
             ri.l3_vni is not None for ri in tree.routing_instances
         )
         if tree.vxlan_vnis or has_l3_vnis:
+            src_iface = "Loopback0"
+            for v in tree.vxlan_vnis:
+                if v.source_interface:
+                    src_iface = v.source_interface
+                    break
+            udp_port = 4789
+            for v in tree.vxlan_vnis:
+                if v.udp_port and v.udp_port != 4789:
+                    udp_port = v.udp_port
+                    break
             out.append("interface Vxlan1")
-            out.append("   vxlan source-interface Loopback0")
-            out.append("   vxlan udp-port 4789")
+            out.append(f"   vxlan source-interface {src_iface}")
+            out.append(f"   vxlan udp-port {udp_port}")
             for v in tree.vxlan_vnis:
                 out.append(f"   vxlan vlan {v.vlan_id} vni {v.vni}")
             for ri in tree.routing_instances:
