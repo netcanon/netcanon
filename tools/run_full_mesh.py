@@ -2,11 +2,11 @@
 """
 Cross-mesh translation fidelity runner (Phase 1 of the audit).
 
-Walks every committed real-capture fixture × every bidirectional codec
-in the registry, performs ``target_codec.parse(target_codec.render(
-source_codec.parse(raw)))``, and records per-canonical-field drift
-between the source-side canonical tree and the round-tripped target-side
-canonical tree.
+Walks every committed fixture (both real-world captures and synthetic
+hand-authored kitchen-sinks) × every bidirectional codec in the registry,
+performs ``target_codec.parse(target_codec.render(source_codec.parse(raw)))``,
+and records per-canonical-field drift between the source-side canonical
+tree and the round-tripped target-side canonical tree.
 
 What this is
 ------------
@@ -31,7 +31,13 @@ gitignored).
 
 Architecture
 ------------
-* Source-codec discovery mirrors ``tests/unit/migration/test_real_captures.py::_DIR_TO_CODEC_NAME``.
+* Real fixture source-codec discovery mirrors
+  ``tests/unit/migration/test_real_captures.py::_DIR_TO_CODEC_NAME``
+  (human-short labels bridged to format-qualified codec names).
+* Synthetic fixture discovery uses the directory name as the codec name
+  directly — kitchen-sinks live at
+  ``tests/fixtures/synthetic/<codec_name>/kitchen_sink.<ext>`` and the
+  parent dir IS the registered ``CodecBase.name``.
 * Target-codec discovery walks the codec registry and filters to
   ``direction == "bidirectional"`` (skips parse_only + the mock codec).
 * Drift is computed via :func:`compute_field_disposition`, exposed for
@@ -90,6 +96,7 @@ from netconfig.migration.canonical.intent import CanonicalIntent  # noqa: E402
 
 
 REAL_FIXTURES_ROOT = _REPO_ROOT / "tests" / "fixtures" / "real"
+SYNTHETIC_FIXTURES_ROOT = _REPO_ROOT / "tests" / "fixtures" / "synthetic"
 RUNS_DIR = REAL_FIXTURES_ROOT / "_cross_mesh_runs"
 MATRIX_PATH = REAL_FIXTURES_ROOT / "CROSS_MESH_RESULTS.md"
 
@@ -444,12 +451,20 @@ def process_cell(
     source_codec_name: str,
     target_codec: CodecBase,
     target_codec_name: str,
+    fixture_kind: str = "real",
 ) -> dict[str, Any]:
     """Run one (fixture, target_codec) cell.  Always returns a record;
-    exceptions get captured into the record rather than propagating."""
+    exceptions get captured into the record rather than propagating.
+
+    ``fixture_kind`` is ``"real"`` for real-world captures or
+    ``"synthetic"`` for hand-authored kitchen-sink fixtures.  Recorded
+    on the cell so downstream consumers (the matrix renderer, future
+    drift-trend tooling) can group and display them separately.
+    """
     rel_fixture = fixture_path.relative_to(_REPO_ROOT).as_posix()
     cell: dict[str, Any] = {
         "fixture": rel_fixture,
+        "fixture_kind": fixture_kind,
         "source_codec": source_codec_name,
         "target_codec": target_codec_name,
         "render_status": "ok",
@@ -528,28 +543,63 @@ def cell_status(cell: dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def discover_fixtures() -> tuple[list[tuple[str, Path]], list[str]]:
-    """Walk ``tests/fixtures/real`` and return:
-    * ``[(source_codec_name, fixture_path), ...]`` for every recognised
-      fixture
+def discover_fixtures() -> tuple[list[tuple[str, Path, str]], list[str]]:
+    """Walk both fixture roots and return:
+    * ``[(source_codec_name, fixture_path, fixture_kind), ...]`` for
+      every recognised fixture, where ``fixture_kind`` is ``"real"`` or
+      ``"synthetic"``
     * ``[unmapped_dir_path, ...]`` — directories present on disk but
-      missing a ``_DIR_TO_CODEC_NAME`` entry (honest about misses)
+      missing a known codec mapping (honest about misses)
+
+    Discovery details
+    -----------------
+    * ``tests/fixtures/real/<vendor>/`` uses the human-short labels
+      (``fortigate`` / ``mikrotik`` / ``junos``) bridged via
+      ``_DIR_TO_CODEC_NAME`` to format-qualified codec names.
+    * ``tests/fixtures/synthetic/<codec>/`` uses the registered codec
+      name directly as the directory name (matches ``CodecBase.name``)
+      — no translation table needed.  Each kitchen-sink fixture is
+      named ``kitchen_sink.<ext>`` and the codec name is the parent
+      directory name.
     """
-    out: list[tuple[str, Path]] = []
+    out: list[tuple[str, Path, str]] = []
     unmapped: list[str] = []
+
+    # Real captures.
     for vendor_dir in sorted(REAL_FIXTURES_ROOT.iterdir()):
         if not vendor_dir.is_dir() or vendor_dir.name.startswith("_"):
             continue
         codec_name = _DIR_TO_CODEC_NAME.get(vendor_dir.name)
         if codec_name is None:
-            unmapped.append(vendor_dir.name)
+            unmapped.append(f"real/{vendor_dir.name}")
             continue
         for path in sorted(vendor_dir.iterdir()):
             if not path.is_file() or path.name.startswith("."):
                 continue
             if path.suffix.lower() not in _FIXTURE_EXTENSIONS:
                 continue
-            out.append((codec_name, path))
+            out.append((codec_name, path, "real"))
+
+    # Synthetic kitchen-sinks.  Directory name IS the codec name —
+    # one fixture per codec so no per-vendor translation table is
+    # needed.  An unrecognised codec name surfaces in unmapped rather
+    # than silently dropping coverage.
+    if SYNTHETIC_FIXTURES_ROOT.is_dir():
+        registered = set(list_codecs())
+        for codec_dir in sorted(SYNTHETIC_FIXTURES_ROOT.iterdir()):
+            if not codec_dir.is_dir() or codec_dir.name.startswith("_"):
+                continue
+            codec_name = codec_dir.name
+            if codec_name not in registered:
+                unmapped.append(f"synthetic/{codec_dir.name}")
+                continue
+            for path in sorted(codec_dir.iterdir()):
+                if not path.is_file() or path.name.startswith("."):
+                    continue
+                if path.suffix.lower() not in _FIXTURE_EXTENSIONS:
+                    continue
+                out.append((codec_name, path, "synthetic"))
+
     return out, unmapped
 
 
@@ -581,7 +631,7 @@ def run_full_mesh() -> dict[str, Any]:
     cells: list[dict[str, Any]] = []
     started = datetime.now(timezone.utc).isoformat(timespec="seconds")
     t0 = time.perf_counter()
-    for source_codec_name, fixture_path in fixtures:
+    for source_codec_name, fixture_path, fixture_kind in fixtures:
         source_codec = get_codec(source_codec_name)
         for target_name in targets:
             target_codec = get_codec(target_name)
@@ -591,14 +641,21 @@ def run_full_mesh() -> dict[str, Any]:
                 source_codec_name=source_codec_name,
                 target_codec=target_codec,
                 target_codec_name=target_name,
+                fixture_kind=fixture_kind,
             )
             cells.append(cell)
     duration_s = round(time.perf_counter() - t0, 2)
+    real_fixture_count = sum(1 for _, _, k in fixtures if k == "real")
+    synthetic_fixture_count = sum(
+        1 for _, _, k in fixtures if k == "synthetic"
+    )
     return {
         "started_utc": started,
         "duration_s": duration_s,
         "cells_total": len(cells),
         "fixtures_count": len(fixtures),
+        "real_fixtures_count": real_fixture_count,
+        "synthetic_fixtures_count": synthetic_fixture_count,
         "targets_count": len(targets),
         "unmapped_fixture_dirs": unmapped,
         "targets": targets,
@@ -625,24 +682,47 @@ def render_matrix_md(result: dict[str, Any]) -> str:
     """Render the structured run result as the human-readable
     ``CROSS_MESH_RESULTS.md`` body.
 
-    The matrix is a fixture × target grid; every WARN/RENDER/PARSE cell
-    gets a drill-down section below.
+    Two matrices are emitted: the real-capture matrix (carrier configs,
+    Batfish kitchen-sinks, vendor-published examples) and the synthetic
+    kitchen-sink matrix (one hand-authored fixture per codec exercising
+    every CapabilityMatrix-supported field).  Each gets its own
+    fixture × target grid and its own drill-down section below.
+
+    Real and synthetic fixtures answer different questions:
+
+    * Real: "what survives translation when the source operator picked
+      a partial slice of features?"  — driven by what's in the wild.
+    * Synthetic: "what survives translation when EVERY supported field
+      is exercised at once?"  — driven by capability matrices.
+
+    Mixing them in one matrix would conflate "feature absent in source"
+    with "feature dropped in translation", so they live in separate
+    sections with separate drill-downs.
     """
     targets: list[str] = result["targets"]
     cells: list[dict[str, Any]] = result["cells"]
 
-    # Index cells by (fixture, target) for O(1) lookup.
-    by_key: dict[tuple[str, str], dict[str, Any]] = {
-        (c["fixture"], c["target_codec"]): c for c in cells
-    }
-    fixtures = sorted({c["fixture"] for c in cells})
+    real_cells = [c for c in cells if c.get("fixture_kind", "real") == "real"]
+    synthetic_cells = [
+        c for c in cells if c.get("fixture_kind") == "synthetic"
+    ]
+
+    real_fixtures_n = result.get(
+        "real_fixtures_count",
+        len({c["fixture"] for c in real_cells}),
+    )
+    synthetic_fixtures_n = result.get(
+        "synthetic_fixtures_count",
+        len({c["fixture"] for c in synthetic_cells}),
+    )
 
     lines: list[str] = []
     lines.append("# Cross-mesh translation fidelity matrix\n")
     lines.append(
         f"Generated by `tools/run_full_mesh.py` on {result['started_utc']}.  "
         f"Run took {result['duration_s']}s for {result['cells_total']} cells "
-        f"({result['fixtures_count']} fixtures × {result['targets_count']} bidirectional targets)."
+        f"({real_fixtures_n} real + {synthetic_fixtures_n} synthetic fixtures "
+        f"× {result['targets_count']} bidirectional targets)."
         "\n"
     )
     lines.append(
@@ -657,8 +737,8 @@ def render_matrix_md(result: dict[str, Any]) -> str:
         lines.append(
             "Fixture directories present on disk with no source-codec "
             f"mapping: {result['unmapped_fixture_dirs']}.  Add them to "
-            "`tools/run_full_mesh.py::_DIR_TO_CODEC_NAME` to bring them "
-            "into the audit.\n"
+            "`tools/run_full_mesh.py::_DIR_TO_CODEC_NAME` (real) or to "
+            "the codec registry (synthetic) to bring them into the audit.\n"
         )
 
     lines.append("## Cell legend\n")
@@ -674,34 +754,45 @@ def render_matrix_md(result: dict[str, Any]) -> str:
         "for cell-status purposes; per-field unsupported declarations show in the drill-down.\n"
     )
 
-    # ---- Top-level matrix ----
-    lines.append("## Per-fixture × target codec matrix\n")
-    header = ["Source fixture"] + targets
-    lines.append("| " + " | ".join(header) + " |")
-    lines.append("|" + "|".join(["---"] * len(header)) + "|")
-    for fx in fixtures:
-        row = [fx.removeprefix("tests/fixtures/real/")]
-        for tgt in targets:
-            cell = by_key.get((fx, tgt))
-            if cell is None:
-                row.append("—")
-                continue
-            status = cell_status(cell)
-            if status in ("OK", "WARN"):
-                summary = cell.get("summary", {})
-                preserved = (
-                    summary.get("fields_preserved", 0)
-                    + summary.get("fields_unsupported_in_target", 0)
-                )
-                total = summary.get("fields_total", 0)
-                row.append(f"{status} {preserved}/{total}")
-            else:
-                row.append(status)
-        lines.append("| " + " | ".join(row) + " |")
-    lines.append("")
+    # ---- Real-capture matrix ----
+    lines.append("## Real-capture coverage matrix\n")
+    lines.append(
+        "Real configs from carriers, Batfish parser tests, and "
+        "vendor-published examples.  Source slice is whatever the "
+        "original operator chose to deploy — feature absence in a row "
+        "doesn't mean the codec can't handle it, just that the fixture "
+        "doesn't exercise it.  Use the synthetic matrix below to gauge "
+        "feature-complete fidelity.\n"
+    )
+    lines.extend(
+        _render_grid(real_cells, targets, prefix_strip="tests/fixtures/real/")
+    )
+
+    if synthetic_cells:
+        lines.append("## Synthetic kitchen-sink coverage matrix\n")
+        lines.append(
+            "One hand-authored fixture per codec exercising every "
+            "field the codec's :class:`CapabilityMatrix` declares as "
+            "``supported`` or ``lossy``.  Drift here reflects the "
+            "WORST-CASE feature-complete cross-translation; rows in "
+            "the real matrix should be a strict subset of what the "
+            "corresponding synthetic row hits.\n"
+        )
+        lines.extend(
+            _render_grid(
+                synthetic_cells,
+                targets,
+                prefix_strip="tests/fixtures/synthetic/",
+            )
+        )
 
     # ---- Roll-up: top drifted (source, target) pairs ----
     lines.append("## Top drifted (source codec → target codec) pairs\n")
+    lines.append(
+        "Combined across both matrices.  Sums every WARN cell's "
+        "``fields_drifted`` count over all (source, target) pair "
+        "occurrences.\n"
+    )
     pair_drift: dict[tuple[str, str], int] = {}
     for c in cells:
         s = c["summary"] if "summary" in c else None
@@ -720,30 +811,126 @@ def render_matrix_md(result: dict[str, Any]) -> str:
         lines.append(f"| {rank} | {src} | {tgt} | {n} |")
     lines.append("")
 
-    # ---- Per-cell drill-downs ----
-    lines.append("## Per-cell drill-downs\n")
-    drill_cells = [
-        c for c in cells if cell_status(c) != "OK"
-    ]
-    if not drill_cells:
-        lines.append("Every cell preserved every field — no drill-downs.\n")
+    if synthetic_cells:
+        lines.append(
+            "### Top drifted pairs — synthetic submatrix only\n"
+        )
+        lines.append(
+            "Same roll-up but restricted to the synthetic kitchen-sink "
+            "cells.  These pairs see EVERY supported field at once, so "
+            "drift here is the most sensitive signal of codec "
+            "translation gaps.\n"
+        )
+        synth_pair_drift: dict[tuple[str, str], int] = {}
+        for c in synthetic_cells:
+            s = c.get("summary")
+            if s is None:
+                continue
+            key = (c["source_codec"], c["target_codec"])
+            synth_pair_drift[key] = synth_pair_drift.get(
+                key, 0,
+            ) + s.get("fields_drifted", 0)
+        top_synth = sorted(
+            synth_pair_drift.items(), key=lambda kv: kv[1], reverse=True,
+        )[:10]
+        lines.append(
+            "| Rank | Source codec | Target codec | Σ drifted fields |"
+        )
+        lines.append("|---:|---|---|---:|")
+        for rank, ((src, tgt), n) in enumerate(top_synth, start=1):
+            lines.append(f"| {rank} | {src} | {tgt} | {n} |")
+        lines.append("")
+
+    # ---- Per-cell drill-downs (real) ----
+    lines.append("## Per-cell drill-downs — real captures\n")
+    real_drill = [c for c in real_cells if cell_status(c) != "OK"]
+    if not real_drill:
+        lines.append("Every real-capture cell preserved every field.\n")
     else:
         lines.append(
-            f"One section per non-OK cell ({len(drill_cells)} total).  "
-            "Sections are ordered by source fixture then target codec.\n"
+            f"One section per non-OK real-capture cell ({len(real_drill)} "
+            "total).  Sections are ordered by source fixture then target codec.\n"
         )
         for c in sorted(
-            drill_cells,
-            key=lambda x: (x["fixture"], x["target_codec"]),
+            real_drill, key=lambda x: (x["fixture"], x["target_codec"]),
         ):
             lines.extend(_render_cell_drilldown(c))
+
+    # ---- Per-cell drill-downs (synthetic) ----
+    if synthetic_cells:
+        lines.append("## Per-cell drill-downs — synthetic kitchen-sinks\n")
+        synth_drill = [
+            c for c in synthetic_cells if cell_status(c) != "OK"
+        ]
+        if not synth_drill:
+            lines.append(
+                "Every synthetic kitchen-sink cell preserved every field.\n"
+            )
+        else:
+            lines.append(
+                f"One section per non-OK synthetic cell "
+                f"({len(synth_drill)} total).  Sections are ordered by "
+                "source fixture then target codec.\n"
+            )
+            for c in sorted(
+                synth_drill,
+                key=lambda x: (x["fixture"], x["target_codec"]),
+            ):
+                lines.extend(_render_cell_drilldown(c))
+
     return "\n".join(lines) + "\n"
+
+
+def _render_grid(
+    cells: list[dict[str, Any]],
+    targets: list[str],
+    prefix_strip: str,
+) -> list[str]:
+    """Render a fixture × target grid for a subset of cells.  Pulled
+    out of ``render_matrix_md`` so the same code drives both the real
+    and synthetic submatrices.
+    """
+    if not cells:
+        return ["(no fixtures in this category)\n"]
+    by_key: dict[tuple[str, str], dict[str, Any]] = {
+        (c["fixture"], c["target_codec"]): c for c in cells
+    }
+    fixtures = sorted({c["fixture"] for c in cells})
+    out: list[str] = []
+    header = ["Source fixture"] + targets
+    out.append("| " + " | ".join(header) + " |")
+    out.append("|" + "|".join(["---"] * len(header)) + "|")
+    for fx in fixtures:
+        row = [fx.removeprefix(prefix_strip)]
+        for tgt in targets:
+            cell = by_key.get((fx, tgt))
+            if cell is None:
+                row.append("—")
+                continue
+            status = cell_status(cell)
+            if status in ("OK", "WARN"):
+                summary = cell.get("summary", {})
+                preserved = (
+                    summary.get("fields_preserved", 0)
+                    + summary.get("fields_unsupported_in_target", 0)
+                )
+                total = summary.get("fields_total", 0)
+                row.append(f"{status} {preserved}/{total}")
+            else:
+                row.append(status)
+        out.append("| " + " | ".join(row) + " |")
+    out.append("")
+    return out
 
 
 def _render_cell_drilldown(cell: dict[str, Any]) -> list[str]:
     """Render a single cell's per-field drift breakdown."""
     out: list[str] = []
-    fx = cell["fixture"].removeprefix("tests/fixtures/real/")
+    fx = cell["fixture"]
+    for prefix in ("tests/fixtures/real/", "tests/fixtures/synthetic/"):
+        if fx.startswith(prefix):
+            fx = fx[len(prefix):]
+            break
     tgt = cell["target_codec"]
     status = cell_status(cell)
     if status in ("OK", "WARN"):

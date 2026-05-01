@@ -6,10 +6,12 @@ from the repo root.
 
 ## `run_full_mesh.py` — cross-mesh translation fidelity audit
 
-Walks every committed real-capture fixture under
-`tests/fixtures/real/<vendor>/` and runs every bidirectional codec in
-the registry against it as a translation target.  For each
-`(fixture, target_codec)` cell it performs:
+Walks every committed fixture (real-world captures under
+`tests/fixtures/real/<vendor>/` AND hand-authored synthetic
+kitchen-sinks under `tests/fixtures/synthetic/<codec_name>/`) and
+runs every bidirectional codec in the registry against it as a
+translation target.  For each `(fixture, target_codec)` cell it
+performs:
 
 ```
 canonical_source = source_codec.parse(fixture_text)
@@ -38,12 +40,16 @@ python tools/run_full_mesh.py --matrix
 
 * **JSON (always written):**
   `tests/fixtures/real/_cross_mesh_runs/<UTC-timestamp>.json` — one
-  record per cell with full per-field drift detail.  This directory
-  is gitignored; per-run output is operator scratch space.
+  record per cell with full per-field drift detail.  Each cell carries
+  `fixture_kind: "real"` or `fixture_kind: "synthetic"` so downstream
+  tooling can group them.  This directory is gitignored; per-run
+  output is operator scratch space.
 * **Matrix markdown (`--matrix` only):**
   `tests/fixtures/real/CROSS_MESH_RESULTS.md` — operator-readable
   matrix overwritten on each invocation.  This file IS committed; the
-  operator commits the regenerated version manually.
+  operator commits the regenerated version manually.  The markdown
+  carries TWO matrices (real + synthetic) with separate drill-downs
+  for each — see "Real vs synthetic fixtures" below.
 
 ### Cell statuses
 
@@ -69,15 +75,41 @@ expectations file (`tests/fixtures/cross_vendor_expectations.yaml`,
 planned) that classifies each drift as expected-vs-defect.  Until
 then, treat every WARN cell as "unverified" rather than "broken".
 
+### Real vs synthetic fixtures
+
+Two fixture corpora feed the matrix:
+
+* **Real captures** (`tests/fixtures/real/<vendor>/<file>`) — configs
+  drawn from carriers, Batfish parser tests, and vendor-published
+  examples.  Each row reflects whatever feature slice the original
+  operator chose to deploy.  Feature absence in a row doesn't mean the
+  codec can't handle it — just that the fixture doesn't exercise it.
+* **Synthetic kitchen-sinks** (`tests/fixtures/synthetic/<codec>/kitchen_sink.<ext>`) —
+  one hand-authored fixture per codec exercising every field the
+  codec's `CapabilityMatrix` declares as `supported` or `lossy`.
+  Drift here is the worst-case feature-complete signal — every
+  supported field is present at once, so a WARN cell unambiguously
+  means the target lost something the source could express.
+
+The markdown matrix renders both corpora as separate sections with
+separate drill-downs.  Real and synthetic are kept apart because
+mixing them conflates "feature absent in source" with "feature
+dropped in translation".
+
 ### Adding a new fixture or target codec
 
 * New fixture file under `tests/fixtures/real/<vendor>/` — picks up
   automatically on the next run; no script change needed.
-* New fixture vendor directory — add a `<dir> → <codec_name>` row to
-  `_DIR_TO_CODEC_NAME` in this script (mirrors the test-harness
+* New real-fixture vendor directory — add a `<dir> → <codec_name>`
+  row to `_DIR_TO_CODEC_NAME` in this script (mirrors the test-harness
   mapping in `tests/unit/migration/test_real_captures.py`).  The
   script reports unmapped directories explicitly in the JSON's
   `unmapped_fixture_dirs` field rather than silently dropping them.
+* New synthetic kitchen-sink — drop the file at
+  `tests/fixtures/synthetic/<codec_name>/kitchen_sink.<ext>` (the
+  parent directory name must match the registered `CodecBase.name`
+  exactly).  No script change needed — discovery uses the directory
+  name as the codec name directly.
 * New target codec — registers automatically via the existing
   `@register` decorator at codec import time.  The script filters to
   `direction == "bidirectional"` so parse-only codecs are skipped.
