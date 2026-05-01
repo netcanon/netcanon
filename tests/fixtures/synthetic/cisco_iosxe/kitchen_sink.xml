@@ -1,0 +1,385 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Synthetic kitchen-sink fixture for the cisco_iosxe (NETCONF/OpenConfig
+  XML) codec.  This codec is a Phase-0.5 stub that parses ONLY the
+  /openconfig-interfaces/ subtree into the CanonicalIntent.  Other
+  OpenConfig namespaces (system, vlan, network-instance, ...) are
+  declared in the codec's CapabilityMatrix as supported but not yet
+  wired into parse(); the cisco_iosxe_cli sibling codec covers them
+  via show-running-config text.
+
+  Coverage exercised by this fixture (every canonical field the
+  cisco_iosxe codec actually populates on parse):
+
+    * CanonicalInterface.name
+    * CanonicalInterface.description
+    * CanonicalInterface.enabled (both true and false)
+    * CanonicalInterface.interface_type
+        (ethernetCsmacd, softwareLoopback, tunnel, l2vlan, ieee8023adLag)
+    * CanonicalInterface.ipv4_addresses (single + multiple per interface)
+    * CanonicalInterface.ipv6_addresses (single + multiple per interface)
+
+  Lossy paths exercised on the wire (declared lossy in the matrix —
+  parsed into the intermediate dict but NOT carried through to
+  CanonicalInterface in this codec stub):
+
+    * /interfaces/interface/config/mtu
+
+  Out of scope for this codec / fixture (declared unsupported in the
+  capability matrix; covered by cisco_iosxe_cli or future wire-up):
+
+    * VXLAN VNIs, SNMPv3 USM users, switchport access/trunk membership,
+      VRF / routing-instance bindings, EVPN Type-5 routes, LAG mode
+      (mode is rendered "active" by default; not surfaced from XML),
+      DHCP server pools, RADIUS, local users, syslog, banner, BGP/OSPF.
+-->
+<rpc-reply xmlns="urn:ietf:params:xml:ns:netconf:base:1.0" message-id="kitchen-sink-1">
+  <data>
+    <interfaces xmlns="http://openconfig.net/yang/interfaces">
+      <!--
+        1. WAN uplink — physical ethernet with description, dual-stack
+           (single v4 + single v6 global address), MTU set (lossy on
+           round-trip into canonical), enabled.
+      -->
+      <interface>
+        <name>GigabitEthernet0/0/0</name>
+        <config>
+          <name>GigabitEthernet0/0/0</name>
+          <description>WAN uplink to upstream carrier</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+          <mtu>1500</mtu>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>198.51.100.1</ip>
+                  <config>
+                    <ip>198.51.100.1</ip>
+                    <prefix-length>30</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+            <ipv6 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>2001:db8:cafe::1</ip>
+                  <config>
+                    <ip>2001:db8:cafe::1</ip>
+                    <prefix-length>64</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv6>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        2. LAN downlink — ethernet with MULTIPLE IPv4 addresses on one
+           subinterface (primary + secondary).  Exercises list-handling
+           in CanonicalInterface.ipv4_addresses.
+      -->
+      <interface>
+        <name>GigabitEthernet0/0/1</name>
+        <config>
+          <name>GigabitEthernet0/0/1</name>
+          <description>LAN downlink (campus distribution)</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+          <mtu>9000</mtu>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.0.10.1</ip>
+                  <config>
+                    <ip>10.0.10.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+                <address>
+                  <ip>10.0.11.1</ip>
+                  <config>
+                    <ip>10.0.11.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+                <address>
+                  <ip>10.0.12.1</ip>
+                  <config>
+                    <ip>10.0.12.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        3. Administratively shut interface — exercises enabled=false
+           through the YANG-boolean strict parser.
+      -->
+      <interface>
+        <name>GigabitEthernet0/0/2</name>
+        <config>
+          <name>GigabitEthernet0/0/2</name>
+          <description>Reserved for future expansion (shutdown)</description>
+          <enabled>false</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+        </config>
+      </interface>
+
+      <!--
+        4. Subinterface on the parent ethernet (dot1q tag 100) — same
+           OpenConfig shape, just a non-zero index.  Exercises the parser's
+           ability to walk multiple <subinterface> entries under the SAME
+           parent <interface>; canonical bridge collapses every sub's
+           addresses up onto the parent CanonicalInterface, so this both
+           adds another v4 to the GigabitEthernet0/0/3 record AND
+           exercises the index!=0 code path on the wire.
+      -->
+      <interface>
+        <name>GigabitEthernet0/0/3</name>
+        <config>
+          <name>GigabitEthernet0/0/3</name>
+          <description>L3 routed port with dot1q subinterface trunk</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>172.16.0.1</ip>
+                  <config>
+                    <ip>172.16.0.1</ip>
+                    <prefix-length>30</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+          <subinterface>
+            <index>100</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>172.16.100.1</ip>
+                  <config>
+                    <ip>172.16.100.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        5. Loopback — softwareLoopback type, classic router-id pattern.
+           Single ipv4, no description, enabled.
+      -->
+      <interface>
+        <name>Loopback0</name>
+        <config>
+          <name>Loopback0</name>
+          <description>Router ID / iBGP peering loopback</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:softwareLoopback</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.255.255.1</ip>
+                  <config>
+                    <ip>10.255.255.1</ip>
+                    <prefix-length>32</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        6. IPv6-only loopback — exercises the v6-without-v4 path on the
+           subinterface, AND multiple IPv6 addresses (global + ULA).
+      -->
+      <interface>
+        <name>Loopback1</name>
+        <config>
+          <name>Loopback1</name>
+          <description>IPv6 router-id / dual-stack control plane</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:softwareLoopback</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv6 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>2001:db8::1</ip>
+                  <config>
+                    <ip>2001:db8::1</ip>
+                    <prefix-length>128</prefix-length>
+                  </config>
+                </address>
+                <address>
+                  <ip>fd00:db8:1::1</ip>
+                  <config>
+                    <ip>fd00:db8:1::1</ip>
+                    <prefix-length>128</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv6>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        7. Tunnel interface — exercises a non-ethernet, non-loopback
+           interface_type from the IANA registry.
+      -->
+      <interface>
+        <name>Tunnel100</name>
+        <config>
+          <name>Tunnel100</name>
+          <description>GRE overlay to remote site</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:tunnel</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.99.0.1</ip>
+                  <config>
+                    <ip>10.99.0.1</ip>
+                    <prefix-length>30</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        8. SVI / Vlan interface — l2vlan type, dual-stack.
+      -->
+      <interface>
+        <name>Vlan10</name>
+        <config>
+          <name>Vlan10</name>
+          <description>User VLAN 10 SVI</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:l2vlan</type>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.10.10.1</ip>
+                  <config>
+                    <ip>10.10.10.1</ip>
+                    <prefix-length>24</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+            <ipv6 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>2001:db8:10::1</ip>
+                  <config>
+                    <ip>2001:db8:10::1</ip>
+                    <prefix-length>64</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv6>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        9. Port-channel / LAG (logical aggregator) — ieee8023adLag type.
+           Has its own L3 config (the LAG itself is the routed entity).
+      -->
+      <interface>
+        <name>Port-channel1</name>
+        <config>
+          <name>Port-channel1</name>
+          <description>LACP bundle to upstream switch</description>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ieee8023adLag</type>
+          <mtu>9216</mtu>
+        </config>
+        <subinterfaces>
+          <subinterface>
+            <index>0</index>
+            <ipv4 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>10.20.30.1</ip>
+                  <config>
+                    <ip>10.20.30.1</ip>
+                    <prefix-length>30</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv4>
+            <ipv6 xmlns="http://openconfig.net/yang/interfaces/ip">
+              <addresses>
+                <address>
+                  <ip>2001:db8:20::1</ip>
+                  <config>
+                    <ip>2001:db8:20::1</ip>
+                    <prefix-length>126</prefix-length>
+                  </config>
+                </address>
+              </addresses>
+            </ipv6>
+          </subinterface>
+        </subinterfaces>
+      </interface>
+
+      <!--
+        10. Bare interface with no subinterfaces, no description — just
+            a name, enabled, and a type.  Exercises the minimum-fields
+            parse path so callers can't assume every interface has L3.
+      -->
+      <interface>
+        <name>GigabitEthernet0/0/4</name>
+        <config>
+          <name>GigabitEthernet0/0/4</name>
+          <enabled>true</enabled>
+          <type xmlns:ianaift="urn:ietf:params:xml:ns:yang:iana-if-type">ianaift:ethernetCsmacd</type>
+        </config>
+      </interface>
+    </interfaces>
+  </data>
+</rpc-reply>
