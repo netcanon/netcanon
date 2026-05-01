@@ -40,7 +40,11 @@ Silently ignored (Tier 3 — parse-tolerant):
     * spanning-tree mode / aaa authentication / daemon TerminAttr
 
 Module layout:
-    * codec.py — parse/render/probe entry class
+    * codec.py — ``AristaEOSCodec`` class (metadata, delegation,
+                 probe, port-name bridges)
+    * parse.py — line-scan + per-stanza dispatch over EOS
+                 ``show running-config`` text
+    * render.py — canonical tree → EOS CLI text
     * port_names.py — cross-vendor port-name bridge
 """
 
