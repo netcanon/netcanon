@@ -204,6 +204,83 @@
     min-width: 200px;
   }
   .defs-profile-hidden { display: none !important; }
+
+  /* Capability-count chips on the vendor/codec table.  Clickable
+     when the bucket has > 0 paths — expands a detail row directly
+     beneath the codec's row showing the actual paths + reasons.
+     Disabled (non-clickable, dimmed) when count is 0. */
+  .defs-caps-chip {
+    display: inline-block;
+    font-family: monospace;
+    font-size: .78rem;
+    padding: .05rem .35rem;
+    border-radius: 3px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .defs-caps-chip:hover:not(:disabled) {
+    background: var(--surface-elev);
+    color: var(--text-primary);
+    border-color: var(--border);
+  }
+  .defs-caps-chip[aria-expanded="true"] {
+    background: var(--surface-elev);
+    color: var(--text-primary);
+    border-color: var(--border-strong);
+  }
+  .defs-caps-chip:disabled {
+    cursor: default;
+    opacity: .55;
+  }
+  .defs-caps-chip-supported    { color: var(--badge-completed-fg, #22863a); }
+  .defs-caps-chip-lossy        { color: var(--badge-partial-fg, #b08800); }
+  .defs-caps-chip-unsupported  { color: var(--badge-failed-fg, #d73a49); }
+
+  /* Detail row that drops in beneath the codec row showing the
+     bucket's xpaths.  Keeps the table flow + uses ``colspan`` so
+     it spans the full row width.  ``data-codec-detail-active``
+     marks which bucket is currently shown so the toggle code can
+     swap content vs hide. */
+  .defs-caps-detail-cell {
+    background: var(--surface-elev);
+    padding: .6rem .75rem;
+    border-top: 1px dashed var(--border);
+  }
+  .defs-caps-detail-empty {
+    color: var(--text-faint);
+    font-style: italic;
+    font-size: .82rem;
+  }
+  .defs-caps-detail-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    grid-template-columns: minmax(180px, max-content) 1fr;
+    column-gap: 1rem;
+    row-gap: .35rem;
+    font-size: .82rem;
+  }
+  .defs-caps-detail-list code {
+    font-family: monospace;
+    color: var(--text-primary);
+  }
+  .defs-caps-detail-list .reason {
+    color: var(--text-muted);
+  }
+  .defs-caps-detail-list .severity {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: .7rem;
+    margin-right: .35rem;
+    letter-spacing: .03em;
+  }
+  .defs-caps-detail-list .severity-warn  { color: var(--badge-partial-fg, #b08800); }
+  .defs-caps-detail-list .severity-error { color: var(--badge-failed-fg, #d73a49); }
 </style>
 
 {# ═════════════════ 1. Backup-side device definitions ═════════════════ #}
@@ -555,11 +632,41 @@
             <td><code style="font-size:.78rem">{{ c.input_format }}</code></td>
             <td style="font-size:.78rem;color:var(--text-muted)"
                 data-testid="codec-caps-counts">
-              <span title="Supported xpaths">&#10003; {{ c.supported_count }}</span>
+              {# Each chip is a button: clickable when count > 0,
+                 disabled (greyed) when 0.  Click toggles a detail
+                 row inserted below this codec's row showing the
+                 bucket's actual xpaths + reasons.  See the
+                 ``codec-caps-chip-*`` testids for the click
+                 handlers. #}
+              <button type="button"
+                      class="defs-caps-chip defs-caps-chip-supported"
+                      data-testid="codec-caps-chip-supported"
+                      data-bucket="supported"
+                      data-codec="{{ c.name }}"
+                      title="Supported xpaths — click to expand"
+                      {% if c.supported_count == 0 %}disabled{% endif %}>
+                &#10003; {{ c.supported_count }}
+              </button>
               ·
-              <span title="Lossy xpaths (review-required on translate)">&#9888; {{ c.lossy_count }}</span>
+              <button type="button"
+                      class="defs-caps-chip defs-caps-chip-lossy"
+                      data-testid="codec-caps-chip-lossy"
+                      data-bucket="lossy"
+                      data-codec="{{ c.name }}"
+                      title="Lossy xpaths (review-required) — click to expand"
+                      {% if c.lossy_count == 0 %}disabled{% endif %}>
+                &#9888; {{ c.lossy_count }}
+              </button>
               ·
-              <span title="Unsupported xpaths (cannot be translated)">&#10007; {{ c.unsupported_count }}</span>
+              <button type="button"
+                      class="defs-caps-chip defs-caps-chip-unsupported"
+                      data-testid="codec-caps-chip-unsupported"
+                      data-bucket="unsupported"
+                      data-codec="{{ c.name }}"
+                      title="Unsupported xpaths — click to expand"
+                      {% if c.unsupported_count == 0 %}disabled{% endif %}>
+                &#10007; {{ c.unsupported_count }}
+              </button>
             </td>
           </tr>
           {% endfor %}
@@ -636,6 +743,176 @@ document.getElementById('reload-defs-btn').addEventListener('click', async funct
     }
   }
   input.addEventListener('input', applyFilter);
+})();
+
+/* ── Capability-detail expansion ──────────────────────────────────────
+ * Click a count chip on the Vendors+codecs table to drop a detail
+ * row beneath that codec showing the bucket's xpaths + per-path
+ * reasons.  Cached per codec name so re-clicking different chips
+ * for the same codec doesn't re-hit the server.
+ *
+ * State machine per codec row:
+ *   * No detail row visible → click any chip with count>0 fetches
+ *     the matrix (cached) + inserts a sibling <tr> with the bucket's
+ *     paths + reasons.  Chip aria-expanded=true.
+ *   * Detail row showing bucket X → click bucket X chip again hides
+ *     the detail row + clears aria-expanded.  Click a different
+ *     bucket Y → swap content + flip aria-expanded between chips.
+ *   * Disabled chips (count=0) are non-interactive.
+ *
+ * Cached matrix lives in a closure-scoped object so SPA-style page
+ * lifetime persistence isn't needed — page reload clears it which is
+ * fine because the data source (CapabilityMatrix in code) only
+ * changes when the server restarts. */
+(function() {
+  var capsCache = {};   // codec_name -> CapabilityMatrix
+  var loading = {};     // codec_name -> Promise (in-flight de-dupe)
+
+  async function fetchCaps(codecName) {
+    if (capsCache[codecName]) return capsCache[codecName];
+    if (loading[codecName]) return await loading[codecName];
+    var p = (async function() {
+      var resp = await fetch(
+        '/api/v1/migration/adapters/' + encodeURIComponent(codecName)
+        + '/capabilities'
+      );
+      if (!resp.ok) {
+        throw new Error('HTTP ' + resp.status + ' for ' + codecName);
+      }
+      var data = await resp.json();
+      capsCache[codecName] = data;
+      return data;
+    })();
+    loading[codecName] = p;
+    try {
+      return await p;
+    } finally {
+      delete loading[codecName];
+    }
+  }
+
+  function renderBucket(caps, bucket) {
+    /* The bucket-name → path-list mapping.  ``supported`` is a flat
+     * list of strings; ``lossy`` and ``unsupported`` are objects with
+     * {path, reason, severity}. */
+    if (bucket === 'supported') {
+      var paths = caps.supported || [];
+      if (!paths.length) {
+        return '<div class="defs-caps-detail-empty">'
+          + 'No supported xpaths declared for this codec.</div>';
+      }
+      var html = '<ul class="defs-caps-detail-list" '
+        + 'data-testid="codec-caps-detail-list-supported">';
+      paths.forEach(function(p) {
+        html += '<li><code>' + escapeHtml(p) + '</code></li>'
+          + '<li class="reason"></li>';
+      });
+      html += '</ul>';
+      return html;
+    }
+    var entries = caps[bucket] || [];
+    if (!entries.length) {
+      return '<div class="defs-caps-detail-empty">'
+        + 'No ' + escapeHtml(bucket) + ' xpaths declared for this codec.'
+        + '</div>';
+    }
+    var html = '<ul class="defs-caps-detail-list" '
+      + 'data-testid="codec-caps-detail-list-' + bucket + '">';
+    entries.forEach(function(e) {
+      var sev = (e.severity || (bucket === 'unsupported' ? 'error' : 'warn'))
+        .toLowerCase();
+      html += '<li><code>' + escapeHtml(e.path || '') + '</code></li>';
+      html += '<li class="reason">';
+      html += '<span class="severity severity-' + escapeHtml(sev) + '">'
+        + escapeHtml(sev) + '</span>';
+      html += escapeHtml(e.reason || '(no reason given)');
+      html += '</li>';
+    });
+    html += '</ul>';
+    return html;
+  }
+
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function clearChipState(codecRow) {
+    codecRow.querySelectorAll('.defs-caps-chip').forEach(function(b) {
+      b.removeAttribute('aria-expanded');
+    });
+  }
+
+  function findExistingDetailRow(codecRow) {
+    var sib = codecRow.nextElementSibling;
+    if (sib && sib.getAttribute('data-testid') === 'codec-caps-detail-row'
+        && sib.getAttribute('data-codec-name')
+            === codecRow.getAttribute('data-codec-name')) {
+      return sib;
+    }
+    return null;
+  }
+
+  function buildDetailRow(codecRow, bucket, caps) {
+    var existing = findExistingDetailRow(codecRow);
+    if (existing) existing.remove();
+    var tr = document.createElement('tr');
+    tr.setAttribute('data-testid', 'codec-caps-detail-row');
+    tr.setAttribute('data-codec-name',
+                    codecRow.getAttribute('data-codec-name'));
+    tr.setAttribute('data-bucket', bucket);
+    var td = document.createElement('td');
+    td.colSpan = 5;
+    td.className = 'defs-caps-detail-cell';
+    td.innerHTML = renderBucket(caps, bucket);
+    tr.appendChild(td);
+    codecRow.parentNode.insertBefore(tr, codecRow.nextSibling);
+    return tr;
+  }
+
+  document.addEventListener('click', async function(ev) {
+    var chip = ev.target.closest('.defs-caps-chip');
+    if (!chip || chip.disabled) return;
+    var bucket = chip.getAttribute('data-bucket');
+    var codecName = chip.getAttribute('data-codec');
+    var codecRow = chip.closest('tr[data-testid="vendor-codec-row"]');
+    if (!codecRow || !bucket || !codecName) return;
+    var existing = findExistingDetailRow(codecRow);
+    var sameBucket = existing
+      && existing.getAttribute('data-bucket') === bucket;
+    if (sameBucket) {
+      // Clicked the active bucket again → hide.
+      existing.remove();
+      clearChipState(codecRow);
+      return;
+    }
+    // Either no detail row, or showing a different bucket — fetch
+    // (or hit cache) and (re)build the detail row.
+    chip.disabled = true;   // brief lock to dedupe rapid clicks
+    try {
+      var caps = await fetchCaps(codecName);
+      buildDetailRow(codecRow, bucket, caps);
+      clearChipState(codecRow);
+      chip.setAttribute('aria-expanded', 'true');
+    } catch (err) {
+      var existingFail = findExistingDetailRow(codecRow);
+      if (existingFail) existingFail.remove();
+      var tr = document.createElement('tr');
+      tr.setAttribute('data-testid', 'codec-caps-detail-row');
+      tr.setAttribute('data-codec-name', codecName);
+      tr.setAttribute('data-bucket', bucket);
+      var td = document.createElement('td');
+      td.colSpan = 5;
+      td.className = 'defs-caps-detail-cell defs-caps-detail-empty';
+      td.textContent = 'Failed to load: ' + (err.message || String(err));
+      tr.appendChild(td);
+      codecRow.parentNode.insertBefore(tr, codecRow.nextSibling);
+    } finally {
+      chip.disabled = false;
+    }
+  });
 })();
 </script>
 {% endblock %}

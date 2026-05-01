@@ -281,7 +281,14 @@ The page exposes four sections — one `section-*` testid per container.
 | `codec-name`            | `<code>` | Codec identifier (matches `CodecBase.name`) |
 | `codec-direction`       | `<span class="defs-pill">` | Pill: `parse_only` / `render_only` / `bidirectional` |
 | `codec-certainty`       | `<span class="defs-pill defs-pill-<tier>">` | Pill: `certified` / `best_effort` / `experimental` |
-| `codec-caps-counts`     | `<td>` | Capability-matrix counts: `✓ N · ⚠ M · ✗ K` (supported / lossy / unsupported xpaths) |
+| `codec-caps-counts`     | `<td>` | Capability-matrix counts cell wrapping the three chips below |
+| `codec-caps-chip-supported`   | `<button>` | Clickable count chip `✓ N` for supported xpaths.  Click expands a detail row showing the full path list.  `disabled` when `N == 0` |
+| `codec-caps-chip-lossy`       | `<button>` | Clickable count chip `⚠ N` for lossy xpaths.  Click expands a detail row showing each path + reason + severity (`warn` / `error`) |
+| `codec-caps-chip-unsupported` | `<button>` | Clickable count chip `✗ N` for unsupported xpaths.  Click expands a detail row showing each path + reason |
+| `codec-caps-detail-row`       | `<tr>` | Dynamically-inserted row that drops in beneath a `vendor-codec-row` when a chip is clicked.  `data-codec-name` matches the parent codec; `data-bucket` is `supported` / `lossy` / `unsupported` |
+| `codec-caps-detail-list-supported`  | `<ul>` | Inside the detail row when bucket=supported.  Two-column grid: path, blank reason cell |
+| `codec-caps-detail-list-lossy`      | `<ul>` | Inside the detail row when bucket=lossy.  Two-column grid: path, severity-tagged reason |
+| `codec-caps-detail-list-unsupported`| `<ul>` | Inside the detail row when bucket=unsupported.  Two-column grid: path, severity-tagged reason |
 
 ## Jobs page (`jobs.html`)
 
@@ -645,6 +652,17 @@ surfaces under a shared left-rail navigation):
 
 ### RESERVED for Phase 2 (transforms + deploy)
 
+> **Aspirational — not yet shipped.**  The testids in the table below are
+> reserved names for the upcoming Phase 2 work (transforms wizard, semantic
+> delta banner, deploy confirmation flow).  None of these testids exist in
+> any template today.  Searching the `netconfig/templates/` tree for any of
+> them will return zero hits — that is expected.
+>
+> They are listed here so the Phase 2 implementation lands with stable
+> selectors that match the rest of the migrate-page naming convention.  Do
+> not write E2E tests against these names until the corresponding template
+> elements exist; the tests will fail.
+
 | `data-testid` (planned)               | Purpose |
 |---------------------------------------|---------|
 | `migrate-transforms-list`             | Container for applied transforms |
@@ -656,4 +674,12 @@ surfaces under a shared left-rail navigation):
 
 Note: the rendered-output review step reuses the existing `/configs/{L}/vs/{R}`
 diff page — no `migrate-diff-viewer` testid is needed.
+
+---
+
+## See also
+
+- [`README.md`](README.md) — test-suite layout, markers, mocking strategy
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — four-layer design and template organisation
+- [`../CLAUDE.md`](../CLAUDE.md) — selectors discipline (every interactive element carries a `data-testid`)
 

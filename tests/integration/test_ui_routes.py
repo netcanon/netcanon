@@ -413,6 +413,88 @@ class TestDefinitionsPageEnriched:
         assert 'data-testid="codec-direction"' in resp.text
         assert "defs-pill-direction" in resp.text
 
+    def test_capability_chips_are_buttons(
+        self, client: TestClient,
+    ) -> None:
+        """The supported / lossy / unsupported count cells render as
+        ``<button>`` elements with the expected testids — operators
+        click them to expand a detail row showing the actual paths.
+        Pre-fix these were inert ``<span>``s with hover tooltips
+        only."""
+        resp = client.get("/definitions")
+        for testid in (
+            "codec-caps-chip-supported",
+            "codec-caps-chip-lossy",
+            "codec-caps-chip-unsupported",
+        ):
+            assert f'data-testid="{testid}"' in resp.text, (
+                f"missing {testid!r} chip on /definitions"
+            )
+        # The chips must include the data-bucket + data-codec
+        # attributes the JS handler reads.
+        assert 'data-bucket="supported"' in resp.text
+        assert 'data-bucket="lossy"' in resp.text
+        assert 'data-bucket="unsupported"' in resp.text
+        assert 'data-codec="' in resp.text
+
+    def test_capability_chips_disabled_when_count_zero(
+        self, client: TestClient,
+    ) -> None:
+        """A chip whose count is 0 must render with the ``disabled``
+        attribute so it can't be clicked + visually communicates
+        "nothing to expand here".  The mock codec ships with zero
+        unsupported xpaths and zero lossy xpaths in its declared
+        capability matrix — guarding against accidental removal of
+        the conditional ``{% if count == 0 %}disabled{% endif %}``
+        in the template."""
+        resp = client.get("/definitions")
+        # The mock codec row should have at least one disabled chip.
+        assert 'disabled' in resp.text
+        # And at least one chip with a non-zero count must NOT be
+        # disabled — every shipped codec has supported xpaths > 0.
+        # Crude check: there's a chip without ``disabled`` somewhere
+        # before its closing tag.
+        import re
+        # Look for one chip-supported button that isn't disabled.
+        # The button definition spans multiple lines so use DOTALL.
+        m = re.search(
+            r'<button[^>]*data-testid="codec-caps-chip-supported"'
+            r'(?![^>]*disabled)[^>]*>',
+            resp.text,
+        )
+        assert m is not None, (
+            "expected at least one supported-chip without `disabled` "
+            "(every shipped codec has at least one supported xpath)"
+        )
+
+    def test_capabilities_endpoint_returns_full_matrix(
+        self, client: TestClient,
+    ) -> None:
+        """The detail-row JS calls
+        ``GET /api/v1/migration/adapters/{name}/capabilities`` to
+        populate the expanded view.  Lock in the response shape so
+        the JS bind doesn't silently break: must contain
+        ``supported`` (list of strings) + ``lossy`` (list of
+        path/reason objects) + ``unsupported`` (same shape as
+        lossy).  Use a real shipped codec — opnsense — so the
+        fixture is stable across test runs."""
+        resp = client.get(
+            "/api/v1/migration/adapters/opnsense/capabilities",
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "supported" in body
+        assert "lossy" in body
+        assert "unsupported" in body
+        assert isinstance(body["supported"], list)
+        # OPNsense's ``unsupported`` is non-empty (firewall rules,
+        # NAT, snmpv3 USM users) — exercise the lossy/unsupported
+        # entry shape that the JS expects.
+        assert len(body["unsupported"]) >= 1
+        first_unsupp = body["unsupported"][0]
+        assert "path" in first_unsupp
+        assert "reason" in first_unsupp
+
     def test_overlays_section_absent_when_no_overlays_loaded(
         self, client: TestClient,
     ) -> None:
