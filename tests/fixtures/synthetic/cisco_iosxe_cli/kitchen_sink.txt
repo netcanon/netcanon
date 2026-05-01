@@ -1,0 +1,226 @@
+Building configuration...
+
+Current configuration : 6420 bytes
+!
+! Last configuration change at 12:34:56 UTC Wed Apr 30 2026 by netadmin
+!
+version 17.9
+service timestamps debug datetime msec
+service timestamps log datetime msec localtime show-timezone
+service password-encryption
+platform punt-keepalive disable-kernel-core
+!
+hostname kitchensink-rtr01
+!
+boot-start-marker
+boot-end-marker
+!
+vrf definition Mgmt-vrf
+ description Out-of-band management VRF
+ rd 65000:1
+ !
+ address-family ipv4
+  route-target export 65000:1
+  route-target import 65000:1
+ exit-address-family
+!
+vrf definition CUSTOMER-A
+ description Tenant A — corp-overlay
+ rd 65000:100
+ !
+ address-family ipv4
+  route-target export 65000:100
+  route-target import 65000:100
+  route-target import 65000:999
+ exit-address-family
+!
+clock timezone UTC 0 0
+!
+ip domain name kitchensink.example.com
+ip name-server 198.51.100.53
+ip name-server 198.51.100.54
+ip name-server 2001:db8:53::1
+!
+ntp server 198.51.100.123
+ntp server 198.51.100.124
+!
+logging host 198.51.100.200
+logging host 198.51.100.201
+logging trap notifications
+logging facility local5
+!
+no aaa new-model
+aaa new-model
+aaa authentication login default group radius local
+aaa authorization exec default group radius local
+!
+username admin1 privilege 15 secret 5 $1$fakeABCD$ZqXcVbNmLkJhGfDsApZpQ.
+username admin2 privilege 15 secret 9 $9$fakeSCRYPTsaltAAAA$ZcVbNmLkJhGfDsApFakeScryptHashOutputForTesting12
+username operator1 privilege 5 secret 8 $8$fakePBKDF2salt$ZqXcVbNmLkJhGfDsApFakePbkdf2HashOutputForTesting34=
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name SERVERS
+!
+vlan 30
+ name VOICE
+!
+vlan 40
+ name GUESTS
+!
+!
+interface Port-channel1
+ description Uplink to core (LACP)
+ switchport
+ switchport mode trunk
+ switchport trunk native vlan 10
+ switchport trunk allowed vlan 10,20,30,40
+!
+interface Port-channel2
+ description Server bond (LACP passive)
+ switchport
+ switchport mode trunk
+ switchport trunk allowed vlan 20
+!
+interface Loopback0
+ description Router-ID and management loopback
+ ip address 10.255.255.1 255.255.255.255
+ ipv6 address 2001:db8:ffff::1/128
+!
+interface GigabitEthernet0/0/0
+ description WAN uplink to ISP-A
+ ip address 198.51.100.1 255.255.255.252
+ ipv6 address 2001:db8:beef::1/64
+ ipv6 address fe80::1 link-local
+ mtu 1500
+ no shutdown
+!
+interface GigabitEthernet0/0/1
+ description Access port — desk pool A
+ switchport
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 30
+ no shutdown
+!
+interface TenGigabitEthernet1/0/1
+ description LACP member to core (Po1)
+ switchport
+ switchport mode trunk
+ switchport trunk native vlan 10
+ switchport trunk allowed vlan 10,20,30,40
+ channel-group 1 mode active
+ no shutdown
+!
+interface TenGigabitEthernet1/0/2
+ description LACP member to core (Po1)
+ switchport
+ switchport mode trunk
+ switchport trunk native vlan 10
+ switchport trunk allowed vlan 10,20,30,40
+ channel-group 1 mode active
+ no shutdown
+!
+interface TenGigabitEthernet1/0/3
+ description Server bond member (Po2)
+ switchport
+ switchport mode trunk
+ switchport trunk allowed vlan 20
+ channel-group 2 mode passive
+ no shutdown
+!
+interface TenGigabitEthernet1/0/4
+ description Server bond member (Po2)
+ switchport
+ switchport mode trunk
+ switchport trunk allowed vlan 20
+ channel-group 2 mode passive
+ no shutdown
+!
+interface TenGigabitEthernet1/0/5
+ description Disabled spare port
+ shutdown
+!
+interface Vlan10
+ description Users SVI
+ ip address 192.168.10.1 255.255.255.0
+ ipv6 address 2001:db8:10::1/64
+!
+interface Vlan20
+ description Servers SVI
+ ip address 192.168.20.1 255.255.255.0
+!
+interface Vlan30
+ description Voice SVI
+ ip address 192.168.30.1 255.255.255.0
+!
+interface Vlan40
+ description Guests SVI
+ ip address 192.168.40.1 255.255.255.0
+!
+interface GigabitEthernet0
+ description Out-of-band management interface
+ vrf forwarding Mgmt-vrf
+ ip address 10.0.0.10 255.255.255.0
+ no shutdown
+!
+ip default-gateway 10.0.0.1
+!
+ip route 0.0.0.0 0.0.0.0 198.51.100.2
+ip route 10.10.0.0 255.255.0.0 198.51.100.2
+ip route 10.20.0.0 255.255.0.0 GigabitEthernet0/0/0
+ip route vrf CUSTOMER-A 172.16.0.0 255.255.0.0 198.51.100.50
+ipv6 route 2001:db8:cafe::/48 2001:db8:beef::2
+!
+ip dhcp pool USERS-POOL
+ network 192.168.10.0 255.255.255.0
+ default-router 192.168.10.1
+ dns-server 198.51.100.53 198.51.100.54
+ domain-name corp.kitchensink.example.com
+ lease 7 0 0
+!
+ip dhcp pool VOICE-POOL
+ network 192.168.30.0 255.255.255.0
+ default-router 192.168.30.1
+ dns-server 198.51.100.53
+ lease 1 0 0
+!
+radius server PRIMARY-AUTH
+ address ipv4 198.51.100.40 auth-port 1812 acct-port 1813
+ key 7 fakeRadiusSharedSecret01
+!
+radius server SECONDARY-AUTH
+ address ipv4 198.51.100.41 auth-port 1812 acct-port 1813
+ key 7 fakeRadiusSharedSecret02
+!
+snmp-server community publicRO RO
+snmp-server community privateRW RW
+snmp-server community restrictedV view OPS-MIBVIEW RO
+snmp-server location "Lab-A Rack 12 Unit 4"
+snmp-server contact "noc@kitchensink.example.com"
+snmp-server host 198.51.100.250 fakeTrapCommunity
+snmp-server host 198.51.100.251 fakeTrapCommunity
+snmp-server group MONITOR-GRP v3 priv read OPS-MIBVIEW
+snmp-server user monitor1 MONITOR-GRP v3 auth sha fakeAuthHashSha01 priv aes 128 fakePrivHashAes01
+snmp-server user monitor2 MONITOR-GRP v3 auth sha256 fakeAuthHashSha256 priv aes 256 fakePrivHashAes256
+!
+ip http server
+ip http secure-server
+ip ssh version 2
+!
+line con 0
+ logging synchronous
+ stopbits 1
+line vty 0 4
+ login authentication default
+ transport input ssh
+line vty 5 15
+ login authentication default
+ transport input ssh
+!
+end
