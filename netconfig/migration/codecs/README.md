@@ -76,10 +76,14 @@ vendor-specific mode tables) live in `parse.py` and get re-imported
 into `render.py` — one directional edge, no circular risk.
 
 Codecs with the split applied: **fortigate_cli** (first; Phase 1
-god-file cleanup), **opnsense** (XML wire-format reference), and
-**aruba_aoss** (banner + positional port-list reference).
-Remaining split candidates: mikrotik_routeros and cisco_iosxe_cli —
-apply opportunistically when each becomes painful; the pattern
+god-file cleanup), **opnsense** (XML wire-format reference),
+**aruba_aoss** (banner + positional port-list reference),
+**arista_eos** (Cisco-dialect parallel reference), and
+**cisco_iosxe_cli** (largest render path; ``_walk_canonical`` kept
+at module level in ``codec.py`` to preserve the cross-codec import
+surface every other codec's ``iter_xpaths`` reuses).
+Remaining split candidates: mikrotik_routeros — apply
+opportunistically when each becomes painful; the pattern
 generalises cleanly.  Tests that pin internal symbols
 (``_parse_blocks``, ``_prefix_to_mask``, ``_trim_xml_envelope``,
 ``_format_port_list``, ``_parse_port_list``) should import via
