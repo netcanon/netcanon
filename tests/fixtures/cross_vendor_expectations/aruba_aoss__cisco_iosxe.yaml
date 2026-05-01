@@ -1,0 +1,585 @@
+# Cross-vendor fidelity expectations: aruba_aoss -> cisco_iosxe
+#
+# Source: aruba_aoss codec (AOS-S `show running-config` text).
+# Target: cisco_iosxe codec — OpenConfig NETCONF YANG XML.  This is
+# the NETCONF/OpenConfig sibling of cisco_iosxe_cli (operator-paste
+# CLI).  Both target the same Cisco device family; the asymmetry on
+# this cross-pair is dominated by the cisco_iosxe codec being a
+# Phase-0.5 stub whose render emits ONLY the openconfig-interfaces
+# subtree (interfaces, IPv4, IPv6, description, enable, IANA type).
+# Every other canonical category that AOS-S parses (hostname, DNS,
+# NTP, syslog, VLANs, SNMP, RADIUS, local users, LAGs, static
+# routes) lands on the canonical tree but is silently dropped by
+# the cisco_iosxe target render — the codec walks intent.interfaces
+# only.
+#
+# Direction-specific framing: for fields the cisco_iosxe codec's
+# CapabilityMatrix declares `supported` but its render() never
+# emits (system, vlans, snmp, static-routes), the disposition here
+# is `unsupported` with reason citing the render-side wire-up gap.
+# The matrix declarations are aspirational — they exist so that
+# cross-codec mesh translations don't classify these paths as
+# `unsupported` on the target side, but the actual emit path is
+# narrow.  Honest classification beats matrix-deference.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_cisco_iosxe/
+#
+# Authored 2026-05-01 as part of Phase 3 cross-mesh audit (one of
+# six aruba_aoss-mesh parallel pairs).
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    Aruba AOS-S source consumed into a NETCONF/OpenConfig-driven
+    orchestration pipeline that uses the cisco_iosxe codec.  The
+    target render emits only the openconfig-interfaces subtree, so
+    this pair is appropriate ONLY for the narrow case where the
+    downstream consumer needs interface-level data and accepts that
+    everything else (VLANs, SNMP, RADIUS, users, LAGs, static
+    routes, system services) must be applied separately.  For a
+    real campus refresh from AOS-S to a Catalyst, route through
+    cisco_iosxe_cli instead — that pair is `certified` and emits
+    the full canonical surface.
+  certainty: medium
+  references:
+    - id: oc-interfaces
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/oc-interfaces.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/oc-interfaces.md
+      title: "openconfig-if-ip YANG schema docs (IPv4 / IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-system
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/system-services.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc-vlan
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/vlan-svi-loss.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: oc-network-instance
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/vxlan-evpn-vrf.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: oc-evpn
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/vxlan-evpn-vrf.md
+      title: "openconfig-evpn YANG model (GitHub)"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-05-01"
+    - id: aoss-mcg
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/aoss-out-of-scope.md
+      title: "Aruba ArubaOS-Switch 16.11 Management and Configuration Guide for 2930F/2930M/3810/5400R"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aoss-asg
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/snmp-and-aaa.md
+      title: "Aruba ArubaOS-Switch 16.11 Access Security Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aoss-atmg
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/vlan-svi-loss.md
+      title: "Aruba ArubaOS-Switch 16.10 Advanced Traffic Management Guide for 2930F/2930M/3810/5400R"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aoss-bog
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/port-naming.md
+      title: "Aruba ArubaOS-Switch 16.10 Basic Operation Guide for 2930F/2930M/3810/5400R"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/BOG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aoss-out-of-scope
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/aoss-out-of-scope.md
+      title: "AOS-S source content NOT carried through the OpenConfig render"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: interface-fields
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/interface-fields.md
+      title: "Interface canonical-core fields (per-field disposition)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: cisco-snmp-yang
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe/snmp-and-aaa.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.hostname from `hostname "<name>"`.
+      The cisco_iosxe NETCONF render does NOT walk intent.hostname —
+      _render_canonical() emits only the openconfig-interfaces subtree.
+      The CapabilityMatrix declares /system/hostname `supported` but
+      the declaration is aspirational (cross-codec mesh friendliness);
+      no `<system>` element appears in the output XML regardless of
+      source content.  Flips to good once render-side wire-up lands.
+    references: [oc-system, aoss-out-of-scope]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      AOS-S has no first-class domain directive parsed by the
+      aruba_aoss codec; intent.domain is always empty on this
+      direction so there's nothing for the cisco_iosxe render to
+      drop.  Even if both codecs wired domain, OpenConfig models it
+      via openconfig-system `<config><domain-name>` while AOS-S has
+      no clean equivalent.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.dns_servers from `ip dns
+      server-address priority N <addr>`.  cisco_iosxe render emits
+      no `<system><dns>` element (render-side wire-up gap; matrix
+      declares /system/dns-server `supported` aspirationally).
+      Flips to good once render is wired.
+    references: [oc-system, aoss-out-of-scope]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.ntp_servers from `sntp server
+      priority N <addr>` (note: AOS-S uses SNTP not NTP; the
+      protocol distinction is already collapsed on the canonical
+      layer at parse).  cisco_iosxe render emits no
+      `<system><ntp>` (render-side gap).  Flips to lossy once
+      wired (because of the SNTP/NTP collapse upstream of the
+      render).
+    references: [oc-system, aoss-out-of-scope]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      The aruba_aoss codec does not parse `time timezone
+      <minute-offset>` today (parse-side codec gap; deferred to
+      subsequent audit pass).  intent.timezone is empty after parse,
+      so nothing reaches the cisco_iosxe render.  Even with
+      bidirectional wire-up the format mapping (Aruba minute-offset
+      vs Cisco/OpenConfig IANA tz database identifier vs Cisco CLI
+      `clock timezone NAME OFFSET`) is lossy.
+    references: [oc-system]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.syslog_servers from `logging
+      <addr>`.  cisco_iosxe render emits no `<system><logging>`
+      (render-side wire-up gap).  Flips to good once wired
+      (host-list surface).
+    references: [oc-system, aoss-out-of-scope]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips: the AOS-S parser
+      produces CanonicalInterface records and the cisco_iosxe render
+      walks them.  Per-field drift is itemised below — name,
+      description, enabled, ipv4_addresses are good; interface_type
+      and ipv6_addresses (link-local scope) are lossy; switchport /
+      VLAN / LAG / VRF / DHCP-client fields are unsupported because
+      the cisco_iosxe render path doesn't emit the corresponding
+      OpenConfig subtrees.
+    references: [oc-interfaces, interface-fields]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      AOS-S bare-numeric / letter-port name -> OpenConfig
+      `<interface><name>` text verbatim, after the port-rename mesh
+      translates AOS-S `1` / `A1` to Cisco `GigabitEthernet1/0/1`
+      form.  Without the rename mesh, the literal AOS-S name
+      reaches the wire and a real Cisco device would reject it on
+      edit-config.
+    references: [oc-interfaces, aoss-bog]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trip.  AOS-S parses `name "<text>"` from the
+      interface stanza; cisco_iosxe render emits as
+      `<config><description>` verbatim.
+    references: [oc-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      AOS-S `enable` / `disable` (default enabled) maps to YANG
+      boolean `<enabled>true</enabled>` / `<enabled>false</enabled>`.
+      Strict YANG-bool parsing on the cisco_iosxe side accepts only
+      `"true"` / `"false"` (case-insensitive); the AOS-S codec emits
+      the canonical bool which serialises correctly.
+    references: [oc-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      AOS-S has no IANA ifType concept — the aruba_aoss codec
+      INFERS interface_type from name shape (bare numeric ->
+      ethernetCsmacd, Trk* -> ieee8023adLag, Vlan* -> l2vlan,
+      Loopback* -> softwareLoopback).  The cisco_iosxe render
+      emits the inferred IANA ident as `<config><type>`, but a
+      downstream OpenConfig consumer treats this as authoritative
+      when in fact it's an inference.  The asymmetry is mild —
+      both sides agree on the same mapping table — but a Cisco
+      Port-channel sub-interface (legitimate IANA type ieee8023adLag)
+      named with a bare numeric on AOS-S side could mis-classify.
+    references: [oc-interfaces, interface-fields]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      AOS-S has an `mtu` directive but the aruba_aoss parser does
+      NOT extract it (parse-side codec gap; deferred).
+      intent.interfaces[].mtu is None on parse; cisco_iosxe render
+      emits no `<config><mtu>` line.  Doubly-deferred: even if
+      AOS-S parse were wired, the cisco_iosxe matrix declares
+      /interfaces/interface/config/mtu `lossy` because OpenConfig's
+      single mtu leaf doesn't distinguish link-MTU from ip-MTU.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      AOS-S parser populates from VLAN SVI absorption (vlan N / ip
+      address X/N) and from routed-port `ip address` directives.
+      cisco_iosxe render emits as
+      `<subinterface><ipv4><addresses><address>` with prefix-length.
+      Round-trip lossless for the (ip, prefix) tuple.
+    references: [oc-if-ip]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe codec hard-codes scope="global" on every
+      parsed IPv6 address (link-local inference not yet wired).
+      The render side respects whatever scope is on the canonical
+      record — but since the AOS-S parser also defaults to global,
+      and the wire format has no scope discriminator natively in
+      this codec pair, link-local addresses (fe80::/10) get
+      mis-categorised as global on round-trip.  This is a long-
+      standing canonical-model gap, not introduced by this codec
+      pair.
+    references: [oc-if-ip, interface-fields]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates switchport state by re-projecting VLAN-
+      centric port membership (project_vlan_to_switchport
+      equivalent).  The cisco_iosxe render does NOT walk the
+      `openconfig-vlan:switched-vlan` augment under `<ethernet>`;
+      no switchport state appears in the output XML.  Render-side
+      wire-up gap.  Flips to good once wired.
+    references: [oc-vlan, interface-fields]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: Same `switched-vlan` augment render gap as switchport_mode.
+    references: [oc-vlan, interface-fields]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: Same render gap.  OpenConfig models this as `trunk-vlans` leaf-list.
+    references: [oc-vlan, interface-fields]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: Same render gap.
+    references: [oc-vlan, interface-fields]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      Doubly unsupported — the aruba_aoss parser doesn't populate
+      voice_vlan from AOS-S running-config (codec gap), AND the
+      cisco_iosxe render doesn't walk the OpenConfig voice-VLAN
+      augment (which isn't universally supported in OpenConfig
+      releases anyway).
+    references: [oc-vlan]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates lag_member_of from `trunk N-M trkX
+      <mode>` directives.  cisco_iosxe render does NOT emit the
+      `openconfig-if-aggregate:aggregate-id` leaf — render-side
+      gap.  Flips to good once wired.
+    references: [oc-interfaces, interface-fields]
+
+  "interfaces[].dhcp_client":
+    disposition: unsupported
+    reason: >
+      AOS-S parser doesn't populate dhcp_client (parse-side gap;
+      AOS-S has `ip address dhcp` but the codec doesn't extract
+      it).  cisco_iosxe render also doesn't walk the OpenConfig
+      DHCP-client augment.
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      AOS-S has no VRF concept (single global routing table).
+      intent.interfaces[].vrf is always empty on AOS-S parse, so
+      there's nothing for the cisco_iosxe render to emit even if
+      it walked `<network-instances>`.  Structurally absent on
+      this direction.
+    references: [oc-network-instance]
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.vlans with full VLAN-centric
+      records (id, name, tagged_ports, untagged_ports, SVI
+      addressing).  cisco_iosxe render does NOT walk intent.vlans —
+      _render_canonical() emits only the interfaces subtree.
+      Synthesised SVI interfaces (intent.interfaces[name="VlanN"])
+      DO survive via the interfaces walk, but the top-level
+      `<vlans>` declaration that should accompany them does not.
+      A downstream OpenConfig consumer would see SVIs without
+      VLAN-membership context.  Render-side wire-up gap; flips to
+      good once wired.
+    references: [oc-vlan, aoss-atmg]
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.static_routes from `ip route
+      DEST/N GW` and the legacy `ip default-gateway` form.
+      cisco_iosxe render does not walk `<network-instances>` /
+      `<protocols><protocol identifier=STATIC>` on emit.
+      Render-side wire-up gap; the matrix declares
+      /routing/static-route `supported` aspirationally.
+    references: [oc-network-instance, aoss-out-of-scope]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      AOS-S is primarily a DHCP relay platform, not a server.  The
+      aruba_aoss codec does not advertise /dhcp/pool in its
+      supported set, so intent.dhcp_servers is always empty on
+      this direction — nothing to render.  cisco_iosxe also has
+      no first-class OpenConfig DHCP-server model, so the field
+      stays not_applicable bidirectionally.
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.snmp (community, location,
+      contact, trap_hosts, v3_users).  cisco_iosxe render does
+      NOT walk intent.snmp.  Render-side wire-up gap on the v1/v2c
+      surface; the v3 surface is doubly unsupported because the
+      cisco_iosxe matrix lists /snmp/v3-user under `unsupported`
+      explicitly ("Phase 0.5 stub — SNMPv3 USM wire-up requires
+      Cisco-IOS-XE-snmp native YANG bridging").
+    references: [aoss-mcg, cisco-snmp-yang]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: Same render-side wire-up gap as snmp.
+    references: [aoss-mcg]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [aoss-mcg]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [aoss-mcg]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [aoss-mcg]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Doubly unsupported — render-side wire-up gap PLUS the
+      cisco_iosxe matrix declares /snmp/v3-user `unsupported`
+      explicitly (Phase 0.5 stub; SNMPv3 USM requires the
+      Cisco-IOS-XE-snmp native YANG module that isn't bridged
+      in this codec).  Even if v1/v2c SNMP eventually wires up,
+      v3 stays unsupported on the cisco_iosxe target until native-
+      YANG bridging lands.
+    references: [aoss-asg, cisco-snmp-yang]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.lags from `trunk N-M trkX
+      <mode>`.  cisco_iosxe render does NOT walk intent.lags or
+      emit the `openconfig-if-aggregate` augment.  Render-side
+      wire-up gap.
+    references: [oc-interfaces]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.local_users (manager / operator
+      roles, sha1 / bcrypt / plaintext hashes).  cisco_iosxe render
+      does NOT walk `<system><aaa><authentication><users>`.
+      Render-side gap.  Even if wired, hash-format incompatibility
+      (Aruba sha1/bcrypt vs Cisco type-5/8/9) would force re-keying
+      on the target — same lossy classification as the
+      cisco_iosxe_cli direction.
+    references: [aoss-asg, oc-system]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      AOS-S parser populates intent.radius_servers from
+      `radius-server host` + global key.  cisco_iosxe render does
+      NOT walk `<system><aaa><server-groups>`.  Render-side gap;
+      flips to good once wired.
+    references: [aoss-asg, oc-system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      AOS-S has no VXLAN concept; aruba_aoss matrix lists
+      /vxlan-vnis/* under `unsupported`.  cisco_iosxe matrix ALSO
+      lists /vxlan-vnis/* under `unsupported`.  intent.vxlan_vnis
+      is always empty on AOS-S parse.  Both sides agree: nothing
+      to translate.
+    references: [oc-evpn]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — AOS-S has no EVPN concept,
+      and intent.evpn_type5_routes is always empty on parse.
+    references: [oc-evpn]
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      AOS-S has no VRF concept (single global routing table on
+      ProCurve heritage hardware).  intent.routing_instances is
+      always empty on AOS-S parse.  cisco_iosxe render also
+      doesn't walk `<network-instances>`, so the field is doubly
+      not_applicable.
+    references: [oc-network-instance]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private; cross-vendor
+      migration drops it with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (apply-groups statement preservation per GAP
+      9b).  Aruba AOS-S and Cisco codecs do not emit apply_groups;
+      field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The structural framing is high-confidence: the cisco_iosxe
+#     codec's _render_canonical() is in-tree code that any reader
+#     can verify, and the conclusion that it walks intent.interfaces
+#     only is verifiable by code inspection.
+#
+#   * The interface canonical-core dispositions (good for name /
+#     description / enabled / ipv4 / ipv6; lossy for type / mtu /
+#     v6 link-local) are confidence-high — the cisco_iosxe matrix
+#     and the aruba_aoss matrix both agree on the same surface.
+#
+#   * The non-interface unsupported dispositions are confidence-
+#     medium: it's mechanically true that the render doesn't emit
+#     today, but the matrix declarations as `supported` (rather
+#     than `unsupported`) make the codec's INTENT clear — these
+#     should round-trip eventually.  An operator running this
+#     today must understand this is a Phase-0.5 codec.
+#
+#   * The IPv6 link-local lossy classification is medium-confidence:
+#     the cisco_iosxe codec hard-codes scope="global" but the
+#     aruba_aoss codec also defaults global, so on this specific
+#     pair the loss is upstream of both codecs.  When AOS-S adds
+#     link-local awareness, the lossy classification will become
+#     more authoritative.
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * timezone — aruba_aoss parse-side gap (`time timezone
+#     <minute-offset>` not extracted).
+#
+#   * mtu — aruba_aoss parse-side gap (mtu directive not
+#     extracted).
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The `unsupported` vs `not_applicable` distinction is doing
+#     a lot of work here.  For fields where the SOURCE has no
+#     concept (Aruba VRF, Aruba VXLAN), `not_applicable` is
+#     correct.  For fields where the source produces data but the
+#     target render silently drops, `unsupported` is correct (with
+#     reason citing render-side wire-up gap).  Mixing these two
+#     would obscure the actionable insight: "fix the cisco_iosxe
+#     render to walk intent.snmp" is mechanically different from
+#     "wait for AOS-S to grow VXLAN" (which is never going to
+#     happen).
+#
+#   * The cisco_iosxe codec is currently the bottleneck on every
+#     cross-pair where it appears as either source or target.
+#     Wiring its render to walk intent.{hostname,dns_servers,
+#     ntp_servers,syslog_servers,vlans,static_routes,snmp,lags,
+#     local_users,radius_servers} would convert ~12 unsupported
+#     dispositions in this YAML to good (or lossy where vendor
+#     mismatch dominates).
