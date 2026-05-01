@@ -1,0 +1,199 @@
+# Time: 2026-05-01 00:00:00 UTC
+#
+# Synthetic kitchen-sink fixture for the juniper_junos codec.
+# Intentionally exercises every canonical field declared 'supported'
+# or 'lossy' in JunosCodec._CAPS, plus the apply-groups two-pass parse
+# (GAP 8) and group-content round-trip (GAP 9b) which is unique to
+# Junos amongst the shipped codecs.  Hashes are FAKE per CLAUDE.md —
+# they look real but are not actual credentials.  Tested across
+# Junos 15-21+ grammar (no version-locked features used).
+#
+# Inventory:
+#   - hostname / domain / DNS / NTP / syslog / radius / time-zone
+#   - 8 interfaces (ge ethernet x2, lo0, ae0 LAG, irb SVI, em0/fxp0 mgmt)
+#     covering IPv4 + IPv6 + link-local, VLAN trunk + native, MTU
+#   - 4 named VLANs, 3 with VXLAN VNI mappings + switch-options globals
+#   - static routes (IPv4 default, IPv4 named, IPv6 default)
+#   - 3 routing-instances (vrf, mac-vrf, virtual-router) with RD,
+#     vrf-target import/export, interface bindings, L3 VNI for Type-5
+#   - 2 LAGs (ae0 + ae1) with members via 802.3ad ether-options
+#   - 3 local users with different auth-key forms
+#     (ssh-rsa key, password $6$..., no-password / class-only)
+#   - SNMP v1/v2c communities (RO + RW) + trap-group + 2 v3 USM users
+#   - apply-groups: GLOBAL-SETTINGS feeds interface description+mtu
+#     into ge-0/0/0 (validates two-pass parse inheritance)
+#
+set version 21.4R3.15
+set system host-name kitchen-sink-junos
+set system domain-name lab.example.net
+set system time-zone America/New_York
+set system name-server 10.0.0.53
+set system name-server 10.0.0.54
+set system ntp server 10.0.0.123
+set system ntp server 10.0.0.124 prefer
+set system syslog host 10.0.0.250 any any
+set system syslog host 10.0.0.251 any notice
+set system radius-server 10.0.0.200 secret "$9$fakeRadiusSecret$1"
+set system radius-server 10.0.0.201 port 1812 secret "$9$fakeRadiusSecret$2"
+set system services ssh root-login allow
+set system services netconf ssh
+set system root-authentication encrypted-password "$6$fakeRoot$fakeRootHashAbcDef0123456789"
+#
+# --- local users (3 — different auth-key shapes) ---
+#
+set system login user admin uid 2000
+set system login user admin class super-user
+set system login user admin authentication encrypted-password "$6$fakeAdmin$fakeAdminHash01234567890123"
+set system login user operator uid 2001
+set system login user operator class operator
+set system login user operator authentication encrypted-password "$6$fakeOp$fakeOpHash9876543210"
+set system login user readonly uid 2002
+set system login user readonly class read-only
+set system login user readonly authentication ssh-rsa "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDfakePublicKeyContent01234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ readonly@kitchen-sink"
+#
+# --- apply-groups (Junos two-pass parse — GAP 8 / GAP 9b) ---
+# GLOBAL-SETTINGS contributes the description + MTU on ge-0/0/0; the
+# top-level interface lines that follow add IP addresses on top.  The
+# parser's two-pass dispatch resolves group content first, then top
+# level, so the resulting CanonicalInterface ge-0/0/0 carries BOTH
+# the inherited description+MTU and the directly-set IPv4/IPv6.
+#
+set groups GLOBAL-SETTINGS interfaces ge-0/0/0 description "Inherited from GLOBAL-SETTINGS apply-group"
+set groups GLOBAL-SETTINGS interfaces ge-0/0/0 mtu 9000
+set groups GLOBAL-SETTINGS system syslog host 10.0.0.252 any info
+set apply-groups GLOBAL-SETTINGS
+#
+# --- interfaces ---
+#
+# ge-0/0/0: IPv4 + IPv6 (global), inherits description+mtu from group
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/31
+set interfaces ge-0/0/0 unit 0 family inet6 address 2001:db8::1/64
+#
+# ge-0/0/1: VLAN trunk + native (Junos ethernet-switching surface;
+# the trunk/native sub-paths are Tier-3 parse-and-ignore in v1, but
+# we include them for realism and round-trip).  Per-unit vlan-id
+# below populates CanonicalInterface.access_vlan.
+set interfaces ge-0/0/1 description "Trunk to access switch"
+set interfaces ge-0/0/1 mtu 9100
+set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members USERS
+set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members VOICE
+set interfaces ge-0/0/1 unit 0 family ethernet-switching native-vlan-id 1
+#
+# Sub-interface (unit 100) materialises as ge-0/0/1.100 with access_vlan=100.
+set interfaces ge-0/0/1 unit 100 vlan-id 100
+set interfaces ge-0/0/1 unit 100 family inet address 10.100.0.1/24
+#
+# lo0: IPv4 + IPv6 global + IPv6 link-local
+set interfaces lo0 description "VTEP / router-id loopback"
+set interfaces lo0 unit 0 family inet address 172.16.0.1/32
+set interfaces lo0 unit 0 family inet6 address 2001:db8:ffff::1/128
+set interfaces lo0 unit 0 family inet6 address fe80::1/64
+#
+# ae0: LAG (aggregated-ethernet); members declared via ether-options
+# 802.3ad on physical interfaces.  LAG membership is parse-and-ignore
+# on Junos in v1 (no CanonicalLAG populated) but the ae0 IP block
+# still materialises as a regular interface.
+set interfaces ge-0/0/2 description "LAG ae0 member 1"
+set interfaces ge-0/0/2 ether-options 802.3ad ae0
+set interfaces ge-0/0/3 description "LAG ae0 member 2"
+set interfaces ge-0/0/3 ether-options 802.3ad ae0
+set interfaces ge-0/0/4 description "LAG ae1 member 1"
+set interfaces ge-0/0/4 ether-options 802.3ad ae1
+set interfaces ge-0/0/5 description "LAG ae1 member 2"
+set interfaces ge-0/0/5 ether-options 802.3ad ae1
+set interfaces ae0 description "Bonded uplink to spine"
+set interfaces ae0 mtu 9192
+set interfaces ae0 aggregated-ether-options lacp active
+set interfaces ae0 unit 0 family inet address 10.1.0.1/31
+set interfaces ae1 description "Bonded trunk to leaf-02"
+set interfaces ae1 aggregated-ether-options lacp active
+set interfaces ae1 unit 0 family inet address 10.1.0.3/31
+#
+# irb: SVI for VLAN 100 + 200 (sub-interface units materialise as
+# irb.100 / irb.200 since the parent name doesn't match the
+# physical-port slash regex).
+set interfaces irb unit 100 family inet address 172.16.100.1/24
+set interfaces irb unit 100 family inet6 address 2001:db8:100::1/64
+set interfaces irb unit 200 family inet address 172.16.200.1/24
+#
+# em0: management
+set interfaces em0 description "Management interface (em0)"
+set interfaces em0 unit 0 family inet address 192.168.100.10/24
+set interfaces em0 unit 0 family inet6 address 2001:db8:100::a/64
+#
+# fxp0: out-of-band management
+set interfaces fxp0 description "OOB management (fxp0)"
+set interfaces fxp0 unit 0 family inet address 192.168.99.10/24
+#
+# Disabled interface to exercise the disable surface
+set interfaces ge-0/0/9 description "Reserved -- administratively down"
+set interfaces ge-0/0/9 disable
+#
+# --- VLANs (4 named, 3 with VXLAN VNI mappings) ---
+#
+set vlans USERS vlan-id 10
+set vlans USERS vxlan vni 10010
+set vlans VOICE vlan-id 20
+set vlans VOICE vxlan vni 10020
+set vlans TENANT_A_DATA vlan-id 100
+set vlans TENANT_A_DATA l3-interface irb.100
+set vlans TENANT_A_DATA vxlan vni 10100
+set vlans TRANSIT vlan-id 200
+set vlans TRANSIT l3-interface irb.200
+#
+# --- switch-options (VXLAN globals — GAP-EVPN-2) ---
+#
+set switch-options vtep-source-interface lo0.0
+set switch-options route-distinguisher 172.16.0.1:1
+set switch-options vrf-target target:65000:9999
+set switch-options vxlan-port 4789
+#
+# --- routing-instances (3 — vrf, mac-vrf, virtual-router) ---
+#
+set routing-instances TENANT_A instance-type vrf
+set routing-instances TENANT_A description "Tenant A L3 VRF"
+set routing-instances TENANT_A route-distinguisher 172.16.0.1:10000
+set routing-instances TENANT_A vrf-target target:65000:10000
+set routing-instances TENANT_A interface irb.100
+set routing-instances TENANT_A protocols evpn ip-prefix-routes vni 50100
+set routing-instances TENANT_B instance-type mac-vrf
+set routing-instances TENANT_B description "Tenant B L2 mac-vrf"
+set routing-instances TENANT_B route-distinguisher 172.16.0.1:20000
+set routing-instances TENANT_B vrf-target import target:65000:20000
+set routing-instances TENANT_B vrf-target export target:65000:20001
+set routing-instances TENANT_B interface irb.200
+set routing-instances RTR_C instance-type virtual-router
+set routing-instances RTR_C description "Lightweight virtual router for transit"
+set routing-instances RTR_C interface ge-0/0/0.0
+#
+# --- routing-options (static routes — IPv4 default, IPv4 named, IPv6 default) ---
+#
+set routing-options static route 0.0.0.0/0 next-hop 10.0.0.2
+set routing-options static route 10.50.0.0/16 next-hop 10.0.0.3
+set routing-options static route ::/0 next-hop 2001:db8::2
+set routing-options router-id 172.16.0.1
+set routing-options autonomous-system 65001
+#
+# --- SNMP v1/v2c + v3 ---
+#
+set snmp community public authorization read-only
+set snmp community private authorization read-write
+set snmp location "Synthetic Lab Rack 7"
+set snmp contact "noc@example.net"
+set snmp trap-group monitoring targets 10.0.0.250
+set snmp trap-group monitoring targets 10.0.0.251
+#
+# v3 USM users (2): one MD5+DES, one SHA256+AES256
+set snmp v3 usm local-engine user monitor authentication-md5 authentication-key "$9$fakeMd5AuthKey$1"
+set snmp v3 usm local-engine user monitor privacy-des privacy-key "$9$fakeDesPrivKey$1"
+set snmp v3 vacm security-to-group security-model usm security-name monitor group netadmin
+set snmp v3 usm local-engine user readonly_v3 authentication-sha256 authentication-key "$9$fakeSha256AuthKey$2"
+set snmp v3 usm local-engine user readonly_v3 privacy-aes256 privacy-key "$9$fakeAes256PrivKey$2"
+set snmp v3 vacm security-to-group security-model usm security-name readonly_v3 group readonly
+#
+# --- protocols (Tier-3 parse-and-ignore, included for realism) ---
+#
+set protocols lldp interface all
+set protocols rstp interface ge-0/0/0
+set protocols rstp interface ge-0/0/1
