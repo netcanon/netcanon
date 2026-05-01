@@ -1,0 +1,606 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> cisco_iosxe
+#
+# Same vendor, different wire format:
+#   * source = `cisco_iosxe_cli`  — operator-paste running-config text
+#   * target = `cisco_iosxe`      — NETCONF / OpenConfig YANG XML
+#
+# Both codecs target the same Cisco IOS-XE 17.x platform family
+# (Catalyst 9K, ISR, ASR1K, Cat8000V).  In theory this cross-pair
+# should round-trip near-100% because both wire formats project the
+# same operational state.  In practice this repository's `cisco_iosxe`
+# codec is a Phase-0.5 stub (declared `best_effort` certification, not
+# `certified`) whose parse/render only walks `<interfaces>` and IPv4 /
+# IPv6 addresses — many paths declared `supported` in its capability
+# matrix are aspirational.  Drift on this cross-pair is therefore
+# overwhelmingly **codec wire-up gap**, not **model gap**.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/
+#
+# Authored 2026-04-30 as part of Phase 3 cross-mesh audit (one of seven
+# parallel pairs).
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    Cross-format same-vendor migration: pasting a Catalyst 9300 /
+    ISR4K `show running-config` into a NETCONF/OpenConfig-driven
+    orchestration pipeline (e.g. NSO, Cisco Crosswork, ServiceNow
+    OPN integrations).  Demonstrates the `OpenConfig surface` ceiling
+    on field portability — anything Cisco-IOS-XE-native models that
+    OpenConfig doesn't is dropped on render.
+  certainty: medium
+  references:
+    - id: cisco-yang-blog
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/oc-vs-native-yang.md
+      title: "Native, IETF, OpenConfig... Why so many YANG models? (Cisco Blogs)"
+      source_url: "https://blogs.cisco.com/developer/which-yang-model-to-use"
+      retrieved: "2026-04-30"
+      excerpt: >
+        Cisco models are typically a superset of what OpenConfig offers,
+        and requests for an OpenConfig data element are converted to the
+        corresponding native data element.
+    - id: iosxe-prog-guide-1715
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/oc-vs-native-yang.md
+      title: "Programmability Configuration Guide, Cisco IOS XE 17.15.x — NETCONF Protocol"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/prog/configuration/1715/b_1715_programmability_cg/m_1715_prog_yang_netconf.html"
+      retrieved: "2026-04-30"
+      excerpt: >
+        Execute the `show running-config | format netconf-xml` command
+        to translate IOS commands into the NETCONF-YANG XML format.
+    - id: oc-interfaces
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/interfaces.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-interface-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/interfaces.md
+      title: "Cisco IOS XE 17 Interface and Hardware Component Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/int-hw/b-int-hw.html"
+      retrieved: "2026-04-30"
+    - id: oc-vlan
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/vlans-and-switchport.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-vlan-cg-1717
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/vlans-and-switchport.md
+      title: "VLAN Configuration Guide, Cisco IOS XE 17.17.x (Catalyst 9600)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9600/software/release/17-17/configuration_guide/vlan/b_1717_vlan_9600_cg/configuring_vlans.html"
+      retrieved: "2026-04-30"
+    - id: oc-network-instance
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/static-routes.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-04-30"
+    - id: iosxe-routing-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/static-routes.md
+      title: "IP Routing Configuration Guide, Cisco IOS XE 17.x — Recursive Static Route"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/ip-routing/b-ip-routing/m_iri-recursive-static-route-xe.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-multivrf
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/vrf-and-network-instance.md
+      title: "IP Routing Configuration Guide, Cisco IOS XE 17.x — Multi-VRF Support (VRF-Lite)"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/ip-routing/b-ip-routing/m_mp-multi-vrf-vrf-lite.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-snmp-17
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/snmp.md
+      title: "SNMP Configuration Guide, Cisco IOS XE 17"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/snmp/configuration/xe-17-x/snmp-xe-17-book/nm-snmp-cfg-snmp-support.html"
+      retrieved: "2026-04-30"
+    - id: cisco-snmp-yang
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/snmp.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-04-30"
+    - id: oc-system
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/system-services.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-systemmgmt-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/system-services.md
+      title: "System Management Configuration Guide, Cisco IOS XE 17.x"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/syst-mgmt/b-system-management.html"
+      retrieved: "2026-04-30"
+    - id: oc-system-aaa
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/local-users-and-aaa.md
+      title: "openconfig-system AAA augment"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-secusr-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/local-users-and-aaa.md
+      title: "Security Configuration Guide, Cisco IOS XE 17.x — User Accounts"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/routers/ios/config/17-x/sec-usr/b-sec-usr.html"
+      retrieved: "2026-04-30"
+    - id: cisco-iosxe-native-yang
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/banner-and-cli-only.md
+      title: "Cisco-IOS-XE-native.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1761/Cisco-IOS-XE-native.yang"
+      retrieved: "2026-04-30"
+    - id: iosxe-vxlan-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/vxlan-and-evpn.md
+      title: "Catalyst 9000 Series EVPN-VXLAN Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-15/configuration_guide/vxlan/b_1715_bgp_evpn_vxlan_9300_cg.html"
+      retrieved: "2026-04-30"
+    - id: oc-evpn
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/vxlan-and-evpn.md
+      title: "openconfig-evpn YANG model"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-04-30"
+    - id: oc-if-aggregate
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/lags-and-dhcp.md
+      title: "openconfig-if-aggregate YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-aggregate.html"
+      retrieved: "2026-04-30"
+    - id: iosxe-dhcp-cg
+      path: docs/vendor-references/cisco_iosxe_cli_to_cisco_iosxe/lags-and-dhcp.md
+      title: "Cisco-IOS-XE-dhcp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/tree/main/vendor/cisco/xe"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      The `cisco_iosxe` NETCONF codec declares `/system/hostname` as
+      supported in its capability matrix but its render path does not
+      emit any `<system>` XML — the codec is a Phase-0.5 stub that
+      walks `<interfaces>` only.  CLI source's hostname is dropped on
+      render.  When `<system>` rendering is wired this flips to good
+      (same vendor, same database, identical name on the wire).
+    references: [oc-system, cisco-yang-blog]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Same Phase-0.5 wire-up gap as hostname.  CLI source's `ip domain
+      name <fqdn>` is dropped because the NETCONF render emits no
+      `<system>` element today.  Flips to good once `<system>` is
+      wired.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      Same Phase-0.5 wire-up gap.  CLI source's `ip name-server`
+      addresses are dropped on render because the NETCONF codec emits
+      no `<system><dns>` XML today.  Flips to good once wired.
+    references: [oc-system]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Same Phase-0.5 wire-up gap as dns_servers.  Even after `<system>`
+      wire-up the canonical `ntp_servers: list[str]` shape is host-
+      only — per-server options (`prefer`, `iburst`, `key`, `source`)
+      are not modelled and would still drop on round-trip.  This
+      pre-existing canonical-model decision applies cross-vendor
+      everywhere.
+    references: [oc-system]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Same Phase-0.5 wire-up gap.  Even after wire-up the field flips
+      to lossy rather than good: CLI emits Cisco's named-zone-with-
+      offset form (`clock timezone PST -8 0`); OpenConfig models a
+      single `timezone-name` leaf preferring IANA tz database
+      identifiers (`America/Los_Angeles`).  Cross-format mapping
+      requires an operator-curated table; DST behaviour
+      (`clock summer-time`) is a separate CLI concept with no
+      OpenConfig equivalent.
+    references: [oc-system, iosxe-systemmgmt-cg]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Same Phase-0.5 wire-up gap.  CLI source's `logging host`
+      addresses dropped on render.  Flips to good once `<system>
+      <logging>` is wired (canonical surface is host-only; per-host
+      severity / facility tokens are pre-existing canonical-model
+      gap, lossy by design across vendors).
+    references: [oc-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips through the NETCONF
+      codec's parse/render — name / description / enabled /
+      interface_type / IPv4 / IPv6 are good.  The lossy classification
+      reflects per-field drift listed below: switchport / VLAN / LAG /
+      VRF / DHCP-client fields are unsupported (NETCONF codec wire-up
+      gap), and MTU / interface_type are lossy due to OpenConfig
+      versus CLI model divergence.
+    references: [oc-interfaces, iosxe-interface-cg]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Verbatim same-vendor name (`GigabitEthernet1/0/1`,
+      `Loopback0`, `Vlan100`).  No rename mesh involvement; the
+      port-name convention is identical on both wire formats.
+    references: [oc-interfaces]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-form text round-trips verbatim (XML CDATA encoding handles
+      special chars).
+    references: [oc-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      CLI `no shutdown` -> YANG `enabled: true`; CLI `shutdown` ->
+      `enabled: false`.  Default is enabled on both sides.
+    references: [oc-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      CLI codec infers IANA type from the name prefix
+      (GigabitEthernet -> ethernetCsmacd, Loopback -> softwareLoopback,
+      Port-channel -> ieee8023adLag) and passes it through to the
+      `<config><type>` leaf.  Inference covers the common types but
+      not all platform-specific shapes (Service-Engine, Tunnel
+      variants, Cellular).  Documented in the CLI codec's capability
+      matrix as `LossyPath(/interfaces/interface/config/type)`.
+    references: [oc-interfaces]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      IOS-XE native CLI distinguishes `mtu N` (link-MTU), `ip mtu N`
+      (IPv4 MTU), `ipv6 mtu N` (IPv6 MTU), and `mpls mtu N`.
+      OpenConfig models a single `mtu` leaf at the interface level;
+      cross-format round-trip collapses to `mtu N` (link).  Documented
+      in `cisco_iosxe` codec capability matrix as
+      `LossyPath(/interfaces/interface/config/mtu)`.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Dotted-decimal mask <-> prefix-length conversion handled by the
+      CLI codec; canonical representation is prefix-length so the
+      NETCONF render emits `<prefix-length>` cleanly.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv6_addresses":
+    disposition: good
+    note: >
+      GAP-EVPN-3 wired IPv6 in both codecs.  CLI parser handles
+      `ipv6 address <addr>/<prefix>` and the NETCONF codec emits the
+      `<ipv6><addresses><address>` subtree.  Link-local scope
+      discriminator is not yet inferred from the wire by either
+      codec (treated as global).
+    references: [oc-interfaces]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      The `cisco_iosxe` NETCONF codec does not wire the
+      `openconfig-vlan` `switched-vlan` augment.  CLI source's
+      `switchport mode access|trunk` is dropped on render.  When
+      wired this flips to good (interface-mode enum maps cleanly).
+    references: [oc-vlan, iosxe-vlan-cg-1717]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: >
+      Same `switched-vlan` wire-up gap as switchport_mode.  CLI
+      source's `switchport access vlan <N>` is dropped.  Flips to
+      good once wired.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      Same wire-up gap.  CLI source's `switchport trunk allowed vlan
+      <list>` is dropped.  Flips to good once wired (OpenConfig
+      models `trunk-vlans` as a leaf-list with range support).
+    references: [oc-vlan]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      Same wire-up gap.  CLI source's `switchport trunk native vlan
+      <N>` is dropped.  Flips to good once wired.
+    references: [oc-vlan]
+
+  "interfaces[].voice_vlan":
+    disposition: unsupported
+    reason: >
+      Same wire-up gap, plus an additional model-coverage gap:
+      OpenConfig models voice-VLAN under a separate augment
+      (`oc-vlan` + voip extension) that is not universally supported
+      on Catalyst platforms.  Even after switched-vlan wire-up this
+      may remain lossy.
+    references: [oc-vlan]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      The NETCONF codec does not wire the `openconfig-if-aggregate`
+      augment; CLI source's `channel-group <N> mode active` is
+      dropped on render (the `<aggregate-id>` leaf under
+      `<ethernet>` would carry it).  Flips to good once wired.
+    references: [oc-if-aggregate]
+
+  "interfaces[].dhcp_client":
+    disposition: unsupported
+    reason: >
+      OpenConfig models DHCP client via the `dhcp` augment under the
+      IPv4 subinterface; the NETCONF codec doesn't wire it.  CLI
+      source's `ip address dhcp` is dropped on render.
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      The CLI codec parse-and-ignores `vrf forwarding <name>` on
+      interfaces (its `/routing-instances/instance` capability path
+      is declared `unsupported`); even if it parsed, the NETCONF
+      codec does not render `<network-instance><interfaces>` mappings.
+      Cross-pair drops VRF membership entirely today.
+    references: [oc-network-instance, iosxe-multivrf]
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      The CLI codec parses `vlan <id> / name <X>` into `intent.vlans`,
+      but the NETCONF codec does not render `<network-instances>
+      <vlans>` XML.  Entire VLAN database is dropped on render.  Flips
+      to good once VLAN rendering is wired (canonical-stable surface:
+      id / name / description / tagged_ports / untagged_ports /
+      ipv4_addresses).
+    references: [oc-vlan]
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      The CLI codec parses `ip route ...` lines into
+      `intent.static_routes`, but the NETCONF codec does not render
+      `<network-instances><protocols><protocol identifier=STATIC>` XML.
+      Routes are dropped on render.  Per-VRF routes also have a
+      canonical-model gap (`CanonicalStaticRoute` lacks a `vrf`
+      field).  Flips to good for default-VRF on wire-up; per-VRF
+      stays lossy.
+    references: [oc-network-instance, iosxe-routing-cg]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      OpenConfig has no fully-baked DHCP server model in widely-
+      deployed Cisco IOS-XE versions; the NETCONF codec doesn't wire
+      DHCP at all.  CLI source's `ip dhcp pool` blocks are dropped.
+      This is a model-coverage gap (not a Phase-0.5 wire-up gap),
+      so the disposition stays `unsupported` even with future codec
+      work; bridging would require a Cisco-IOS-XE-dhcp native YANG
+      sibling codec.
+    references: [iosxe-dhcp-cg]
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      The NETCONF codec declares `/snmp/community`, `/snmp/location`,
+      `/snmp/contact`, `/snmp/trap-host` as supported and `/snmp/v3-
+      user` as explicitly unsupported, but the codec's render path
+      emits no SNMP XML.  All five canonical SNMP fields are dropped
+      on render.  Flips to good for v1/v2c surface and good for v3
+      same-vendor (engineID stable so passphrase hashes round-trip)
+      once wired.
+    references: [iosxe-snmp-17, cisco-snmp-yang]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: >
+      Phase-0.5 wire-up gap.  Same as `snmp` above.
+    references: [iosxe-snmp-17]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: Phase-0.5 wire-up gap. Same as `snmp` above.
+    references: [iosxe-snmp-17]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: Phase-0.5 wire-up gap. Same as `snmp` above.
+    references: [iosxe-snmp-17]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: Phase-0.5 wire-up gap. Same as `snmp` above.
+    references: [iosxe-snmp-17]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      The NETCONF codec capability matrix lists `/snmp/v3-user` under
+      `unsupported` explicitly: "The NETCONF/OpenConfig codec is a
+      stub (Phase 0.5 experimental) — SNMPv3 USM wire-up requires the
+      Cisco-IOS-XE-snmp native YANG module, not covered today."  CLI
+      source's v3 users are dropped.  Note: the codec's
+      `unsupported_rename_categories = frozenset({"snmpv3"})` exists
+      to surface this gap in the per-pane override UI.
+    references: [iosxe-snmp-17, cisco-snmp-yang]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      The NETCONF codec doesn't wire the `openconfig-if-aggregate`
+      augment.  CLI source's Port-channel<N> interfaces and member
+      `channel-group` lines are dropped on render.  Flips to good
+      once wired (same `Port-channel<N>` naming, same LACP modes).
+    references: [oc-if-aggregate]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      The NETCONF codec doesn't wire the `openconfig-system` AAA
+      augment.  CLI source's `username <name> privilege <N> secret <T>
+      <hash>` lines are dropped on render.  Flips to good once
+      wired — and unlike the cross-vendor case, hash bytes
+      (Cisco type-9 `$9$`, type-8 PBKDF2, type-5 `$1$`) round-trip
+      verbatim same-vendor.
+    references: [oc-system-aaa, iosxe-secusr-cg]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Same `openconfig-system` AAA wire-up gap.  CLI source's
+      `radius server <name>` blocks are dropped on render.  Flips to
+      good once wired (host / key / auth_port / acct_port surface;
+      type-7 obfuscated and type-6 AES-encrypted shared secrets
+      round-trip same-vendor-same-engine).
+    references: [oc-system-aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Both codecs declare every `/vxlan-vnis/*` path as `unsupported`
+      in their capability matrices: "VXLAN not modelled in this
+      NETCONF/OpenConfig stub codec.  CLI sibling defers VXLAN wire-
+      up until Catalyst demand arrives; NETCONF stays in lockstep."
+      CanonicalVxlan schema exists; cross-pair drops vxlan_vnis
+      entirely.
+    references: [iosxe-vxlan-cg, oc-evpn]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      The CLI codec lists `/evpn-type5-routes/route` under `lossy`
+      (deferred to route-map / policy-statement parsing) and the
+      NETCONF codec doesn't model EVPN at all.  No codec populates
+      per-prefix records today.  Same disposition as the cross-vendor
+      DC pairs — the canonical surface for EVPN Type-5 intent is
+      `CanonicalRoutingInstance.l3_vni`, not per-prefix records.
+    references: [oc-evpn, iosxe-vxlan-cg]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The CLI codec capability matrix declares
+      `/routing-instances/instance` as `unsupported` ("VRF
+      declarations and per-interface `vrf forwarding <name>` parse-
+      and-ignore in v1.  CanonicalRoutingInstance schema exists; IOS-
+      XE wire-up deferred").  The NETCONF codec doesn't model
+      network-instances either.  Cross-pair drops routing_instances
+      entirely; this is the highest-value wire-up opportunity for
+      this same-vendor pair (Catalyst customer environments use
+      VRF-Lite extensively).
+    references: [oc-network-instance, iosxe-multivrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 by design — never auto-rendered.  Each codec's
+      raw_sections content is wire-format-private; cross-format
+      migration drops it with a banner.  CLI parser populates
+      raw_sections with the unparsed stanzas (banner motd, AAA
+      policy, route-maps, ACLs, line vty config); NETCONF render
+      ignores.  Same shape across all cross-pairs.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec doesn't
+      consume it.  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (`apply-groups` statement preservation per GAP
+      9b).  Cisco IOS-XE codecs (CLI and NETCONF) do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The cross-format framing is high-confidence: vendor docs are
+#     clear that OpenConfig is a translation overlay on top of Cisco-
+#     IOS-XE-native, and the CLI/NETCONF correspondence on a real
+#     IOS-XE 17.x device is well-documented (`show running-config |
+#     format netconf-xml` is the device's own ground truth).
+#
+#   * The per-field disposition is low-medium-confidence because the
+#     `cisco_iosxe` codec in this repository is a Phase-0.5 stub.
+#     Many paths declared `supported` in its capability matrix
+#     (`/system/hostname`, `/snmp/community`, `/vlans/vlan/id`,
+#     `/routing/static-route`) are aspirational — the codec's
+#     parse/render only walks `<interfaces>` today.  Actually
+#     measuring per-field round-trip on a real device would require
+#     the NETCONF codec to be substantially more complete than it is.
+#
+#   * The framing of `unsupported` (codec wire-up gap) versus
+#     `not_applicable` (already not in canonical model) is honest:
+#     hostname/dns/ntp/snmp/vlans/static_routes are all in the
+#     canonical model but the codec doesn't wire them, hence
+#     unsupported.  Banner motd / service timestamps / route-maps are
+#     not in the canonical model, hence absent from this YAML's per-
+#     field expectations entirely.
+#
+# Deferred items (none — every CanonicalIntent top-level field is
+# enumerated above with a concrete disposition).
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The `cisco_iosxe` codec's capability matrix declares far more
+#     paths as `supported` than the codec's render path actually
+#     emits.  The matrix is aspirational scoping rather than a
+#     truthful description of current behaviour.  A future hardening
+#     pass might introduce a runtime guard that asserts every
+#     `supported` path is actually walked by the codec's iter_xpaths
+#     output on a representative tree.
+#
+#   * Same-vendor v3 SNMP USM passphrase round-trip is materially
+#     different from the cross-vendor case.  In cross-vendor pairs
+#     the engineID divergence forces re-keying; in this pair the
+#     engineID is constant (same physical device or same vendor-
+#     model engineID derivation), so passphrase hashes survive
+#     verbatim.  This is not currently called out in the codec's
+#     capability matrix and could be surfaced in the validation
+#     report as a green-checkmark for the cross-format same-vendor
+#     case specifically.
