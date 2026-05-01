@@ -742,21 +742,20 @@ TIER 3 — interactive rename modal in /migrate UI.
        and noticed dropped semantic surface.  Five separable items
        ordered smallest → largest:
 
-  (1) ARISTA `router bgp / vlan N / rd ... / route-target both ...`
-      → CanonicalRoutingInstance (small, ~1hr).  The RD + RT data
-      IS already canonically modelled on CanonicalRoutingInstance,
-      but the Arista parser ONLY populates it from top-level
-      `vrf instance <name>` declarations.  This per-VLAN EVPN
-      binding form goes through unparsed.  Fix lives in
-      arista_eos/codec.py — extend the existing `router bgp`
-      block-walker (already present for VRF parsing under
-      `router bgp / vrf <name>`) to ALSO recognise
-      `router bgp / vlan <N>` and route the rd / route-target /
-      redistribute entries into a CanonicalRoutingInstance keyed
-      by the VLAN name (matching the CanonicalVlan.name).
-      Tests: a new fixture-driven test that asserts
-      tree.routing_instances populates RD + RT from the bgp/vlan
-      form on the karneliuk EOS 4.26 fixture.
+  (1) [SHIPPED] ARISTA `router bgp / vlan N / rd ... /
+      route-target both ...` → CanonicalRoutingInstance with
+      `instance_type="mac-vrf"`.  Parser extends the existing
+      `_parse_router_bgp` block-walker; render emits per-VLAN
+      `vlan <vid>` blocks under `router bgp <asn>` for every
+      mac-vrf routing-instance.  The L3 `vrf <name>` path
+      continues to use `instance_type="vrf"` (unchanged).
+      Critical depth check: the new `vlan <N>` matcher only fires
+      at the 3-space top-level indent within router-bgp so it
+      does NOT spuriously fire on nested `vlan-aware-bundle ...
+      / vlan <range>` lines (a separate EOS form that is
+      parse-and-ignore today).  See test_arista_eos
+      TestBgpVlanMacVrf + the karneliuk EOS 4.26 real-capture
+      assertion.
 
   (2) [SHIPPED] CanonicalVxlan source-interface + udp-port.
       CanonicalVxlan now carries {vlan_id, vni, mcast_group,

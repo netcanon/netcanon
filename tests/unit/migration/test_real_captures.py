@@ -472,3 +472,40 @@ def test_arista_vxlan_source_interface_survives_parse(
             f"{expected_source_interface!r}"
         )
         assert rec.udp_port == 4789  # both fixtures use the IANA default
+
+
+# ---------------------------------------------------------------------------
+# GAP-EVPN-1: ``router bgp / vlan N / rd ... / route-target both ...``
+# populates a CanonicalRoutingInstance keyed by the matching
+# CanonicalVlan.name with ``instance_type="mac-vrf"``.  Regression
+# guard against the silent-drop bug pattern (#1) flagged in
+# translator-plans.txt.
+# ---------------------------------------------------------------------------
+
+
+def test_arista_bgp_vlan_mac_vrf_survives_karneliuk_parse() -> None:
+    """The karneliuk EOS 4.26 fixture declares
+    ``router bgp 65033 / vlan 100 / rd 10.0.255.33:100 /
+    route-target both 65000:100``.  All three pieces must populate a
+    CanonicalRoutingInstance keyed ``Tenant_100`` (the matching
+    CanonicalVlan.name)."""
+    path = (
+        REAL_FIXTURES_ROOT / "arista_eos" / "karneliuk_a_eos1_eos4260.txt"
+    )
+    if not path.is_file():
+        pytest.skip("karneliuk fixture not present")
+    codec = get_codec("arista_eos")
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    intent = codec.parse(raw)
+    ri = next(
+        (r for r in intent.routing_instances if r.name == "Tenant_100"),
+        None,
+    )
+    assert ri is not None, (
+        f"Expected MAC-VRF for VLAN 100 named Tenant_100; got "
+        f"routing_instances={[r.name for r in intent.routing_instances]}"
+    )
+    assert ri.instance_type == "mac-vrf"
+    assert ri.route_distinguisher == "10.0.255.33:100"
+    assert ri.rt_imports == ["65000:100"]
+    assert ri.rt_exports == ["65000:100"]

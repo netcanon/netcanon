@@ -32,7 +32,10 @@ not just the EOS 4.26 trigger fixture.
   (CanonicalRoutingInstance with `instance_type="mac-vrf"`).  The
   per-VLAN EVPN binding form (`router bgp / vlan N / rd ... /
   route-target both ...`) now populates a CanonicalRoutingInstance
-  keyed by the VLAN name — previously parse-and-ignore.
+  keyed by the VLAN name — previously parse-and-ignore.  The new
+  `vlan <N>` recognition is depth-restricted (3-space top-level
+  router-bgp sub) so nested `vlan-aware-bundle ... / vlan <N>` lines
+  don't spuriously spawn MAC-VRF entries.
 
 ### Fixed (OPNsense paramiko-shell backups breaking the migrate parser)
 

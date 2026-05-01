@@ -585,78 +585,145 @@ class AristaEOSCodec(CodecBase):
         self, raw: str, intent: CanonicalIntent,
     ) -> None:
         """Parse ``router bgp <asn> / vrf <name> / rd <rd> /
-        route-target import|export|both <rt>`` — the pieces we care
-        about for VRF metadata.  BGP neighbor/address-family details
-        stay parse-and-ignore.
+        route-target import|export|both <rt>`` — VRF metadata — AND
+        ``router bgp <asn> / vlan <N> / rd ... / route-target ...``
+        — the per-VLAN EVPN MAC-VRF binding form (GAP-EVPN-1).
+        BGP neighbor/address-family details stay parse-and-ignore.
 
-        Lines in EOS `router bgp` are indented; `vrf <name>` nests
-        3-spaces deeper than the router-bgp stanza.  We track stanza
-        depth via leading-whitespace count.
+        Lines in EOS `router bgp` are indented; `vrf <name>` and
+        `vlan <N>` nest 3-spaces deeper than the router-bgp stanza.
+        We track stanza depth via leading-whitespace count.
+
+        For ``vlan <N>``: the routing-instance is keyed by the
+        matching CanonicalVlan.name (the ``vlan <N> name <NAME>``
+        block earlier in the file).  ``instance_type="mac-vrf"`` to
+        discriminate from L3 VRF entries (``instance_type="vrf"``).
+        Junos render emits these with the same instance_type
+        propagated.
         """
         in_bgp = False
-        current_vrf: CanonicalRoutingInstance | None = None
+        # Renamed from current_vrf — now tracks both VRF and MAC-VRF
+        # contexts with the same RD/RT machinery.
+        current_ri: CanonicalRoutingInstance | None = None
         for raw_line in raw.splitlines():
             stripped = raw_line.strip()
             # Blank line: end of file / section.
             if not stripped:
                 in_bgp = False
-                current_vrf = None
+                current_ri = None
                 continue
             # Top-level ``router bgp <asn>`` opens the section.
             if raw_line.startswith("router bgp "):
                 in_bgp = True
-                current_vrf = None
+                current_ri = None
                 continue
             # ``!`` alone (possibly indented) is a sub-stanza separator
-            # inside router-bgp; close the per-vrf context but KEEP
-            # in_bgp active so the next ``vrf <name>`` block parses.
+            # inside router-bgp; close the per-vrf / per-vlan context
+            # but KEEP in_bgp active so the next sub-stanza parses.
             if stripped == "!":
-                current_vrf = None
+                current_ri = None
                 continue
             # Another top-level stanza (non-indented, non-comment)
             # closes router-bgp.
             if not raw_line.startswith((" ", "\t")):
                 in_bgp = False
-                current_vrf = None
+                current_ri = None
                 continue
             if not in_bgp:
                 continue
             # Inside router-bgp: 3-space indent for top-level router
-            # subs, 6-space indent for per-vrf subs.  Count leading
-            # spaces to distinguish.
+            # subs, 6-space indent for per-vrf / per-vlan subs.  Count
+            # leading spaces to distinguish.
             leading_spaces = len(raw_line) - len(raw_line.lstrip(" "))
             if stripped.startswith("vrf "):
                 vrf_name = stripped.split(None, 1)[1].strip()
-                current_vrf = next(
+                current_ri = next(
                     (r for r in intent.routing_instances if r.name == vrf_name),
                     None,
                 )
-                if current_vrf is None:
+                if current_ri is None:
                     # ``router bgp X / vrf Y`` declares a VRF context
                     # even if no standalone ``vrf instance Y`` was
                     # seen upstream — create one so RD/RTs don't get
                     # dropped.
-                    current_vrf = CanonicalRoutingInstance(name=vrf_name)
-                    intent.routing_instances.append(current_vrf)
+                    current_ri = CanonicalRoutingInstance(name=vrf_name)
+                    intent.routing_instances.append(current_ri)
+                # Defensive: a freshly-seen VRF context is L3, not
+                # MAC-VRF.  If a previous parse had marked it
+                # ``mac-vrf``, that's a re-declaration error and we
+                # leave the existing tag (don't silently flip).
                 continue
-            if current_vrf is None:
+            # GAP-EVPN-1: ``vlan <N>`` opens a per-VLAN EVPN MAC-VRF
+            # binding block.  Look up the matching CanonicalVlan to
+            # derive the routing-instance name (vlan.name when set;
+            # ``VLAN<N>`` synthetic fallback otherwise).  The same
+            # synthetic-name convention lets render look up the
+            # source vlan_id back from the routing-instance name.
+            #
+            # CRITICAL: only fire at the 3-space top-level indent
+            # within router-bgp.  At deeper indents, ``vlan <N>``
+            # appears as a sub-line of vlan-aware-bundle blocks
+            # (``vlan-aware-bundle <NAME> / vlan 110``) and would
+            # otherwise spawn a spurious MAC-VRF context.
+            m_vlan = (
+                re.match(r"^vlan\s+(\d+)\s*$", stripped)
+                if leading_spaces == 3 else None
+            )
+            if m_vlan:
+                try:
+                    vid = int(m_vlan.group(1))
+                except ValueError:
+                    current_ri = None
+                    continue
+                vlan = next(
+                    (v for v in intent.vlans if v.id == vid), None,
+                )
+                ri_name = (vlan.name if vlan and vlan.name else f"VLAN{vid}")
+                existing = next(
+                    (r for r in intent.routing_instances if r.name == ri_name),
+                    None,
+                )
+                if existing is None:
+                    current_ri = CanonicalRoutingInstance(
+                        name=ri_name, instance_type="mac-vrf",
+                    )
+                    intent.routing_instances.append(current_ri)
+                else:
+                    # Existing entry: tag it as mac-vrf if no other
+                    # parse path already populated as L3.  ``vrf``
+                    # context wins by precedence; if both are seen
+                    # (extremely unusual — same name as both an L3
+                    # VRF and a MAC-VRF binding), keep the first
+                    # type and merge RD/RTs.
+                    current_ri = existing
+                    if (
+                        existing.instance_type == "vrf"
+                        and not existing.route_distinguisher
+                        and not existing.rt_imports
+                        and not existing.rt_exports
+                    ):
+                        # Empty placeholder — safe to upgrade.
+                        existing.instance_type = "mac-vrf"
                 continue
-            # Deeper indent = sub-command of ``vrf <name>``.
+            if current_ri is None:
+                continue
+            # Deeper indent = sub-command of ``vrf <name>`` or
+            # ``vlan <N>``.
             if leading_spaces < 6:
-                # Back up to router-bgp top-level — close vrf context.
-                current_vrf = None
+                # Back up to router-bgp top-level — close context.
+                current_ri = None
                 continue
             if stripped.startswith("rd "):
                 parts = stripped.split(None, 1)
                 if len(parts) >= 2:
-                    current_vrf.route_distinguisher = parts[1].strip()
+                    current_ri.route_distinguisher = parts[1].strip()
                 continue
             if stripped.startswith("route-target both "):
                 rt = stripped.split(None, 2)[2].strip()
-                if rt not in current_vrf.rt_imports:
-                    current_vrf.rt_imports.append(rt)
-                if rt not in current_vrf.rt_exports:
-                    current_vrf.rt_exports.append(rt)
+                if rt not in current_ri.rt_imports:
+                    current_ri.rt_imports.append(rt)
+                if rt not in current_ri.rt_exports:
+                    current_ri.rt_exports.append(rt)
                 continue
             if stripped.startswith("route-target import "):
                 rt = stripped.split(None, 2)[2].strip()
@@ -666,16 +733,19 @@ class AristaEOSCodec(CodecBase):
                 # actual RT follows.  Strip the ``evpn `` prefix.
                 if rt.startswith("evpn "):
                     rt = rt[len("evpn "):].strip()
-                if rt and rt not in current_vrf.rt_imports:
-                    current_vrf.rt_imports.append(rt)
+                if rt and rt not in current_ri.rt_imports:
+                    current_ri.rt_imports.append(rt)
                 continue
             if stripped.startswith("route-target export "):
                 rt = stripped.split(None, 2)[2].strip()
                 if rt.startswith("evpn "):
                     rt = rt[len("evpn "):].strip()
-                if rt and rt not in current_vrf.rt_exports:
-                    current_vrf.rt_exports.append(rt)
+                if rt and rt not in current_ri.rt_exports:
+                    current_ri.rt_exports.append(rt)
                 continue
+            # ``redistribute learned`` / ``redistribute connected`` —
+            # parse-and-ignore.  Future enrichment under
+            # CanonicalRoutingInstance.redistribute_*.
 
     def _apply_iface_subcommand(
         self,
@@ -935,11 +1005,17 @@ class AristaEOSCodec(CodecBase):
                 out.append(" ".join(parts))
             out.append("!")
 
-        # --- VRF instances (GAP 6) — declare every canonical VRF via
-        #     ``vrf instance <name>``.  RD + RTs emit later under
-        #     router-bgp / vrf <name>. ---
-        if tree.routing_instances:
-            for ri in tree.routing_instances:
+        # --- VRF instances (GAP 6) — declare every canonical L3 VRF
+        #     via ``vrf instance <name>``.  RD + RTs emit later
+        #     under router-bgp / vrf <name>.  GAP-EVPN-1 mac-vrf
+        #     entries are NOT L3 VRFs and skip this block — they're
+        #     emitted purely under router-bgp / vlan <vid>.
+        l3_vrfs = [
+            ri for ri in tree.routing_instances
+            if ri.instance_type != "mac-vrf"
+        ]
+        if l3_vrfs:
+            for ri in l3_vrfs:
                 out.append(f"vrf instance {ri.name}")
             out.append("!")
 
@@ -1057,20 +1133,48 @@ class AristaEOSCodec(CodecBase):
                     out.append(f"   vxlan vrf {ri.name} vni {ri.l3_vni}")
             out.append("!")
 
-        # --- router bgp VRF blocks (GAP 6) — emit ``router bgp <asn> /
-        #     vrf <name> / rd / route-target import/export`` when any
-        #     VRF carries RD or RTs.  ASN defaults to a placeholder
-        #     since CanonicalIntent doesn't model BGP config beyond
-        #     what VRFs need; operators re-emit as needed.
-        vrfs_with_bgp_meta = [
+        # --- router bgp blocks (GAP 6 + GAP-EVPN-1) — emit
+        #     ``router bgp <asn>`` carrying:
+        #       * ``vrf <name> / rd / route-target ...`` for L3 VRFs
+        #         (instance_type == "vrf")
+        #       * ``vlan <vid> / rd / route-target ...`` for per-VLAN
+        #         EVPN MAC-VRF bindings (instance_type == "mac-vrf",
+        #         GAP-EVPN-1).  vid is reverse-looked-up from the
+        #         routing-instance name → CanonicalVlan.name match.
+        #     ASN defaults to a placeholder since CanonicalIntent
+        #     doesn't model BGP config beyond what VRFs need;
+        #     operators re-emit as needed.
+        ris_with_bgp_meta = [
             ri for ri in tree.routing_instances
             if ri.route_distinguisher or ri.rt_imports or ri.rt_exports
         ]
-        if vrfs_with_bgp_meta:
+        if ris_with_bgp_meta:
+            # Build a name→vlan_id lookup for the MAC-VRF emit path.
+            vid_by_name = {
+                v.name: v.id for v in tree.vlans if v.name
+            }
             out.append("router bgp 65000")
-            for ri in vrfs_with_bgp_meta:
+            for ri in ris_with_bgp_meta:
                 out.append("   !")
-                out.append(f"   vrf {ri.name}")
+                if ri.instance_type == "mac-vrf":
+                    # Reverse-lookup the VLAN id by name.  Fall back
+                    # to parsing ``VLAN<N>`` synthetic-form (the
+                    # parse path uses this when CanonicalVlan.name
+                    # is empty).  If neither works, skip — render
+                    # would emit an invalid ``vlan <name>`` line.
+                    vid = vid_by_name.get(ri.name)
+                    if vid is None and ri.name.startswith("VLAN"):
+                        try:
+                            vid = int(ri.name[len("VLAN"):])
+                        except ValueError:
+                            vid = None
+                    if vid is None:
+                        # Can't resolve back to a VID — skip the
+                        # block rather than emit nonsense.
+                        continue
+                    out.append(f"   vlan {vid}")
+                else:
+                    out.append(f"   vrf {ri.name}")
                 if ri.route_distinguisher:
                     out.append(f"      rd {ri.route_distinguisher}")
                 # Use ``route-target both`` for matched import/export
@@ -1086,6 +1190,12 @@ class AristaEOSCodec(CodecBase):
                         out.append(f"      route-target import evpn {rt}")
                     for rt in ri.rt_exports:
                         out.append(f"      route-target export evpn {rt}")
+                if ri.instance_type == "mac-vrf":
+                    # ``redistribute learned`` is the canonical EOS
+                    # default for MAC-VRF blocks — emit it so a
+                    # round-trip of a fresh-from-Arista MAC-VRF
+                    # continues to advertise locally-learned MACs.
+                    out.append("      redistribute learned")
             out.append("!")
 
         # --- Static routes ---

@@ -561,6 +561,242 @@ class TestVxlanSourceInterfaceUdpPort:
             assert rec.udp_port == 4789
 
 
+class TestBgpVlanMacVrf:
+    """GAP-EVPN-1: ``router bgp <asn> / vlan <N> / rd ... /
+    route-target both ...`` is the per-VLAN EVPN MAC-VRF binding form.
+    Populates a CanonicalRoutingInstance keyed by the matching
+    CanonicalVlan.name with ``instance_type="mac-vrf"``."""
+
+    def test_parse_bgp_vlan_mac_vrf_minimal(self):
+        raw = (
+            "vlan 100\n"
+            "   name Tenant_100\n"
+            "!\n"
+            "router bgp 65033\n"
+            "   router-id 10.0.255.33\n"
+            "   !\n"
+            "   vlan 100\n"
+            "      rd 10.0.255.33:100\n"
+            "      route-target both 65000:100\n"
+            "      redistribute learned\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        ri = next(
+            (r for r in intent.routing_instances if r.name == "Tenant_100"),
+            None,
+        )
+        assert ri is not None, (
+            f"Expected MAC-VRF for VLAN 100 with name Tenant_100; "
+            f"got {[r.name for r in intent.routing_instances]}"
+        )
+        assert ri.instance_type == "mac-vrf"
+        assert ri.route_distinguisher == "10.0.255.33:100"
+        assert ri.rt_imports == ["65000:100"]
+        assert ri.rt_exports == ["65000:100"]
+
+    def test_parse_bgp_vlan_unnamed_vlan_uses_synthetic_name(self):
+        # CanonicalVlan with no name → routing-instance keyed
+        # ``VLAN<N>`` synthetic-form so render can reverse-resolve.
+        raw = (
+            "vlan 200\n"
+            "!\n"
+            "router bgp 65000\n"
+            "   !\n"
+            "   vlan 200\n"
+            "      rd 1.1.1.1:200\n"
+            "      route-target both 65000:200\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        ri = next(
+            (r for r in intent.routing_instances if r.name == "VLAN200"),
+            None,
+        )
+        assert ri is not None
+        assert ri.instance_type == "mac-vrf"
+        assert ri.route_distinguisher == "1.1.1.1:200"
+
+    def test_parse_bgp_vlan_does_not_match_inside_vlan_aware_bundle(self):
+        # Per-VLAN EVPN form must NOT spawn spurious MAC-VRF entries
+        # from nested ``vlan <N>`` lines under
+        # ``vlan-aware-bundle <NAME> / vlan <N|range>`` (a deeper indent
+        # form that is NOT a top-level router-bgp sub-stanza).
+        raw = (
+            "vlan 110\n"
+            "   name V110\n"
+            "!\n"
+            "vlan 111\n"
+            "   name V111\n"
+            "!\n"
+            "router bgp 65000\n"
+            "   !\n"
+            "   vlan-aware-bundle MyBundle\n"
+            "      rd 1.1.1.1:111\n"
+            "      route-target both 65000:111\n"
+            "      vlan 110\n"
+            "      vlan 111\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        # The vlan-aware-bundle form is parse-and-ignore today, but
+        # the inner ``vlan 110`` / ``vlan 111`` lines must NOT
+        # surface as MAC-VRF entries.
+        names = [r.name for r in intent.routing_instances]
+        assert "V110" not in names
+        assert "V111" not in names
+        assert "VLAN110" not in names
+        assert "VLAN111" not in names
+
+    def test_parse_bgp_vlan_separate_import_export(self):
+        raw = (
+            "vlan 100\n"
+            "   name Tenant_100\n"
+            "!\n"
+            "router bgp 65000\n"
+            "   !\n"
+            "   vlan 100\n"
+            "      rd 1.1.1.1:100\n"
+            "      route-target import evpn 65000:100\n"
+            "      route-target export evpn 65000:200\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        ri = next(r for r in intent.routing_instances if r.name == "Tenant_100")
+        assert ri.rt_imports == ["65000:100"]
+        assert ri.rt_exports == ["65000:200"]
+
+    def test_render_emits_bgp_vlan_block_for_mac_vrf(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(id=100, name="Tenant_100")],
+            routing_instances=[
+                __import__(
+                    "netconfig.migration.canonical.intent",
+                    fromlist=["CanonicalRoutingInstance"],
+                ).CanonicalRoutingInstance(
+                    name="Tenant_100",
+                    instance_type="mac-vrf",
+                    route_distinguisher="10.0.255.33:100",
+                    rt_imports=["65000:100"],
+                    rt_exports=["65000:100"],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "router bgp 65000" in out
+        assert "   vlan 100" in out
+        assert "      rd 10.0.255.33:100" in out
+        assert "      route-target both 65000:100" in out
+        assert "      redistribute learned" in out
+        # MAC-VRF is NOT an L3 VRF — must NOT emit ``vrf instance``.
+        assert "vrf instance Tenant_100" not in out
+
+    def test_render_skips_mac_vrf_when_no_matching_vlan(self):
+        # Defensive: a MAC-VRF whose name doesn't match any vlan and
+        # doesn't fit the synthetic VLAN<N> form gets skipped (no
+        # garbage line emitted).
+        from netconfig.migration.canonical.intent import (
+            CanonicalRoutingInstance,
+        )
+        intent = CanonicalIntent(
+            vlans=[],  # no vlan to reverse-look-up against
+            routing_instances=[CanonicalRoutingInstance(
+                name="Orphaned_Tenant",
+                instance_type="mac-vrf",
+                route_distinguisher="1.1.1.1:200",
+                rt_imports=["65000:200"],
+                rt_exports=["65000:200"],
+            )],
+        )
+        out = AristaEOSCodec().render(intent)
+        # Block should NOT be emitted (no resolvable vid).
+        assert "vlan Orphaned_Tenant" not in out
+        # And it must NOT appear as a vrf instance (not L3) — except
+        # as a comment-stripped phrase nowhere.
+        assert "vrf instance Orphaned_Tenant" not in out
+
+    def test_round_trip_bgp_vlan_mac_vrf(self):
+        raw = (
+            "vlan 100\n"
+            "   name Tenant_100\n"
+            "!\n"
+            "router bgp 65033\n"
+            "   !\n"
+            "   vlan 100\n"
+            "      rd 10.0.255.33:100\n"
+            "      route-target both 65000:100\n"
+            "      redistribute learned\n"
+            "   !\n"
+        )
+        codec = AristaEOSCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        ri_first = next(
+            r for r in first.routing_instances if r.name == "Tenant_100"
+        )
+        ri_second = next(
+            r for r in second.routing_instances if r.name == "Tenant_100"
+        )
+        assert ri_first.instance_type == ri_second.instance_type == "mac-vrf"
+        assert ri_first.route_distinguisher == ri_second.route_distinguisher
+        assert ri_first.rt_imports == ri_second.rt_imports
+        assert ri_first.rt_exports == ri_second.rt_exports
+
+    def test_multi_vlan_mac_vrf(self):
+        raw = (
+            "vlan 100\n"
+            "   name V100\n"
+            "!\n"
+            "vlan 200\n"
+            "   name V200\n"
+            "!\n"
+            "router bgp 65000\n"
+            "   !\n"
+            "   vlan 100\n"
+            "      rd 1.1.1.1:100\n"
+            "      route-target both 65000:100\n"
+            "   !\n"
+            "   vlan 200\n"
+            "      rd 1.1.1.1:200\n"
+            "      route-target both 65000:200\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        names = {r.name: r for r in intent.routing_instances}
+        assert "V100" in names and "V200" in names
+        assert names["V100"].instance_type == "mac-vrf"
+        assert names["V200"].instance_type == "mac-vrf"
+        assert names["V100"].route_distinguisher == "1.1.1.1:100"
+        assert names["V200"].route_distinguisher == "1.1.1.1:200"
+
+    def test_parse_l3_vrf_and_mac_vrf_coexist(self):
+        # Mixed: ``vrf instance L3VRF`` + ``router bgp / vrf L3VRF``
+        # block alongside ``router bgp / vlan 100`` MAC-VRF block.
+        raw = (
+            "vlan 100\n"
+            "   name V100\n"
+            "!\n"
+            "vrf instance L3VRF\n"
+            "!\n"
+            "router bgp 65000\n"
+            "   !\n"
+            "   vrf L3VRF\n"
+            "      rd 1.1.1.1:1\n"
+            "      route-target both 65000:1\n"
+            "   !\n"
+            "   vlan 100\n"
+            "      rd 1.1.1.1:100\n"
+            "      route-target both 65000:100\n"
+            "   !\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        l3 = next(r for r in intent.routing_instances if r.name == "L3VRF")
+        mac = next(r for r in intent.routing_instances if r.name == "V100")
+        assert l3.instance_type == "vrf"
+        assert mac.instance_type == "mac-vrf"
+
+
 class TestRoundTrip:
     """Full parse → render → parse idempotency on realistic snippets."""
 
