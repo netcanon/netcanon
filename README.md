@@ -63,6 +63,8 @@ is the source of truth for pass counts.
 | Add a new codec (vendor parser/renderer) | [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) |
 | Add a new device definition / target profile | [`definitions/README.md`](definitions/README.md) — layered definitions (family base + os_version / model overlays), target-profile module-variant schema |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — MTU as a worked example |
+| Add a new target-profile YAML | [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — flat-port + module-variant shapes, fit-check propagation |
+| Ship a feature across web + desktop | [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — SNMPv3 USM rename as a worked example |
 | Read the roadmap / current blockers | [`translator-plans.txt`](translator-plans.txt) — dense, grep-friendly, opens with a TL;DR |
 | See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |
 | Check codec certification tiers | [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) |

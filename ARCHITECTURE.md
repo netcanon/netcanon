@@ -704,5 +704,7 @@ What's queued:
 - [`netconfig/api/routes/README.md`](netconfig/api/routes/README.md) — HTTP route inventory and frozen pipeline-stage signatures
 - [`docs/glossary.md`](docs/glossary.md) — project-jargon reference
 - [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — worked example: MTU wire-through across every codec
+- [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — worked example: shipping a hardware-shape YAML for the rename UI fit-checks
+- [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — worked example: SNMPv3 USM landing across canonical + codec + pipeline + UI + tests + docs
 - [`translator-plans.txt`](translator-plans.txt) — active roadmap and backlog
 - [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) — per-codec certification state
