@@ -1,0 +1,345 @@
+<?xml version="1.0"?>
+<!--
+  Synthetic kitchen-sink fixture for the opnsense codec (config.xml
+  wire format).  Intentionally exercises every canonical field the
+  OPNsense parser actually populates today, plus the surrounding
+  CapabilityMatrix-supported XML shapes that document the wire
+  contract for future parser wire-up.  Hashes are FAKE per
+  CLAUDE.md — they look real but are not actual credentials.
+
+  Coverage exercised by this fixture (canonical fields the OPNsense
+  parser populates on parse — see netconfig/migration/codecs/opnsense/
+  parse.py):
+
+    * CanonicalIntent.hostname           via <system><hostname>
+    * CanonicalIntent.domain             via <system><domain>
+    * CanonicalIntent.local_users        via <system><user> (>= 3)
+    * CanonicalIntent.radius_servers     via <system><authserver>
+    * CanonicalIntent.interfaces         via <interfaces><wan|lan|optN>
+        - CanonicalInterface.name        from zone tag
+        - .description                   from <descr>
+        - .enabled                       from <enable/>
+        - .mtu                           from <mtu>
+        - .ipv4_addresses                from <ipaddr>+<subnet>
+        - .ipv6_addresses                from <ipaddrv6>+<subnetv6>
+            (incl. link-local scope normalisation for fe80::/10)
+    * CanonicalIntent.vlans              via <vlans><vlan>
+        - .id                            from <tag>
+        - .name                          from <descr>
+    * CanonicalIntent.dhcp_servers       via <dhcpd><zone>
+        - .interface, .start_ip, .end_ip, .gateway, .dns_servers,
+          .domain_name, .lease_time
+    * CanonicalIntent.lags               via <laggs><lagg>
+        - .name, .members, .mode (via proto-to-canonical map)
+        - reverse-link to CanonicalInterface.lag_member_of
+    * CanonicalIntent.snmp               via <snmpd>
+        - .community     from <rocommunity>
+        - .location      from <syslocation>
+        - .contact       from <syscontact>
+        - .trap_hosts    from <traphost> (>= 1)
+
+  Wire-format documented but NOT yet parsed (declared supported in
+  the CapabilityMatrix; parser wire-up pending):
+
+    * /system/dns-server   via <system><dnsserver>
+    * /system/ntp-server   via <ntpd>/<ispool> + <system><timeservers>
+    * /system/timezone     via <system><timezone>
+    * /staticroutes/route  via <staticroutes><route>
+
+  These are present in the XML so the kitchen-sink documents the
+  expected on-the-wire shape; the test asserts only what the parser
+  populates today.
+
+  Out of scope (declared unsupported in the capability matrix):
+
+    * /filter/rule         — firewall rules need netconfig-ext YANG
+    * /nat/outbound        — NAT translation needs careful semantic
+                             mapping
+    * /snmp/v3-user        — OPNsense SNMPv3 lives in snmpd.conf,
+                             not config.xml (frozenset entry on the
+                             codec)
+    * /vxlan-vnis/*        — OPNsense is a firewall codec; VXLAN
+                             not modelled
+    * BGP / OSPF / route-maps / EVPN Type-5 / MAC-VRF / switching
+      state — not part of OPNsense's canonical-portable surface.
+
+  Multi-version compatible across OPNsense 22.x through 24.x+ — uses
+  only stable XML elements that have been in the schema since the
+  22.x line.
+-->
+<opnsense>
+  <theme>opnsense</theme>
+  <system>
+    <optimization>normal</optimization>
+    <hostname>fw-kitchensink</hostname>
+    <domain>example.net</domain>
+    <timezone>Etc/UTC</timezone>
+    <timeservers>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org</timeservers>
+    <dnsserver>1.1.1.1</dnsserver>
+    <dnsserver>9.9.9.9</dnsserver>
+    <dnsallowoverride>1</dnsallowoverride>
+    <webgui>
+      <protocol>https</protocol>
+    </webgui>
+    <ssh>
+      <group>admins</group>
+    </ssh>
+    <!-- Local users — root (admin), netops (admin), readonly (user).
+         Hashes are bcrypt-shape but obviously fake per CLAUDE.md. -->
+    <group>
+      <name>admins</name>
+      <description>System Administrators</description>
+      <scope>system</scope>
+      <gid>1999</gid>
+      <member>0</member>
+      <member>2000</member>
+      <priv>page-all</priv>
+    </group>
+    <group>
+      <name>users</name>
+      <description>Read-only Operators</description>
+      <scope>system</scope>
+      <gid>2000</gid>
+      <member>2001</member>
+    </group>
+    <user>
+      <name>root</name>
+      <descr>System Administrator</descr>
+      <scope>system</scope>
+      <groupname>admins</groupname>
+      <password>$2b$10$fakeAJhashRootAccountPlaceholderObviouslySyntheticAaaaa</password>
+      <uid>0</uid>
+    </user>
+    <user>
+      <name>netops</name>
+      <descr>Network Operations</descr>
+      <scope>user</scope>
+      <groupname>admins</groupname>
+      <password>$2b$10$fakeAJhashNetopsAccountPlaceholderObviouslySynthetic000</password>
+      <uid>2000</uid>
+    </user>
+    <user>
+      <name>readonly</name>
+      <descr>Read-Only Auditor</descr>
+      <scope>user</scope>
+      <groupname>users</groupname>
+      <password>$2b$10$fakeAJhashReadonlyAccountPlaceholderObviouslySynthet111</password>
+      <uid>2001</uid>
+    </user>
+    <!-- RADIUS auth servers — two entries with explicit ports. -->
+    <authserver>
+      <refid>radius-primary</refid>
+      <type>radius</type>
+      <name>radius-primary</name>
+      <host>10.0.0.50</host>
+      <radius_secret>fakeRadiusSharedSecret01</radius_secret>
+      <radius_auth_port>1812</radius_auth_port>
+      <radius_acct_port>1813</radius_acct_port>
+      <radius_timeout>5</radius_timeout>
+      <radius_protocol>PAP</radius_protocol>
+    </authserver>
+    <authserver>
+      <refid>radius-secondary</refid>
+      <type>radius</type>
+      <name>radius-secondary</name>
+      <host>10.0.0.51</host>
+      <radius_secret>fakeRadiusSharedSecret02</radius_secret>
+      <radius_auth_port>11812</radius_auth_port>
+      <radius_acct_port>11813</radius_acct_port>
+    </authserver>
+    <!-- An ldap authserver (NOT type=radius) — parser must skip it. -->
+    <authserver>
+      <refid>ldap-corp</refid>
+      <type>ldap</type>
+      <name>ldap-corp</name>
+      <host>ldap.example.net</host>
+    </authserver>
+  </system>
+  <interfaces>
+    <!-- WAN — physical em0, static IPv4 + dhcp6 (ignored by canonical). -->
+    <wan>
+      <enable>1</enable>
+      <if>em0</if>
+      <descr>WAN uplink to upstream carrier</descr>
+      <mtu>1500</mtu>
+      <ipaddr>198.51.100.2</ipaddr>
+      <subnet>30</subnet>
+      <gateway>WAN_GW</gateway>
+      <blockpriv>1</blockpriv>
+      <blockbogons>1</blockbogons>
+    </wan>
+    <!-- LAN — physical em1, static IPv4 + IPv6 global. -->
+    <lan>
+      <enable>1</enable>
+      <if>em1</if>
+      <descr>Internal LAN segment</descr>
+      <ipaddr>192.168.10.1</ipaddr>
+      <subnet>24</subnet>
+      <ipaddrv6>2001:db8:10::1</ipaddrv6>
+      <subnetv6>64</subnetv6>
+    </lan>
+    <!-- opt1 — VLAN child interface on em1, scoped IPv4. -->
+    <opt1>
+      <enable>1</enable>
+      <if>vlan0.20</if>
+      <descr>Voice VLAN gateway</descr>
+      <ipaddr>192.168.20.1</ipaddr>
+      <subnet>24</subnet>
+    </opt1>
+    <!-- opt2 — VLAN child, link-local IPv6 only (scope normalisation). -->
+    <opt2>
+      <enable>1</enable>
+      <if>vlan0.30</if>
+      <descr>Guest VLAN gateway (link-local v6)</descr>
+      <ipaddr>192.168.30.1</ipaddr>
+      <subnet>24</subnet>
+      <ipaddrv6>fe80::1</ipaddrv6>
+      <subnetv6>64</subnetv6>
+    </opt2>
+    <!-- opt3 — physical interface participating in the LAG below.
+         The parser reverse-links lag_member_of when <laggs>/<lagg>
+         names this interface in <members>. -->
+    <opt3>
+      <enable>1</enable>
+      <if>em2</if>
+      <descr>LAG member 1</descr>
+    </opt3>
+    <!-- opt4 — physical interface participating in the LAG below. -->
+    <opt4>
+      <enable>1</enable>
+      <if>em3</if>
+      <descr>LAG member 2</descr>
+    </opt4>
+    <!-- opt5 — disabled interface; <enable/> absent so parser sets
+         enabled=False.  Description preserved for round-trip. -->
+    <opt5>
+      <if>em4</if>
+      <descr>Reserved (disabled)</descr>
+    </opt5>
+  </interfaces>
+  <!-- VLANs — five 802.1Q tags with descr that maps to canonical
+       CanonicalVlan.name.  Real OPNsense vlan elements carry uuid /
+       <if> / <pcp> / <vlanif> attributes; the parser only reads
+       <tag> + <descr>. -->
+  <vlans>
+    <vlan uuid="fakeuuid-0001-0000-0000-000000000010">
+      <if>em1</if>
+      <tag>10</tag>
+      <pcp>0</pcp>
+      <descr>USER VLAN</descr>
+      <vlanif>vlan0.10</vlanif>
+    </vlan>
+    <vlan uuid="fakeuuid-0001-0000-0000-000000000020">
+      <if>em1</if>
+      <tag>20</tag>
+      <pcp>0</pcp>
+      <descr>VOICE VLAN</descr>
+      <vlanif>vlan0.20</vlanif>
+    </vlan>
+    <vlan uuid="fakeuuid-0001-0000-0000-000000000030">
+      <if>em1</if>
+      <tag>30</tag>
+      <pcp>0</pcp>
+      <descr>GUEST VLAN</descr>
+      <vlanif>vlan0.30</vlanif>
+    </vlan>
+    <vlan uuid="fakeuuid-0001-0000-0000-000000000064">
+      <if>em1</if>
+      <tag>100</tag>
+      <pcp>0</pcp>
+      <descr>SERVERS VLAN</descr>
+      <vlanif>vlan0.100</vlanif>
+    </vlan>
+    <vlan uuid="fakeuuid-0001-0000-0000-0000000000c8">
+      <if>em1</if>
+      <tag>200</tag>
+      <pcp>0</pcp>
+      <descr>MGMT VLAN</descr>
+      <vlanif>vlan0.200</vlanif>
+    </vlan>
+  </vlans>
+  <!-- Static routes — wire-format documentation; OPNsense parser
+       does not populate CanonicalIntent.static_routes today (no
+       /staticroutes path in CapabilityMatrix.supported).  Included
+       so the kitchen-sink documents the on-the-wire shape for when
+       parser support lands. -->
+  <staticroutes version="1.0.0">
+    <route uuid="fakeuuid-stroute-0000-0000-000000000001">
+      <network>10.50.0.0/16</network>
+      <gateway>WAN_GW</gateway>
+      <descr>Lab tenant subnet via WAN</descr>
+      <disabled>0</disabled>
+    </route>
+    <route uuid="fakeuuid-stroute-0000-0000-000000000002">
+      <network>172.16.0.0/12</network>
+      <gateway>10.0.0.254</gateway>
+      <descr>Corporate transit</descr>
+      <disabled>0</disabled>
+    </route>
+  </staticroutes>
+  <!-- DHCP — one zone (lan).  Parser produces a CanonicalDHCPPool
+       per <dhcpd>/<zone> element with content.  The wan zone is
+       intentionally empty (reserved-zone scaffolding) — parser
+       must skip it without crashing. -->
+  <dhcpd>
+    <wan/>
+    <lan>
+      <enable/>
+      <range>
+        <from>192.168.10.100</from>
+        <to>192.168.10.199</to>
+      </range>
+      <gateway>192.168.10.1</gateway>
+      <dnsserver>1.1.1.1,9.9.9.9</dnsserver>
+      <domain>lan.example.net</domain>
+      <defaultleasetime>7200</defaultleasetime>
+      <maxleasetime>86400</maxleasetime>
+    </lan>
+  </dhcpd>
+  <!-- LAGs — one LACP lagg bundling opt3 + opt4.  Parser maps
+       proto=lacp -> CanonicalLAG.mode="active" and reverse-links
+       opt3/opt4 above to lag_member_of="lagg0".
+
+       NOTE: real OPNsense XML stores BSD device names (em2, em3)
+       in <members>, but the parser's reverse-link compares against
+       CanonicalInterface.name (the zone tag).  We use zone names
+       here so the synthetic kitchen-sink exercises the
+       lag_member_of wire-through end-to-end; cross-vendor
+       expectations (tests/fixtures/cross_vendor_expectations/
+       opnsense__cisco_iosxe_cli.yaml) document this assumption. -->
+  <laggs version="1.0.0">
+    <lagg uuid="fakeuuid-lagg-0000-0000-000000000001">
+      <laggif>lagg0</laggif>
+      <members>opt3,opt4</members>
+      <proto>lacp</proto>
+      <descr>Bonded uplink to core switch</descr>
+    </lagg>
+  </laggs>
+  <!-- SNMP v1/v2c — community + location/contact + two trap hosts.
+       SNMPv3 USM is intentionally absent: OPNsense does not store
+       v3 users in config.xml (see codec.unsupported_rename_categories
+       and the /snmp/v3-user UnsupportedPath). -->
+  <snmpd>
+    <rocommunity>kitchensink-ro</rocommunity>
+    <syslocation>Synthetic Lab Rack 7</syslocation>
+    <syscontact>noc@example.net</syscontact>
+    <traphost>10.0.0.250</traphost>
+    <traphost>10.0.0.251</traphost>
+  </snmpd>
+  <!-- NTP daemon stanza — wire-format documentation; not parsed
+       into intent.ntp_servers today. -->
+  <ntpd>
+    <prefer>0.opnsense.pool.ntp.org</prefer>
+    <ispool>0.opnsense.pool.ntp.org 1.opnsense.pool.ntp.org</ispool>
+  </ntpd>
+  <!-- Syslog — wire-format documentation; not parsed into
+       intent.syslog_servers today. -->
+  <Syslog version="1.0.2">
+    <general>
+      <enabled>1</enabled>
+      <loglocal>1</loglocal>
+      <maxpreserve>31</maxpreserve>
+    </general>
+    <destinations/>
+  </Syslog>
+</opnsense>
