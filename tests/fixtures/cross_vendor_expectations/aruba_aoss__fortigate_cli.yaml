@@ -1,0 +1,505 @@
+# Cross-vendor fidelity expectations: aruba_aoss -> fortigate_cli
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_fortigate_cli/
+#
+# This is a switch -> firewall pair.  Aruba AOS-S is a campus
+# L2/L3 enterprise switch (ProCurve heritage 2930F / 2930M / 3810
+# / 5400R) and FortiGate is a session-based stateful firewall with
+# limited L2 hardware-switch surface.  The pair shares less feature
+# surface than either to-Cisco direction:
+#
+#   * Aruba's switching-centric features (VLAN-as-stanza port lists,
+#     spanning-tree, dhcp-snooping, IGMP) lose their target on
+#     FortiGate (L3-only product surface).
+#   * FortiGate's firewall / NAT / VPN / UTM product surface is
+#     absent from the Aruba source (Tier 3 / not modelled in
+#     canonical) so there is nothing to migrate.
+#   * Foundations (hostname / DNS / NTP / SNMP / static-routes /
+#     RADIUS / local-users / LAGs / DHCP scope) translate via the
+#     canonical tree; per-field divergence is documented below.
+#
+# certainty=medium because:
+#   * Shared scalar surface (hostname / DNS / NTP / SNMP v1+v2c /
+#     RADIUS / static-routes / DHCP / local-users) is high-confidence
+#     — both vendor docs are unambiguous and both codecs already
+#     round-trip the canonical fields on real-capture fixtures.
+#   * Switching features (Aruba's VLAN-centric tagged/untagged
+#     port lists, spanning-tree, dhcp-snooping) are confidently
+#     unsupported on FortiGate — no L2 product surface beyond the
+#     hardware-switch sub-feature on a few low-end models.
+#   * Firewall / NAT / VPN / UTM and VDOM are confidently
+#     unsupported in the source -> target direction (Aruba never
+#     populates these canonical fields, but FortiGate-side they are
+#     vendor-private and out of v1 scope).
+#   * VRF / VXLAN / EVPN are confidently not_applicable on this
+#     direction (Aruba source carries no VRF / VXLAN intent).
+#   * DHCP is medium-confidence lossy (model divergence: Aruba
+#     codec does not advertise /dhcp/pool but emits the pool config
+#     verbatim into a relay-comment block; the FortiGate target
+#     parses interface-bound pools).
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    Aruba ProCurve / AOS-S campus switch -> FortiGate firewall edge
+    consolidation.  Common scenario: collapsing a Cisco-IOS-flavoured
+    AOS-S edge switch into a FortiGate as a converged
+    routing-and-security appliance, retiring the dedicated L2 access
+    box.  System services + IPv4/IPv6 + LAG + RADIUS surfaces
+    translate; AOS-S's dense L2 surface (VLAN-centric port lists,
+    spanning-tree, voice-via-LLDP-MED) loses its target because
+    FortiGate is L3-only.
+  certainty: medium
+  references:
+    - id: system_services
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/system_services.md
+      title: "System services (hostname / DNS / SNTP-NTP / syslog / clock): Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-04-30"
+    - id: interface_naming
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/interface_naming.md
+      title: "Interface naming: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-04-30"
+    - id: ip_addressing
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/ip_addressing.md
+      title: "IPv4 / IPv6 addressing: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv6/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: vlans
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/vlans.md
+      title: "VLAN configuration: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: switchport
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/switchport.md
+      title: "Switching features: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/static_routes.md
+      title: "Static routes: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: snmp
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/snmp.md
+      title: "SNMP: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/local_users.md
+      title: "Local users + admin profiles: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: radius
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/radius.md
+      title: "RADIUS: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: dhcp
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/dhcp.md
+      title: "DHCP relay (Aruba) versus DHCP server (FortiGate)"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: lags
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/lags.md
+      title: "LAG / Trk / aggregate: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-04-30"
+    - id: vrf
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/vrf.md
+      title: "VRF / VDOM: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-04-30"
+    - id: routing_protocols
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/routing_protocols.md
+      title: "Routing protocols (BGP / OSPF / static): Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MRG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: firewall_policy
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/firewall_policy.md
+      title: "Firewall policies: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-04-30"
+    - id: spanning_tree
+      path: docs/vendor-references/aruba_aoss_to_fortigate_cli/spanning_tree.md
+      title: "Spanning-tree: Aruba AOS-S versus FortiGate FortiOS"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MRG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Aruba ``hostname "sw-edge-01"`` -> FortiOS ``set hostname
+      "sw-edge-01"`` under ``config system global``.  Codec strips
+      the AOS-S quotes on parse; FortiOS re-quotes on render.
+      FortiOS caps at 35 characters; AOS-S accepts up to 32 — no
+      truncation in this direction.
+    references: [system_services]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no first-class domain directive in the codec's
+      parse surface (the AOS-S CLI folds the FQDN into the hostname
+      via ``hostname "<host>.<domain>"`` when set).  Field is always
+      empty on this direction so nothing renders on the FortiGate
+      target.
+    references: [system_services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Aruba ``ip dns server-address priority N <addr>`` collapses to
+      a bare address list on canonical (sorted by priority).
+      FortiOS schemas DNS into ``set primary`` + ``set secondary``
+      (and a hidden ``set tertiary``) under ``config system dns`` —
+      the AOS-S source rarely carries more than two configured DNS
+      servers (priority 1 / 2) so the FortiOS three-server cap is
+      not a practical bottleneck on this direction.  No truncation
+      observed on real-capture fixtures.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Aruba uses **SNTP** (``sntp server priority N <addr>``) as its
+      time-protocol primitive while FortiOS uses **NTP** (``config
+      system ntp / config ntpserver / set server <addr>``).  The
+      protocol distinction (full NTP vs SNTP) is lost on the
+      canonical layer (field is ``list[str]`` of addresses).
+      FortiOS additionally requires ``set ntpsync enable`` and
+      ``set type custom`` outside the per-server table; the Aruba
+      source never populates these as canonical scalars.  Per-server
+      modifiers (Aruba priority overrides; FortiOS per-server
+      ``set authentication``) drop on round-trip.  Functional
+      equivalence at the server-list level.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Aruba emits ``time timezone <minute-offset>`` (e.g. ``-480``
+      for PST) plus separate ``time daylight-time-rule <region>``.
+      FortiOS uses a numeric index ``set timezone <NN>`` per the
+      FortiOS Cookbook timezone table (e.g. ``04`` = US Pacific).
+      Cross-vendor migration requires an operator-curated lookup
+      from minute-offset to FortiOS numeric index.  The aruba_aoss
+      codec does not currently parse the timezone field as a
+      canonical scalar (the directive falls into raw_sections);
+      the FortiGate codec also does not currently emit the
+      timezone field on render.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Aruba ``logging <addr>`` host list maps to FortiOS's ``config
+      log syslogd setting / set server`` (single primary server)
+      plus the ``syslogd2`` / ``syslogd3`` peers.  FortiOS therefore
+      caps at three syslog backends; AOS-S sources with longer
+      lists drop the tail.  Severity / facility tokens (Aruba
+      ``logging facility local6`` / ``logging severity info``) are
+      not modelled — drop on round-trip.
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface fields divide cleanly: name (lossy — the
+      port-rename mesh maps Aruba's bare-numeric form ``1`` /
+      ``A1`` to FortiGate's ``port1`` / ``port24`` flat namespace,
+      which requires operator-curated mappings on cross-vendor
+      render), description (good — FortiOS alias caps at 25
+      characters; Aruba ``name "..."`` with a longer string
+      truncates), enabled (good), ipv4_addresses (good for
+      primary; AOS-S typically carries only one address per
+      routed interface), ipv6_addresses (lossy on link-local
+      scope — FortiOS source has no explicit ``link-local``
+      keyword form for ``set ip6-address``, only the global
+      address slot), switchport_mode / access_vlan /
+      trunk_allowed_vlans / trunk_native_vlan (unsupported — see
+      switchport reference; FortiGate is L3-only beyond the
+      hardware-switch sub-feature), voice_vlan (unsupported —
+      AOS-S handles voice VLANs via LLDP-MED policy; the
+      aruba_aoss codec does not currently parse voice_vlan and
+      FortiGate has no L2 surface to render it), lag_member_of
+      (good — see lags), dhcp_client (lossy — FortiGate render
+      does not yet emit ``set mode dhcp``; Aruba source rarely
+      uses DHCP-client on routed ports), vrf (not_applicable —
+      Aruba has no VRF concept; see routing_instances), mtu
+      (lossy — aruba_aoss codec does not currently parse MTU,
+      so the canonical field is empty on parse and FortiOS
+      ``set mtu`` is not emitted).
+    references: [interface_naming, ip_addressing, switchport, lags]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly.  Aruba's ``vlan 100 / name
+      "USERS"`` separate name does not survive on FortiGate (the
+      FortiOS codec uses the interface edit ID as the VLAN's
+      identity; the canonical name is preserved through parse but
+      FortiGate render emits ``edit "VL_100"`` with a synthesised
+      name).  Per-VLAN description is FortiGate-unsupported.  Most
+      importantly, the VLAN-centric port list (Aruba's ``tagged
+      1-24`` / ``untagged 25-26``) is a model-translation gap:
+      FortiGate expresses VLAN membership as child interfaces
+      hanging off a parent (``edit "agg1.100" / set type vlan / set
+      vlanid 100 / set interface "agg1"``), not as a port list per
+      VLAN.  Cross-vendor migration on Aruba -> FortiGate requires
+      synthesising multiple VLAN-child interfaces (one per VLAN per
+      parent) which the v1 render does not do; the operator must
+      manually reconstruct multi-port VLAN membership.  SVI
+      absorption: Aruba's ``vlan 100 / ip address X/N`` populates
+      CanonicalVlan.ipv4_addresses; the FortiGate render emits the
+      address on the synthesised VLAN child interface (``set ip``).
+    references: [vlans]
+
+  static_routes:
+    disposition: good
+    note: >
+      Aruba's CIDR ``ip route DEST/N GW`` converts to FortiOS's
+      ``config router static / edit N / set dst DEST MASK / set
+      gateway GW`` form via the codec helpers (CIDR -> dotted-mask
+      conversion).  Aruba's legacy ``ip default-gateway`` directive
+      normalises to a ``0.0.0.0/0`` canonical record that FortiGate
+      renders as ``set dst 0.0.0.0 0.0.0.0``.  Aruba never carries
+      per-VRF static routes (no VRF concept), so the FortiGate-
+      side ``set vrf <id>`` is structurally absent on this
+      direction.  Description / name fields are lossy — both
+      vendors permit them but neither is currently parsed.
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S is primarily a DHCP relay platform, not a server.
+      The aruba_aoss codec does not advertise ``/dhcp/pool`` in its
+      supported set, so CanonicalIntent.dhcp_servers is always
+      empty on this direction — nothing to lose.  ``ip
+      helper-address`` directives on Aruba VLAN stanzas are not
+      modelled (no canonical helper-address field).  FortiGate
+      target's ``config system dhcp server`` interface-bound model
+      simply emits nothing on render.
+    references: [dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly with one caveat: FortiGate's edit-table
+      can carry multiple community strings, but canonical holds a
+      single scalar; Aruba's two-string Operator/Manager pattern
+      collapses to the first (typically Operator/RO) on parse.
+      Aruba's Operator/Manager access keywords map to FortiGate
+      community-permission only as a positional convention — the
+      canonical model stores only the bare community string.
+      v3 USM round-trips username / group / protocol enum but
+      auth/priv passphrases are NOT cross-compatible: USM keys are
+      salted with vendor-specific engineID-derived constants, so
+      Aruba-derived passphrases (``$1$<aoss-salt>$<hash>``) will
+      fail on FortiGate after migration.  Operator must re-key v3
+      users on the target; FortiOS encrypts secrets with an
+      internal key (``ENC <opaque-base64>`` prefix).  ``engine_id``
+      field exists in canonical but not wired through either
+      codec.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Aruba's ``Trk<N>`` form differs from FortiGate's
+      operator-named aggregates (``LAG_<role>`` / ``agg<n>``); the
+      port-rename mesh applies operator-curated mappings on
+      cross-vendor render.  Members preserve via the rename mesh
+      applied to each member name (Aruba ``1-4`` port-list expands
+      to four canonical port records on parse; FortiGate render
+      emits ``set member "port1" "port2" ...``).  LACP mode
+      (active/passive/static) preserves; Aruba-unique modes
+      (``dt-lacp`` distributed-trunk, ``fec`` HP-proprietary)
+      collapse to ``static`` with a banner — FortiOS LACP only
+      offers active/passive/static.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Aruba's two-role model (manager/operator) maps to FortiGate's
+      named accprofile strings (``super_admin`` / ``prof_admin`` /
+      custom): manager -> super_admin, operator -> prof_admin.
+      Hash formats are NOT cross-compatible: Aruba SHA-1
+      (``<hex>``), bcrypt (``$2y$...``), and plaintext are all
+      Aruba-only; FortiOS uses its proprietary ``ENC <base64>`` form
+      with an internal-key encryption.  Cross-vendor migration of
+      admin accounts requires re-setting passwords on the target.
+      Both codecs preserve hashes verbatim with vendor tags so the
+      loss surfaces in the validation report.  Trusthost / IP-based
+      access controls (FortiOS ``set trusthost1``) are FortiGate-
+      specific and not in canonical.
+    references: [local_users]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port preserve cleanly.  Aruba's flat
+      ``radius-server host <ip> key "<secret>"`` populates the
+      canonical ``host / key / auth_port / acct_port`` tuple; the
+      FortiGate render emits ``config user radius / edit "<name>" /
+      set server <ip> / set secret ENC <encrypted> / set radius-port
+      1812``.  Shared-secret format is incompatible: Aruba carries
+      plaintext / shadowed strings; FortiOS uses ``ENC <opaque-
+      base64>``.  Cross-vendor migration requires re-keying.
+      FortiOS has no separate acct-port field (derived as
+      auth-port + 1 per RFC default), so non-default Aruba acct-port
+      values drop.  Aruba never carries a server-name (uses host
+      address as identity) so FortiOS render synthesises a name
+      from the host address.
+    references: [radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VXLAN concept; the aruba_aoss codec
+      capability matrix lists /vxlan-vnis/* under unsupported
+      ("VXLAN not modelled — AOS-S is a campus L2/L3 codec").
+      CanonicalIntent.vxlan_vnis is always empty on Aruba parse,
+      so there is nothing to render on FortiGate — the field is
+      structurally absent on this direction.  FortiGate likewise
+      lists /vxlan-vnis/* unsupported ("VXLAN not modelled —
+      FortiGate is a firewall codec").
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — Aruba AOS-S has no EVPN /
+      MP-BGP concept, so CanonicalIntent.evpn_type5_routes is
+      always empty on Aruba parse.  FortiGate has no EVPN data
+      plane either (firewall codec).
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VRF concept (campus L2/L3 platform with
+      a single global routing table).  CanonicalIntent.
+      routing_instances and CanonicalInterface.vrf are always
+      empty on Aruba parse.  FortiGate's per-interface integer
+      VRF (FortiOS 7.x) and VDOM multi-tenancy primitive are
+      structurally distinct from Cisco-style named-VRF + RD + RT;
+      the FortiGate codec does not parse them in v1, so even a
+      hypothetical Aruba-source VRF would not survive a FortiGate
+      re-parse.
+    references: [vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private; cross-vendor
+      migration drops it with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; informational only."
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata; not a translation field."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  Aruba AOS-S and FortiGate codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific group-scoped set-line tails.  Same
+      not_applicable status as apply_groups.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The shared scalar surface (hostname / DNS / SNMP v1+v2c /
+#     RADIUS / static-routes / local-users / LAG members) is high-
+#     confidence: AOS-S documentation examples track Cisco-IOS
+#     ancestry on these commands, FortiOS CLI Reference is
+#     unambiguous, and both codecs already round-trip the canonical
+#     fields on real-capture fixtures.
+#
+#   * Switching features (Aruba's VLAN-centric tagged/untagged
+#     port lists, spanning-tree, voice-VLAN-via-LLDP-MED) are
+#     confidently unsupported on FortiGate — no L2 product surface
+#     beyond a hardware-switch sub-feature on a few low-end models.
+#
+#   * Firewall / NAT / VPN / UTM / VDOM are FortiGate-only product
+#     surfaces; canonical model has no representation, so the field
+#     is not_applicable on this direction (Aruba source carries
+#     nothing) rather than unsupported (an active drop on render).
+#
+#   * VRF / VXLAN / EVPN / dynamic routing protocols are confidently
+#     not_applicable: Aruba AOS-S simply does not model any of
+#     these concepts, and the canonical field is always empty on
+#     this direction.
+#
+#   * Timezone / DHCP / SNMPv3 USM passphrases / hash formats are
+#     medium-confidence lossy: the format incompatibilities are
+#     well-documented but cross-vendor render involves codec policy
+#     decisions (minute-offset -> numeric index, AOS-S SHA-1 ->
+#     FortiOS ENC) that operators may want to override.
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * MTU per interface — Aruba codec does not currently parse
+#     ``mtu N``; FortiGate codec parses ``set mtu`` but emit-only
+#     when ``set mtu-override enable`` is also present.  Carried as
+#     part of interfaces[].mtu and silently dropped on this
+#     direction.  Promote when the aruba codec wires MTU.
+#
+#   * Voice VLAN — Aruba's voice-VLAN-via-LLDP-MED has no direct
+#     FortiOS analogue; FortiGate's L3-only product surface has no
+#     voice-VLAN concept.
+#
+#   * Helper addresses — Aruba's per-VLAN ``ip helper-address`` for
+#     DHCP relay is not modelled in canonical (no
+#     CanonicalInterface.helper_addresses field).  Drops on parse.
+#
+#   * TACACS+ — no canonical model in v1.  Lands when
+#     CanonicalTACACSServer is added.
+#
+#   * FortiGate firewall policy / VIP / address-object / UTM
+#     migration — not applicable on this direction (Aruba source
+#     carries no firewall policy that could populate canonical),
+#     but operators consolidating an Aruba+upstream-firewall stack
+#     into a single FortiGate must manually reconstruct the
+#     security policy.
