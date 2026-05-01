@@ -737,6 +737,35 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 --- DEFERRED ROADMAP ---
 
+[WIP] CROSS-MESH FIDELITY AUDIT — multi-phase, branched off `audit/cross-mesh-throughput`.
+
+  Phase 1 [SHIPPED]: mechanical drift matrix.
+    * tools/run_full_mesh.py — standalone runner that walks every
+      committed real-capture fixture × every bidirectional codec,
+      performs parse(render(parse(raw))) and records per-canonical-
+      field drift.  Output: timestamped JSON under
+      tests/fixtures/real/_cross_mesh_runs/ (gitignored) and
+      tests/fixtures/real/CROSS_MESH_RESULTS.md (committed snapshot).
+    * tests/unit/audit/test_run_full_mesh.py — pins drift-computation
+      building blocks (identical → all preserved, list-order-cosmetic,
+      unsupported-by-design classification, scalar-empty-state
+      semantics, _AUDITED_FIELDS coverage of CanonicalIntent).
+    * tools/README.md documents the runner + cell-status legend.
+    * .gitignore excludes per-run JSON.
+    * tests/fixtures/real/RESULTS.md cross-references the new matrix.
+
+  Phase 2 [DEFERRED]: drift trend tracking — diff the latest matrix
+    vs the previous committed one to highlight regressions on each
+    audit pass.
+
+  Phase 3 [DEFERRED]: vendor-doc-grounded expectations YAML
+    (tests/fixtures/cross_vendor_expectations.yaml planned) that
+    classifies each drift as expected-vendor-mismatch vs codec defect.
+    Phase 1's matrix is the input substrate for this work.
+
+  Phase 4 [DEFERRED]: automated codec-defect ticket creation from
+    the expected-vs-defect classification.
+
 [TODO] EOS 4.26 EVPN/VXLAN GAPS — surfaced when user replayed
        karneliuk_a_eos1_eos4260.txt through arista_eos → juniper_junos
        and noticed dropped semantic surface.  Five separable items

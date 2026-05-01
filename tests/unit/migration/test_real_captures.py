@@ -391,18 +391,26 @@ def test_real_capture_round_trips_stable(
 
 
 def test_every_fixture_dir_has_codec_mapping() -> None:
-    """Every non-hidden subdirectory under ``tests/fixtures/real/``
-    must appear in ``_DIR_TO_CODEC_NAME``.  Guard against adding a
-    new fixture directory (e.g. ``tests/fixtures/real/aos_cx/``)
-    without wiring it to a codec — the old _discover_fixtures loop
-    silently skipped unmapped directories, which means unmapped
-    fixtures got zero validation coverage.
+    """Every non-hidden, non-underscored subdirectory under
+    ``tests/fixtures/real/`` must appear in ``_DIR_TO_CODEC_NAME``.
+    Guard against adding a new fixture directory (e.g.
+    ``tests/fixtures/real/aos_cx/``) without wiring it to a codec —
+    the old _discover_fixtures loop silently skipped unmapped
+    directories, which means unmapped fixtures got zero validation
+    coverage.
+
+    Underscore-prefixed directories (e.g. ``_cross_mesh_runs/``) are
+    operator scratch space owned by ``tools/``-layer scripts and are
+    intentionally exempt; ``.gitignore`` excludes their contents from
+    version control.
     """
     if not REAL_FIXTURES_ROOT.is_dir():
         pytest.skip(f"{REAL_FIXTURES_ROOT} does not exist")
     subdirs = [
         d.name for d in REAL_FIXTURES_ROOT.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
+        if d.is_dir()
+        and not d.name.startswith(".")
+        and not d.name.startswith("_")
     ]
     missing = [d for d in subdirs if d not in _DIR_TO_CODEC_NAME]
     assert not missing, (
