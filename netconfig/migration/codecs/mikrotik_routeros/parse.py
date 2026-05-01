@@ -1,0 +1,881 @@
+"""
+MikroTik RouterOS parser — ``/export`` CLI form to ``CanonicalIntent``.
+
+Extracted from ``codec.py`` during the parse/render split per the
+``codecs/README.md`` split-codec convention.  Public function
+(consumed by ``codec.py::MikroTikRouterOSCodec.parse()``):
+
+* :func:`parse_intent` — one-shot parse entry: raw text in, fully-
+  populated :class:`CanonicalIntent` out.
+
+Each command in a RouterOS ``/export`` is a self-contained line; the
+parser dispatches on the leading path (``/ip address``,
+``/interface ethernet``, ``/ipv6 address``, etc.).  Stable across
+RouterOS 6-7.
+
+Shared helpers (``_is_ethernet_name``, ``_is_vlan_name``,
+``_infer_iface_type_from_name``, ``_sort_interfaces``) live here and
+are imported by :mod:`.render` — one directional edge, no circular
+risk, per the README's split-codec guidance.
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import logging
+import re
+from typing import Iterable
+
+from ...canonical.intent import (
+    CanonicalDHCPPool,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalLAG,
+    CanonicalLocalUser,
+    CanonicalRADIUSServer,
+    CanonicalSNMP,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+)
+from ..base import ParseError
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Top-level entry
+# ---------------------------------------------------------------------------
+
+
+def parse_intent(raw: str) -> CanonicalIntent:
+    """Parse RouterOS ``/export verbose`` text into a
+    :class:`CanonicalIntent`.
+
+    Raises:
+        ParseError: On empty input or input that clearly isn't
+            RouterOS (XML, JSON, etc).
+    """
+    if not raw.strip():
+        raise ParseError(
+            "mikrotik_routeros: empty input",
+            snippet="",
+        )
+    stripped = raw.lstrip()
+    if stripped.startswith("<"):
+        raise ParseError(
+            "mikrotik_routeros: input looks like XML, not RouterOS "
+            "export.  Use the opnsense or cisco_iosxe codec instead.",
+            snippet=stripped[:120],
+        )
+    if stripped.startswith("{"):
+        raise ParseError(
+            "mikrotik_routeros: input looks like JSON, not RouterOS "
+            "export.",
+            snippet=stripped[:120],
+        )
+
+    intent = CanonicalIntent(
+        source_vendor="mikrotik_routeros",
+        source_format="cli-mikrotik",
+    )
+
+    # Pre-process: join `\` line continuations.
+    joined = _join_continuations(raw)
+
+    # Group lines by their /section context.
+    sections = _group_by_section(joined)
+
+    # Walk each section with a section-specific handler.
+    # Interfaces need to be assembled across multiple sections
+    # (ethernet sets properties, vlan adds a new interface, ip
+    # address attaches addresses) so we carry an accumulator.
+    iface_by_name: dict[str, CanonicalInterface] = {}
+
+    # Some sections must run AFTER others regardless of file order.
+    # /ip pool carries DHCP-range data that needs to merge into pool
+    # records created by /ip dhcp-server network; running them in
+    # file order would split a single logical pool into two
+    # canonical records when the file happens to list /ip pool
+    # first.  Defer /ip pool to a post-pass.
+    deferred_ip_pool: list[list[str]] = []
+
+    for section, lines in sections:
+        if section == "/system identity":
+            _parse_system_identity(lines, intent)
+        elif section == "/system dns":
+            _parse_system_dns(lines, intent)
+        elif section == "/system ntp client":
+            _parse_system_ntp(lines, intent)
+        elif section == "/interface ethernet":
+            _parse_interface_ethernet(lines, iface_by_name)
+        elif section == "/interface vlan":
+            _parse_interface_vlan(lines, iface_by_name, intent)
+        elif section == "/interface bridge":
+            _parse_interface_bridge(lines, iface_by_name)
+        elif section == "/interface bonding":
+            _parse_interface_bonding(lines, iface_by_name, intent)
+        elif section == "/ip address":
+            _parse_ip_address(lines, iface_by_name)
+        elif section == "/ipv6 address":              # GAP-EVPN-3
+            _parse_ipv6_address(lines, iface_by_name)
+        elif section == "/ip route":
+            _parse_ip_route(lines, intent)
+        elif section == "/snmp":
+            _parse_snmp_root(lines, intent)
+        elif section == "/snmp community":
+            _parse_snmp_community(lines, intent)
+        elif section == "/user":
+            _parse_user(lines, intent)
+        elif section == "/ip dhcp-server network":
+            _parse_dhcp_server_network(lines, intent)
+        elif section == "/ip pool":
+            deferred_ip_pool.append(lines)
+        elif section == "/radius":
+            _parse_radius(lines, intent)
+        # Other sections silently ignored — not in scope yet.
+
+    for pool_lines in deferred_ip_pool:
+        _parse_ip_pool(pool_lines, intent)
+
+    # Order interfaces deterministically: ethernet ports first
+    # (by natural-sort name), then bridges, then VLANs, then rest.
+    intent.interfaces = _sort_interfaces(iface_by_name.values())
+
+    logger.debug(
+        "mikrotik_routeros parsed: hostname=%r ifaces=%d vlans=%d "
+        "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
+        intent.hostname,
+        len(intent.interfaces),
+        len(intent.vlans),
+        len(intent.static_routes),
+        len(intent.lags),
+        len(intent.local_users),
+        "yes" if intent.snmp else "no",
+        len(raw),
+    )
+    return intent
+
+
+# ---------------------------------------------------------------------------
+# Parser helpers
+# ---------------------------------------------------------------------------
+
+
+_SECTION_RE = re.compile(r"^(/[a-zA-Z][a-zA-Z0-9 \-]*)$")
+_COMMENT_RE = re.compile(r"^\s*#")
+
+
+def _join_continuations(raw: str) -> str:
+    """Collapse RouterOS ``\\`` line continuations into single lines."""
+    out: list[str] = []
+    buffer = ""
+    for line in raw.splitlines():
+        if buffer:
+            buffer += " " + line.strip()
+        else:
+            buffer = line
+        if buffer.rstrip().endswith("\\"):
+            # Strip the trailing backslash and keep buffering.
+            buffer = buffer.rstrip()[:-1].rstrip()
+            continue
+        out.append(buffer)
+        buffer = ""
+    if buffer:
+        out.append(buffer)
+    return "\n".join(out)
+
+
+def _group_by_section(raw: str) -> list[tuple[str, list[str]]]:
+    """Group lines by their ``/section`` heading.
+
+    Returns a list of (section, lines) pairs preserving order.  Lines
+    that don't belong to any section (file-level banner) are dropped.
+    """
+    groups: list[tuple[str, list[str]]] = []
+    current_section: str | None = None
+    current_lines: list[str] = []
+
+    for line in raw.splitlines():
+        stripped = line.rstrip()
+        if not stripped or _COMMENT_RE.match(stripped):
+            continue
+        m = _SECTION_RE.match(stripped)
+        if m:
+            if current_section is not None:
+                groups.append((current_section, current_lines))
+            current_section = m.group(1)
+            current_lines = []
+            continue
+        if current_section is None:
+            continue
+        current_lines.append(stripped)
+
+    if current_section is not None:
+        groups.append((current_section, current_lines))
+    return groups
+
+
+_KV_RE = re.compile(
+    r"""
+    ([\w\-]+)             # key
+    =
+    (                     # value:
+        "[^"]*"           #   double-quoted string, OR
+      | [^\s]+            #   bare token (no spaces)
+    )
+    """,
+    re.VERBOSE,
+)
+
+
+def _parse_kv(line: str) -> dict[str, str]:
+    """Parse ``key=value`` pairs from a single command line.
+
+    Handles quoted values with spaces.  Unquotes the result so the
+    caller gets the raw value.  Ignores the leading verb
+    (``add``/``set``/``remove``) and any ``[ find ... ]`` predicate.
+    """
+    pairs: dict[str, str] = {}
+    for m in _KV_RE.finditer(line):
+        key = m.group(1)
+        val = m.group(2)
+        if val.startswith('"') and val.endswith('"'):
+            val = val[1:-1]
+        pairs[key] = val
+    return pairs
+
+
+_FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")
+
+
+def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
+    for line in lines:
+        if line.startswith("set"):
+            kv = _parse_kv(line)
+            if "name" in kv:
+                intent.hostname = kv["name"]
+                return
+
+
+def _parse_system_dns(lines: list[str], intent: CanonicalIntent) -> None:
+    for line in lines:
+        if line.startswith("set"):
+            kv = _parse_kv(line)
+            if "servers" in kv:
+                intent.dns_servers = [
+                    s.strip() for s in kv["servers"].split(",") if s.strip()
+                ]
+
+
+def _parse_system_ntp(lines: list[str], intent: CanonicalIntent) -> None:
+    for line in lines:
+        if line.startswith("set"):
+            kv = _parse_kv(line)
+            if "servers" in kv:
+                intent.ntp_servers = [
+                    s.strip() for s in kv["servers"].split(",") if s.strip()
+                ]
+
+
+def _parse_interface_ethernet(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Parse ``set [ find default-name=etherN ] ...`` tweaks.
+
+    Real RouterOS configs routinely rename ports for descriptive
+    purposes — e.g. ``set [ find default-name=ether2 ] name="Access
+    Point"``.  When that happens, the RENAMED name (``Access Point``)
+    is how the rest of the config references the port (in
+    ``/interface bridge port interface=...``, ``/queue interface``,
+    ``/ip address interface=``, etc.).  The canonical must therefore
+    track the renamed name as ``CanonicalInterface.name``, with the
+    original factory default-name preserved on ``default_name`` so
+    the renderer can reconstruct the ``set [ find default-name=X ]``
+    lookup.
+    """
+    for line in lines:
+        if not line.startswith("set"):
+            continue
+        fm = _FIND_DEFAULT_NAME_RE.search(line)
+        if not fm:
+            continue
+        default_name = fm.group(1)
+        kv = _parse_kv(line)
+        canonical_name = kv.get("name", default_name)
+        iface = iface_by_name.get(canonical_name)
+        if iface is None:
+            iface = CanonicalInterface(
+                name=canonical_name,
+                default_name=default_name,
+                interface_type="ianaift:ethernetCsmacd",
+            )
+            iface_by_name[canonical_name] = iface
+        else:
+            # Merge default_name if we hadn't captured it yet.
+            if not iface.default_name:
+                iface.default_name = default_name
+        if "comment" in kv:
+            iface.description = kv["comment"]
+        if "disabled" in kv:
+            iface.enabled = kv["disabled"].lower() == "no"
+        if "mtu" in kv:
+            try:
+                iface.mtu = int(kv["mtu"])
+            except ValueError:
+                pass
+
+
+def _parse_interface_vlan(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+    intent: CanonicalIntent,
+) -> None:
+    """Parse ``add ... vlan-id=N name=X ...`` VLAN interface definitions."""
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        vlan_id_str = kv.get("vlan-id")
+        if not vlan_id_str or not vlan_id_str.isdigit():
+            continue
+        vlan_id = int(vlan_id_str)
+        iface = iface_by_name.setdefault(
+            name,
+            CanonicalInterface(
+                name=name,
+                interface_type="ianaift:l3ipvlan",
+            ),
+        )
+        if "comment" in kv:
+            iface.description = kv["comment"]
+        # Disabled flag (defaults to enabled if not present).
+        if "disabled" in kv:
+            iface.enabled = kv["disabled"].lower() == "no"
+        # Also record in intent.vlans so the VLAN database is complete.
+        # Use the IFACE name as the canonical VLAN name (not the
+        # comment) — the render path's `_vlan_id_for` lookup matches
+        # iface.name -> vlans[*].name, so keeping those in sync is
+        # essential for round-trip stability.  The comment (a human-
+        # readable label like "Management" or "Cluster") goes onto the
+        # VLAN's description field instead.
+        intent.vlans.append(CanonicalVlan(
+            id=vlan_id,
+            name=name,
+            description=kv.get("comment", ""),
+        ))
+
+
+def _parse_interface_bridge(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Parse bridge interface definitions (just record existence + name)."""
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        iface = iface_by_name.setdefault(
+            name,
+            CanonicalInterface(
+                name=name,
+                interface_type="ianaift:bridge",
+            ),
+        )
+        if "comment" in kv:
+            iface.description = kv["comment"]
+
+
+def _parse_interface_bonding(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+    intent: CanonicalIntent,
+) -> None:
+    """Parse ``/interface bonding`` section into :class:`CanonicalLAG`
+    records plus a synthetic LAG interface.
+
+    Expected shape::
+
+        /interface bonding
+        add name=bond1 slaves=ether1,ether2 mode=802.3ad
+
+    ``mode`` values:
+        802.3ad -> LACP (canonical "active")
+        active-backup / balance-* / broadcast -> static
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        slaves_raw = kv.get("slaves", "")
+        members = [s.strip() for s in slaves_raw.split(",") if s.strip()]
+        mode = _ROUTEROS_BONDING_MODE_TO_CANONICAL.get(
+            kv.get("mode", "").lower(), "static"
+        )
+        lag = CanonicalLAG(name=name, members=members, mode=mode)
+        intent.lags.append(lag)
+
+        # Also materialise the LAG as a CanonicalInterface so the
+        # rest of the canonical model treats it uniformly (IP
+        # addresses can be attached, etc.).
+        iface = iface_by_name.setdefault(
+            name,
+            CanonicalInterface(
+                name=name,
+                interface_type="ianaift:ieee8023adLag",
+            ),
+        )
+        if "comment" in kv:
+            iface.description = kv["comment"]
+        # Reverse-link members.
+        for m in members:
+            m_iface = iface_by_name.setdefault(
+                m,
+                CanonicalInterface(
+                    name=m,
+                    interface_type=_infer_iface_type_from_name(m),
+                ),
+            )
+            if m_iface.lag_member_of is None:
+                m_iface.lag_member_of = name
+
+
+_ROUTEROS_BONDING_MODE_TO_CANONICAL = {
+    "802.3ad": "active",
+    "active-backup": "static",
+    "balance-rr": "static",
+    "balance-xor": "static",
+    "balance-tlb": "static",
+    "balance-alb": "static",
+    "broadcast": "static",
+}
+
+
+def _parse_ip_address(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Parse ``add address=X/Y interface=Z`` lines and attach to iface."""
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        addr = kv.get("address")
+        iface_name = kv.get("interface")
+        if not addr or not iface_name:
+            continue
+        if "/" not in addr:
+            raise ParseError(
+                f"mikrotik_routeros: address {addr!r} missing CIDR prefix",
+                path=f"/ip address/{iface_name}",
+                snippet=line[:120],
+            )
+        ip_str, prefix_str = addr.split("/", 1)
+        try:
+            prefix_len = int(prefix_str)
+        except ValueError:
+            raise ParseError(
+                f"mikrotik_routeros: invalid CIDR prefix {prefix_str!r}",
+                path=f"/ip address/{iface_name}",
+                snippet=line[:120],
+            )
+        iface = iface_by_name.setdefault(
+            iface_name,
+            CanonicalInterface(
+                name=iface_name,
+                interface_type=_infer_iface_type_from_name(iface_name),
+                # If the name already matches a factory default pattern,
+                # use it as the default_name too.  Keeps round-trip
+                # consistent for ifaces that only appear in /ip address
+                # (no /interface ethernet set line carries the default-
+                # name lookup).
+                default_name=iface_name if _is_ethernet_name(iface_name) else "",
+            ),
+        )
+        iface.ipv4_addresses.append(CanonicalIPv4Address(
+            ip=ip_str.strip(),
+            prefix_length=prefix_len,
+        ))
+
+
+def _parse_ipv6_address(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Parse ``/ipv6 address`` section entries (GAP-EVPN-3).
+
+    Mirrors :func:`_parse_ip_address` for v6.  RouterOS form:
+        /ipv6 address
+        add address=2001:db8::1/64 interface=ether1
+        add address=fe80::1/64 interface=ether1 advertise=no
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        addr = kv.get("address")
+        iface_name = kv.get("interface")
+        if not addr or not iface_name:
+            continue
+        if "/" not in addr:
+            continue
+        ip_str, prefix_str = addr.split("/", 1)
+        try:
+            prefix_len = int(prefix_str)
+        except ValueError:
+            continue
+        # Scope inferred from fe80::/10 — RouterOS doesn't keyword-tag
+        # link-local addresses on the wire (the ``advertise=no`` flag
+        # is informational; we don't model it).
+        lo = ip_str.strip().lower()
+        scope = (
+            "link-local"
+            if (
+                len(lo) >= 3
+                and lo[:2] == "fe"
+                and lo[2] in ("8", "9", "a", "b")
+            )
+            else "global"
+        )
+        iface = iface_by_name.setdefault(
+            iface_name,
+            CanonicalInterface(
+                name=iface_name,
+                interface_type=_infer_iface_type_from_name(iface_name),
+                default_name=iface_name if _is_ethernet_name(iface_name) else "",
+            ),
+        )
+        iface.ipv6_addresses.append(CanonicalIPv6Address(
+            ip=ip_str.strip(),
+            prefix_length=prefix_len,
+            scope=scope,
+        ))
+
+
+def _parse_snmp_root(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/snmp set enabled=yes contact=X location=Y`` (Tier 2).
+
+    Sets global SNMP agent properties (contact + location).  The
+    community strings live under ``/snmp community`` and are handled
+    by :func:`_parse_snmp_community`.
+    """
+    for line in lines:
+        if not line.startswith("set"):
+            continue
+        kv = _parse_kv(line)
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        if "contact" in kv:
+            intent.snmp.contact = kv["contact"]
+        if "location" in kv:
+            intent.snmp.location = kv["location"]
+        if "trap-target" in kv:
+            for host in kv["trap-target"].split(","):
+                h = host.strip()
+                if h:
+                    intent.snmp.trap_hosts.append(h)
+
+
+def _parse_radius(
+    lines: list[str], intent: CanonicalIntent,
+) -> None:
+    """Parse ``/radius`` section entries into CanonicalRADIUSServer.
+
+    RouterOS form:
+        /radius
+        add address=10.0.0.4 secret=shared-secret service=login,dhcp \\
+            authentication-port=1812 accounting-port=1813
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        address = kv.get("address")
+        if not address:
+            continue
+        auth_port = 1812
+        acct_port = 1813
+        try:
+            auth_port = int(kv.get("authentication-port") or 1812)
+        except ValueError:
+            pass
+        try:
+            acct_port = int(kv.get("accounting-port") or 1813)
+        except ValueError:
+            pass
+        intent.radius_servers.append(CanonicalRADIUSServer(
+            host=address,
+            key=kv.get("secret", ""),
+            auth_port=auth_port,
+            acct_port=acct_port,
+        ))
+
+
+def _parse_dhcp_server_network(
+    lines: list[str], intent: CanonicalIntent,
+) -> None:
+    """Parse ``/ip dhcp-server network`` section into CanonicalDHCPPool.
+
+    RouterOS DHCP is genuinely spread across THREE sections:
+        /ip dhcp-server          - the server instance (binds to iface)
+        /ip dhcp-server network  - network-scoped options (gateway, DNS)
+        /ip pool                 - the allocation range
+
+    For canonical translation, the `network` section is the richest
+    per-pool record — it carries gateway, DNS, domain, and the address
+    CIDR.  We use it as the pool's primary record and merge address-
+    range data from /ip pool in a separate pass.  Real configs keep
+    the sections structurally parallel so match-by-position works in
+    simple cases; more complex cases need a future refinement pass.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        address = kv.get("address")
+        if not address:
+            continue
+        pool = CanonicalDHCPPool(
+            network=address,
+            gateway=kv.get("gateway", ""),
+            domain_name=kv.get("domain", ""),
+        )
+        dns_raw = kv.get("dns-server", "")
+        if dns_raw:
+            pool.dns_servers.extend(
+                s.strip() for s in dns_raw.split(",") if s.strip()
+            )
+        intent.dhcp_servers.append(pool)
+
+
+def _parse_ip_pool(lines: list[str], intent: CanonicalIntent) -> None:
+    """Merge ``/ip pool add ranges=START-END`` data into existing
+    CanonicalDHCPPool records.
+
+    Matching strategy: find the pool whose network contains the range's
+    start IP.  If none matches (orphan pool) we create a new
+    CanonicalDHCPPool with just the range populated.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        ranges = kv.get("ranges", "")
+        if not ranges or "-" not in ranges:
+            continue
+        # ranges= can be comma-separated multiple; take the first.
+        first_range = ranges.split(",")[0].strip()
+        start_str, _, end_str = first_range.partition("-")
+        if not (start_str and end_str):
+            continue
+        try:
+            start_ip = ipaddress.IPv4Address(start_str.strip())
+        except ipaddress.AddressValueError:
+            continue
+        # Find an existing pool whose network contains start_ip.
+        merged = False
+        for pool in intent.dhcp_servers:
+            if not pool.network:
+                continue
+            try:
+                network = ipaddress.IPv4Network(pool.network, strict=False)
+            except (ValueError, ipaddress.AddressValueError):
+                continue
+            if start_ip in network:
+                pool.start_ip = start_str.strip()
+                pool.end_ip = end_str.strip()
+                merged = True
+                break
+        if not merged:
+            intent.dhcp_servers.append(CanonicalDHCPPool(
+                start_ip=start_str.strip(),
+                end_ip=end_str.strip(),
+            ))
+
+
+def _parse_user(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/user`` section entries into CanonicalLocalUser records.
+
+    RouterOS ``/export`` intentionally omits password hashes (they
+    live in a separate protected store), so canonical
+    ``hashed_password`` will be empty from this parser.  Group membership
+    maps to canonical privilege:
+        full   -> 15 (admin)
+        write  -> 10 (operator, elevated)
+        read   -> 1  (operator, read-only)
+        any custom group -> 1 (operator; unknown group treated as least-privileged)
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        group = (kv.get("group") or "").lower()
+        privilege = _ROUTEROS_GROUP_TO_PRIVILEGE.get(group, 1)
+        intent.local_users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=privilege,
+            hashed_password="",   # /export omits hashes
+            role="admin" if privilege == 15 else "operator",
+        ))
+
+
+_ROUTEROS_GROUP_TO_PRIVILEGE = {
+    "full": 15,
+    "write": 10,
+    "read": 1,
+}
+
+
+#: RouterOS auth-protocol → canonical auth_protocol short form.
+_MT_AUTH_MAP = {
+    "md5": "md5",
+    "sha1": "sha",
+    "sha256": "sha256",
+    "sha512": "sha512",
+}
+#: RouterOS encryption-protocol → canonical priv_protocol short form.
+_MT_PRIV_MAP = {
+    "des": "des",
+    "aes": "aes128",
+    "aes-128-ccm": "aes128",
+    "aes-128-cfb": "aes128",
+    "aes-192-cfb": "aes192",
+    "aes-256-cfb": "aes256",
+}
+
+
+def _parse_snmp_community(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``/snmp community set [ find default=yes ] name=X``
+    + ``add name=Y`` lines.
+
+    RouterOS overloads the ``/snmp community`` section to carry BOTH
+    v1/v2c communities AND v3 USM users — disambiguated by the
+    presence of ``authentication-protocol=`` on the line:
+
+    * No auth-proto → v1/v2c community (populates
+      :attr:`CanonicalSNMP.community`; first wins).
+    * Has auth-proto → SNMPv3 user (populates
+      :attr:`CanonicalSNMP.v3_users`).
+
+    RouterOS supports multiple community entries; we record the first
+    one as the canonical community (CanonicalSNMP has a single
+    community field — full multi-community is a Tier 2.5 refinement).
+    """
+    from ...canonical.intent import CanonicalSNMPv3User  # lazy local import
+    for line in lines:
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        if intent.snmp is None:
+            intent.snmp = CanonicalSNMP()
+        auth_proto_raw = kv.get("authentication-protocol", "")
+        priv_proto_raw = kv.get("encryption-protocol", "")
+        if auth_proto_raw or priv_proto_raw:
+            # Has crypto knobs → v3 user record.
+            intent.snmp.v3_users.append(CanonicalSNMPv3User(
+                name=name,
+                auth_protocol=_MT_AUTH_MAP.get(
+                    auth_proto_raw.lower(), auth_proto_raw.lower(),
+                ),
+                auth_passphrase=kv.get("authentication-password", ""),
+                priv_protocol=_MT_PRIV_MAP.get(
+                    priv_proto_raw.lower(), priv_proto_raw.lower(),
+                ),
+                priv_passphrase=kv.get("encryption-password", ""),
+            ))
+        else:
+            # Plain v1/v2c community.
+            if not intent.snmp.community:
+                intent.snmp.community = name
+
+
+def _parse_ip_route(lines: list[str], intent: CanonicalIntent) -> None:
+    """Parse ``add dst-address=... gateway=...`` static routes."""
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        dest = kv.get("dst-address")
+        if not dest:
+            continue
+        gateway = kv.get("gateway", "")
+        # gateway may be an IP or an interface name; both are fine for
+        # the canonical form since we expose both fields.
+        route = CanonicalStaticRoute(
+            destination=dest,
+            gateway=gateway,
+            description=kv.get("comment", ""),
+        )
+        intent.static_routes.append(route)
+
+
+# ---------------------------------------------------------------------------
+# Shared name/type helpers (re-imported by render.py)
+# ---------------------------------------------------------------------------
+
+
+def _is_ethernet_name(name: str) -> bool:
+    """Does this name look like a MikroTik default ethernet port?"""
+    return bool(re.match(r"^ether\d", name, re.IGNORECASE))
+
+
+def _is_vlan_name(name: str) -> bool:
+    """Does this name look like a VLAN interface?"""
+    return bool(re.match(r"^vlan\d", name, re.IGNORECASE))
+
+
+def _infer_iface_type_from_name(name: str) -> str:
+    """Map a RouterOS interface-name pattern to the canonical IANA
+    interface-type string.
+
+    Any code that materialises a fresh ``CanonicalInterface`` must use
+    this — otherwise different sections populate ``interface_type``
+    inconsistently and round-trips drift.  Order matters: more-specific
+    patterns come first.
+    """
+    if _is_vlan_name(name):
+        return "ianaift:l3ipvlan"
+    if _is_ethernet_name(name):
+        return "ianaift:ethernetCsmacd"
+    if re.match(r"^bond\d", name, re.IGNORECASE):
+        return "ianaift:ieee8023adLag"
+    if re.match(r"^(br|bridge)\d", name, re.IGNORECASE):
+        return "ianaift:bridge"
+    return ""
+
+
+def _sort_interfaces(
+    ifaces: Iterable[CanonicalInterface],
+) -> list[CanonicalInterface]:
+    """Deterministic interface ordering for reproducible output.
+
+    Ethernet ports first (natural-sort by numeric suffix), then bridges,
+    then VLAN interfaces, then everything else.
+    """
+    def sort_key(iface: CanonicalInterface) -> tuple[int, int, str]:
+        name = iface.name
+        if _is_ethernet_name(name):
+            m = re.match(r"^ether(\d+)", name, re.IGNORECASE)
+            return (0, int(m.group(1)) if m else 0, name)
+        if name.startswith("bridge"):
+            return (1, 0, name)
+        if _is_vlan_name(name):
+            m = re.match(r"^vlan(\d+)", name, re.IGNORECASE)
+            return (2, int(m.group(1)) if m else 0, name)
+        return (3, 0, name)
+    return sorted(ifaces, key=sort_key)

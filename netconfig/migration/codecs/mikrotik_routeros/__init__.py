@@ -23,6 +23,16 @@ Out of scope (future):
     * Wireless, CAPsMAN, MPLS, routing protocols.
     * ``set [ find ... ]`` predicates richer than ``default-name``.
 
+Module layout (post-split per the codecs/README.md split-codec
+convention):
+    * ``codec.py``      — ``MikroTikRouterOSCodec`` class (metadata,
+                          delegation, probe, port-name bridges)
+    * ``parse.py``      — section dispatcher + per-section parsers;
+                          hosts shared name/type helpers re-imported
+                          by render
+    * ``render.py``     — canonical tree → RouterOS ``/export`` text
+    * ``port_names.py`` — cross-vendor port-name identity bridge
+
 Certainty: ``best_effort`` — validated against synthetic fixtures; not
 yet tested against a real device capture (RouterOS emits a lot of
 default-value boilerplate via ``verbose`` that we filter out).
