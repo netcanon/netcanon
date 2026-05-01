@@ -1,0 +1,784 @@
+# Cross-vendor expectations: juniper_junos -> aruba_aoss
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_aruba_aoss/
+#
+# DC-router-to-switch pair.  Juniper Junos is a full DC-class router
+# with EVPN-VXLAN, apply-groups inheritance, instance-typed routing-
+# instances, and per-unit interface families; Aruba AOS-S is a
+# campus L2 / basic-L3 platform (HPE ProCurve heritage).  The
+# asymmetry is heavier in this direction than the reverse:
+#
+#   * Junos source actively populates VRFs, VXLAN VNIs, EVPN Type-5
+#     L3 VNIs, and apply-groups inheritance.  Aruba target has NO
+#     construct to render any of these — they actively drop on
+#     render (unsupported), not structurally empty (not_applicable).
+#   * The aruba_aoss codec's parse / render path is narrower than
+#     Junos's — domain, syslog, mtu, timezone parse-and-ignore on
+#     the Aruba codec today, so even Tier-1 surface partially drops
+#     on cross-vendor round-trip.
+#   * Hash formats ($1$/$5$/$6$ vs sha1/bcrypt) do not overlap;
+#     re-keying always required.
+#
+# The keyword-stable surface (vlan id, hostname, snmp community,
+# radius-server host, static routes) maps cleanly through canonical
+# when both sides have a parse / render path.
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: aruba_aoss
+  primary_use_case: >
+    Junos QFX / EX -> Aruba ProCurve / AOS-S downsizing /
+    consolidation.  Heavy asymmetry: Junos source carries DC-class
+    L3 / overlay surface that Aruba cannot represent (VRFs, VXLAN,
+    EVPN, apply-groups), so the cross-pair has more `unsupported`
+    fields than the reverse direction.  Best-suited use case:
+    extracting access-layer port + VLAN + IP + SNMP intent from a
+    Junos config to repurpose on a campus Aruba switch.
+  certainty: medium
+  references:
+    - id: junos-vlans-statement
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vlans.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vlans.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-naming
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/port_naming.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/ip_addressing.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-family-inet6
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/ip_addressing.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-05-01"
+    - id: junos-static-routing
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/static_routes.md
+      title: "Junos static-routing topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/topic-map/static-routing-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/snmp.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/snmp.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-05-01"
+    - id: junos-password-cli
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/local_users.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-05-01"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/local_users.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-05-01"
+    - id: junos-lag-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/lags.md
+      title: "Junos LAG overview topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-ae-example
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/lags.md
+      title: "Junos aggregated-Ethernet configuration example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html"
+      retrieved: "2026-05-01"
+    - id: junos-initial-config
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/system_services.md
+      title: "Junos Initial Configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/system-basics/topics/topic-map/initial-configuration-junos-os.html"
+      retrieved: "2026-05-01"
+    - id: junos-syslog-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/system_services.md
+      title: "Junos syslog overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sys-mgmt/topics/concept/syslog-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-radius-cli
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/radius.md
+      title: "Junos radius-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/radius-server-edit-system.html"
+      retrieved: "2026-05-01"
+    - id: junos-instance-type
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vrf_unsupported.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-05-01"
+    - id: junos-l3vpn
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vrf_unsupported.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-05-01"
+    - id: junos-groups-statement
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/apply_groups.md
+      title: "Junos groups statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/groups-edit.html"
+      retrieved: "2026-05-01"
+    - id: junos-config-groups-overview
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/apply_groups.md
+      title: "Junos configuration groups overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-config-groups-overview.html"
+      retrieved: "2026-05-01"
+    - id: aruba-vlans
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vlans.md
+      title: "Aruba ArubaOS-Switch 16.10 Advanced Traffic Management Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-port-naming
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/port_naming.md
+      title: "Aruba ArubaOS-Switch 16.10 Basic Operation Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/BOG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-ip-addressing
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/ip_addressing.md
+      title: "Aruba ArubaOS-Switch 16.10 IPv6 Configuration Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv6/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-static-routes
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/static_routes.md
+      title: "Aruba ArubaOS-Switch 16.10 IP Routing Configuration Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-snmp
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/snmp.md
+      title: "Aruba AOS-S 16.10 MCG — SNMP"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-user-security
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/local_users.md
+      title: "Aruba AOS-S 16.10 ASG — local users"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-lags
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/lags.md
+      title: "Aruba AOS-S 16.10 ATMG — link aggregation (trunk)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-system-services
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/system_services.md
+      title: "Aruba AOS-S 16.10 MCG — system services"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-radius
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/radius.md
+      title: "Aruba AOS-S 16.10 ASG — RADIUS"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-vrf-unsupported
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vrf_unsupported.md
+      title: "Aruba AOS-S — no VRF / routing-instances on this platform line"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: aruba-vxlan-unsupported
+      path: docs/vendor-references/juniper_junos_to_aruba_aoss/vxlan_evpn_unsupported.md
+      title: "Aruba AOS-S — no VXLAN / EVPN on this platform line"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Junos's ``set system host-name <name>`` -> Aruba ``hostname
+      "<name>"`` (Aruba quotes the value on render).  Round-trip
+      lossless on the FQDN/short-name string.
+    references: [junos-initial-config, aruba-system-services]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Junos's ``set system domain-name`` is parsed and lands on
+      ``CanonicalIntent.domain``, but the aruba_aoss codec's render
+      path does not emit a domain directive (no parse path for
+      ``ip domain-name`` or equivalent on AOS-S today).  The field
+      drops on Aruba render.  Codec-side wire-up gap.
+    references: [junos-initial-config, aruba-system-services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Junos's ``set system name-server <addr>`` lines collect into
+      the canonical list; Aruba render emits
+      ``ip dns server-address priority N <addr>`` lines with
+      synthetic priority numbers (1, 2, ...).
+    references: [junos-initial-config, aruba-system-services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Junos uses NTP (``set system ntp server``) while Aruba uses
+      SNTP (``sntp server priority N <addr>``).  The protocol
+      distinction is not modelled canonically.  Per-server
+      modifiers (Junos ``prefer`` / ``key`` / ``source-address``)
+      drop on round-trip.  Functional equivalence at the
+      server-list level for typical deployments.
+    references: [junos-initial-config, aruba-system-services]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Junos's ``set system time-zone <Olson>`` lands on
+      ``CanonicalIntent.timezone`` verbatim.  The aruba_aoss codec
+      render path does not emit ``time timezone <minute-offset>``
+      (no parse path on the codec today), so the field drops on
+      Aruba render.  Codec-side wire-up gap.
+    references: [junos-initial-config, aruba-system-services]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Junos's ``set system syslog host X any info`` populates the
+      canonical host list; the aruba_aoss codec render path does
+      not emit syslog directives.  Per-host severity / facility
+      filters drop on canonical layer first; the host list itself
+      then drops on Aruba render.  Codec-side wire-up gap.
+    references: [junos-syslog-overview, aruba-system-services]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Port-name mesh maps Junos ``ge-0/0/0`` / ``ae0`` / ``irb.100``
+      / ``lo0.0`` -> Aruba ``1`` / ``Trk1`` / VLAN-absorbed / no
+      Aruba equivalent.  Junos's speed prefix (``xe-`` = 10G,
+      ``et-`` = 40/100G) drops on Aruba's bare-numeric form.
+      Junos's ``lo0`` has no first-class Aruba analogue (the
+      management VLAN serves as the device-self-IP host); render
+      emits a ``;`` comment.  LAG index translates ``ae<N>`` ->
+      ``Trk<N+1>`` (zero-based -> one-based).
+    references: [junos-iface-naming, aruba-port-naming]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Junos's ``set interfaces <name> description "<text>"`` maps to
+      Aruba's ``name "<text>"`` directive (per-interface
+      description).  Both quote values with whitespace.
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Junos's ``set interfaces <name> disable`` -> Aruba ``disable``;
+      delete-form / absent -> Aruba ``enable``.
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The cross-vendor type hint is loosely informational; Junos
+      infers from name prefix (``ge-`` -> ethernetCsmacd; ``ae`` ->
+      ieee8023adLag), Aruba infers from name shape (bare number ->
+      ethernet, ``Trk`` -> port-channel).  Documented in the
+      aruba_aoss codec capability matrix as
+      ``/interfaces/interface/config/type`` lossy.
+    references: [junos-iface-naming, aruba-port-naming]
+
+  interfaces[].mtu:
+    disposition: unsupported
+    reason: >
+      Junos's ``set interfaces <name> mtu N`` lands on
+      ``CanonicalInterface.mtu``; the aruba_aoss codec render path
+      does not emit MTU directives (no parse path on the codec
+      today).  Field drops on Aruba render.  Codec-side wire-up
+      gap.
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Junos's ``set interfaces <name> unit 0 family inet address
+      X/N`` lands on ``CanonicalInterface.ipv4_addresses``; Aruba
+      render emits ``ip address X/N`` (CIDR form preserved on Aruba
+      AOS-S).  Multiple addresses per unit flatten to a list.
+      Junos's ``irb`` sub-interface family addresses transpose to
+      ``CanonicalVlan.ipv4_addresses`` via the ``l3-interface
+      irb.<id>`` link.
+    references: [junos-iface-fundamentals, aruba-ip-addressing]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Junos's ``family inet6 address`` form (with prefix-detected
+      link-local scope) maps to Aruba's
+      ``ipv6 address X/N [link-local]`` form.  The
+      ``CanonicalIPv6Address.scope`` discriminator preserves across
+      vendors.
+    references: [junos-family-inet6, aruba-ip-addressing]
+
+  interfaces[].switchport_mode:
+    disposition: good
+    note: >
+      Junos's ``family ethernet-switching interface-mode {access |
+      trunk}`` maps to Aruba's VLAN-centric port-membership lists.
+      Aruba's render path is VLAN-centric, so the canonical
+      switchport-mode field is consumed by
+      ``project_vlan_to_switchport`` to derive the per-VLAN tagged
+      / untagged lists.
+
+  interfaces[].access_vlan:
+    disposition: good
+    note: >
+      Junos's ``family ethernet-switching vlan members <name>`` (in
+      access mode) -> Aruba's per-VLAN ``untagged <port>`` list.
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: good
+    note: >
+      Junos's ``family ethernet-switching vlan members [ <name> ...
+      ]`` (in trunk mode) -> Aruba's per-VLAN ``tagged <port>``
+      list.
+
+  interfaces[].trunk_native_vlan:
+    disposition: lossy
+    reason: >
+      Junos's ``set interfaces <name> native-vlan-id N`` lands on
+      ``CanonicalInterface.trunk_native_vlan``; Aruba represents
+      native-VLAN as the ``untagged <port>`` membership on the
+      designated VLAN.  Round-trip preserves the integer; the
+      structural transformation is internal to each codec.
+
+  interfaces[].voice_vlan:
+    disposition: not_applicable
+    note: >
+      Junos QFX/EX has no first-class voice-VLAN construct
+      (LLDP-MED voice-VLAN advertisement lives under
+      ``protocols lldp-med``).  ``CanonicalInterface.voice_vlan`` is
+      always empty on Junos source so Aruba render emits no
+      voice-related directives.
+
+  interfaces[].lag_member_of:
+    disposition: good
+    note: >
+      Junos's ``set interfaces <name> ether-options 802.3ad ae<N>``
+      populates ``CanonicalInterface.lag_member_of``; Aruba render
+      emits a ``trunk <port-list> trk<N+1> lacp`` line with the
+      members reconstructed from the back-pointer list.
+    references: [junos-lag-overview, aruba-lags]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      Junos's ``family inet dhcp`` -> Aruba's
+      ``ip address dhcp-bootp``.  Per-platform DHCP-client option
+      semantics (lease length, hostname-option) are not modelled
+      canonically and drop on round-trip.
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      Junos's per-routing-instance interface binding (``set
+      routing-instances <vrf> interface <name>``) populates
+      ``CanonicalInterface.vrf`` (GAP 6).  Aruba AOS-S has no VRF
+      concept, so the binding drops on Aruba render — interfaces
+      lose their VRF membership and revert to the implicit global
+      routing context.
+    references: [junos-instance-type, aruba-vrf-unsupported]
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Junos's ``set vlans <name> vlan-id N`` populates
+      ``CanonicalVlan.id``; Aruba render emits ``vlan N`` directly.
+    references: [junos-vlans-statement, aruba-vlans]
+
+  vlans[].name:
+    disposition: good
+    note: >
+      Junos VLAN names allow letters, digits, hyphens, periods only
+      (a strict subset of Aruba's allowed character set), so Junos
+      -> Aruba is lossless on the name string.  Aruba render
+      preserves the name verbatim inside the ``vlan <id> / name
+      "<name>"`` stanza.
+    references: [junos-vlans-statement, aruba-vlans]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Junos supports ``set vlans <name> description X``; Aruba does
+      not model a VLAN-level description natively (only interface
+      descriptions).  Aruba render emits the description as a
+      ``;`` comment immediately after the ``vlan <id>`` header —
+      informational only, not interpreted by the AOS-S parser on
+      reload.
+    references: [junos-vlans-statement, aruba-vlans]
+
+  vlans[].tagged_ports:
+    disposition: good
+    note: >
+      Junos's per-interface ``family ethernet-switching vlan members``
+      transposes back to per-VLAN port lists on parse via the codec's
+      projection helper.  Aruba render emits ``tagged <ports>``
+      directly under the VLAN stanza.
+
+  vlans[].untagged_ports:
+    disposition: good
+    note: >
+      Same as ``tagged_ports``; Aruba render emits ``untagged
+      <ports>``.
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Junos's ``set interfaces irb unit 100 family inet address
+      X/N`` + ``set vlans <name> l3-interface irb.100`` lands on
+      ``CanonicalVlan.ipv4_addresses``; Aruba render emits the
+      address inline inside the VLAN stanza
+      (``vlan 100 / ip address X/N``).
+    references: [junos-bridging-overview, aruba-vlans]
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly (Junos's CIDR ->
+      Aruba's CIDR or dotted-mask via ``_dest_mask_to_cidr``
+      helper).  Junos's ``preference`` and ``qualified-next-hop``
+      attributes have no Aruba analogue and drop on render.
+      Per-routing-instance static routes (``set routing-instances X
+      routing-options static``) drop on Aruba render — Aruba has
+      no VRF concept (see ``vrf_unsupported.md``).  IPv6 static
+      routes (``set routing-options rib inet6.0 static``) parse-
+      and-ignore today (CanonicalStaticRoute is IPv4-shaped) —
+      lossy by deferral.
+    references: [junos-static-routing, aruba-static-routes]
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Junos's two-stage ``set system services dhcp-local-server`` +
+      ``set access address-assignment pool`` model populates
+      ``CanonicalIntent.dhcp_servers`` (when wired); the
+      aruba_aoss codec is primarily a relay platform and does NOT
+      advertise ``/dhcp/pool`` in its supported set, so Aruba
+      render emits no DHCP-pool directives.  The pool list drops
+      on render; helper-address directives are not modelled
+      canonically.
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: >
+      Junos's ``set snmp community public authorization read-only``
+      maps to Aruba's quoted ``snmp-server community "public"
+      Operator``.  Junos ``read-write`` -> Aruba ``Manager``.
+    references: [junos-snmp-overview, aruba-snmp]
+
+  snmp.location:
+    disposition: good
+    references: [junos-snmp-overview, aruba-snmp]
+
+  snmp.contact:
+    disposition: good
+    references: [junos-snmp-overview, aruba-snmp]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      Junos's ``set snmp trap-group <name> targets <addr>`` lines
+      collect into the canonical list; Aruba render emits flat
+      ``snmp-server host <addr>`` lines (the trap-group name and
+      per-group categories drop).
+    references: [junos-snmp-overview, aruba-snmp]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      USM username / group / auth-protocol / priv-protocol round-
+      trip via the canonical schema.  Junos ``authentication-sha``
+      (= SHA-1) -> Aruba ``sha``; Junos ``privacy-aes128`` -> Aruba
+      ``aes`` (= AES-128).  Junos-only protocol variants
+      (``authentication-sha224`` / ``sha256``, ``privacy-aes192`` /
+      ``aes256``, ``privacy-3des``) have no Aruba analogue and
+      collapse to the closest match (``sha`` / ``aes``) with a
+      comment, OR drop on render if no match.  Opaque hashed
+      passphrases are NOT cross-compatible — operator must re-key
+      v3 users on the target.
+    references: [junos-snmpv3-cg, aruba-snmp]
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: lossy
+    reason: >
+      Junos ``ae<N>`` -> Aruba ``Trk<N+1>`` (zero-based ->
+      one-based; codec render maps ``ae0`` -> ``Trk1``).  LACP
+      ``active`` / ``passive`` collapse to a single Aruba ``lacp``
+      keyword (Aruba does not distinguish active/passive at the
+      trunk-type level).  Static (no ``lacp`` block on Junos) ->
+      Aruba ``trunk``.  Junos's chassis-wide ``aggregated-devices
+      ethernet device-count`` has no Aruba parallel — drops on
+      render.  Note: the juniper_junos codec capability matrix
+      does not advertise ``/lags/lag`` under supported in v1, so
+      explicit ``CanonicalLAG`` records may not populate from
+      Junos parse — the ``CanonicalInterface.lag_member_of``
+      back-pointer is the surviving primitive on this direction.
+    references: [junos-lag-overview, junos-ae-example, aruba-lags]
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Junos class tokens map to Aruba two-role: ``super-user`` ->
+      ``manager``; ``operator`` -> ``operator``; ``read-only`` ->
+      ``operator`` (closest approximation).  Operator-defined
+      Junos classes collapse to ``operator`` with a comment.
+      Hash formats are NOT cross-compatible: Junos accepts ``$1$``
+      (MD5 legacy), ``$5$`` (SHA-256), ``$6$`` (SHA-512 default
+      since 17.2 per KB31903); Aruba accepts ``sha1 <hex>``,
+      ``bcrypt $2y$...``, and ``plaintext "<pass>"``.  None
+      overlap.  SSH-RSA / SSH-DSA / SSH-ED25519 keys on Junos have
+      no canonical fit in the hash-shaped ``hashed_password``
+      field — parse-and-ignore today (lossy by deferral).
+      Cross-vendor migration requires re-setting passwords on the
+      target.
+    references: [junos-password-cli, junos-kb-password-format, aruba-user-security]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Junos's ``set system radius-server <host> secret <key>`` ->
+      Aruba's ``radius-server host <ip> key "<secret>"``.  Default
+      ports (1812 / 1813) preserved.  Junos's ``$9$...``
+      reversible-encrypted secret cannot cross-decrypt to Aruba's
+      quoted plaintext / encrypted form — operator must re-set the
+      shared secret on the target.  Junos-only attributes
+      (``retry``, ``timeout``, ``source-address``) drop on round-
+      trip.
+    references: [junos-radius-cli, aruba-radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      The juniper_junos codec capability matrix lists
+      ``/vxlan-vnis/vni``, ``/vxlan-vnis/source-interface``, and
+      ``/vxlan-vnis/udp-port`` under supported — Junos source
+      actively populates ``CanonicalIntent.vxlan_vnis`` with
+      per-VLAN VNI mappings, source-interface (``lo0.0``), and
+      UDP port.  Aruba AOS-S has no VXLAN concept (capability
+      matrix lists every overlay path under unsupported with
+      rationale "VXLAN not modelled — AOS-S is a campus L2/L3
+      codec").  The entire list drops on Aruba render; the loss is
+      real (operator's overlay-fabric configuration does not
+      survive the migration).
+    references: [junos-evpn-overview, junos-evpn-irb-example, aruba-vxlan-unsupported]
+
+  vxlan_vnis[].vlan_id:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis`` (Aruba lacks VXLAN)."
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis``."
+
+  vxlan_vnis[].mcast_group:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis``."
+
+  vxlan_vnis[].flood_list:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis``."
+
+  vxlan_vnis[].source_interface:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis``."
+
+  vxlan_vnis[].udp_port:
+    disposition: unsupported
+    reason: "Same rationale as ``vxlan_vnis``."
+
+  evpn_type5_routes:
+    disposition: lossy
+    reason: "deferred"
+    references: [junos-evpn-overview, junos-evpn-irb-example]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The juniper_junos codec capability matrix lists
+      ``/routing-instances/instance`` under supported (GAP 6
+      wired); Junos source populates each instance's name, type,
+      RD, route-targets, description, and L3 VNI.  Aruba AOS-S has
+      no VRF concept on this platform line — the entire list drops
+      on Aruba render.  Operator's tenant isolation does not
+      survive the migration.
+    references: [junos-instance-type, junos-l3vpn, aruba-vrf-unsupported]
+
+  routing_instances[].name:
+    disposition: unsupported
+    reason: "Same rationale as ``routing_instances`` (Aruba has no VRF)."
+
+  routing_instances[].instance_type:
+    disposition: unsupported
+    reason: >
+      Junos's ``instance-type`` enum (``vrf``, ``virtual-router``,
+      ``mac-vrf``, ``l2vpn``, ``evpn``) has no Aruba analogue —
+      drops alongside the parent instance.
+
+  routing_instances[].route_distinguisher:
+    disposition: unsupported
+    reason: "Same rationale as ``routing_instances``."
+
+  routing_instances[].rt_imports:
+    disposition: unsupported
+    reason: "Same rationale as ``routing_instances``."
+
+  routing_instances[].rt_exports:
+    disposition: unsupported
+    reason: "Same rationale as ``routing_instances``."
+
+  routing_instances[].description:
+    disposition: unsupported
+    reason: "Same rationale as ``routing_instances``."
+
+  routing_instances[].l3_vni:
+    disposition: unsupported
+    reason: >
+      Junos's ``set routing-instances <vrf> protocols evpn
+      ip-prefix-routes vni N`` populates the L3 VNI for EVPN
+      Type-5 routing.  Aruba has no EVPN — drops with the parent
+      instance.
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private (Junos preserves
+      ``protocols / policy-options / firewall``; Aruba preserves
+      ``include-credentials`` / module-type stanzas); cross-vendor
+      migration drops the section with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: lossy
+    reason: >
+      Junos-specific concept (``set apply-groups <G>`` per GAP 9b).
+      The juniper_junos parser does a two-pass parse: first pass
+      flattens apply-groups inheritance into the canonical tree
+      (so an inherited MTU 9000 appears on every matching
+      interface); second pass preserves the original group-scoped
+      lines on ``CanonicalIntent.apply_groups`` and ``group_content``.
+      On Aruba render, the FLATTENED canonical content emits as
+      Aruba config (operator's intent preserved); the apply-groups
+      structure itself is dropped (Aruba has no analogue).  A
+      validation banner notes the loss.
+    references: [junos-groups-statement, junos-config-groups-overview]
+
+  group_content:
+    disposition: lossy
+    reason: >
+      Companion to ``apply_groups``; the original group-scoped
+      set-line tails are preserved on Junos same-vendor round-trip
+      but drop entirely on cross-vendor render to Aruba (no
+      analogue construct).  See ``apply_groups`` for the flattening
+      behaviour that preserves the operator's intent.
+    references: [junos-groups-statement, junos-config-groups-overview]
+
+# ---------------------------------------------------------------------------
+# Notes on confidence and deferred items
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The keyword-stable surface (vlans / hostname / DNS / SNMP
+#     v1+v2c / radius-server / static-routes / IPv4+IPv6 addressing)
+#     is high-confidence and grounded by both vendors' published CG.
+#
+#   * The asymmetric direction (Junos wider than Aruba) makes more
+#     fields `unsupported` (Junos source actively populates fields
+#     Aruba target cannot represent) than the reverse direction's
+#     `not_applicable` count.  This is the harder direction.
+#
+#   * The hash-format incompatibility, NTP/SNTP protocol,
+#     LAG-name index translation, and apply-groups flattening
+#     surfaces are medium-confidence — vendor docs are clear and
+#     codec policy is documented, but cross-vendor render involves
+#     decisions (super-user/operator/read-only -> manager/operator,
+#     ae<N> -> Trk<N+1>, group flattening) that operators may want
+#     to override.
+#
+# Deferred items (lossy with reason="deferred" or codec-side
+# wire-up gaps):
+#
+#   * evpn_type5_routes — the canonical CanonicalEvpnType5Route
+#     list is lossy-by-default in the juniper_junos codec
+#     capability matrix; no codec populates it today (would
+#     require policy-statement parsing).  Tagged `lossy` with
+#     `reason: "deferred"` per CLAUDE.md guidance for unconfident
+#     fields.
+#
+#   * MTU / domain / syslog / timezone — aruba_aoss codec render
+#     path does not emit these directives today.  Marked
+#     `unsupported` rather than `lossy` because Junos source
+#     actively populates the canonical fields and Aruba cannot
+#     represent them at all on render.
+#
+#   * IPv6 static routes — CanonicalStaticRoute is IPv4-shaped
+#     today; Junos's ``rib inet6.0 static`` parses-and-ignores.
+#
+#   * Per-VRF static routes — schema gap (no vrf field on
+#     CanonicalStaticRoute) AND structurally absent on Aruba.
+#
+#   * SSH public-key authentication on Junos — does not fit the
+#     hash-shaped CanonicalLocalUser.hashed_password field.
