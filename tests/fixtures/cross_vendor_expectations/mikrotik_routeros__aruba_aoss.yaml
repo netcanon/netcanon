@@ -1,0 +1,444 @@
+# Cross-vendor expectations: mikrotik_routeros -> aruba_aoss
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/
+#
+# Phase 3 follow-up pair.  Inverse of aruba_aoss__mikrotik_routeros.
+# Same wire-format and switching-philosophy gulf, but viewed from the
+# RouterOS source side: lossy points cluster around RouterOS-richer
+# surfaces (firewall / NAT / queues / wireless / scripting that fall
+# outside canonical scope and land in raw_sections) and around the
+# password-export gap (RouterOS does not surface its hashed
+# passwords in /export, so the Aruba render emits empty SHA-1 hashes
+# and the operator MUST set passwords manually post-migration).
+#
+# Aruba target also has structurally smaller feature footprint than
+# Cisco IOS-XE — fields like dhcp_servers (Aruba is relay-only) are
+# unsupported on the target side rather than lossy.  This is the
+# dominant difference from the inverse cisco_iosxe_cli pair.
+
+meta:
+  source_vendor: mikrotik_routeros
+  target_vendor: aruba_aoss
+  primary_use_case: >
+    MikroTik RouterOS to Aruba AOS-S migration (typical: SMB / WISP
+    operator scaling up to enterprise campus hardware, or
+    consolidating onto a Cisco-CLI-compatible ProCurve estate after
+    growing past RouterOS scale limits).  Loses RouterOS-rich
+    plumbing that does not have a canonical field (firewall, NAT,
+    queues, wireless, scripting, hotspot, IPsec) and loses password
+    material because RouterOS's /export does not include hashed
+    passwords.  Aruba's smaller feature footprint also means
+    several fields are unsupported on the target rather than lossy.
+  certainty: medium
+  references:
+    - id: system_services
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/system_services.md
+      title: "System services (hostname / DNS / NTP / timezone / syslog): MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-04-30"
+    - id: interface_naming
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/interface_naming.md
+      title: "Interface naming: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-04-30"
+    - id: ip_addressing
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/ip_addressing.md
+      title: "IPv4 / IPv6 addressing: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: vlans
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/vlans.md
+      title: "VLAN configuration: MikroTik RouterOS two-plane model versus Aruba VLAN-centric"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-04-30"
+    - id: switching_model
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/switching_model.md
+      title: "Switching philosophy: RouterOS router-first versus Aruba L2-by-default"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/47579231/Bridging+and+Switching"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/static_routes.md
+      title: "Static routes: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: dhcp
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/dhcp.md
+      title: "DHCP server pools (RouterOS three-section form) versus DHCP relay (Aruba)"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-04-30"
+    - id: snmp
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/snmp.md
+      title: "SNMP: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/local_users.md
+      title: "Local users + hash formats: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-04-30"
+    - id: lags
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/lags.md
+      title: "LAGs: RouterOS bond<N> versus Aruba Trk<N>"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-04-30"
+    - id: radius_aaa
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/radius_aaa.md
+      title: "RADIUS / AAA: MikroTik RouterOS versus Aruba AOS-S"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/13402205/RADIUS"
+      retrieved: "2026-04-30"
+    - id: routing_instances_vrf
+      path: docs/vendor-references/mikrotik_routeros_to_aruba_aoss/routing_instances_vrf.md
+      title: "VRF / routing-instances: RouterOS /ip vrf versus Aruba (no concept)"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      RouterOS ``/system identity / set name=ks-edge-01`` -> Aruba
+      ``hostname "ks-edge-01"``.  Bare on RouterOS source; quoted
+      on Aruba target render.  Identical semantic.
+    references: [system_services]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      RouterOS does not surface a top-level FQDN identity field;
+      the canonical ``domain`` is empty after RouterOS parse.
+      Aruba target render emits no domain directive.  Structural
+      absence on the source, not a translation loss.
+    references: [system_services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      RouterOS ``/ip dns / set servers=1.1.1.1,8.8.8.8`` parses
+      into ``list[str]``; Aruba target render emits per-entry
+      ``ip dns server-address priority N <addr>`` with priority
+      synthesised from canonical list order (priority 1 = first).
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system ntp client / set servers=<list>`` (full
+      NTPv4) -> Aruba ``sntp server priority N <addr>`` (SNTP).
+      The protocol distinction (full NTP vs SNTP) is lost on the
+      canonical layer (field is ``list[str]``).  Per-server
+      modifiers drop on round-trip.  Functional equivalence at
+      the server-list level for typical campus deployments.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system clock / set time-zone-name=America/
+      New_York`` (Olson / IANA tz database) -> Aruba ``time
+      timezone <minute-offset>`` plus separate ``time daylight-
+      time-rule <region>``.  Auto-rendering an Olson name as
+      Aruba syntax produces a numeric offset (e.g. ``-300`` for
+      EST) but loses the region context and DST rule binding;
+      operator must select the matching ``daylight-time-rule``.
+      Inverse direction has the opposite asymmetry.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system logging action add target=remote
+      remote=<addr>`` (destination) plus ``/system logging add
+      action=remote topics=...`` (filter) -> Aruba ``logging
+      <addr>``.  RouterOS's per-topic / per-severity filter rules
+      are richer than the canonical surface (host-only); per-
+      topic filters drop on the cross-vendor migration.  The
+      aruba_aoss codec does not currently parse syslog hosts on
+      its own side either, so cross-vendor render may end up as
+      no-op on Aruba target.
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface scalars round-trip with documented caveats:
+      (1) the operator-friendly free-form RouterOS name (``WAN
+      uplink``) cannot survive on Aruba — Aruba interface names
+      are fixed by the hardware layout; cross-vendor render
+      converts the operator name to an Aruba ``name "..."``
+      attribute (description) and replaces the in-band name with
+      the rename-mesh-chosen Aruba identity; (2) the
+      ``default_name`` discriminator is meaningless to Aruba and
+      drops on cross-vendor render; (3) ``interface_type`` is
+      lossy by both codecs' capability matrices (inferred from
+      the name shape on both); (4) Loopback emulation (RouterOS
+      empty-bridge with /ip address) lifts only awkwardly to
+      Aruba's VLAN-SVI form — Aruba has no first-class loopback,
+      so the codec must allocate a placeholder VLAN id; (5)
+      ``mtu`` is not parsed by the aruba_aoss codec on its own
+      side, so the field drops on Aruba render; (6) ``vrf`` is
+      structurally absent on Aruba target.
+    references: [interface_naming, ip_addressing, switching_model]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      ``id`` round-trips cleanly.  ``name`` is conflated with
+      the RouterOS L3 interface name (per the MikroTik codec's
+      ``LossyPath`` on /vlans/vlan/name); cross-vendor render to
+      Aruba may emit a generic ``name "vlanN"`` when the parsed
+      name was the bare interface form.  ``description`` has no
+      RouterOS source data — not_applicable rather than lossy in
+      this direction.  Tagged / untagged port lists land via
+      partial Plane-2 (bridge VLAN filtering) parse: bridge-port
+      pvid= and /interface bridge vlan rows lift to canonical
+      lists; cross-vendor render to Aruba's VLAN-centric form
+      may produce partially populated port lists when the
+      RouterOS source uses Plane 2 for switching.  SVI addressing
+      round-trips good (/interface vlan + /ip address -> Aruba
+      ``vlan <id> / ip address X/N`` with absorption).
+    references: [vlans, switching_model]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-table IPv4 routes round-trip cleanly: ``/ip route
+      add dst-address=X/N gateway=Y`` -> Aruba ``ip route X/N
+      Y``.  Aruba accepts both CIDR and dotted-mask destinations;
+      codec emits CIDR by default.  Lossy bits: (1) per-VRF
+      routes (``routing-table=TENANT-A``) drop to default VRF
+      because the canonical model lacks a vrf field on
+      CanonicalStaticRoute, AND Aruba target structurally has no
+      VRF concept anyway; (2) ``blackhole=yes`` flag has no
+      canonical equivalent — drops on render with banner;
+      (3) interface-as-gateway (``gateway=ether2``) populates
+      the canonical interface field but Aruba's ``ip route``
+      directive does not accept an interface as gateway —
+      drops with banner; (4) IPv6 static routes populate
+      canonically but the aruba_aoss codec render path for IPv6
+      static routes is not currently implemented.
+    references: [static_routes, routing_instances_vrf]
+
+  # ── Tier 2 — auto-translate with review banner ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
+      server network`` + ``/ip dhcp-server``) joins on parse to
+      a single CanonicalDHCPPool per network and emits in
+      canonical scope.  The aruba_aoss codec does NOT advertise
+      ``/dhcp/pool`` in its supported set — Aruba AOS-S is
+      primarily a DHCP relay platform.  Cross-vendor render to
+      Aruba drops the pool config with a relay-comment banner;
+      operator is directed to configure relay-and-central-server
+      topology instead.  RouterOS-only static reservations
+      (``/ip dhcp-server lease``), DHCP option codes, and
+      multi-range pools are not modelled canonically and drop to
+      raw_sections.
+    references: [dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact) round-trips
+      cleanly.  RouterOS does not have Aruba's Operator/Manager
+      access-keyword distinction (uses read-access= / write-
+      access= flags); cross-vendor render to Aruba defaults
+      RouterOS source communities to Operator unless the source
+      had write-access=yes set.  Trap hosts: RouterOS supports
+      only one trap target — single-element list collapses
+      cleanly to one Aruba ``snmp-server host`` line.  v3 USM:
+      RouterOS source ``MD5`` / ``SHA1`` and ``AES`` (= AES-128)
+      / ``DES`` overlap directly with Aruba's ``md5`` / ``sha`` /
+      ``aes`` / ``des`` — no algorithm downgrade required on
+      this direction.  RouterOS-specific ``aes-256-cfb`` cipher
+      does NOT have an Aruba equivalent (Aruba supports only
+      AES-128) — render emits ``aes`` with a banner.  Passphrases
+      are engineID-salted per RFC 3414 — operator MUST re-key on
+      the Aruba target.  Group field is empty on RouterOS source
+      (no group concept); Aruba render injects a default group
+      name (``snmpv3 group "<default>" user "<name>" sec-model
+      ver3``) with a banner.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      RouterOS ``/interface bonding mode=802.3ad slaves=etherN,
+      etherM`` round-trips cleanly to Aruba ``trunk <port-list>
+      trk<N> lacp``.  Naming convention differs (``bond1`` vs
+      ``Trk1``); rename mesh canonicalises.  Mode mapping:
+      ``802.3ad`` -> ``lacp``, ``balance-xor`` -> ``trunk``
+      (static).  RouterOS-only modes (active-backup, balance-rr,
+      balance-tlb, balance-alb, broadcast) have no Aruba
+      EtherChannel equivalent; codec collapses to static
+      ``trunk`` with a banner — operator must validate that
+      static aggregation is acceptable for the destination peer.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      RouterOS named groups -> Aruba two-role: ``full`` ->
+      ``manager``, ``read`` -> ``operator``, ``write`` ->
+      ``manager`` (no Aruba intermediate role; banner on render).
+      Custom RouterOS groups have no Aruba equivalent — collapse
+      to ``operator`` with banner.  Password material is the
+      structural blocker: RouterOS does not surface hashed
+      passwords in /export, so the canonical ``hashed_password``
+      arrives empty.  Aruba render emits ``password manager
+      user-name "<name>" sha1 ""`` (empty SHA-1) which Aruba
+      accepts syntactically but treats as a no-password account
+      (login disabled until the operator manually sets a
+      password).  Operator MUST re-set passwords on the Aruba
+      target after migration.
+    references: [local_users]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port / acct_port round-trip cleanly.  Shared
+      secret encoding pass-through verbatim.  Service binding
+      (RouterOS ``service=login,ppp,wireless,hotspot,dhcp,
+      ipsec``) versus Aruba's per-login-type method-list model
+      is not modelled canonically — RouterOS-only services
+      (ppp / wireless / hotspot / dhcp / ipsec) drop with
+      banner, Aruba target render emits ``aaa authentication
+      ssh login radius local`` default.
+    references: [radius_aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      mikrotik_routeros codec capability matrix lists
+      ``/vxlan-vnis/vni`` as unsupported ("RouterOS VXLAN exists
+      but is rare in canonical scope and not modelled in v1.").
+      aruba_aoss codec capability matrix also lists the path under
+      unsupported ("VXLAN not modelled — AOS-S is a campus L2/L3
+      codec.").  Cross-pair surface unsupported regardless of
+      structural compatibility.
+    references: [routing_instances_vrf]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      RouterOS does not model EVPN Type-5 at all.  Aruba AOS-S
+      has no MP-BGP / EVPN concept.  Cross-pair surface
+      effectively unsupported.
+    references: [routing_instances_vrf]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The mikrotik_routeros codec does not yet wire up ``/ip vrf``
+      parsing — the canonical ``routing_instances`` list is empty
+      after parsing a RouterOS source.  Aruba AOS-S has no VRF
+      concept on the 2930F / 2930M / 3810 / 5400R platforms
+      (single global routing table).  Cross-pair empty regardless
+      of structural compatibility.  When RouterOS-side wire-up
+      lands, the cross-pair surface will UPGRADE to lossy in this
+      direction (RouterOS source can carry VRFs; Aruba target
+      structurally cannot — flatten to global table with banner).
+    references: [routing_instances_vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict carrying RouterOS-rich plumbing (firewall, NAT,
+      mangle, queues, wireless, scripts, IPsec, scheduler, PPP,
+      hotspot) that has no canonical field.  Surfaced to operator
+      review; not auto-rendered.  This is the largest source of
+      cross-vendor information loss in this direction — the
+      RouterOS source carries far more semantic richness than the
+      canonical model captures, and Aruba target has no first-
+      class equivalent for any of these surfaces (a campus L2/L3
+      switch is not a router-firewall-AP-VPN appliance).
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; not a translation field."
+
+  source_format:
+    disposition: not_applicable
+    note: "Same as source_vendor — informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  RouterOS source never populates this list.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific companion to apply_groups.  Always empty on
+      this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The basic surface (hostname / DNS / NTP / IPv4-IPv6 addresses
+#     / static routes) is high-confidence: vendor docs are clear and
+#     both codecs have established parse+render coverage.
+#
+#   * The local-users surface is confidently lossy in this direction
+#     specifically because RouterOS's /export does not surface
+#     password material AND Aruba's hash formats (SHA-1 hex, bcrypt,
+#     plaintext) are not the same as RouterOS's vendor-private
+#     format — this is a documented limitation, not a codec gap.
+#     The empty SHA-1 render is the dominant lossy path.
+#
+#   * Switching plane (VLANs / interfaces switchport fields):
+#     medium-confidence, same as the inverse direction.  Plane-2
+#     (bridge VLAN filtering) parsing is partial in v1.
+#
+#   * VRF / EVPN-VXLAN are confidently unsupported on both codecs.
+#
+#   * RouterOS-only Tier-3 surfaces (firewall, queues, wireless,
+#     scripts, IPsec) are confidently not_applicable on the
+#     canonical surface; they land in raw_sections and are not
+#     auto-rendered.  This is the largest source of "cross-vendor
+#     information loss" in this direction — the canonical model
+#     simply does not capture as much as the RouterOS source carries.
+#
+#   * dhcp_servers is unsupported on the Aruba target side rather
+#     than lossy.  Aruba is relay-only on the campus platforms
+#     covered by AOS-S 16.x; the codec does not advertise
+#     /dhcp/pool in its supported set.  Operator-curated relay
+#     topology required.
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes — canonical schema gap; lands alongside
+#     VRF wire-up.  Marked unsupported above for transparency.
+#
+#   * RouterOS-specific per-interface tuning (``arp=`` modes,
+#     ``ageing-time``, ``loop-protect``, ``poe-out=auto-on``) —
+#     not modelled canonically, drops to raw_sections.
+#
+#   * Aruba's MTU / voice_vlan / helper-address parsing — codec
+#     wire-up gaps rather than cross-vendor mapping decisions.
