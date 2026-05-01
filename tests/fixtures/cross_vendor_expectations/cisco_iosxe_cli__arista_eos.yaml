@@ -1,0 +1,375 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> arista_eos
+#
+# This file enumerates the per-field translation disposition for every
+# top-level field on CanonicalIntent (see netconfig/migration/canonical/
+# intent.py).  Each disposition is grounded in vendor documentation
+# excerpts under docs/vendor-references/cisco_iosxe_cli_to_arista_eos/.
+#
+# Schema authored by Agent A in tests/fixtures/cross_vendor_expectations/
+# README.md (sibling file).  Disposition vocabulary:
+#   good            - field round-trips without semantic loss
+#   lossy           - field round-trips with documented degradation
+#   unsupported     - field is parse-and-ignore on one or both codecs
+#   not_applicable  - field has no concept on the target vendor
+#
+# Phase 3b deliverable.  Cisco IOS-XE -> Arista EOS is the second
+# worked-example pair after the arista_eos -> juniper_junos pair (Agent
+# A).  This pair is high-feature-overlap (DC-to-DC migration; Arista
+# EOS deliberately mirrors Cisco IOS for low onboarding friction).
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: arista_eos
+  primary_use_case: >
+    Cisco IOS-XE -> Arista EOS DC migration; high feature overlap
+    (Arista EOS deliberately mirrors Cisco IOS CLI grammar for
+    low operator onboarding cost).  The keyword-stable surface
+    (vlans / switchport / static routes / SNMP v1/v2c / hostname /
+    NTP / DNS / logging) round-trips cleanly; semantic-divergent
+    surfaces (interface naming, VRF, local user hashes, routing
+    protocols) are flagged lossy or unsupported.
+  certainty: medium
+  references:
+    - id: vlans
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/vlans.md
+      title: "VLAN configuration: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-virtual-lans-vlans"
+      retrieved: "2026-04-30"
+    - id: switchport
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/switchport.md
+      title: "Switchport mode: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-virtual-lans-vlans"
+      retrieved: "2026-04-30"
+    - id: interface_naming
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/interface_naming.md
+      title: "Interface naming: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/interface/command/ir-cr-book/ir-s7.html"
+      retrieved: "2026-04-30"
+    - id: ip_addressing
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/ip_addressing.md
+      title: "IPv4 / IPv6 addressing: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-ipv4"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/static_routes.md
+      title: "Static routes: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-ipv4"
+      retrieved: "2026-04-30"
+    - id: vrf
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/vrf.md
+      title: "VRF / routing-instance: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-static-inter-vrf-route"
+      retrieved: "2026-04-30"
+    - id: snmp
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/snmp.md
+      title: "SNMP: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-snmp"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/local_users.md
+      title: "Local users + hash formats: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-04-30"
+    - id: aaa
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/aaa.md
+      title: "AAA / TACACS+ / RADIUS: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-04-30"
+    - id: spanning_tree
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/spanning_tree.md
+      title: "Spanning-tree mode: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-spanning-tree-protocol"
+      retrieved: "2026-04-30"
+    - id: routing_protocols
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/routing_protocols.md
+      title: "Routing protocols (BGP / OSPF / EIGRP): Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-border-gateway-protocol-bgp"
+      retrieved: "2026-04-30"
+    - id: system_services
+      path: docs/vendor-references/cisco_iosxe_cli_to_arista_eos/system_services.md
+      title: "System services: Cisco IOS-XE versus Arista EOS"
+      source_url: "https://www.arista.com/en/um-eos/eos-switch-administration-commands"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  One entry per top-level CanonicalIntent field;
+# walks intent.py top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Both vendors use a bare ``hostname <name>`` global directive.
+      Identical grammar; round-trip is lossless.
+
+  domain:
+    disposition: good
+    note: >
+      Cisco uses ``ip domain name <fqdn>`` (space) and Arista uses
+      ``ip domain-name <fqdn>`` (hyphen).  Both codecs handle the
+      keyword variation; canonical stores the FQDN string verbatim.
+    references: [system_services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Both vendors use ``ip name-server <addr>`` directives, one
+      per server.  Round-trip is lossless on the address list.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Canonical model stores ``ntp_servers: list[str]`` (bare
+      addresses only).  Per-server options (``prefer``, ``iburst``,
+      ``key``, ``source``) are not modelled and drop on round-trip.
+      Address list itself is preserved.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Cisco emits ``clock timezone PST -8 0`` (offset+DST tokens)
+      while Arista emits ``clock timezone US/Pacific`` (zoneinfo
+      name).  Canonical stores an opaque string; cross-vendor
+      migration may produce a token the target accepts syntactically
+      but with different DST behaviour.  Operator-curated mapping
+      table would be needed for full fidelity.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Both vendors use ``logging host <addr>`` (or legacy ``logging
+      <addr>``) and round-trip the server list cleanly.  Severity /
+      facility tokens are not modelled (canonical surface is host
+      list only).
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips; per-interface fields
+      (name, description, enabled, ipv4_addresses, ipv6_addresses,
+      switchport_mode, access_vlan, trunk_allowed_vlans,
+      trunk_native_vlan, voice_vlan, lag_member_of, dhcp_client)
+      are good.  The lossy bit is ``interface_type`` / speed-hint:
+      Cisco names encode speed (GigabitEthernet vs TenGigabitEthernet)
+      while Arista's ``Ethernet<N>`` does not, so cross-vendor
+      round-trip degrades the speed inference.  Documented in both
+      codecs' capability matrices.  ``vrf`` field on per-interface
+      records also degrades — see ``routing_instances`` below.
+    references: [interface_naming, switchport, ip_addressing]
+
+  vlans:
+    disposition: good
+    note: >
+      VLAN id / name / description / tagged_ports / untagged_ports /
+      ipv4_addresses (SVI) round-trip cleanly.  Both vendors use
+      ``vlan <N> / name <X>`` and the same trunk syntax.  Port lists
+      track the renamed interface names from the rename mesh.
+    references: [vlans, switchport]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly (Cisco's dotted-
+      mask form converts to / from Arista's CIDR form via the
+      codecs).  However, per-VRF static routes (``ip route vrf X
+      ...``) are currently parse-and-ignore on the Cisco codec
+      (CanonicalStaticRoute lacks a ``vrf`` field).  This is a
+      known gap that lands alongside VRF wire-up.
+    references: [static_routes, vrf]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Cisco's ``ip dhcp pool <name>`` syntax with ``network``,
+      ``default-router``, ``dns-server``, ``lease`` lines maps to
+      Arista's IP DHCP Server / IP DHCP Relay configuration.
+      The Cisco codec parses DHCP pools (per its capability matrix);
+      the Arista codec does not advertise ``/dhcp/pool`` paths in
+      its supported set.  Cross-vendor round-trip therefore drops
+      DHCP server config on Cisco -> Arista.  Deferred to subsequent
+      audit pass.
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1 / v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly — both vendors share the
+      ``snmp-server community / location / contact / host`` grammar.
+      v3 USM (v3_users) round-trips the username + group + protocol
+      enum (auth_protocol / priv_protocol) but the opaque
+      auth_passphrase / priv_passphrase blobs are NOT cross-
+      compatible: USM keys are salted with vendor-specific engineID
+      constants, so Cisco-derived passphrases will fail on Arista
+      after migration.  Operator must re-key v3 users on the target
+      device.  Documented in CanonicalSNMPv3User docstring.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Both vendors use ``channel-group <N> mode active`` (LACP) on
+      the member interface, but the resulting LAG name differs:
+      Cisco emits ``Port-channel<N>`` (lower-case 'c'), Arista emits
+      ``Port-Channel<N>`` (capital 'C').  The Arista codec docstring
+      explicitly notes this divergence.  Round-trip preserves
+      member lists and LACP mode but the LAG name differs by
+      capitalisation, which the rename mesh canonicalises if the
+      target side uses port-name overrides.
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Cisco's ``privilege <N>`` (numeric, 1-15) versus Arista's
+      ``role <name>`` (named RBAC) requires operator-curated mapping
+      on round-trip.  More fundamentally, the password hash formats
+      are NOT cross-compatible:  Cisco type-9 scrypt (``$9$...``) is
+      Cisco-only; Arista sha512-crypt (``$6$...``) is Arista-only;
+      only the legacy MD5 type-5 (``$1$...``) form lands on both.
+      Cross-vendor migration of user accounts therefore requires
+      re-setting passwords on the target device.  Both codecs pass
+      hashes through verbatim; the loss surfaces in the validation
+      report.
+    references: [local_users]
+
+  radius_servers:
+    disposition: good
+    note: >
+      Both vendors round-trip the canonical
+      ``host / key / auth_port / acct_port`` tuple cleanly via
+      ``radius-server host`` (Arista) / ``radius server <name>`` +
+      ``address ipv4`` (Cisco IOS-XE modern form).  Shared-secret
+      preservation is opaque per the canonical schema.
+    references: [aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/vxlan-vnis/vni`` as unsupported with rationale "IOS-XE
+      VXLAN mappings (``interface nve1 / member vni <N> associate
+      vrf <name>``) parse-and-ignore in v1.  CanonicalVxlan schema
+      exists; wire-up deferred until demand arrives for Catalyst-
+      to-Arista migrations."  Arista EOS codec advertises
+      ``/vxlan-vnis/vni`` as supported but Cisco-side parse is
+      empty, so the cross-pair drops to unsupported.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list ``/evpn-type5-routes/route`` under lossy with
+      rationale that EVPN Type-5 is a VRF-property model
+      (CanonicalRoutingInstance.l3_vni) rather than per-prefix
+      records; no codec populates the per-prefix list today.
+      Effectively unsupported on the cross-pair until route-map /
+      policy-statement parsing lands.
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/routing-instances/instance`` as unsupported: "VRF
+      declarations (``vrf definition <name>`` with ``rd`` +
+      ``address-family ipv4`` + ``route-target import/export``) and
+      per-interface ``vrf forwarding <name>`` parse-and-ignore in
+      v1."  Arista EOS codec advertises the path as supported but
+      Cisco-side parse drops to empty, so the cross-pair migration
+      emits no ``vrf instance`` blocks on the Arista target.
+      Deferred to GAP-6 wire-up.
+    references: [vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      ``raw_sections`` is a Tier-3 dict of section-name -> raw text
+      that the pipeline carries through for display but never auto-
+      renders.  It is by-design vendor-specific and does not map
+      across vendors.  The validation report surfaces sections for
+      operator review but cross-vendor translation is out of scope
+      for this field.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  Cisco IOS-XE and Arista EOS codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The keyword-stable surface (vlans / switchport / static routes /
+#     hostname / DNS / NTP / SNMP v1+v2c) is high-confidence: the EOS
+#     manual examples are byte-identical to Cisco IOS for these
+#     commands, and both codecs have established round-trip tests on
+#     real captures.
+#
+#   * The interface-naming / VRF / hash-format / routing-protocol
+#     surfaces are medium-confidence: the vendor docs are clear on
+#     syntax but the codec wire-up is partial (e.g. Cisco IOS-XE
+#     parse-and-ignores VRF declarations entirely; Arista EOS
+#     advertises VRF support but the cross-pair degrades).
+#
+#   * Spanning-tree, BGP, OSPF, EIGRP are explicitly out of canonical
+#     scope on both vendors and confidently marked unsupported.
+#
+#   * DHCP server config is a known gap (Cisco parses, Arista codec
+#     does not advertise the path) and confidently marked lossy
+#     pending wire-up.
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes (``ip route vrf X ...``) — Cisco parses
+#     and emits them, Arista same; canonical model lacks a vrf field
+#     on CanonicalStaticRoute.  Lands alongside VRF wire-up.
+#
+#   * NTP per-server options (prefer / iburst / key / source) —
+#     canonical model is host-list-only.  Lossy by design;
+#     subsequent audit pass would extend the model if demand
+#     surfaces.
+#
+#   * TACACS+ servers — no canonical model in v1.  Lands when
+#     CanonicalTACACSServer is added.
