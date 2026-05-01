@@ -1,0 +1,152 @@
+! Command: show running-config
+! device: ks-leaf-01 (DCS-7280SR-48C6, EOS-4.27.0F)
+!
+! Synthetic kitchen-sink fixture for the arista_eos codec.
+! Intentionally exercises every canonical field declared 'supported'
+! or 'lossy' in AristaEOSCodec._CAPS, plus the LAG / local-user /
+! VRF / EVPN-VXLAN surfaces the parser populates.  Hashes are FAKE
+! per CLAUDE.md — they look real but are not actual credentials.
+!
+transceiver qsfp default-mode 4x10G
+!
+service routing protocols model multi-agent
+!
+hostname ks-leaf-01
+!
+spanning-tree mode mstp
+!
+ip name-server vrf default 10.0.0.53
+ip name-server vrf default 10.0.0.54
+dns domain example.net
+!
+ntp server 10.0.0.123
+ntp server 10.0.0.124
+!
+snmp-server community public ro
+snmp-server location "Synthetic Lab Rack 7"
+snmp-server contact "noc@example.net"
+snmp-server host 10.0.0.250
+snmp-server user monitor netadmin v3 auth sha $9$fake$authHash$1 priv aes256 $9$fake$privHash$1
+snmp-server user readonly readonly v3 auth sha256 $9$fake$authHash$2 priv aes $9$fake$privHash$2
+!
+username admin privilege 15 role network-admin nopassword
+username operator privilege 15 role network-admin secret sha512 $6$fakeSalt$fakeHashSha512AbcDefGhiJklMnoPqrStuVwxYz0123456789AbcDefGhiJklMnoPqrStuVwxYz01234
+username readonly privilege 1 role network-operator secret 5 $1$fakeSalt$fakeMd5Hash01234
+!
+vrf instance TENANT_A
+!
+vlan 10
+   name USERS
+!
+vlan 20
+   name VOICE
+!
+vlan 100
+   name TENANT_A_DATA
+!
+vlan 200
+   name TRANSIT
+!
+interface Ethernet1
+   description "Spine uplink (L3 routed)"
+   no switchport
+   mtu 9214
+   ip address 10.0.0.1/31
+   ipv6 address 2001:db8:0:1::1/64
+   ipv6 address fe80::1 link-local
+!
+interface Ethernet2
+   description "Access port for end-host"
+   switchport mode access
+   switchport access vlan 10
+!
+interface Ethernet3
+   description "Trunk to downstream switch"
+   switchport mode trunk
+   switchport trunk native vlan 1
+   switchport trunk allowed vlan 10,20,100,200
+!
+interface Ethernet4
+   description "LAG member 1"
+   channel-group 10 mode active
+!
+interface Ethernet5
+   description "LAG member 2"
+   channel-group 10 mode active
+!
+interface Ethernet6
+   description "LAG member 3"
+   channel-group 20 mode active
+!
+interface Ethernet7
+   description "LAG member 4"
+   channel-group 20 mode active
+!
+interface Loopback0
+   description "VTEP / router-id"
+   ip address 10.255.0.1/32
+   ipv6 address 2001:db8:ffff::1/128
+!
+interface Management1
+   description "Out-of-band management"
+   ip address 192.168.100.10/24
+   ipv6 address 2001:db8:100::a/64
+!
+interface Port-Channel10
+   description "Bonded uplink to core"
+   no switchport
+   ip address 10.0.1.1/31
+!
+interface Port-Channel20
+   description "Bonded trunk to leaf-02"
+   switchport mode trunk
+   switchport trunk allowed vlan 100,200
+!
+interface Vlan100
+   description "Tenant A data SVI"
+   vrf TENANT_A
+   ip address 10.100.0.1/24
+   ipv6 address 2001:db8:100:100::1/64
+!
+interface Vlan200
+   description "Transit SVI"
+   ip address 10.200.0.1/24
+!
+interface Vxlan1
+   vxlan source-interface Loopback0
+   vxlan udp-port 4789
+   vxlan vlan 10 vni 10010
+   vxlan vlan 20 vni 10020
+   vxlan vlan 100 vni 10100
+   vxlan vrf TENANT_A vni 50100
+!
+ip routing
+ip routing vrf TENANT_A
+!
+ipv6 unicast-routing
+!
+ip route 0.0.0.0/0 192.168.100.1
+ip route 10.50.0.0/16 10.0.0.2
+!
+ipv6 route ::/0 2001:db8:0:1::2
+!
+router bgp 65001
+   router-id 10.255.0.1
+   neighbor 10.0.0.0 remote-as 65000
+   !
+   vlan 100
+      rd 10.255.0.1:100
+      route-target both 65000:100
+      redistribute learned
+   !
+   vrf TENANT_A
+      rd 10.255.0.1:50100
+      route-target import evpn 65000:50100
+      route-target export evpn 65000:50100
+      route-target import evpn 65000:99999
+   !
+   address-family evpn
+      neighbor 10.0.0.0 activate
+   !
+!
+end
