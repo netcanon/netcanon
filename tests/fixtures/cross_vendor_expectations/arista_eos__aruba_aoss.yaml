@@ -1,0 +1,457 @@
+# Cross-vendor expectations: arista_eos -> aruba_aoss
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/arista_eos_to_aruba_aoss/
+#
+# Phase 3 cross-mesh pair: aruba_aoss mesh sweep, REVERSE direction
+# of aruba_aoss__arista_eos.yaml.  This is the asymmetrically harder
+# direction because Arista EOS is a DC-class switch with rich VRF /
+# EVPN / VXLAN / dynamic routing support, while Aruba AOS-S is a
+# campus L2/basic-L3 platform that doesn't model any of those.  The
+# "richer-source-than-target" loss concentrates on:
+#
+#   * VRF — Arista carries fully-modelled VRFs (vrf instance + RD +
+#     RT + per-interface vrf membership + l3_vni for EVPN Type-5);
+#     Aruba has no concept.  Render drops with banner.
+#   * VXLAN/EVPN — Arista's VXLAN data and EVPN MAC-VRF / Type-5
+#     surfaces have no Aruba target.
+#   * Local users — Arista's secret sha512 (the modern default)
+#     requires re-keying on Aruba's narrower SHA-1 / bcrypt set.
+#   * Timezone — zoneinfo names cannot be auto-mapped to Aruba's
+#     minute-offset format without a curated lookup.
+#   * MTU — not parsed by the aruba_aoss codec, so jumbo-frame
+#     settings (mtu 9214) drop on Aruba render.
+#
+# The keyword-stable surface (vlans / switchport / static routes /
+# SNMP v1+v2c / hostname / DNS / radius-server / CIDR addressing)
+# tracks closely because both vendors derive their CLI lineage from
+# Cisco IOS.
+
+meta:
+  source_vendor: arista_eos
+  target_vendor: aruba_aoss
+  primary_use_case: >
+    Edge consolidation where an Arista EOS DC-leaf or campus
+    deployment is decommissioned to a smaller Aruba AOS-S
+    2930F / 2930M / 3810 / 5400R footprint.  The Arista source
+    typically carries DC-class VRF / EVPN / VXLAN / BGP data
+    that has no Aruba target — those surfaces drop with banners.
+    The L2 / basic-L3 surface (VLAN, switchport, SVI, static
+    routes, SNMP, RADIUS, local users) round-trips well.
+  certainty: medium
+  references:
+    - id: vlans
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/vlans.md
+      title: "VLAN configuration: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: port_naming
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/port_naming.md
+      title: "Port naming: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/BOG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: ip_addressing
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/ip_addressing.md
+      title: "IPv4 / IPv6 addressing: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv6/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: static_routes
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/static_routes.md
+      title: "Static routes: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+    - id: snmp
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/snmp.md
+      title: "SNMP: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-snmp"
+      retrieved: "2026-05-01"
+    - id: local_users
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/local_users.md
+      title: "Local users + hash formats: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-05-01"
+    - id: lags
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/lags.md
+      title: "LAGs (Port-Channel / Trk): Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-data-transfer"
+      retrieved: "2026-05-01"
+    - id: system_services
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/system_services.md
+      title: "System services: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-switch-administration-commands"
+      retrieved: "2026-05-01"
+    - id: vrf_unsupported
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/vrf_unsupported.md
+      title: "VRF / routing-instances: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-static-inter-vrf-route"
+      retrieved: "2026-05-01"
+    - id: vxlan_unsupported
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/vxlan_unsupported.md
+      title: "VXLAN / EVPN: Arista EOS versus Aruba AOS-S"
+      source_url: "https://eos.arista.com/vxlan-configuration-example/"
+      retrieved: "2026-05-01"
+    - id: routing_protocols_unsupported
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/routing_protocols_unsupported.md
+      title: "Routing protocols (BGP / OSPF / EIGRP): Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arista.com/en/um-eos/eos-border-gateway-protocol-bgp"
+      retrieved: "2026-05-01"
+    - id: radius
+      path: docs/vendor-references/arista_eos_to_aruba_aoss/radius.md
+      title: "RADIUS: Arista EOS versus Aruba AOS-S"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Arista emits a bare ``hostname <name>`` directive; Aruba
+      wraps the value in quotes on render.  Round-trip is
+      lossless on the string content.
+    references: [system_services]
+
+  domain:
+    disposition: lossy
+    reason: >
+      Arista emits ``dns domain <fqdn>`` (or ``ip domain-name
+      <fqdn>`` legacy form) as a top-level directive.  The
+      aruba_aoss codec does not currently parse or render a
+      separate domain directive (AOS-S folds the FQDN into the
+      hostname via ``hostname "<host>.<domain>"`` when set).
+      Cross-vendor render drops the bare-domain field with no
+      banner — a known codec-side wire-up gap.
+    references: [system_services]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Arista's flat ``ip name-server <addr>`` list (with optional
+      ``vrf default`` qualifier the codec strips on parse) maps
+      to Aruba's ``ip dns server-address priority N <addr>`` form
+      with synthesised priorities (1, 2, ... in source order).
+      Round-trip is lossless on the address list.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Arista uses NTP (``ntp server <addr>``); Aruba uses SNTP
+      (``sntp server priority N <addr>``).  The protocol-keyword
+      distinction is lost on the canonical layer (field is
+      ``list[str]`` of addresses).  Per-server modifiers (Arista
+      ``prefer`` / ``iburst``; Aruba priority overrides) drop
+      on round-trip.  Functional equivalence at the server-list
+      level since AOS-S's SNTP client successfully queries NTP
+      servers.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Arista emits ``clock timezone <zoneinfo-name>`` (e.g.
+      ``US/Pacific``) with DST implicit in the zoneinfo data.
+      Aruba expects ``time timezone <minute-offset>`` (e.g.
+      ``-480`` for PST) plus a separate
+      ``time daylight-time-rule <region>`` directive.  Canonical
+      stores the operator-typed string verbatim; cross-vendor
+      migration produces a token Aruba's parser will reject
+      (``US/Pacific`` is not a valid Aruba time-timezone value).
+      Operator override required via a curated lookup.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Arista ``logging host <addr>`` -> Aruba ``logging <addr>``.
+      Both vendors round-trip the host list cleanly.  Severity /
+      facility tokens drop (canonical surface is host-list-only).
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips; per-interface fields
+      (description, enabled, ipv4_addresses, ipv6_addresses,
+      switchport_mode, access_vlan, trunk_allowed_vlans,
+      trunk_native_vlan, lag_member_of) are good.  Lossy bits:
+      (1) ``name`` carries Arista's ``Ethernet<N>`` /
+      ``Port-Channel<N>`` form which the port-rename mesh maps
+      to Aruba's bare-numeric / ``Trk<N>`` defaults — no speed-
+      token loss because neither vendor encodes link speed in the
+      port name;
+      (2) ``mtu`` is set on Arista source (``mtu 9214`` for
+      jumbo frames) but the aruba_aoss codec does not parse OR
+      render MTU, so jumbo-frame configuration drops silently
+      on render — operator must reconfigure manually;
+      (3) ``vrf`` field carries Arista's per-interface VRF
+      membership but Aruba has no VRF concept, so the field
+      drops with the rest of the VRF surface;
+      (4) Arista's ``Loopback<N>`` and ``Vxlan1`` interfaces
+      have no Aruba render path — Loopback drops silently;
+      Vxlan drops with the VXLAN banner.
+      Membership is reprojected via project_switchport_to_vlan
+      so VLAN-centric Aruba render has tagged/untagged port
+      lists derived from Arista's per-port switchport state.
+    references: [port_naming, vlans, ip_addressing]
+
+  vlans:
+    disposition: good
+    note: >
+      VLAN id, name, description, tagged_ports, untagged_ports,
+      and ipv4_addresses (SVI absorption) round-trip cleanly.
+      Arista's per-port ``switchport access vlan N`` /
+      ``switchport trunk allowed vlan ...`` re-projects via
+      ``project_switchport_to_vlan`` to the canonical VLAN-
+      centric port-membership lists; Aruba render emits
+      ``vlan N / untagged ... / tagged ...``.  SVI absorption:
+      Arista's ``interface Vlan100 / ip address X/N`` lands on
+      CanonicalVlan.ipv4_addresses; Aruba render emits the
+      address inline on the ``vlan 100`` stanza.  Caveat:
+      Arista's ``interface Vlan<N> / vrf TENANT_A`` SVIs have
+      the ``vrf`` field silently dropped on Aruba render (see
+      vrf_unsupported.md).
+    references: [vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF IPv4 static routes round-trip cleanly (both
+      vendors emit CIDR; no dotted-mask conversion noise).
+      Per-VRF static routes (``ip route vrf X ...``) are
+      currently parse-and-ignore at the canonical layer
+      (CanonicalStaticRoute lacks a ``vrf`` field), so the data
+      never reaches the Aruba target.  IPv6 default routes
+      (``ipv6 route ::/0 <gw>``) are not reliably parsed on the
+      Aruba side either, so cross-vendor IPv6 routes also drop.
+      Known canonical-model gap.
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S is primarily a DHCP relay platform; the
+      aruba_aoss codec does not advertise /dhcp/pool in its
+      supported set.  The arista_eos codec also does not
+      advertise the path, so CanonicalIntent.dhcp_servers is
+      always empty on this direction — symmetrically empty
+      rather than asymmetrically lossy.
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly.  Cross-vendor render maps Arista
+      ``ro`` -> Aruba ``Operator`` and Arista ``rw`` -> Aruba
+      ``Manager``.  v3 USM round-trips the structured fields
+      but the auth_protocol enum DOWNGRADES on Aruba: Arista's
+      ``sha224`` / ``sha256`` / ``sha384`` / ``sha512`` collapse
+      to plain ``sha`` (SHA-1 on Aruba) and Arista's ``aes192``
+      / ``aes256`` priv ciphers collapse to plain ``aes``
+      (AES-128 on Aruba).  On top of the protocol downgrade,
+      the opaque auth/priv passphrase blobs are NOT cross-
+      compatible (engineID-derived salt).  Operator must re-key
+      v3 users on the target.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Arista emits ``Port-Channel<N>`` (capital 'C'); Aruba
+      emits ``Trk<N>``.  Codec helper ``_extract_lag_number``
+      parses the integer suffix and emits the Aruba-style name.
+      LACP mode (active/passive/static) preserves; Arista's
+      MLAG (``mlag <id>`` inside the Port-Channel stanza) has no
+      Aruba equivalent and drops.  Member port lists round-trip
+      via the rename mesh — Arista's per-member
+      ``channel-group N mode active`` lines aggregate to a
+      single Aruba ``trunk <port-list> trk<N> lacp`` line via
+      the ``_collapse_port_list`` helper.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Arista's ``privilege <N>`` + ``role <name>`` collapses to
+      Aruba's two-role model on render: privilege >= 15 OR role
+      = network-admin -> manager; everything else -> operator.
+      Cisco-style granular privilege levels (1..14) are flattened.
+      Hash formats are NOT cross-compatible: Arista MD5
+      (``$1$...``), SHA-512-crypt (``$6$...``, the modern
+      default), and Cisco-7 reversible (``$7$...``) are all
+      Arista-only on the canonical layer; Aruba accepts SHA-1
+      (``<hex>``), bcrypt (``$2y$...``), and plaintext but none
+      match Arista's forms.  Cross-vendor migration of user
+      accounts therefore requires re-setting passwords on the
+      target device — and modern EOS uses SHA-512 by default,
+      so this bites every migration.
+    references: [local_users]
+
+  radius_servers:
+    disposition: good
+    note: >
+      Arista's ``radius-server host <ip> key "..."`` form (Cisco-
+      derived grammar) lands on the canonical
+      ``host / key / auth_port / acct_port`` tuple cleanly.
+      Aruba render emits the same shape — both vendors share
+      Cisco-style grammar.  Default ports (1812 / 1813)
+      preserved.  RADIUS shared secrets are NOT engineID-salted,
+      so cross-vendor migration of a key works without
+      re-keying.
+    references: [radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Arista EOS codec capability matrix lists ``/vxlan-vnis/vni``,
+      ``/vxlan-vnis/source-interface``, and
+      ``/vxlan-vnis/udp-port`` as supported.  The parser
+      populates CanonicalIntent.vxlan_vnis with a CanonicalVxlan
+      record per VLAN-to-VNI mapping (carrying source_interface
+      + udp_port broadcast across all records for the VTEP).
+      The aruba_aoss codec capability matrix lists every VXLAN
+      xpath under unsupported with rationale "VXLAN not modelled
+      — AOS-S is a campus L2/L3 codec".  The Arista synthetic
+      kitchen-sink (ks-leaf-01) carries five VNI records
+      (10010, 10020, 10100 + L3-VNI 50100); all drop silently
+      on Aruba render with an operator review-required banner.
+    references: [vxlan_unsupported]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Arista EOS codec lists /evpn-type5-routes/route under
+      lossy with rationale that EVPN Type-5 is a VRF-property
+      model (CanonicalRoutingInstance.l3_vni) rather than per-
+      prefix records.  The l3_vni field DOES populate from
+      Arista's ``vxlan vrf <name> vni <N>`` line, but the
+      aruba_aoss codec has no NVE / VRF / EVPN render path, so
+      both the per-prefix list AND the L3 VNI value silently
+      drop on Aruba render.
+    references: [vxlan_unsupported, vrf_unsupported]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Arista EOS codec parses ``vrf instance <name>`` blocks
+      AND walks ``router bgp / vrf <name>`` sub-stanzas to
+      extract RD + RT communities.  EVPN MAC-VRF (``router bgp
+      / vlan N``) lands as instance_type="mac-vrf"
+      routing-instance records.  Aruba AOS-S has NO VRF concept
+      whatsoever — the platform is a single global routing-
+      table campus L2/L3 switch.  The aruba_aoss codec has no
+      render path for /routing-instances/instance, so the
+      entire VRF surface drops with an operator review-required
+      banner.  This is the major asymmetric loss on this
+      direction.
+    references: [vrf_unsupported, routing_protocols_unsupported]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private; cross-vendor
+      migration drops it with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does
+      not consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation
+      per GAP 9b).  Arista EOS and Aruba AOS-S codecs do not
+      emit apply_groups; field is always empty on this cross-
+      pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The keyword-stable surface (vlans / hostname / DNS / SNMP
+#     v1+v2c / radius-server / static-routes) is high-confidence.
+#     Both vendors derive their CLI lineage from Cisco IOS so
+#     the bytes are nearly identical for the L2 / basic-L3
+#     surface.  Tracks the existing arista_eos__cisco_iosxe_cli
+#     and aruba_aoss__cisco_iosxe_cli pairs.
+#
+#   * The MAJOR asymmetric loss is the VRF / VXLAN / EVPN /
+#     dynamic-routing surface — Arista carries it richly; Aruba
+#     has no concept.  This is the same shape as
+#     arista_eos__cisco_iosxe_cli for VXLAN/EVPN (Cisco IOS-XE
+#     also has no auto-renderable form for those), but the VRF
+#     part is WORSE on this direction because Aruba does not
+#     model VRFs at all (Cisco IOS-XE renders cleanly via
+#     ``vrf definition`` blocks).
+#
+#   * The hash-format surface bites every migration because
+#     modern EOS defaults to ``secret sha512`` — Aruba has no
+#     SHA-512 acceptance on the ``password manager`` directive.
+#     Operators MUST re-key all users.
+#
+#   * The interface-naming surface is medium-confidence: vendor
+#     docs are clear but Arista's Loopback / Vxlan interfaces
+#     have no Aruba equivalent and silently drop.
+#
+#   * The MTU surface is a known wire-up gap on the aruba_aoss
+#     codec — Arista's ``mtu 9214`` jumbo-frame settings drop
+#     silently on render.  Lands when the Aruba codec gains MTU
+#     parse/render.
+#
+# Deferred items:
+#
+#   * Per-VRF static routes (``ip route vrf X ...``) — the
+#     CanonicalStaticRoute model has no VRF field; data drops at
+#     parse on the Arista source.  Lands alongside richer VRF
+#     wire-up.
+#
+#   * IPv6 static routes — not reliably parsed on the Aruba
+#     codec; cross-vendor IPv6 routes drop.
+#
+#   * NTP per-server options (prefer / iburst / key / source) —
+#     canonical model is host-list-only.  Lossy by design.
+#
+#   * TACACS+ servers — no canonical model in v1.  Lands when
+#     CanonicalTACACSServer is added.
+#
+#   * AAA method lists, route-maps / prefix-lists / policy-
+#     statements — Tier-3 informational on both codecs.
