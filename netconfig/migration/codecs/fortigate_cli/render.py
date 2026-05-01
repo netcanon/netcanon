@@ -150,6 +150,14 @@ def render_intent(tree: Any) -> str:
                 mask = _prefix_to_mask(addr.prefix_length)
                 out.append(f"        set ip {addr.ip} {mask}")
                 out.append("        set mode static")
+            # GAP-EVPN-3: IPv6 addresses.  FortiOS uses CIDR
+            # natively (``set ip6-address <addr>/<prefix>``); only
+            # one v6 address per interface fits the FortiOS schema.
+            if iface.ipv6_addresses:
+                v6 = iface.ipv6_addresses[0]
+                out.append(
+                    f"        set ip6-address {v6.ip}/{v6.prefix_length}"
+                )
             if iface.mtu is not None:
                 # FortiOS requires mtu-override enable before
                 # set mtu has effect on physical ports.  Emit

@@ -419,11 +419,12 @@ class TestCapabilities:
         lossy_paths = [lp.path for lp in CiscoIOSXECodec().capabilities.lossy]
         assert "/interfaces/interface/config/mtu" in lossy_paths
 
-    def test_declares_ipv6_as_unsupported(self):
-        unsupp_paths = [
-            up.path for up in CiscoIOSXECodec().capabilities.unsupported
-        ]
-        assert any("ipv6" in p for p in unsupp_paths)
+    def test_declares_ipv6_as_supported(self):
+        """GAP-EVPN-3: IPv6 addresses are now wired through every
+        codec; the NETCONF/OpenConfig sibling tracks the same."""
+        supp_paths = list(CiscoIOSXECodec().capabilities.supported)
+        assert "/interfaces/interface/ipv6/address/ip" in supp_paths
+        assert "/interfaces/interface/ipv6/address/prefix-length" in supp_paths
 
 
 # ---------------------------------------------------------------------------

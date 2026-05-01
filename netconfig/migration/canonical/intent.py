@@ -81,6 +81,33 @@ class CanonicalIPv4Address(BaseModel):
     prefix_length: int = Field(ge=0, le=32)
 
 
+class CanonicalIPv6Address(BaseModel):
+    """Single IPv6 address declaration on a CanonicalInterface.
+
+    Mirrors the :class:`CanonicalIPv4Address` shape; differs only in
+    the address type (RFC 4291 colon-hex form rather than dotted-quad)
+    and the optional ``scope`` discriminator that distinguishes
+    global / link-local addresses on the wire.
+
+    Attributes:
+        ip: Address in RFC 4291 colon-hex form (e.g.
+            ``"2001:db8::1"``, ``"fe80::1"``).  No prefix-length
+            suffix here; that lives on ``prefix_length``.
+        prefix_length: Subnet prefix length (0-128).
+        scope: Address scope discriminator.  ``"global"`` (the
+            default) for routable addresses; ``"link-local"`` for
+            ``fe80::/10`` addresses that must not leave the
+            attached link.  Vendors emit link-local explicitly via
+            different keywords (Cisco / Arista ``link-local``,
+            Junos ``family inet6 address X/Y`` then auto-detect by
+            prefix); the canonical model normalises to this enum.
+    """
+
+    ip: str
+    prefix_length: int = Field(ge=0, le=128)
+    scope: str = "global"  # 'global' | 'link-local'
+
+
 class CanonicalInterface(BaseModel):
     """A network interface — physical, VLAN SVI, LAG, loopback, tunnel."""
 
@@ -101,6 +128,7 @@ class CanonicalInterface(BaseModel):
     interface_type: str = ""                    # e.g. "ethernetCsmacd", "softwareLoopback"
     mtu: int | None = None
     ipv4_addresses: list[CanonicalIPv4Address] = Field(default_factory=list)
+    ipv6_addresses: list[CanonicalIPv6Address] = Field(default_factory=list)
     # Switchport state — None means "not a switchport" (routed port).
     switchport_mode: str | None = None          # "access" | "trunk" | None
     access_vlan: int | None = None              # for access mode

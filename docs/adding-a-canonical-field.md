@@ -329,6 +329,33 @@ canonical surface small.
 
 ---
 
+## IPv6 address wire-through (GAP-EVPN-3)
+
+A second worked example: `CanonicalIPv6Address` + per-interface
+`ipv6_addresses`, wired through every bidirectional codec in a single
+commit.  Followed the MTU pattern verbatim with two extras worth
+calling out:
+
+1. **Scope discriminator.**  IPv6 has a global / link-local
+   address-class distinction that's keyword-tagged on Cisco / Arista
+   (`ipv6 address X link-local`) but prefix-inferred on Junos /
+   MikroTik / OPNsense / FortiGate.  The canonical model carries
+   `scope: str = "global"` as a normalised enum; codecs that
+   keyword-tag round-trip the keyword, codecs that don't infer scope
+   from the `fe80::/10` prefix at parse time.
+
+2. **Vendor-placeholder filtering.**  FortiGate's `set ip6-address
+   ::/0`, OPNsense's `<ipaddrv6>dhcp6</ipaddrv6>` / `idassoc6`, and
+   AOS-S's `ipv6 address dhcp full` are vendor-default /
+   DHCPv6-keyword markers that don't represent static addresses.
+   Codecs filter them on parse so the canonical tree stays clean —
+   without the filter, every FortiGate fixture in the corpus would
+   produce 40+ spurious `::/0` records.  The pattern: parse-side
+   gates the canonical-record append behind a syntactic check (e.g.
+   "address contains a colon" for OPNsense's keyword vs colon-hex
+   discriminator); render-side emits without re-introducing the
+   placeholder.
+
 ## See also
 
 - [`../netconfig/migration/canonical/README.md`](../netconfig/migration/canonical/README.md) — canonical intent model overview and Tier 1 / 2 / 3 promotion rules

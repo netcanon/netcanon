@@ -483,6 +483,74 @@ def test_arista_vxlan_source_interface_survives_parse(
 # ---------------------------------------------------------------------------
 
 
+def test_ipv6_addresses_survive_real_capture_parse() -> None:
+    """GAP-EVPN-3: every real-capture fixture that carries static IPv6
+    addresses must have those addresses survive on the canonical
+    CanonicalInterface.ipv6_addresses field.
+
+    Vendor coverage exercised here:
+        * arista_eos / karneliuk_a_eos1_eos4260.txt — Management1
+          carries ``ipv6 address fc00:192:168:100::62/64`` (the
+          regression target).
+        * cisco_iosxe / batfish_cisco_interface.txt — multiple v6
+          addresses including a /128 loopback and a /64 SVI.
+        * junos / buraglio_netlab_junos184.set — em0 + lo0 carry
+          ``family inet6 address`` lines.
+        * junos / batfish_evpntype5_router1_junos2541.set — fxp0
+          v6 management address.
+
+    The aruba real-capture has only ``ipv6 address dhcp full``
+    (stateless DHCP) which doesn't represent a static address;
+    fortigate's only v6 lines are the ``set ip6-address ::/0``
+    placeholders that we filter; opnsense's v6 lines are
+    ``dhcp6`` / ``idassoc6`` keyword markers that we also filter.
+    Those vendors are deliberately not asserted here.
+    """
+    cases = [
+        # (fixture_path, codec_id, expected_address, expected_prefix)
+        (
+            "arista_eos/karneliuk_a_eos1_eos4260.txt",
+            "arista_eos",
+            "fc00:192:168:100::62",
+            64,
+        ),
+        (
+            "cisco_iosxe/batfish_cisco_interface.txt",
+            "cisco_iosxe_cli",
+            "2001:60:0:C00::B",
+            128,
+        ),
+        (
+            "junos/buraglio_netlab_junos184.set",
+            "juniper_junos",
+            "2001:db8:293:1::fd",
+            128,
+        ),
+        (
+            "junos/batfish_evpntype5_router1_junos2541.set",
+            "juniper_junos",
+            "2001:db8::2",
+            64,
+        ),
+    ]
+    for fixture_rel, codec_id, expected_ip, expected_prefix in cases:
+        path = REAL_FIXTURES_ROOT / fixture_rel
+        if not path.is_file():
+            continue
+        codec = get_codec(codec_id)
+        raw = path.read_text(encoding="utf-8", errors="replace")
+        intent = codec.parse(raw)
+        observed = [
+            (a.ip, a.prefix_length)
+            for iface in intent.interfaces
+            for a in iface.ipv6_addresses
+        ]
+        assert (expected_ip, expected_prefix) in observed, (
+            f"Expected ({expected_ip}, /{expected_prefix}) in "
+            f"{fixture_rel}; observed={observed}"
+        )
+
+
 def test_arista_bgp_vlan_mac_vrf_survives_karneliuk_parse() -> None:
     """The karneliuk EOS 4.26 fixture declares
     ``router bgp 65033 / vlan 100 / rd 10.0.255.33:100 /

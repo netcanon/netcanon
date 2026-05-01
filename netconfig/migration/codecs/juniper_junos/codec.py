@@ -47,6 +47,7 @@ from ....models.migration import (
 )
 from ...canonical.intent import (
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLocalUser,
@@ -121,6 +122,8 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/config/vrf",   # GAP 6
             "/vlans/vlan/id",
             "/vlans/vlan/name",
@@ -397,6 +400,19 @@ class JunosCodec(CodecBase):
                                 existing.append(pair)
                         except ValueError:
                             pass
+                # GAP-EVPN-3: same shape for v6 addresses on
+                # interface-range members.
+                for addr in attrs.get("ipv6", []):
+                    if "/" in addr:
+                        ip_str, prefix_str = addr.split("/", 1)
+                        try:
+                            prefix = int(prefix_str)
+                            existing = member_state.setdefault("ipv6", [])
+                            pair = (ip_str, prefix)
+                            if pair not in existing:
+                                existing.append(pair)
+                        except ValueError:
+                            pass
 
         # Materialise CanonicalInterface records from the accumulator.
         # GAP 4: sub-interfaces (unit 1+) are materialised as distinct
@@ -423,6 +439,28 @@ class JunosCodec(CodecBase):
             for ip, prefix in state.get("ipv4", []):
                 iface.ipv4_addresses.append(
                     CanonicalIPv4Address(ip=ip, prefix_length=prefix)
+                )
+            # GAP-EVPN-3: IPv6 addresses.  Scope inferred from the
+            # fe80::/10 prefix (Junos doesn't keyword-tag link-local).
+            # fe80::/10 covers fe80::/16 through febf::/16 (first 10
+            # bits are 1111111010 = fe + {8,9,a,b}<rest>).
+            for ip, prefix in state.get("ipv6", []):
+                lo = ip.lower()
+                scope = (
+                    "link-local"
+                    if (
+                        len(lo) >= 3
+                        and lo[:2] == "fe"
+                        and lo[2] in ("8", "9", "a", "b")
+                    )
+                    else "global"
+                )
+                iface.ipv6_addresses.append(
+                    CanonicalIPv6Address(
+                        ip=ip,
+                        prefix_length=prefix,
+                        scope=scope,
+                    )
                 )
             intent.interfaces.append(iface)
 
@@ -661,6 +699,7 @@ class JunosCodec(CodecBase):
                 bool(iface.description)
                 or (not iface.enabled)
                 or bool(iface.ipv4_addresses)
+                or bool(iface.ipv6_addresses)              # GAP-EVPN-3
             )
             # Structural collapse: if this interface is a member of
             # an auto-synthesised range, suppress the shared-attr
@@ -709,6 +748,16 @@ class JunosCodec(CodecBase):
                         f"family inet address "
                         f"{addr.ip}/{addr.prefix_length}"
                     )
+                # GAP-EVPN-3: IPv6 addresses on sub-interfaces.
+                # Junos emits scope-uniformly under family inet6 —
+                # the canonical scope discriminator is informational
+                # only on this codec.
+                for v6 in iface.ipv6_addresses:
+                    out.append(
+                        f"set interfaces {parent} unit {unit_num} "
+                        f"family inet6 address "
+                        f"{v6.ip}/{v6.prefix_length}"
+                    )
                 if not sub_has_renderable:
                     out.append(
                         f"set interfaces {parent} unit {unit_num}"
@@ -729,6 +778,12 @@ class JunosCodec(CodecBase):
                 out.append(
                     f"set interfaces {name} unit 0 family inet "
                     f"address {addr.ip}/{addr.prefix_length}"
+                )
+            # GAP-EVPN-3: IPv6 addresses also emit under unit 0.
+            for v6 in iface.ipv6_addresses:
+                out.append(
+                    f"set interfaces {name} unit 0 family inet6 "
+                    f"address {v6.ip}/{v6.prefix_length}"
                 )
             # Placeholder: the parse side creates an interface entry
             # for every ``set interfaces <name> ...`` line, even when
@@ -1447,6 +1502,28 @@ def _apply_interfaces(
                         existing.append(pair)
                 except ValueError:
                     pass
+        # GAP-EVPN-3: ``unit <N> family inet6 address <ipv6>/<prefix>``.
+        # Junos treats global / link-local uniformly here (unlike
+        # Cisco / Arista which keyword-tag link-local); we infer the
+        # canonical scope from the fe80::/10 prefix at materialisation
+        # time so render-side scope handling is loss-free.
+        if (
+            len(tokens) >= 7
+            and tokens[3] == "family"
+            and tokens[4] == "inet6"
+            and tokens[5] == "address"
+        ):
+            addr = tokens[6]
+            if "/" in addr:
+                ip_str, prefix_str = addr.split("/", 1)
+                try:
+                    prefix = int(prefix_str)
+                    existing = target_state.setdefault("ipv6", [])
+                    pair = (ip_str, prefix)
+                    if pair not in existing:
+                        existing.append(pair)
+                except ValueError:
+                    pass
         # ``unit <N> description "<desc>"`` — some configs place it here.
         if (
             len(tokens) >= 5
@@ -1525,6 +1602,16 @@ def _apply_interface_range(
         and tokens[5] == "address"
     ):
         state["attrs"].setdefault("ipv4", []).append(tokens[6])
+    # GAP-EVPN-3: ``unit 0 family inet6 address <ipv6>/<prefix>``.
+    if (
+        sub == "unit"
+        and len(tokens) >= 7
+        and tokens[2] == "0"
+        and tokens[3] == "family"
+        and tokens[4] == "inet6"
+        and tokens[5] == "address"
+    ):
+        state["attrs"].setdefault("ipv6", []).append(tokens[6])
     # Everything else parses-and-ignores.
 
 

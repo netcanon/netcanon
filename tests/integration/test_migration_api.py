@@ -195,15 +195,15 @@ class TestListMigrationAdapters:
 
     def test_cisco_iosxe_capabilities_endpoint(self, client):
         """The detail endpoint returns the full iosxe matrix including
-        lossy MTU and unsupported IPv6 declarations."""
+        lossy MTU and (post-GAP-EVPN-3) supported IPv6 declarations."""
         caps = client.get(
             "/api/v1/migration/adapters/cisco_iosxe/capabilities"
         ).json()
         assert caps["adapter"] == "cisco_iosxe"
         lossy_paths = [lp["path"] for lp in caps["lossy"]]
         assert "/interfaces/interface/config/mtu" in lossy_paths
-        unsupp_paths = [up["path"] for up in caps["unsupported"]]
-        assert any("ipv6" in p for p in unsupp_paths)
+        supp_paths = caps["supported"]
+        assert "/interfaces/interface/ipv6/address/ip" in supp_paths
 
     def test_mock_adapter_counts_match_capability_matrix(self, client):
         """The summary counts in the list view must match the detail view."""

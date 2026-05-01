@@ -769,15 +769,23 @@ TIER 3 — interactive rename modal in /migrate UI.
       TestVxlanSourceInterfaceUdpPort + test_juniper_junos
       TestVxlanSwitchOptions + cross-mesh round-trip cases.
 
-  (3) IPv6 ADDRESSES on interfaces (~2-3 hrs).  CanonicalIPv4Address
-      exists but no IPv6 sibling.  Add CanonicalIPv6Address (ip,
-      prefix_length, scope='global'/'link-local'), and a list field
-      ipv6_addresses on CanonicalInterface paralleling
-      ipv4_addresses.  Wire through every codec's parse + render.
-      Same shape as the existing MTU wire-through (multi-codec
-      single commit).  Cross-mesh: test_cross_mesh_overrides.py
-      gets a new "ipv6 address survives the round-trip" smoke
-      across every (source_capable, target_capable) bidir pair.
+  (3) [SHIPPED] IPv6 ADDRESSES on interfaces (GAP-EVPN-3).
+      CanonicalIPv6Address (ip, prefix_length,
+      scope='global'/'link-local') + CanonicalInterface.ipv6_addresses
+      now wired through every bidirectional codec's parse + render.
+      Link-local discriminator handles the keyword form on Cisco /
+      Arista (``ipv6 address X link-local``); Junos / MikroTik /
+      OPNsense infer scope from the fe80::/10 prefix.  Vendor-
+      specific placeholders dropped on parse: FortiGate ``::/0``,
+      OPNsense ``dhcp6`` / ``idassoc6``, AOS-S ``dhcp full``.
+      Karneliuk EOS 4.26 fixture's
+      ``ipv6 address fc00:192:168:100::62/64`` on Management1
+      now survives parse end-to-end.  Cross-mesh: 72 new smoke
+      tests cover every (source, target) pair preserving an IPv6
+      address through the round-trip.  See test_ipv6_wire_through
+      (36 unit tests) + test_cross_mesh_overrides
+      (test_ipv6_address_survives_round_trip / _cross_mesh_render)
+      + test_real_captures::test_ipv6_addresses_survive_real_capture_parse.
 
   (4) FULL BGP CANONICAL MODEL — CanonicalBGPProcess
       (multi-session).  Biggest of the five.  Schema needs:

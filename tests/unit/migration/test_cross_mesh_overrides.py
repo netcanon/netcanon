@@ -773,3 +773,183 @@ def test_vxlan_udp_port_override_survives_arista_to_junos():
     assert intent.vxlan_vnis[0].udp_port == 8472
     rendered = junos.render(intent)
     assert "set switch-options vxlan-port 8472" in rendered
+
+
+# ---------------------------------------------------------------------------
+# IPv6 address wire-through (GAP-EVPN-3) — cross-mesh smoke
+# ---------------------------------------------------------------------------
+
+
+# Codecs whose render path emits IPv6 addresses to native syntax —
+# parse-only codecs (cisco_iosxe_cli) sit on the source axis only.
+_IPV6_TARGET_CAPABLE = [
+    "arista_eos",
+    "aruba_aoss",
+    "cisco_iosxe",
+    "cisco_iosxe_cli",
+    "fortigate_cli",
+    "juniper_junos",
+    "mikrotik_routeros",
+    "opnsense",
+]
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("target_name", _IPV6_TARGET_CAPABLE)
+def test_ipv6_address_survives_cross_mesh_render(target_name: str):
+    """A canonical interface carrying ``2001:db8::1/64`` must
+    round-trip through every bidirectional target codec's render
+    path without losing the address.  Source side is the in-memory
+    canonical tree (skipping the source-codec parse step) so the
+    test isolates render-side preservation rather than parse +
+    render together — that is the silent-drop class of bug GAP-
+    EVPN-3 was filed for.
+    """
+    from netconfig.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalInterface,
+        CanonicalIPv6Address,
+    )
+    target = _CODECS[target_name]()
+    # Per-vendor name picked to satisfy each codec's name-shape
+    # heuristics.  Wrong names occasionally confuse render
+    # (e.g. mikrotik_routeros wants ``etherN``); a trio of common
+    # forms covers all eight.
+    name_for_vendor = {
+        "arista_eos": "Ethernet1",
+        "aruba_aoss": "1",
+        "cisco_iosxe": "GigabitEthernet0/0/0",
+        "cisco_iosxe_cli": "GigabitEthernet0/0/0",
+        "fortigate_cli": "port1",
+        "juniper_junos": "em0",
+        "mikrotik_routeros": "ether1",
+        "opnsense": "wan",
+    }
+    iface_name = name_for_vendor[target_name]
+    extra = {}
+    if target_name == "mikrotik_routeros":
+        extra = {
+            "interface_type": "ianaift:ethernetCsmacd",
+            "default_name": iface_name,
+        }
+    intent = CanonicalIntent(interfaces=[CanonicalInterface(
+        name=iface_name,
+        enabled=True,
+        ipv6_addresses=[
+            CanonicalIPv6Address(ip="2001:db8::1", prefix_length=64),
+        ],
+        **extra,
+    )])
+    rendered = target.render(intent)
+    # Crude assertion — the canonical address string appears in
+    # the rendered output.  Exact framing varies per vendor:
+    # Arista/Cisco/Aruba: ``ipv6 address 2001:db8::1/64``
+    # Junos: ``family inet6 address 2001:db8::1/64``
+    # FortiGate: ``set ip6-address 2001:db8::1/64``
+    # MikroTik: ``add address=2001:db8::1/64 interface=...``
+    # OPNsense: ``<ipaddrv6>2001:db8::1</ipaddrv6>``
+    assert "2001:db8::1" in rendered, (
+        f"{target_name}: rendered output dropped the IPv6 address.\n"
+        f"---\n{rendered}\n---"
+    )
+
+
+@pytest.mark.cross_mesh
+@pytest.mark.parametrize("source_name", _IPV6_TARGET_CAPABLE)
+@pytest.mark.parametrize("target_name", _IPV6_TARGET_CAPABLE)
+def test_ipv6_address_survives_round_trip(
+    source_name: str, target_name: str,
+):
+    """Full cross-mesh: a source codec parses an IPv6 address out of
+    its native syntax, and the target codec renders it back.  Skips
+    codecs whose minimal sample config doesn't declare an IPv6
+    address (i.e., we don't have native-syntax sample input lying
+    around for them) — for the rest, the canonical bridge must
+    preserve the address through both halves of the round-trip.
+    """
+    # Native IPv6 input for each parse-capable codec.  These are
+    # minimal but lexer-valid for their codec.
+    src_v6_configs = {
+        "arista_eos": (
+            "interface Ethernet1\n"
+            "   no switchport\n"
+            "   ipv6 address 2001:db8::1/64\n"
+            "!\n"
+        ),
+        "aruba_aoss": (
+            "interface 1\n"
+            "   routing\n"
+            "   ipv6 address 2001:db8::1/64\n"
+            "   exit\n"
+        ),
+        "cisco_iosxe": (
+            '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n'
+            "  <interface>\n"
+            "    <name>Gi0/0/0</name>\n"
+            "    <config><name>Gi0/0/0</name>"
+            "<enabled>true</enabled></config>\n"
+            "    <subinterfaces><subinterface>\n"
+            "      <index>0</index>\n"
+            '      <ipv6 xmlns="http://openconfig.net/yang/interfaces/ip">\n'
+            "        <addresses><address>\n"
+            "          <ip>2001:db8::1</ip>\n"
+            "          <config><ip>2001:db8::1</ip>"
+            "<prefix-length>64</prefix-length></config>\n"
+            "        </address></addresses>\n"
+            "      </ipv6>\n"
+            "    </subinterface></subinterfaces>\n"
+            "  </interface>\n"
+            "</interfaces>\n"
+        ),
+        "cisco_iosxe_cli": (
+            "interface GigabitEthernet1\n"
+            " ipv6 address 2001:db8::1/64\n"
+            "!\n"
+        ),
+        "fortigate_cli": (
+            "config system interface\n"
+            '    edit "port1"\n'
+            "        set ip6-address 2001:db8::1/64\n"
+            "    next\n"
+            "end\n"
+        ),
+        "juniper_junos": (
+            "set interfaces em0 unit 0 family inet6 address 2001:db8::1/64\n"
+        ),
+        "mikrotik_routeros": (
+            "/ipv6 address\n"
+            "add address=2001:db8::1/64 interface=ether1\n"
+        ),
+        "opnsense": (
+            '<?xml version="1.0"?>\n'
+            "<opnsense>\n"
+            "  <interfaces>\n"
+            "    <wan>\n"
+            "      <if>em0</if>\n"
+            "      <enable>1</enable>\n"
+            "      <ipaddrv6>2001:db8::1</ipaddrv6>\n"
+            "      <subnetv6>64</subnetv6>\n"
+            "    </wan>\n"
+            "  </interfaces>\n"
+            "</opnsense>\n"
+        ),
+    }
+    source = _CODECS[source_name]()
+    target = _CODECS[target_name]()
+    raw = src_v6_configs[source_name]
+    intent = source.parse(raw)
+    # The address must survive on the canonical tree.
+    found = any(
+        any(a.ip == "2001:db8::1" for a in iface.ipv6_addresses)
+        for iface in intent.interfaces
+    )
+    assert found, (
+        f"{source_name}: parse dropped the IPv6 address from "
+        f"canonical.  intent.interfaces={[(i.name, i.ipv6_addresses) for i in intent.interfaces]}"
+    )
+    # And it must round-trip out the target side.
+    rendered = target.render(intent)
+    assert "2001:db8::1" in rendered, (
+        f"{source_name} -> {target_name} dropped the IPv6 address "
+        f"on render.\n---\n{rendered}\n---"
+    )

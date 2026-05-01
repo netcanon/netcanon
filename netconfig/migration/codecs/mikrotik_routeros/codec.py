@@ -61,6 +61,7 @@ from ....models.migration import (
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -128,6 +129,8 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -266,6 +269,8 @@ class MikroTikRouterOSCodec(CodecBase):
                 _parse_interface_bonding(lines, iface_by_name, intent)
             elif section == "/ip address":
                 _parse_ip_address(lines, iface_by_name)
+            elif section == "/ipv6 address":              # GAP-EVPN-3
+                _parse_ipv6_address(lines, iface_by_name)
             elif section == "/ip route":
                 _parse_ip_route(lines, intent)
             elif section == "/snmp":
@@ -451,6 +456,19 @@ class MikroTikRouterOSCodec(CodecBase):
         if ip_rows:
             lines.append("/ip address")
             for ip, prefix, iface_name in ip_rows:
+                lines.append(
+                    f"add address={ip}/{prefix} interface={iface_name}"
+                )
+            lines.append("")
+
+        # ----- /ipv6 address (GAP-EVPN-3) -----
+        ip6_rows: list[tuple[str, int, str]] = []
+        for iface in tree.interfaces:
+            for v6 in iface.ipv6_addresses:
+                ip6_rows.append((v6.ip, v6.prefix_length, iface.name))
+        if ip6_rows:
+            lines.append("/ipv6 address")
+            for ip, prefix, iface_name in ip6_rows:
                 lines.append(
                     f"add address={ip}/{prefix} interface={iface_name}"
                 )
@@ -1065,6 +1083,60 @@ def _parse_ip_address(
         iface.ipv4_addresses.append(CanonicalIPv4Address(
             ip=ip_str.strip(),
             prefix_length=prefix_len,
+        ))
+
+
+def _parse_ipv6_address(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Parse ``/ipv6 address`` section entries (GAP-EVPN-3).
+
+    Mirrors :func:`_parse_ip_address` for v6.  RouterOS form:
+        /ipv6 address
+        add address=2001:db8::1/64 interface=ether1
+        add address=fe80::1/64 interface=ether1 advertise=no
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        addr = kv.get("address")
+        iface_name = kv.get("interface")
+        if not addr or not iface_name:
+            continue
+        if "/" not in addr:
+            continue
+        ip_str, prefix_str = addr.split("/", 1)
+        try:
+            prefix_len = int(prefix_str)
+        except ValueError:
+            continue
+        # Scope inferred from fe80::/10 — RouterOS doesn't keyword-tag
+        # link-local addresses on the wire (the ``advertise=no`` flag
+        # is informational; we don't model it).
+        lo = ip_str.strip().lower()
+        scope = (
+            "link-local"
+            if (
+                len(lo) >= 3
+                and lo[:2] == "fe"
+                and lo[2] in ("8", "9", "a", "b")
+            )
+            else "global"
+        )
+        iface = iface_by_name.setdefault(
+            iface_name,
+            CanonicalInterface(
+                name=iface_name,
+                interface_type=_infer_iface_type_from_name(iface_name),
+                default_name=iface_name if _is_ethernet_name(iface_name) else "",
+            ),
+        )
+        iface.ipv6_addresses.append(CanonicalIPv6Address(
+            ip=ip_str.strip(),
+            prefix_length=prefix_len,
+            scope=scope,
         ))
 
 

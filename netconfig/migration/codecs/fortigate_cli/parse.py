@@ -47,6 +47,7 @@ from ..base import ParseError
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -316,6 +317,29 @@ def _apply_system_interface(
                 ip=ip,
                 prefix_length=_mask_to_prefix(mask),
             ))
+
+        # GAP-EVPN-3: ``set ip6-address <addr>/<prefix>`` (CIDR form,
+        # FortiOS native).  ``set ip6-address ::/0`` is "no IPv6
+        # address" — drop the all-zero placeholder rather than emit
+        # a canonical record for it.
+        ip6_tokens = edit.settings.get("ip6-address")
+        if ip6_tokens and ip6_tokens[0]:
+            v6_token = ip6_tokens[0]
+            if "/" in v6_token:
+                ip_part, prefix_str = v6_token.split("/", 1)
+                # Filter the FortiOS placeholder ``::/0`` (semantic
+                # "no v6 address" — every interface in the corpus
+                # carries this default and treating it as a real
+                # address would flood the canonical tree).
+                if ip_part not in ("::", "0::"):
+                    try:
+                        iface.ipv6_addresses.append(CanonicalIPv6Address(
+                            ip=ip_part,
+                            prefix_length=int(prefix_str),
+                            scope="global",
+                        ))
+                    except ValueError:
+                        pass
 
         iface_type = edit.settings.get("type")
         vlanid = edit.settings.get("vlanid")

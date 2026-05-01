@@ -45,6 +45,7 @@ from ....models.migration import (
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -118,6 +119,8 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -476,6 +479,18 @@ class CiscoIOSXECLICodec(CodecBase):
             for addr in iface.ipv4_addresses:
                 mask = _prefix_to_mask(addr.prefix_length)
                 out.append(f" ip address {addr.ip} {mask}")
+            # GAP-EVPN-3: IPv6 addresses — IOS-XE uses CIDR natively
+            # (no dotted-mask form for v6).  Link-local re-emits the
+            # explicit keyword.
+            for v6 in iface.ipv6_addresses:
+                if v6.scope == "link-local":
+                    out.append(
+                        f" ipv6 address {v6.ip}/{v6.prefix_length} link-local"
+                    )
+                else:
+                    out.append(
+                        f" ipv6 address {v6.ip}/{v6.prefix_length}"
+                    )
             # Switchport — emit the mode FIRST (operator-natural
             # ordering), then EVERY captured switchport sub-attribute
             # regardless of mode.  Cisco IOS-XE tolerates declaring
@@ -790,6 +805,14 @@ _IP_RE = re.compile(
     r"^\s+ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
+# GAP-EVPN-3: ``ipv6 address 2001:db8::1/64`` (global) or
+# ``ipv6 address fe80::1 link-local`` (explicit link-local; bare
+# address with no prefix on IOS-XE).  Captures the address-token
+# (with optional /N suffix) and the optional ``link-local`` trailer.
+_IPV6_RE = re.compile(
+    r"^\s+ipv6\s+address\s+(\S+)(?:\s+(link-local))?\s*$",
+    re.IGNORECASE,
+)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
@@ -1069,6 +1092,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "trunk_native": None,
                 "lag_member_of": None,
                 "mtu": None,
+                "ipv6": [],
             }
             continue
 
@@ -1108,6 +1132,33 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             prefix_len = _mask_to_prefix(mask_str)
             if not current["ipv4"]:  # primary only
                 current["ipv4"].append({"ip": ip_str, "prefix_length": prefix_len})
+            continue
+
+        # GAP-EVPN-3: IPv6 address.  IOS-XE uses CIDR form natively
+        # (``ipv6 address 2001:db8::1/64``) — unlike its dotted-mask
+        # IPv4 form.  The ``link-local`` keyword tags an address as
+        # link-local-scope; bare ``ipv6 address fe80::1 link-local``
+        # without a prefix takes the implicit /64 from fe80::/10.
+        v6m = _IPV6_RE.match(line)
+        if v6m:
+            addr = v6m.group(1)
+            scope = "link-local" if v6m.group(2) else "global"
+            if "/" in addr:
+                ip_part, prefix_str = addr.split("/", 1)
+                try:
+                    current["ipv6"].append({
+                        "ip": ip_part,
+                        "prefix_length": int(prefix_str),
+                        "scope": scope,
+                    })
+                except ValueError:
+                    pass
+            elif scope == "link-local":
+                current["ipv6"].append({
+                    "ip": addr,
+                    "prefix_length": 64,
+                    "scope": "link-local",
+                })
             continue
 
         sm = _SWITCHPORT_MODE_RE.match(line)
@@ -1151,6 +1202,14 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         ipv4_addresses=[
             CanonicalIPv4Address(ip=a["ip"], prefix_length=a["prefix_length"])
             for a in raw.get("ipv4", [])
+        ],
+        ipv6_addresses=[
+            CanonicalIPv6Address(
+                ip=a["ip"],
+                prefix_length=a["prefix_length"],
+                scope=a.get("scope", "global"),
+            )
+            for a in raw.get("ipv6", [])
         ],
         switchport_mode=raw.get("switchport_mode"),
         access_vlan=raw.get("access_vlan"),
@@ -1398,6 +1457,9 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         for _ in iface.ipv4_addresses:
             yield "/interfaces/interface/ipv4/address/ip"
             yield "/interfaces/interface/ipv4/address/prefix-length"
+        for _ in iface.ipv6_addresses:                # GAP-EVPN-3
+            yield "/interfaces/interface/ipv6/address/ip"
+            yield "/interfaces/interface/ipv6/address/prefix-length"
     for _ in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"

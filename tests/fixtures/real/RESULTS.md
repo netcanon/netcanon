@@ -552,6 +552,33 @@ them breaks CI.
 after one grammar fix each — strong evidence the recursive block
 parser generalises beyond hand-crafted samples.
 
+### IPv6 address coverage (post GAP-EVPN-3)
+
+The following real-capture fixtures now exercise the
+`CanonicalIPv6Address` parse path landed in GAP-EVPN-3:
+
+* `arista_eos/karneliuk_a_eos1_eos4260.txt` — Management1 carries
+  `ipv6 address fc00:192:168:100::62/64` (the regression target).
+* `cisco_iosxe/batfish_cisco_interface.txt` — multiple v6 addresses
+  including a `/128` loopback (`2001:60:0:C00::B/128`) and a `/64`
+  (`2222::1/64`).
+* `cisco_iosxe/ntc_carrier_interfaces.txt` — `ipv6 address
+  FE80:A8::2DA::1689/126` (intentionally malformed; codec parses
+  without crashing).
+* `junos/buraglio_netlab_junos184.set` — em0 + lo0 v6 addresses.
+* `junos/batfish_evpntype5_router1_junos2541.set` — fxp0 v6 mgmt.
+* `junos/batfish_l3vpn_pe1_junos2541.set` — fxp0 v6 mgmt.
+
+Vendor placeholders deliberately filtered (no canonical record):
+FortiGate `set ip6-address ::/0` (40+ instances across the corpus),
+OPNsense `<ipaddrv6>dhcp6</ipaddrv6>` / `<ipaddrv6>idassoc6</ipaddrv6>`,
+Aruba AOS-S `ipv6 address dhcp full`.  These are vendor-default /
+DHCPv6-keyword forms that don't represent static addresses and
+would distort the canonical tree if parsed verbatim.
+
+Round-trip preservation guarded by
+`tests/unit/migration/test_real_captures.py::test_ipv6_addresses_survive_real_capture_parse`.
+
 ### Certification state (April 2026)
 
 **All five codecs are now `certified`.**  The cert bar (≥3 real-ish

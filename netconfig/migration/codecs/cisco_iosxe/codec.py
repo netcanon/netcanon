@@ -165,6 +165,8 @@ class CiscoIOSXECodec(CodecBase):
             "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -189,13 +191,6 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
-            UnsupportedPath(
-                path="/interfaces/interface/ipv6",
-                reason=(
-                    "Phase 0.5 covers IPv4 only — IPv6 support is queued "
-                    "for Phase 1 once BGP/OSPF models land."
-                ),
-            ),
             UnsupportedPath(
                 path="/vxlan-vnis/vni",
                 reason=(
@@ -357,18 +352,29 @@ class CiscoIOSXECodec(CodecBase):
             )
             if iface.interface_type:
                 ET.SubElement(cfg_el, f"{{{_NS_IF}}}type").text = iface.interface_type
-            if iface.ipv4_addresses:
+            if iface.ipv4_addresses or iface.ipv6_addresses:
                 subs_el = ET.SubElement(iface_el, f"{{{_NS_IF}}}subinterfaces")
                 si_el = ET.SubElement(subs_el, f"{{{_NS_IF}}}subinterface")
                 ET.SubElement(si_el, f"{{{_NS_IF}}}index").text = "0"
-                ipv4_el = ET.SubElement(si_el, f"{{{_NS_IP}}}ipv4")
-                addrs_el = ET.SubElement(ipv4_el, f"{{{_NS_IP}}}addresses")
-                for addr in iface.ipv4_addresses:
-                    a_el = ET.SubElement(addrs_el, f"{{{_NS_IP}}}address")
-                    ET.SubElement(a_el, f"{{{_NS_IP}}}ip").text = addr.ip
-                    ac_el = ET.SubElement(a_el, f"{{{_NS_IP}}}config")
-                    ET.SubElement(ac_el, f"{{{_NS_IP}}}ip").text = addr.ip
-                    ET.SubElement(ac_el, f"{{{_NS_IP}}}prefix-length").text = str(addr.prefix_length)
+                if iface.ipv4_addresses:
+                    ipv4_el = ET.SubElement(si_el, f"{{{_NS_IP}}}ipv4")
+                    addrs_el = ET.SubElement(ipv4_el, f"{{{_NS_IP}}}addresses")
+                    for addr in iface.ipv4_addresses:
+                        a_el = ET.SubElement(addrs_el, f"{{{_NS_IP}}}address")
+                        ET.SubElement(a_el, f"{{{_NS_IP}}}ip").text = addr.ip
+                        ac_el = ET.SubElement(a_el, f"{{{_NS_IP}}}config")
+                        ET.SubElement(ac_el, f"{{{_NS_IP}}}ip").text = addr.ip
+                        ET.SubElement(ac_el, f"{{{_NS_IP}}}prefix-length").text = str(addr.prefix_length)
+                # GAP-EVPN-3: IPv6 sibling under same subinterface.
+                if iface.ipv6_addresses:
+                    ipv6_el = ET.SubElement(si_el, f"{{{_NS_IP}}}ipv6")
+                    v6_addrs_el = ET.SubElement(ipv6_el, f"{{{_NS_IP}}}addresses")
+                    for v6 in iface.ipv6_addresses:
+                        a_el = ET.SubElement(v6_addrs_el, f"{{{_NS_IP}}}address")
+                        ET.SubElement(a_el, f"{{{_NS_IP}}}ip").text = v6.ip
+                        ac_el = ET.SubElement(a_el, f"{{{_NS_IP}}}config")
+                        ET.SubElement(ac_el, f"{{{_NS_IP}}}ip").text = v6.ip
+                        ET.SubElement(ac_el, f"{{{_NS_IP}}}prefix-length").text = str(v6.prefix_length)
         ET.register_namespace("", _NS_IF)
         ET.register_namespace("oc-ip", _NS_IP)
         raw_xml = ET.tostring(root, encoding="unicode")
@@ -562,12 +568,19 @@ def _parse_subinterface(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
 
     # <ipv4> block — IP augment namespace, but we strip and treat uniformly.
     ipv4_el = None
+    ipv6_el = None
     for child in el:
-        if _strip_ns(child.tag) == "ipv4":
+        local = _strip_ns(child.tag)
+        if local == "ipv4":
             ipv4_el = child
-            break
+        elif local == "ipv6":
+            ipv6_el = child
     if ipv4_el is not None:
         out["ipv4"] = _parse_ipv4(ipv4_el, iface_idx=iface_idx)
+    # GAP-EVPN-3: IPv6 sibling — same OpenConfig
+    # ip-augment shape (addresses/address/ip + config/prefix-length).
+    if ipv6_el is not None:
+        out["ipv6"] = _parse_ipv6(ipv6_el, iface_idx=iface_idx)
     return out
 
 
@@ -619,6 +632,65 @@ def _parse_ipv4(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
                             raise ParseError(
                                 f"cisco_iosxe: prefix-length {pl} out of "
                                 f"range [0, 32] for IPv4",
+                                path=pl_path,
+                                snippet=pl_text[:120],
+                            )
+                        cfg["prefix-length"] = pl
+                addr["config"] = cfg
+            addresses.append(addr)
+    return {"addresses": {"address": addresses}}
+
+
+def _parse_ipv6(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
+    """Parse an ``<ipv6><addresses>`` subtree (GAP-EVPN-3).
+
+    Mirrors :func:`_parse_ipv4` exactly; the only differences are the
+    canonical address-form (RFC 4291 colon-hex) and the wider prefix
+    range (0-128).  Link-local scope is not yet inferred from the wire
+    here — OpenConfig models it separately, and this stub treats every
+    IPv6 address as global until a real-fixture demand surfaces.
+    """
+    addresses: list[dict[str, Any]] = []
+    addrs_el = None
+    for child in el:
+        if _strip_ns(child.tag) == "addresses":
+            addrs_el = child
+            break
+    if addrs_el is not None:
+        for addr_el in addrs_el:
+            if _strip_ns(addr_el.tag) != "address":
+                continue
+            addr: dict[str, Any] = {}
+            ip_el = _first_child_by_tag(addr_el, "ip")
+            if ip_el is not None and ip_el.text:
+                addr["ip"] = ip_el.text.strip()
+            cfg_el = _first_child_by_tag(addr_el, "config")
+            if cfg_el is not None:
+                cfg: dict[str, Any] = {}
+                for c in cfg_el:
+                    tag = _strip_ns(c.tag)
+                    if tag == "ip" and c.text:
+                        cfg["ip"] = c.text.strip()
+                    elif tag == "prefix-length" and c.text:
+                        pl_text = c.text.strip()
+                        pl_path = (
+                            f"/interfaces/interface[{iface_idx}]/"
+                            f"subinterfaces/subinterface/ipv6/addresses/"
+                            f"address/config/prefix-length"
+                        )
+                        try:
+                            pl = int(pl_text)
+                        except ValueError:
+                            raise ParseError(
+                                f"cisco_iosxe: non-integer ipv6 "
+                                f"prefix-length {c.text!r}",
+                                path=pl_path,
+                                snippet=pl_text[:120],
+                            )
+                        if not 0 <= pl <= 128:
+                            raise ParseError(
+                                f"cisco_iosxe: prefix-length {pl} out of "
+                                f"range [0, 128] for IPv6",
                                 path=pl_path,
                                 snippet=pl_text[:120],
                             )
@@ -727,7 +799,11 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
     Lives here as a helper so the public ``parse()`` call remains a
     one-liner.
     """
-    from ...canonical.intent import CanonicalIPv4Address, CanonicalInterface
+    from ...canonical.intent import (
+        CanonicalIPv4Address,
+        CanonicalIPv6Address,
+        CanonicalInterface,
+    )
     cfg = raw.get("config", {})
     iface = CanonicalInterface(
         name=raw.get("name", ""),
@@ -748,6 +824,20 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
             iface.ipv4_addresses.append(CanonicalIPv4Address(
                 ip=ip,
                 prefix_length=int(prefix),
+            ))
+        # GAP-EVPN-3: IPv6 sibling — same nested shape as v4.
+        ipv6 = subif.get("ipv6", {})
+        v6_addresses = ipv6.get("addresses", {}).get("address", [])
+        for addr in v6_addresses:
+            addr_cfg = addr.get("config", {})
+            ip = addr_cfg.get("ip") or addr.get("ip")
+            prefix = addr_cfg.get("prefix-length")
+            if ip is None or prefix is None:
+                continue
+            iface.ipv6_addresses.append(CanonicalIPv6Address(
+                ip=ip,
+                prefix_length=int(prefix),
+                scope="global",
             ))
     return iface
 

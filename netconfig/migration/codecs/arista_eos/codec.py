@@ -37,6 +37,7 @@ from ....models.migration import (
 )
 from ...canonical.intent import (
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalEvpnType5Route,  # noqa: F401 — reserved for GAP 6+ follow-up
@@ -200,6 +201,8 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/config/vrf",   # GAP 6
             "/vlans/vlan/id",
             "/vlans/vlan/name",
@@ -785,6 +788,43 @@ class AristaEOSCodec(CodecBase):
                 except ValueError:
                     pass
             return
+        if line.startswith("ipv6 address "):
+            # GAP-EVPN-3: ``ipv6 address 2001:db8::1/64`` (global) or
+            # ``ipv6 address fe80::1 link-local`` (explicit link-local).
+            # The link-local form is keyword-tagged on EOS and Cisco
+            # IOS-XE; we normalise the canonical ``scope`` enum here.
+            tail = line.split(None, 2)[2].strip()
+            tokens = tail.split()
+            if not tokens:
+                return
+            addr = tokens[0]
+            scope = "global"
+            if len(tokens) >= 2 and tokens[1].lower() == "link-local":
+                scope = "link-local"
+            if "/" in addr:
+                ip, prefix = addr.split("/", 1)
+                try:
+                    iface.ipv6_addresses.append(CanonicalIPv6Address(
+                        ip=ip,
+                        prefix_length=int(prefix),
+                        scope=scope,
+                    ))
+                except ValueError:
+                    pass
+            elif scope == "link-local":
+                # ``ipv6 address fe80::1 link-local`` (no /N) — EOS
+                # accepts a bare link-local address with implicit /64
+                # in the fe80::/10 block.  Store the literal /64 as
+                # the canonical default.
+                try:
+                    iface.ipv6_addresses.append(CanonicalIPv6Address(
+                        ip=addr,
+                        prefix_length=64,
+                        scope="link-local",
+                    ))
+                except ValueError:
+                    pass
+            return
         if line.startswith("mtu "):
             try:
                 iface.mtu = int(line.split()[1])
@@ -1066,6 +1106,18 @@ class AristaEOSCodec(CodecBase):
                 out.append(
                     f"   ip address {addr.ip}/{addr.prefix_length}"
                 )
+            # GAP-EVPN-3: IPv6 addresses.  Link-local form re-emits
+            # the explicit ``link-local`` keyword; global form emits
+            # plain ``ipv6 address X/Y``.
+            for v6 in iface.ipv6_addresses:
+                if v6.scope == "link-local":
+                    out.append(
+                        f"   ipv6 address {v6.ip}/{v6.prefix_length} link-local"
+                    )
+                else:
+                    out.append(
+                        f"   ipv6 address {v6.ip}/{v6.prefix_length}"
+                    )
             # LAG membership: ``channel-group N mode <mode>`` on member
             # Ethernet interfaces.  Arista (like Cisco IOS) puts this
             # on the child side, not the Port-Channel stanza.

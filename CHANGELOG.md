@@ -11,6 +11,39 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (EOS 4.26 EVPN/VXLAN gaps — item 3 of 5: IPv6 addresses)
+
+Third of the five deferred translator-plans EVPN/VXLAN gaps closed.
+The karneliuk EOS 4.26 fixture's
+`ipv6 address fc00:192:168:100::62/64` on Management1 was silently
+dropped on parse before this change; the same was true for every
+real-capture fixture carrying static IPv6 (Junos `family inet6
+address`, Cisco `ipv6 address X/Y`, etc.) — IPv6 addresses are
+stable syntax across vendor versions in the corpus, so the wire-up
+is version-agnostic.
+
+* **Schema** — new `CanonicalIPv6Address` (ip + prefix_length +
+  scope) sibling to `CanonicalIPv4Address`; new
+  `CanonicalInterface.ipv6_addresses` list.  Scope discriminator
+  (`"global"` / `"link-local"`) normalises the keyword form on
+  Cisco / Arista against prefix-inferred form on Junos / MikroTik /
+  OPNsense / FortiGate.
+
+* **Wire-through** — parse + render landed on all 8 codecs:
+  arista_eos, cisco_iosxe (NETCONF/OpenConfig), cisco_iosxe_cli,
+  aruba_aoss, juniper_junos, fortigate_cli, mikrotik_routeros,
+  opnsense.  Capability matrix entries added on every codec.
+  Vendor-specific placeholders filtered on parse: FortiGate `::/0`
+  (no-v6 default), OPNsense `dhcp6` / `idassoc6` (keyword markers),
+  Aruba AOS-S `dhcp full` (stateless DHCPv6).
+
+* **Tests** — 36 new per-codec unit tests
+  (`test_ipv6_wire_through.py`); 72 new cross-mesh smoke tests
+  (every bidirectional pair preserves an IPv6 address through the
+  round-trip + every target codec emits canonical IPv6 input);
+  real-capture regression assertion exercising karneliuk EOS 4.26
+  + ntc carrier IOS-XE + buraglio Junos + batfish EVPN-Type5 Junos.
+
 ### Added (EOS 4.26 EVPN/VXLAN gaps — items 1 + 2 of 5)
 
 Two of the five deferred translator-plans EVPN/VXLAN gaps closed.

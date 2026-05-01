@@ -120,6 +120,8 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",

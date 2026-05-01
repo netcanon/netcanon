@@ -51,6 +51,7 @@ from ....models.migration import (
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -188,6 +189,8 @@ class OPNsenseCodec(CodecBase):
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             # Tier 2 — SNMP (OPNsense snmpd plugin)
@@ -563,6 +566,11 @@ class OPNsenseCodec(CodecBase):
                 if iface.ipv4_addresses:
                     ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                     ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+                # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
+                # Only one v6 address fits the OPNsense schema.
+                if iface.ipv6_addresses:
+                    ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
+                    ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
 
         # VLANs — emit <vlans><vlan> per CanonicalVlan.  We mirror the
         # minimal shape the parser reads back: <tag> (required) + <descr>
@@ -772,6 +780,44 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
                 f"opnsense: non-integer <subnet> {subnet_el.text!r}",
                 path=f"/interfaces/{el.tag}/subnet",
                 snippet=(subnet_el.text or "")[:120],
+            )
+    # GAP-EVPN-3: ``<ipaddrv6>X</ipaddrv6>`` + ``<subnetv6>N</subnetv6>``.
+    # OPNsense uses the same shape as IPv4 but with the v6 suffix.
+    # Non-static keywords (``dhcp6``, ``track6``, ``slaac``, ``6rd``,
+    # ``6to4``) are NOT static addresses and don't fit the canonical
+    # CanonicalIPv6Address record — parse-and-ignore those (the
+    # downstream codec doesn't have a way to render them anyway).
+    ipaddrv6_el = el.find("ipaddrv6")
+    subnetv6_el = el.find("subnetv6")
+    if (
+        ipaddrv6_el is not None
+        and ipaddrv6_el.text
+        and ":" in ipaddrv6_el.text  # filter dhcp6 / track6 / slaac
+        and subnetv6_el is not None
+        and subnetv6_el.text
+    ):
+        try:
+            ip_v6 = ipaddrv6_el.text.strip()
+            lo = ip_v6.lower()
+            scope = (
+                "link-local"
+                if (
+                    len(lo) >= 3
+                    and lo[:2] == "fe"
+                    and lo[2] in ("8", "9", "a", "b")
+                )
+                else "global"
+            )
+            iface.ipv6_addresses.append(CanonicalIPv6Address(
+                ip=ip_v6,
+                prefix_length=int(subnetv6_el.text.strip()),
+                scope=scope,
+            ))
+        except ValueError:
+            raise ParseError(
+                f"opnsense: non-integer <subnetv6> {subnetv6_el.text!r}",
+                path=f"/interfaces/{el.tag}/subnetv6",
+                snippet=(subnetv6_el.text or "")[:120],
             )
     return iface
 

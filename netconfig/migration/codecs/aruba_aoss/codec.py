@@ -19,6 +19,7 @@ from ....models.migration import (
 )
 from ...canonical.intent import (
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -100,6 +101,8 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/config/type",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
+            "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/vlans/vlan/tagged-ports",
@@ -698,12 +701,22 @@ class ArubaAOSSCodec(CodecBase):
                 lines.append("   enable")
             else:
                 lines.append("   disable")
-            if iface.ipv4_addresses:
+            if iface.ipv4_addresses or iface.ipv6_addresses:
                 lines.append("   routing")
                 for addr in iface.ipv4_addresses:
                     lines.append(
                         f"   ip address {addr.ip}/{addr.prefix_length}"
                     )
+                # GAP-EVPN-3: IPv6 addresses.
+                for v6 in iface.ipv6_addresses:
+                    if v6.scope == "link-local":
+                        lines.append(
+                            f"   ipv6 address {v6.ip}/{v6.prefix_length} link-local"
+                        )
+                    else:
+                        lines.append(
+                            f"   ipv6 address {v6.ip}/{v6.prefix_length}"
+                        )
             lines.append("   exit")
 
         # Static routes.  Default route (0.0.0.0/0) becomes
@@ -956,6 +969,15 @@ _IP_ADDR_CIDR_RE = re.compile(
 )
 _IP_ADDR_MASK_RE = re.compile(
     r"^ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)$",
+    re.IGNORECASE,
+)
+# GAP-EVPN-3: AOS-S `ipv6 address <addr>/<prefix> [link-local]`.
+# Real-capture corpus also carries `ipv6 address dhcp full`
+# (stateless DHCPv6) which has no static address and is parse-
+# and-ignore — the regex below intentionally requires a colon-
+# hex address with a prefix length to drop the dhcp form.
+_IPV6_ADDR_RE = re.compile(
+    r"^ipv6\s+address\s+([0-9A-Fa-f:]+)/(\d+)(?:\s+(link-local))?\s*$",
     re.IGNORECASE,
 )
 _IFACE_NAME_RE = re.compile(r'^name\s+"?([^"\n]+)"?', re.IGNORECASE)
@@ -1243,6 +1265,16 @@ def _parse_vlan_stanza(
             i += 1
             continue
 
+        # GAP-EVPN-3: IPv6 address.  CanonicalVlan does not carry an
+        # ipv6_addresses list today (the SVI-on-VLAN model is IPv4-
+        # only), so we skip the line.  Static IPv6 addresses inside
+        # `vlan <N>` stanzas are rare on AOS-S in practice; if they
+        # appear in a future fixture corpus we extend CanonicalVlan
+        # at that point.
+        if _IPV6_ADDR_RE.match(stripped):
+            i += 1
+            continue
+
         i += 1
     return vlan, i
 
@@ -1305,6 +1337,25 @@ def _parse_interface_stanza(
                 ip=ip_mask.group(1),
                 prefix_length=_mask_to_prefix(ip_mask.group(2)),
             ))
+            i += 1
+            continue
+
+        # GAP-EVPN-3: IPv6 address.  AOS-S form is `ipv6 address
+        # <addr>/<prefix> [link-local]`.  `ipv6 address dhcp full`
+        # (stateless DHCPv6) does not match the regex (no slash) and
+        # falls through silently — that's the desired behaviour since
+        # there's no static address to capture.
+        v6m = _IPV6_ADDR_RE.match(stripped)
+        if v6m:
+            scope = "link-local" if v6m.group(3) else "global"
+            try:
+                iface.ipv6_addresses.append(CanonicalIPv6Address(
+                    ip=v6m.group(1),
+                    prefix_length=int(v6m.group(2)),
+                    scope=scope,
+                ))
+            except ValueError:
+                pass
             i += 1
             continue
 
