@@ -21,6 +21,16 @@ Deliberately NOT in scope (Phase 2+):
     * Firewall rules, NAT, gateways (need the netconfig-ext YANG augment).
     * FRR BGP/OSPF packages (plugin-dependent, out of base config.xml).
     * Aliases, dashboards, dashboard widgets.
+
+Module layout:
+    * ``codec.py``       — ``OPNsenseCodec`` class (metadata, delegation,
+                           probe, port-name bridges, iter_xpaths)
+    * ``parse.py``       — ``config.xml`` to ``CanonicalIntent``; owns
+                           the bounded envelope-trim helper that rescues
+                           legacy paramiko-shell backups
+    * ``render.py``      — ``CanonicalIntent`` (or legacy dict) to
+                           ``config.xml`` text
+    * ``port_names.py``  — cross-vendor port-name identity bridge
 """
 
 from .codec import OPNsenseCodec
