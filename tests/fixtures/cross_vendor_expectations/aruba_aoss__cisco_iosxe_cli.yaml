@@ -1,0 +1,390 @@
+# Cross-vendor expectations: aruba_aoss -> cisco_iosxe_cli
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/
+#
+# Phase 3 follow-up pair: REVERSE direction of cisco_iosxe_cli ->
+# aruba_aoss.  Campus refresh Aruba -> Cisco where the source
+# (ProCurve heritage AOS-S, L2/basic-L3) typically carries fewer
+# features than the target (Cisco IOS-XE) accepts.  The asymmetry
+# inverts the lossy fields:
+#
+#   * VRF / BGP / EIGRP / IS-IS — Aruba source never populates
+#     these (no platform support), so the canonical fields are
+#     empty and the Cisco render emits nothing.  Re-classified as
+#     not_applicable rather than unsupported.
+#   * DHCP server pools — Aruba is relay-only, so no source data
+#     to lose.
+#   * Hash formats are still incompatible (Aruba SHA-1/bcrypt vs
+#     Cisco type-9 scrypt) — same lossy direction either way.
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: cisco_iosxe_cli
+  primary_use_case: >
+    Campus refresh from Aruba ProCurve / AOS-S (2930F / 2930M /
+    3810 / 5400R) to Cisco Catalyst (IOS-XE 15.x / 16.x / 17.x).
+    Aruba source is L2/basic-L3 only, so most Cisco-only L3
+    surface is structurally absent on the source side and the
+    cross-pair has fewer lossy categories than the reverse
+    direction.
+  certainty: medium
+  references:
+    - id: vlans
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/vlans.md
+      title: "VLAN configuration: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: port_naming
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/port_naming.md
+      title: "Port naming: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/BOG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: ip_addressing
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/ip_addressing.md
+      title: "IPv4 / IPv6 addressing: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv6/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/static_routes.md
+      title: "Static routes: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: snmp
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/snmp.md
+      title: "SNMP: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/local_users.md
+      title: "Local users + hash formats: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: lags
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/lags.md
+      title: "LAGs (Trk / Port-channel): Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: system_services
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/system_services.md
+      title: "System services: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: vrf_unsupported
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/vrf_unsupported.md
+      title: "VRF / routing-instances: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: routing_protocols_unsupported
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/routing_protocols_unsupported.md
+      title: "Routing protocols (BGP / OSPF / EIGRP): Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MRG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: radius
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/radius.md
+      title: "RADIUS: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: dhcp_relay
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/dhcp_relay.md
+      title: "DHCP relay (no server pools): Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: spanning_tree
+      path: docs/vendor-references/aruba_aoss_to_cisco_iosxe_cli/spanning_tree.md
+      title: "Spanning-tree: Aruba AOS-S versus Cisco IOS-XE"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MRG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Aruba quotes the hostname in ``show running-config``; codec
+      strips the quotes on parse.  Cisco render emits a bare
+      ``hostname <name>``.  Round-trip is lossless on the string
+      content.
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no first-class domain directive in the
+      codec's parse surface; the field is always empty on this
+      direction so nothing renders on the Cisco target.
+
+  dns_servers:
+    disposition: good
+    note: >
+      Aruba ``ip dns server-address priority N <addr>`` collapses
+      to a bare address list on canonical (sorted by priority).
+      Cisco render emits ``ip name-server <addr>`` lines in that
+      order.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Aruba uses SNTP (``sntp server priority N <addr>``) as its
+      time-protocol primitive while Cisco uses NTP (``ntp server
+      <addr>``).  The protocol distinction is lost on the canonical
+      layer (field is ``list[str]`` of addresses).  Per-server
+      modifiers (Aruba priority overrides; Cisco ``prefer`` /
+      ``iburst``) drop on round-trip.  Functional equivalence at
+      the server-list level for typical deployments.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Aruba emits ``time timezone <minute-offset>`` (e.g. ``-480``
+      for PST) plus separate ``time daylight-time-rule <region>``.
+      Cisco expects ``clock timezone <name> <hours-offset>
+      <minutes-offset>`` plus separate ``clock summer-time``.
+      Canonical stores the operator-typed string verbatim; cross-
+      vendor migration of ``-480`` to Cisco syntax requires
+      operator translation (offset format + DST rule).
+    references: [system_services]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      Aruba ``logging <addr>`` -> Cisco ``logging host <addr>``.
+      Both vendors round-trip the host list cleanly.  Severity /
+      facility tokens (``logging facility local6``, ``logging
+      severity info``) are not modelled — drop on round-trip.
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips; per-interface fields
+      (description, enabled, ipv4_addresses, ipv6_addresses,
+      switchport_mode, access_vlan, trunk_allowed_vlans,
+      trunk_native_vlan, lag_member_of) are good.  Lossy bits:
+      (1) ``name`` carries Aruba's bare-numeric form which the
+      port-rename mesh maps to Cisco's ``GigabitEthernet1/0/1``
+      default — speed-hint inference defaults to GigabitEthernet
+      and operators must override for 10G/25G/100G ports;
+      (2) ``interface_type`` is inferred from the name shape on
+      both vendors so cross-vendor degrades the inference;
+      (3) ``mtu`` is not parsed by the aruba_aoss codec, so the
+      field is empty on parse and Cisco render emits no ``mtu`` line;
+      (4) ``voice_vlan`` and ``vrf`` are also unpopulated by the
+      aruba_aoss parse path.  Membership is reprojected via
+      ``project_vlan_to_switchport`` so port-centric Cisco render
+      has switchport state derived from VLAN membership lists.
+    references: [port_naming, vlans, ip_addressing]
+
+  vlans:
+    disposition: good
+    note: >
+      VLAN id, name, description, tagged_ports, untagged_ports, and
+      ipv4_addresses (SVI absorption) round-trip cleanly.  Aruba's
+      VLAN-centric ``untagged 1-24`` / ``tagged 25-26`` populates
+      the canonical port-membership lists directly; Cisco render
+      emits per-port ``switchport access vlan N`` /
+      ``switchport trunk allowed vlan ...`` after
+      ``project_vlan_to_switchport`` re-projects.  SVI absorption:
+      Aruba's ``vlan 100 / ip address X/N`` lands on
+      CanonicalVlan.ipv4_addresses; Cisco render emits a separate
+      ``interface Vlan100`` stanza.
+    references: [vlans]
+
+  static_routes:
+    disposition: good
+    note: >
+      Aruba's CIDR ``ip route DEST/N GW`` converts to Cisco's
+      dotted-mask ``ip route DEST MASK GW`` via the codec helper
+      ``_cidr_to_dest_mask``.  Aruba's legacy ``ip default-gateway``
+      directive normalises to a ``0.0.0.0/0`` canonical record
+      that the Cisco renderer emits as
+      ``ip route 0.0.0.0 0.0.0.0 <gw>``.  Aruba never carries
+      per-VRF static routes (no VRF concept), so the Cisco-only
+      ``ip route vrf X`` form is structurally absent on this
+      direction.
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S is primarily a DHCP relay platform, not a
+      server.  The aruba_aoss codec does not advertise /dhcp/pool
+      in its supported set, so CanonicalIntent.dhcp_servers is
+      always empty on this direction — nothing to lose.  ``ip
+      helper-address`` directives on Aruba VLAN stanzas are not
+      modelled (no canonical helper-address field).
+    references: [dhcp_relay]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly.  Aruba uses Operator/Manager access
+      keywords; the canonical model stores only the bare community
+      string, so cross-vendor render maps Aruba Operator -> Cisco
+      RO and Aruba Manager -> Cisco RW.  v3 USM round-trips the
+      structured fields (name, group, auth_protocol, priv_protocol)
+      but the opaque auth_passphrase / priv_passphrase blobs are
+      NOT cross-compatible: USM keys are salted with vendor-specific
+      engineID-derived constants, so Aruba-derived passphrases will
+      fail on Cisco after migration.  Operator must re-key v3 users
+      on the target.
+    references: [snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Aruba emits ``Trk<N>``; Cisco emits ``Port-channel<N>``.
+      Codec helper ``_extract_lag_number`` parses the integer
+      suffix and emits the Cisco-style name.  LACP mode
+      (active/passive/static) preserves; Aruba-unique ``dt-lacp``
+      (multi-chassis distributed-trunk) and ``fec`` (HP-proprietary)
+      collapse to ``static`` on render with a comment.  Member
+      port lists round-trip via the rename mesh — Aruba's
+      ``1-4`` port-list expands to four canonical port records on
+      parse; Cisco render lists each member with
+      ``channel-group N mode <mode>``.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Aruba's two-role model (manager/operator) expands to Cisco's
+      numeric privilege on render: manager -> privilege 15,
+      operator -> privilege 1.  The Cisco target loses no data
+      from this expansion (Aruba had only the two roles), but the
+      reverse direction collapses Cisco's intermediate privilege
+      levels (already documented in cisco_iosxe_cli__aruba_aoss).
+      Hash formats are NOT cross-compatible: Aruba SHA-1
+      (``<hex>``), bcrypt (``$2y$...``), and plaintext are all
+      Aruba-only; Cisco accepts MD5 (``$1$...``), PBKDF2
+      (``$8$...``), and scrypt (``$9$...``) but none match Aruba's
+      forms.  Cross-vendor migration requires re-setting passwords
+      on the target.
+    references: [local_users]
+
+  radius_servers:
+    disposition: good
+    note: >
+      Aruba's flat ``radius-server host <ip>`` plus separate
+      ``radius-server key "<secret>"`` for the global default
+      lands on the canonical
+      ``host / key / auth_port / acct_port`` tuple cleanly.  Cisco
+      render emits the modern ``radius server <name> / address
+      ipv4 <ip> auth-port 1812 acct-port 1813 / key <secret>``
+      form.  Default ports (1812/1813) preserved.
+    references: [radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VXLAN concept; the aruba_aoss codec
+      capability matrix lists /vxlan-vnis/* under unsupported
+      ("VXLAN not modelled — AOS-S is a campus L2/L3 codec").
+      CanonicalIntent.vxlan_vnis is always empty on Aruba parse,
+      so there is nothing to render on Cisco — the field is
+      structurally absent on this direction.
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — Aruba AOS-S has no EVPN /
+      MP-BGP concept, so CanonicalIntent.evpn_type5_routes is
+      always empty on Aruba parse.
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VRF concept (campus L2/L3 platform with
+      a single global routing table).  CanonicalIntent.
+      routing_instances and CanonicalInterface.vrf are always
+      empty on Aruba parse.  cisco_iosxe_cli also parse-and-
+      ignores VRFs (capability matrix unsupported), so the field
+      survives a Cisco re-parse only if the operator manually
+      adds the VRF stanzas post-migration.
+    references: [vrf_unsupported]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private; cross-vendor
+      migration drops it with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  Aruba AOS-S and Cisco IOS-XE codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The reverse direction has FEWER lossy categories than
+#     cisco_iosxe_cli__aruba_aoss because Aruba source carries a
+#     smaller feature footprint.  VRF / VXLAN / EVPN / dynamic
+#     routing protocols / DHCP server pools are all not_applicable
+#     here (source field always empty) rather than unsupported (an
+#     active drop on render).
+#
+#   * The keyword-stable surface (vlans / hostname / DNS / SNMP
+#     v1+v2c / radius-server / static-routes) is high-confidence
+#     and has established round-trip tests on real captures.
+#
+#   * The interface-naming / hash-format / DST surfaces are medium-
+#     confidence: vendor docs are clear but cross-vendor render
+#     involves codec policy decisions (Operator/Manager -> RO/RW
+#     mapping, manager/operator -> privilege expansion, minute-
+#     offset -> hour+minute timezone format) that operators may
+#     want to override.
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * MTU / voice_vlan / helper-address / TACACS+ — same as the
+#     reverse direction.  See cisco_iosxe_cli__aruba_aoss.yaml
+#     for the consolidated list.  These are codec-side wire-up
+#     gaps rather than cross-vendor mapping decisions.
