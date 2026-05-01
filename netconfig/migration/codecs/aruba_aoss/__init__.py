@@ -42,6 +42,18 @@ Out of scope (future):
     * LACP / trunk (``trunk A1-A2 trk1 lacp``)
     * ACLs (``access-list``)
 
+Module layout (post-split per the codecs/README.md split-codec
+convention):
+    * ``codec.py``           — ``ArubaAOSSCodec`` class (metadata,
+                               delegation, probe, port-name bridges)
+    * ``parse.py``           — line-walker + per-stanza parsers
+                               (``_parse_vlan_stanza`` /
+                               ``_parse_interface_stanza``)
+    * ``render.py``          — canonical tree → AOS-S CLI text
+    * ``port_names.py``      — cross-vendor port-name identity bridge
+    * ``_svi_absorption.py`` — SVI-into-VLAN absorption flag (single
+                               source of truth for ``absorbs_svi_into_vlan``)
+
 Certainty: ``best_effort`` — validated against synthetic fixtures
 modelled on Aruba docs + community configs.
 """

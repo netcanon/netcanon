@@ -76,14 +76,16 @@ vendor-specific mode tables) live in `parse.py` and get re-imported
 into `render.py` — one directional edge, no circular risk.
 
 Codecs with the split applied: **fortigate_cli** (first; Phase 1
-god-file cleanup) and **opnsense** (XML wire-format reference).
-Remaining split candidates: mikrotik_routeros, cisco_iosxe_cli, and
-aruba_aoss — apply opportunistically when each becomes painful; the
-pattern generalises cleanly.  Tests that pin internal symbols
-(``_parse_blocks``, ``_prefix_to_mask``, ``_trim_xml_envelope``)
-should import via re-export in `codec.py` so the split doesn't
-break them — see fortigate_cli/codec.py's and opnsense/codec.py's
-`__all__` for the shape.
+god-file cleanup), **opnsense** (XML wire-format reference), and
+**aruba_aoss** (banner + positional port-list reference).
+Remaining split candidates: mikrotik_routeros and cisco_iosxe_cli —
+apply opportunistically when each becomes painful; the pattern
+generalises cleanly.  Tests that pin internal symbols
+(``_parse_blocks``, ``_prefix_to_mask``, ``_trim_xml_envelope``,
+``_format_port_list``, ``_parse_port_list``) should import via
+re-export in `codec.py` so the split doesn't break them — see
+fortigate_cli/codec.py's, opnsense/codec.py's, and
+aruba_aoss/codec.py's `__all__` for the shape.
 
 **`port_names.py` is mandatory** for any codec that participates in
 the rename-modal flow.  The cross-vendor orchestrator at
