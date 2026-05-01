@@ -1,0 +1,339 @@
+# Cross-vendor expectations: arista_eos -> juniper_junos
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/arista_eos_to_juniper_junos/
+#
+# Worked-example pair for the Phase 3a infrastructure: DC EVPN-VXLAN
+# spine-leaf migration is the user's original surfacing case.
+
+meta:
+  source_vendor: arista_eos
+  target_vendor: juniper_junos
+  primary_use_case: "DC EVPN-VXLAN spine-leaf migration (Arista leaf -> Junos QFX leaf)"
+  certainty: medium
+  references:
+    - id: arista-vxlan-cg
+      path: docs/vendor-references/arista_eos_to_juniper_junos/vtep-source-interface.md
+      title: "Arista EOS VXLAN Configuration Guide (4.36.0F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-vxlan-configuration"
+      retrieved: "2026-05-01"
+      excerpt: "vxlan source-interface specifies the loopback interface from which the VTEP derives the source address."
+    - id: arista-evpn-cg
+      path: docs/vendor-references/arista_eos_to_juniper_junos/mac-vrf-and-l2vpn-evpn.md
+      title: "Arista EOS Configuring EVPN (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-configuring-evpn"
+      retrieved: "2026-05-01"
+    - id: arista-iface-cg
+      path: docs/vendor-references/arista_eos_to_juniper_junos/ipv6-address-forms.md
+      title: "Arista EOS Interface Configuration (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-interface-configuration"
+      retrieved: "2026-05-01"
+    - id: arista-vlan-cg
+      path: docs/vendor-references/arista_eos_to_juniper_junos/vlan-name-constraints.md
+      title: "Arista EOS VLAN Configuration (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-vlan-configuration"
+      retrieved: "2026-05-01"
+    - id: arista-user-security
+      path: docs/vendor-references/arista_eos_to_juniper_junos/local-user-hash-formats.md
+      title: "Arista EOS User Security (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-05-01"
+    - id: arista-ethernet-ports
+      path: docs/vendor-references/arista_eos_to_juniper_junos/port-naming-convention.md
+      title: "Arista EOS Ethernet Ports (4.36.0F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-ethernet-ports"
+      retrieved: "2026-05-01"
+    - id: junos-vtep-source-iface
+      path: docs/vendor-references/arista_eos_to_juniper_junos/vtep-source-interface.md
+      title: "Junos vtep-source-interface CLI reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/ovsdb-vxlan-qfx/topics/ref/statement/vtep-source-interface.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/arista_eos_to_juniper_junos/vlan-to-vni-mapping.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/arista_eos_to_juniper_junos/ipv6-address-forms.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-family-inet6
+      path: docs/vendor-references/arista_eos_to_juniper_junos/ipv6-address-forms.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-05-01"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/arista_eos_to_juniper_junos/vlan-name-constraints.md
+      title: "Junos vlans statement reference (QFX)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-password-cli
+      path: docs/vendor-references/arista_eos_to_juniper_junos/local-user-hash-formats.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-05-01"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/arista_eos_to_juniper_junos/local-user-hash-formats.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-05-01"
+    - id: junos-iface-naming
+      path: docs/vendor-references/arista_eos_to_juniper_junos/port-naming-convention.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars ──
+
+  hostname:
+    disposition: good
+    note: "Both vendors accept free-form hostnames within length limits; Arista 'hostname X' maps to Junos 'set system host-name X'."
+
+  domain:
+    disposition: good
+    note: "Arista 'ip domain-name X' maps to Junos 'set system domain-name X'."
+
+  dns_servers:
+    disposition: good
+    note: "Arista 'ip name-server vrf default X' maps to Junos 'set system name-server X'."
+
+  ntp_servers:
+    disposition: good
+    note: "Arista 'ntp server X' maps to Junos 'set system ntp server X'."
+
+  timezone:
+    disposition: lossy
+    reason: "Both vendors accept Olson timezone names but Arista accepts both abbreviations (PST/EST) and Olson IDs while Junos requires Olson IDs (America/Los_Angeles). Round-trip of operator-typed PST -> Junos requires translation; canonical model preserves the source string verbatim so operator may need to adjust."
+
+  syslog_servers:
+    disposition: lossy
+    reason: "Junos requires explicit per-host facility/severity filters via 'set system syslog host X any info'; Arista's 'logging host X' has implicit any-any. Basic mapping works; per-severity filters drift."
+    references: [junos-iface-fundamentals]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: "Port-name mesh maps Ethernet1 -> ge-0/0/0 etc; semantic preserved but speed prefix is lost (Arista names carry no speed hint, Junos render defaults to 'ge-' which understates 10G/25G/100G ports). Operators override via the per-pane port-rename surface for non-default mappings."
+    references: [arista-ethernet-ports, junos-iface-naming]
+
+  interfaces[].description:
+    disposition: good
+    note: "Both vendors accept free-form interface descriptions; Junos quotes when whitespace present."
+
+  interfaces[].enabled:
+    disposition: good
+    note: "Arista 'shutdown' / 'no shutdown' maps to Junos 'set interfaces X disable' / 'delete interfaces X disable'."
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: "Cross-vendor type hint is loosely informational; Arista emits no explicit type, Junos infers from name prefix (ge-/xe-/et-)."
+
+  interfaces[].mtu:
+    disposition: good
+    note: "Both accept integer MTU; Arista 'mtu N' maps to Junos 'set interfaces X mtu N'."
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: "Arista 'ip address X/N' on the bare interface maps to Junos 'set interfaces X unit 0 family inet address X/N'."
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: "Junos uses set family inet6 form; canonical scope=link-local discriminator preserved across vendors."
+    references: [arista-iface-cg, junos-family-inet6]
+
+  interfaces[].switchport_mode:
+    disposition: lossy
+    reason: "Arista access/trunk maps to Junos 'family ethernet-switching' interface-mode {access | trunk}; trunk allowed-VLAN list preserved but Junos's per-interface 'native-vlan-id' lives at a different hierarchy than Arista's 'switchport trunk native vlan'."
+
+  interfaces[].access_vlan:
+    disposition: good
+    note: "Arista 'switchport access vlan N' maps to Junos 'set interfaces X unit 0 family ethernet-switching vlan members <name>' where <name> is synthesised from the VLAN id."
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: good
+    note: "Arista 'switchport trunk allowed vlan N,M' maps to Junos 'set interfaces X unit 0 family ethernet-switching vlan members [N M]'."
+
+  interfaces[].trunk_native_vlan:
+    disposition: lossy
+    reason: "Arista 'switchport trunk native vlan N' (untagged on trunk) maps to Junos 'set interfaces X native-vlan-id N' which lives at the parent-interface hierarchy, not the unit. Round-trip preserved; semantic equivalent."
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: "Junos QFX/EX has no first-class 'voice VLAN' construct equivalent to Arista's 'switchport voice vlan N'; LLDP-MED voice-VLAN advertisement is configured per-interface under 'protocols lldp-med' with different semantics. Canonical field carried but render emits a comment."
+
+  interfaces[].lag_member_of:
+    disposition: good
+    note: "Arista 'channel-group N mode active' maps to Junos 'set interfaces X gigether-options 802.3ad ae<N>'."
+
+  interfaces[].dhcp_client:
+    disposition: good
+    note: "Arista 'ip address dhcp' maps to Junos 'set interfaces X unit 0 family inet dhcp'."
+
+  interfaces[].vrf:
+    disposition: good
+    note: "Arista 'vrf forwarding X' maps to Junos VRF membership via 'set routing-instances X interface ge-0/0/0.0' (pivot on routing-instance side, not interface side)."
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: "Arista 'vlan N' maps to Junos 'set vlans <name> vlan-id N'."
+
+  vlans[].name:
+    disposition: lossy
+    reason: "Junos VLAN names allow letters, digits, hyphens, periods only (up to 255 chars). Arista allows underscores and wider character set. Names with hyphens or periods round-trip; names with underscores or special chars are sanitised on render."
+    references: [arista-vlan-cg, junos-vlans-statement]
+
+  vlans[].description:
+    disposition: good
+    note: "Junos 'set vlans <name> description X'; Arista has no equivalent (description on VLAN is not a first-class field, lives in interface descriptions). Canonical carries it; Arista render emits as a comment."
+
+  vlans[].tagged_ports:
+    disposition: good
+    note: "VLAN-centric port-list is canonically VLAN-centric. Junos transposes back to per-interface 'family ethernet-switching vlan members' on render."
+
+  vlans[].untagged_ports:
+    disposition: good
+    note: "Same as tagged_ports; rendered via interface-side 'interface-mode access' + 'vlan members <name>'."
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: "Arista 'interface Vlan100' SVI with 'ip address X/N' maps to Junos 'set interfaces irb unit 100 family inet address X/N' + 'set vlans <name> l3-interface irb.100'."
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: good
+    note: "Arista 'ip route X/N <gw>' maps to Junos 'set routing-options static route X/N next-hop <gw>'. Per-VRF: 'ip route vrf X dest gw' -> 'set routing-instances X routing-options static route'."
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: "Arista's 'ip dhcp pool' grammar (host-side scopes, options) doesn't map cleanly to Junos's 'set system services dhcp-local-server' / 'set access address-assignment pool' two-stage model. Basic pools (network + range + gateway + DNS) round-trip; advanced options drift."
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: "Arista 'snmp-server community X ro' maps to Junos 'set snmp community X authorization read-only'."
+
+  snmp.location:
+    disposition: good
+
+  snmp.contact:
+    disposition: good
+
+  snmp.trap_hosts:
+    disposition: good
+    note: "Arista 'snmp-server host X version 2c <community>' maps to Junos 'set snmp trap-group <name> targets X'."
+
+  snmp.v3_users:
+    disposition: good
+    note: "USM auth/priv key formats normalise; both vendors support SHA + AES variants. Arista 'snmp-server user' maps to Junos 'set snmp v3 usm local-engine user' + 'set snmp v3 vacm security-to-group'."
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: good
+    note: "Arista 'Port-Channel N' maps to Junos 'ae N'. LACP mode (active/passive/static) preserved via 'set interfaces aeN aggregated-ether-options lacp {active|passive}'."
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: good
+    note: "Both vendors share the Linux crypt() hash family ($1$ MD5, $5$ SHA-256, $6$ SHA-512). Hash bytes round-trip losslessly; authentication may still fail post-migration if Arista salted with username (default) and username changes between platforms."
+    references: [arista-user-security, junos-password-cli, junos-kb-password-format]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: "Both support RADIUS; Arista 'radius-server host X key K' is positional-arg, Junos 'set system radius-server X secret K' is keyword-form. Default port semantics differ (Arista defaults 1812/1813, Junos defaults same but emits explicit 'port 1812' in show output). Canonical preserves explicit port + secret."
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN ──
+
+  vxlan_vnis:
+    disposition: good
+    note: "Both vendors model VLAN-to-VNI bindings; Arista 'vxlan vlan N vni X' inside 'interface Vxlan1' maps to Junos 'set vlans <name> vxlan vni X'."
+    references: [arista-vxlan-cg, junos-evpn-irb-example]
+
+  vxlan_vnis[].vlan_id:
+    disposition: good
+
+  vxlan_vnis[].vni:
+    disposition: good
+
+  vxlan_vnis[].mcast_group:
+    disposition: lossy
+    reason: "Arista 'vxlan vlan N multicast-group <addr>' has no direct Junos equivalent in the EVPN-VXLAN data plane (Junos uses BGP-EVPN signalled ingress replication by default). Canonical field carried but Junos render emits as a comment when present."
+
+  vxlan_vnis[].flood_list:
+    disposition: lossy
+    reason: "Arista's per-VLAN 'vxlan flood vtep' head-end replication list maps loosely to Junos's 'set vlans NAME vxlan static-remote-vtep-list'; semantic equivalent but Junos's preferred path is BGP-EVPN signalled discovery, so explicit static lists are uncommon."
+
+  vxlan_vnis[].source_interface:
+    disposition: good
+    note: "Loopback0 -> lo0.0 mapping handled by port-rename mesh; canonical preserves the operator-form name. Junos emits 'set switch-options vtep-source-interface lo0.0'."
+    references: [arista-vxlan-cg, junos-vtep-source-iface]
+
+  vxlan_vnis[].udp_port:
+    disposition: good
+    note: "Both default to 4789 (IANA); explicit override via 'vxlan udp-port N' (Arista) / not commonly tunable on Junos QFX (defaults to 4789). Canonical preserves the value."
+
+  evpn_type5_routes:
+    disposition: lossy
+    reason: "Both vendors support Type-5 IP-prefix routes via L3-VNI on the routing-instance (CanonicalRoutingInstance.l3_vni). Per-prefix CanonicalEvpnType5Route records are not populated by either codec today (deferred — would require route-map / policy-statement parsing). Operators relying on selective prefix export will see a review-required banner."
+    references: [arista-evpn-cg, junos-evpn-irb-example]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: good
+    note: "Arista 'vrf instance X' + 'ip routing vrf X' maps to Junos 'set routing-instances X instance-type vrf'."
+    references: [arista-evpn-cg, junos-evpn-irb-example]
+
+  routing_instances[].name:
+    disposition: good
+
+  routing_instances[].instance_type:
+    disposition: lossy
+    reason: "Arista has no per-VRF instance-type discriminator (always 'vrf'); Junos models 'vrf', 'virtual-router', 'mac-vrf', 'l2vpn'. Arista source -> Junos always renders as instance-type=vrf. Junos source with non-vrf instance-type drops the discriminator on Arista render."
+
+  routing_instances[].route_distinguisher:
+    disposition: good
+    note: "Both accept '<asn>:<nn>' and '<ip>:<nn>' forms. Arista emits per-VRF RD under 'router bgp / vrf X'; Junos under 'set routing-instances X route-distinguisher'."
+
+  routing_instances[].rt_imports:
+    disposition: good
+
+  routing_instances[].rt_exports:
+    disposition: good
+
+  routing_instances[].description:
+    disposition: good
+
+  routing_instances[].l3_vni:
+    disposition: good
+    note: "Arista 'vxlan vrf X vni N' (inside interface Vxlan1) maps to Junos 'set routing-instances X protocols evpn ip-prefix-routes vni N'."
+    references: [arista-evpn-cg, junos-evpn-irb-example]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: "Tier 3 by design — never auto-rendered. Each codec's raw_sections content is vendor-private; cross-vendor migration drops it with a banner."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: "Junos-specific concept (set apply-groups <G>); Arista source has no equivalent and never populates this list."
+
+  group_content:
+    disposition: not_applicable
+    note: "Companion to apply_groups; same not-applicable status for Arista as source."
