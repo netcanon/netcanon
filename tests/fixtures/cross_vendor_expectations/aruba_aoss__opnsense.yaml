@@ -1,0 +1,632 @@
+# Cross-vendor fidelity expectations: aruba_aoss -> opnsense
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/aruba_aoss_to_opnsense/
+#
+# Phase 3 follow-up pair.  Aruba AOS-S is an enterprise campus
+# L2/basic-L3 switch (ProCurve heritage); OPNsense is a FreeBSD-based
+# router/firewall (pfSense fork).  Two vendor roles barely overlap.
+# Shared canonical surface:
+#
+#   * hostname — good
+#   * domain / DNS / NTP / syslog / timezone — lossy until OPNsense
+#     parse + render wires up the corresponding `<system>` children
+#     (Aruba has no domain directive, so domain is N/A here)
+#   * interfaces (IP, enable, descr) — good
+#   * VLANs — id good; name/description collapse; port-membership and
+#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
+#     lists, no first-class SVI)
+#   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
+#     model is two-stage, codec doesn't currently render either)
+#   * DHCP server scopes — N/A (Aruba is relay-only; canonical list
+#     always empty on parse)
+#   * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in plugin's
+#     snmpd.conf, not config.xml)
+#   * Local users — lossy (Aruba sha1 / bcrypt / plaintext vs
+#     OPNsense bcrypt-only)
+#   * RADIUS — good
+#   * LAGs — lossy (Trk<N> ↔ lagg<N> rename, LACP mode collapse on
+#     OPNsense's single 'lacp' proto, mode-name semantics differ)
+#
+# What's firmly out of scope on OPNsense (target unsupported):
+#
+#   * switchport modes / per-VLAN tagged/untagged port lists /
+#     voice_vlan / spanning-tree state — OPNsense has no switching
+#     fabric
+#   * VRF / routing-instance — neither vendor models VRFs (N/A)
+#   * VXLAN / EVPN Type-5 — neither vendor models them (N/A)
+
+meta:
+  source_vendor: aruba_aoss
+  target_vendor: opnsense
+  primary_use_case: >
+    Hybrid migration: Aruba AOS-S campus switch (2930F / 2930M /
+    3810 / 5400R) -> OPNsense firewall/router.  Shared surface is
+    hostname / DNS / interface IPs / VLAN tags / SNMP v1/v2c /
+    local users / RADIUS / LAGs.  Aruba switching state (per-VLAN
+    port lists, voice-VLAN, spanning-tree) is firmly out of scope
+    on the OPNsense side.  OPNsense's firewall / NAT / VPN feature
+    set is firmly out of scope on the Aruba source side.
+  certainty: medium
+  references:
+    - id: opnsense-interfaces
+      path: docs/vendor-references/aruba_aoss_to_opnsense/interfaces.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-vlans
+      path: docs/vendor-references/aruba_aoss_to_opnsense/vlans.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-dhcp
+      path: docs/vendor-references/aruba_aoss_to_opnsense/dhcp_relay_versus_pool.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-gateways
+      path: docs/vendor-references/aruba_aoss_to_opnsense/static_routes.md
+      title: "OPNsense Gateways manual"
+      source_url: "https://docs.opnsense.org/manual/gateways.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-users
+      path: docs/vendor-references/aruba_aoss_to_opnsense/local_users.md
+      title: "OPNsense Users manual"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-snmp
+      path: docs/vendor-references/aruba_aoss_to_opnsense/snmp.md
+      title: "OPNsense Net-SNMP plugin reference (development docs)"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-system
+      path: docs/vendor-references/aruba_aoss_to_opnsense/system_services.md
+      title: "OPNsense General Settings manual"
+      source_url: "https://docs.opnsense.org/manual/settingsmenu.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-laggs
+      path: docs/vendor-references/aruba_aoss_to_opnsense/lags.md
+      title: "OPNsense Devices manual (LAGG tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-radius
+      path: docs/vendor-references/aruba_aoss_to_opnsense/radius.md
+      title: "OPNsense Users manual (Authentication servers)"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: aruba-system-services
+      path: docs/vendor-references/aruba_aoss_to_opnsense/system_services.md
+      title: "Aruba AOS-S 16.10 Management and Configuration Guide"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-interfaces
+      path: docs/vendor-references/aruba_aoss_to_opnsense/interfaces.md
+      title: "Aruba AOS-S 16.10 Basic Operation Guide (interface naming)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/BOG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-vlans
+      path: docs/vendor-references/aruba_aoss_to_opnsense/vlans.md
+      title: "Aruba AOS-S 16.10 Advanced Traffic Management Guide (VLANs)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-static-routes
+      path: docs/vendor-references/aruba_aoss_to_opnsense/static_routes.md
+      title: "Aruba AOS-S 16.10 IPv4 Configuration Guide (static routes)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-dhcp-relay
+      path: docs/vendor-references/aruba_aoss_to_opnsense/dhcp_relay_versus_pool.md
+      title: "Aruba AOS-S 16.10 IPv4 Configuration Guide (DHCP relay)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-snmp
+      path: docs/vendor-references/aruba_aoss_to_opnsense/snmp.md
+      title: "Aruba AOS-S 16.10 Management and Configuration Guide (SNMP)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-users
+      path: docs/vendor-references/aruba_aoss_to_opnsense/local_users.md
+      title: "Aruba AOS-S 16.10 Access Security Guide (local users)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-radius
+      path: docs/vendor-references/aruba_aoss_to_opnsense/radius.md
+      title: "Aruba AOS-S 16.10 Access Security Guide (RADIUS)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ASG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: aruba-lags
+      path: docs/vendor-references/aruba_aoss_to_opnsense/lags.md
+      title: "Aruba AOS-S 16.10 Advanced Traffic Management Guide (Trunking)"
+      source_url: "https://www.arubanetworks.com/techdocs/AOS-S/16.10/ATMG/2930F-3810-5400/index.htm"
+      retrieved: "2026-04-30"
+    - id: switchport-unsupported
+      path: docs/vendor-references/aruba_aoss_to_opnsense/switchport_unsupported.md
+      title: "Switchport / spanning-tree / voice-VLAN unsupported on OPNsense"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: vrf-unsupported
+      path: docs/vendor-references/aruba_aoss_to_opnsense/vrf_unsupported.md
+      title: "VRF / routing-instance unsupported on both vendors"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: firewall-out-of-scope
+      path: docs/vendor-references/aruba_aoss_to_opnsense/firewall_natively_unsupported.md
+      title: "Firewall / NAT / VPN cross-vendor scope"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  One entry per top-level CanonicalIntent field
+# (intent.py walked top-down).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Aruba quoted ``hostname "<name>"`` ↔ OPNsense
+      ``<system>/<hostname>``.  Codec strips quotes on parse.
+      Round-trip is lossless.
+    references: [opnsense-system, aruba-system-services]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no first-class domain directive in the
+      codec's parse surface; the field is always empty on Aruba
+      parse so nothing renders on the OPNsense target.
+    references: [aruba-system-services]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      Aruba ``ip dns server-address priority N <addr>`` collapses
+      to a bare list on canonical (sorted by priority).  OPNsense
+      capability matrix declares ``/system/dns-server`` supported
+      but render wire-up does not currently emit ``<dnsserver>``
+      elements.  Cross-pair drops the resolver list pending wire-up.
+    references: [opnsense-system, aruba-system-services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Aruba's SNTP ``sntp server priority N <addr>`` lines map to
+      OPNsense's space-separated ``<system>/<timeservers>``
+      element.  Protocol distinction (full NTP vs SNTP) is lost
+      on the canonical layer.  Per-server modifiers (priority
+      overrides; prefer / iburst) drop on round-trip.  OPNsense
+      codec does not currently wire ``<timeservers>`` into
+      ``CanonicalIntent.ntp_servers`` on render.
+    references: [opnsense-system, aruba-system-services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Aruba ``time timezone <minute-offset>`` (e.g. ``-480`` for
+      PST) plus separate ``time daylight-time-rule <region>``
+      versus OPNsense
+      ``<system>/<timezone>America/Los_Angeles</timezone>`` (Olson
+      zoneinfo) carry different semantics.  Operator-curated
+      mapping required.  Codecs also do not wire timezone into
+      canonical today.
+    references: [opnsense-system, aruba-system-services]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Aruba ``logging <addr>`` lines map to OPNsense
+      ``<system>/<syslog>/<remoteserver>``.  OPNsense codec does
+      not currently wire syslog config into canonical
+      ``syslog_servers`` on render.  Severity / facility tokens
+      are not modelled.
+    references: [opnsense-system, aruba-system-services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips, but several per-
+      interface sub-fields are lossy or unsupported.  See the
+      ``interfaces[].*`` entries below for the per-sub-field
+      breakdown.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Aruba bare-numeric (``1``, ``13``) / letter-uplink (``A1``)
+      / ``Trk1`` does not survive on OPNsense.  The operator-
+      facing label on OPNsense is the zone tag (``<wan>`` /
+      ``<lan>`` / ``<optN>``); the BSD device name lives in
+      ``<if>``.  Port-rename mesh handles the conversion via the
+      codec's ``classify_port_name`` / ``format_port_identity``
+      delegates.  Canonical preserves the source string verbatim.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Aruba ``name "<x>"`` (64-char limit) ↔ OPNsense ``<descr>``
+      (no length limit).  Round-trip preserves text content.
+      Aruba may truncate on render when an OPNsense ``<descr>``
+      exceeds 64 characters, but the inverse direction (this one)
+      never expands.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Aruba ``enable`` / ``disable`` ↔ OPNsense ``<enable>``
+      element presence.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      Aruba codec infers from name shape (bare number ->
+      ethernetCsmacd, ``Trk`` -> port-channel, ``Vlan`` ->
+      l3ipvlan).  OPNsense doesn't surface a type field; the
+      cross-pair drops the type hint.  Codec capability matrix
+      declares this lossy on the Aruba side.
+    references: [aruba-interfaces, opnsense-interfaces]
+
+  interfaces[].mtu:
+    disposition: lossy
+    reason: >
+      Aruba codec does not currently parse ``mtu N`` directives
+      (capability matrix gap; field always empty on Aruba parse).
+      OPNsense target supports ``<mtu>`` on render but has nothing
+      to write.
+    references: [opnsense-interfaces]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Aruba CIDR (``10.0.0.2/30``) or dotted-mask form converts
+      mechanically to OPNsense ``<ipaddr>`` + ``<subnet>``.
+      Multiple addresses per interface are uncommon on Aruba L3
+      ports and would collapse to the primary on canonical.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Aruba ``ipv6 address X/N`` ↔ OPNsense ``<ipaddrv6>`` +
+      ``<subnetv6>``.  ``scope`` discriminator (global / link-
+      local) preserved.  OPNsense's non-static IPv6 keywords
+      (``dhcp6``, ``track6``, ``slaac``, ``6rd``, ``6to4``) are
+      not generated by Aruba source.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].switchport_mode:
+    disposition: unsupported
+    reason: >
+      OPNsense has no switching fabric.  Aruba carries port-mode
+      state implicitly via VLAN-centric ``tagged`` / ``untagged``
+      port lists; canonical projection populates
+      ``switchport_mode`` from those lists.  Cross-pair drops the
+      field; OPNsense render emits no switchport XML.
+    references: [switchport-unsupported]
+
+  interfaces[].access_vlan:
+    disposition: unsupported
+    reason: >
+      Same rationale as switchport_mode — OPNsense has no
+      access-VLAN concept on physical interfaces.
+    references: [switchport-unsupported]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: unsupported
+    reason: >
+      OPNsense has no per-port allowed-VLAN list.  Trunking is
+      implicit: every ``<vlans>/<vlan>`` whose ``<if>`` matches
+      a physical NIC rides that NIC.
+    references: [switchport-unsupported, opnsense-vlans]
+
+  interfaces[].trunk_native_vlan:
+    disposition: unsupported
+    reason: >
+      Same as trunk_allowed_vlans — OPNsense's "native VLAN" is
+      the parent NIC's untagged frames; not a per-port toggle.
+    references: [switchport-unsupported]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      OPNsense has no LLDP-MED voice-VLAN signalling in the base
+      OS.  Aruba's per-VLAN ``voice`` keyword (set inside the
+      VLAN stanza) drops on the cross-pair.
+    references: [switchport-unsupported]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      Aruba ``trunk 23-24 trk1 lacp`` declares membership outside
+      the per-port stanza; canonical back-points to ``Trk1`` on
+      each member.  OPNsense's ``<laggs>`` block carries member
+      lists by NIC name in a comma-separated ``<members>`` element
+      under ``<laggif>laggN</laggif>``.  Both codecs round-trip
+      the back-pointer but the LAG name itself differs (``Trk1``
+      versus ``lagg0``); port-rename mesh canonicalises.
+    references: [opnsense-laggs, aruba-lags]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      Aruba ``ip address dhcp`` ↔ OPNsense
+      ``<ipaddr>dhcp</ipaddr>``.  Neither codec currently wires
+      this into ``CanonicalInterface.dhcp_client``; cross-pair
+      drops pending wire-up.
+    references: [opnsense-interfaces, aruba-interfaces]
+
+  interfaces[].vrf:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VRF concept (always empty on parse) and
+      OPNsense has no VRF model in ``config.xml``.  Field
+      structurally absent on this direction.
+    references: [vrf-unsupported]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      The list itself round-trips for the id field.  Per-VLAN
+      sub-fields collapse or drop — see ``vlans[].*`` entries
+      below.
+    references: [opnsense-vlans, aruba-vlans]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Aruba ``vlan N`` ↔ OPNsense ``<vlan>/<tag>N</tag>``.  Both
+      vendors share the 1-4094 range.
+    references: [opnsense-vlans, aruba-vlans]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      Aruba per-VLAN ``name "<x>"`` (32-char truncation).
+      OPNsense's nearest equivalent is ``<descr>`` — which is also
+      where the canonical ``description`` lands.  Two canonical
+      fields collapse to one OPNsense XML field; one drops on
+      render.
+    references: [opnsense-vlans, aruba-vlans]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Same as ``vlans[].name`` — both canonical fields share the
+      single OPNsense ``<descr>`` slot.
+    references: [opnsense-vlans, aruba-vlans]
+
+  vlans[].tagged_ports:
+    disposition: unsupported
+    reason: >
+      OPNsense has no VLAN-centric port-membership model.  A
+      VLAN exists only as a tagged sub-interface on ONE parent
+      NIC (the ``<if>`` element).  Cross-pair render emits no
+      port-membership XML; operators reconstruct trunk topology
+      manually by assigning each ``<vlan>`` to a zone.  Aruba's
+      ``tagged 23-24`` lines drop on render.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].untagged_ports:
+    disposition: unsupported
+    reason: >
+      Same as tagged_ports — OPNsense's "untagged" traffic is
+      the parent NIC's native frames; not a per-port toggle.
+      Aruba's ``untagged 1-12`` lines drop on render.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      Aruba's per-VLAN ``ip address X/N`` (absorbed onto the
+      canonical VLAN record by ``_svi_absorption.py``) has no
+      first-class OPNsense equivalent.  The OPNsense pattern is
+      to assign the VLAN sub-interface to a zone and put the
+      address on the zone (``<opt2>``).  The canonical model
+      carries the SVI address but the OPNsense render path
+      doesn't synthesise the corresponding zone — operator-
+      curated.
+    references: [opnsense-vlans, aruba-vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      OPNsense splits static-route declaration into two blocks:
+      ``<gateways>/<gateway_item>`` (named gateways) and
+      ``<staticroutes>/<route>`` (routes referencing named
+      gateways).  The OPNsense codec does not currently render
+      either block on cross-vendor; canonical static_routes from
+      an Aruba source drop pending wire-up.  Aruba's legacy
+      ``ip default-gateway`` form normalises to a ``0.0.0.0/0``
+      canonical record but the OPNsense idiom is to set the
+      default via the WAN zone's ``<gateway>`` rather than a
+      ``0.0.0.0/0`` route.
+    references: [opnsense-gateways, aruba-static-routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S is primarily a DHCP relay platform.  The
+      aruba_aoss codec does not advertise ``/dhcp/pool`` in its
+      supported set, so ``CanonicalIntent.dhcp_servers`` is always
+      empty on this direction — nothing to lose.  Aruba's per-
+      VLAN ``ip helper-address`` directives also drop because the
+      canonical schema has no helper-address field.
+    references: [aruba-dhcp-relay]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly — Aruba ``snmp-server community / location
+      / contact / host`` ↔ OPNsense ``<snmpd>/<rocommunity> /
+      <syslocation> / <syscontact> / <traphost>``.  Aruba's
+      Operator/Manager keyword normalises to RO on canonical (only
+      the first community survives).  v3 USM is unsupported on
+      OPNsense (lives in plugin's snmpd.conf, not config.xml — see
+      codec's ``/snmp/v3-user`` unsupported entry); ``v3_users``
+      records drop on the cross-pair and the rename-pane shows the
+      ``snmpv3`` unsupported-category banner declared on the
+      OPNsense codec's ``unsupported_rename_categories`` frozenset.
+    references: [opnsense-snmp, aruba-snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Aruba ``Trk<N>`` ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4)
+      driver naming).  Aruba is one-based, FreeBSD is zero-based,
+      so ``Trk1`` ↔ ``lagg0`` via the port-rename mesh.  Member
+      lists round-trip via the rename mesh.  LACP modes collapse:
+      Aruba's ``lacp`` / ``dt-lacp`` / ``fec`` / ``trunk`` map to
+      OPNsense ``<proto>lacp</proto>`` (FreeBSD always advertises
+      actively) or ``<proto>none</proto>`` (static).  PAgP-style
+      and HP-proprietary modes have no LACP equivalent;
+      cross-pair degrades.  OPNsense codec parses ``<laggs>`` but
+      its capability matrix doesn't currently advertise
+      ``/lag/aggregate``; render is partial pending wire-up.
+    references: [opnsense-laggs, aruba-lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Aruba SHA-1 hex (``sha1 "<40-hex>"``) and plaintext
+      (``plaintext "<...>"``) hashes are NOT bcrypt and OPNsense
+      will reject them on apply (FreeBSD ``crypt(3)`` accepts only
+      bcrypt-prefix forms).  Aruba's bcrypt form (``bcrypt
+      "$2y$..."``) MAY round-trip if the OPNsense backend accepts
+      ``$2y$`` (it accepts ``$2a$`` / ``$2b$`` / ``$2y$``
+      interchangeably) but the salt-engine differences may still
+      require re-keying.  Operators must reset passwords on the
+      OPNsense target in most cases.  Privilege number (15 -> 1)
+      collapses to OPNsense's binary admin / non-admin via group
+      membership: privilege >= 15 -> ``<groupname>admins</groupname>``,
+      otherwise ``<groupname>users</groupname>``.  Both codecs pass
+      hashes through verbatim; loss surfaces in the validation
+      report.
+    references: [opnsense-users, aruba-users]
+
+  radius_servers:
+    disposition: good
+    note: >
+      Aruba ``radius-server host <ip> key "<secret>"`` (with
+      separate ``radius-server key`` for the global default) ↔
+      OPNsense ``<authserver>`` with ``<type>radius</type>``,
+      ``<host>``, ``<radius_secret>``, ``<radius_auth_port>``,
+      ``<radius_acct_port>``.  Round-trips host / port pair
+      cleanly with default ports 1812 / 1813.  Aruba's optional
+      ``radius-server retransmit`` / ``timeout`` directives have
+      no canonical model and drop on render.
+    references: [opnsense-radius, aruba-radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      aruba_aoss codec capability matrix lists ``/vxlan-vnis/vni``
+      under unsupported ("VXLAN not modelled — AOS-S is a campus
+      L2/L3 codec") so canonical list is always empty on Aruba
+      parse.  OPNsense codec also lists the path under unsupported
+      ("VXLAN not modelled — OPNsense is a firewall codec").
+      Field structurally absent on this direction.
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — Aruba AOS-S has no EVPN
+      concept (no MP-BGP, no VXLAN underlay), so canonical list
+      is always empty on Aruba parse.  OPNsense doesn't model
+      EVPN either.
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      Aruba AOS-S has no VRF / routing-instance model (single
+      global routing table).  OPNsense ``config.xml`` has no
+      VRF schema.  Both ends absent.
+    references: [vrf-unsupported]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict by design — never auto-rendered.  Aruba-source
+      ACL / port-mirror / spanning-tree stanzas may land here but
+      OPNsense target couldn't render them as XML rules anyway
+      (firewall rules are unsupported per codec capability matrix).
+    references: [firewall-out-of-scope]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does
+      not consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``apply-groups`` statement
+      preservation per GAP 9b).  Aruba AOS-S source never
+      populates this list; field is always empty on this
+      cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not_applicable status for
+      Aruba source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The fundamental shape — what OPNsense models in config.xml versus
+#     what Aruba AOS-S models in CLI text — is well documented and
+#     unambiguous.  hostname / interface IPs / VLAN tags / SNMP v1/v2c
+#     / RADIUS / LAG-name-collision round-trip cleanly.
+#
+#   * The wire-up gaps on the OPNsense side (no DNS / NTP / syslog /
+#     timezone / static-route render path; no /dhcp/pool advertised;
+#     no /lag/aggregate advertised) push several Tier-1 fields into
+#     'lossy' rather than 'good'.  These are codec-implementation
+#     gaps, not vendor-modelling gaps, and would close as wire-up
+#     lands.
+#
+#   * The switch versus firewall role mismatch is unambiguously
+#     unsupported / N/A: switching state, VRF, VXLAN, EVPN are firmly
+#     outside both vendors' wheelhouses (or absent on the source so
+#     N/A on this direction).  Confident.
+#
+#   * The hash-format incompatibility (Aruba SHA-1 / plaintext / bcrypt
+#     versus OPNsense bcrypt-only) is documented and confidently lossy.
+#
+# Deferred items (none — all fields walked and dispositioned):
+#
+#   * (none — every CanonicalIntent top-level field carries an explicit
+#     per_field_expectation entry; sub-fields enumerated where the
+#     disposition varies by sub-field).
