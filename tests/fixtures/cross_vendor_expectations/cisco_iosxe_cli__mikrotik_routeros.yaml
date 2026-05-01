@@ -1,0 +1,416 @@
+# Cross-vendor fidelity expectations: cisco_iosxe_cli -> mikrotik_routeros
+#
+# This file enumerates the per-field translation disposition for every
+# top-level field on CanonicalIntent (see netconfig/migration/canonical/
+# intent.py).  Each disposition is grounded in vendor documentation
+# excerpts under docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+#
+# Phase 3 follow-up pair.  Cisco IOS-XE -> MikroTik RouterOS is an
+# enterprise-to-SMB/WISP migration.  The wire formats (Cisco stanza
+# config vs RouterOS /export section-and-set form) and the underlying
+# switching philosophy (Cisco interface-centric switchport vs
+# RouterOS router-first with optional bridge) differ enough that even
+# concepts both vendors model end up lossy on the cross-pair.
+
+meta:
+  source_vendor: cisco_iosxe_cli
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    Enterprise Cisco IOS-XE router/switch to MikroTik RouterOS
+    (typical: SMB / WISP migrations replacing aging Cisco gear with
+    cost-effective RouterOS hardware; or operators consolidating
+    branch sites onto MikroTik for OPEX reduction).  The basic
+    surface (hostname / DNS / NTP / IPv4-IPv6 addresses / static
+    routes / SNMP v1/v2c) round-trips with documented losses;
+    deeper features (switchport semantics, VRF, voice VLAN, EVPN-
+    VXLAN) either parse-and-ignore on one codec or have no shape-
+    compatible target syntax.
+  certainty: medium
+  references:
+    - id: mikrotik_vlan
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/vlans.md
+      title: "VLAN configuration: Cisco IOS-XE versus MikroTik RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-04-30"
+    - id: mikrotik_bridge_vlan
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/vlans.md
+      title: "Basic VLAN switching (bridge VLAN filtering) — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/103841826/Basic+VLAN+switching"
+      retrieved: "2026-04-30"
+    - id: mikrotik_ip_routing
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/static_routes.md
+      title: "IP Routing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: mikrotik_ip_address
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/ip_addressing.md
+      title: "IP addressing: Cisco IOS-XE versus MikroTik RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: mikrotik_dhcp
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/dhcp_server.md
+      title: "DHCP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-04-30"
+    - id: mikrotik_snmp
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/snmp.md
+      title: "SNMP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-04-30"
+    - id: mikrotik_user
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/local_users.md
+      title: "User — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-04-30"
+    - id: mikrotik_radius
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/radius_aaa.md
+      title: "RADIUS Client — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/13402205/RADIUS"
+      retrieved: "2026-04-30"
+    - id: mikrotik_bonding
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/lags.md
+      title: "Bonding — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-04-30"
+    - id: mikrotik_vrf
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/routing_instances_vrf.md
+      title: "VRF — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-04-30"
+    - id: mikrotik_clock
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/system_services.md
+      title: "Clock — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992866/Clock"
+      retrieved: "2026-04-30"
+    - id: mikrotik_identity
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/system_services.md
+      title: "Identity — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-04-30"
+    - id: mikrotik_switching_model
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/switching_model.md
+      title: "Bridging and Switching philosophy — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/47579231/Bridging+and+Switching"
+      retrieved: "2026-04-30"
+    - id: mikrotik_iface_naming
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/interface_naming.md
+      title: "Ethernet ports / interface naming — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-04-30"
+    - id: cisco_snmp_v3
+      path: docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/snmp.md
+      title: "SNMP Configuration Guide — Cisco IOS XE SNMPv3"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/snmp/configuration/xe-3se/3850/snmp-xe-3se-3850-book/nm-snmp-snmpv3.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks intent.py top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Cisco ``hostname X`` -> RouterOS ``/system identity / set
+      name=X``.  Identical semantic; clean direct map.
+    references: [mikrotik_identity]
+
+  domain:
+    disposition: lossy
+    reason: >
+      Cisco's ``ip domain name <fqdn>`` has no first-class RouterOS
+      equivalent — RouterOS keeps domain hints inside the DNS
+      resolver search list (``/ip dns set domain=...``) rather than
+      as a top-level identity attribute.  Most RouterOS deployments
+      omit the field; the Cisco source's domain string drops on
+      render unless the codec emits it as a ``/ip dns`` line, which
+      changes its scope semantically.
+    references: [mikrotik_identity]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Cisco ``ip name-server <addr>`` (one line per server) ->
+      RouterOS ``/ip dns / set servers=<addr>,<addr>,...`` (single
+      comma-separated value).  Both codecs reconstitute the list
+      shape on parse.
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Bare-address list round-trips cleanly (Cisco ``ntp server X``
+      -> RouterOS ``/system ntp client / set servers=X,...``).  The
+      Cisco-side per-server options (``prefer`` / ``iburst`` /
+      ``key`` / ``source``) drop on canonical round-trip — the
+      canonical model stores ``list[str]`` only, and RouterOS's
+      ``/system ntp client`` does not surface per-server options
+      anyway.
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Cisco ``clock timezone PST -8 0`` (3-letter abbreviation +
+      offset + DST tokens) versus RouterOS ``/system clock / set
+      time-zone-name=America/Los_Angeles`` (TZ-database name).
+      Cisco accepts arbitrary 3-letter zones; RouterOS uses the
+      IANA tz database.  Cross-vendor render may emit a token the
+      target accepts grammatically but with different DST
+      semantics; operator-curated mapping needed.
+    references: [mikrotik_clock]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Cisco ``logging host X`` -> RouterOS ``/system logging action
+      add target=remote remote=X`` plus a separate ``/system
+      logging add action=remote topics=...`` rule.  RouterOS splits
+      destination from filter; canonical surface stores host
+      addresses only, so per-severity / per-facility semantics drop
+      on round-trip.
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface scalars (name, description, enabled, MTU,
+      ipv4_addresses, ipv6_addresses, dhcp_client) are mostly good
+      with documented per-field caveats below.  The lossy bits are
+      structural: Cisco's speed-encoded interface-name prefix
+      (GigabitEthernet vs TenGigabitEthernet) does not survive the
+      round-trip into RouterOS's flat etherN naming, and the
+      switchport-mode surface (access/trunk) lives in a different
+      configuration plane on RouterOS.  Loopback as a first-class
+      interface family is a Cisco concept; RouterOS emulates via
+      empty bridges, which the codec carries via interface_type
+      inference but does not render byte-identically.
+    references: [mikrotik_iface_naming, mikrotik_switching_model]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly.  ``name`` is conflated with the
+      RouterOS L3 interface name (e.g. vlan10), per the MikroTik
+      codec's ``LossyPath`` entry on ``/vlans/vlan/name``.
+      ``description`` has no RouterOS field at all.  Tagged /
+      untagged port lists land on RouterOS bridge VLAN filtering
+      (Plane 2), which the MikroTik codec parses partially in v1.
+      SVI addressing (``interfaces[].ipv4_addresses`` on a vlan-
+      named interface) round-trips good via /interface vlan + /ip
+      address.
+    references: [mikrotik_vlan, mikrotik_bridge_vlan]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF routes round-trip cleanly: ``ip route DEST MASK
+      GW`` -> ``/ip route add dst-address=DEST/N gateway=GW``.
+      Codec converts dotted-mask <-> CIDR transparently.  Cisco's
+      interface-as-gateway form (``ip route X Y GigabitEthernet0/0/2``)
+      maps to RouterOS's ``gateway=ether2`` form.  The lossy bit
+      is per-VRF: Cisco ``ip route vrf X ...`` drops to the global
+      table on render because the canonical model lacks a vrf field
+      on CanonicalStaticRoute (deferred — lands alongside VRF
+      wire-up).
+    references: [mikrotik_ip_routing]
+
+  # ── Tier 2 — auto-translate with review banner ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Cisco's bundled ``ip dhcp pool`` block maps to the three-
+      section RouterOS form (``/ip pool`` + ``/ip dhcp-server
+      network`` + ``/ip dhcp-server``).  The MikroTik codec joins
+      the three on parse and emits the three on render.  The
+      lossy bits are: (1) Cisco ``ip dhcp excluded-address``
+      multi-fragment exclusions compress into a single
+      start_ip/end_ip range on canonical; (2) static reservations
+      (``host`` / ``client-identifier`` / ``hardware-address`` on
+      Cisco; ``/ip dhcp-server lease`` on RouterOS) have no
+      canonical field and drop to raw_sections; (3) DHCP option
+      codes (``option 43``, etc.) are not modelled.
+    references: [mikrotik_dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact) round-trips
+      cleanly.  Trap hosts: Cisco supports multiple ``snmp-server
+      host`` declarations; RouterOS supports only a single
+      ``trap-target=`` — multi-target Cisco source drops to the
+      first.  v3 USM has multiple cliffs: (1) RouterOS supports
+      only MD5 / SHA1 auth and DES / AES (= AES-128) priv; Cisco's
+      SHA-2 family and AES-192/256/3DES downgrade with banner; (2)
+      passphrases are engineID-salted per RFC 3414 and never
+      cross-portable — operator MUST re-key on the target; (3)
+      Cisco's group / view-based access control has no first-class
+      RouterOS equivalent (RouterOS gates v3 access via
+      read-access= / write-access= flags).  Documented in
+      CanonicalSNMPv3User docstring.
+    references: [mikrotik_snmp, cisco_snmp_v3]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Cisco's ``Port-channel<N>`` + per-member ``channel-group <N>
+      mode active`` maps to RouterOS's ``/interface bonding add
+      slaves=etherN,etherM mode=802.3ad``.  Mode mapping:
+      ``active`` -> ``802.3ad``, ``passive`` -> ``802.3ad`` (no
+      separate passive on RouterOS), ``on`` -> static (closest
+      RouterOS analogue is ``balance-xor`` with no LACP peer).
+      Naming convention differs (``Port-channel10`` vs ``bond1``);
+      the rename mesh canonicalises.  RouterOS's other bonding
+      modes (active-backup, balance-rr, balance-tlb, balance-alb,
+      broadcast) have no Cisco equivalent and would only appear in
+      the inverse direction.
+    references: [mikrotik_bonding]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Cisco's numeric ``privilege 1-15`` versus RouterOS's named
+      groups (``full`` / ``write`` / ``read`` / custom) requires
+      operator-curated mapping.  Default mapping: privilege 15 ->
+      full, privilege 1 -> read.  Intermediate privilege levels
+      have no clean group analogue.  Password hash formats are NOT
+      cross-compatible: Cisco type-9 scrypt (``$9$...``) and
+      type-8 PBKDF2-SHA256 (``$8$...``) are Cisco-only; RouterOS
+      stores passwords in a vendor-private format that is not
+      surfaced in /export at all.  Operator must re-set passwords
+      on the target device after migration.
+    references: [mikrotik_user]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port / acct_port round-trip cleanly.  Shared
+      secret encoding differs: Cisco's ``key 7 ...`` form (type-7
+      reversible obfuscation) versus RouterOS's opaque ``secret=``;
+      both codecs pass through verbatim, the receiving vendor's
+      RADIUS daemon will reject if it does not match the server's
+      expectation.  Service-binding (RouterOS ``service=login,ppp,
+      wireless``) versus method-list / server-group (Cisco ``aaa
+      group server radius`` + ``aaa authentication login default
+      group ... local``) is not modelled canonically — Cisco-side
+      method-list richness lands in raw_sections; RouterOS-side
+      service binding defaults on render.
+    references: [mikrotik_radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists ``/vxlan-vnis/vni``
+      as unsupported with rationale "IOS-XE VXLAN mappings (`interface
+      nve1 / member vni <N> associate vrf <name>`) parse-and-ignore in
+      v1.  CanonicalVxlan schema exists; wire-up deferred until demand
+      arrives for Catalyst-to-Arista migrations."  The MikroTik codec
+      capability matrix also lists ``/vxlan-vnis/vni`` as unsupported
+      ("RouterOS VXLAN exists but is rare in canonical scope and not
+      modelled in v1.").  Cross-pair drops to unsupported on both
+      sides.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec lists ``/evpn-type5-routes/route`` under
+      lossy with rationale that EVPN Type-5 is a VRF-property model
+      (CanonicalRoutingInstance.l3_vni) rather than per-prefix records,
+      and no codec populates the per-prefix list today.  RouterOS does
+      not model EVPN at all.  Effectively unsupported on the cross-
+      pair.
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Cisco IOS-XE codec capability matrix lists
+      ``/routing-instances/instance`` as unsupported: "VRF declarations
+      (`vrf definition <name>` with `rd` + `address-family ipv4` +
+      `route-target import/export`) and per-interface `vrf forwarding
+      <name>` parse-and-ignore in v1."  RouterOS 7+ has /ip vrf but
+      the MikroTik codec does not yet wire up the parser either.
+      Cross-pair surface is empty regardless of structural
+      compatibility (RouterOS keeps RD/RT under BGP rather than the
+      VRF block, so even when both codecs land their VRF parsers, the
+      RD/RT fields will be lossy on the cross-pair).
+    references: [mikrotik_vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict of section-name -> raw text that the pipeline
+      carries through for display but never auto-renders.  By design
+      vendor-specific.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; not a translation field."
+
+  source_format:
+    disposition: not_applicable
+    note: "Same as source_vendor — informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  Cisco IOS-XE source never populates this list.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific companion to apply_groups.  Always empty on
+      this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The basic surface (hostname / DNS / NTP / IPv4-IPv6 addresses /
+#     static routes) is high-confidence: vendor docs are clear and
+#     both codecs have established parse+render coverage on that
+#     subset.
+#
+#   * The switching-plane surface (vlans / interfaces switchport
+#     fields) is medium-confidence: RouterOS's two-plane model
+#     (router-on-a-stick /interface vlan vs bridge VLAN filtering)
+#     does not 1:1 with Cisco's interface-centric switchport model,
+#     and the MikroTik codec's bridge-VLAN parsing is partial in v1.
+#
+#   * The SNMPv3 USM surface is medium-confidence: documented
+#     algorithm-set divergence (Cisco SHA-2 / AES-192/256 / 3DES vs
+#     RouterOS SHA1 / AES-128 / DES) plus engineID-salted passphrases
+#     mean cross-vendor v3 migrations always require operator re-key.
+#
+#   * VRF / EVPN-VXLAN are confidently unsupported on both codecs;
+#     the cross-pair status will follow when wire-up lands.
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes — canonical schema gap; lands alongside
+#     VRF wire-up.
+#
+#   * Cisco's full DHCP option-set (option 43 vendor-specific data,
+#     option 82 relay agent info, etc.) — no canonical field today.
+#
+#   * RouterOS firewall / NAT / queues / wireless configuration —
+#     Tier-3 by design; remain in raw_sections for review.  These
+#     are inverse-direction concerns and noted in the
+#     mikrotik_routeros__cisco_iosxe_cli.yaml inverse pair.
