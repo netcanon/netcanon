@@ -1,0 +1,782 @@
+# Cross-vendor fidelity expectations: juniper_junos -> cisco_iosxe
+#
+# Source: juniper_junos codec (Junos set-form CLI, rich canonical
+# surface — hostname, DNS, NTP, syslog, timezone, VLANs, VXLAN VNIs,
+# MAC-VRF, L3-VRF, SNMPv1/v2c/v3, local users, static routes,
+# apply-groups inheritance per GAP 9b).
+# Target: cisco_iosxe codec — OpenConfig NETCONF YANG XML.  This is
+# the NETCONF/OpenConfig sibling of cisco_iosxe_cli (operator-paste
+# CLI).  Both target the same Cisco device family; the asymmetry on
+# this cross-pair is dominated by the cisco_iosxe codec being a
+# Phase-0.5 stub whose render emits ONLY the openconfig-interfaces
+# subtree (interfaces, IPv4, IPv6, description, enable, IANA type).
+# Every other canonical category that Junos parses (hostname, DNS,
+# NTP, syslog, timezone, VLANs, VXLAN, VRF, SNMP, local users, RADIUS,
+# LAGs, static routes, apply-groups) lands on the canonical tree but
+# is silently dropped by the cisco_iosxe target render — the codec
+# walks intent.interfaces only.
+#
+# Direction-specific framing: for fields the cisco_iosxe codec's
+# CapabilityMatrix declares `supported` but its render() never
+# emits (system, vlans, snmp, static-routes), the disposition here
+# is `unsupported` with reason citing the render-side wire-up gap.
+# The matrix declarations are aspirational — they exist so that
+# cross-codec mesh translations don't classify these paths as
+# `unsupported` on the target side, but the actual emit path is
+# narrow.  Honest classification beats matrix-deference.
+#
+# This is the mirror of cisco_iosxe__juniper_junos.yaml.  Forward
+# direction is dominated by parser-side gap on cisco_iosxe (-> skews
+# `not_applicable`); reverse is dominated by render-side gap (->
+# skews `unsupported`).  Both reach the same operational endpoint:
+# data not in output.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_cisco_iosxe/
+#
+# Authored 2026-05-01 as part of Phase 3 cross-mesh audit.
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    Junos source consumed into a NETCONF/OpenConfig-driven
+    orchestration pipeline that uses the cisco_iosxe codec.  The
+    target render emits only the openconfig-interfaces subtree, so
+    this pair is appropriate ONLY for the narrow case where the
+    downstream consumer needs interface-level data and accepts that
+    everything else (VLANs, SNMP, RADIUS, users, LAGs, static
+    routes, system services, VXLAN, VRF) must be applied separately.
+    For a real DC migration from Junos to Cisco IOS-XE, route
+    through cisco_iosxe_cli instead — that pair is `certified` and
+    emits the full canonical surface (still imperfect on EVPN/VRF
+    but structurally rich).
+  certainty: medium
+  references:
+    - id: oc-interfaces
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/openconfig-yang-scope.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/interface-fields.md
+      title: "openconfig-if-ip YANG schema docs (IPv4 / IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-system
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/openconfig-yang-scope.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc-vlan
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vlan-render-gap.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: oc-network-instance
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vrf-render-gap.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: oc-evpn
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vxlan-evpn-gap.md
+      title: "openconfig-evpn YANG model (GitHub)"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-05-01"
+    - id: cisco-snmp-yang
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/snmp-render-gap.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-05-01"
+    - id: cisco-iosxe-prog-guide
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/openconfig-yang-scope.md
+      title: "Programmability Configuration Guide, Cisco IOS XE 17.15.x — NETCONF Protocol"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/prog/configuration/1715/b_1715_programmability_cg/m_1715_prog_yang_netconf.html"
+      retrieved: "2026-05-01"
+    - id: cisco-evpn-vxlan-cg
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vxlan-evpn-gap.md
+      title: "Catalyst 9000 Series EVPN-VXLAN Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-15/configuration_guide/vxlan/b_1715_bgp_evpn_vxlan_9300_cg.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-naming
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/interface-fields.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/interface-fields.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-family-inet6
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/ipv6-addresses.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-05-01"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vlan-render-gap.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vlan-render-gap.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/snmp-render-gap.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/snmp-render-gap.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-05-01"
+    - id: junos-instance-type
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vrf-render-gap.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-05-01"
+    - id: junos-l3vpn
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vrf-render-gap.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vxlan-evpn-gap.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/vxlan-evpn-gap.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-05-01"
+    - id: junos-config-groups
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/apply-groups-unsupported.md
+      title: "Junos Configuration Groups Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli/topics/concept/junos-config-groups-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-apply-groups-stmt
+      path: docs/vendor-references/juniper_junos_to_cisco_iosxe/apply-groups-unsupported.md
+      title: "Junos `apply-groups` statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/apply-groups-edit.html"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.hostname from `set system
+      host-name X`.  The cisco_iosxe NETCONF render does NOT walk
+      intent.hostname — _render_canonical() emits only the
+      openconfig-interfaces subtree.  The CapabilityMatrix declares
+      /system/hostname `supported` but the declaration is
+      aspirational (cross-codec mesh friendliness); no `<system>`
+      element appears in the output XML regardless of source
+      content.  Flips to good once render-side wire-up lands.
+    references: [oc-system, cisco-iosxe-prog-guide]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.domain from `set system
+      domain-name X`.  cisco_iosxe render emits no
+      `<system><config><domain-name>` (render-side wire-up gap).
+      Flips to good once wired.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.dns_servers from
+      `set system name-server X` (multiple).  cisco_iosxe render
+      emits no `<system><dns>` element (render-side gap; matrix
+      declares /system/dns-server `supported` aspirationally).
+      Flips to good once wired.
+    references: [oc-system]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.ntp_servers from
+      `set system ntp server X`.  cisco_iosxe render emits no
+      `<system><ntp>` (render-side gap).  Flips to lossy once
+      wired (per-server options like prefer / iburst / key /
+      source not modelled canonically).
+    references: [oc-system]
+
+  timezone:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.timezone from `set system
+      time-zone <Olson>` (e.g. `America/Los_Angeles`).  cisco_iosxe
+      render emits no `<system><clock>` element (render-side gap).
+      OpenConfig prefers IANA tz database identifiers which match
+      Junos's form exactly, so post-wire-up this would be `good`
+      for the IANA -> NETCONF emit case (and `lossy` only if a
+      downstream Cisco device's CLI translation drops back to
+      abbreviation+offset).
+    references: [oc-system]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.syslog_servers from
+      `set system syslog host X any info`.  cisco_iosxe render
+      emits no `<system><logging>` (render-side gap).  Flips to
+      lossy once wired (canonical host-list surface; per-facility
+      / severity filters not modelled).
+    references: [oc-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips: the Junos parser
+      produces CanonicalInterface records and the cisco_iosxe
+      render walks them.  Per-field drift is itemised below —
+      name, description, enabled, ipv4_addresses are good;
+      interface_type, mtu, and ipv6_addresses (link-local scope)
+      are lossy; switchport / VLAN / LAG / VRF / DHCP-client
+      fields are unsupported because the cisco_iosxe render path
+      doesn't emit the corresponding OpenConfig subtrees.
+    references: [oc-interfaces]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      Junos's media-prefix name (`ge-0/0/0`, `xe-0/0/0`, `et-0/0/48`)
+      -> OpenConfig `<interface><name>` text verbatim, after the
+      port-rename mesh translates Junos shape to Cisco speed-encoded
+      form (`GigabitEthernet1/0/1`, `TenGigE1/0/1`, `HundredGigE1/0/49`).
+      Without the rename mesh, the literal Junos name reaches the
+      wire and a real Cisco device would reject it on edit-config.
+      LAG (`ae<N>` -> `Port-channel<N>`), loopback (`lo0` ->
+      `Loopback0`), and IRB (`irb.<N>` -> `Vlan<N>`) all route
+      through the rename mesh.
+    references: [oc-interfaces, junos-iface-naming]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trip.  Junos parses `set interfaces X
+      description "<text>"` from the source; cisco_iosxe render
+      emits as `<config><description>` verbatim.
+    references: [oc-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      Junos's `set interfaces X disable` (default enabled) maps to
+      YANG boolean `<enabled>true</enabled>` /
+      `<enabled>false</enabled>`.  The cisco_iosxe render emits
+      strict YANG-bool form.
+    references: [oc-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      Junos has no IANA ifType concept on the wire — the
+      juniper_junos codec INFERS interface_type from name shape
+      (`ge-`/`xe-`/`et-`/`mge-` -> ethernetCsmacd, `ae` ->
+      ieee8023adLag, `lo` -> softwareLoopback, `irb` -> l2vlan).
+      The cisco_iosxe render emits the inferred IANA ident as
+      `<config><type>`, but a downstream OpenConfig consumer
+      treats this as authoritative when in fact it's an inference.
+      Inference asymmetry exists in the canonical model rather than
+      being introduced by this codec pair specifically.
+    references: [oc-interfaces, junos-iface-fundamentals]
+
+  "interfaces[].mtu":
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.interfaces[].mtu from
+      `set interfaces X mtu N`.  cisco_iosxe render does NOT emit
+      `<config><mtu>` even when present on the canonical record
+      (render-side gap).  The matrix declares
+      /interfaces/interface/config/mtu `lossy` ("YANG-only round-
+      trip loses the link/IP-MTU distinction") — but the
+      operational truth is that the render doesn't emit at all,
+      not that it loses the distinction.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Junos parser populates from `set interfaces X unit 0 family
+      inet address A.B.C.D/N`.  cisco_iosxe render emits as
+      `<subinterface><ipv4><addresses><address>` with prefix-length.
+      Round-trip lossless for the (ip, prefix) tuple.
+    references: [oc-if-ip]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      The Junos parser preserves the link-local scope discriminator
+      (sets `scope="link-local"` on addresses in the `fe80::/10`
+      range).  The cisco_iosxe render emits `<ipv6><addresses>
+      <address>` with `<ip>` and `<prefix-length>` — but no scope
+      discriminator.  OpenConfig's openconfig-if-ip schema doesn't
+      carry scope explicitly; downstream consumers must infer from
+      the prefix bytes (per RFC 4291).  Long-standing canonical-
+      model gap shaped by OpenConfig schema rather than codec gap.
+    references: [oc-if-ip, junos-family-inet6]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      Junos source populates switchport state from `family
+      ethernet-switching interface-mode {access | trunk}`.  The
+      cisco_iosxe render does NOT walk the
+      `openconfig-vlan:switched-vlan` augment under `<ethernet>`;
+      no switchport state appears in the output XML.  Render-side
+      wire-up gap.  Flips to good once wired.
+    references: [oc-vlan]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: Same `switched-vlan` augment render gap as switchport_mode.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: >
+      Same render gap.  OpenConfig models this as `trunk-vlans`
+      leaf-list under the switched-vlan augment.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: >
+      Same render gap.  Junos's `native-vlan-id` lives at the
+      parent-interface hierarchy (NOT under the unit), so the
+      render path needs to handle the cross-stanza correlation.
+    references: [oc-vlan]
+
+  "interfaces[].voice_vlan":
+    disposition: not_applicable
+    note: >
+      Junos has no first-class voice-VLAN construct equivalent to
+      Cisco's `switchport voice vlan N`.  Junos source never
+      populates this field; intent.interfaces[].voice_vlan is
+      always None on Junos parse.  Doubly-not-applicable: source
+      structurally absent AND target render doesn't walk.
+    references: [oc-vlan, junos-vlans-statement]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      Junos source populates lag_member_of from
+      `set interfaces X gigether-options 802.3ad ae<N>`.
+      cisco_iosxe render does NOT emit the
+      `openconfig-if-aggregate:aggregate-id` leaf — render-side
+      gap.  Flips to good once wired (OpenConfig leaf maps to
+      Cisco `channel-group N mode active` on a downstream
+      consumer).
+    references: [oc-interfaces]
+
+  "interfaces[].dhcp_client":
+    disposition: unsupported
+    reason: >
+      Junos source populates dhcp_client from `set interfaces X
+      unit 0 family inet dhcp`.  cisco_iosxe render doesn't walk
+      the OpenConfig DHCP-client augment.  Render-side gap.
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.interfaces[].vrf from
+      `set routing-instances X interface ge-0/0/0.0` (transposed
+      back-pointer per GAP 6).  cisco_iosxe render doesn't walk
+      `<network-instances>` interface-membership annotations.
+      Render-side gap.  Compounded by the absence of any
+      /routing-instances/* paths in the cisco_iosxe matrix.
+    references: [oc-network-instance, junos-instance-type]
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.vlans with full VLAN-centric
+      records (id, name, description, tagged_ports, untagged_ports,
+      SVI addressing via IRB).  cisco_iosxe render does NOT walk
+      intent.vlans — _render_canonical() emits only the interfaces
+      subtree.  Synthesised IRB interfaces (intent.interfaces[name=
+      "irb.X"]) DO survive via the interfaces walk, but the top-
+      level `<vlans>` declaration that should accompany them does
+      not.  A downstream OpenConfig consumer would see SVIs without
+      VLAN-membership context.  Render-side wire-up gap; flips to
+      good once wired.
+    references: [oc-vlan, junos-vlans-statement, junos-bridging-overview]
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: Same render-side wire-up gap as vlans.
+    references: [oc-vlan]
+
+  "vlans[].name":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [oc-vlan]
+
+  "vlans[].description":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [oc-vlan]
+
+  "vlans[].tagged_ports":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [oc-vlan]
+
+  "vlans[].untagged_ports":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [oc-vlan]
+
+  "vlans[].ipv4_addresses":
+    disposition: unsupported
+    reason: >
+      SVI L3 addressing absorbs into intent.vlans[].ipv4_addresses
+      on Junos parse from `set interfaces irb unit N family inet
+      address X/N` + `set vlans <name> l3-interface irb.N`.  The
+      synthesised CanonicalInterface (name="irb.N") survives the
+      cisco_iosxe interface walk so the L3 data reaches the wire,
+      but the VLAN-association context drops with the rest of
+      intent.vlans.
+    references: [oc-vlan]
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.static_routes from
+      `set routing-options static route X next-hop Y` (default-VRF
+      routes; per-VRF static routes parse-and-ignore until
+      CanonicalStaticRoute gains a vrf field).  cisco_iosxe render
+      does not walk `<network-instances>` /
+      `<protocols><protocol identifier=STATIC>` on emit.
+      Render-side wire-up gap; the matrix declares
+      /routing/static-route `supported` aspirationally.
+    references: [oc-network-instance]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.dhcp_servers from
+      `dhcp-local-server` + `access address-assignment pool` (two-
+      stage model that flattens to canonical CanonicalDHCPPool).
+      cisco_iosxe render doesn't emit OpenConfig DHCP-server
+      models — render-side gap, doubly-blocked because OpenConfig
+      DHCP server coverage on Catalyst trains is incomplete (would
+      require Cisco-IOS-XE-dhcp native YANG bridging).
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.snmp (community, location,
+      contact, trap_hosts, v3_users).  cisco_iosxe render does
+      NOT walk intent.snmp.  Render-side wire-up gap on the v1/v2c
+      surface; the v3 surface is doubly unsupported because the
+      cisco_iosxe matrix lists /snmp/v3-user under `unsupported`
+      explicitly ("Phase 0.5 stub — SNMPv3 USM wire-up requires
+      Cisco-IOS-XE-snmp native YANG bridging").
+    references: [junos-snmp-overview, cisco-snmp-yang]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: Same render-side wire-up gap as snmp.
+    references: [junos-snmp-overview]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [junos-snmp-overview]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [junos-snmp-overview]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [junos-snmp-overview]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Doubly unsupported — render-side wire-up gap PLUS the
+      cisco_iosxe matrix declares /snmp/v3-user `unsupported`
+      explicitly (Phase 0.5 stub; SNMPv3 USM requires the
+      Cisco-IOS-XE-snmp native YANG module that isn't bridged in
+      this codec).  Even if v1/v2c SNMP eventually wires up, v3
+      stays unsupported on the cisco_iosxe target until native-
+      YANG bridging lands.  Junos source supports v3 USM natively
+      (`/snmp/v3-user` declared `supported`).
+    references: [junos-snmpv3-cg, cisco-snmp-yang]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.lags from `set interfaces
+      ae<N> aggregated-ether-options ...` and `set chassis
+      aggregated-devices ethernet device-count N`.  cisco_iosxe
+      render does NOT walk intent.lags or emit the
+      `openconfig-if-aggregate` augment.  Render-side wire-up gap.
+    references: [oc-interfaces]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.local_users from `set system
+      login user X class <role> authentication encrypted-password
+      "<hash>"`.  cisco_iosxe render does NOT walk
+      `<system><aaa><authentication><users>`.  Render-side gap.
+      Even if wired, hash-format incompatibility (Junos $1/$5/$6/
+      $sha1 vs Cisco type-5/8/9) would force re-keying on the
+      target — same lossy classification as the
+      cisco_iosxe_cli direction.
+    references: [oc-system]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.radius_servers from
+      `set system radius-server X secret "$9$..." port N
+      accounting-port N`.  cisco_iosxe render does NOT walk
+      `<system><aaa><server-groups>`.  Render-side gap; flips to
+      lossy once wired (shared-secret format differs across
+      vendors; operator typically re-keys regardless).
+    references: [oc-system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.vxlan_vnis from `set vlans
+      <name> vxlan vni <N>` (GAP 6) and `set switch-options
+      vtep-source-interface lo0.0` (GAP-EVPN-2).  cisco_iosxe
+      codec capability matrix lists `/vxlan-vnis/vni`,
+      `/vxlan-vnis/source-interface`, and `/vxlan-vnis/udp-port`
+      under `unsupported` explicitly with reason "VXLAN not
+      modelled in this NETCONF/OpenConfig stub codec.  CLI
+      sibling defers VXLAN wire-up until Catalyst demand
+      arrives; NETCONF stays in lockstep."  Cross-pair drops
+      VXLAN entirely.
+    references: [oc-evpn, junos-evpn-overview, junos-evpn-irb-example, cisco-evpn-vxlan-cg]
+
+  "vxlan_vnis[].vlan_id":
+    disposition: unsupported
+    reason: Same as vxlan_vnis (cisco_iosxe matrix-unsupported + render-side gap).
+
+  "vxlan_vnis[].vni":
+    disposition: unsupported
+    reason: Same as vxlan_vnis.
+
+  "vxlan_vnis[].mcast_group":
+    disposition: unsupported
+    reason: Same as vxlan_vnis.
+
+  "vxlan_vnis[].flood_list":
+    disposition: unsupported
+    reason: Same as vxlan_vnis.
+
+  "vxlan_vnis[].source_interface":
+    disposition: unsupported
+    reason: Same as vxlan_vnis.
+
+  "vxlan_vnis[].udp_port":
+    disposition: unsupported
+    reason: Same as vxlan_vnis.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list `/evpn-type5-routes/route` under lossy-by-
+      default with rationale that EVPN Type-5 is a VRF-property
+      model (`CanonicalRoutingInstance.l3_vni`) rather than per-
+      prefix records; no codec populates the per-prefix list
+      today.  Junos source DOES populate the property model via
+      `set routing-instances X protocols evpn ip-prefix-routes
+      vni N` but the cisco_iosxe routing_instances render-side
+      gap blocks the property model from emitting.
+    references: [oc-evpn, junos-evpn-irb-example]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Junos source populates intent.routing_instances with full
+      records (name, instance_type, route_distinguisher,
+      rt_imports, rt_exports, description, l3_vni) per GAP 6.
+      cisco_iosxe render does NOT walk
+      `<network-instances><network-instance>` on emit.  Render-side
+      wire-up gap.  The codec matrix doesn't declare any
+      /routing-instances/* paths — implicitly unsupported.
+    references: [oc-network-instance, junos-instance-type, junos-l3vpn]
+
+  "routing_instances[].name":
+    disposition: unsupported
+    reason: Same as routing_instances (render-side gap).
+
+  "routing_instances[].instance_type":
+    disposition: unsupported
+    reason: >
+      Junos enum is richer (vrf / virtual-router / mac-vrf / l2vpn
+      / evpn) than what Cisco models cleanly.  Cross-pair drops
+      the discriminator regardless of render-side wire-up
+      progress.  Compounded by the underlying render-side gap.
+
+  "routing_instances[].route_distinguisher":
+    disposition: unsupported
+    reason: Same as routing_instances (render-side gap).
+
+  "routing_instances[].rt_imports":
+    disposition: unsupported
+    reason: Same as routing_instances.
+
+  "routing_instances[].rt_exports":
+    disposition: unsupported
+    reason: Same as routing_instances.
+
+  "routing_instances[].description":
+    disposition: unsupported
+    reason: Same as routing_instances.
+
+  "routing_instances[].l3_vni":
+    disposition: unsupported
+    reason: >
+      Junos's `set routing-instances X protocols evpn ip-prefix-
+      routes vni N` populates `CanonicalRoutingInstance.l3_vni`.
+      Cisco's equivalent (`member vni N vrf X` under nve1) is
+      parse-and-ignore in v1; cross-pair render also drops the
+      L3 VNI on the cisco_iosxe NETCONF render path (no nve1
+      emit at all on the stub codec).
+    references: [junos-evpn-irb-example, cisco-evpn-vxlan-cg]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Junos's
+      raw_sections content captures unrecognised `protocols /
+      policy-options / firewall` set-form lines.  cisco_iosxe
+      render ignores raw_sections entirely.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: unsupported
+    reason: >
+      Junos's `set apply-groups <G>` configuration-inheritance
+      mechanism has no Cisco analogue.  Junos parser populates the
+      list (per GAP 9b two-pass parse).  On cisco_iosxe render,
+      the group structure drops and only the flattened canonical
+      content would be emitted (and even that's blocked by the
+      broader render-side gap on this stub codec).  A validation
+      banner notes the loss on full-feature target codecs.
+    references: [junos-config-groups, junos-apply-groups-stmt]
+
+  group_content:
+    disposition: unsupported
+    reason: >
+      Companion to apply_groups — Junos parser preserves the
+      original group-scoped set-line tails for same-vendor render.
+      Drops on cisco_iosxe render along with apply_groups.
+    references: [junos-config-groups, junos-apply-groups-stmt]
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The structural framing is high-confidence: the cisco_iosxe
+#     codec's _render_canonical() is in-tree code that any reader
+#     can verify, and the conclusion that it walks intent.interfaces
+#     only is verifiable by code inspection.  The matrix declarations
+#     for `<system>`, `<vlans>`, `<routing>` are aspirational —
+#     present so cross-codec mesh translations are friendly, but
+#     not backed by the render implementation.
+#
+#   * The interface canonical-core dispositions (good for name /
+#     description / enabled / ipv4 / ipv6 modulo link-local; lossy
+#     for type / mtu / v6 link-local) are confidence-high — the
+#     juniper_junos codec is full-featured on the source side, and
+#     the cisco_iosxe matrix's interface coverage matches the
+#     render path.
+#
+#   * The non-interface unsupported dispositions are confidence-
+#     medium: it's mechanically true that the render doesn't emit
+#     today, but the matrix declarations as `supported` (rather
+#     than `unsupported`) make the codec's INTENT clear — these
+#     should round-trip eventually.  An operator running this
+#     today must understand this is a Phase-0.5 codec.
+#
+#   * The IPv6 link-local lossy classification is medium-confidence:
+#     the canonical model carries scope but OpenConfig schema has
+#     no scope leaf, so the loss is structural rather than codec-
+#     introduced.  The lossy classification documents the
+#     downstream-consumer-must-infer behaviour.
+#
+# Deferred items: none with reason="deferred".  Every field is
+# enumerated with a concrete disposition.
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The cisco_iosxe codec is currently the bottleneck on every
+#     cross-pair where it appears as either source or target.
+#     Wiring its render to walk intent.{hostname,dns_servers,
+#     ntp_servers,syslog_servers,timezone,vlans,static_routes,
+#     snmp,lags,local_users,radius_servers,routing_instances,
+#     vxlan_vnis} would convert ~25 unsupported dispositions in
+#     this YAML to good (or lossy where vendor mismatch dominates).
+#
+#   * The `unsupported` vs `not_applicable` distinction is doing
+#     a lot of work here.  For fields where the SOURCE has no
+#     concept (Junos `voice_vlan` is empty), `not_applicable` is
+#     correct.  For fields where the source produces data but the
+#     target render silently drops, `unsupported` is correct (with
+#     reason citing render-side wire-up gap).  The forward direction
+#     (cisco_iosxe -> juniper_junos) skews `not_applicable` because
+#     the parser-side gap dominates; this direction skews
+#     `unsupported` because the render-side gap dominates.  Same
+#     codec, same gap, opposite labelling depending on which side
+#     of the pipeline is broken.
+#
+#   * Junos's apply-groups inheritance has no Cisco equivalent at
+#     all — even with full cisco_iosxe render-side wire-up, the
+#     `groups` / `apply-groups` provenance pair would never round-
+#     trip.  Junos operators using apply-groups for compliance
+#     enforcement must accept that cross-vendor migration flattens
+#     the structural template entirely.
