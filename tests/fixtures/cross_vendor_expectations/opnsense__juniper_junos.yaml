@@ -1,0 +1,768 @@
+# Cross-vendor fidelity expectations: opnsense -> juniper_junos
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/opnsense_to_juniper_junos/
+#
+# FreeBSD-firewall → DC-class router pair.  This is the reverse of
+# `juniper_junos__opnsense.yaml`; dispositions are NOT symmetric.
+#
+# OPNsense source has a much smaller feature footprint than Junos
+# accepts, so most Junos-only L3 / DC surface (VRFs, VXLAN, EVPN,
+# apply-groups, named user classes, SNMPv3 USM users) is structurally
+# absent on OPNsense parse and the cross-pair hits `not_applicable`
+# rather than `unsupported`.
+#
+# What's structurally absent on OPNsense source (not_applicable):
+#   * routing_instances / VRF — OPNsense doesn't model VRFs
+#   * vxlan_vnis / evpn_type5_routes — OPNsense doesn't model VXLAN
+#   * apply_groups / group_content — Junos-only inheritance concept
+#   * snmp.v3_users — OPNsense's v3 USM lives in plugin's snmpd.conf,
+#     not config.xml; never reaches canonical from this source
+#   * switchport_mode / access_vlan / trunk_allowed_vlans /
+#     trunk_native_vlan / voice_vlan — OPNsense has no switching
+#     fabric, source never populates these
+#   * vlans[].tagged_ports / untagged_ports — same reason; OPNsense
+#     doesn't model VLAN-centric port-membership
+#
+# What translates well:
+#   * hostname / domain — direct mapping (both vendors model bare
+#     short name + DNS suffix)
+#   * interface description / enable / MTU / IPv4 / IPv6 — close
+#     structural match
+#   * VLAN id (tag) — both share 1-4094 range
+#   * SNMP v1/v2c — community / location / contact / trap_hosts
+#   * RADIUS — host / port pair (Junos auto-encrypts plaintext
+#     secret on commit, so functional cross-pair works)
+#
+# What translates poorly (lossy):
+#   * DNS / NTP / syslog / timezone — OPNsense codec parse path is
+#     incomplete on these `<system>` children (declared supported
+#     in the OPNsense capability matrix but wire-up incomplete)
+#   * Static routes — OPNsense codec doesn't currently parse
+#     `<staticroutes>` / `<gateways>` blocks
+#   * Local users — OPNsense bcrypt hash format isn't a Junos
+#     `encrypted-password` accepted format; group-binary versus
+#     named class collapse
+#   * LAGs — `lagg<N>` ↔ `ae<N>` rename, LACP-mode synthesis
+#   * DHCP — Junos render path not yet wiring `/dhcp/pool`
+#   * vlans[].name / description — collapse to OPNsense's single
+#     `<descr>` slot, then re-expand on Junos render
+
+meta:
+  source_vendor: opnsense
+  target_vendor: juniper_junos
+  primary_use_case: >
+    OPNsense firewall -> Junos DC-router migration (less common as
+    a complete migration, more common as a lab-to-production
+    promotion or as a step in a phased SDN-build-out where
+    OPNsense was the prototype).  Shared canonical surface is
+    hostname / domain / interface IPs / basic SNMP / RADIUS.
+    OPNsense's firewall / NAT / VPN feature set is firmly out of
+    scope on the Junos side; Junos's DC features (VRF, EVPN-VXLAN,
+    apply-groups) are structurally absent on the OPNsense source.
+  certainty: medium
+  references:
+    - id: opnsense-system
+      path: docs/vendor-references/opnsense_to_juniper_junos/system_services.md
+      title: "OPNsense General Settings manual"
+      source_url: "https://docs.opnsense.org/manual/settingsmenu.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-interfaces
+      path: docs/vendor-references/opnsense_to_juniper_junos/interfaces.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-vlans
+      path: docs/vendor-references/opnsense_to_juniper_junos/vlans.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-gateways
+      path: docs/vendor-references/opnsense_to_juniper_junos/static_routes.md
+      title: "OPNsense Gateways manual"
+      source_url: "https://docs.opnsense.org/manual/gateways.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-snmp
+      path: docs/vendor-references/opnsense_to_juniper_junos/snmp.md
+      title: "OPNsense Net-SNMP plugin reference (development docs)"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-users
+      path: docs/vendor-references/opnsense_to_juniper_junos/local_users.md
+      title: "OPNsense Users manual"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-laggs
+      path: docs/vendor-references/opnsense_to_juniper_junos/lags.md
+      title: "OPNsense Devices manual (LAGG tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-dhcp
+      path: docs/vendor-references/opnsense_to_juniper_junos/dhcp.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-firewall
+      path: docs/vendor-references/opnsense_to_juniper_junos/firewall_role_mismatch.md
+      title: "OPNsense Firewall manual"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-04-30"
+    - id: junos-iface-naming
+      path: docs/vendor-references/opnsense_to_juniper_junos/interfaces.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/opnsense_to_juniper_junos/interfaces.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/opnsense_to_juniper_junos/vlans.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/opnsense_to_juniper_junos/vlans.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-static-routing
+      path: docs/vendor-references/opnsense_to_juniper_junos/static_routes.md
+      title: "Junos static-routing topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/topic-map/static-routing-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/opnsense_to_juniper_junos/snmp.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/opnsense_to_juniper_junos/snmp.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-05-01"
+    - id: junos-password-cli
+      path: docs/vendor-references/opnsense_to_juniper_junos/local_users.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-05-01"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/opnsense_to_juniper_junos/local_users.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-05-01"
+    - id: junos-initial-config
+      path: docs/vendor-references/opnsense_to_juniper_junos/system_services.md
+      title: "Junos OS Initial Configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/system-basics/topics/topic-map/initial-configuration-junos-os.html"
+      retrieved: "2026-05-01"
+    - id: junos-syslog-overview
+      path: docs/vendor-references/opnsense_to_juniper_junos/system_services.md
+      title: "Junos syslog overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sys-mgmt/topics/concept/syslog-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-lag-overview
+      path: docs/vendor-references/opnsense_to_juniper_junos/lags.md
+      title: "Junos LAG overview topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-ae-example
+      path: docs/vendor-references/opnsense_to_juniper_junos/lags.md
+      title: "Junos aggregated-Ethernet configuration example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html"
+      retrieved: "2026-05-01"
+    - id: junos-radius-cli
+      path: docs/vendor-references/opnsense_to_juniper_junos/radius.md
+      title: "Junos radius-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/radius-server-edit-system.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-server
+      path: docs/vendor-references/opnsense_to_juniper_junos/dhcp.md
+      title: "Junos DHCP server topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-server.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-local-server
+      path: docs/vendor-references/opnsense_to_juniper_junos/dhcp.md
+      title: "Junos DHCP local-server overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/concept/dhcp-local-server-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-instance-type
+      path: docs/vendor-references/opnsense_to_juniper_junos/vrf_unsupported.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-05-01"
+    - id: junos-l3vpn
+      path: docs/vendor-references/opnsense_to_juniper_junos/vrf_unsupported.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/opnsense_to_juniper_junos/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-05-01"
+    - id: vrf-not-applicable
+      path: docs/vendor-references/opnsense_to_juniper_junos/vrf_unsupported.md
+      title: "VRF / routing-instance not_applicable on OPNsense source"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: vxlan-not-applicable
+      path: docs/vendor-references/opnsense_to_juniper_junos/vxlan_evpn_unsupported.md
+      title: "VXLAN / EVPN not_applicable on OPNsense source"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: firewall-role-mismatch
+      path: docs/vendor-references/opnsense_to_juniper_junos/firewall_role_mismatch.md
+      title: "Firewall / role mismatch — OPNsense source versus Junos target"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  One entry per top-level CanonicalIntent field
+# (intent.py walked top-down).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      OPNsense ``<system>/<hostname>`` ↔ Junos ``set system
+      host-name X``.  Both vendors model the bare short name.
+      Round-trip is lossless.
+    references: [opnsense-system, junos-initial-config]
+
+  domain:
+    disposition: good
+    note: >
+      OPNsense ``<system>/<domain>`` ↔ Junos ``set system
+      domain-name X``.  Both store as a sibling DNS suffix.
+    references: [opnsense-system, junos-initial-config]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      OPNsense ``<dnsserver>`` repeated elements map to Junos ``set
+      system name-server <addr>`` lines.  The opnsense codec does
+      not currently parse ``<dnsserver>`` into the canonical
+      ``dns_servers`` list (declared supported in capability matrix,
+      wire-up incomplete); cross-pair drops the resolver list pending
+      OPNsense codec wire-up.
+    references: [opnsense-system, junos-initial-config]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      OPNsense's space-separated ``<system>/<timeservers>`` element
+      splits into Junos's per-server ``set system ntp server <addr>``
+      lines.  Per-server modifiers (``prefer``, ``iburst``, ``key``)
+      drop on the canonical host-list-only model.  OPNsense codec
+      does not currently wire ``<timeservers>`` into
+      ``CanonicalIntent.ntp_servers``.
+    references: [opnsense-system, junos-initial-config]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Both vendors use Olson zoneinfo identifiers, so the SEMANTIC
+      round-trips losslessly when wire-up lands.  Currently the
+      opnsense codec does not wire ``<system>/<timezone>`` into
+      ``CanonicalIntent.timezone``; cross-pair drops the field
+      pending wire-up.
+    references: [opnsense-system, junos-initial-config]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      OPNsense ``<system>/<syslog>/<remoteserver>`` carries only
+      the host; Junos REQUIRES facility + severity tokens on
+      ``set system syslog host <addr> <facility> <severity>``
+      (canonical model has only host list, so render synthesises
+      ``any any``).  OPNsense codec does not currently parse syslog
+      into the canonical ``syslog_servers`` list.
+    references: [opnsense-system, junos-syslog-overview]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      OPNsense's zone-tag form (``<wan>`` / ``<lan>`` / ``<optN>``)
+      does not survive on Junos.  Junos expects media-prefix names
+      (``ge-0/0/0``, ``xe-0/0/47``, ``ae0``).  Port-rename mesh
+      handles the conversion via the codec's ``classify_port_name``
+      / ``format_port_identity`` delegates.  Canonical preserves the
+      source string verbatim.
+    references: [opnsense-interfaces, junos-iface-naming]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      OPNsense ``<descr>`` ↔ Junos ``description`` (Junos quotes
+      when whitespace present).  Round-trip preserves text content.
+    references: [opnsense-interfaces, junos-iface-fundamentals]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      OPNsense empty ``<enable/>`` element (presence = enabled) ↔
+      Junos ``set interfaces X disable`` (presence = disabled).
+      Inverted polarity; codec normalises.
+    references: [opnsense-interfaces]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      OPNsense doesn't surface a type field; canonical type is
+      empty on parse from this source.  Junos infers from media
+      prefix on render so a sensible inferred type appears on the
+      target side, but the source-side signal was empty.
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      OPNsense ``<mtu>N</mtu>`` ↔ Junos parent-scope ``mtu N``.
+      Both render explicitly when set.
+    references: [opnsense-interfaces]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      OPNsense ``<ipaddr>X</ipaddr>`` + ``<subnet>N</subnet>`` ↔
+      Junos ``unit 0 family inet address X/N``.  OPNsense's
+      single-address-per-interface model is a strict subset of
+      Junos's multi-address surface (Junos accepts repeated
+      ``set address`` lines).
+    references: [opnsense-interfaces, junos-iface-fundamentals]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      OPNsense ``<ipaddrv6>`` + ``<subnetv6>`` ↔ Junos
+      ``family inet6 address X/N``.  ``scope`` discriminator
+      (global / link-local) preserved.
+    references: [opnsense-interfaces, junos-iface-fundamentals]
+
+  interfaces[].switchport_mode:
+    disposition: not_applicable
+    note: >
+      OPNsense has no switching fabric; the source never populates
+      switchport_mode on parse.  Junos target supports per-unit
+      ``family ethernet-switching interface-mode`` but receives
+      nothing from this direction.
+    references: [opnsense-interfaces]
+
+  interfaces[].access_vlan:
+    disposition: not_applicable
+    note: >
+      Same as switchport_mode — OPNsense source never populates.
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: not_applicable
+    note: >
+      Same as switchport_mode — OPNsense source never populates.
+
+  interfaces[].trunk_native_vlan:
+    disposition: not_applicable
+    note: >
+      Same as switchport_mode — OPNsense source never populates.
+
+  interfaces[].voice_vlan:
+    disposition: not_applicable
+    note: >
+      Same as switchport_mode — OPNsense source never populates.
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      OPNsense's ``<laggs>/<lagg>/<members>`` reverse-link points
+      member CanonicalInterface entries at the parent ``lagg<N>``;
+      Junos uses ``set interfaces X gigether-options 802.3ad ae<N>``
+      form.  Both codecs round-trip the back-pointer but the LAG
+      name itself differs (``lagg0`` ↔ ``ae0``); port-rename mesh
+      canonicalises.
+    references: [opnsense-laggs, junos-lag-overview]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      OPNsense ``<ipaddr>dhcp</ipaddr>`` ↔ Junos
+      ``set interfaces X unit 0 family inet dhcp``.  Neither codec
+      currently wires this into ``CanonicalInterface.dhcp_client``;
+      cross-pair drops pending wire-up.
+    references: [opnsense-interfaces]
+
+  interfaces[].vrf:
+    disposition: not_applicable
+    note: >
+      OPNsense has no VRF model in ``config.xml``; source never
+      populates.  Junos target supports ``CanonicalInterface.vrf``
+      via GAP 6 but receives nothing to render.
+    references: [vrf-not-applicable]
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: >
+      OPNsense ``<vlan>/<tag>N</tag>`` ↔ Junos ``set vlans NAME
+      vlan-id N``.  Both share 1-4094 range.  Junos addresses
+      VLANs by name; codec render synthesises a default name
+      (typically ``vlan<N>``) when the source had no explicit
+      name beyond the description.
+    references: [opnsense-vlans, junos-vlans-statement]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      OPNsense's free-form ``<descr>`` (no character-set
+      restrictions) maps to Junos VLAN name (letters / digits /
+      hyphens / periods only, up to 255 chars).  Codec sanitises
+      (underscore → hyphen, spaces stripped).  Two canonical fields
+      (``name`` and ``description``) share OPNsense's single
+      ``<descr>`` slot, so the source-side collapse predates the
+      cross-vendor render.
+    references: [opnsense-vlans, junos-vlans-statement]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Same source-side collapse as ``vlans[].name`` (both share
+      OPNsense's ``<descr>``).  Junos target supports
+      ``set vlans NAME description X`` but receives only one of
+      the two canonical fields.
+    references: [opnsense-vlans, junos-vlans-statement]
+
+  vlans[].tagged_ports:
+    disposition: not_applicable
+    note: >
+      OPNsense has no VLAN-centric port-membership model; source
+      never populates tagged_ports.  Junos target supports per-
+      interface ``family ethernet-switching vlan members`` declarations
+      but receives nothing to render.
+    references: [opnsense-vlans]
+
+  vlans[].untagged_ports:
+    disposition: not_applicable
+    note: >
+      Same as tagged_ports — OPNsense source never populates.
+    references: [opnsense-vlans]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      OPNsense's pattern (zone with VLAN sub-interface) doesn't
+      populate ``CanonicalVlan.ipv4_addresses`` — the L3 address
+      lives on the zone's CanonicalInterface entry.  Junos target's
+      ``irb.<N>`` synthesis from ``CanonicalVlan.ipv4_addresses``
+      therefore receives nothing — the SVI mapping must be rebuilt
+      manually by the operator on the Junos target.
+    references: [opnsense-vlans, junos-vlans-statement]
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      OPNsense codec does not currently parse ``<staticroutes>`` /
+      ``<gateways>`` blocks into the canonical static_routes list;
+      structural mapping IS sound (each ``<staticroutes>/<route>``
+      becomes one Junos ``set routing-options static route X/N
+      next-hop Y`` once wire-up lands), but currently the cross-pair
+      delivers an empty list.  Default route synthesis: OPNsense's
+      WAN-gateway default-flag has no direct Junos analogue; the
+      canonical model would need to synthesise ``0.0.0.0/0 →
+      wan_gw_ip`` to round-trip.
+    references: [opnsense-gateways, junos-static-routing]
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      OPNsense's zone-keyed pool (``<dhcpd><lan>``) maps to Junos's
+      named pool (``access address-assignment pool LAN_POOL``) —
+      pool name must be synthesised on Junos render (typically from
+      the zone label).  Network + mask must be reconstructed on
+      Junos render from the pool's start_ip / end_ip + canonical
+      interface IP.  DNS list flattens from OPNsense's comma-
+      separated string to Junos's per-line ``name-server``.  Lease
+      time scalar (seconds) round-trips.  Junos codec does not
+      currently advertise ``/dhcp/pool`` in its capability matrix;
+      cross-pair render is partial pending wire-up.  OPNsense parse
+      side IS healthy.
+    references: [opnsense-dhcp, junos-dhcp-server, junos-dhcp-local-server]
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: >
+      OPNsense ``<rocommunity>`` ↔ Junos ``set snmp community NAME
+      authorization read-only``.  ``<rwcommunity>`` (rare) maps to
+      Junos ``read-write``.
+    references: [opnsense-snmp, junos-snmp-overview]
+
+  snmp.location:
+    disposition: good
+    references: [opnsense-snmp, junos-snmp-overview]
+
+  snmp.contact:
+    disposition: good
+    references: [opnsense-snmp, junos-snmp-overview]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      OPNsense ``<traphost>`` list ↔ Junos ``set snmp trap-group
+      <name> targets <ip>``.  Junos requires a trap-group name;
+      codec render synthesises a default name (typically
+      ``monitoring`` or ``default``).
+    references: [opnsense-snmp, junos-snmp-overview]
+
+  snmp.v3_users:
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates v3 USM users — they live in
+      the bsnmpd / net-snmp plugin's ``snmpd.conf`` (createUser
+      lines), outside the canonical wire format the opnsense codec
+      reads.  The codec capability matrix lists ``/snmp/v3-user`` as
+      unsupported.  Junos target supports v3 USM but receives
+      nothing to render from this direction.
+    references: [opnsense-snmp, junos-snmpv3-cg]
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: lossy
+    reason: >
+      OPNsense ``lagg<N>`` (FreeBSD lagg(4) driver) ↔ Junos
+      ``ae<N>`` (zero-based on both sides).  Member lists round-trip
+      via the port-rename mesh.  LACP modes synthesised: OPNsense
+      ``<proto>lacp</proto>`` maps to Junos
+      ``aggregated-ether-options lacp active`` (default to
+      ``active`` — OPNsense doesn't carry the active/passive
+      discriminator).  Junos chassis-wide ``device-count`` allocation
+      synthesised on render (typically equal to number of ``ae<N>``
+      interfaces).  OPNsense codec parses ``<laggs>`` but capability
+      matrix doesn't currently advertise ``/lag/aggregate``;
+      ``CanonicalLAG`` records may not populate fully.
+    references: [opnsense-laggs, junos-lag-overview, junos-ae-example]
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: lossy
+    reason: >
+      OPNsense's bcrypt hash format (``$2b$<cost>$...``) is NOT a
+      Junos ``encrypted-password`` accepted format (Junos accepts
+      ``$1$`` MD5, ``$5$`` SHA-256, ``$6$`` SHA-512).  Junos's PAM
+      stack on most modern releases does support bcrypt via Linux
+      crypt() compatibility, but the safer expectation is rejection
+      or non-authentication; operator re-keys on the Junos target.
+      Privilege model: OPNsense's group-binary
+      (``<groupname>admins</groupname>`` ↔ privilege_level=15;
+      others ↔ 1) maps to Junos's named ``class``.  Default mapping:
+      privilege >= 15 → ``super-user``; else ``operator`` (or
+      ``read-only`` if a richer mapping is wired).  Custom OPNsense
+      groups lose identity.  SSH public keys live separately under
+      OPNsense's ``<authorizedkeys>`` (not currently wired into
+      canonical), so re-add SSH keys on the Junos target after
+      migration.  Both codecs pass hashes through verbatim; loss
+      surfaces in the validation report.
+    references: [opnsense-users, junos-password-cli, junos-kb-password-format]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Both support host / secret / auth-port / acct-port.  OPNsense's
+      plaintext ``<radius_secret>`` lands verbatim in Junos's
+      ``secret`` field.  Junos accepts plaintext secrets on input
+      and encrypts them at config-commit time (the ``$9$...`` form
+      appears on subsequent reads), so functionally the cross-pair
+      WORKS as long as the source was plaintext (which OPNsense
+      stores).  Auth-port / acct-port preserved.  Marked lossy
+      rather than good because the encrypted form on the target
+      differs from the plaintext source — operator may want to
+      audit / re-encrypt for hygiene.
+    references: [opnsense-users, junos-radius-cli]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates ``CanonicalIntent.vxlan_vnis``
+      — OPNsense doesn't model VXLAN in ``config.xml`` (capability
+      matrix lists ``/vxlan-vnis/vni`` and siblings as unsupported).
+      Junos target supports VXLAN but receives an empty list.
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].vlan_id:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].vni:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].mcast_group:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].flood_list:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].source_interface:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  vxlan_vnis[].udp_port:
+    disposition: not_applicable
+    note: "Same as vxlan_vnis (OPNsense source never populates)."
+    references: [vxlan-not-applicable]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates this list — no EVPN model.
+      Junos target supports the schema but no codec populates the
+      per-prefix list today (Type-5 uses
+      ``CanonicalRoutingInstance.l3_vni`` VRF-property model).
+    references: [vxlan-not-applicable, junos-evpn-overview]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates ``routing_instances`` —
+      OPNsense doesn't model VRFs in ``config.xml``.  Junos target
+      supports ``set routing-instances`` (capability matrix
+      ``supported``, GAP 6) but receives an empty list.
+    references: [vrf-not-applicable, junos-instance-type, junos-l3vpn]
+
+  routing_instances[].name:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].instance_type:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].route_distinguisher:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].rt_imports:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].rt_exports:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].description:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  routing_instances[].l3_vni:
+    disposition: not_applicable
+    note: "Same as routing_instances (OPNsense source never populates)."
+    references: [vrf-not-applicable]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  OPNsense-source
+      firewall / NAT / VPN / captive-portal / plugin XML may land
+      in raw_sections; Junos target couldn't render them as Junos
+      config anyway (firewall filter syntax is structurally distinct
+      from OPNsense PF rules; OPNsense's stateful firewall surface
+      has no Junos SRX analogue at the canonical level).
+    references: [firewall-role-mismatch, opnsense-firewall]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``set apply-groups <G>``).  OPNsense
+      source never populates this list; field is always empty on
+      this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not_applicable status for
+      OPNsense source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence and deferred items
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * Keyword-stable surface (hostname / domain / interface IPs /
+#     VLAN tags / SNMP v1+v2c / RADIUS host-port pair) is high-
+#     confidence — vendor docs cite identical primitives, and both
+#     codecs parse / render the OPNsense source / Junos target
+#     elements today.
+#
+#   * Several Tier-1 fields (DNS, NTP, syslog, timezone, static
+#     routes) downgrade to `lossy` because the OPNsense codec's
+#     parse path is incomplete on these elements (declared
+#     supported in the OPNsense capability matrix but wire-up
+#     incomplete).  These are codec-implementation gaps, not
+#     vendor-modelling gaps, and would close as wire-up lands.
+#
+#   * Most Junos-only DC surface (VRF, VXLAN, EVPN, apply-groups,
+#     SNMPv3 USM, switching state) is `not_applicable` — OPNsense
+#     source has no construct to populate, so the cross-pair never
+#     carries this content.
+#
+#   * Hash-format incompatibility (OPNsense bcrypt versus Junos
+#     `$6$` SHA-512) is documented and confidently lossy; Junos's
+#     bcrypt-via-PAM acceptance on modern releases is the only
+#     uncertainty axis.
+#
+# Deferred items:
+#
+#   * No fields tagged with `reason: deferred` — every per-field
+#     entry walked and dispositioned with vendor-doc grounding.
