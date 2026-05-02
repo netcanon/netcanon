@@ -127,9 +127,10 @@ class TestPlanWithRenameMap:
         assert "GigabitEthernet1/0/1" in body["port_renames"]
         assert body["port_renames"]["GigabitEthernet1/0/1"] == "1/1"
         assert body["port_renames"]["Port-channel1"] == "Trk1"
-        # Loopback0 should produce a warning.
-        warnings_text = "\n".join(body["warnings"])
-        assert "Loopback0" in warnings_text or "loopback" in warnings_text
+        # Loopback0 maps cleanly to AOS-S `loopback1` (16.04+
+        # supports `interface loopback <N>`); auto-heuristic produces
+        # the rewrite, no warning needed.
+        assert body["port_renames"]["Loopback0"] == "loopback1"
 
     def test_plan_with_explicit_rename_map_wins_over_auto(
         self, client: TestClient,

@@ -42,37 +42,77 @@ _MODE_TO_AOS_TRUNK_TYPE = {
 }
 
 
-_AOS_KNOWN_ALGORITHMS = {"sha1", "plaintext"}
+#: Hash algorithms AOS-S accepts in the ``password manager user-name
+#: <name> <alg> <hash>`` form.  Verified against Aruba's published
+#: docs (Aruba 3810M/5400R Access Security Guide for AOS-S 16.11,
+#: "Setting passwords and usernames" + the password command-options
+#: reference).  AOS-S accepts ``plaintext``, ``sha1`` (40-char hex),
+#: ``sha256`` (64-char hex).  ``sha512`` is NOT accepted (this is
+#: the cross-vendor migration hazard from Cisco / Arista — operator
+#: must reset the password rather than re-use the hash).  Cisco
+#: type-5 (md5crypt) and type-9 (scrypt) are also unmigratable.
+_AOS_KNOWN_ALGORITHMS = {"sha1", "sha256", "plaintext"}
+
+#: Algorithms whose hashes AOS-S literally cannot consume — emit a
+#: comment-form `; password manager ... -- review:` line and skip
+#: the ``password ...`` command, so the rendered config commits
+#: clean and the operator gets an explicit reminder rather than a
+#: line AOS-S would reject (or worse: accept-as-plaintext garbage).
+_AOS_UNMIGRATABLE_ALGORITHMS = {
+    "sha512",      # Arista / Junos $6$ hashes
+    "5",           # Cisco IOS type-5 (md5crypt with leading "5 ")
+    "9",           # Cisco IOS-XE type-9 (scrypt with leading "9 ")
+    "8",           # Cisco IOS-XE type-8 (PBKDF2-SHA256)
+    "7",           # Cisco IOS type-7 reversible XOR (sometimes leading "7 ")
+    "bcrypt",      # OPNsense / pfSense
+    "fortios",     # FortiGate ENC-encrypted
+}
 
 
 def _split_aos_hash(hashed: str) -> tuple[str, str]:
     """Split a canonical ``hashed_password`` into (aos-algorithm, hash).
 
     Canonical entries carry hashes from multiple vendors in a few
-    shapes.  Map each to the closest AOS-S algorithm keyword so the
-    ``password manager ...`` line is at least syntactically valid:
+    shapes.  Map each to the closest AOS-S algorithm keyword:
 
-        ``sha1:<hex>``      -> ("sha1", "<hex>")            [Aruba native]
-        ``bcrypt:<...>``    -> ("plaintext", "bcrypt:<...>") [OPNsense/FortiGate]
-        ``fortios:ENC ...`` -> ("plaintext", "fortios:ENC ...") [FortiGate]
-        ``5 <md5crypt>``    -> ("plaintext", "5 <md5crypt>") [Cisco legacy]
-        ``9 <scrypt>``      -> ("plaintext", "9 <scrypt>")   [Cisco IOS-XE]
+        ``sha1:<hex>``        -> ("sha1", "<hex>")        [native]
+        ``sha256:<hex>``      -> ("sha256", "<hex>")      [native]
+        ``arista:sha512:...`` -> ("__unmigratable__", "sha512")
+        ``5 <md5crypt>``      -> ("__unmigratable__", "5")
+        ``9 <scrypt>``        -> ("__unmigratable__", "9")
+        ``bcrypt:...``        -> ("__unmigratable__", "bcrypt")
+        ``fortios:ENC ...``   -> ("__unmigratable__", "fortios")
 
-    AOS-S only understands ``sha1`` and ``plaintext`` at this position.
-    Foreign algorithm tags are re-wrapped under ``plaintext`` with the
-    original tag preserved inside the value — the line stays
-    syntactically valid, and the deploy-time rejection is explicit
-    rather than silently-corrupted canonical data.
+    The sentinel ``"__unmigratable__"`` triggers comment-form
+    emission upstream rather than producing a syntactically-correct
+    but operationally-broken ``plaintext "..."`` line.  Operators
+    see an explicit "reset this password" reminder.
     """
+    # Vendor-tagged form: ``arista:sha512:<...>`` / ``cisco:type9:<...>``
+    # Tagged forms have TWO colons; the first segment is the source
+    # vendor and the second is the algorithm.
     if ":" in hashed:
-        alg, _, val = hashed.partition(":")
-        if alg.lower() in _AOS_KNOWN_ALGORITHMS:
-            return alg, val
-        # Foreign algorithm — preserve the full original string so a
-        # reverse translation can recover it.
+        first, _, rest = hashed.partition(":")
+        if rest and ":" in rest:
+            alg, _, _val = rest.partition(":")
+            alg_low = alg.lower()
+            if alg_low in _AOS_UNMIGRATABLE_ALGORITHMS:
+                return "__unmigratable__", alg_low
+            if alg_low in _AOS_KNOWN_ALGORITHMS:
+                return alg, _val
+        # Single-colon form: ``alg:<value>``
+        alg_low = first.lower()
+        if alg_low in _AOS_KNOWN_ALGORITHMS:
+            return first, rest
+        if alg_low in _AOS_UNMIGRATABLE_ALGORITHMS:
+            return "__unmigratable__", alg_low
+        # Unknown algorithm — preserve verbatim under plaintext.
         return "plaintext", hashed
-    # No algorithm tag — looks like a bare Cisco "5 $1$..." or similar.
-    # Wrap as plaintext.
+    # Bare leading-digit Cisco form: ``5 $1$...`` / ``9 $9$...``.
+    head, _, _tail = hashed.partition(" ")
+    if head in _AOS_UNMIGRATABLE_ALGORITHMS:
+        return "__unmigratable__", head
+    # No algorithm tag — last-resort plaintext wrap.
     return "plaintext", hashed
 
 
@@ -263,6 +303,20 @@ def render_intent(tree: Any) -> str:
     for user in tree.local_users:
         aos_role = "manager" if user.privilege_level == 15 else "operator"
         hash_alg, hash_val = _split_aos_hash(user.hashed_password)
+        if hash_alg == "__unmigratable__":
+            # AOS-S can't consume this hash format (sha512 from
+            # Arista/Junos $6$, Cisco type-5/9, OPNsense/FortiGate
+            # bcrypt).  Emit a comment-form line so operators see an
+            # explicit "reset this password" reminder rather than a
+            # garbled `plaintext "arista:sha512:$6$..."` line that
+            # would either be rejected at deploy or, worse, accepted
+            # as a literal plaintext password (severe security bug).
+            lines.append(
+                f'; password {aos_role} user-name "{user.name}" '
+                f'-- review: {hash_val} hash from source vendor cannot '
+                f'be re-used on AOS-S; reset this user password manually'
+            )
+            continue
         lines.append(
             f'password {aos_role} user-name "{user.name}" '
             f'{hash_alg} "{hash_val}"'
@@ -324,20 +378,65 @@ def render_intent(tree: Any) -> str:
             )
         lines.append("   exit")
 
+    # OOBM (out-of-band management) — AOS-S has a top-level `oobm`
+    # block that's NOT a regular interface stanza.  When the cross-
+    # vendor port-rename mesh maps an mgmt-kind interface (e.g.
+    # Cisco GigabitEthernet0/0, Arista Management1) to "oobm",
+    # render emits the dedicated block here and the per-iface loop
+    # below skips it.  See Aruba Management & Configuration Guide
+    # for AOS-S 16.10, "Out-of-Band Management" chapter.
+    oobm_iface = next(
+        (i for i in tree.interfaces if i.name == "oobm"), None,
+    )
+    if oobm_iface is not None:
+        lines.append("oobm")
+        for addr in oobm_iface.ipv4_addresses:
+            lines.append(
+                f"   ip address {addr.ip}/{addr.prefix_length}"
+            )
+        # IPv6 on OOBM: the `oobm ipv6 default-gateway` form is
+        # documented at the top level.  An `ipv6 address` inside
+        # the oobm context is unverified against AOS-S docs as of
+        # this writing; we emit a comment flagging it for operator
+        # review rather than guessing the syntax.
+        for v6 in oobm_iface.ipv6_addresses:
+            lines.append(
+                f"   ; ipv6 address {v6.ip}/{v6.prefix_length} "
+                f"-- review: AOS-S oobm IPv6 syntax not auto-emitted"
+            )
+        lines.append("   exit")
+
     # Physical / named interfaces.  Skip Vlan<N> stubs that were
-    # already handled inside the VLAN stanza.
+    # already handled inside the VLAN stanza, and skip oobm (handled
+    # above as a top-level block).
     for iface in tree.interfaces:
-        if iface.name.lower().startswith("vlan"):
+        lname = iface.name.lower()
+        if lname.startswith("vlan"):
             continue
-        lines.append(f"interface {iface.name}")
+        if iface.name == "oobm":
+            continue
+        # Loopback interfaces use AOS-S `interface loopback <N>`
+        # syntax; the rest of the body (ip address, ipv6 address,
+        # description) is identical to the physical-port form.
+        # See Aruba Basic Operation Guide for AOS-S 16.10,
+        # "Managing loopback interfaces" chapter.
+        if lname.startswith("loopback"):
+            lines.append(f"interface {iface.name}")
+        else:
+            lines.append(f"interface {iface.name}")
         if iface.description:
             lines.append(f'   name "{iface.description}"')
-        if iface.enabled:
-            lines.append("   enable")
-        else:
-            lines.append("   disable")
+        # Skip enable/disable + routing markers on logical
+        # interfaces (loopback is always-up, has no routing toggle).
+        is_logical = lname.startswith("loopback")
+        if not is_logical:
+            if iface.enabled:
+                lines.append("   enable")
+            else:
+                lines.append("   disable")
         if iface.ipv4_addresses or iface.ipv6_addresses:
-            lines.append("   routing")
+            if not is_logical:
+                lines.append("   routing")
             for addr in iface.ipv4_addresses:
                 lines.append(
                     f"   ip address {addr.ip}/{addr.prefix_length}"

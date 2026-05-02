@@ -240,25 +240,60 @@ class TestCiscoToAruba:
         ident = src.classify_port_name("TenGigabitEthernet1/1/1/1")
         assert tgt.format_port_identity(ident) is None
 
-    def test_loopback_returns_none_for_warning(self):
-        """Aruba AOS-S has no loopback concept."""
+    def test_loopback_maps_to_aos_s_loopback_form(self):
+        """AOS-S 16.04+ DOES support `interface loopback <0-7>` per
+        the Aruba Basic Operation Guide ("Managing loopback
+        interfaces" chapter).  Loopback0 from a source vendor maps
+        to AOS-S `loopback1` (lo-0 is reserved for the auto-assigned
+        ::1/128 IPv6 loopback so user-creatable IDs start at 1)."""
         src = CiscoIOSXECLICodec()
         tgt = ArubaAOSSCodec()
         ident = src.classify_port_name("Loopback0")
+        assert tgt.format_port_identity(ident) == "loopback1"
+
+    def test_loopback_indices_above_seven_return_none(self):
+        """AOS-S only supports loopback 0-7; higher indices have
+        no representation and must flag for operator review."""
+        src = CiscoIOSXECLICodec()
+        tgt = ArubaAOSSCodec()
+        ident = src.classify_port_name("Loopback42")
         assert tgt.format_port_identity(ident) is None
 
-    def test_aruba_bails_on_port_zero(self):
-        """Cisco ``GigabitEthernet0/0`` is the OOBM Mgmt-vrf port with
-        port=0.  Aruba has no port 0 and no common OOBM port-name
-        representation; the formatter used to collapse this to bogus
-        ``"1"`` via ``port or 1``.  Regression: must return None so
-        the orchestrator flags it for review instead of silently
-        colliding with a real port 1 assignment."""
+    def test_aruba_port_zero_maps_to_oobm(self):
+        """Cisco ``GigabitEthernet0/0`` is the OOBM Mgmt-vrf port
+        (port=0, kind=mgmt-classified by Cisco's classifier when it
+        recognises Mgmt-vrf semantics, OR physical/port=0 fallback).
+        AOS-S has a dedicated ``oobm`` top-level configuration block
+        per the Aruba Management & Configuration Guide ("Out-of-Band
+        Management" chapter); the Aruba formatter returns the sentinel
+        name ``oobm`` so the renderer emits the correct top-level
+        block instead of silently dropping the management interface."""
         src = CiscoIOSXECLICodec()
         tgt = ArubaAOSSCodec()
         ident = src.classify_port_name("GigabitEthernet0/0")
         assert ident.port == 0
+        # Cisco's classifier returns kind=physical/port=0 here (not
+        # kind=mgmt) since GigabitEthernet0/0 isn't *always* the
+        # OOBM port — depends on platform.  For physical/port=0 the
+        # Aruba formatter still returns None (no port 0 in AOS-S).
+        # The mgmt-kind path is exercised by Arista's `Management1`
+        # which classifies as kind=mgmt.
         assert tgt.format_port_identity(ident) is None
+
+    def test_arista_management_maps_to_oobm(self):
+        """Arista's ``Management1`` classifies as kind=mgmt; AOS-S
+        has the dedicated `oobm` top-level block.  Formatter returns
+        the sentinel name ``oobm`` so the renderer emits the right
+        thing instead of silently dropping the interface (verified
+        against Aruba MCG for AOS-S 16.10)."""
+        from netconfig.migration.codecs.arista_eos.codec import (
+            AristaEOSCodec,
+        )
+        src = AristaEOSCodec()
+        tgt = ArubaAOSSCodec()
+        ident = src.classify_port_name("Management1")
+        assert ident.kind == "mgmt"
+        assert tgt.format_port_identity(ident) == "oobm"
 
 
 class TestSviAbsorption:
@@ -289,10 +324,14 @@ class TestSviAbsorption:
             interfaces=[
                 CanonicalInterface(name="Vlan11"),
                 CanonicalInterface(name="Vlan100"),
-                # Non-SVI kinds must still warn normally — this is
-                # regression coverage for "we didn't accidentally
-                # silence everything".
+                # Non-SVI kinds must still translate without warning
+                # IF the target codec has a representation.  Aruba
+                # AOS-S 16.04+ supports `interface loopback <0-7>`
+                # so Loopback0 maps cleanly to `loopback1`.  Use a
+                # tunnel name (no AOS-S equivalent) for the warn-
+                # path coverage.
                 CanonicalInterface(name="Loopback0"),
+                CanonicalInterface(name="Tunnel99"),
             ],
         )
         result = translate_port_names(
@@ -301,8 +340,12 @@ class TestSviAbsorption:
         # SVIs: no warning, name left verbatim (absorbed into VLAN stanza).
         assert not any("Vlan11" in w for w in result.warnings)
         assert not any("Vlan100" in w for w in result.warnings)
-        # Loopback still warns (not absorbed).
-        assert any("Loopback0" in w and "loopback" in w for w in result.warnings)
+        # Loopback maps cleanly (AOS-S supports loopback) — no warning.
+        assert not any("Loopback0" in w for w in result.warnings)
+        assert result.applied.get("Loopback0") == "loopback1"
+        # Tunnel still warns (AOS-S has no tunnel concept) — regression
+        # coverage for "we didn't accidentally silence everything".
+        assert any("Tunnel99" in w and "tunnel" in w for w in result.warnings)
 
     def test_svi_warning_still_fires_when_target_does_not_absorb(self):
         from netconfig.migration.canonical.intent import (
@@ -563,19 +606,21 @@ class TestOrchestrator:
             strip_unmappable=False,  # keep verbatim for reference checks
         )
 
-        # Interfaces — physical ones rewritten; Vlan10 + Loopback0
-        # fall through with warnings since Aruba can't express those.
-        # (With default strip_unmappable=True the Loopback would have
-        # been auto-dropped — exercised in TestAutoDrop below.)
+        # Interfaces — physical ones rewritten; Vlan10 stays verbatim
+        # (SVI has no AOS-S port-name form — the Aruba renderer handles
+        # VLAN L3 via the VLAN stanza itself).  Loopback0 NOW
+        # translates cleanly to AOS-S `loopback1` (16.04+ supports
+        # `interface loopback <N>`); previously it was passed through
+        # as a warn-and-leave-verbatim case.
         names = [i.name for i in intent.interfaces]
         assert "1/1" in names
         assert "1/2" in names
         assert "1/3" in names
-        # Vlan10 stays verbatim (SVI has no AOS-S port-name form — the
-        # Aruba renderer handles VLAN L3 via the VLAN stanza itself,
-        # so this is correct).
+        # Vlan10 stays verbatim.
         assert "Vlan10" in names
-        assert "Loopback0" in names
+        # Loopback0 → loopback1 (Aruba representation).
+        assert "loopback1" in names
+        assert "Loopback0" not in names
 
         # VLAN port lists rewritten consistently.
         vlan10 = next(v for v in intent.vlans if v.id == 10)
@@ -598,11 +643,14 @@ class TestOrchestrator:
         assert result.applied["GigabitEthernet1/0/1"] == "1/1"
         assert result.applied["Port-channel1"] == "Trk1"
 
-        # Warnings describe the verbatim-fallback cases.  SVI (Vlan10)
-        # is NOT warned about because Aruba absorbs SVI L3 into the
-        # VLAN stanza — see TestSviAbsorption for dedicated coverage.
+        # Warnings: SVI (Vlan10) is NOT warned about because Aruba
+        # absorbs SVI L3 into the VLAN stanza.  Loopback0 is NOT
+        # warned about because AOS-S 16.04+ supports
+        # `interface loopback <N>` and the formatter maps it cleanly
+        # to `loopback1` — see TestSviAbsorption for the suppression
+        # rule and the dedicated loopback tests for the mapping.
         assert not any("Vlan10" in w for w in result.warnings)
-        assert any("Loopback0" in w and "loopback" in w for w in result.warnings)
+        assert not any("Loopback0" in w for w in result.warnings)
 
     def test_user_rename_map_wins_over_auto(self):
         intent = _cisco_intent_with_lag()
@@ -630,11 +678,12 @@ class TestOrchestrator:
         transform(intent)
         assert intent.interfaces[0].name == "1/1"
         assert "GigabitEthernet1/0/1" in result.applied
-        # Loopback0 warns (Aruba has no loopback).  SVI Vlan10
-        # suppressed because Aruba absorbs SVI into VLAN stanza.
-        assert any("Loopback0" in w for w in result.warnings)
-        # Default strip_unmappable=True auto-drops Loopback0.
-        assert "Loopback0" in result.dropped
+        # Loopback0 maps cleanly to AOS-S `loopback1` — no warning,
+        # not auto-dropped.  SVI Vlan10 suppressed because Aruba
+        # absorbs SVI into VLAN stanza.
+        assert not any("Loopback0" in w for w in result.warnings)
+        assert "Loopback0" not in result.dropped
+        assert result.applied.get("Loopback0") == "loopback1"
 
 
 class TestAutoDropUnmappable:
@@ -655,7 +704,12 @@ class TestAutoDropUnmappable:
                 # Aruba uplink module (non-zero middle digit) — no
                 # auto-translation possible.
                 CanonicalInterface(name="FortyGigabitEthernet1/1/1"),
-                CanonicalInterface(name="Loopback0"),
+                # Tunnel — AOS-S has no tunnel concept (verified
+                # against Aruba 16.10/16.11 docs).  Loopback was
+                # previously the unmappable case here but AOS-S
+                # 16.04+ supports `interface loopback <N>`, so it
+                # now translates cleanly to `loopback1`.
+                CanonicalInterface(name="Tunnel99"),
             ],
         )
         result = translate_port_names(
@@ -666,12 +720,13 @@ class TestAutoDropUnmappable:
         assert "1/1" in names
         # Unmappable: auto-dropped.
         assert "FortyGigabitEthernet1/1/1" not in names
-        assert "Loopback0" not in names
+        assert "Tunnel99" not in names
         # Dropped set reflects the auto-drops.
         assert "FortyGigabitEthernet1/1/1" in result.dropped
-        assert "Loopback0" in result.dropped
+        assert "Tunnel99" in result.dropped
         # Warnings still fire so the operator sees what happened.
         assert any("FortyGigabitEthernet1/1/1" in w for w in result.warnings)
+        assert any("Tunnel99" in w for w in result.warnings)
 
     def test_strip_unmappable_false_keeps_verbatim(self):
         """Opt-out: ``strip_unmappable=False`` preserves legacy

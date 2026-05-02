@@ -137,10 +137,16 @@ class TestArubaLocalUsersParseRender:
         assert [(u.name, u.role, u.privilege_level) for u in first.local_users] \
                == [(u.name, u.role, u.privilege_level) for u in second.local_users]
 
-    def test_foreign_hash_emitted_as_plaintext_marker(self):
-        """Bcrypt/Cisco-type-9 hashes from other codecs render under
-        a `plaintext` algorithm marker so the line stays syntactically
-        valid (deploy-time rejection is the intended failure mode)."""
+    def test_unmigratable_hash_emits_comment_review_line(self):
+        """AOS-S only accepts plaintext / sha1 / sha256.  Bcrypt
+        (OPNsense / FortiGate), sha512 (Arista / Junos $6$), Cisco
+        type-5 / type-9 / type-7 etc. cannot be consumed.  Render
+        emits a comment-form `; password manager ... -- review:`
+        line carrying the source hash format name, so the operator
+        gets an explicit reset-this-password reminder rather than
+        a `plaintext "bcrypt:..."` line that AOS-S could either
+        reject (best case) or accept as a literal plaintext
+        password equal to the hash text (severe security bug)."""
         intent = CanonicalIntent(
             source_vendor="test", source_format="test",
             local_users=[CanonicalLocalUser(
@@ -150,7 +156,15 @@ class TestArubaLocalUsersParseRender:
             )],
         )
         out = ArubaAOSSCodec().render(intent)
-        assert 'password manager user-name "imported" plaintext' in out
+        # Comment marker (leading ";") so the line is inert.
+        assert '; password manager user-name "imported"' in out
+        # Carries the source-vendor hash algorithm name in the review
+        # text so the operator knows what to reset from.
+        assert "bcrypt" in out
+        assert "review" in out
+        # The original hash MUST NOT leak into the rendered config
+        # (would-be plaintext security bug).
+        assert "$2y$10$somehash" not in out
 
 
 # ---------------------------------------------------------------------------

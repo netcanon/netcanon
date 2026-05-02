@@ -167,7 +167,35 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     # ``ArubaAOSSCodec.absorbs_svi_into_vlan``.
     if identity.kind == "svi":
         return None
-    # AOS-S has no loopback, tunnel, breakout, or hw_aggregate.
-    # mgmt is a separate OOBM concept that doesn't share the
-    # port-name space.
+    # AOS-S DOES support loopback (verified against Aruba Basic
+    # Operation Guide for AOS-S 16.10, "Managing loopback interfaces"
+    # chapter): `interface loopback <N>` where N is 0-7.  ``lo-0`` is
+    # reserved (auto-assigned ::1/128) so user-creatable IDs are
+    # 1-7.  Cisco/Arista/Junos sources commonly use Loopback0; map
+    # to AOS-S loopback 1 (the first user-creatable slot) when the
+    # source uses 0, otherwise pass the index through if it fits.
+    # Above index 7 we can't represent — return None to drop with
+    # the standard "no native representation" warning.
+    if identity.kind == "loopback":
+        idx = identity.index if identity.index is not None else 0
+        # Map Loopback0 → loopback1; preserve 1..7 verbatim.
+        if idx == 0:
+            return "loopback1"
+        if 1 <= idx <= 7:
+            return f"loopback{idx}"
+        return None
+    # AOS-S OOBM is a separate top-level configuration block (NOT a
+    # numbered interface).  See Aruba Management & Configuration
+    # Guide for AOS-S 16.10, "Out-of-Band Management" chapter:
+    # `oobm` opens the context, then `ip address <addr>/<mask>` and
+    # `ip default-gateway <addr>` configure it.  Return the sentinel
+    # "oobm" so the renderer recognises it and emits the top-level
+    # block instead of an `interface oobm` stanza (which would be
+    # invalid AOS-S syntax).  Stack-aware variants (`oobm / member
+    # <id> / ip address ...`) are deferred until a real fixture
+    # demands them.
+    if identity.kind == "mgmt":
+        return "oobm"
+    # tunnel / breakout / hw_aggregate / virtual / unknown — AOS-S
+    # has no native representation.
     return None
