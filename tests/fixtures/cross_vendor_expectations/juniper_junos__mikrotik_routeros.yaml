@@ -1,0 +1,864 @@
+# Cross-vendor expectations: juniper_junos -> mikrotik_routeros
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_mikrotik_routeros/
+#
+# DC-class router to SMB/WISP router pair.  Junos = full DC-class
+# router with EVPN-VXLAN, apply-groups inheritance, two-pass parse,
+# multi-instance routing.  RouterOS = SMB / WISP router-first OS with
+# rich firewall / NAT / queue / wireless / hotspot plumbing but no
+# fabric overlay.  Same router-class chassis but very different
+# feature focus and target market.
+#
+# Asymmetry shape on this direction:
+#
+#   * Junos is broader on the L2/L3/EVPN-fabric / apply-groups axis;
+#     fabric-overlay surface (vxlan_vnis, evpn_type5_routes,
+#     mac-vrf routing-instances) is unsupported on the RouterOS
+#     target.
+#   * Junos's apply-groups STRUCTURE drops on render (group_content
+#     is flattened into the canonical tree by GAP 8's two-pass parse,
+#     so the post-inheritance values land on RouterOS faithfully —
+#     but the original group naming + group reuse is lost).
+#   * RouterOS-rich Tier-3 plumbing (firewall / NAT / scripts /
+#     hotspot / queues / wireless / WireGuard / OVPN-server) is
+#     structurally absent on Junos source side — nothing to lose
+#     in this direction.
+#
+# Wire formats differ fundamentally — Junos `set ...` form with
+# hierarchical inheritance and per-unit interface families;
+# RouterOS `/section` + `add/set` flat record lists.  The keyword-
+# stable surface (hostname, DNS, NTP, IP addresses, static routes,
+# SNMP, RADIUS) round-trips through the canonical model despite
+# the syntactic gap.
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    Junos DC / branch site retired in favour of a MikroTik
+    RouterOS deployment (typical: SMB consolidating from a Junos
+    branch QFX/EX/SRX onto a smaller RouterOS footprint, or
+    operators rebuilding a Junos lab on RouterOS hardware for
+    cost reduction).  The basic surface (hostname / DNS / NTP /
+    IPv4-IPv6 addresses / static routes / SNMP v1/v2c + v3 /
+    RADIUS / LAGs / DHCP servers) round-trips with documented
+    losses; deeper Junos-only surface (EVPN-VXLAN, mac-vrf,
+    apply-groups, policy-statement) drops on RouterOS render.
+  certainty: medium
+  references:
+    - id: junos-initial-config
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/system_services.md
+      title: "Junos Initial Configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/system-basics/topics/topic-map/initial-configuration-junos-os.html"
+      retrieved: "2026-05-01"
+    - id: junos-syslog-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/system_services.md
+      title: "Junos syslog overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sys-mgmt/topics/concept/syslog-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-naming
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/interfaces.md
+      title: "Junos Understanding Interface Naming Conventions (QFX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/interfaces.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-family-inet6
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/interfaces.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-05-01"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vlans.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vlans.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-static-routing
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/static_routes.md
+      title: "Junos static-routing topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/topic-map/static-routing-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/snmp_aaa.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/snmp_aaa.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-05-01"
+    - id: junos-radius-cli
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/snmp_aaa.md
+      title: "Junos radius-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/radius-server-edit-system.html"
+      retrieved: "2026-05-01"
+    - id: junos-password-cli
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/local_users.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-05-01"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/local_users.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-05-01"
+    - id: junos-lag-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/lags.md
+      title: "Junos LAG overview topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-ae-example
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/lags.md
+      title: "Junos aggregated-Ethernet configuration example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-server
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/dhcp.md
+      title: "Junos DHCP server topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-server.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-local-server
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/dhcp.md
+      title: "Junos DHCP local-server overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/concept/dhcp-local-server-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-05-01"
+    - id: junos-instance-type
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/routing_instances_vrf.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-05-01"
+    - id: junos-l3vpn
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/routing_instances_vrf.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-config-groups-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/apply_groups.md
+      title: "Junos CLI Configuration Groups Overview"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/junos-cli-config-groups-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-groups-statement
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/apply_groups.md
+      title: "Junos groups statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/groups-edit-junos-os.html"
+      retrieved: "2026-05-01"
+    - id: junos-firewall-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/firewall_unsupported.md
+      title: "Junos security-policies overview (Tier-3 firewall)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/security-policies/topics/topic-map/security-policies-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-policy-overview
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/firewall_unsupported.md
+      title: "Junos routing-policy overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/routing-policy/topics/topic-map/policy-overview.html"
+      retrieved: "2026-05-01"
+    - id: mikrotik-identity
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/system_services.md
+      title: "Identity — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-05-01"
+    - id: mikrotik-clock
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/system_services.md
+      title: "Clock — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992866/Clock"
+      retrieved: "2026-05-01"
+    - id: mikrotik-iface-naming
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/interfaces.md
+      title: "Ethernet ports / interface naming — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-05-01"
+    - id: mikrotik-ip-address
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/interfaces.md
+      title: "IP Routing / addressing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-05-01"
+    - id: mikrotik-vlan
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vlans.md
+      title: "VLAN — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-05-01"
+    - id: mikrotik-bridge-vlan
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vlans.md
+      title: "Basic VLAN switching (bridge VLAN filtering) — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/103841826/Basic+VLAN+switching"
+      retrieved: "2026-05-01"
+    - id: mikrotik-ip-routing
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/static_routes.md
+      title: "IP Routing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-05-01"
+    - id: mikrotik-snmp
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/snmp_aaa.md
+      title: "SNMP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-05-01"
+    - id: mikrotik-radius
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/snmp_aaa.md
+      title: "RADIUS Client — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/13402205/RADIUS"
+      retrieved: "2026-05-01"
+    - id: mikrotik-user
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/local_users.md
+      title: "User — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-05-01"
+    - id: mikrotik-bonding
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/lags.md
+      title: "Bonding — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-05-01"
+    - id: mikrotik-dhcp
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/dhcp.md
+      title: "DHCP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-05-01"
+    - id: mikrotik-vrf
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/routing_instances_vrf.md
+      title: "VRF — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-05-01"
+    - id: mikrotik-switching-model
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "Bridging and Switching philosophy — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/47579231/Bridging+and+Switching"
+      retrieved: "2026-05-01"
+    - id: mikrotik-firewall
+      path: docs/vendor-references/juniper_junos_to_mikrotik_routeros/firewall_unsupported.md
+      title: "Firewall — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805973/Firewall"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Junos ``set system host-name X`` -> RouterOS ``/system identity
+      / set name=X``.  Identical semantic; clean direct map.
+    references: [junos-initial-config, mikrotik-identity]
+
+  domain:
+    disposition: lossy
+    reason: >
+      Junos ``set system domain-name <fqdn>`` is a top-level identity
+      attribute used for FQDN expansion.  RouterOS keeps domain hints
+      inside the DNS resolver (``/ip dns set domain=...``) rather
+      than as a device-identity attribute.  Cross-vendor render
+      drops the field on RouterOS unless the codec emits it as a
+      ``/ip dns`` line, which changes its scope semantically.
+    references: [junos-initial-config, mikrotik-identity]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Junos per-line ``set system name-server <addr>`` collapses to
+      a list; RouterOS render emits a single comma-separated
+      ``/ip dns set servers=<addr>,<addr>``.  Round-trip preserves
+      the ordered list.
+    references: [junos-initial-config, mikrotik-identity]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Bare-address list round-trips cleanly (Junos ``set system ntp
+      server X`` -> RouterOS ``/system ntp client / set servers=X,...``).
+      Junos per-server modifiers (``prefer`` / ``key`` / ``iburst``
+      / ``source``) drop on canonical round-trip — canonical model
+      stores ``list[str]`` only, and RouterOS exposes no per-server
+      options.
+    references: [junos-initial-config, mikrotik-identity]
+
+  timezone:
+    disposition: good
+    note: >
+      Both vendors use Olson zoneinfo names natively.  Junos
+      ``set system time-zone America/New_York`` -> RouterOS
+      ``/system clock / set time-zone-name=America/New_York``.
+      Direct mapping for parsable Olson names.
+    references: [junos-initial-config, mikrotik-clock]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Junos ``set system syslog host X any info`` (severity required)
+      -> RouterOS ``/system logging action add target=remote
+      remote=X`` plus a ``/system logging add action=remote topics=...``
+      rule.  RouterOS splits destination from filter; canonical
+      surface stores host addresses only, so per-severity /
+      per-facility semantics drop on round-trip.
+    references: [junos-syslog-overview]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Junos's speed-encoded media-prefix names (``ge-0/0/0`` /
+      ``xe-0/0/0`` / ``et-0/0/48`` / ``ae0`` / ``irb`` / ``lo0``) and
+      RouterOS's flat factory-default names (``ether1`` / ``etherN``
+      / ``sfp-sfpplus1``) carry the same speed semantic but use
+      different naming conventions.  The port-rename mesh handles
+      the cross-vendor mapping (default ``ge-`` -> ``ether<N>``;
+      ``xe-`` / ``et-`` -> ``sfp-sfpplus<N>``); operators override
+      via the per-pane port-rename surface.
+    references: [junos-iface-naming, mikrotik-iface-naming]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      Both vendors accept free-form descriptions; Junos quotes when
+      whitespace present.  Junos ``description "X"`` -> RouterOS
+      ``comment="X"``.
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Junos's ``set interfaces X disable`` / ``delete interfaces X
+      disable`` -> RouterOS's ``disabled=yes`` / ``disabled=no``
+      (inverted boolean).
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      The codec parsers infer interface type from name prefix
+      (Junos ``ge-`` / ``ae`` / ``lo0`` / ``irb`` -> ethernetCsmacd
+      / ieee8023adLag / softwareLoopback / l3ipvlan; RouterOS
+      ``etherN`` / ``vlanN`` / ``bondN`` -> ethernetCsmacd /
+      l3ipvlan / ieee8023adLag).  Documented in the MikroTik codec
+      capability matrix as ``/interfaces/interface/config/type``
+      lossy entry.
+    references: [mikrotik-iface-naming]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Both accept integer MTU; Junos's parent-interface ``mtu N``
+      -> RouterOS's ``mtu=N``.
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      Junos's ``set interfaces X unit 0 family inet address A.B.C.D/N``
+      parses to canonical ``CanonicalIPv4Address{ip, prefix_length}``
+      and renders to RouterOS's ``/ip address add address=A.B.C.D/N
+      interface=X``.  Multiple addresses (Junos secondary on same
+      unit, or extra units) become multiple ``/ip address`` records
+      on the RouterOS render side.
+    references: [junos-iface-fundamentals, mikrotik-ip-address]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      Junos ``family inet6`` -> RouterOS ``/ipv6 address``.
+      Canonical ``scope=link-local`` discriminator preserved (Junos
+      auto-detects from ``fe80::/10`` prefix; RouterOS accepts
+      explicit advertisement flag).
+    references: [junos-family-inet6]
+
+  interfaces[].switchport_mode:
+    disposition: lossy
+    reason: >
+      Junos's ``family ethernet-switching interface-mode {access |
+      trunk}`` -> RouterOS's two-plane bridge model.  RouterOS
+      Plane 1 (`/interface vlan`) uses router-on-a-stick semantics
+      where each VLAN is a separate L3 interface; Plane 2
+      (`/interface bridge vlan`) uses bridge VLAN filtering.
+      Codec policy decides which plane to render based on the
+      Junos source's switchport state.
+    references: [junos-vlans-statement, mikrotik-bridge-vlan]
+
+  interfaces[].access_vlan:
+    disposition: lossy
+    reason: >
+      Junos's ``family ethernet-switching vlan members <name>`` (with
+      ``interface-mode access``) -> RouterOS's `/interface bridge
+      port set <iface> pvid=<N>` plus `/interface bridge vlan add
+      vlan-ids=<N> untagged=<iface>`.  Plane-2 bridge-VLAN parsing
+      is partial in v1, so render may under-populate port lists.
+    references: [mikrotik-bridge-vlan]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: lossy
+    reason: >
+      Junos's ``family ethernet-switching vlan members [ V1 V2 ]`` ->
+      RouterOS's `/interface bridge vlan add vlan-ids=N1,N2
+      tagged=<iface>`.  Same Plane-2 partial wire-up caveat as
+      ``access_vlan``.
+    references: [mikrotik-bridge-vlan]
+
+  interfaces[].trunk_native_vlan:
+    disposition: lossy
+    reason: >
+      Junos's parent-level ``native-vlan-id N`` (NOT under the unit)
+      -> RouterOS's `/interface bridge port set <iface> pvid=<N>`.
+      Round-trip preserves the integer; structural difference is
+      internal to each codec.
+    references: [junos-vlans-statement, mikrotik-bridge-vlan]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      Junos QFX/EX has no first-class voice-VLAN construct (LLDP-MED
+      voice-VLAN advertisement is configured separately under
+      ``protocols lldp-med``).  RouterOS also has no voice-VLAN
+      construct.  Field is structurally absent on both sides; no
+      Junos source ever populates it, and RouterOS render emits no
+      voice-VLAN config.
+
+  interfaces[].lag_member_of:
+    disposition: good
+    note: >
+      Junos's per-member ``ether-options 802.3ad ae<N>`` back-pointer
+      -> RouterOS's forward `/interface bonding add slaves=`.  Codec
+      transposes between the per-member and per-LAG forms.
+    references: [junos-lag-overview, mikrotik-bonding]
+
+  interfaces[].dhcp_client:
+    disposition: good
+    note: >
+      Junos's ``family inet dhcp`` -> RouterOS's ``/ip dhcp-client
+      add interface=<X>``.  Per-platform DHCP-client option semantics
+      (lease length, hostname-option) are not modelled canonically
+      and drop on round-trip.
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      Junos's `set routing-instances X interface Y` populates the
+      canonical ``CanonicalInterface.vrf`` back-pointer (GAP 6
+      supported in JunosCodec._CAPS).  RouterOS's `/ip vrf` exists
+      (RouterOS 7+) but the mikrotik_routeros codec does not yet
+      wire up VRF parsing/rendering — canonical VRF binding has no
+      target render path.  Cross-pair drops the per-interface VRF
+      binding silently.
+    references: [junos-instance-type, mikrotik-vrf]
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Junos ``set vlans <name> vlan-id N`` -> RouterOS
+      ``/interface vlan add name=<name> vlan-id=N``.  Direct integer
+      mapping.
+    references: [junos-vlans-statement, mikrotik-vlan]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      Junos VLAN names allow letters, digits, hyphens, periods only
+      (no underscores, no spaces, up to 255 chars); RouterOS
+      conflates the L3 interface name with the VLAN name (per the
+      MikroTik codec's ``LossyPath`` entry on ``/vlans/vlan/name``).
+      Junos's ``USERS`` -> RouterOS L3 interface name ``USERS`` (or
+      conventionally ``vlan10``); operators may want to rename for
+      style consistency.
+    references: [junos-vlans-statement, mikrotik-vlan]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Junos supports ``set vlans <name> description X``; RouterOS
+      has no first-class VLAN-level description field on either
+      plane (the `/interface vlan` record carries `comment=` but
+      that lifts to interface description, not VLAN description).
+      Junos source's description drops on RouterOS render with
+      banner.
+    references: [junos-vlans-statement]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      Junos's per-interface ``family ethernet-switching vlan members``
+      lifts to canonical VLAN-centric port lists; RouterOS render
+      emits ``/interface bridge vlan add tagged=`` (Plane 2).
+      Plane-2 wire-up is partial in v1, so render may under-populate
+      port lists.
+    references: [junos-vlans-statement, mikrotik-bridge-vlan]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: "Same as ``tagged_ports`` — Plane-2 partial wire-up."
+    references: [mikrotik-bridge-vlan]
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Junos's ``irb.<unit>`` binding (`set vlans <name> l3-interface
+      irb.100` + `set interfaces irb unit 100 family inet address
+      X/N`) -> RouterOS's `/interface vlan add name=vlan100 vlan-id=
+      100` + `/ip address add address=X/N interface=vlan100`.  SVI
+      absorption round-trips cleanly when the L3 interface name
+      follows the `vlan<id>` convention.
+    references: [junos-vlans-statement, junos-bridging-overview, mikrotik-vlan]
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly: Junos's
+      ``set routing-options static route X/N next-hop Y`` ->
+      RouterOS's ``/ip route add dst-address=X/N gateway=Y``.  IPv6
+      default route (`::/0`) supported on both via the same CIDR
+      shape.  Lossy bits: (1) Junos's ``preference`` and RouterOS's
+      ``distance`` are vendor-specific AD scalars not 1:1 with
+      canonical ``metric`` (which is the operator-visible metric,
+      not preference / AD) — drift on round-trip; (2) Junos's
+      ``qualified-next-hop`` (weighted multi-NH) flattens to
+      multiple canonical entries and expands to multiple RouterOS
+      records; (3) per-VRF static routes (`routing-instances X
+      routing-options static`) flatten to the global table because
+      ``CanonicalStaticRoute`` lacks a ``vrf`` field (deferred).
+    references: [junos-static-routing, mikrotik-ip-routing]
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Junos's two-stage ``system services dhcp-local-server`` +
+      ``access address-assignment pool`` model -> RouterOS's three-
+      stage ``/ip pool`` + ``/ip dhcp-server`` + ``/ip dhcp-server
+      network`` form.  Basic pool fields (network, range, gateway,
+      DNS, lease, domain) round-trip; binding semantics differ
+      (Junos pool-group can serve many interfaces; RouterOS binds
+      one server per interface).  Static reservations (Junos `pool
+      X family inet host` / RouterOS `/ip dhcp-server lease`) and
+      DHCP option codes (43 / 60 / 66 / 150) are not modelled
+      canonically and drop to raw_sections.
+    references: [junos-dhcp-server, junos-dhcp-local-server, mikrotik-dhcp]
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: >
+      Junos ``set snmp community X authorization read-only`` ->
+      RouterOS ``/snmp community add name=X read-access=yes``.
+      Authorization (read-only / read-write) maps to RouterOS's
+      access flags via codec policy.
+    references: [junos-snmp-overview, mikrotik-snmp]
+
+  snmp.location:
+    disposition: good
+    references: [junos-snmp-overview, mikrotik-snmp]
+
+  snmp.contact:
+    disposition: good
+    references: [junos-snmp-overview, mikrotik-snmp]
+
+  snmp.trap_hosts:
+    disposition: lossy
+    reason: >
+      Junos supports multiple targets per trap-group; RouterOS
+      supports only ONE ``trap-target=`` value.  Multi-target Junos
+      source drops to the first host with a banner; the rest land
+      in raw_sections.
+    references: [junos-snmp-overview, mikrotik-snmp]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      USM username / group / auth-protocol / priv-protocol round-trip
+      via the canonical ``CanonicalSNMPv3User`` schema.  Algorithm
+      overlap: Junos ``authentication-md5`` / ``authentication-sha``
+      / ``authentication-sha256`` -> RouterOS ``MD5`` / ``SHA1`` /
+      ``SHA256`` (SHA256 added in 7.13+); ``privacy-des`` /
+      ``privacy-aes128`` -> ``DES`` / ``AES``.  Junos ``privacy-aes192``
+      / ``privacy-aes256`` downgrade to RouterOS ``AES`` (AES-128) on
+      early lines, or map to v7.13+ ``aes-256-cfb`` if the target
+      supports it.  Auth/priv passphrases do NOT cross-decrypt:
+      passphrases are engineID-salted per RFC 3414 and never
+      cross-portable.  Operator MUST re-key v3 users on the target
+      after migration.  VACM groups (Junos ``security-to-group``) have
+      no first-class RouterOS equivalent; group field drops on render.
+    references: [junos-snmp-overview, junos-snmpv3-cg, mikrotik-snmp]
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: lossy
+    reason: >
+      Junos's ``ae<N>`` + per-member ``ether-options 802.3ad`` ->
+      RouterOS's ``/interface bonding add name=bond<N> slaves=...
+      mode=802.3ad``.  LACP active mode round-trips cleanly; Junos
+      static (no-LACP) membership maps to RouterOS
+      ``mode=balance-xor`` (closest static analogue) with banner.
+      Junos's chassis-wide ``aggregated-devices ethernet device-count``
+      has no RouterOS analogue (RouterOS allocates dynamically);
+      drops on render.  RouterOS-only modes (``active-backup``,
+      ``balance-rr``, ``balance-tlb``, ``balance-alb``,
+      ``broadcast``) have no Junos equivalent and only appear in
+      the inverse direction.
+    references: [junos-lag-overview, junos-ae-example, mikrotik-bonding]
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Junos's named classes (``super-user`` / ``operator`` /
+      ``read-only``) map to RouterOS's named groups (``full`` /
+      ``write`` / ``read``) via codec policy: ``super-user`` ->
+      ``full``, ``operator`` -> ``write``, ``read-only`` -> ``read``.
+      Custom Junos classes have no clean RouterOS analogue — fall
+      back to ``read`` with banner.  Hash formats are NOT cross-
+      compatible: Junos ``$6$`` (SHA-512), ``$5$`` (SHA-256), ``$1$``
+      (MD5) blobs are not portable to RouterOS's vendor-private
+      internal hash format (RouterOS does not surface the hash in
+      /export at all).  Cross-vendor render passes the Junos blob
+      through into a RouterOS ``comment=`` so the operator has it
+      during re-key.  Operator MUST re-set passwords on the target
+      after migration.  SSH public-key auth (Junos ``ssh-rsa``,
+      ``ssh-ed25519``) is outside canonical scope.
+    references: [junos-password-cli, junos-kb-password-format, mikrotik-user]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Junos's ``set system radius-server <ip> secret <key> port <p>``
+      -> RouterOS's ``/radius add address=<ip> secret=<key>
+      authentication-port=<p>``.  Default ports (1812 / 1813)
+      preserved.  Shared-secret cross-decrypt impossible: Junos's
+      ``$9$...`` reversible-encrypted form cannot be decoded by
+      RouterOS, and the RouterOS receiving daemon will reject the
+      blob if it does not match the server's expectation.  Operator
+      must re-set the shared secret on the target.  RouterOS
+      ``service=`` binding (``login,ppp,wireless,hotspot,dhcp,ipsec``)
+      is RouterOS-rich and not modelled canonically; cross-vendor
+      render to RouterOS defaults to ``service=login`` with a banner.
+    references: [junos-radius-cli, mikrotik-radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Junos source codec lists ``/vxlan-vnis/vni`` and
+      ``/vxlan-vnis/source-interface`` and ``/vxlan-vnis/udp-port``
+      in JunosCodec._CAPS as supported (GAP 6, GAP-EVPN-2) — Junos
+      source populates the canonical ``vxlan_vnis`` list.  MikroTik
+      codec capability matrix lists these paths as unsupported
+      ("RouterOS VXLAN exists but is rare in canonical scope and not
+      modelled in v1.").  Cross-pair drops the entire fabric overlay
+      surface with a banner — RouterOS render emits no
+      ``/interface vxlan`` blocks.
+    references: [junos-evpn-overview, junos-evpn-irb-example, mikrotik-switching-model]
+
+  vxlan_vnis[].vlan_id:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  vxlan_vnis[].mcast_group:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  vxlan_vnis[].flood_list:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  vxlan_vnis[].source_interface:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  vxlan_vnis[].udp_port:
+    disposition: unsupported
+    reason: "Same as ``vxlan_vnis`` (RouterOS codec unsupported)."
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Junos source codec lists ``/evpn-type5-routes/route`` under
+      lossy with rationale that EVPN Type-5 is a VRF-property model
+      (``CanonicalRoutingInstance.l3_vni``) rather than per-prefix
+      records; no codec populates the per-prefix list today.
+      RouterOS does not model EVPN at all.  Effectively unsupported
+      on the cross-pair.
+    references: [junos-evpn-overview, mikrotik-switching-model]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Junos source codec lists ``/routing-instances/instance`` in
+      JunosCodec._CAPS as supported (GAP 6) — Junos source populates
+      the canonical ``routing_instances`` list with name + RD +
+      vrf-target + interfaces + l3_vni.  The mikrotik_routeros codec
+      does not yet wire up ``/ip vrf`` parsing OR rendering — the
+      cross-pair drops the entire VRF surface on RouterOS render
+      regardless of canonical content.  Even when RouterOS-side
+      wire-up lands, RD/RT will REMAIN structurally lossy because
+      RouterOS keeps RD/RT under BGP per-VRF rather than on the VRF
+      record.  Junos's ``mac-vrf`` / ``virtual-router`` /
+      ``l2vpn`` / ``evpn`` instance-types have no RouterOS analogue
+      regardless.
+    references: [junos-instance-type, junos-l3vpn, mikrotik-vrf]
+
+  routing_instances[].name:
+    disposition: unsupported
+    reason: "Same as ``routing_instances`` (RouterOS codec wire-up gap)."
+
+  routing_instances[].instance_type:
+    disposition: unsupported
+    reason: "Same as ``routing_instances``; mac-vrf / virtual-router / l2vpn have no RouterOS analogue regardless."
+
+  routing_instances[].route_distinguisher:
+    disposition: unsupported
+    reason: "Same as ``routing_instances``; RouterOS keeps RD under BGP, not on /ip vrf."
+
+  routing_instances[].rt_imports:
+    disposition: unsupported
+    reason: "Same as ``routing_instances``; RouterOS keeps RT under BGP."
+
+  routing_instances[].rt_exports:
+    disposition: unsupported
+    reason: "Same as ``routing_instances``; RouterOS keeps RT under BGP."
+
+  routing_instances[].description:
+    disposition: unsupported
+    reason: "Same as ``routing_instances``; no RouterOS field."
+
+  routing_instances[].l3_vni:
+    disposition: unsupported
+    reason: "Same as ``routing_instances`` (RouterOS does not model EVPN)."
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private; cross-vendor migration
+      drops it with a banner.  Junos source raw_sections (firewall
+      filters, policy-statement, BGP/OSPF/IS-IS protocol stanzas)
+      are unsupported on RouterOS auto-render and remain in
+      raw_sections for operator review.
+    references: [junos-firewall-overview, junos-policy-overview, mikrotik-firewall]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: lossy
+    reason: >
+      Junos-specific concept (``set apply-groups <G>`` per GAP 9b).
+      Junos source populates the list (e.g. ``["GLOBAL-SETTINGS"]``).
+      The GROUP CONTENT (under ``CanonicalIntent.group_content``) has
+      already been flattened into the canonical tree by GAP 8's
+      two-pass parse, so the post-inheritance values land on
+      RouterOS faithfully — but the original group structure
+      (which statements were grouped vs which were top-level, group
+      naming, group reuse) is lost on RouterOS render.  RouterOS
+      target codec does not consume the list — drop on render.
+    references: [junos-config-groups-overview, junos-groups-statement]
+
+  group_content:
+    disposition: lossy
+    reason: >
+      Companion to ``apply_groups``.  Junos-only intermediate-form
+      data preserved alongside the flattened content for Junos -
+      Junos round-trip fidelity (GAP 9b).  RouterOS target codec
+      does not consume it — drop on render.  Semantic content is
+      preserved via the two-pass-parse-flattened canonical tree;
+      only the structural information is lost.
+    references: [junos-config-groups-overview, junos-groups-statement]
+
+# ---------------------------------------------------------------------------
+# Notes on confidence and deferred items
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The basic surface (hostname / DNS / NTP / timezone / IPv4-IPv6
+#     addresses / static routes) is high-confidence: vendor docs
+#     are clear and both codecs have established parse+render
+#     coverage on that subset.
+#
+#   * The switching-plane surface (vlans / interfaces switchport
+#     fields) is medium-confidence: RouterOS's two-plane model
+#     (Plane 1 `/interface vlan` vs Plane 2 `/interface bridge vlan`)
+#     does not 1:1 with Junos's per-interface `family ethernet-
+#     switching` model, and the MikroTik codec's bridge-VLAN parsing
+#     is partial in v1.  Plane choice is a render-time codec policy.
+#
+#   * Local-user / SNMPv3 / RADIUS surfaces are medium-confidence:
+#     algorithm overlap (MD5/SHA1/SHA256 + DES/AES) is documented
+#     and clean on the canonical-stable path; engineID-salted USM
+#     keys plus vendor-specific password / RADIUS secret formats
+#     mean cross-vendor migrations always require operator re-key
+#     on the RouterOS target.
+#
+#   * VRF / EVPN-VXLAN are confidently unsupported on the RouterOS
+#     target due to mikrotik_routeros codec wire-up gaps; drops with
+#     banner.  When wire-up lands, ``routing_instances`` will
+#     upgrade to lossy (RD/RT structurally absent on RouterOS side
+#     regardless).
+#
+#   * apply_groups / group_content are confidently lossy on this
+#     direction: GAP 8 two-pass parse flattens content into the
+#     canonical tree (semantic preserved); GAP 9b preserves the
+#     STRUCTURE on Junos source but the structure is dropped on
+#     RouterOS render.
+#
+# Deferred items:
+#
+#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
+#     (no vrf field).  Lands alongside VRF wire-up.
+#
+#   * Junos `qualified-next-hop` weighted multi-NH preservation —
+#     canonical model is single-NH-only; flattens to multiple
+#     entries.
+#
+#   * Junos firewall filters / policy-statements — Tier-3 by design;
+#     remain in raw_sections.  Operator hand-translation required.
