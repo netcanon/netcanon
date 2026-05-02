@@ -1,0 +1,518 @@
+# Cross-vendor fidelity expectations: fortigate_cli -> arista_eos
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/fortigate_cli_to_arista_eos/
+#
+# Reverse direction of arista_eos -> fortigate_cli.  Per the schema
+# README's "Reverse pairs are independent files" rule, this file
+# authors the dispositions independently rather than mirroring.
+# Direction-asymmetric concerns:
+#
+#   * dns_servers / syslog_servers: arista -> fortigate is lossy
+#     (FortiOS 3-cap drops Arista tail).  fortigate -> arista is
+#     good (FortiOS source carries at most three; Arista accepts
+#     unbounded — no truncation in this direction).
+#   * vlans port-membership: arista -> fortigate loses the
+#     re-projected port lists (canonical has them; FortiGate
+#     render does not synthesise child VLAN interfaces).
+#     fortigate -> arista is unsupported in the inverse sense
+#     (FortiGate parse never populated tagged_ports /
+#     untagged_ports because the parent-interface VLAN model
+#     carries membership via the parent's identity, so Arista
+#     render needs the operator to reconstruct switchport state).
+#   * Switching features (switchport_mode / access_vlan /
+#     trunk_*): arista -> fortigate is unsupported (target
+#     absent — FortiGate is L3-only).  fortigate -> arista is
+#     also unsupported but for the inverse reason: the canonical
+#     fields are empty after FortiGate parse (source absent).
+#   * Firewall / NAT / VIP / VPN / IPsec / UTM: fortigate ->
+#     arista drops the FortiGate primary product surface (Tier
+#     3, out of canonical scope).  No Arista analogue.
+#   * VDOMs and per-interface integer VRF: fortigate -> arista
+#     is unsupported (FortiGate codec doesn't parse `set vrf
+#     <id>` in v1; even if it did, integer-VRF lacks the RD/RT
+#     semantics Arista's named-VRF + EVPN model needs).
+#   * EVPN-VXLAN: arista -> fortigate is unsupported (target
+#     absent).  fortigate -> arista is not_applicable (FortiGate
+#     source has no fabric data plane to populate canonical).
+
+meta:
+  source_vendor: fortigate_cli
+  target_vendor: arista_eos
+  primary_use_case: >
+    FortiGate firewall edge -> Arista EOS DC-switch / campus-switch
+    demotion.  Less common than the reverse direction; surfaces when
+    an operator demotes a FortiGate to a pure L2/L3 routing role and
+    offloads the security duties to a separate appliance.  System
+    services + IPv4/IPv6 (global) + LAG + RADIUS + SNMP translate;
+    FortiGate's firewall / NAT / VIP / VPN / IPsec / UTM product
+    surface has no Arista analogue and is lost on migration.
+    Operators should treat the FortiGate firewall config as
+    documentation rather than a translatable artefact for this
+    cross-pair.  VLAN port-membership requires manual reconstruction
+    on the Arista target because FortiGate's child-interface model
+    never populated the canonical port-lists.
+  certainty: medium
+  references:
+    - id: system_services
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/system_services.md
+      title: "System services: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: system_services_arista
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/system_services.md
+      title: "Arista EOS Switch Administration Commands"
+      source_url: "https://www.arista.com/en/um-eos/eos-switch-administration-commands"
+      retrieved: "2026-05-01"
+    - id: interfaces
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/interfaces.md
+      title: "Interfaces: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: interfaces_arista
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/interfaces.md
+      title: "Arista EOS Interface Configuration"
+      source_url: "https://www.arista.com/en/um-eos/eos-interface-configuration"
+      retrieved: "2026-05-01"
+    - id: vlans
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/vlans.md
+      title: "VLAN configuration: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+    - id: static_routes
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/static_routes.md
+      title: "Static routes: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: snmp_aaa
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/snmp_aaa.md
+      title: "SNMP + AAA / RADIUS: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: snmp_aaa_arista
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/snmp_aaa.md
+      title: "Arista EOS SNMP + RADIUS"
+      source_url: "https://www.arista.com/en/um-eos/eos-snmp"
+      retrieved: "2026-05-01"
+    - id: local_users
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/local_users.md
+      title: "Local users + admin profiles: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: local_users_arista
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/local_users.md
+      title: "Arista EOS User Security"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-05-01"
+    - id: lags
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/lags.md
+      title: "LAG / aggregate / port-channel: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: firewall_unsupported
+      path: docs/vendor-references/fortigate_cli_to_arista_eos/firewall_unsupported.md
+      title: "Firewall / NAT / VPN / IPsec / VDOMs / per-interface VRF: FortiGate FortiOS versus Arista EOS"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      FortiOS ``set hostname "fgt-edge"`` (under ``config system
+      global``) -> Arista ``hostname fgt-edge``.  Codec strips/adds
+      quotes.  No truncation in this direction (FortiOS source caps
+      at 35; Arista accepts up to 255).
+    references: [system_services, system_services_arista]
+
+  domain:
+    disposition: good
+    note: >
+      FortiOS ``set domain "example.net"`` (under ``config system
+      dns``) -> Arista ``dns domain example.net``.  Both vendors
+      treat the FQDN as a flat scalar; round-trip lossless.
+    references: [system_services, system_services_arista]
+
+  dns_servers:
+    disposition: good
+    note: >
+      FortiOS source carries at most three DNS servers (primary /
+      secondary / hidden tertiary).  Arista accepts unbounded ``ip
+      name-server vrf default <addr>`` lines, so cross-vendor
+      round-trip preserves the lot — no truncation in this
+      direction (inverse of arista -> fortigate where FortiOS
+      3-cap drops Arista tail).
+    references: [system_services, system_services_arista]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Address list preserves cleanly.  FortiOS's ``set ntpsync
+      enable`` / ``set type custom`` are codec-internal defaults
+      rather than canonical scalars and don't round-trip.  Arista
+      per-server modifiers (``prefer`` / ``iburst`` / ``key`` /
+      ``source``) are not modelled in canonical; FortiGate source
+      doesn't populate them either, so the loss is symmetric.
+      Functional equivalence at the server-list level.
+    references: [system_services, system_services_arista]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      FortiOS emits ``set timezone <NN>`` (numeric index, e.g.
+      ``04`` = US Pacific per FortiOS Cookbook timezone table).
+      Arista expects ``clock timezone <zoneinfo-name>`` (e.g.
+      ``US/Pacific``); cross-vendor migration of the FortiOS index
+      to Arista zoneinfo requires an operator-curated lookup.  The
+      FortiGate codec does not currently parse the timezone field
+      as a canonical scalar at all, so the field is effectively
+      empty on this direction — classified ``lossy`` rather than
+      ``not_applicable`` because the gap is a known codec wire-up
+      gap rather than a structural absence.
+    references: [system_services, system_services_arista]
+
+  syslog_servers:
+    disposition: good
+    note: >
+      FortiOS's three syslog backends (``syslogd``, ``syslogd2``,
+      ``syslogd3``) collapse to the canonical list which Arista's
+      ``logging host <addr>`` directive can emit unbounded.  No
+      truncation in this direction.  Severity / facility tokens
+      (FortiOS ``set facility``; Arista ``logging trap`` /
+      ``logging facility``) are not modelled — drop on round-trip.
+    references: [system_services, system_services_arista]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface fields divide cleanly: name (lossy —
+      FortiGate's flat namespace ``port1`` / ``agg1`` -> Arista's
+      CamelCase ``Ethernet1`` / ``Port-Channel1`` requires the
+      port-rename mesh; without overrides the FortiGate-source
+      name is preserved verbatim and Arista's parser will reject
+      it), description (good — FortiOS 25-character alias fits
+      comfortably in Arista's free-form description), enabled
+      (good), mtu (good), ipv4_addresses (good for primary;
+      secondaries n/a — FortiGate parse populates only primary),
+      ipv6_addresses (good for global addresses; link-local
+      n/a — FortiOS source has no explicit link-local form),
+      switchport_mode / access_vlan / trunk_allowed_vlans /
+      trunk_native_vlan / voice_vlan (unsupported — FortiGate
+      parse never populates these because the parent-interface
+      VLAN model carries membership via parent identity;
+      operator must reconstruct switchport state on Arista
+      target), lag_member_of (good — see lags), dhcp_client
+      (lossy — FortiGate codec parse coverage of ``set mode dhcp``
+      may be inconsistent in v1), vrf (unsupported — see
+      routing_instances; FortiGate codec does not parse ``set
+      vrf <id>`` in v1).
+    references: [interfaces, interfaces_arista]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly when the FortiGate source has
+      explicit ``set type vlan / set vlanid <N>`` child interfaces.
+      FortiGate uses the interface edit ID as canonical VLAN name
+      (``agg1.100``, ``VL_200``, ``port4.300``); Arista renders
+      ``vlan 100 / name agg1.100`` which is mechanical but not
+      operator-readable.  Per-VLAN description is empty after
+      FortiGate parse (no equivalent slot on the source).  The
+      VLAN-centric port list (``tagged_ports`` /
+      ``untagged_ports``) is empty after FortiGate parse —
+      FortiGate's child-interface model encodes membership via
+      the parent's identity, not as a port list per VLAN.
+      Cross-vendor migration on FortiGate -> Arista loses the
+      port-membership intent on the canonical layer; operators
+      MUST manually reconstruct ``switchport access vlan N`` on
+      each Arista access port and ``switchport trunk allowed
+      vlan ...`` on each trunk port.  vlans[].ipv4_addresses
+      (SVI absorption) does round-trip cleanly via the FortiGate
+      VL-iface ``set ip``; Arista's ``interface Vlan100 / ip
+      address X/N`` form lands the SVI on the dedicated SVI
+      stanza.
+    references: [vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly via dotted-mask
+      <-> CIDR conversions: FortiOS ``set dst 10.99.0.0
+      255.255.0.0`` -> Arista ``ip route 10.99.0.0/16 <gw>``.
+      Outgoing-interface field requires the rename mesh to map
+      FortiGate's ``port1`` to an Arista-shape interface name.
+      Metric semantics differ (FortiGate distance / AD-ordering vs
+      Arista per-route preference / default 1) so the integer
+      preserves but its meaning shifts on the target.  Description
+      / comment (FortiGate ``set comment``) parse coverage may be
+      inconsistent in v1.  Per-VRF static routes (FortiGate ``set
+      vrf <id>``) are unsupported on this pair — canonical model
+      lacks a vrf field on CanonicalStaticRoute AND the FortiGate
+      codec does not currently parse ``set vrf``.  IPv6 static
+      routes live under ``config router static6`` on FortiOS
+      (separate edit-table; not currently wired through the
+      canonical static_routes list).
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate-source ``config system dhcp server`` populates
+      CanonicalDHCPPool records cleanly on parse.  The arista_eos
+      codec does NOT advertise ``/dhcp/pool`` in its supported
+      set — Arista DC leafs typically don't host DHCP servers
+      (DHCP is a relay-only role on Arista DC deployments via
+      ``ip helper-address``).  Cross-vendor render therefore
+      drops the pool config entirely; operators migrating a
+      FortiGate edge to an Arista DC role must redirect DHCP-
+      server duties to a separate appliance.  Promote to ``lossy``
+      when the arista_eos codec wires DHCP-pool render (uncommon
+      in practice).
+    references: [interfaces]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly with one caveat: FortiGate's edit-table
+      can carry multiple community strings; the FortiGate codec
+      parses only the first into the canonical scalar.  Multi-
+      community FortiOS configs lose all but one on canonical-
+      side.  Arista's per-community access-mode (``ro`` / ``rw``)
+      is not preserved on FortiGate parse, so cross-vendor render
+      defaults FortiGate-source to Arista ``ro``.  v3 USM round-
+      trips username / group / protocol enum.  Auth/priv
+      passphrases NOT cross-compatible: FortiOS ``ENC <opaque-
+      base64>`` requires the FortiGate device's master key for
+      decryption; Arista cannot decrypt.  Operator MUST re-key
+      v3 users on the target.  Protocol-enum coercion: FortiOS
+      ``aes256cisco`` has no Arista analogue; FortiOS ``sha224``
+      / ``sha256`` / ``sha384`` / ``sha512`` map to Arista's
+      same-named enums.  ``engine_id`` field exists in canonical
+      but not wired through.
+    references: [snmp_aaa, snmp_aaa_arista]
+
+  lags:
+    disposition: lossy
+    reason: >
+      FortiGate operator-named aggregates (``LAG_INTERNAL``,
+      ``agg1``) -> Arista's mandatory ``Port-Channel<N>`` form
+      with capital 'C' requires invention on render: when the
+      FortiGate source carries an integer suffix (``agg1`` -> 1)
+      the codec extracts it; otherwise it picks the next
+      available integer (operators override via per-pane LAG-
+      rename surface).  Members preserve via the rename mesh
+      applied to each member name (FortiGate ``port2`` -> Arista
+      ``Ethernet2``).  LACP modes map cleanly: FortiOS
+      ``set lacp-mode active`` / ``passive`` / ``static`` ->
+      Arista ``mode active`` / ``passive`` / ``on``.  Arista MLAG
+      is an extension absent from FortiGate source, so cross-
+      vendor render emits no MLAG state.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      FortiGate's named accprofile strings (``super_admin`` /
+      ``super_admin_readonly`` / ``prof_admin`` / custom)
+      flatten onto Arista's numeric privilege + role string via
+      codec policy: ``super_admin`` -> privilege 15 + role
+      ``network-admin``; others -> privilege 1 + role preserved
+      as-is in the canonical ``role`` field.  Granular per-
+      profile detail (FortiGate accprofile permission matrices)
+      is lost — Arista has no equivalent of FortiGate's per-
+      profile feature-permission grid.  Hash formats are NOT
+      cross-compatible: FortiOS ``ENC <opaque-base64>`` requires
+      the FortiGate device's master key; Arista accepts ``$1$``
+      (md5_crypt), ``$5$`` (sha256_crypt), ``$6$`` (sha512_crypt
+      — modern default), ``$8$`` (PBKDF2), ``$9$`` (scrypt), and
+      type-7 reversible — none match FortiOS ``ENC``.  Cross-
+      vendor migration of admin accounts requires re-setting
+      passwords on the target.  Both codecs preserve hashes
+      verbatim with vendor tags so the loss surfaces in the
+      validation report.  Trusthost / IP-source-restriction
+      (FortiOS ``set trusthost1``) is FortiGate-specific and
+      not in canonical, so it drops entirely on Arista render.
+    references: [local_users, local_users_arista]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port preserve cleanly.  Shared-secret format
+      is incompatible: FortiOS ``ENC <opaque-base64>`` is not
+      Arista-parseable; cross-vendor migration requires re-
+      keying.  The FortiGate codec normalises FortiOS's ``set
+      radius-port 0`` placeholder to the effective default 1812
+      at parse-time; Arista renders the flat ``radius-server
+      host <ip> auth-port 1812 acct-port 1813`` form.  FortiGate
+      carries a per-server name (edit ID) that Arista's flat
+      host-keyed form discards.  Acct-port: FortiGate has no
+      separate field (canonical defaults to 1813), so Arista
+      target renders the default unless operator overrides.
+    references: [snmp_aaa, snmp_aaa_arista]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      FortiGate codec capability matrix lists ``/vxlan-vnis/vni``
+      as unsupported ("VXLAN not modelled — FortiGate is a
+      firewall codec").  CanonicalIntent.vxlan_vnis is therefore
+      always empty on this direction — there is nothing to lose
+      on the source side.  The arista_eos codec capability matrix
+      lists every VXLAN xpath under supported and would render
+      records if any existed, but since none populate from
+      FortiGate parse, no VXLAN config emerges on the Arista
+      target.  Operators rebuilding an EVPN-VXLAN fabric on
+      Arista must construct it from scratch.
+    references: [firewall_unsupported]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — FortiGate has no EVPN data
+      plane (firewall codec), so CanonicalIntent.
+      evpn_type5_routes is always empty on FortiGate parse.
+      Arista has the surface but receives no source data.
+    references: [firewall_unsupported]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      FortiGate codec does not parse ``set vrf <id>`` (per-
+      interface integer VRF, FortiOS 7.0+) into canonical
+      CanonicalRoutingInstance records in v1.  VDOMs are
+      FortiGate's heavyweight multi-tenancy primitive (independent
+      firewall policy tables, address-objects, admin sessions,
+      routing tables) — they don't map 1:1 to Arista's named-VRF
+      + RD + RT + EVPN-VXLAN model.  More fundamentally, FortiOS
+      7.x integer VRF lacks the RD/RT semantics Arista's named-
+      VRF + MP-BGP model needs, so even a hypothetical wired-up
+      FortiGate parse would not survive cross-vendor migration
+      into a fully-formed Arista VRF.  Operators rebuilding
+      multi-tenancy on Arista must construct ``vrf instance
+      <name>`` + RD + RT + EVPN address-family from scratch.
+      CanonicalInterface.vrf is also unsupported on this
+      direction (same root cause — codec parse gap).
+    references: [firewall_unsupported]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  FortiGate's
+      firewall / VIP / address-object / VPN / IPsec / VDOM
+      stanzas are the primary content operators encounter here;
+      Arista has no policy / NAT / multi-tenancy analogue at the
+      canonical level.  Operators must treat the FortiGate
+      firewall config as documentation, not a translatable
+      artefact, on this direction.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; informational only."
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata; not a translation field."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  FortiGate and Arista EOS codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific group-scoped set-line tails.  Same
+      not_applicable status as apply_groups.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * FortiGate-source -> Arista-target shared scalar surface is
+#     high-confidence (FortiOS CLI Reference is unambiguous; Arista
+#     EOS docs are unambiguous on the foundation surface; both
+#     codecs round-trip the canonical fields on real-capture
+#     fixtures).
+#
+#   * Direction-asymmetric losses are well-understood: dns_servers
+#     and syslog_servers escalate from lossy (forward) to good
+#     (reverse) because FortiOS source list-lengths sit within
+#     Arista's unbounded targets.  vlans port-membership stays
+#     unsupported but for the inverse reason (FortiGate parse
+#     never populates the canonical port-list, so Arista render
+#     emits empty switchport state).
+#
+#   * Switching features (switchport_mode / access_vlan /
+#     trunk_*) are confidently unsupported on this direction
+#     because the FortiGate parent-interface VLAN model never
+#     populates the canonical port-membership lists, so Arista
+#     render emits VLAN stanzas with no per-port switchport
+#     state regardless of the FortiGate source's intent.  The
+#     operator must reconstruct switchport state on the Arista
+#     target.
+#
+#   * Firewall / NAT / VIP / VPN / IPsec / UTM / VDOM are
+#     confidently unsupported (Arista has no policy / multi-
+#     tenancy analogue at the canonical level; canonical schema
+#     also doesn't carry firewall policy in v1).
+#
+#   * Per-interface integer VRF and VDOMs are confidently
+#     unsupported (FortiGate codec doesn't parse ``set vrf
+#     <id>`` in v1; even if wired, integer-VRF lacks the RD/RT
+#     semantics Arista's named-VRF + EVPN model needs).
+#
+#   * EVPN-VXLAN is not_applicable on this direction (FortiGate
+#     source has no fabric data plane to populate canonical),
+#     not unsupported — there's nothing to lose.
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * Per-interface FortiGate ``set vrf <id>`` parse into
+#     CanonicalRoutingInstance — deferred to subsequent audit
+#     pass when canonical schema gains vendor-id translation
+#     tables.  Even when wired, integer-VRF -> Arista named-VRF
+#     migration will require operator-curated mappings.
+#
+#   * Arista codec wire-up for ``/dhcp/pool`` render — currently
+#     unsupported; would promote dhcp_servers to ``lossy`` (with
+#     model-divergence caveats around Arista's typical relay-
+#     only DC role).
+#
+#   * IPv6 static routes — not currently wired through the
+#     canonical static_routes list on FortiOS source side
+#     (separate ``config router static6`` block).  Lossy by
+#     design until the canonical model unifies IPv4/IPv6 statics.
+#
+#   * TACACS+ — no canonical model in v1.  Lands when
+#     CanonicalTACACSServer is added.
+#
+#   * FortiGate firewall policy / VIP / address-object / UTM /
+#     VPN migration to Arista — deferred indefinitely.  No
+#     Arista analogue at canonical level; operators must treat
+#     the FortiGate firewall config as documentation.
