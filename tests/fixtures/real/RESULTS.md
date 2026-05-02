@@ -624,3 +624,5 @@ adding new canonical fields (ongoing roadmap).
 - [`../../README.md`](../../README.md) — test-suite layout and how the real-capture harness fits in
 - [`NOTICE.md`](NOTICE.md) — provenance, attribution, and licensing for every fixture in this corpus
 - [`../../testid_reference.md`](../../testid_reference.md) — interactive-element inventory (the migrate UI surfaces certainty tiers from this matrix)
+- [`PHASE4_RECONCILIATION.md`](PHASE4_RECONCILIATION.md) — cross-mesh fidelity reconciliation matrix (Phase 1 mechanical drift × Phase 3 vendor-doc expectations)
+- [`user_smoke_findings.md`](user_smoke_findings.md) — operator-spotted bugs from manual cross-vendor smoke pasting; complements the mechanical reconciliation with human-readable issues

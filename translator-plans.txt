@@ -2288,5 +2288,12 @@ A: Six-stage pipeline (collect -> parse -> transform -> validate ->
   feed back into this roadmap)
 - netconfig/migration/codecs/README.md — codec authorship guide for
   the per-vendor parse/render adapters this plan describes
+- tests/fixtures/real/PHASE4_RECONCILIATION.md — current cross-mesh
+  fidelity reconciliation matrix; top-6 codec-fix backlog joins
+  Phase 1 mechanical drift against Phase 3 vendor-doc expectations
+- tests/fixtures/real/user_smoke_findings.md — operator-spotted
+  bugs from manual smoke testing (active backlog of cross-vendor
+  translation issues surfaced by running real Cisco / Arista / etc
+  configs through the migrate UI and inspecting per-target output)
 
 # END

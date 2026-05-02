@@ -114,5 +114,7 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 | Every interactive HTML element's `data-testid` | [`testid_reference.md`](testid_reference.md) — canonical E2E selector inventory |
 | Real-capture fixture provenance + licensing | [`fixtures/real/NOTICE.md`](fixtures/real/NOTICE.md) |
 | Codec certification state + coverage matrix | [`fixtures/real/RESULTS.md`](fixtures/real/RESULTS.md) |
+| Cross-mesh fidelity reconciliation (Phase 4) | [`fixtures/real/PHASE4_RECONCILIATION.md`](fixtures/real/PHASE4_RECONCILIATION.md) |
+| Operator-spotted cross-vendor bugs | [`fixtures/real/user_smoke_findings.md`](fixtures/real/user_smoke_findings.md) |
 | Codec authoring (how to add a new vendor) | [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) |
 | Device-definition + target-profile schema | [`../definitions/README.md`](../definitions/README.md) |

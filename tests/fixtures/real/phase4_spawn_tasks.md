@@ -656,5 +656,9 @@ not modify the per-vendor findings markdowns.
 * `tests/fixtures/real/phase4_findings_*.md` — per-source-vendor
   bug-by-bug attribution, the source of truth for "estimated bugs
   cleared" claims in each draft above
+* [`user_smoke_findings.md`](user_smoke_findings.md) — operator-spotted
+  bugs from manual cross-vendor smoke pasting (complements the
+  mechanical attribution with human-readable issues like duplicate
+  port edits and security-relevant hash-format leaks)
 * `tools/run_phase4_reconciliation.py` — re-running this script
   after each fix lands shows the residual CODEC_BUG count

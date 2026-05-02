@@ -75,4 +75,7 @@ This section is populated by Phase 4b investigation agents.  Each agent reads th
 - ``tests/fixtures/cross_vendor_expectations/`` — Phase 3 vendor-doc-grounded expectations (56 pair YAMLs)
 - ``tests/fixtures/real/CROSS_MESH_RESULTS.md`` — Phase 1 mechanical drift matrix (the input this report joins against)
 - ``tools/run_full_mesh.py`` — Phase 1 generator
+- ``tests/fixtures/real/phase4_findings_<vendor>.md`` — per-source-vendor mechanical-drift triage (8 files, one per source codec)
+- ``tests/fixtures/real/phase4_spawn_tasks.md`` — fix-task spawn drafts for the top-6 leverage findings
+- ``tests/fixtures/real/user_smoke_findings.md`` — operator-spotted issues from manual cross-vendor smoke pasting (complements the mechanical reconciliation with human-readable bugs not covered by canonical-field drift)
 
