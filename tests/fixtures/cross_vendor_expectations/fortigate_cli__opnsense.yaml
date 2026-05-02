@@ -1,0 +1,724 @@
+# Cross-vendor fidelity expectations: fortigate_cli -> opnsense
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/fortigate_cli_to_opnsense/
+#
+# Phase 3 follow-up pair.  This is the FIREWALL × FIREWALL pair —
+# the most role-compatible pair in the cross-mesh matrix.  Both
+# vendors are session-based stateful firewalls with native models
+# for the same core concepts: WAN/LAN/zone interfaces, DHCP scopes,
+# IPsec VPN, RADIUS, local users, SNMP, NAT, firewall policy.
+#
+# Shared canonical surface (Tier 1 + Tier 2):
+#
+#   * hostname / domain — good (both vendors carry single-suffix
+#     domain on a separate field-of-its-own)
+#   * DNS / NTP / syslog / timezone — lossy on parser wire-up gaps
+#     (both codecs have <system>/<dnsserver>/<timeservers>/<syslog>/
+#     <timezone> wire-up incomplete)
+#   * interfaces — IP/MTU/enable round-trip well; switching state
+#     unsupported on both ends (firewalls)
+#   * vlans — both vendors use 802.1Q child interfaces (NOT VLAN-
+#     centric port lists).  This is the unusual fit-on-this-pair —
+#     in the wider mesh Cisco/Aruba/Arista all use port-list shape.
+#   * static_routes — lossy (OPNsense's two-block <gateways> +
+#     <staticroutes> model with named-gateway JOIN; OPNsense codec
+#     parser/render unwired)
+#   * dhcp_servers — interface-bound on both ends, lossy on
+#     edit-id-vs-zone-label addressing and DNS three-cap on FortiOS
+#   * snmp — v1/v2c good; v3 USM unsupported on OPNsense (lives in
+#     snmpd.conf, not config.xml)
+#   * local_users — lossy (FortiOS `ENC` versus OPNsense bcrypt;
+#     both vendor-private, not cross-compatible)
+#   * radius_servers — lossy (FortiOS ENC versus OPNsense cleartext
+#     secret; cross-vendor re-keying required)
+#   * lags — lossy (FortiOS operator-named versus OPNsense `lagg<N>`
+#     FreeBSD lagg(4) driver naming; LACP-mode collapse)
+#
+# What's firmly out of scope on the canonical-portable form
+# (unsupported despite both ends modelling natively):
+#
+#   * FortiGate firewall policy / VIPs / address-objects — Tier 3
+#   * FortiGate IPsec / SSL-VPN — Tier 3
+#   * FortiGate UTM (web filter, IPS, application control) — Tier 3
+#   * FortiGate VDOMs — heavyweight multi-tenancy primitive
+#   * FortiGate per-interface integer VRF — codec doesn't parse v1
+#
+# This is the unfortunate gap on what should be the most
+# role-compatible pair in the matrix: both ends model the same
+# concepts natively, but the canonical-portable form does not carry
+# the data (Tier 3 — policy semantics differ enough between vendors
+# that auto-translation would be unsafe).  Operators must manually
+# reconstruct security policy after migration.
+
+meta:
+  source_vendor: fortigate_cli
+  target_vendor: opnsense
+  primary_use_case: >
+    Hybrid migration: FortiGate firewall edge -> OPNsense
+    firewall/router (FreeBSD-based, pfSense fork).  Common scenario:
+    cost-driven consolidation onto open-source OPNsense for SMB /
+    home-lab deployments, or migration off legacy FortiGate hardware
+    nearing EOL.  Foundations (hostname / DNS / NTP / interface IPs /
+    VLAN tags / SNMP v1/v2c / RADIUS / local users / DHCP server
+    scopes / LAGs) translate via the canonical tree.  FortiGate's
+    rich firewall / NAT / UTM / IPsec product surface has no
+    canonical-portable representation in v1; operators must
+    manually reconstruct on the OPNsense target.
+  certainty: medium
+  references:
+    - id: fgt-system-services
+      path: docs/vendor-references/fortigate_cli_to_opnsense/system_services.md
+      title: "FortiGate FortiOS 7.4 CLI Reference (config system global / dns / ntp)"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: fgt-interfaces
+      path: docs/vendor-references/fortigate_cli_to_opnsense/interfaces.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — Interface settings"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: fgt-vlans
+      path: docs/vendor-references/fortigate_cli_to_opnsense/vlans.md
+      title: "FortiGate FortiOS 7.4 Cookbook — VLAN configuration"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+    - id: fgt-static-routes
+      path: docs/vendor-references/fortigate_cli_to_opnsense/static_routes.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — Static routes"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fgt-dhcp
+      path: docs/vendor-references/fortigate_cli_to_opnsense/dhcp.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — DHCP server"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fgt-snmp
+      path: docs/vendor-references/fortigate_cli_to_opnsense/snmp.md
+      title: "FortiGate FortiOS 7.4 CLI Reference — config system snmp"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: fgt-local-users
+      path: docs/vendor-references/fortigate_cli_to_opnsense/local_users.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — config system admin"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fgt-radius
+      path: docs/vendor-references/fortigate_cli_to_opnsense/radius.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — config user radius"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fgt-lags
+      path: docs/vendor-references/fortigate_cli_to_opnsense/lags.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — Aggregate interfaces"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: fgt-firewall
+      path: docs/vendor-references/fortigate_cli_to_opnsense/firewall_role_match_but_unsupported.md
+      title: "FortiGate FortiOS 7.4 Cookbook — Firewall policies"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+    - id: fgt-vrf-vdom
+      path: docs/vendor-references/fortigate_cli_to_opnsense/vrf_vdom.md
+      title: "FortiGate FortiOS 7.4 Administration Guide — VDOMs and VRFs"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: opn-system
+      path: docs/vendor-references/fortigate_cli_to_opnsense/system_services.md
+      title: "OPNsense General Settings manual"
+      source_url: "https://docs.opnsense.org/manual/settingsmenu.html"
+      retrieved: "2026-05-01"
+    - id: opn-interfaces
+      path: docs/vendor-references/fortigate_cli_to_opnsense/interfaces.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-05-01"
+    - id: opn-vlans
+      path: docs/vendor-references/fortigate_cli_to_opnsense/vlans.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: opn-static-routes
+      path: docs/vendor-references/fortigate_cli_to_opnsense/static_routes.md
+      title: "OPNsense Gateways + Static Routes manual"
+      source_url: "https://docs.opnsense.org/manual/gateways.html"
+      retrieved: "2026-05-01"
+    - id: opn-dhcp
+      path: docs/vendor-references/fortigate_cli_to_opnsense/dhcp.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-05-01"
+    - id: opn-snmp
+      path: docs/vendor-references/fortigate_cli_to_opnsense/snmp.md
+      title: "OPNsense Net-SNMP plugin reference"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-05-01"
+    - id: opn-users
+      path: docs/vendor-references/fortigate_cli_to_opnsense/local_users.md
+      title: "OPNsense Users manual"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-05-01"
+    - id: opn-radius
+      path: docs/vendor-references/fortigate_cli_to_opnsense/radius.md
+      title: "OPNsense Users manual (Authentication servers)"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-05-01"
+    - id: opn-laggs
+      path: docs/vendor-references/fortigate_cli_to_opnsense/lags.md
+      title: "OPNsense Devices manual (LAGG tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: opn-firewall
+      path: docs/vendor-references/fortigate_cli_to_opnsense/firewall_role_match_but_unsupported.md
+      title: "OPNsense Firewall manual"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-05-01"
+    - id: opn-vrf
+      path: docs/vendor-references/fortigate_cli_to_opnsense/vrf_vdom.md
+      title: "OPNsense routing docs (no VRF in base OS)"
+      source_url: "https://docs.opnsense.org/manual/"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      FortiOS quoted ``set hostname "fgt-edge"`` (under ``config
+      system global``) ↔ OPNsense ``<system>/<hostname>``.  Codec
+      strips quotes on parse; OPNsense renders bare element content.
+      FortiOS caps at 35 characters; OPNsense imposes no length
+      limit — no truncation in this direction.
+    references: [fgt-system-services, opn-system]
+
+  domain:
+    disposition: good
+    note: >
+      FortiOS ``set domain "example.com"`` (under ``config system
+      dns``) ↔ OPNsense ``<system>/<domain>example.com</domain>``.
+      Both vendors carry a single suffix string.  Same FQDN
+      preserved.
+    references: [fgt-system-services, opn-system]
+
+  dns_servers:
+    disposition: good
+    note: >
+      FortiOS three-cap (``set primary`` / ``set secondary`` /
+      hidden ``set tertiary`` under ``config system dns``) collapses
+      cleanly to OPNsense's repeated ``<dnsserver>`` elements (no
+      fixed cap).  The canonical list always fits the OPNsense
+      render side; the constraint is on the source side and is
+      already accepted by FortiGate.
+    references: [fgt-system-services, opn-system]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      FortiOS uses a numbered edit-table under ``config system ntp /
+      config ntpserver / set server <addr>``.  OPNsense uses a
+      single space-separated ``<system>/<timeservers>`` element.
+      Address list itself is preserved on both ends, but FortiOS's
+      protocol distinction (full NTP with ``set ntpsync enable`` +
+      ``set type custom`` versus OPNsense's basic ntpd) is not
+      modelled in canonical.  Per-server modifiers (FortiOS
+      ``set authentication`` / ``set ntp-auth-key``) drop on
+      canonical.  OPNsense codec parser does not currently wire
+      ``<timeservers>`` into ``CanonicalIntent.ntp_servers`` on
+      parse, but the render branch DOES emit ``<timeservers>`` from
+      the canonical list — this direction is render-side, so the
+      list lands on OPNsense correctly.
+    references: [fgt-system-services, opn-system]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      FortiOS numeric index (``set timezone 04`` for US Pacific per
+      the FortiOS Cookbook timezone table) versus OPNsense Olson
+      zoneinfo (``<timezone>America/Los_Angeles</timezone>``)
+      requires an operator-curated lookup.  Codec wire-up gap on
+      both ends.
+    references: [fgt-system-services, opn-system]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      FortiOS three-backend cap (``config log syslogd setting / set
+      server`` plus syslogd2 / syslogd3 sibling blocks) maps to
+      OPNsense's repeated ``<system>/<syslog>/<remoteserver>``
+      elements; no truncation in this direction.  Severity /
+      facility tokens not modelled.  OPNsense codec's syslog
+      parse/render branch is not currently wired to canonical.
+    references: [fgt-system-services, opn-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips, but several per-
+      interface sub-fields are lossy or unsupported.  See the
+      ``interfaces[].*`` entries below for the per-sub-field
+      breakdown.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      FortiGate flat namespace (``port1`` / ``internal`` /
+      ``agg1``) does not survive on OPNsense.  The operator-facing
+      label on OPNsense is the zone tag (``<wan>`` / ``<lan>`` /
+      ``<optN>``); the BSD device name lives in ``<if>``.
+      Port-rename mesh handles the conversion via the codec's
+      ``classify_port_name`` / ``format_port_identity`` delegates.
+      Canonical preserves the source string verbatim.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].description:
+    disposition: lossy
+    reason: >
+      FortiGate ``set alias`` caps at 25 characters; OPNsense
+      ``<descr>`` is unbounded.  No truncation in this direction
+      (25-char fits unbounded).  Marked lossy because FortiGate's
+      ``set comment`` on a static-route or other block (a longer
+      free-form field) has no destination on OPNsense.  FortiGate
+      codec capability matrix declares
+      ``/interfaces/interface/config/description`` lossy with this
+      rationale.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      FortiGate ``set status up`` / ``set status down`` ↔ OPNsense
+      ``<enable>1</enable>`` element presence (or absence).
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      FortiGate ``set type`` enumerates physical / vlan / aggregate
+      / loopback / tunnel / hard-switch.  OPNsense doesn't surface
+      a type field; cross-pair drops the type hint.  FortiGate
+      codec capability matrix declares
+      ``/interfaces/interface/config/type`` lossy.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      FortiGate ``set mtu-override enable / set mtu 1500`` ↔
+      OPNsense ``<mtu>1500</mtu>``.  Mechanical pass-through when
+      mtu-override is set.  Default-MTU absence (no FortiGate
+      ``set mtu``) maps to no ``<mtu>`` element on OPNsense (both
+      default-derived from interface speed).
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      FortiGate ``set ip <addr> <mask>`` (dotted-mask form) converts
+      mechanically to OPNsense ``<ipaddr>`` + ``<subnet>`` (prefix-
+      length).  Mask-to-prefix conversion handled by codec helpers.
+      FortiGate secondary addresses (``set secondary-IP``) drop
+      before reaching canonical.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      FortiGate ``set ip6-address 2001:db8::1/64`` ↔ OPNsense
+      ``<ipaddrv6>`` + ``<subnetv6>``.  ``scope`` discriminator
+      preserved.  OPNsense's non-static IPv6 keywords (``dhcp6``,
+      ``track6``, ``slaac``, ``6rd``, ``6to4``) are not generated
+      by FortiGate source.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].switchport_mode:
+    disposition: unsupported
+    reason: >
+      Neither vendor models a switching fabric in canonical (both
+      are L3-only beyond FortiGate's hard-switch sub-feature on
+      a few low-end models, which the codec does not parse into
+      switchport state).  The canonical field is empty after
+      FortiGate parse; OPNsense render emits no switchport XML.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].access_vlan:
+    disposition: unsupported
+    reason: >
+      Same rationale as switchport_mode — neither vendor has a
+      first-class switchport / access-VLAN concept on physical
+      interfaces.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: unsupported
+    reason: >
+      Same rationale as switchport_mode — both vendors model VLANs
+      as 802.1Q child interfaces, not as per-port allowed-VLAN lists.
+    references: [fgt-interfaces, opn-vlans]
+
+  interfaces[].trunk_native_vlan:
+    disposition: unsupported
+    reason: >
+      Same as trunk_allowed_vlans — neither vendor has a per-port
+      native-VLAN concept.
+    references: [fgt-interfaces, opn-vlans]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      Neither vendor has LLDP-MED voice-VLAN signalling in the
+      canonical surface.  Canonical field is empty after FortiGate
+      parse.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      FortiGate aggregate uses ``set type aggregate / set member
+      "port3" "port4"`` declared on the parent; canonical back-points
+      to the aggregate name on each member.  OPNsense
+      ``<laggs>/<lagg>/<members>`` carries member lists by NIC name
+      in a comma-separated ``<members>`` element under
+      ``<laggif>laggN</laggif>``.  Both codecs round-trip the
+      back-pointer but the LAG name itself differs (``agg1`` versus
+      ``lagg0``); port-rename mesh canonicalises (operator-named ↔
+      zero-based FreeBSD lagg(N)).
+    references: [fgt-lags, opn-laggs]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      FortiGate ``set mode dhcp`` (rare on routed ports; common on
+      the WAN edit) ↔ OPNsense ``<ipaddr>dhcp</ipaddr>``.  Neither
+      codec currently wires this into ``CanonicalInterface.
+      dhcp_client``; cross-pair drops pending wire-up.
+    references: [fgt-interfaces, opn-interfaces]
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      FortiGate ``set vrf <id>`` (FortiOS 7.x per-interface integer
+      VRF) is not parsed by the codec into ``CanonicalInterface.vrf``
+      in v1.  OPNsense ``config.xml`` has no VRF schema either.
+      Field structurally absent on this direction.
+    references: [fgt-vrf-vdom, opn-vrf]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      The list itself round-trips for the id field.  Per-VLAN
+      sub-fields collapse or drop — see ``vlans[].*`` entries below.
+      Both vendors share the unusual idiom of modelling VLANs as
+      802.1Q child interfaces (NOT VLAN-centric port lists), which
+      makes this pair relatively clean compared to switch-to-firewall
+      pairs.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      FortiGate ``set vlanid 10`` (under a vlan-typed interface
+      edit) ↔ OPNsense ``<vlan>/<tag>10</tag>``.  Both vendors share
+      the 1-4094 range.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      FortiGate's edit-name (``port2.10``) doubles as VLAN identity.
+      The canonical ``name`` populates from this on parse but loses
+      the ergonomic alias.  OPNsense renders a synthesised
+      ``<descr>`` instead — and OPNsense's ``<descr>`` is the only
+      label slot, so canonical ``name`` and ``description`` collapse
+      to one OPNsense XML field.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      FortiGate ``set alias`` (25-char cap) ↔ OPNsense ``<descr>``
+      (unbounded).  No truncation in this direction; marked lossy
+      because canonical ``name`` and ``description`` collapse to a
+      single OPNsense ``<descr>`` slot.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].tagged_ports:
+    disposition: not_applicable
+    note: >
+      FortiGate parse never populates these (canonical lists are
+      empty on parse) because neither vendor uses VLAN-centric port
+      lists.  Membership is encoded as the parent interface's
+      identity (``set interface "<parent>"`` on FortiGate;
+      ``<vlan>/<if>em1</if>`` on OPNsense), not as a port list per
+      VLAN.  Cross-pair render emits no port-membership XML on
+      OPNsense because there's nothing on canonical.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].untagged_ports:
+    disposition: not_applicable
+    note: >
+      Same rationale as tagged_ports — empty on FortiGate parse.
+    references: [fgt-vlans, opn-vlans]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      FortiGate places the L3 SVI address on the VLAN-child edit
+      (``set ip`` on ``port2.10``), which the parser absorbs into
+      ``CanonicalVlan.ipv4_addresses``.  OPNsense requires
+      synthesising a zone interface (``<opt2>``) referencing
+      ``<vlanif>em1_vlan10</vlanif>`` and putting the IP there.
+      The OPNsense codec does not currently auto-synthesise the
+      zone for an SVI-bearing canonical VLAN; cross-pair render
+      emits the VLAN declaration but loses the L3 address pending
+      wire-up.
+    references: [fgt-vlans, opn-vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      FortiGate's flat ``config router static`` per-route table
+      flattens cleanly into canonical (FortiGate codec parses
+      dst/mask -> prefix/prefix_length; gateway -> next_hop;
+      device -> interface).  OPNsense rendering would have to
+      synthesise a ``<gateway_item>`` per unique next-hop on the
+      canonical list (or reuse an existing one if the operator
+      pre-declared it), then emit ``<route>`` elements.  The
+      OPNsense codec capability matrix does NOT currently advertise
+      ``/routing/static-route`` as supported — render is unwired
+      pending wire-up.  Additionally, FortiGate's
+      ``set dst 0.0.0.0 0.0.0.0`` (default route) is a first-class
+      entry; the OPNsense equivalent is to set the WAN zone's
+      default-gateway flag rather than emit a ``<route>``.
+    references: [fgt-static-routes, opn-static-routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Both vendors are interface-bound DHCP servers, philosophical
+      match.  Cross-pair losses:
+
+        1. FortiGate scopes are addressed by numeric edit ID;
+           OPNsense scopes are addressed by zone label.  The
+           cross-pair render must invent the matching zone label
+           from the FortiGate ``set interface`` value via the
+           rename mesh.
+        2. The OPNsense codec's capability matrix does NOT
+           currently advertise ``/dhcp/pool`` paths under supported;
+           render is unwired pending wire-up.
+        3. FortiOS's three-cap on dns-server1/2/3 fits OPNsense's
+           unbounded ``<dnsserver>`` elements with no truncation,
+           but FortiOS multi-range scopes (``config ip-range``)
+           collapse to a single canonical range.
+        4. FortiOS ``<exclude-range>`` carve-outs have no direct
+           OPNsense equivalent (operator must split the range or
+           add static-mappings).
+    references: [fgt-dhcp, opn-dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly — FortiGate ``config system snmp
+      community`` edit-table + ``config system snmp sysinfo``
+      (description / contact-info) ↔ OPNsense ``<snmpd>/
+      <rocommunity> / <syslocation> / <syscontact> / <traphost>``.
+      FortiOS multi-community configs collapse to the first
+      community on canonical.  Note FortiOS labels the location
+      field ``description`` while OPNsense uses ``syslocation`` —
+      the canonical field is ``location``.  v3 USM is unsupported
+      on OPNsense (lives in plugin's snmpd.conf, not config.xml —
+      see opnsense codec's ``/snmp/v3-user`` unsupported entry);
+      ``v3_users`` records drop on the cross-pair and the rename
+      pane shows the ``snmpv3`` unsupported-category banner declared
+      on the OPNsense codec's ``unsupported_rename_categories``
+      frozenset.
+    references: [fgt-snmp, opn-snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      FortiGate operator-named aggregates (``agg1`` /
+      ``LAG_INTERNAL``) ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4)
+      driver naming, zero-based).  Member lists round-trip via the
+      rename mesh applied to each member name (FortiGate ``port3``
+      -> OPNsense BSD device ``em2``).  Members are emitted as
+      space-separated quoted on FortiOS versus comma-separated
+      string on OPNsense — both codecs handle the normalisation.
+      LACP modes collapse: FortiGate ``set lacp-mode active`` /
+      ``passive`` both map to OPNsense ``<proto>lacp</proto>`` (the
+      FreeBSD driver always advertises actively); FortiGate
+      ``static`` ↔ OPNsense ``<proto>none</proto>``.  Cross-pair
+      degrades the active/passive distinction silently.  OPNsense
+      codec parses ``<laggs>`` but its capability matrix doesn't
+      currently advertise ``/lag/aggregate``; render is partial
+      pending wire-up.
+    references: [fgt-lags, opn-laggs]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      FortiGate ``set password ENC <opaque-base64>`` is FortiOS-
+      internal-key-encrypted; OPNsense bcrypt is FreeBSD-
+      ``crypt(3)``-compatible (``$2a$`` / ``$2b$`` / ``$2y$``
+      prefixes).  Hash formats are NOT cross-compatible.  Both
+      codecs preserve hashes verbatim with vendor tags
+      (``fortios:`` on FortiGate, ``bcrypt:`` on OPNsense) so the
+      loss surfaces in the validation report.  Operators must reset
+      passwords on the OPNsense target.  Privilege number collapses
+      to OPNsense's binary admin / non-admin via group membership:
+      FortiGate ``super_admin`` (canonical privilege 15) ->
+      ``<groupname>admins</groupname>``, other profiles ->
+      ``<groupname>users</groupname>``.  Granular per-profile detail
+      is lost.  FortiGate ``set trusthost1...trusthost10`` IP-
+      restricted access controls are not modelled in canonical;
+      drop on parse.
+    references: [fgt-local-users, opn-users]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      FortiOS ``set secret ENC <opaque-base64>`` is FortiOS-
+      internal-key-encrypted; OPNsense expects cleartext in
+      ``<radius_secret>``.  Cross-vendor migration requires
+      re-keying — operators must paste the cleartext shared secret
+      into OPNsense after migration.  The codec passes the FortiOS-
+      encoded form through verbatim with a vendor tag so the loss
+      surfaces in the validation report.  ``auth_port`` / ``host``
+      / ``name`` preserve cleanly.  ``acct_port``: FortiGate has no
+      separate field (canonical defaults to 1813, which is
+      OPNsense's default too).  FortiOS ``set auth-type`` /
+      ``set source-ip`` / ``set timeout`` drop on canonical (no
+      schema fields).
+    references: [fgt-radius, opn-radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      fortigate_cli codec capability matrix lists ``/vxlan-vnis/vni``
+      under unsupported ("VXLAN not modelled — FortiGate is a
+      firewall codec") so canonical list is always empty on
+      FortiGate parse.  OPNsense codec also lists the path under
+      unsupported.  Field structurally absent on this direction.
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — FortiGate has no EVPN concept
+      (no MP-BGP, no VXLAN underlay), so canonical list is always
+      empty on FortiGate parse.  OPNsense doesn't model EVPN
+      either.
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      FortiGate codec does not parse ``set vrf <id>`` (per-interface
+      integer VRF, FortiOS 7.0+) into canonical
+      ``CanonicalRoutingInstance`` records in v1.  OPNsense
+      ``config.xml`` has no VRF schema.  More fundamentally,
+      FortiGate's per-interface integer VRF (no name, no RD, no RT)
+      and VDOMs (heavyweight multi-tenancy primitive requiring
+      per-VDOM canonical-tree splitting) cannot be expressed
+      through the v1 canonical pipeline.
+    references: [fgt-vrf-vdom, opn-vrf]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict by design — never auto-rendered.  FortiGate-source
+      firewall policy / NAT / VPN / UTM stanzas may land here but
+      OPNsense target couldn't render them as XML rules anyway
+      (firewall rules are unsupported per OPNsense codec capability
+      matrix's ``/filter/rule`` and ``/nat/outbound`` unsupported
+      entries).  This is the gap on the natural-fit pair: both
+      vendors model the same concepts natively, but the canonical-
+      portable form does not carry the data.
+    references: [fgt-firewall, opn-firewall]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes
+      vendor).  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``apply-groups`` statement preservation
+      per GAP 9b).  FortiGate source never populates this list;
+      field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not_applicable status for
+      FortiGate source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The fundamental shape — what FortiGate models in CLI versus what
+#     OPNsense models in config.xml — is well documented and unambiguous
+#     on the foundation surface (hostname / domain / DNS / interfaces /
+#     VLANs / static routes / SNMP / RADIUS / LAGs / local users / DHCP
+#     scopes).  Both codecs already round-trip the canonical fields on
+#     real-capture fixtures.
+#
+#   * The wire-up gaps on the OPNsense side (no DNS / NTP / syslog /
+#     timezone / static-route / DHCP pool render path; no
+#     /lag/aggregate advertised) push several Tier-1 / Tier-2 fields
+#     into 'lossy' rather than 'good'.  These are codec-implementation
+#     gaps, not vendor-modelling gaps, and would close as wire-up
+#     lands.
+#
+#   * The role match (firewall versus firewall) is the strongest in
+#     the cross-mesh, but the canonical-portable form does not carry
+#     firewall / NAT / VPN.  This is the unfortunate gap that pushes
+#     the certainty down — operators expect the natural-fit pair to
+#     translate cleanly, and on the foundations it does, but the
+#     security policy itself does not.
+#
+#   * The hash-format incompatibility (FortiOS ``ENC`` versus OPNsense
+#     bcrypt) and shared-secret incompatibility (FortiOS ``ENC``
+#     versus OPNsense cleartext) are documented and confidently lossy.
+#
+#   * The shared 802.1Q-child-interface idiom for VLAN modelling is
+#     unusual in the wider mesh and clean on this pair — confidently
+#     mapped at the schema level, with the SVI projection gap being
+#     a codec wire-up gap rather than a vendor modelling gap.
+#
+# Deferred items (none — all fields walked and dispositioned):
+#
+#   * (none — every CanonicalIntent top-level field carries an explicit
+#     per_field_expectation entry; sub-fields enumerated where the
+#     disposition varies by sub-field).
