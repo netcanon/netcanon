@@ -1,0 +1,608 @@
+# Cross-vendor fidelity expectations: opnsense -> cisco_iosxe
+#
+# Source: opnsense codec — `certified` OPNsense `config.xml` parse.
+# Target: cisco_iosxe codec — OpenConfig NETCONF YANG XML render
+# (Phase-0.5 stub; render emits `<interfaces>` only).
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/opnsense_to_cisco_iosxe/
+#
+# Authored 2026-05-01 as part of Phase 3 cross-mesh audit Batch 2
+# (one of seven parallel pair agents).
+#
+# Direction-specific framing.  Reverse direction of
+# cisco_iosxe__opnsense.yaml.  The asymmetry runs the opposite way:
+#
+#   1. The opnsense SOURCE codec's parse() populates several Tier-1
+#      / Tier-2 fields beyond `interfaces`: hostname / domain /
+#      local_users / radius_servers / snmp (v1/v2c) / lags /
+#      vlans (id + name) / dhcp_servers.  But it leaves DNS / NTP /
+#      syslog / timezone / static_routes / IPv6 link-local empty
+#      due to its own parse-side wire-up gaps.
+#
+#   2. The cisco_iosxe TARGET codec's _render_canonical() emits
+#      `<interfaces>` only — no `<system>`, `<vlans>`, `<snmp>`,
+#      `<network-instances>`, `<routing>`.  Even when the canonical
+#      tree carries hostname / SNMP / VLAN / RADIUS / local-users
+#      records, the render emits a bare `<interfaces>` document.
+#
+# The composite effect: heavy `unsupported` (target render-side
+# decline for fields the OPNsense source CAN populate) plus some
+# `not_applicable` (where the OPNsense source itself doesn't
+# populate, e.g. switchport state / VRF).  Schematically different
+# from the forward pair which is dominated by `not_applicable` —
+# operationally identical though (data not in output regardless).
+
+meta:
+  source_vendor: opnsense
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    NETCONF-target orchestration emitting OpenConfig YANG towards a
+    Cisco IOS-XE device, sourced from an OPNsense firewall config.
+    The cisco_iosxe codec is a Phase-0.5 stub so this pair pushes
+    only interface-level data through to render; for any real
+    perimeter-to-router migration use cisco_iosxe_cli as the
+    target.  This pair primarily exists to demonstrate that the
+    render-side wire-up gap dominates classification on every
+    cross-pair where cisco_iosxe is the target.
+  certainty: medium
+  references:
+    - id: oc-interfaces
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/interface_fields.md
+      title: "openconfig-if-ip YANG schema docs (IPv4 / IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip-v6
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/ipv6_addresses.md
+      title: "openconfig-if-ip YANG schema docs (IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-system
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc-vlan
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/vlan_render_gap.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: oc-network-instance
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/vxlan_evpn_gap.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: oc-evpn
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/vxlan_evpn_gap.md
+      title: "openconfig-evpn YANG model (GitHub)"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-05-01"
+    - id: iosxe-prog-guide
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "Programmability Configuration Guide, Cisco IOS XE 17.15.x — NETCONF Protocol"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/prog/configuration/1715/b_1715_programmability_cg/m_1715_prog_yang_netconf.html"
+      retrieved: "2026-05-01"
+    - id: iosxe-evpn-cg
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/vxlan_evpn_gap.md
+      title: "Catalyst 9000 Series EVPN-VXLAN Configuration Guide"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/switches/lan/catalyst9300/software/release/17-15/configuration_guide/vxlan/b_1715_bgp_evpn_vxlan_9300_cg.html"
+      retrieved: "2026-05-01"
+    - id: cisco-snmp-yang
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/snmp_render_gap.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-05-01"
+    - id: opnsense-interfaces
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/interface_fields.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-05-01"
+    - id: opnsense-vlans
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/vlan_render_gap.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: opnsense-snmp
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/snmp_render_gap.md
+      title: "OPNsense Net-SNMP plugin reference"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-05-01"
+    - id: opnsense-dhcp
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/dhcp_render_gap.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-05-01"
+    - id: opnsense-firewall
+      path: docs/vendor-references/opnsense_to_cisco_iosxe/firewall_unsupported.md
+      title: "OPNsense Firewall manual"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# defined in netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.hostname from
+      `<system>/<hostname>`.  cisco_iosxe target's
+      _render_canonical() emits no `<system>` element regardless of
+      what the canonical tree carries — render is `<interfaces>`-
+      only.  Render-side wire-up gap; the matrix declares
+      `/system/hostname` under `supported` aspirationally but the
+      render path doesn't act on it.  Flips to good when render-
+      side wire-up lands.
+    references: [oc-system, iosxe-prog-guide]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates `<system>/<domain>` into
+      intent.domain.  Same render-side wire-up gap as hostname —
+      cisco_iosxe target render emits no `<system>` element.
+      Flips to good when wire-up lands.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently wire `<system>/<dnsserver>`
+      into canonical intent.dns_servers; the canonical list is
+      empty from this source.  Doubly empty: source doesn't
+      populate AND target render doesn't emit `/system/dns-server`
+      anyway.  Flips to lossy on the source side once OPNsense
+      parse wire-up completes; still gated by target render side.
+    references: [oc-system]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently wire `<system>/<timeservers>`
+      into canonical intent.ntp_servers.  Same as dns_servers —
+      gated on both ends.
+    references: [oc-system]
+
+  timezone:
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently wire `<system>/<timezone>`
+      into canonical intent.timezone.  Once wired, becomes lossy:
+      OPNsense's Olson zoneinfo (`America/Los_Angeles`) versus
+      OpenConfig's IANA tz database identifier are usually
+      symbol-compatible but the cisco_iosxe target render doesn't
+      emit timezone XML anyway.
+    references: [oc-system]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently wire `<system>/<syslog>/<remoteserver>`
+      into canonical intent.syslog_servers.  Same as dns_servers —
+      gated on both ends.
+    references: [oc-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips: OPNsense parser walks
+      zone-keyed `<interfaces>/<wan|lan|optN>` blocks; cisco_iosxe
+      target render emits `<interfaces>/<interface>`.  Per-field
+      drift listed below — name / description / enabled /
+      ipv4_addresses are good; mtu / lag_member_of / IPv6 link-
+      local are lossy or unsupported; switchport / VRF /
+      dhcp_client / interface_type are not_applicable because the
+      OPNsense source never populates them.
+    references: [oc-interfaces, opnsense-interfaces]
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      OPNsense source emits zone label (`wan`/`lan`/`optN`) or BSD
+      device name (`em0`); cisco_iosxe target render emits via the
+      port-rename mesh, mapping OPNsense shape to Cisco speed-
+      encoded form (`GigabitEthernet0/0/0`).  Without the rename
+      mesh, OPNsense zone tags reach Cisco YANG and the device
+      rejects the syntax (zone tags aren't valid IANA ifNames).
+    references: [oc-interfaces, opnsense-interfaces]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trip.  OPNsense parses `<descr>` (no length
+      limit); cisco_iosxe render emits `<config>/<description>`
+      (240-char Cisco truncation applies if the source description
+      is unusually long).
+    references: [opnsense-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      OPNsense empty `<enable/>` element parses to enabled=True;
+      cisco_iosxe render emits `<config>/<enabled>true|false</enabled>`
+      strict YANG bool.
+    references: [opnsense-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't surface a type field — OPNsense
+      doesn't model IANA ifType.  intent.interfaces[].interface_type
+      is empty from this source.  cisco_iosxe target render leaves
+      `<config>/<type>` empty when the canonical hint is empty.
+    references: [oc-interfaces]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      OPNsense source DOES populate intent.interfaces[].mtu from
+      `<mtu>`.  cisco_iosxe target codec lists
+      `/interfaces/interface/config/mtu` under `lossy` in its
+      capability matrix and `_render_canonical()` does NOT emit
+      `<config>/<mtu>` even when the canonical record carries it.
+      Render-side wire-up gap; the MTU value drops on render.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      OPNsense `<ipaddr>` + `<subnet>` (CIDR) parses to
+      CanonicalIPv4Address; cisco_iosxe render emits
+      `<subinterface>/<ipv4>/<addresses>/<address>` with `<config>/<ip>`
+      and `<config>/<prefix-length>`.  Mechanical conversion.
+    references: [oc-if-ip, opnsense-interfaces]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      OPNsense `<ipaddrv6>` + `<subnetv6>` parses to
+      CanonicalIPv6Address (scope=global; OPNsense doesn't model
+      link-local separately — FreeBSD auto-derives from MAC).
+      cisco_iosxe render emits bare `<ip>` + `<prefix-length>`
+      without the OpenConfig `<config>/<type>` enum that would
+      distinguish global / link-local.  For typical "global only"
+      configurations the round-trip is clean; specialised cases
+      lose the scope discriminator on the canonical schema's
+      render side.
+    references: [oc-if-ip-v6]
+
+  "interfaces[].switchport_mode":
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates this field — no switching
+      fabric.  intent.interfaces[].switchport_mode is None from
+      this source.  cisco_iosxe target render also doesn't walk
+      the `openconfig-vlan:switched-vlan` augment regardless.
+    references: [oc-vlan]
+
+  "interfaces[].access_vlan":
+    disposition: not_applicable
+    note: Same as switchport_mode — OPNsense source never populates.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: not_applicable
+    note: Same — OPNsense source never populates.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: not_applicable
+    note: Same — OPNsense source never populates.
+    references: [oc-vlan]
+
+  "interfaces[].voice_vlan":
+    disposition: not_applicable
+    note: >
+      OPNsense base OS has no LLDP-MED voice-VLAN signalling;
+      source never populates this field.
+    references: [oc-vlan]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      OPNsense source DOES populate this field via `<laggs>/<lagg>/<members>`
+      back-link (parser walks the LAG block and sets
+      lag_member_of on each member's CanonicalInterface).
+      cisco_iosxe target render does NOT emit
+      `openconfig-if-aggregate:aggregate-id` or any LAG-membership
+      element under `<ethernet>`.  Render-side wire-up gap; the
+      back-pointer drops on render.
+    references: [oc-interfaces]
+
+  "interfaces[].dhcp_client":
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently wire `<ipaddr>dhcp</ipaddr>`
+      into CanonicalInterface.dhcp_client; intent.dhcp_client is
+      always False from this source.  cisco_iosxe render also
+      doesn't walk OpenConfig DHCP-client augment.
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      OPNsense has no VRF concept; source never populates this
+      field.  cisco_iosxe target render doesn't walk
+      `<network-instances>` regardless.
+    references: [oc-network-instance]
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      OPNsense source DOES populate intent.vlans (id + name from
+      `<vlans>/<vlan>/<tag>` and `<descr>`).  cisco_iosxe target
+      render does NOT emit any `<vlans>` element regardless of
+      what the canonical tree carries.  Render-side wire-up gap
+      for the entire vlan list.  Flips to good (id) / lossy
+      (name collapse) when render-side wire-up lands.
+    references: [oc-vlan, opnsense-vlans]
+
+  "vlans[].id":
+    disposition: unsupported
+    reason: >
+      Same render-side wire-up gap as parent `vlans` — OPNsense
+      source populates from `<tag>`; cisco_iosxe render emits
+      nothing.
+    references: [oc-vlan, opnsense-vlans]
+
+  "vlans[].name":
+    disposition: unsupported
+    reason: >
+      Same render-side wire-up gap.  OPNsense `<descr>` lands in
+      canonical name (per OPNsense parse.py); cisco_iosxe render
+      drops on the cross-pair.
+    references: [oc-vlan, opnsense-vlans]
+
+  "vlans[].description":
+    disposition: not_applicable
+    note: >
+      OPNsense source doesn't populate description separately —
+      `<descr>` lands in canonical name instead.  cisco_iosxe
+      render also doesn't emit description regardless.
+    references: [opnsense-vlans]
+
+  "vlans[].tagged_ports":
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates VLAN-centric port-membership
+      lists — no such concept in OPNsense (every `<vlan>` rides
+      its parent NIC, no per-port toggle).
+    references: [opnsense-vlans]
+
+  "vlans[].untagged_ports":
+    disposition: not_applicable
+    note: Same as tagged_ports — OPNsense source never populates.
+    references: [opnsense-vlans]
+
+  "vlans[].ipv4_addresses":
+    disposition: not_applicable
+    note: >
+      OPNsense's L3 face of a VLAN tag is the zone owning the
+      `<vlanif>` device; OPNsense parser does not currently
+      populate CanonicalVlan.ipv4_addresses (zone-side L3 stays
+      on the interface record instead).
+    references: [opnsense-vlans]
+
+  static_routes:
+    disposition: not_applicable
+    note: >
+      OPNsense parser doesn't currently parse `<gateways>` or
+      `<staticroutes>` into intent.static_routes — the codec
+      hasn't wired the two-block model into canonical.  cisco_iosxe
+      target render also doesn't walk
+      `<network-instances>/<protocols>/<protocol identifier=STATIC>`
+      regardless.  Doubly gated.
+    references: [oc-network-instance]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.dhcp_servers from
+      interface-keyed `<dhcpd>` blocks.  cisco_iosxe target render
+      does NOT emit DHCP server XML regardless — OpenConfig has no
+      widely-deployed DHCP server model in the IOS XE 17.x YANG
+      datastore, and the cisco_iosxe codec is a Phase 0.5 stub
+      that doesn't bridge native YANG modules.  Render-side wire-
+      up gap.
+    references: [opnsense-dhcp]
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.snmp.community / location /
+      contact / trap_hosts from `<snmpd>` (v1/v2c surface).
+      cisco_iosxe target render emits NO `<snmp>` element
+      regardless of what the canonical tree carries.  Render-side
+      wire-up gap; matrix declares /snmp/community etc. under
+      `supported` aspirationally.  v3_users separately
+      not_applicable (OPNsense source never populates — data
+      lives in plugin's snmpd.conf, not config.xml).
+    references: [oc-system, cisco-snmp-yang, opnsense-snmp]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: Render-side wire-up gap. Same as `snmp` above.
+    references: [opnsense-snmp]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: Render-side wire-up gap.
+    references: [opnsense-snmp]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: Render-side wire-up gap.
+    references: [opnsense-snmp]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: Render-side wire-up gap.
+    references: [opnsense-snmp]
+
+  "snmp.v3_users":
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates intent.snmp.v3_users — v3
+      USM data lives in the Net-SNMP plugin's snmpd.conf, NOT in
+      config.xml (per OPNsense codec's /snmp/v3-user unsupported
+      entry).  cisco_iosxe matrix also declares /snmp/v3-user
+      `unsupported` (Phase 0.5 stub; native YANG bridging not
+      covered).  No path to migrate v3 users on this pair, but
+      labelled not_applicable rather than unsupported because
+      the canonical tree is structurally empty.
+    references: [cisco-snmp-yang, opnsense-snmp]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.lags from `<laggs>/<lagg>`
+      blocks (FreeBSD lagg(4) driver).  cisco_iosxe target render
+      does NOT emit `openconfig-if-aggregate` augment or any
+      `<config>/<aggregate-id>` records.  Render-side wire-up
+      gap.
+    references: [oc-interfaces]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.local_users from
+      `<system>/<user>` blocks (with bcrypt hashes).  cisco_iosxe
+      target render does NOT emit `<system>/<aaa>/<authentication>/<users>`
+      records regardless.  Render-side wire-up gap.  Even after
+      wire-up, would be lossy: OPNsense bcrypt hashes don't match
+      Cisco type-5/8/9 hash formats.
+    references: [oc-system]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      OPNsense source populates intent.radius_servers from
+      `<authserver>` records with `<type>radius</type>`.
+      cisco_iosxe target render does NOT emit
+      `<system>/<aaa>/<server-groups>` records regardless.
+      Render-side wire-up gap.
+    references: [oc-system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      OPNsense source never populates — codec matrix declares
+      /vxlan-vnis/vni `unsupported` ("VXLAN not modelled —
+      OPNsense is a firewall codec").  cisco_iosxe target also
+      declares /vxlan-vnis/* `unsupported`.  No data crosses
+      this pair; labelled not_applicable because the canonical
+      tree is structurally empty from this source.
+    references: [oc-evpn, iosxe-evpn-cg]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — OPNsense source has no EVPN
+      surface; canonical list is always empty.
+    references: [oc-evpn]
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      OPNsense has no VRF / routing-instance model; source never
+      populates intent.routing_instances.  cisco_iosxe target also
+      doesn't walk `<network-instances>` regardless.
+    references: [oc-network-instance]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  OPNsense firewall /
+      NAT / VPN / captive-portal blocks could in principle land
+      here as Tier-3 raw text, but the OPNsense parser does not
+      currently route them; cross-pair drops these vendor-private
+      surfaces silently regardless of target render scope.
+    references: [opnsense-firewall]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec doesn't
+      consume it.  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (apply-groups statement preservation per GAP
+      9b).  OPNsense and Cisco codecs do not emit apply_groups;
+      field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The structural framing is high-confidence: the cisco_iosxe
+#     codec's _render_canonical() body is in-tree code that any
+#     reader can verify, and the conclusion that it emits
+#     `<interfaces>` only is verifiable by code inspection.  The
+#     matrix declarations for `<system>`, `<vlans>`, `<routing>`,
+#     `<snmp>` are aspirational — present so cross-codec mesh
+#     translations are friendly, but not backed by the render
+#     implementation.
+#
+#   * The interface canonical-core dispositions (good for name /
+#     description / enabled / ipv4 / ipv6 modulo link-local) are
+#     confidence-high — both codecs agree on the canonical shape,
+#     and the OPNsense certified parser produces records the cisco
+#     render-half handles cleanly.
+#
+#   * The unsupported-on-render dispositions (hostname / domain /
+#     vlans / snmp / lags / local_users / radius_servers /
+#     dhcp_servers / lag_member_of / mtu) are honest about today's
+#     codec state and would flip to good / lossy when render-side
+#     wire-up lands.
+#
+#   * The router/firewall versus router/switch role mismatch
+#     manifests as `not_applicable` here on the source side
+#     (switchport / VRF / VXLAN / EVPN never populated by OPNsense
+#     parse) plus matrix-declared `unsupported` on the target side
+#     for VXLAN — these stay structurally absent regardless of
+#     wire-up state.
+#
+# Deferred items: none with reason="deferred".  Every field is
+# enumerated with a concrete disposition.  The honest classification
+# today is overwhelmingly unsupported for Tier-1/Tier-2 fields the
+# OPNsense source CAN populate but the cisco_iosxe NETCONF render
+# can't emit; this is not a deferred audit question, it's an
+# accurate snapshot of the codec's current behaviour.
