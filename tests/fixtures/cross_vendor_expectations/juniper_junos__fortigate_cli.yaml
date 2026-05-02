@@ -1,0 +1,932 @@
+# Cross-vendor fidelity expectations: juniper_junos -> fortigate_cli
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/juniper_junos_to_fortigate_cli/
+#
+# Reverse-direction sibling of fortigate_cli__juniper_junos.yaml.
+# Per the schema README's "Reverse pairs are independent files" rule,
+# this file authors the dispositions independently rather than
+# mirroring.  Several fields are direction-asymmetric:
+#
+#   * dns_servers: Junos -> FortiGate is lossy (FortiGate caps at
+#     2-3 servers; Junos source can have more).  FortiGate -> Junos
+#     is good (no truncation in that direction).
+#
+#   * syslog_servers: Junos -> FortiGate is lossy (FortiGate caps at
+#     three syslog backends).  FortiGate -> Junos is good.
+#
+#   * VLAN port-membership: Junos -> FortiGate is lossy because the
+#     canonical-VLAN port list cannot be projected onto FortiGate's
+#     child-interface model without synthesising multiple VLAN-child
+#     interfaces (one per VLAN per parent).  FortiGate -> Junos is
+#     also lossy but for the opposite reason (FortiGate parse
+#     populates an empty list).
+#
+#   * apply_groups / group_content: Junos source populates these
+#     (per GAP 9b).  FortiGate has no analogous inheritance
+#     mechanism, so the group structure drops on FortiGate render
+#     but the flattened content survives via the two-pass parse.
+#     Lossy on this direction (group-shape drops; content survives).
+#
+#   * routing_instances: Junos source-side IS wired (GAP 6) so
+#     canonical CanonicalRoutingInstance records DO get populated;
+#     FortiGate render does not consume them, so they drop at the
+#     render boundary.  Lossy on this direction.
+#
+#   * vxlan_vnis: Junos source-side IS wired (GAP-EVPN-2); FortiGate
+#     has no fabric data plane, so cross-pair drops the VXLAN
+#     intent.  Unsupported on this direction (FortiGate side).
+
+meta:
+  source_vendor: juniper_junos
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    Juniper Junos router/switch (MX / QFX / EX / SRX) -> FortiGate
+    firewall edge migration.  Common scenario: replacing a Juniper
+    SRX-as-router or QFX-as-edge with a FortiGate as a converged
+    routing-and-security appliance, often when the Juniper EVPN-VXLAN
+    fabric is being decommissioned in favour of a flatter L3-routed
+    + firewall design.  L3 routing + system services + IP addressing
+    + RADIUS + LAGs translate cleanly with documented per-field
+    caveats.  Junos's EVPN-VXLAN fabric data plane (VNI mappings,
+    Type-5 routes, MAC-VRF, L3 VNI for IRB, switch-options globals)
+    has no FortiGate target — operators accept that tenant separation
+    collapses to FortiGate's VDOM / per-interface-integer-VRF model
+    manually.  Junos firewall filters / policy-statements / BGP /
+    OSPF stanzas drop entirely (canonical schema gap).  apply-groups
+    inheritance flattens via the two-pass parse — group-shape drops
+    on FortiGate render but the inherited content survives.
+  certainty: medium
+  references:
+    - id: junos-iface-naming
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/interfaces.md
+      title: "Junos Understanding Interface Naming Conventions (QFX / EX / MX)"
+      source_url: "https://www.juniper.net/documentation/en_US/junos12.3/topics/concept/interfaces-naming-conventions-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-iface-fundamentals
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/interfaces.md
+      title: "Junos Protocol Family and Interface Address Properties"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html"
+      retrieved: "2026-05-01"
+    - id: junos-family-inet6
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/interfaces.md
+      title: "Junos family inet6 statement reference"
+      source_url: "https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html"
+      retrieved: "2026-05-01"
+    - id: junos-vlans-statement
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vlans.md
+      title: "Junos vlans statement reference (QFX bridging)"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/ref/statement/vlans-bridging-qfx-series.html"
+      retrieved: "2026-05-01"
+    - id: junos-bridging-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vlans.md
+      title: "Junos Bridging and VLANs Overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/bridging-and-vlans-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-static-routing
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/static_routes.md
+      title: "Junos static routing topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/static-routing/topics/topic-map/static-routing-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmp-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/snmp_aaa.md
+      title: "Junos SNMP overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/concept/snmp-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-snmpv3-cg
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/snmp_aaa.md
+      title: "Junos SNMPv3 configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/network-mgmt/topics/topic-map/snmpv3-configuration.html"
+      retrieved: "2026-05-01"
+    - id: junos-radius-cli
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/snmp_aaa.md
+      title: "Junos radius-server statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/radius-server-edit-system.html"
+      retrieved: "2026-05-01"
+    - id: junos-password-cli
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/local_users.md
+      title: "Junos password (Login) CLI reference"
+      source_url: "https://www.juniper.net/documentation//us/en/software/junos/cli-reference/topics/ref/statement/password-edit-system-login.html"
+      retrieved: "2026-05-01"
+    - id: junos-kb-password-format
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/local_users.md
+      title: "Juniper KB31903 — password format SHA512 default in 17.2+"
+      source_url: "https://kb.juniper.net/InfoCenter/index?page=content&id=KB31903"
+      retrieved: "2026-05-01"
+    - id: junos-initial-config
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/system_services.md
+      title: "Junos Initial Configuration topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/system-basics/topics/topic-map/initial-configuration-junos-os.html"
+      retrieved: "2026-05-01"
+    - id: junos-syslog-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/system_services.md
+      title: "Junos syslog overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sys-mgmt/topics/concept/syslog-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-lag-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/lags.md
+      title: "Junos LAG overview topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/multicast-l2/topics/topic-map/lag-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-ae-example
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/lags.md
+      title: "Junos aggregated-Ethernet configuration example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/sampling-forwarding-monitoring/topics/example/lag-aggregated-ethernet-link-configuring.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-server
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/dhcp.md
+      title: "Junos DHCP server topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/topic-map/dhcp-server.html"
+      retrieved: "2026-05-01"
+    - id: junos-dhcp-local-server
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/dhcp.md
+      title: "Junos DHCP local-server overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/dhcp/topics/concept/dhcp-local-server-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-instance-type
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vrf_unsupported.md
+      title: "Junos instance-type statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/instance-type-edit-routing-instances.html"
+      retrieved: "2026-05-01"
+    - id: junos-l3vpn
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vrf_unsupported.md
+      title: "Junos L3 VPN topic-map"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/vpn-l3/topics/topic-map/l3vpns-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN data-center overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn-vxlan/topics/concept/evpn-vxlan-data-center-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-evpn-irb-example
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vxlan_evpn_unsupported.md
+      title: "Junos EVPN-VXLAN Centrally-Routed Bridging Fabric example"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/evpn/topics/example/evpn-vxlan-irb-within-data-center.html"
+      retrieved: "2026-05-01"
+    - id: junos-groups-statement
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/apply_groups.md
+      title: "Junos groups statement reference"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli-reference/topics/ref/statement/groups-edit.html"
+      retrieved: "2026-05-01"
+    - id: junos-config-groups-overview
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/apply_groups.md
+      title: "Junos configuration-groups overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/cli/topics/topic-map/junos-config-groups-overview.html"
+      retrieved: "2026-05-01"
+    - id: junos-firewall-filters
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/firewall_filters_unsupported.md
+      title: "Junos firewall filters / policy-statement overview"
+      source_url: "https://www.juniper.net/documentation/us/en/software/junos/routing-policy/topics/topic-map/firewall-filter-overview.html"
+      retrieved: "2026-05-01"
+    - id: fortios-cli-reference
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/system_services.md
+      title: "FortiGate / FortiOS CLI Reference 7.4 — system global / dns / ntp / log syslogd / clock"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: fortios-admin-guide
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/system_services.md
+      title: "FortiGate / FortiOS Administration Guide 7.4 — system services"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fortios-interface-settings
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/interfaces.md
+      title: "FortiGate / FortiOS Administration Guide — Interface settings"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: fortios-vlan-cookbook
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vlans.md
+      title: "FortiGate / FortiOS Cookbook — VLAN child interfaces and VLAN tagging"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+    - id: fortios-static-routes
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/static_routes.md
+      title: "FortiGate / FortiOS Administration Guide — Routing / Static routes"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fortios-snmp-cli
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/snmp_aaa.md
+      title: "FortiGate / FortiOS CLI Reference — config system snmp sysinfo / community / user"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: fortios-aaa
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/snmp_aaa.md
+      title: "FortiGate / FortiOS Administration Guide — User authentication / config user radius"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fortios-local-users
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/local_users.md
+      title: "FortiGate / FortiOS Administration Guide — System administrators / accprofile"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fortios-dhcp
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/dhcp.md
+      title: "FortiGate / FortiOS Administration Guide — Networking / DHCP server"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+    - id: fortios-lags
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/lags.md
+      title: "FortiGate / FortiOS Administration Guide — Aggregate interfaces (type aggregate / lacp-mode)"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: fortios-vdom
+      path: docs/vendor-references/juniper_junos_to_fortigate_cli/vrf_unsupported.md
+      title: "FortiGate / FortiOS Administration Guide — Virtual Domains (VDOMs) and per-interface VRF"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks intent.py top-down.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Junos's ``set system host-name X`` -> FortiOS's
+      ``config system global / set hostname "X"``.  FortiOS caps
+      hostname at 35 characters; Junos accepts up to 255 — long
+      Junos-source hostnames truncate on FortiGate render.
+    references: [junos-initial-config, fortios-cli-reference]
+
+  domain:
+    disposition: good
+    note: >
+      Junos's ``set system domain-name X`` -> FortiOS's
+      ``config system dns / set domain "X"``.  Same FQDN preserved.
+    references: [junos-initial-config, fortios-cli-reference]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      Junos ``set system name-server X`` accepts arbitrarily many
+      directives; FortiOS schemas DNS into ``set primary`` + ``set
+      secondary`` (and a hidden ``set tertiary``) — at most three
+      servers.  Junos-source configurations with more than three
+      DNS servers will lose the tail on FortiGate render — the
+      FortiGate codec only emits the first two from the canonical
+      list.
+    references: [junos-initial-config, fortios-cli-reference]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Address list itself is preserved.  Junos's per-server options
+      (``prefer`` / ``key`` / ``boot-server`` / ``source-address``)
+      are not modelled in canonical and drop on round-trip.
+      FortiGate emits the list under ``config system ntp / config
+      ntpserver`` with sequential edit IDs.
+    references: [junos-initial-config, fortios-cli-reference]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Junos uses ``set system time-zone America/Los_Angeles`` (Olson
+      zoneinfo names); FortiOS uses a numeric index ``set timezone
+      <NN>`` per the FortiOS Cookbook timezone table.  Cross-vendor
+      migration requires an operator-curated lookup table from
+      Olson zone name to FortiOS numeric index.  The FortiGate codec
+      does not currently parse / render the timezone field, so this
+      lossy disposition is grounded in the schema gap rather than
+      mis-translation.
+    references: [junos-initial-config, fortios-cli-reference]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Junos's ``set system syslog host X any info`` accepts
+      unbounded; FortiOS caps at three syslog backends (``config
+      log syslogd setting`` + ``syslogd2`` / ``syslogd3``).  Lists
+      longer than three drop the tail.  Per-facility / severity
+      tokens are not canonically modelled.
+    references: [junos-syslog-overview, fortios-cli-reference]
+
+  # ── Tier 1 — interfaces ──
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      Junos's media-prefix names (``ge-0/0/0``, ``xe-0/0/0``,
+      ``et-0/0/48``, ``ae0``, ``lo0.0``) carry speed + FPC/PIC/port
+      semantics; FortiGate's flat namespace (``port1``, ``wan1``,
+      ``loopback0``, operator-named ``LAG_<role>``) carries no
+      structural intent.  The port-rename mesh handles the cross-
+      vendor mapping; without operator overrides, the FortiGate
+      render defaults to ``port<N>`` for sequentially-numbered
+      Junos ports.  Junos's per-unit form (``ge-0/0/0 unit 100``)
+      materialises in canonical as a separate child interface
+      named ``ge-0/0/0.100``; FortiGate render must emit a
+      ``config system interface / edit "ge-0-0-0.100"`` (or rename-
+      mesh-mapped child name) with ``type vlan`` and the parent
+      reference.  Names containing slashes are not directly
+      legal on FortiOS — the rename mesh sanitises ``/`` -> ``-``
+      on render.
+    references: [junos-iface-naming, fortios-interface-settings]
+
+  interfaces[].description:
+    disposition: lossy
+    reason: >
+      Junos's ``set interfaces X description "..."`` accepts
+      arbitrary length (no documented cap in practice); FortiOS
+      ``set alias`` caps at 25 characters.  Long Junos descriptions
+      truncate on FortiGate render with a banner.
+    references: [junos-iface-naming, fortios-interface-settings]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      Junos's ``set interfaces X disable`` /
+      ``delete interfaces X disable`` maps to FortiOS's
+      ``set status down`` / ``set status up``.
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      Junos's name-prefix-based detection (``ge-`` / ``xe-`` /
+      ``lo`` -> ethernetCsmacd / softwareLoopback) is heuristic.
+      FortiOS has no IANA ifType — the FortiGate codec capability
+      matrix lists ``/interfaces/interface/config/type`` under lossy
+      and infers from ``set type vlan|aggregate|loopback``.
+      Aggregation and loopback survive; tunnel / management
+      subtypes drift.
+    references: [junos-iface-naming, fortios-interface-settings]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      Junos's ``set interfaces X mtu N`` (parent scope) maps to
+      FortiOS's ``set mtu-override enable / set mtu N``.  Both
+      accept integer MTU.
+
+  interfaces[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      Junos's ``set ... family inet address A.B.C.D/N`` (multiple
+      ``set address`` lines per unit allowed) parses to canonical
+      ``CanonicalIPv4Address`` records; FortiGate render emits only
+      the primary address as ``set ip A.B.C.D MASK`` (mask form).
+      FortiOS supports a ``set secondary-IP enable`` + nested
+      ``config secondaryip`` table for additional addresses, but
+      the FortiGate codec does not emit them in v1.  Multi-address
+      Junos source therefore loses the tail on FortiGate render.
+    references: [junos-iface-fundamentals, fortios-interface-settings]
+
+  interfaces[].ipv6_addresses:
+    disposition: lossy
+    reason: >
+      Junos's ``family inet6`` form preserves scope (link-local
+      auto-detected by ``fe80::/10`` prefix); FortiOS ``set
+      ip6-address X/N`` preserves the prefix bits but the
+      ``scope=link-local`` discriminator may not survive round-
+      trip if the FortiGate codec normalises.  Single-address
+      surface round-trips; multi-address (multiple ``set address``
+      lines on Junos) drops to first on FortiGate render.
+    references: [junos-family-inet6, fortios-interface-settings]
+
+  interfaces[].switchport_mode:
+    disposition: unsupported
+    reason: >
+      Junos's ``family ethernet-switching interface-mode access |
+      trunk`` is parsed by the Junos codec into canonical
+      ``switchport_mode``; FortiGate has no L2 surface to land it
+      on — FortiGate is a firewall codec with hardware-switch
+      support only on entry-level FGT models, and the canonical
+      switchport surface is not wired through to FortiGate render.
+      Junos -> FortiGate render therefore emits routed-port-only
+      configurations regardless of the Junos source's
+      ethernet-switching intent.
+    references: [junos-vlans-statement, fortios-interface-settings]
+
+  interfaces[].access_vlan:
+    disposition: unsupported
+    reason: >
+      Same model gap as switchport_mode — FortiGate has no
+      per-interface access-VLAN canonical render.  The Junos
+      ``set ... vlan members <name>`` (single member) intent
+      drops on FortiGate render; operators reconstruct as
+      ``edit "port4" / set type ... / set ip ...`` plus a
+      ``edit "port4.<vlanid>" / set type vlan / set vlanid N``
+      child.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: unsupported
+    reason: >
+      Same as access_vlan; FortiGate has no canonical trunk-allowed
+      surface.  Junos ``vlan members [ v100 v200 ]`` drops on
+      FortiGate render; operators must synthesise multiple VLAN-
+      child interfaces (one per VLAN per parent) manually.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  interfaces[].trunk_native_vlan:
+    disposition: unsupported
+    reason: >
+      Junos's ``native-vlan-id N`` (parent-scope) drops on
+      FortiGate render — FortiGate's child-interface model has no
+      analogue (untagged-frame VLAN binding lives on the parent's
+      own routed config).
+    references: [junos-vlans-statement]
+
+  interfaces[].voice_vlan:
+    disposition: not_applicable
+    note: >
+      Junos has no first-class voice-VLAN construct (LLDP-MED
+      voice advertisement uses different semantics); the canonical
+      ``voice_vlan`` is always None after Junos parse.  FortiGate
+      target receives no voice-VLAN intent.
+    references: [junos-vlans-statement]
+
+  interfaces[].lag_member_of:
+    disposition: good
+    note: >
+      Junos's ``set interfaces X gigether-options 802.3ad ae<N>``
+      (or ``ether-options``) parses to ``CanonicalInterface
+      .lag_member_of = ae<N>``; FortiGate render emits the member
+      as a ``set member "<X>"`` entry under the renamed
+      ``edit "<lagname>"`` aggregate.
+    references: [junos-lag-overview, fortios-lags]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      Junos's ``set interfaces X unit 0 family inet dhcp`` parses
+      to ``dhcp_client=True``; FortiGate render emits ``set mode
+      dhcp`` (replacing ``set ip``).  Marked lossy rather than good
+      because Junos's IPv6 DHCP / RA / SLAAC alternatives are not
+      modelled canonically and drop.
+    references: [junos-iface-fundamentals, fortios-interface-settings]
+
+  interfaces[].vrf:
+    disposition: unsupported
+    reason: >
+      Junos source side has the path supported (GAP 6) — the codec
+      parses ``set routing-instances X interface ge-0/0/0.0`` and
+      synthesises ``CanonicalInterface.vrf = X``.  FortiGate codec
+      capability matrix does not advertise VRF render in v1
+      (per-interface integer VRF in FortiOS 7.0+ is not wired).
+      More fundamentally, FortiGate's integer-keyed VRF model has
+      no name to bind to.  Cross-pair render therefore emits no
+      ``set vrf <id>`` line on the FortiGate target regardless of
+      the Junos source's per-interface VRF intent.
+    references: [junos-instance-type, fortios-vdom]
+
+  # ── Tier 1 — VLANs ──
+
+  vlans[].id:
+    disposition: good
+    note: >
+      Junos's ``set vlans <name> vlan-id N`` -> FortiGate's
+      ``edit "<name>" / set type vlan / set vlanid N``.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      Junos VLAN names allow letters, digits, hyphens, periods only
+      (up to 255 chars); FortiGate VLAN-child interface names
+      become the canonical name verbatim — Junos names containing
+      hyphens / dots are FortiGate-legal but the FortiGate edit-ID
+      conventions favour underscores.  Round-trip preserves the
+      string but operators may rename for FortiGate readability.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Junos's ``set vlans <name> description X`` is parsed by the
+      Junos codec but FortiGate has no first-class VLAN description
+      (only the child-interface alias, which doubles as VLAN name).
+      Description drops with a banner on FortiGate render.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  vlans[].tagged_ports:
+    disposition: lossy
+    reason: >
+      Junos's per-interface ``family ethernet-switching vlan
+      members <name>`` flattens to the canonical VLAN-centric
+      ``tagged_ports`` list.  FortiGate's child-interface model
+      cannot consume this list directly: each (VLAN x parent)
+      pair would require a synthesised ``edit "<parent>.<vlanid>"
+      / set type vlan / set vlanid N / set interface "<parent>"``
+      child interface.  v1 render does not perform this synthesis
+      — operators reconstruct manually post-migration.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  vlans[].untagged_ports:
+    disposition: lossy
+    reason: >
+      Same model gap as tagged_ports — FortiGate has no port-list-
+      per-VLAN render.  ``access`` mode VLANs (single untagged
+      member per port on Junos) cannot project onto FortiGate
+      without synthesising hardware-switch members or per-VLAN
+      child interfaces.
+    references: [junos-vlans-statement, fortios-vlan-cookbook]
+
+  vlans[].ipv4_addresses:
+    disposition: good
+    note: >
+      Junos's ``set interfaces irb unit 100 family inet address
+      X/N`` + ``set vlans <name> l3-interface irb.100`` flattens
+      on parse to ``CanonicalVlan.ipv4_addresses``.  FortiGate
+      render emits the SVI as a VLAN-child interface
+      ``edit "<vlanname>" / set vlanid N / set ip A.B.C.D MASK``.
+    references: [junos-bridging-overview, fortios-vlan-cookbook]
+
+  # ── Tier 1 — static routes ──
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF static routes round-trip cleanly.  Junos's
+      ``set routing-options static route 0.0.0.0/0 next-hop X``
+      -> FortiGate's ``config router static / edit N / set dst
+      0.0.0.0 0.0.0.0 / set gateway X`` (codec converts CIDR to
+      dotted-mask on render).  Junos's ``qualified-next-hop``
+      (multi-NH preference) flattens to multiple canonical entries
+      with different metrics; FortiGate distance / AD-ordering
+      semantics differ from Junos preference, so the integer
+      preserves but its meaning differs.  Per-VRF static routes
+      (``set routing-instances X routing-options static route
+      ...``) are parse-and-ignore in v1 (CanonicalStaticRoute
+      lacks a vrf field).  ``description`` field not rendered
+      (FortiGate has no comment surface on ``edit N`` static
+      routes in v1 codec).
+    references: [junos-static-routing, fortios-static-routes]
+
+  # ── Tier 2 — DHCP server ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Junos's split ``dhcp-local-server`` + ``access address-
+      assignment pool`` model flattens on parse to a single
+      CanonicalDHCPPool record per pool.  FortiGate's interface-
+      bound model (``config system dhcp server / edit N / set
+      interface "X"``) re-renders directly — but the FortiGate
+      render must look up the interface owning each pool's network
+      because Junos pools are not directly interface-scoped.
+      Basic pools round-trip; advanced options (option 43 / 60 /
+      66 / 150) are not modelled canonically.  Junos's multi-range
+      ``range low/high`` form drops to the first range only on
+      FortiGate render (FortiGate supports multiple ranges via
+      ``config ip-range`` but the canonical model has a single
+      start/end pair).
+    references: [junos-dhcp-server, junos-dhcp-local-server, fortios-dhcp]
+
+  # ── Tier 2 — SNMP ──
+
+  snmp.community:
+    disposition: good
+    note: >
+      Junos's ``set snmp community X authorization read-only`` ->
+      FortiGate's ``config system snmp community / edit N / set
+      name "X"``.  Single canonical community scalar; Junos source
+      with multiple communities loses tail on canonical-side (Junos
+      codec parses only the first into the scalar).
+    references: [junos-snmp-overview, fortios-snmp-cli]
+
+  snmp.location:
+    disposition: good
+    note: >
+      Junos's ``set snmp location "..."`` -> FortiOS's
+      ``config system snmp sysinfo / set location "..."``.
+    references: [junos-snmp-overview, fortios-snmp-cli]
+
+  snmp.contact:
+    disposition: good
+    note: >
+      Junos's ``set snmp contact "..."`` -> FortiOS's
+      ``set contact-info "..."``.
+    references: [junos-snmp-overview, fortios-snmp-cli]
+
+  snmp.trap_hosts:
+    disposition: good
+    note: >
+      Junos's ``set snmp trap-group <name> targets X`` (multiple
+      targets per named group) flattens to canonical
+      ``trap_hosts: list[str]``; FortiGate render emits one
+      ``edit N / set ip "X 255.255.255.255"`` per address under
+      ``config system snmp community / config hosts``.  Junos
+      trap-group versioning (``version v2``) drops; FortiGate
+      defaults to v2c.
+    references: [junos-snmp-overview, fortios-snmp-cli]
+
+  snmp.v3_users:
+    disposition: lossy
+    reason: >
+      USM username / group / auth-protocol / priv-protocol round-
+      trip cleanly via the canonical CanonicalSNMPv3User schema.
+      Auth-protocol enum coercion: Junos's ``authentication-md5``
+      / ``-sha`` / ``-sha224`` / ``-sha256`` map to FortiOS's
+      ``auth-proto md5 | sha | sha224 | sha256 | sha384 |
+      sha512``.  Auth/priv passphrases do NOT cross-decrypt:
+      Junos uses ``$9$...`` reversible-encrypted blobs, FortiOS
+      uses ``ENC <opaque-base64>`` form.  Operator must re-key
+      v3 users on the target after migration.  Junos's richer
+      VACM access plumbing (security-to-group, access, view)
+      flattens to a default-group on FortiGate render.
+    references: [junos-snmpv3-cg, fortios-snmp-cli]
+
+  # ── Tier 2 — LAGs ──
+
+  lags:
+    disposition: lossy
+    reason: >
+      Junos's ``ae<N>`` integer-keyed form -> FortiGate's
+      operator-named aggregate (``LAG_<role>`` / ``agg<N>``).
+      The canonical LAG name preserves the Junos ``ae<N>`` string;
+      FortiGate render keeps it verbatim by default unless the
+      rename mesh maps to an operator-friendly name.  Members
+      preserve via the rename mesh applied to each member name.
+      LACP modes: Junos's ``lacp active`` / ``passive`` map cleanly
+      to FortiGate's ``lacp-mode active`` / ``passive`` / ``static``
+      (Junos has no PAgP analogue).  Junos's chassis-wide
+      ``aggregated-devices ethernet device-count N`` drops on
+      FortiGate render (FortiGate auto-allocates).
+    references: [junos-lag-overview, junos-ae-example, fortios-lags]
+
+  # ── Tier 2 — local users ──
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Junos's named ``class super-user / operator / read-only``
+      and FortiGate's named accprofile strings (``super_admin`` /
+      ``prof_admin`` / ``super_admin_readonly`` / custom) require
+      operator-curated mapping.  Junos codec preserves the
+      class string in canonical ``role``; FortiGate render maps
+      ``super-user`` -> ``super_admin``, others -> ``prof_admin``
+      (privilege 1) by default.  Hash formats are NOT cross-
+      compatible: Junos uses ``$1$`` (MD5) / ``$5$`` (SHA-256) /
+      ``$6$`` (SHA-512, default since 17.2) and ``ssh-rsa`` keys;
+      FortiOS uses its own proprietary ``ENC <base64>`` form.
+      Cross-vendor migration of admin accounts therefore requires
+      re-setting passwords on the target device.  ``ssh-rsa`` SSH
+      keys (Junos ``set system login user X authentication ssh-rsa
+      "..."``) are not canonically modelled and drop.  Both codecs
+      preserve hashes verbatim with vendor tags so the loss
+      surfaces in the validation report.
+    references: [junos-password-cli, junos-kb-password-format, fortios-local-users]
+
+  # ── Tier 2 — RADIUS ──
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port preserve cleanly.  Junos's ``set system
+      radius-server X port N secret "<encrypted>"`` -> FortiGate's
+      ``config user radius / edit "<name>" / set server "X" / set
+      secret ENC <...> / set radius-port N``.  Junos's IP-keyed
+      form requires synthesising a name on FortiGate render
+      (canonical preserves the IP as the host; FortiGate render
+      synthesises ``radius-<sequence>``).  Shared-secret
+      incompatible: Junos's ``$9$...`` and FortiOS's ``ENC <...>``
+      do NOT cross-decrypt; operator must re-set the shared secret
+      on the target.  Acct-port: Junos has a separate ``accounting-
+      port`` field; FortiGate has no separate field (canonical
+      defaults to 1813), so non-default Junos source values drop.
+    references: [junos-radius-cli, fortios-aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Junos codec capability matrix lists ``/vxlan-vnis/vni``,
+      ``/vxlan-vnis/source-interface``, and ``/vxlan-vnis/udp-port``
+      under supported (GAP 6 + GAP-EVPN-2 wired).  FortiGate codec
+      capability matrix lists the same paths under unsupported with
+      rationale "VXLAN not modelled — FortiGate is a firewall
+      codec".  Cross-pair therefore drops the VXLAN intent at the
+      FortiGate render boundary regardless of how rich the Junos
+      source's EVPN-VXLAN fabric was.  FortiOS does support VXLAN
+      tunnel interfaces for limited SD-WAN scenarios but no EVPN
+      control plane — operators wanting to retain fabric data plane
+      must keep a Junos / Cisco / Arista EVPN target rather than
+      collapsing to FortiGate.
+    references: [junos-evpn-overview, junos-evpn-irb-example]
+
+  vxlan_vnis[].vlan_id:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  vxlan_vnis[].vni:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  vxlan_vnis[].mcast_group:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  vxlan_vnis[].flood_list:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  vxlan_vnis[].source_interface:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  vxlan_vnis[].udp_port:
+    disposition: unsupported
+    reason: "Same as vxlan_vnis (FortiGate has no VXLAN render in v1)."
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list ``/evpn-type5-routes/route`` under lossy
+      with rationale that EVPN Type-5 is a VRF-property model
+      (``CanonicalRoutingInstance.l3_vni``) rather than per-prefix
+      records; no codec populates the per-prefix list today.
+      Effectively unsupported on the cross-pair: FortiGate has no
+      EVPN data plane.  Even if Type-5 were populated, FortiGate
+      could not consume it.
+    references: [junos-evpn-overview]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Junos codec capability matrix lists
+      ``/routing-instances/instance`` under supported (GAP 6
+      wired); the Junos source populates CanonicalRoutingInstance
+      records with name / instance-type / RD / RT / interface
+      bindings.  FortiGate codec does not advertise VRF render in
+      v1 — per-interface integer VRF (FortiOS 7.0+) is unwired,
+      and VDOMs are a heavier multi-tenancy primitive that doesn't
+      map 1:1 (independent firewall tables, address objects, admin
+      sessions).  Cross-pair render produces no VRF binding on the
+      FortiGate target regardless of how richly the Junos source
+      modelled tenant separation.
+    references: [junos-instance-type, junos-l3vpn, fortios-vdom]
+
+  routing_instances[].name:
+    disposition: unsupported
+    reason: "Same as routing_instances (FortiGate render-side wire-up deferred)."
+
+  routing_instances[].instance_type:
+    disposition: unsupported
+    reason: >
+      Junos models a richer enum (``vrf``, ``virtual-router``,
+      ``mac-vrf``, ``l2vpn``, ``evpn``); FortiGate has no per-VRF
+      instance-type discriminator.  Junos source with non-``vrf``
+      instance-type cannot be represented faithfully on FortiGate
+      — particularly mac-vrf / l2vpn / evpn which are L2-fabric
+      constructs FortiGate doesn't model at all.  Compounded by the
+      underlying FortiGate render-side wire-up gap.
+    references: [junos-instance-type]
+
+  routing_instances[].route_distinguisher:
+    disposition: unsupported
+    reason: "Same as routing_instances (FortiGate render-side wire-up deferred)."
+
+  routing_instances[].rt_imports:
+    disposition: unsupported
+    reason: >
+      Junos's ``vrf-target target:...`` shorthand (single-RT)
+      flattens to canonical rt_imports + rt_exports; asymmetric
+      import/export configured via Junos ``policy-statement`` is
+      not modelled.  FortiGate render-side wire-up also deferred.
+    references: [junos-instance-type]
+
+  routing_instances[].rt_exports:
+    disposition: unsupported
+    reason: "Same as rt_imports (policy-statement asymmetry; FortiGate render-side wire-up deferred)."
+
+  routing_instances[].description:
+    disposition: unsupported
+    reason: "Same as routing_instances (FortiGate render-side wire-up deferred)."
+
+  routing_instances[].l3_vni:
+    disposition: unsupported
+    reason: >
+      Junos's ``protocols evpn ip-prefix-routes vni N`` under the
+      routing-instance maps to canonical
+      ``CanonicalRoutingInstance.l3_vni``.  FortiGate has no L3
+      VNI / Type-5 surface to land it on; cross-pair render
+      drops the L3 VNI at the FortiGate render boundary.
+    references: [junos-evpn-irb-example]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Junos's
+      raw_sections content captures unrecognised
+      ``protocols / policy-options / firewall`` set-form lines
+      (BGP / OSPF / IS-IS / MPLS / firewall filters); FortiGate's
+      would capture ``config firewall policy`` / ``config vpn
+      ipsec`` / ``config wireless-controller`` / etc.  Cross-vendor
+      migration drops the section with a banner.
+    references: [junos-firewall-filters]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; informational only."
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: lossy
+    reason: >
+      Junos's ``set apply-groups <G>`` configuration-inheritance
+      mechanism populates canonical ``apply_groups`` (per GAP 9b
+      two-pass parse).  FortiGate has no analogous structure —
+      the group-shape (the apply-groups statement itself, the
+      ``set groups <G> ...`` content blocks) drops on FortiGate
+      render.  However, GAP 8's two-pass parse flattens the
+      inherited content INTO the top-level canonical fields
+      (interfaces, system, etc.) before render, so the SEMANTIC
+      content survives — only the inheritance-structure drops.
+      A validation banner notes the loss.
+    references: [junos-groups-statement, junos-config-groups-overview]
+
+  group_content:
+    disposition: lossy
+    reason: >
+      Companion to apply_groups — Junos parser preserves the
+      original group-scoped set-line tails for same-vendor
+      round-trip.  FortiGate render does not consume the
+      group_content dict; the per-group set-line tails drop.
+      The flattened content (post-GAP-8 two-pass parse) survives
+      in the top-level canonical fields, so semantic intent is
+      not lost — only the group-shape attribution.
+    references: [junos-groups-statement, junos-config-groups-overview]
+
+# ---------------------------------------------------------------------------
+# Notes on confidence and deferred items
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * Shared scalar surface (hostname / domain / dns / ntp / syslog /
+#     RADIUS / SNMP v1+v2c / static-routes / IPv4-IPv6 + MTU / LAGs)
+#     is high-confidence.  Junos TechLibrary and FortiOS CLI Reference
+#     are unambiguous; both codecs round-trip the canonical fields on
+#     real-capture fixtures today.
+#
+#   * Junos source-side wire-up of routing-instances / VRF / VXLAN
+#     (GAP 6 + GAP-EVPN-2) means the canonical tree IS populated for
+#     this direction; the loss is concentrated on the FortiGate render
+#     boundary which has no fabric data plane.
+#
+#   * Switching features (switchport_mode / access_vlan / trunk_*)
+#     are confidently unsupported in this direction — Junos populates
+#     the canonical L2 fields but FortiGate has no canonical render
+#     path.  VLAN port-membership requires synthesising multiple
+#     VLAN-child interfaces (one per VLAN per parent) which is
+#     unwired in v1.
+#
+#   * apply-groups is direction-asymmetric: lossy on this direction
+#     (group-shape drops; content survives via two-pass parse),
+#     not_applicable on FortiGate -> Junos (FortiGate source never
+#     populates).
+#
+#   * Hash-format incompatibility (Junos $1$/$5$/$6$ + $9$ vs FortiOS
+#     ENC) and SNMPv3 USM passphrase non-portability are well-
+#     documented.
+#
+#   * Firewall / NAT / VPN / IPsec / UTM / VDOM surfaces are
+#     confidently unsupported (canonical schema gap; out of v1
+#     scope).  The FortiGate render emits no firewall policy / VIP /
+#     NAT rules.
+#
+#   * Junos firewall filters / policy-statements / BGP / OSPF / MPLS
+#     are confidently unsupported (Junos codec parse-and-ignore in
+#     v1; canonical schema gap).
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes — schema gap on CanonicalStaticRoute
+#     (no vrf field).  Lands alongside FortiGate VRF wire-up.
+#
+#   * Junos policy-statement plumbing for asymmetric VRF
+#     import/export RTs — flattens to single rt_imports/rt_exports
+#     pair canonically.
+#
+#   * Junos VLAN-aware bridge mode (alternative ``bridge-domains``
+#     hierarchy used on some QFX/MX deployments) — codec parses
+#     both shapes but renders to the conventional ``vlans`` form.
+#
+#   * Junos SSH-key-based authentication (``set system login user
+#     X authentication ssh-rsa "..."``) — not in canonical model;
+#     drops on FortiGate render.
+#
+#   * TACACS+ — no canonical model in v1.
+#
+#   * Cross-vendor secondary-IP preservation — FortiGate codec
+#     does not emit secondary IPs in v1; Junos source with stacked
+#     ``set address`` lines drops to the first.
