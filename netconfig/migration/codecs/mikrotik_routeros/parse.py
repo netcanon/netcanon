@@ -248,6 +248,12 @@ def _parse_kv(line: str) -> dict[str, str]:
 
 
 _FIND_DEFAULT_NAME_RE = re.compile(r"\[\s*find\s+default-name=(\S+)\s*\]")
+# Cross-vendor render path emits ``[ find name=X ]`` against the
+# canonical name when no ``default_name`` was tracked; we need to
+# accept both forms on the parse side so round-trips don't drop the
+# row.  Quoted names (``[ find name="ge-0/0/1" ]``) need the value
+# extracted without the surrounding quotes.
+_FIND_NAME_RE = re.compile(r'\[\s*find\s+name=(?:"([^"]*)"|(\S+?))\s*\]')
 
 
 def _parse_system_identity(lines: list[str], intent: CanonicalIntent) -> None:
@@ -299,23 +305,51 @@ def _parse_interface_ethernet(
     for line in lines:
         if not line.startswith("set"):
             continue
+        # Two find-clause forms accepted: ``[ find default-name=X ]``
+        # (the MikroTik factory-port lookup) and ``[ find name=X ]``
+        # (the cross-vendor render path's fallback when no
+        # ``default_name`` was tracked).  The latter never sets
+        # ``default_name`` on the resulting CanonicalInterface,
+        # preserving round-trip equality for sources like Junos
+        # ``ge-0/0/1`` or OPNsense ``wan`` whose names don't match
+        # the MikroTik factory shape.
         fm = _FIND_DEFAULT_NAME_RE.search(line)
-        if not fm:
+        nm = _FIND_NAME_RE.search(line) if fm is None else None
+        if fm is None and nm is None:
             continue
-        default_name = fm.group(1)
+        if fm is not None:
+            default_name = fm.group(1)
+            canonical_default = default_name
+        else:
+            default_name = ""
+            # _FIND_NAME_RE: group(1) is the quoted form, group(2) the bare.
+            canonical_default = nm.group(1) if nm.group(1) is not None else nm.group(2)
         kv = _parse_kv(line)
-        canonical_name = kv.get("name", default_name)
+        canonical_name = kv.get("name", canonical_default)
         iface = iface_by_name.get(canonical_name)
         if iface is None:
+            # Only the ``default-name=`` form implies the iface is a
+            # MikroTik factory ethernet port - that's the find clause
+            # that only resolves on a real device.  The ``name=`` form
+            # is the cross-vendor fallback and carries no such
+            # implication; defer to ``_infer_iface_type_from_name`` so
+            # an iface named ``eth3_vlan1`` (created by ``/ip address``
+            # in the first pass with empty ``interface_type``) doesn't
+            # gain a synthetic type on the second pass.
+            inferred_type = (
+                "ianaift:ethernetCsmacd"
+                if fm is not None
+                else _infer_iface_type_from_name(canonical_name)
+            )
             iface = CanonicalInterface(
                 name=canonical_name,
                 default_name=default_name,
-                interface_type="ianaift:ethernetCsmacd",
+                interface_type=inferred_type,
             )
             iface_by_name[canonical_name] = iface
         else:
             # Merge default_name if we hadn't captured it yet.
-            if not iface.default_name:
+            if not iface.default_name and default_name:
                 iface.default_name = default_name
         if "comment" in kv:
             iface.description = kv["comment"]
@@ -837,6 +871,62 @@ def _is_ethernet_name(name: str) -> bool:
 def _is_vlan_name(name: str) -> bool:
     """Does this name look like a VLAN interface?"""
     return bool(re.match(r"^vlan\d", name, re.IGNORECASE))
+
+
+# ---------------------------------------------------------------------------
+# Cross-vendor name classifiers
+# ---------------------------------------------------------------------------
+#
+# When a CanonicalIntent originates from a non-MikroTik codec the
+# interface ``name`` is whatever the source vendor minted (``wan``,
+# ``lan``, ``ge-0/0/0``, ``GigabitEthernet0/0/0``, ``Loopback0`` ...)
+# and ``default_name`` is empty.  The render path needs a way to
+# decide which interfaces belong inside which RouterOS section
+# (``/interface vlan``, ``/interface bridge``, ``/interface bonding``,
+# ``/interface ethernet``).  ``_is_vlan_name`` / ``_is_ethernet_name``
+# above are MikroTik-shaped; the helpers below are intentionally
+# permissive cross-vendor classifiers used as exclusion filters in
+# the renderer.
+
+
+def _looks_like_vlan_iface(name: str) -> bool:
+    """Permissive: name looks like a VLAN/SVI interface from any vendor.
+
+    Matches MikroTik ``vlanN`` form, generic ``vlan*`` names, and the
+    Junos/IOS-style subinterface unit form (``ge-0/0/0.10``,
+    ``Vlan100``, ``irb.0``).
+    """
+    if not name:
+        return False
+    if re.match(r"^vlan", name, re.IGNORECASE):
+        return True
+    # Subinterface unit form: anything with a dot followed by digits.
+    # Junos `ge-0/0/0.10`, IOS `GigabitEthernet0/0/0.100`, etc.
+    if re.search(r"\.\d+$", name):
+        return True
+    return False
+
+
+def _looks_like_bridge_iface(name: str) -> bool:
+    """Permissive: name looks like a bridge interface from any vendor."""
+    if not name:
+        return False
+    return bool(re.match(r"^(bridge|br\d)", name, re.IGNORECASE))
+
+
+def _looks_like_lag_iface(name: str) -> bool:
+    """Permissive: name looks like a LAG/port-channel interface.
+
+    Covers MikroTik ``bondN``, Cisco ``Port-channelN`` /
+    ``port-channelN`` / ``PoN``, ArubaOS-S ``trkN`` / ``TrkN``,
+    and Junos aggregated ethernet ``aeN``.
+    """
+    if not name:
+        return False
+    return bool(
+        re.match(r"^(bond\d|port-channel\d|po\d|trk\d|ae\d)",
+                 name, re.IGNORECASE)
+    )
 
 
 def _infer_iface_type_from_name(name: str) -> str:

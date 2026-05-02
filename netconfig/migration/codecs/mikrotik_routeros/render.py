@@ -29,7 +29,13 @@ from typing import Any
 
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ..base import RenderError
-from .parse import _is_ethernet_name, _is_vlan_name
+from .parse import (
+    _is_ethernet_name,
+    _is_vlan_name,
+    _looks_like_bridge_iface,
+    _looks_like_lag_iface,
+    _looks_like_vlan_iface,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -83,26 +89,65 @@ def render_intent(tree: Any) -> str:
         lines.append("")
 
     # ----- /interface ethernet (tweaks to default ports) -----
+    # Filter by exclusion rather than by MikroTik-shape match.
+    # When the source intent comes from a non-MikroTik codec the
+    # interface name is the source vendor's native name (`wan`,
+    # `lan`, `ge-0/0/0`, `GigabitEthernet0/0/0`, `Loopback0`,
+    # `irb`, ...) and `default_name` is empty.  The previous
+    # `_is_ethernet_name` filter required `^ether\d`, so all of
+    # those non-conforming names dropped out of the render and
+    # their description/mtu/enabled/dhcp_client state never made
+    # it onto the wire.  Surfaced as a top-rank Phase-4 finding
+    # across the juniper_junos / opnsense / cisco_iosxe -> mikrotik
+    # cross-vendor matrix.  Loopback / Tunnel emission still has
+    # a gap (RouterOS expresses those as bridge / ovpn-server /
+    # gre, not ethernet) but the broadened filter at least
+    # carries the interface name forward instead of silently
+    # dropping the whole row.  The /interface vlan, /interface
+    # bridge and /interface bonding sections below own their
+    # own ifaces so we exclude those by name shape.
     ethernet_ifaces = [
         i for i in tree.interfaces
-        if _is_ethernet_name(i.name) or _is_ethernet_name(i.default_name)
-        or (i.interface_type == "ianaift:ethernetCsmacd" and i.default_name)
+        if not _looks_like_vlan_iface(i.name)
+        and not _looks_like_bridge_iface(i.name)
+        and not _looks_like_lag_iface(i.name)
+        and i.interface_type != "ianaift:bridge"
+        and i.interface_type != "ianaift:ieee8023adLag"
+        and i.interface_type != "ianaift:l3ipvlan"
     ]
     if ethernet_ifaces:
         lines.append("/interface ethernet")
         for iface in ethernet_ifaces:
-            # Find key: prefer default_name (factory default, matches
-            # what the device finds by default-name=) falling back to
-            # the canonical name when no default_name was tracked.
-            find_key = iface.default_name or iface.name
-            parts = [f"set [ find default-name={find_key} ]"]
+            # Find clause: prefer the MikroTik factory ``default-name=``
+            # form when we know the original factory port name - either
+            # because parse captured it on a ``set [ find default-name=X ]``
+            # line, or because the canonical name itself follows the
+            # MikroTik ``etherN`` shape (in which case ``default-name``
+            # is the right thing for the device to look up).  When
+            # ``default_name`` is empty AND the name doesn't match the
+            # factory shape - the common case for cross-vendor sources
+            # whose interface names came from Junos / OPNsense / Cisco -
+            # emit ``[ find name=X ]`` against the canonical name
+            # instead.  Using ``default-name`` in that branch would
+            # cause a round-trip to synthesise a spurious
+            # ``default_name`` field on the second parse pass.
+            use_default_name_form = bool(iface.default_name) or _is_ethernet_name(iface.name)
+            if use_default_name_form:
+                find_key = iface.default_name or iface.name
+                parts = [f"set [ find default-name={find_key} ]"]
+                # Emit the renamed name only when it differs from
+                # the factory default-name - avoids a noisy no-op
+                # `name=ether1` on otherwise-default ports.
+                if iface.name != find_key:
+                    parts.append(
+                        f"name={_quote_if_needed(iface.name)}"
+                    )
+            else:
+                parts = [
+                    f"set [ find name={_quote_if_needed(iface.name)} ]"
+                ]
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
-            # Emit the renamed name only when it differs from the
-            # factory default-name — avoids a noisy no-op
-            # `name=ether1` on otherwise-default ports.
-            if iface.name != find_key:
-                parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"disabled={_yes_no(not iface.enabled)}")
             if iface.mtu is not None:
                 parts.append(f"mtu={iface.mtu}")
