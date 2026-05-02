@@ -136,3 +136,59 @@ roadmap.
   every committed real-capture fixture.
 * `tests/unit/audit/test_run_full_mesh.py` — unit tests pinning the
   drift-computation building blocks.
+
+## `run_phase4_reconciliation.py` — Phase 4a reconciliation
+
+Joins the Phase 1 mechanical drift JSON
+(`tests/fixtures/real/_cross_mesh_runs/<timestamp>.json`) with the
+Phase 3 vendor-doc-grounded expectation YAMLs
+(`tests/fixtures/cross_vendor_expectations/<src>__<tgt>.yaml`) to
+produce a per-cell variance classification.  Each canonical field's
+**actual** disposition (preserved vs drifted, from Phase 1) is
+reconciled against its **expected** disposition (good / lossy /
+unsupported / not_applicable, from Phase 3) and bucketed into one of:
+
+| Variance class            | Meaning                                                       | Severity |
+|---------------------------|---------------------------------------------------------------|----------|
+| `ALIGNED`                 | preserved + expected good                                     | ok       |
+| `EXPECTED_LOSSY`          | drifted + expected lossy (matches docs)                       | ok       |
+| `EXPECTED_UNSUPPORTED`    | drifted + expected unsupported (matches docs)                 | ok       |
+| `METHODOLOGY_ISSUE_under` | preserved against {lossy/unsupported/N-A} expectation         | low/medium |
+| `METHODOLOGY_ISSUE_over`  | drifted against `not_applicable` expectation                  | low      |
+| `CODEC_BUG`               | drifted + expected good (the docs/code disagreement to fix)   | **high** |
+
+### Usage
+
+```sh
+# Reconcile against the most recent Phase 1 run.
+python tools/run_phase4_reconciliation.py
+
+# Pin a specific Phase 1 JSON (e.g. a known-good baseline).
+python tools/run_phase4_reconciliation.py --mesh-json \
+    tests/fixtures/real/_cross_mesh_runs/<timestamp>.json
+```
+
+### Output structure
+
+* **JSON archive (gitignored):**
+  `tests/fixtures/real/_phase4_runs/<UTC-timestamp>.json` — one
+  record per cell with full per-field variance breakdown.
+* **JSON snapshot (committed):**
+  `tests/fixtures/real/_phase4_runs/latest.json` — stable mirror
+  overwritten on every run.  Phase 4b investigation agents read this
+  to surface CODEC_BUG findings per source vendor without the operator
+  having to track timestamped names.
+* **Skeleton report (committed, overwritten on every run):**
+  `tests/fixtures/real/PHASE4_RECONCILIATION.md` — aggregate
+  variance counts, per-(source × target) CODEC_BUG matrix, top-N
+  pairs by CODEC_BUG count, and a placeholder for per-vendor
+  findings reports.
+
+### Phase 4a vs Phase 4b
+
+* **Phase 4a (this script):** mechanical reconciliation — produces the
+  variance JSON and skeleton report.  No subjective judgement.
+* **Phase 4b (separate investigation agents):** read the per-run JSON,
+  triage each CODEC_BUG finding for an assigned source vendor, and
+  produce a per-vendor findings report at
+  `tests/fixtures/real/phase4_findings_<source_vendor>.md`.
