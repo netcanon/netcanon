@@ -171,8 +171,41 @@ _AOS_TRUNK_TYPE_TO_MODE = {
     "trunk": "static",
     "fec": "static",
 }
+# Interface header regex.
+#
+# AOS-S native port-name forms in the real-capture corpus include:
+#   * bare numeric: ``1``, ``25``, ``42``
+#   * letter-prefix uplink: ``A1``, ``B2``
+#   * stacked slot/port: ``1/1``, ``2/24``
+#   * stacked letter-uplink: ``1/A1``
+#   * trunk aliases: ``Trk1``, ``Trk10``
+#
+# In addition, the parser is exercised cross-vendor by Phase 4
+# bidirectionality fixtures: a JunOS, IOS-XE, or Cisco-CLI capture
+# fed through detection may end up in this codec when the device
+# class disagrees with the wire format.  Earlier the regex demanded
+# at most one ``/`` segment, a mandatory trailing digit, and no
+# hyphen / dot — which silently dropped legitimate cross-vendor
+# names like ``ge-0/0/1``, ``ge-0/0/1.100``, ``irb``, ``irb.100``,
+# ``GigabitEthernet0/0/0``, ``TenGigabitEthernet1/0/1``,
+# ``Port-channel1``, ``Port-Channel10``.  See Phase 4 finding 1 in
+# ``tests/fixtures/real/phase4_findings_juniper_junos.md`` (~40
+# affected cells) and the rank-1 row in
+# ``tests/fixtures/real/PHASE4_RECONCILIATION.md``.
+#
+# The widened pattern accepts any token starting with an
+# alphanumeric followed by alphanumerics, ``.``, ``/``, or ``-``.
+# Underscore is intentionally excluded — AOS-S does not use it.
+#
+# Follow-up: ``_parse_port_list`` / ``_expand_port_range`` below
+# split tokens containing ``-`` as ranges.  If a future cross-vendor
+# capture surfaces a hyphenated name inside a ``vlan ... untagged
+# <list>`` directive (e.g. ``untagged Port-channel1``) it would be
+# shredded into ``["Port", "channel1"]``.  This regex fix does not
+# address that path; the port-list expansion remains numeric-/
+# letter-uplink-shaped per AOS-S native forms.
 _IFACE_HEADER_RE = re.compile(
-    r'^interface\s+("?[A-Za-z]*\d+(?:/\d+)?"?)\s*$', re.IGNORECASE,
+    r'^interface\s+("?[A-Za-z0-9][A-Za-z0-9./\-]*"?)\s*$', re.IGNORECASE,
 )
 
 _VLAN_NAME_RE = re.compile(r'^name\s+"?([^"\n]+)"?', re.IGNORECASE)
