@@ -1,0 +1,473 @@
+# Cross-vendor fidelity expectations: mikrotik_routeros -> fortigate_cli
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/
+#
+# Reverse-direction sibling of fortigate_cli__mikrotik_routeros.yaml.
+# Per the schema README's "Reverse pairs are independent files —
+# arista_eos__juniper_junos.yaml and juniper_junos__arista_eos.yaml are
+# not assumed symmetric" rule, this file authors the dispositions
+# independently.  Several fields are direction-asymmetric on this pair:
+#
+#   * domain: FortiGate -> RouterOS is lossy (no first-class identity-
+#     scope domain on RouterOS).  RouterOS -> FortiGate is
+#     not_applicable (RouterOS source never populates the canonical
+#     domain field).
+#
+#   * dns_servers: FortiGate -> RouterOS is good (FortiOS three-server
+#     cap fits inside RouterOS unbounded list).  RouterOS -> FortiGate
+#     is lossy (RouterOS unbounded versus FortiOS three-server cap).
+#
+#   * ipv4_addresses (per-interface): FortiGate -> RouterOS is good
+#     (single primary).  RouterOS -> FortiGate is lossy
+#     (multi-address-per-interface is common in RouterOS WISP
+#     deployments; FortiOS allows only one primary).
+#
+#   * ipv6_addresses (link-local): FortiGate -> RouterOS rarely loses
+#     anything (FortiOS auto-derives fe80:: and source rarely carries
+#     explicit link-local).  RouterOS -> FortiGate is lossy
+#     (RouterOS source carries explicit fe80:: lines that cannot be
+#     re-applied on FortiOS).
+#
+#   * local_users.hashed_password: FortiGate -> RouterOS is lossy
+#     because RouterOS does not surface password material in /export.
+#     RouterOS -> FortiGate is similarly lossy but for the inverse
+#     reason: RouterOS source carries NO hashed_password at all (the
+#     codec parses none), so the FortiGate render emits no ``set
+#     password`` line and the migrated admin will be locked out
+#     until an operator sets a password interactively.
+
+meta:
+  source_vendor: mikrotik_routeros
+  target_vendor: fortigate_cli
+  primary_use_case: >
+    MikroTik RouterOS -> FortiGate firewall edge migration (typical:
+    SMB / WISP operator scaling up to enterprise-grade FortiGate
+    hardware, or operators consolidating onto a FortiGate-standard
+    estate for security and UTM features RouterOS cannot match).
+    L3 routing + system-services translates well; RouterOS-rich
+    plumbing (firewall / NAT / queues / wireless / scripting) has
+    no canonical landing place and falls into raw_sections for
+    review.  Cross-vendor migration also loses password material
+    because RouterOS's /export does not include hashed passwords.
+  certainty: medium
+  references:
+    - id: system_services
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/system_services.md
+      title: "System services (hostname / DNS / NTP / timezone / syslog): MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-04-30"
+    - id: interfaces
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/interfaces.md
+      title: "Interfaces: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-04-30"
+    - id: vlans
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/vlans.md
+      title: "VLAN configuration: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-04-30"
+    - id: static_routes
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/static_routes.md
+      title: "Static routes: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: snmp_aaa
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/snmp_aaa.md
+      title: "SNMP / RADIUS / AAA: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-04-30"
+    - id: local_users
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/local_users.md
+      title: "Local users + admin profiles: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-04-30"
+    - id: lags
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/lags.md
+      title: "LAGs: RouterOS bonding versus FortiGate aggregate"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-04-30"
+    - id: dhcp
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/dhcp.md
+      title: "DHCP server: RouterOS three-section form versus FortiGate interface-bound"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-04-30"
+    - id: firewall_unsupported
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/firewall_unsupported.md
+      title: "Firewall / NAT / queues / wireless / scripts (unsupported): MikroTik RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/130220/Firewall"
+      retrieved: "2026-04-30"
+    - id: vrf
+      path: docs/vendor-references/mikrotik_routeros_to_fortigate_cli/routing_instances_vrf.md
+      title: "VRF / VDOM / routing instances: MikroTik RouterOS versus FortiGate FortiOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      RouterOS ``/system identity / set name=ks-edge-01`` -> FortiOS
+      ``set hostname "ks-edge-01"`` under ``config system global``.
+      FortiOS caps at 35 characters; RouterOS-source names exceeding
+      35 chars truncate (uncommon in practice).
+    references: [system_services]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      RouterOS does not surface a top-level identity-scope domain
+      field; the canonical ``domain`` is empty after parsing a
+      RouterOS source.  FortiOS render emits no ``set domain`` line.
+      This is a structural absence on the source, not a translation
+      loss.
+    references: [system_services]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/ip dns / set servers=<csv>`` (unbounded) versus
+      FortiOS three-server cap (``set primary`` / ``set secondary``
+      / hidden ``set tertiary``).  RouterOS-source lists with four+
+      entries lose the tail on FortiOS render.  Most RouterOS
+      deployments carry only two DNS servers, so the loss is
+      uncommon in practice.
+    references: [system_services]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      Address list itself round-trips cleanly (RouterOS ``/system
+      ntp client / set servers=<csv>`` -> FortiOS ``config ntpserver
+      / edit N / set server "<addr>"``).  FortiOS-side global flags
+      (``set ntpsync enable``, ``set type custom``) and per-edit
+      numeric edit ids are not modelled canonically; per-server
+      modifiers (none on either side) drop on round-trip.
+    references: [system_services]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system clock / set time-zone-name=America/Los_Angeles``
+      (IANA tz name) versus FortiOS ``set timezone 04`` (numeric
+      index).  Cross-vendor migration requires operator-curated
+      mapping from IANA name to FortiOS numeric index — neither
+      codec currently parses / emits the timezone field.
+    references: [system_services]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system logging action add target=remote
+      remote=<addr>`` (when the codec lands the parser) maps to
+      FortiOS ``config log syslogd setting / set server`` (single
+      primary plus ``syslogd2`` / ``syslogd3`` peers; capped at
+      three).  Severity / facility / topic-filter context drops on
+      round-trip — neither vendor's per-server filter taxonomy
+      survives the canonical bottleneck.
+    references: [system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface fields divide as follows: name (lossy — RouterOS
+      ``etherN`` flat namespace rename-meshes to FortiOS ``port1`` /
+      ``wan1``; loopback emulation differs because RouterOS uses
+      empty bridges with no FortiOS ``set type loopback`` analogue
+      without operator intervention), description (lossy — RouterOS
+      ``comment="..."`` is unbounded; FortiOS ``set alias`` caps at
+      25 characters so long comments truncate), enabled (good —
+      RouterOS ``disabled=yes/no`` inverts to FortiOS ``set status
+      down/up``), interface_type (lossy — RouterOS infers from name
+      prefix; FortiOS emits ``set type ...`` based on the inferred
+      type, best-effort), ipv4_addresses (lossy — multiple
+      ``/ip address`` lines per interface lose the tail because
+      FortiOS allows only one primary ``set ip``; common loss for
+      WISP RouterOS deployments), ipv6_addresses (lossy — global
+      addresses round-trip; explicit RouterOS ``fe80::/N`` link-local
+      lines have no FortiGate counterpart and drop with banner), mtu
+      (lossy — RouterOS ``mtu=N`` on ``/interface ethernet`` parses
+      cleanly; bonding parents and VLAN children where MTU is
+      implicit do not surface), switchport_mode / access_vlan /
+      trunk_allowed_vlans / trunk_native_vlan / voice_vlan
+      (unsupported — FortiGate is L3-only beyond the hardware-switch
+      sub-feature), lag_member_of (good — see lags), dhcp_client
+      (lossy — RouterOS ``/ip dhcp-client`` not yet parsed; FortiOS
+      ``set mode dhcp`` not yet rendered), vrf (unsupported — see
+      routing_instances).
+    references: [interfaces]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly via Plane-1 ``/interface vlan`` ->
+      FortiOS child interface (``set type vlan / set vlanid <id> /
+      set interface "<parent>"``).  Name is lossy: RouterOS conflates
+      the VLAN's name with the L3 interface name (``vlan100``);
+      FortiOS render emits the synthesised child-interface name
+      (e.g. ``agg1.100``) which differs from the canonical name
+      (per the MikroTik codec's LossyPath on ``/vlans/vlan/name``).
+      Per-VLAN description has no first-class field on either side.
+      Tagged / untagged port lists from RouterOS Plane-2 (bridge
+      VLAN filtering, parsed partially in v1) are unsupported on
+      FortiGate target — FortiOS has no port-list-per-VLAN concept;
+      multi-port VLAN membership requires synthesising multiple
+      VLAN child interfaces (one per parent) which the v1 render
+      does not do.  SVI addressing round-trips good.
+    references: [vlans]
+
+  static_routes:
+    disposition: good
+    note: >
+      RouterOS ``/ip route add dst-address=DEST/N gateway=GW`` ->
+      FortiOS ``config router static / edit N / set dst DEST MASK /
+      set gateway GW`` via codec CIDR -> dotted-mask helpers.
+      Default route ``dst-address=0.0.0.0/0`` round-trips.
+      Interface-form gateways (``gateway=bridge1``) populate
+      canonical ``interface`` and FortiOS render emits ``set
+      device "<iface>"`` after rename mesh.  Description (RouterOS
+      ``comment``) drops on FortiOS render (no per-route description
+      on FortiOS).  Distance defaults differ (RouterOS 1, FortiOS 10);
+      integer preserves but priority semantics shift.  IPv6 routes
+      on ``/ipv6 route`` parse but FortiGate codec does not emit
+      ``config router static6`` so IPv6 statics drop on render.
+    references: [static_routes]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      RouterOS three-section form (``/ip pool`` + ``/ip dhcp-server``
+      + ``/ip dhcp-server network``) maps to FortiOS interface-bound
+      ``config system dhcp server / edit N``.  Per-field: interface
+      (good after rename mesh — RouterOS ``interface=bridge1`` ->
+      FortiOS ``set interface "port4"``), network (good — RouterOS
+      ``address=<CIDR>`` populates the canonical CIDR which FortiOS
+      derives ``set netmask`` from), start_ip / end_ip (good — first
+      range only when multiple ranges on RouterOS), gateway (good),
+      dns_servers (lossy — RouterOS unbounded list versus FortiOS
+      three-server cap; rare loss in practice), lease_time (good —
+      RouterOS ``1h`` parses to seconds), domain_name (good).  Static
+      reservations (RouterOS ``/ip dhcp-server lease``) and DHCP
+      option codes (43, 82) are not modelled canonically and drop.
+      RouterOS ``authoritative=yes/no`` flag has no canonical field;
+      FortiOS DHCP servers are always authoritative.
+    references: [dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      mostly round-trips: RouterOS supports multiple ``/snmp
+      community`` records but canonical holds a single scalar (first
+      community wins).  Single ``trap-target=`` populates the
+      canonical list as a one-element list; FortiOS render emits one
+      trap host record.  v3 USM has multiple cliffs: (1) RouterOS
+      auth set is narrower (MD5 / SHA1, with some recent versions
+      accepting SHA256 / SHA512) — FortiOS supports SHA-2 family
+      natively, so RouterOS-source SHA-2 round-trips cleanly but
+      RouterOS-source MD5 / SHA1 are weak by FortiOS standards;
+      (2) RouterOS plaintext-or-engineID-salted passphrases versus
+      FortiOS ``ENC <opaque-base64>`` (FortiOS-internal-key
+      encrypted); (3) both vendors engineID-salt USM keys per RFC
+      3414, so passphrases are never cross-portable.  Operator must
+      re-key v3 users on the target.
+    references: [snmp_aaa]
+
+  lags:
+    disposition: lossy
+    reason: >
+      RouterOS bonding (``/interface bonding add slaves= mode=...``)
+      maps to FortiOS aggregate (``set type aggregate / set member
+      / set lacp-mode``).  Mode mapping has cliffs:
+      ``mode=802.3ad`` -> ``lacp-mode active`` (RouterOS does not
+      distinguish active vs passive LACP, so the FortiGate side
+      defaults to active).  ``mode=active-backup`` has no FortiOS
+      aggregate analogue (closest is FortiOS interface redundancy
+      ``set type redundant`` which the FortiGate codec does not
+      emit via the LAG path); collapses to ``lacp-mode static`` with
+      banner.  ``mode=balance-rr / balance-xor / balance-tlb /
+      balance-alb / broadcast`` — no FortiOS equivalent; collapse to
+      ``lacp-mode static`` with banner, losing the load-distribution
+      semantic.  Members preserve via the rename mesh applied to
+      each slave name.  Naming differs (``bond1`` vs ``agg1``);
+      rename mesh canonicalises.
+    references: [lags]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      RouterOS named groups (``full`` / ``write`` / ``read`` /
+      custom) map to FortiOS named accprofile strings (default:
+      full -> super_admin, write -> prof_admin, read -> prof_admin
+      with note).  Custom RouterOS groups lose their permission
+      semantics on FortiGate without operator-curated ``config
+      system accprofile`` re-creation.  CRITICAL: RouterOS does NOT
+      surface its hashed password material in /export — the MikroTik
+      codec parses no ``hashed_password`` for any user, so canonical
+      ``hashed_password`` is empty.  FortiOS render therefore emits
+      no ``set password ENC ...`` line and the migrated admin will
+      be locked out at first login.  Operators MUST set passwords
+      interactively on the FortiGate target after migration.  Per-
+      user IP-restriction (RouterOS ``address=<CIDR>``; FortiOS
+      ``set trusthost1``) is not currently parsed into canonical and
+      drops.
+    references: [local_users]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host preserves cleanly: RouterOS ``add address=10.0.0.10`` ->
+      FortiOS ``set server "10.0.0.10"``.  Shared-secret format is
+      incompatible: RouterOS ``secret=<text>`` (plaintext on
+      /export) versus FortiOS ``set secret ENC <opaque-base64>``
+      (FortiOS-internal-key encrypted).  Cross-vendor migration
+      requires re-keying.  auth_port preserves; acct_port is lossy
+      because FortiOS exposes only ``set radius-port`` (auth-port;
+      acct-port derived as auth + 1 per RFC default) — RouterOS-
+      source pairs where acct-port != auth-port + 1 lose the
+      divergence.  RouterOS ``service=login,ppp,wireless,...`` has
+      no FortiOS counterpart (FortiOS RADIUS records bind to
+      authentication contexts via separate FortiGate-side
+      configuration) and drops on render.
+    references: [snmp_aaa]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      MikroTik codec capability matrix lists ``/vxlan-vnis/vni`` as
+      unsupported with rationale "RouterOS VXLAN exists but is rare
+      in canonical scope and not modelled in v1".  FortiGate codec
+      capability matrix lists ``/vxlan-vnis/vni`` as unsupported
+      with rationale "VXLAN not modelled — FortiGate is a firewall
+      codec".  Both codecs parse-and-ignore VXLAN intent on this
+      cross-pair.
+    references: [vrf]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Both codecs list per-prefix EVPN Type-5 records as parse-
+      and-ignore.  RouterOS does not model EVPN at all; FortiGate
+      as a firewall has no EVPN data plane.  Cross-vendor migration
+      is not applicable.
+    references: [vrf]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Neither codec parses VRF in v1.  RouterOS 7+ has named
+      ``/ip vrf`` — not yet wired on the MikroTik codec.  FortiGate
+      has two parallel primitives (heavyweight VDOMs since FortiOS
+      5.x; per-interface integer VRF since FortiOS 7.x) — neither is
+      wired on the FortiGate codec.  Even when both codecs land
+      their parsers, RouterOS named VRF maps imperfectly to FortiOS
+      per-interface integer VRF — operators would need a curated
+      mapping table from RouterOS VRF names (e.g. ``customer-A``) to
+      FortiOS integer ids (e.g. ``vrf 10``).  FortiGate VDOMs are
+      heavyweight tenancy that does not map to RouterOS at all.
+      RD/RT for L3VPN signalling are configured under BGP on
+      RouterOS, not under ``/ip vrf`` itself; FortiGate has no native
+      L3VPN concept.  Cross-pair status will follow when wire-up
+      lands.
+    references: [vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Each codec's
+      raw_sections content is vendor-private (RouterOS /ip firewall
+      / /ip firewall nat / /queue / /interface wireless / /system
+      script; FortiGate firewall policy / VPN / UTM stanzas).
+      Cross-vendor migration drops it with a banner.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; informational only."
+
+  source_format:
+    disposition: not_applicable
+    note: "Informational metadata; not a translation field."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  MikroTik and FortiGate codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific group-scoped set-line tails.  Same
+      not_applicable status as apply_groups.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * Shared scalar surface (hostname / DNS list / static-routes /
+#     interfaces with primary IP+MTU / RADIUS host+auth_port / DHCP
+#     server / LAGs by member list) is high-confidence: MikroTik
+#     wiki and FortiOS CLI Reference are both unambiguous, and both
+#     codecs already round-trip the canonical fields on real-capture
+#     / synthetic kitchen-sink fixtures.
+#
+#   * Per-interface multi-address handling on RouterOS sources is
+#     medium-confidence lossy: WISP deployments routinely carry
+#     multiple ``/ip address`` lines per interface but FortiOS allows
+#     only one primary ``set ip``; the canonical CanonicalInterface
+#     ipv4_addresses list preserves all entries but FortiOS render
+#     emits only the first.
+#
+#   * Local user passwords are medium-confidence lossy on this
+#     direction for an inverse reason from FortiGate -> RouterOS:
+#     RouterOS source carries NO hashed password material at all
+#     (the codec parses none because /export does not include
+#     password material), so FortiOS render emits no ``set password``
+#     line and the migrated admin will be locked out at first login.
+#
+#   * SNMPv3 USM is medium-confidence lossy: algorithm-set divergence
+#     plus engineID-salted passphrases mean cross-vendor v3
+#     migrations always require operator re-key.
+#
+#   * RouterOS-rich plumbing (firewall / NAT / queues / wireless /
+#     scripts) is confidently unsupported in this direction —
+#     RouterOS source carries meaningful policy data with no
+#     canonical landing place, and FortiGate's session-based zone-
+#     aware policy model is structurally distinct.  Operators must
+#     manually reconstruct equivalent policy on the FortiGate target
+#     using FortiGate's product surfaces.
+#
+#   * VRF / VXLAN / EVPN / dynamic routing protocols are confidently
+#     unsupported on both codecs; cross-pair status will follow when
+#     wire-up lands.
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * (none currently flagged as deferred — all dispositions on this
+#     pair are grounded in vendor docs and codec capability
+#     matrices, with caveats noted in the per-field reasons above.)
