@@ -1,0 +1,654 @@
+# Cross-vendor fidelity expectations: fortigate_cli -> cisco_iosxe
+#
+# Source: fortigate_cli codec — FortiOS CLI text.
+# Target: cisco_iosxe codec — OpenConfig NETCONF YANG XML.
+#
+# Reverse-direction sibling of cisco_iosxe__fortigate_cli.yaml with the
+# OPPOSITE asymmetry framing.  The forward direction is bottlenecked
+# on the source PARSER (cisco_iosxe walks <interfaces> only; everything
+# else is `not_applicable`).  This direction is bottlenecked on the
+# target RENDERER: the FortiGate parser populates the full canonical
+# surface (hostname, DNS, NTP, VLANs, static_routes, SNMP v1/v2c/v3,
+# RADIUS, local users, LAGs, DHCP server pools), but the cisco_iosxe
+# NETCONF render only walks `intent.interfaces` and emits the
+# openconfig-interfaces subtree.  Everything else is silently dropped
+# on render — `unsupported` (with reason citing render-side wire-up
+# gap) rather than `not_applicable`.
+#
+# Direction-specific framing: per the schema README's "Reverse pairs
+# are independent files" rule, this YAML is authored independently
+# rather than mirroring the forward direction.  Several fields are
+# direction-asymmetric:
+#
+#   * hostname / dns / ntp / vlans / static_routes / snmp / lags /
+#     local_users / radius_servers: forward = `not_applicable` (cisco
+#     parser-side gap); reverse = `unsupported` (cisco render-side gap,
+#     FortiGate-side data exists).
+#
+#   * Firewall / NAT / VIP / UTM: canonical schema gap (no
+#     CanonicalFirewallPolicy in v1).  On forward, the cisco_iosxe
+#     parser also doesn't read OpenConfig <acl>, so the question is
+#     moot.  On reverse, FortiGate parser populates raw_sections with
+#     firewall data but the canonical layer carries nothing — the
+#     `not_applicable` framing applies to the canonical schema gap,
+#     not a parse-or-render decision.
+#
+# The cisco_iosxe codec's `_CAPS.supported` declarations for
+# `/system/hostname`, `/system/dns-server`, `/snmp/community`, etc.
+# are aspirational (cross-codec mesh friendliness) but the actual
+# `_render_canonical()` body is interface-only.  Honest classification
+# beats matrix-deference.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/fortigate_cli_to_cisco_iosxe/
+#
+# Authored 2026-05-01 as part of Phase 3 cross-mesh audit.
+
+meta:
+  source_vendor: fortigate_cli
+  target_vendor: cisco_iosxe
+  primary_use_case: >
+    FortiGate FortiOS source consumed into a NETCONF/OpenConfig-
+    driven orchestration pipeline that uses the cisco_iosxe target
+    codec.  The target render emits only the openconfig-interfaces
+    subtree, so this pair is appropriate ONLY for the narrow case
+    where the downstream consumer needs interface-level data and
+    accepts that everything else (system services, VLANs, SNMP,
+    RADIUS, local users, LAGs, static-routes, DHCP server pools)
+    must be applied separately.  For a real FortiGate edge -> Cisco
+    IOS-XE migration, route through `fortigate_cli -> cisco_iosxe_cli`
+    instead — that pair is `certified` on the target side and emits
+    the full canonical surface.
+  certainty: medium
+  references:
+    - id: openconfig_yang_scope
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "OpenConfig YANG render scope: what cisco_iosxe actually emits"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: interface_fields
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/interface_fields.md
+      title: "Interface canonical-core fields: fortigate_cli to cisco_iosxe"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/administration-guide/954635/interface-settings"
+      retrieved: "2026-05-01"
+    - id: ipv6_addresses
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/ipv6_addresses.md
+      title: "IPv6 addresses: fortigate_cli source to cisco_iosxe target"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: vlan_render_gap
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/vlan_render_gap.md
+      title: "VLAN render gap: fortigate_cli source to cisco_iosxe target"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: snmp_render_gap
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/snmp_render_gap.md
+      title: "SNMP render gap: fortigate_cli source to cisco_iosxe target"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+    - id: vxlan_evpn_gap
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/vxlan_evpn_gap.md
+      title: "VXLAN, EVPN, and VRF: fortigate_cli source to cisco_iosxe target"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-05-01"
+    - id: firewall_unsupported
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/firewall_unsupported.md
+      title: "FortiGate firewall / NAT / UTM as source intent with no canonical analogue"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cookbook/"
+      retrieved: "2026-05-01"
+    - id: oc_system
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc_network_instance
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/vxlan_evpn_gap.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: cisco_yang_blog
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/openconfig_yang_scope.md
+      title: "Native, IETF, OpenConfig... Why so many YANG models? (Cisco Blogs)"
+      source_url: "https://blogs.cisco.com/developer/which-yang-model-to-use"
+      retrieved: "2026-05-01"
+    - id: cisco_snmp_yang
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/snmp_render_gap.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-05-01"
+    - id: fortios_cli_reference
+      path: docs/vendor-references/fortigate_cli_to_cisco_iosxe/snmp_render_gap.md
+      title: "Fortinet FortiGate CLI Reference 7.4"
+      source_url: "https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.hostname` from `config system
+      global / set hostname "<name>"`.  The cisco_iosxe NETCONF
+      render does NOT walk `intent.hostname` — `_render_canonical()`
+      emits only the openconfig-interfaces subtree.  The
+      CapabilityMatrix declares `/system/hostname` `supported` but the
+      declaration is aspirational; no `<system>` element appears in
+      the output XML regardless of source content.  Flips to good
+      once render-side wire-up lands (FortiOS hostname caps at 35
+      chars; OpenConfig has no length constraint, so no truncation
+      on this direction).
+    references: [openconfig_yang_scope, oc_system]
+
+  domain:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.domain` from `config system
+      dns / set domain "<fqdn>"`.  cisco_iosxe render emits no
+      `<system><config><domain-name>` element (render-side wire-up
+      gap; matrix declares aspirationally).  Flips to good once
+      render is wired.
+    references: [openconfig_yang_scope, oc_system]
+
+  dns_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.dns_servers` from `config
+      system dns / set primary / set secondary` (and the hidden
+      `set tertiary`).  cisco_iosxe render emits no `<system><dns>`
+      element (render-side wire-up gap).  Flips to good once wired —
+      FortiGate-source DNS is capped at three by the FortiOS schema,
+      so no truncation when emitted into Cisco's unbounded
+      `<host>/<address>` list.
+    references: [openconfig_yang_scope, oc_system]
+
+  ntp_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.ntp_servers` from `config
+      system ntp / config ntpserver / edit N / set server <addr>`.
+      cisco_iosxe render emits no `<system><ntp>` element (render-side
+      gap).  Flips to lossy once wired (per-server `prefer` / `key` /
+      `source` modifiers not modelled in canonical; FortiOS-side
+      `set ntpsync enable` / `set type custom` not surfaced as
+      canonical scalars).
+    references: [openconfig_yang_scope, oc_system]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      The fortigate_cli codec does not currently parse `set timezone
+      <NN>` into the canonical scalar (parse-side codec gap; deferred
+      to subsequent audit pass).  `intent.timezone` is empty after
+      parse, so nothing reaches the cisco_iosxe render.  Even with
+      bidirectional wire-up the format mapping (FortiOS numeric
+      index -> OpenConfig IANA tz database identifier) is lossy and
+      requires an operator-curated lookup.
+    references: [openconfig_yang_scope, oc_system]
+
+  syslog_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.syslog_servers` from `config
+      log syslogd setting / set server` plus the `syslogd2` /
+      `syslogd3` peers.  cisco_iosxe render emits no
+      `<system><logging>` element (render-side wire-up gap).  Flips
+      to good once wired (host-list surface; severity / facility
+      tokens not canonically modelled).
+    references: [openconfig_yang_scope, oc_system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips: the FortiGate parser
+      produces CanonicalInterface records and the cisco_iosxe render
+      walks them.  Per-field drift is itemised below — name /
+      description / enabled / ipv4_addresses are good; interface_type
+      and ipv6_addresses (link-local scope) are lossy; switchport /
+      VLAN / LAG / DHCP-client / VRF fields are unsupported because
+      the cisco_iosxe render path doesn't emit the corresponding
+      OpenConfig subtrees.
+    references: [interface_fields]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      FortiOS edit ID (e.g. `port1`, `agg1`, `port1.100`) -> OpenConfig
+      `<interface><name>` text verbatim, after the port-rename mesh
+      translates FortiOS form to Cisco `GigabitEthernet1/0/1` form.
+      Without the rename mesh, the literal FortiOS name reaches the
+      wire and a real Cisco device would reject it on edit-config.
+    references: [interface_fields]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trip.  FortiGate parses `set alias "<text>"`
+      from the interface stanza (capped at 25 chars on FortiOS side);
+      cisco_iosxe render emits as `<config><description>` verbatim.
+    references: [interface_fields]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      FortiOS `set status up` / `set status down` (default up) maps
+      to YANG boolean `<enabled>true</enabled>` /
+      `<enabled>false</enabled>`.  Strict YANG-bool parsing on the
+      cisco_iosxe side accepts only `"true"` / `"false"`; the
+      FortiGate codec emits the canonical bool which serialises
+      correctly.
+    references: [interface_fields]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      FortiGate has no IANA ifType concept — the fortigate_cli codec
+      INFERS interface_type from `set type vlan` / `set type
+      aggregate` / name shape (mapping to `iana-if-type:l2vlan`,
+      `iana-if-type:ieee8023adLag`, `iana-if-type:ethernetCsmacd`,
+      `iana-if-type:softwareLoopback`).  The cisco_iosxe render
+      emits the inferred IANA ident as `<config><type>`, but a
+      downstream OpenConfig consumer treats this as authoritative
+      when in fact it's an inference.  The asymmetry is mild — both
+      sides agree on the same mapping table — but a FortiGate
+      child-VLAN interface (legitimate IANA type l2vlan) named
+      with a non-standard pattern could mis-classify.
+    references: [interface_fields]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      FortiOS has a `set mtu <N>` directive (gated by `set
+      mtu-override enable`) but the fortigate_cli parser does not
+      currently surface it onto canonical (parse-side codec gap;
+      deferred).  `intent.interfaces[].mtu` is None on parse;
+      cisco_iosxe render emits no `<config><mtu>` line.  Doubly
+      deferred: even if FortiGate parse were wired, the cisco_iosxe
+      matrix declares `/interfaces/interface/config/mtu` `lossy`
+      because OpenConfig's single mtu leaf doesn't distinguish
+      link-MTU from `ip mtu` / `ipv6 mtu` / `mpls mtu`.
+    references: [interface_fields]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      FortiGate parser populates from `set ip <addr> <mask>` (single
+      primary address per FortiOS schema; canonical produces a
+      one-entry list).  cisco_iosxe render emits as
+      `<subinterface><ipv4><addresses><address>` with prefix-length.
+      Round-trip lossless for the (ip, prefix) tuple.  FortiOS
+      secondary addressing via `config ipv4-secondary` is not
+      currently parsed onto canonical, so the multi-address case
+      doesn't arise on this direction.
+    references: [interface_fields]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe codec hard-codes `scope="global"` on every
+      parsed IPv6 address (link-local inference not yet wired) — but
+      it ALSO emits no scope discriminator on render.  FortiGate
+      parser defaults `scope="global"` on parse.  On this
+      direction, the loss is upstream of the cisco_iosxe render
+      (canonical-model gap, not introduced here).  FortiOS sources
+      with link-local addresses (rare; FortiOS infers from prefix
+      internally) get the global tag from canonical and emit as bare
+      addresses on the cisco_iosxe wire — a downstream OpenConfig
+      consumer treating the absence of scope as global behaves
+      correctly for the global-only case.
+    references: [ipv6_addresses]
+
+  "interfaces[].switchport_mode":
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates switchport state weakly — most
+      FortiGate hardware is L3-only beyond the hardware-switch
+      sub-feature on a few low-end models.  More importantly,
+      cisco_iosxe render does NOT walk the
+      `openconfig-vlan:switched-vlan` augment under `<ethernet>`;
+      no switchport state appears in the output XML regardless of
+      canonical content.  Render-side wire-up gap.
+    references: [vlan_render_gap]
+
+  "interfaces[].access_vlan":
+    disposition: unsupported
+    reason: Same `switched-vlan` augment render gap as switchport_mode.
+    references: [vlan_render_gap]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: unsupported
+    reason: Same render gap.  OpenConfig models this as `trunk-vlans` leaf-list.
+    references: [vlan_render_gap]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: unsupported
+    reason: Same render gap.
+    references: [vlan_render_gap]
+
+  "interfaces[].voice_vlan":
+    disposition: not_applicable
+    note: >
+      FortiGate has no voice-VLAN concept (L3-only product surface);
+      the fortigate_cli parser doesn't populate voice_vlan from any
+      FortiOS source.  Field is structurally absent on this direction.
+    references: [vlan_render_gap]
+
+  "interfaces[].lag_member_of":
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates lag_member_of from `set type
+      aggregate` parent's `set member` directives (back-reference
+      stamped on each member).  cisco_iosxe render does NOT emit the
+      `openconfig-if-aggregate:aggregate-id` leaf — render-side gap.
+      Flips to good once wired.
+    references: [interface_fields]
+
+  "interfaces[].dhcp_client":
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates dhcp_client from `set mode dhcp`.
+      cisco_iosxe render does not walk the OpenConfig DHCP-client
+      augment.  Render-side gap.
+    references: [interface_fields]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      The fortigate_cli codec doesn't surface `set vrf <id>`
+      (FortiOS 7.x per-interface integer VRF) onto
+      `CanonicalInterface.vrf` in v1.  `intent.interfaces[].vrf`
+      is empty on FortiGate parse, so there's nothing for the
+      cisco_iosxe render to emit even if it walked
+      `<network-instances>`.  Structurally absent on this direction
+      until FortiGate codec wires VRF parsing.
+    references: [vxlan_evpn_gap, oc_network_instance]
+
+  vlans:
+    disposition: unsupported
+    reason: >
+      FortiGate parser synthesises CanonicalVlan records from VLAN
+      child interfaces (`set type vlan` + `set vlanid` + `set
+      interface`).  `intent.vlans` carries id / name / SVI
+      addressing.  cisco_iosxe render does NOT walk `intent.vlans` —
+      `_render_canonical()` emits only the interfaces subtree.
+      The synthesised SVI interfaces (each a CanonicalInterface)
+      DO survive via the interfaces walk, but the top-level
+      `<vlans>` declaration that should accompany them does not.
+      Render-side wire-up gap; flips to lossy once wired (FortiGate
+      child-interface model encodes membership via parent identity,
+      not as a port list per VLAN — multi-port trunk membership
+      stays unrecoverable).
+    references: [vlan_render_gap]
+
+  static_routes:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.static_routes` from `config
+      router static / edit N / set dst <addr> <mask> / set gateway
+      <addr> / set distance <N>` (with mask -> prefix conversion).
+      cisco_iosxe render does not walk `<network-instances>` /
+      `<protocols><protocol identifier=STATIC>` on emit.  Render-side
+      wire-up gap; the matrix declares `/routing/static-route`
+      `supported` aspirationally.
+    references: [openconfig_yang_scope, oc_network_instance]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.dhcp_servers` from `config
+      system dhcp server / edit N` (interface-bound model).
+      cisco_iosxe render emits no DHCP XML — OpenConfig has no
+      fully-baked DHCP server model in widely-deployed Cisco IOS-XE
+      versions, and the codec doesn't bridge the Cisco-IOS-XE-dhcp
+      native YANG.  Render-side gap.
+    references: [openconfig_yang_scope]
+
+  snmp:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.snmp` (community, location,
+      contact, trap_hosts, v3_users) from `config system snmp
+      sysinfo` / `config system snmp community` / `config system
+      snmp user` blocks.  cisco_iosxe render does NOT walk
+      `intent.snmp`.  Render-side wire-up gap on the v1/v2c surface;
+      the v3 surface is doubly unsupported because the cisco_iosxe
+      matrix lists `/snmp/v3-user` under `unsupported` explicitly
+      ("Phase 0.5 stub — SNMPv3 USM wire-up requires
+      Cisco-IOS-XE-snmp native YANG bridging").
+    references: [snmp_render_gap, cisco_snmp_yang]
+
+  "snmp.community":
+    disposition: unsupported
+    reason: Same render-side wire-up gap as snmp.
+    references: [snmp_render_gap]
+
+  "snmp.location":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [snmp_render_gap]
+
+  "snmp.contact":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [snmp_render_gap]
+
+  "snmp.trap_hosts":
+    disposition: unsupported
+    reason: Same render-side wire-up gap.
+    references: [snmp_render_gap]
+
+  "snmp.v3_users":
+    disposition: unsupported
+    reason: >
+      Doubly unsupported — render-side wire-up gap PLUS the
+      cisco_iosxe matrix declares `/snmp/v3-user` `unsupported`
+      explicitly (Phase 0.5 stub; SNMPv3 USM requires the
+      Cisco-IOS-XE-snmp native YANG module that isn't bridged in
+      this codec).  Even if v1/v2c SNMP eventually wires up, v3
+      stays unsupported on the cisco_iosxe target until native-YANG
+      bridging lands.  Cross-vendor passphrase migration would
+      require re-keying because USM keys are salted with vendor-
+      specific engineID-derived constants (FortiOS `ENC <opaque-
+      base64>` is not Cisco-accepted).
+    references: [snmp_render_gap, cisco_snmp_yang]
+
+  lags:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.lags` from `config system
+      interface` records with `set type aggregate` plus the `set
+      member "port1" "port2" ...` member list.  cisco_iosxe render
+      does NOT walk `intent.lags` or emit the
+      `openconfig-if-aggregate` augment.  Render-side wire-up gap.
+    references: [interface_fields]
+
+  local_users:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.local_users` from `config
+      system admin / edit "<name>"` blocks (super_admin accprofile
+      -> privilege 15; other profiles -> privilege 1 with profile
+      name preserved in `role`; password hashes carry `fortios:`
+      tag).  cisco_iosxe render does NOT walk
+      `<system><aaa><authentication><users>`.  Render-side gap.
+      Even if wired, hash-format incompatibility (FortiOS `ENC
+      <opaque-base64>` vs Cisco type-5/8/9) would force re-keying on
+      the target — same lossy classification as the
+      fortigate_cli__cisco_iosxe_cli direction.
+    references: [openconfig_yang_scope, oc_system]
+
+  radius_servers:
+    disposition: unsupported
+    reason: >
+      FortiGate parser populates `intent.radius_servers` from `config
+      user radius / edit "<name>" / set server <ip> / set secret ENC
+      <encrypted> / set radius-port <port>`.  cisco_iosxe render
+      does NOT walk `<system><aaa><server-groups>`.  Render-side
+      gap; flips to lossy once wired (shared-secret format
+      incompatibility — FortiOS `ENC <opaque-base64>` vs Cisco
+      type-7 reversible — requires re-keying).
+    references: [openconfig_yang_scope, oc_system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      FortiGate has no VXLAN concept; fortigate_cli matrix lists
+      `/vxlan-vnis/*` under `unsupported` ("VXLAN not modelled —
+      FortiGate is a firewall codec").  cisco_iosxe matrix ALSO
+      lists `/vxlan-vnis/*` under `unsupported`.  `intent.vxlan_vnis`
+      is always empty on FortiGate parse.  Both sides agree:
+      nothing to translate.
+    references: [vxlan_evpn_gap]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      Same rationale as vxlan_vnis — FortiGate has no EVPN concept,
+      and `intent.evpn_type5_routes` is always empty on parse.
+      cisco_iosxe NETCONF stub also doesn't wire EVPN render.
+    references: [vxlan_evpn_gap]
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      FortiGate codec does not surface `set vrf <id>` (FortiOS 7.x
+      per-interface integer VRF) onto `CanonicalRoutingInstance` in
+      v1.  VDOMs are a heavier multi-tenancy primitive that requires
+      per-VDOM canonical-tree splitting (out of v1 pipeline scope).
+      `intent.routing_instances` is empty on FortiGate parse.
+      cisco_iosxe render also doesn't walk `<network-instances>`,
+      so the field is doubly missing.
+    references: [vxlan_evpn_gap, oc_network_instance]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  FortiGate's primary
+      product surface (firewall policy / NAT / VIP / address objects /
+      UTM profiles) ends up here on parse — the `fortigate_cli` codec
+      lists `/filter/rule` and `/nat/rule` under `unsupported` in
+      its capability matrix because policy semantics differ
+      fundamentally from other vendors (session-based, zone-aware,
+      UTM-enabled).  v1 canonical schema has NO representation for
+      firewall policy / NAT / VIP / UTM.  Operators consolidating a
+      FortiGate edge into a Cisco IOS-XE platform must manually
+      rearchitect security policy from scratch — see
+      firewall_unsupported reference for full framing.
+    references: [firewall_unsupported]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it.  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (`apply-groups` statement preservation per GAP
+      9b).  FortiGate and Cisco IOS-XE codecs do not emit
+      apply_groups; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The structural framing is high-confidence: the cisco_iosxe
+#     codec's `_render_canonical()` is in-tree code that any reader
+#     can verify, and the conclusion that it emits the openconfig-
+#     interfaces subtree only is verifiable by code inspection.  The
+#     cisco_yang_blog reference confirms the broader OpenConfig scope
+#     is real on the wire — the gap is on the codec side.
+#
+#   * The interface canonical-core dispositions (good for name /
+#     description / enabled / ipv4; lossy for type / mtu / v6
+#     link-local) are confidence-high — the cisco_iosxe matrix and
+#     the fortigate_cli matrix both agree on the same surface.
+#
+#   * The non-interface unsupported dispositions are confidence-
+#     medium: it's mechanically true that the render doesn't emit
+#     today, but the matrix declarations as `supported` (rather than
+#     `unsupported`) make the codec's INTENT clear — these should
+#     round-trip eventually.  An operator running this today must
+#     understand this is a Phase-0.5 codec.
+#
+#   * Firewall / NAT / VIP / UTM (FortiGate's primary product
+#     surface) is structurally absent from the canonical schema in
+#     v1.  Operators must manually rearchitect security policy on
+#     the Cisco target.  This is not a deferred field — it's an
+#     intentional v1 scope decision driven by cross-vendor policy-
+#     semantics divergence (Cisco ZBF zone-pairs, FortiGate
+#     stateful zone-aware, OpenConfig nascent policy model).
+#
+# Deferred items (lossy with reason="deferred"):
+#
+#   * timezone — fortigate_cli parse-side gap (`set timezone <NN>`
+#     not surfaced as canonical scalar).
+#
+#   * mtu — fortigate_cli parse-side gap (`set mtu <N>` not surfaced
+#     as canonical scalar).
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The `unsupported` vs `not_applicable` distinction is doing a
+#     lot of work here.  For fields where the SOURCE has no concept
+#     (FortiGate VRF, FortiGate VXLAN, FortiGate voice-VLAN),
+#     `not_applicable` is correct.  For fields where the source
+#     produces data but the target render silently drops,
+#     `unsupported` is correct (with reason citing render-side
+#     wire-up gap).  Mixing these two would obscure the actionable
+#     insight: "fix the cisco_iosxe render to walk intent.snmp" is
+#     mechanically different from "wait for FortiGate to grow VXLAN"
+#     (which is never going to happen).
+#
+#   * The cisco_iosxe codec is currently the bottleneck on every
+#     cross-pair where it appears as either source or target.
+#     Wiring its render to walk intent.{hostname, dns_servers,
+#     ntp_servers, syslog_servers, vlans, static_routes, snmp, lags,
+#     local_users, radius_servers} would convert ~12 unsupported
+#     dispositions in this YAML to good (or lossy where vendor
+#     mismatch dominates).  Same observation as the
+#     aruba_aoss__cisco_iosxe pair.
+#
+#   * The firewall asymmetry framing is direction-specific: on the
+#     forward direction (cisco_iosxe -> fortigate_cli), the
+#     cisco_iosxe parser doesn't read OpenConfig <acl> subtrees, so
+#     the canonical schema gap is invisible — there's nothing on the
+#     source side to drop.  On THIS reverse direction, FortiGate
+#     parser populates raw_sections with firewall policy / VIP / NAT
+#     data, and the canonical schema gap is the binding constraint.
+#     Same canonical absence, two structurally distinct framings
+#     depending on direction.
