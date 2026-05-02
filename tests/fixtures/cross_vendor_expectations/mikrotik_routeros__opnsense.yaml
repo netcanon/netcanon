@@ -1,0 +1,696 @@
+# Cross-vendor fidelity expectations: mikrotik_routeros -> opnsense
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/mikrotik_routeros_to_opnsense/
+#
+# Phase 3 follow-up pair.  MikroTik RouterOS is an SMB / WISP router-
+# first OS with optional bridge for switching; OPNsense is a FreeBSD-
+# based router/firewall (pfSense fork).  Both target small-network
+# deployments but with different feature focus — RouterOS leans on
+# routing / wireless / queues, OPNsense leans on firewall / NAT / VPN.
+#
+# Shared canonical surface:
+#
+#   * hostname — good
+#   * domain — N/A (RouterOS has no first-class FQDN identity)
+#   * DNS / NTP / syslog / timezone — lossy until OPNsense parse +
+#     render wires up the corresponding `<system>` children
+#   * interfaces (IP, MTU, enable, descr) — good (with rename-mesh
+#     handling for etherN <-> zone-tag conversion)
+#   * VLANs — id good; name/description collapse; port-membership and
+#     SVI sub-fields unsupported (OPNsense has no VLAN-centric port
+#     lists, no first-class SVI)
+#   * Static routes — lossy (OPNsense `<gateways>` + `<staticroutes>`
+#     two-stage model; codec doesn't currently render either)
+#   * DHCP server scopes — lossy (interface-keyed pool model on
+#     OPNsense; pool network inferred from zone interface)
+#   * SNMP v1/v2c — good; SNMPv3 USM unsupported (lives in plugin's
+#     snmpd.conf, not config.xml)
+#   * Local users — unsupported password material (RouterOS /export
+#     does NOT surface hashed passwords); OPNsense bcrypt-only
+#     expectation cannot be satisfied from a RouterOS source
+#   * RADIUS — good
+#   * LAGs — lossy (bond<N> ↔ lagg<N> rename, Linux bonding mode
+#     names ↔ FreeBSD lagg(4) protocol names; RouterOS-rich modes
+#     collapse)
+#
+# What's firmly out of scope on OPNsense (target unsupported):
+#
+#   * RouterOS firewall / NAT / mangle / queues / wireless / hotspot
+#     / scripts / scheduler / OVPN / IPsec / PPP — all Tier-3 on
+#     canonical (raw_sections only)
+#   * VRF / routing-instance — RouterOS codec parser gap AND OPNsense
+#     has no VRF model in config.xml; structurally absent on both
+#   * VXLAN / EVPN Type-5 — neither vendor models them in canonical scope
+
+meta:
+  source_vendor: mikrotik_routeros
+  target_vendor: opnsense
+  primary_use_case: >
+    Small-network migration: MikroTik RouterOS SMB / WISP router ->
+    OPNsense firewall/router.  Shared surface is hostname / DNS /
+    interface IPs / VLAN tags / SNMP v1/v2c / RADIUS / LAGs.  RouterOS-
+    rich plumbing (firewall, NAT, queues, wireless, scripts, IPsec,
+    OVPN, hotspot) is firmly Tier-3 (raw_sections only).  OPNsense's
+    firewall / NAT / VPN feature set is firmly out of scope on the
+    RouterOS source side.  Local-user password material is the
+    structural blocker — RouterOS /export does not include hashed
+    passwords, so OPNsense user records render without `<password>`
+    elements and operators must set passwords manually.
+  certainty: medium
+  references:
+    - id: mikrotik_identity
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/system_services.md
+      title: "Identity — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-04-30"
+    - id: mikrotik_clock
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/system_services.md
+      title: "Clock — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992866/Clock"
+      retrieved: "2026-04-30"
+    - id: mikrotik_dns
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/system_services.md
+      title: "DNS — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/37945004/DNS"
+      retrieved: "2026-04-30"
+    - id: mikrotik_iface_naming
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/interfaces.md
+      title: "Ethernet — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-04-30"
+    - id: mikrotik_ip_address
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/interfaces.md
+      title: "IP addressing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: mikrotik_vlan
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vlans.md
+      title: "VLAN — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-04-30"
+    - id: mikrotik_bridge_vlan
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vlans.md
+      title: "Basic VLAN switching (bridge VLAN filtering) — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/103841826/Basic+VLAN+switching"
+      retrieved: "2026-04-30"
+    - id: mikrotik_ip_routing
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/static_routes.md
+      title: "IP Routing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-04-30"
+    - id: mikrotik_dhcp
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/dhcp.md
+      title: "DHCP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-04-30"
+    - id: mikrotik_snmp
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/snmp.md
+      title: "SNMP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-04-30"
+    - id: mikrotik_user
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/local_users.md
+      title: "User — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-04-30"
+    - id: mikrotik_bonding
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/lags.md
+      title: "Bonding — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-04-30"
+    - id: mikrotik_radius
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/radius.md
+      title: "RADIUS Client — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/13402205/RADIUS"
+      retrieved: "2026-04-30"
+    - id: mikrotik_vrf
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vrf_unsupported.md
+      title: "VRF — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-04-30"
+    - id: opnsense-system
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/system_services.md
+      title: "OPNsense General Settings manual"
+      source_url: "https://docs.opnsense.org/manual/settingsmenu.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-interfaces
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/interfaces.md
+      title: "OPNsense Interfaces manual"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-vlans
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vlans.md
+      title: "OPNsense Devices manual (VLAN tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-gateways
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/static_routes.md
+      title: "OPNsense Gateways manual"
+      source_url: "https://docs.opnsense.org/manual/gateways.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-dhcp
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/dhcp.md
+      title: "OPNsense ISC DHCPv4 manual"
+      source_url: "https://docs.opnsense.org/manual/isc.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-snmp
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/snmp.md
+      title: "OPNsense Net-SNMP plugin reference (development docs)"
+      source_url: "https://docs.opnsense.org/development/api/plugins/netsnmp.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-users
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/local_users.md
+      title: "OPNsense Users manual"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-radius
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/radius.md
+      title: "OPNsense Users manual (Authentication servers)"
+      source_url: "https://docs.opnsense.org/manual/users.html"
+      retrieved: "2026-04-30"
+    - id: opnsense-laggs
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/lags.md
+      title: "OPNsense Devices manual (LAGG tab)"
+      source_url: "https://docs.opnsense.org/manual/other-interfaces.html"
+      retrieved: "2026-04-30"
+    - id: switchport-unsupported
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vlans.md
+      title: "Switchport / per-port allowed-VLAN unsupported on OPNsense"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: vrf-unsupported
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/vrf_unsupported.md
+      title: "VRF / routing-instance unsupported on both vendors"
+      source_url: "https://docs.opnsense.org/manual/interfaces.html"
+      retrieved: "2026-04-30"
+    - id: firewall-out-of-scope
+      path: docs/vendor-references/mikrotik_routeros_to_opnsense/firewall_natively_unsupported.md
+      title: "Firewall / NAT / VPN cross-vendor scope"
+      source_url: "https://docs.opnsense.org/manual/firewall.html"
+      retrieved: "2026-04-30"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  One entry per top-level CanonicalIntent field
+# (intent.py walked top-down).
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      RouterOS ``/system identity / set name=X`` ↔ OPNsense
+      ``<system>/<hostname>X</hostname>``.  Both vendors model the
+      bare short name; round-trip is lossless.
+    references: [mikrotik_identity, opnsense-system]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      RouterOS does not surface a top-level FQDN identity field; the
+      canonical ``domain`` value is empty after parsing a RouterOS
+      source.  OPNsense render emits no ``<domain>`` element when the
+      canonical field is empty.  Structural absence on the source
+      side, not a translation loss.
+    references: [mikrotik_identity]
+
+  dns_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/ip dns / set servers=1.1.1.1,8.8.8.8`` parses into
+      the ``list[str]`` cleanly.  OPNsense capability matrix declares
+      ``/system/dns-server`` supported but the OPNsense codec's render
+      path does not currently emit ``<dnsserver>`` elements.  Cross-
+      pair drops the resolver list pending wire-up.
+    references: [opnsense-system]
+
+  ntp_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system ntp client / set servers=10.0.0.123,
+      pool.ntp.org`` maps to OPNsense's space-separated
+      ``<system>/<timeservers>`` element.  OPNsense codec does not
+      currently wire ``<timeservers>`` into ``CanonicalIntent.ntp_servers``
+      on render.  Per-server NTP options are not modelled on either
+      side.
+    references: [opnsense-system]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system clock / set time-zone-name=America/New_York``
+      and OPNsense ``<system>/<timezone>America/New_York</timezone>``
+      both use the IANA tz database name — string shape is
+      compatible.  But the OPNsense codec does not currently wire
+      ``<timezone>`` into ``CanonicalIntent.timezone`` on render, so
+      cross-pair drops on render pending wire-up.
+    references: [mikrotik_clock, opnsense-system]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      RouterOS ``/system logging action add target=remote remote=X``
+      (destination) plus ``/system logging add action=remote
+      topics=...`` (filter) maps to OPNsense
+      ``<system>/<syslog>/<remoteserver>``.  OPNsense codec does not
+      currently wire syslog config into ``syslog_servers``; cross-pair
+      drops pending wire-up.  Per-topic / per-severity filter context
+      drops regardless (canonical surface is host list only).
+    references: [opnsense-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips, but several per-
+      interface sub-fields are lossy or unsupported.  See the
+      ``interfaces[].*`` entries below for the per-sub-field
+      breakdown.
+    references: [mikrotik_iface_naming, opnsense-interfaces]
+
+  interfaces[].name:
+    disposition: lossy
+    reason: >
+      RouterOS ``etherN`` / ``sfp-sfpplus<N>`` / ``bridge1`` /
+      ``vlan100`` does not survive on OPNsense.  The operator-facing
+      label on OPNsense is the zone tag (``<wan>`` / ``<lan>`` /
+      ``<optN>``); the BSD device name lives in ``<if>``.  Port-
+      rename mesh handles the conversion via the codec's
+      ``classify_port_name`` / ``format_port_identity`` delegates.
+      Canonical preserves the source RouterOS string verbatim.
+    references: [mikrotik_iface_naming, opnsense-interfaces]
+
+  interfaces[].default_name:
+    disposition: lossy
+    reason: >
+      RouterOS factory-default-name discriminator (``set [ find
+      default-name=etherN ]`` lookup form) is meaningful only to
+      RouterOS; OPNsense has no such concept.  Field drops on render.
+    references: [mikrotik_iface_naming]
+
+  interfaces[].description:
+    disposition: good
+    note: >
+      RouterOS ``comment="..."`` ↔ OPNsense ``<descr>...</descr>``.
+      Round-trip preserves text content.
+    references: [mikrotik_iface_naming, opnsense-interfaces]
+
+  interfaces[].enabled:
+    disposition: good
+    note: >
+      RouterOS ``disabled=no`` (default) ↔ OPNsense ``<enable/>``
+      element presence (present = enabled).
+    references: [mikrotik_iface_naming, opnsense-interfaces]
+
+  interfaces[].interface_type:
+    disposition: lossy
+    reason: >
+      RouterOS does not expose IANA ifType (codec infers from
+      default-name prefix per its capability matrix lossy entry on
+      ``/interfaces/interface/config/type``).  OPNsense doesn't
+      surface a type field; the cross-pair drops the type hint.
+    references: [mikrotik_iface_naming]
+
+  interfaces[].mtu:
+    disposition: good
+    note: >
+      RouterOS ``mtu=1500`` ↔ OPNsense ``<mtu>1500</mtu>``.  Both
+      render explicitly when set.
+    references: [opnsense-interfaces]
+
+  interfaces[].ipv4_addresses:
+    disposition: good
+    note: >
+      RouterOS ``/ip address add address=A.B.C.D/N interface=etherN``
+      maps mechanically to OPNsense
+      ``<ipaddr>A.B.C.D</ipaddr><subnet>N</subnet>``.  Multiple
+      RouterOS addresses on the same interface collapse to the
+      primary on canonical (single CanonicalIPv4Address per
+      interface).
+    references: [mikrotik_ip_address, opnsense-interfaces]
+
+  interfaces[].ipv6_addresses:
+    disposition: good
+    note: >
+      RouterOS ``/ipv6 address add address=2001:db8::1/64
+      interface=etherN`` ↔ OPNsense ``<ipaddrv6>`` + ``<subnetv6>``.
+      ``scope`` discriminator (global / link-local) preserved —
+      RouterOS addresses in ``fe80::/10`` are normalised to
+      ``scope="link-local"`` on parse.
+    references: [mikrotik_ip_address, opnsense-interfaces]
+
+  interfaces[].switchport_mode:
+    disposition: unsupported
+    reason: >
+      OPNsense has no switching fabric.  RouterOS-side switchport
+      state (synthesised from Plane-2 bridge VLAN filtering parse)
+      drops on render — there is no per-port allowed-VLAN list, no
+      access / trunk mode toggle.
+    references: [switchport-unsupported]
+
+  interfaces[].access_vlan:
+    disposition: unsupported
+    reason: >
+      Same rationale as switchport_mode — OPNsense has no access-
+      VLAN concept on physical interfaces.
+    references: [switchport-unsupported]
+
+  interfaces[].trunk_allowed_vlans:
+    disposition: unsupported
+    reason: >
+      OPNsense has no per-port allowed-VLAN list.  Trunking is
+      implicit: every ``<vlans>/<vlan>`` whose ``<if>`` matches a
+      physical NIC rides that NIC.
+    references: [switchport-unsupported, opnsense-vlans]
+
+  interfaces[].trunk_native_vlan:
+    disposition: unsupported
+    reason: >
+      Same as trunk_allowed_vlans — OPNsense's "native VLAN" is the
+      parent NIC's untagged frames; not a per-port toggle.
+    references: [switchport-unsupported]
+
+  interfaces[].voice_vlan:
+    disposition: unsupported
+    reason: >
+      OPNsense has no LLDP-MED voice-VLAN signalling in the base
+      OS.  RouterOS source rarely populates this field anyway (no
+      first-class voice-VLAN concept on RouterOS); cross-pair drops
+      it.
+    references: [switchport-unsupported]
+
+  interfaces[].lag_member_of:
+    disposition: lossy
+    reason: >
+      RouterOS ``/interface bonding name=bond1 slaves=ether3,ether4``
+      back-points each member to ``bond1``.  OPNsense ``<laggs>/
+      <lagg>/<members>opt3,opt4</members>`` carries the back-pointer
+      with different LAG and member names (``bond1`` ↔ ``lagg0``);
+      port-rename mesh canonicalises.
+    references: [opnsense-laggs]
+
+  interfaces[].dhcp_client:
+    disposition: lossy
+    reason: >
+      RouterOS ``/ip dhcp-client add interface=etherN`` ↔ OPNsense
+      ``<ipaddr>dhcp</ipaddr>``.  Neither codec currently wires
+      this into ``CanonicalInterface.dhcp_client``; cross-pair
+      drops pending wire-up.
+    references: [opnsense-interfaces]
+
+  interfaces[].vrf:
+    disposition: not_applicable
+    note: >
+      RouterOS 7+ ``/ip vrf`` exists but the MikroTik codec does
+      not yet wire up the parser; canonical ``vrf`` field is empty
+      after a RouterOS parse.  OPNsense has no VRF model in
+      ``config.xml``.  Field structurally absent on this direction.
+    references: [vrf-unsupported]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      The list itself round-trips for the id field.  Per-VLAN sub-
+      fields collapse or drop — see ``vlans[].*`` entries below.
+    references: [mikrotik_vlan, opnsense-vlans]
+
+  vlans[].id:
+    disposition: good
+    note: >
+      RouterOS ``vlan-id=10`` ↔ OPNsense ``<vlan>/<tag>10</tag>``.
+      Both vendors share the 1-4094 range.
+    references: [mikrotik_vlan, opnsense-vlans]
+
+  vlans[].name:
+    disposition: lossy
+    reason: >
+      RouterOS conflates the L3 interface name (``vlan10``) with
+      the descriptive VLAN name on Plane 1 (per the MikroTik codec's
+      ``LossyPath`` on ``/vlans/vlan/name``).  OPNsense's nearest
+      equivalent is ``<descr>`` — which is also where the canonical
+      ``description`` lands.  Two canonical fields collapse to one
+      OPNsense XML field; one drops on render.
+    references: [mikrotik_vlan, opnsense-vlans]
+
+  vlans[].description:
+    disposition: lossy
+    reason: >
+      Same as ``vlans[].name`` — both canonical fields share the
+      single OPNsense ``<descr>`` slot.  RouterOS has no first-class
+      description field on either Plane 1 or Plane 2 anyway, so the
+      canonical value is typically empty after a RouterOS parse.
+    references: [opnsense-vlans, mikrotik_bridge_vlan]
+
+  vlans[].tagged_ports:
+    disposition: unsupported
+    reason: >
+      OPNsense has no VLAN-centric port-membership model.  Even when
+      the RouterOS codec successfully populates the lists from
+      Plane-2 (bridge VLAN filtering) parse, the OPNsense render
+      emits no port-membership XML; operators reconstruct trunk
+      topology manually by assigning each ``<vlan>`` to a zone.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].untagged_ports:
+    disposition: unsupported
+    reason: >
+      Same as tagged_ports — OPNsense's "untagged" traffic is the
+      parent NIC's native frames; not a per-port toggle.
+    references: [opnsense-vlans, switchport-unsupported]
+
+  vlans[].ipv4_addresses:
+    disposition: lossy
+    reason: >
+      RouterOS ``/interface vlan name=vlan100`` + ``/ip address add
+      address=X interface=vlan100`` (SVI absorption) has no first-
+      class OPNsense equivalent.  The OPNsense pattern is to assign
+      the VLAN sub-interface to a zone (``<opt2>``) and put the
+      address on the zone.  The canonical model carries the SVI
+      address but the OPNsense render path doesn't synthesise the
+      corresponding zone — operator-curated.
+    references: [opnsense-vlans]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      OPNsense splits static-route declaration into two blocks:
+      ``<gateways>/<gateway_item>`` (named gateways) and
+      ``<staticroutes>/<route>`` (routes referencing named
+      gateways).  The OPNsense codec does not currently parse OR
+      emit either block; canonical static_routes from a RouterOS
+      source therefore drop on render.  Per-VRF routes (RouterOS
+      ``routing-table=TENANT-A``) are unsupported (canonical lacks a
+      VRF field on CanonicalStaticRoute and the MikroTik codec does
+      not yet parse VRF context).  Default route (``0.0.0.0/0``)
+      maps to OPNsense's WAN-zone gateway pattern, not a
+      ``<staticroutes>`` entry — operator-curated.
+    references: [mikrotik_ip_routing, opnsense-gateways]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      RouterOS's three-section form (``/ip pool`` + ``/ip dhcp-
+      server`` + ``/ip dhcp-server network``) joins on parse to a
+      single CanonicalDHCPPool per (interface, network) pair.
+      OPNsense uses an INTERFACE-KEYED layout (``<dhcpd>/<lan>``
+      pools) where the network / mask is INFERRED from the zone
+      interface.  Lease-time units are seconds on both sides
+      (RouterOS suffix-text ``1h`` / ``8h`` parses to seconds).
+      OPNsense codec does not currently advertise ``/dhcp/pool``
+      in its capability matrix supported[]; render is partial
+      pending wire-up.  Static reservations (RouterOS ``/ip dhcp-
+      server lease`` / OPNsense ``<staticmap>``) and DHCP option
+      codes are not modelled canonically on either side.
+    references: [mikrotik_dhcp, opnsense-dhcp]
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact / trap_hosts)
+      round-trips cleanly — RouterOS ``/snmp set contact=`` /
+      ``location=`` and ``/snmp community set [ find default=yes ]
+      name=`` ↔ OPNsense ``<snmpd>/<rocommunity> / <syslocation> /
+      <syscontact>``.  RouterOS supports only one trap-target so
+      multi-target OPNsense source is the lossy direction (this
+      direction renders one ``<traphost>`` cleanly).  v3 USM is
+      unsupported on OPNsense (lives in plugin's snmpd.conf, not
+      config.xml — see codec's ``/snmp/v3-user`` unsupported entry);
+      RouterOS v3 users drop on the cross-pair and the rename-pane
+      shows the ``snmpv3`` unsupported-category banner declared on
+      the OPNsense codec's ``unsupported_rename_categories``
+      frozenset.  Operators must re-declare v3 users on the OPNsense
+      target by editing ``/usr/local/etc/snmpd.conf`` directly.
+    references: [mikrotik_snmp, opnsense-snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      RouterOS ``bond<N>`` (Linux bonding driver: 802.3ad / active-
+      backup / balance-xor / balance-rr / broadcast / balance-tlb /
+      balance-alb) ↔ OPNsense ``lagg<N>`` (FreeBSD lagg(4): lacp /
+      failover / loadbalance / roundrobin / none).  Mode mapping
+      collapses RouterOS-rich modes: ``broadcast``, ``balance-tlb``,
+      ``balance-alb`` have no FreeBSD lagg equivalent and degrade
+      with banner.  Naming convention differs (``bond1`` vs
+      ``lagg0``); port-rename mesh canonicalises.  OPNsense codec
+      parses ``<laggs>`` but its capability matrix doesn't currently
+      advertise ``/lag/aggregate``; render is partial pending
+      wire-up.  LACP-specific extras (system-priority, key, port-
+      priority) are not modelled canonically.
+    references: [mikrotik_bonding, opnsense-laggs]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      RouterOS named groups (``full`` / ``write`` / ``read`` / custom)
+      collapse to OPNsense's binary admin / non-admin via group
+      membership: ``full`` -> ``<groupname>admins</groupname>``
+      (privilege 15 equivalent); ``write`` -> ``<groupname>admins
+      </groupname>`` with banner (closest analogue); ``read`` ->
+      ``<groupname>users</groupname>``; custom RouterOS groups
+      collapse to ``users`` with banner.  The dominant lossy point
+      is password material: RouterOS ``/export`` does NOT surface
+      hashed passwords (they are stored encrypted in the vendor-
+      private ``user.dat`` binary).  ``CanonicalLocalUser.hashed_password``
+      arrives EMPTY after a RouterOS parse; OPNsense render emits
+      the user record without a ``<password>`` element and OPNsense
+      will refuse login until the operator sets a password manually
+      post-migration.
+    references: [mikrotik_user, opnsense-users]
+
+  radius_servers:
+    disposition: good
+    note: >
+      RouterOS ``/radius add address=10.0.0.10 secret=...
+      authentication-port=1812 accounting-port=1813`` ↔ OPNsense
+      ``<authserver>`` with ``<type>radius</type>``, ``<host>``,
+      ``<radius_secret>``, ``<radius_auth_port>``,
+      ``<radius_acct_port>``.  Round-trips host / port pair / shared
+      secret cleanly.  RouterOS's ``service=login,ppp,wireless,
+      hotspot,dhcp,ipsec`` binding has no canonical model; OPNsense
+      references RADIUS servers via ``<refid>`` from individual
+      subsystems and the operator must wire it into target
+      subsystems manually post-migration.
+    references: [mikrotik_radius, opnsense-radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      MikroTik codec capability matrix lists ``/vxlan-vnis/vni`` as
+      unsupported ("RouterOS VXLAN exists but is rare in canonical
+      scope and not modelled in v1.").  OPNsense codec also lists
+      the path under unsupported ("VXLAN not modelled — OPNsense
+      is a firewall codec.").  Cross-pair drops VXLAN entirely.
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      RouterOS does not model EVPN Type-5 at all.  OPNsense doesn't
+      model EVPN either (no MP-BGP plumbing in canonical scope).
+      Cross-pair surface effectively unsupported.
+    references: [vrf-unsupported]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      RouterOS 7+ has ``/ip vrf`` but the MikroTik codec does not
+      yet wire up the parser — canonical ``routing_instances`` list
+      is empty after parsing a RouterOS source.  OPNsense has no
+      VRF / routing-instance model in ``config.xml``.  Cross-pair
+      empty regardless of structural compatibility.
+    references: [vrf-unsupported, mikrotik_vrf]
+
+  # ── Tier 3 — informational only ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict by design — never auto-rendered.  RouterOS-rich
+      plumbing (firewall / NAT / mangle / queues / wireless / hotspot
+      / scripts / scheduler / OVPN / IPsec / PPP) lands here on
+      parse and remains for operator review.  This is the dominant
+      cross-vendor information loss path on this direction — the
+      OPNsense target couldn't render those rules as XML anyway
+      (firewall rules are unsupported per codec capability matrix).
+    references: [firewall-out-of-scope]
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec does not
+      consume it (cross-vendor round-trip explicitly changes vendor).
+      Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: >
+      Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: >
+      OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific concept (``apply-groups`` statement
+      preservation per GAP 9b).  RouterOS source never populates
+      this list; field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Companion to apply_groups; same not_applicable status for
+      RouterOS source.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The fundamental shape — what OPNsense models in config.xml versus
+#     what RouterOS models in /export form — is well documented and
+#     unambiguous.  hostname / interface IPs / VLAN tags / SNMP v1/v2c
+#     / RADIUS / LAG-name-collision round-trip cleanly.
+#
+#   * The wire-up gaps on the OPNsense side (no DNS / NTP / syslog /
+#     timezone / static-route render path; no /dhcp/pool advertised;
+#     no /lag/aggregate advertised) push several Tier-1 fields into
+#     'lossy' rather than 'good'.  These are codec-implementation
+#     gaps, not vendor-modelling gaps, and would close as wire-up
+#     lands.
+#
+#   * The router-with-bridge versus firewall-with-router role mismatch
+#     is unambiguously 'unsupported' on switching state: RouterOS
+#     Plane-2 (bridge VLAN filtering) port lists have no destination
+#     on OPNsense, which has no per-port allowed-VLAN model.  Confident.
+#
+#   * The password-export gap is structurally documented (RouterOS
+#     /export carries no password material) and confidently
+#     unsupported on the cross-pair.  This is the dominant loss point
+#     for local_users on this direction.
+#
+#   * The Tier-3 plumbing gap (firewall / NAT / queues / wireless /
+#     scripts / IPsec / OVPN) is confidently not_applicable —
+#     RouterOS-rich plumbing lands in raw_sections by canonical-scope
+#     design.  Same shape applies to OPNsense's own firewall / NAT /
+#     VPN (unsupported on canonical) which is irrelevant on this
+#     direction (RouterOS source has no OPNsense-shaped data to lose).
+#
+# Deferred items (none — all fields walked and dispositioned):
+#
+#   * (none — every CanonicalIntent top-level field carries an explicit
+#     per_field_expectation entry; sub-fields enumerated where the
+#     disposition varies by sub-field).
