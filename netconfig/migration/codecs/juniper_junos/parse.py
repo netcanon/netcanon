@@ -47,6 +47,7 @@ from ...canonical.intent import (
     CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRoutingInstance,
     CanonicalSNMP,
@@ -113,6 +114,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # config across many lines; we collect per-iface state
     # before materialising CanonicalInterface objects.
     iface_state: dict[str, dict[str, Any]] = {}
+    # Phase 4 rank-4: LAG accumulator (ae<N> aggregated-ether-
+    # options).  Keyed by ae-name; each entry holds members + LACP mode.
+    lag_state: dict[str, dict[str, Any]] = {}
+    # Phase 4 rank-4: IRB SVI accumulator.  Keyed by vid (the irb
+    # unit number); each entry holds the per-vid IPv4 list.
+    irb_state: dict[int, dict[str, Any]] = {}
     # Structural-collapse accumulator: Junos's ``set interfaces
     # interface-range <name>`` grammar declares shared config
     # across multiple physical interfaces.  We collect members
@@ -180,12 +187,18 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # apply-grouped silently drops.
     for gname in reversed(applied_groups):
         for tokens in group_lines.get(gname, []):
-            _dispatch_set(tokens, intent, iface_state, range_state)
+            _dispatch_set(
+                tokens, intent, iface_state, range_state,
+                lag_state, irb_state,
+            )
     # Pass 2b: apply top-level content.  Scalars set by group
     # content get overwritten; list-shaped fields accumulate
     # (duplicate-add protection lives in each _apply_* function).
     for tokens in top_level_lines:
-        _dispatch_set(tokens, intent, iface_state, range_state)
+        _dispatch_set(
+            tokens, intent, iface_state, range_state,
+            lag_state, irb_state,
+        )
 
     # GAP 9b: preserve both the apply-groups STATEMENT and the
     # GROUP CONTENT so render can re-emit `set groups <G> ...`
@@ -273,6 +286,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
             # interface-range <r> mtu <N>`` line via the
             # range-fold pass.
             mtu=state.get("mtu"),
+            # Phase 4 rank-4: L2 switchport semantics.
+            switchport_mode=state.get("switchport_mode"),
+            trunk_native_vlan=state.get("trunk_native_vlan"),
+            lag_member_of=state.get("lag_member_of"),
         )
         for ip, prefix in state.get("ipv4", []):
             iface.ipv4_addresses.append(
@@ -318,6 +335,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
             continue
         for iface_name in pending:
             iface = iface_by_name.get(iface_name)
+            # Phase 4 rank-5: routing-instances reference UNITs
+            # (``Loopback0.0``); canonical stores parent (``Loopback0``).
+            # See PHASE4_RECONCILIATION.md rank 5 (~18 cells).
+            if iface is None and iface_name.endswith(".0"):
+                iface = iface_by_name.get(iface_name[:-2])
             if iface is None:
                 # Interface referenced under routing-instance but
                 # never declared via ``set interfaces`` — create a
@@ -338,6 +360,132 @@ def parse_intent(raw: str) -> CanonicalIntent:
             object.__delattr__(ri, "_pending_interfaces")
         except AttributeError:
             pass
+
+    # --- Phase 4 rank-4: LAG / IRB / L2 vlan-members post-pass ---
+    #
+    # 1. Materialise CanonicalLAG records from the lag_state
+    #    accumulator.  Each entry is keyed by ae-name (e.g. ``ae0``)
+    #    with the ordered member list and the LACP mode.
+    for ae_name, lag_entry in lag_state.items():
+        members = list(lag_entry.get("members", []))
+        mode = lag_entry.get("mode", "active") or "active"
+        # Don't accumulate duplicates if the same LAG already exists
+        # (defensive for groups + apply-groups composition).
+        existing = next(
+            (l for l in intent.lags if l.name == ae_name), None,
+        )
+        if existing is None:
+            intent.lags.append(
+                CanonicalLAG(name=ae_name, members=members, mode=mode)
+            )
+        else:
+            existing.mode = mode
+            for m in members:
+                if m not in existing.members:
+                    existing.members.append(m)
+
+    # 2. Resolve L2 ``vlan members <NAME>`` lists on access / trunk
+    #    interfaces — convert vlan-name lookups to numeric VIDs by
+    #    consulting intent.vlans.  Names that don't resolve are
+    #    silently dropped (parse tolerance).
+    vid_by_vlan_name = {v.name: v.id for v in intent.vlans if v.name}
+    for name, state in iface_state.items():
+        names_list = state.get("l2_vlan_member_names")
+        if not names_list:
+            continue
+        iface = iface_by_name.get(name)
+        if iface is None:
+            continue
+        if iface.switchport_mode == "access":
+            # Access mode: the first resolved member becomes the
+            # access_vlan (operators rarely declare more than one).
+            for vname in names_list:
+                vid = vid_by_vlan_name.get(vname)
+                if vid is not None:
+                    iface.access_vlan = vid
+                    break
+        elif iface.switchport_mode == "trunk":
+            for vname in names_list:
+                vid = vid_by_vlan_name.get(vname)
+                if vid is not None and vid not in iface.trunk_allowed_vlans:
+                    iface.trunk_allowed_vlans.append(vid)
+
+    # 3. Attach IRB SVI L3 addresses to the matching CanonicalVlan
+    #    AND prune the redundant irb.<vid> interface — but ONLY
+    #    when:
+    #
+    #    * The operator declared a ``set vlans <NAME> l3-interface
+    #      irb.<vid>`` binding (signalling SVI intent), AND
+    #    * The irb.<vid> interface has no load-bearing fields
+    #      beyond IPv4 (no VRF binding, no description, no IPv6,
+    #      no LAG membership).
+    #
+    #    A real-capture fixture from Batfish (``junos2541``) carries
+    #    irb.<vid> bindings inside ``routing-instances`` (VRF) — we
+    #    must preserve those interfaces as-is so the routing-
+    #    instance round-trips correctly.  The cross-vendor
+    #    Aruba/OPNsense -> Junos render case the rank-4 fix
+    #    targets always emits a fresh irb.<vid> with no VRF binding,
+    #    which IS safe to fold onto the vlan.
+    bound_vids: set[int] = set()
+    for vid, irb_entry in irb_state.items():
+        if "vlan_name" not in irb_entry:
+            # No l3-interface binding — preserve irb.<vid> as-is.
+            continue
+        # Check whether the irb.<vid> interface (if it exists) has
+        # any load-bearing field that would be lost on prune.
+        sub_iface = iface_by_name.get(f"irb.{vid}")
+        if sub_iface is not None and (
+            sub_iface.vrf
+            or sub_iface.description
+            or sub_iface.ipv6_addresses
+            or sub_iface.lag_member_of
+        ):
+            # Load-bearing — leave the iface alone, don't fold to vlan.
+            continue
+        vlan = next((v for v in intent.vlans if v.id == vid), None)
+        if vlan is None:
+            stub_name = irb_entry.get("vlan_name", f"VLAN-{vid}")
+            vlan = CanonicalVlan(id=vid, name=stub_name)
+            intent.vlans.append(vlan)
+        for ip, prefix in irb_entry.get("ipv4", []):
+            existing_addrs = {
+                (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
+            }
+            if (ip, prefix) not in existing_addrs:
+                vlan.ipv4_addresses.append(
+                    CanonicalIPv4Address(ip=ip, prefix_length=prefix)
+                )
+        bound_vids.add(vid)
+
+    # 4. Prune the synthetic ``irb`` carrier and any ``irb.<vid>``
+    #    sub-interfaces that were folded onto a CanonicalVlan in
+    #    step 3.  ``bound_vids`` only contains vids that were
+    #    safely foldable (no VRF / description / v6 / LAG).
+    pruned: list[CanonicalInterface] = []
+    for iface in intent.interfaces:
+        if iface.name == "irb":
+            # The bare ``irb`` carrier — only prune when at least
+            # one bound vid was folded.  Otherwise keep it.
+            if (
+                bound_vids
+                and not iface.description
+                and not iface.ipv6_addresses
+                and not iface.lag_member_of
+                and not iface.vrf
+            ):
+                continue
+        elif iface.name.startswith("irb."):
+            try:
+                sub_vid = int(iface.name[4:])
+            except ValueError:
+                sub_vid = -1
+            if sub_vid in bound_vids:
+                continue
+        pruned.append(iface)
+    if len(pruned) != len(intent.interfaces):
+        intent.interfaces = pruned
+        iface_by_name = {i.name: i for i in intent.interfaces}
 
     # GAP-EVPN-2: stamp every CanonicalVxlan record with the
     # switch-level vtep-source-interface + vxlan-port we observed.
@@ -584,6 +732,8 @@ def _dispatch_set(
     intent: CanonicalIntent,
     iface_state: dict[str, dict[str, Any]],
     range_state: dict[str, dict[str, Any]] | None = None,
+    lag_state: dict[str, dict[str, Any]] | None = None,
+    irb_state: dict[int, dict[str, Any]] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
@@ -596,7 +746,9 @@ def _dispatch_set(
     with the group-name token stripped.
 
     ``range_state`` is the interface-range accumulator (optional —
-    callers in isolated tests may omit it).
+    callers in isolated tests may omit it).  ``lag_state`` /
+    ``irb_state`` cover the Phase 4 rank-4 surfaces (LAG ae<N> +
+    IRB SVI L3); also optional for legacy callers.
     """
     if not tokens:
         return
@@ -604,9 +756,11 @@ def _dispatch_set(
     if head == "system":
         _apply_system(tokens[1:], intent)
     elif head == "interfaces":
-        _apply_interfaces(tokens[1:], iface_state, range_state)
+        _apply_interfaces(
+            tokens[1:], iface_state, range_state, lag_state, irb_state,
+        )
     elif head == "vlans":
-        _apply_vlans(tokens[1:], intent)
+        _apply_vlans(tokens[1:], intent, irb_state)
     elif head == "routing-options":
         _apply_routing_options(tokens[1:], intent)
     elif head == "snmp":
@@ -697,12 +851,29 @@ def _apply_interfaces(
     tokens: list[str],
     iface_state: dict[str, dict[str, Any]],
     range_state: dict[str, dict[str, Any]] | None = None,
+    lag_state: dict[str, dict[str, Any]] | None = None,
+    irb_state: dict[int, dict[str, Any]] | None = None,
 ) -> None:
     """Parse ``interfaces <name> ...`` variants.
 
     Special case: ``interfaces interface-range <rname> ...`` routes to
     the structural-collapse accumulator so shared attrs apply to each
     member interface at materialisation time.
+
+    Phase 4 rank-4 additions (when *lag_state* / *irb_state* are
+    provided):
+
+    * ``interfaces ae<N> aggregated-ether-options lacp <mode>`` —
+      captured into *lag_state* under the ae-name; the materialiser
+      turns it into a :class:`CanonicalLAG` record.
+    * ``interfaces <member> ether-options 802.3ad ae<N>`` — sets the
+      member's ``lag_member_of`` and registers the member with
+      *lag_state*.
+    * ``interfaces <name> unit 0 family ethernet-switching ...`` —
+      switchport semantics (interface-mode + vlan members).
+    * ``interfaces <name> native-vlan-id <vid>`` — trunk native VLAN.
+    * ``interfaces irb unit <vid> family inet address <ip>/<prefix>`` —
+      VLAN SVI L3 address; captured into *irb_state* keyed by vid.
     """
     if not tokens:
         return
@@ -740,6 +911,43 @@ def _apply_interfaces(
     if second == "mtu" and len(tokens) >= 3:
         try:
             state["mtu"] = int(tokens[2])
+        except ValueError:
+            pass
+        return
+
+    # --- Phase 4 rank-4: LAG ae<N> aggregated-ether-options ---
+    if (
+        second == "aggregated-ether-options"
+        and len(tokens) >= 4
+        and tokens[2] == "lacp"
+        and lag_state is not None
+    ):
+        ae_name = name
+        mode = tokens[3]
+        if mode not in ("active", "passive"):
+            mode = "active"
+        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "active"})
+        entry["mode"] = mode
+        return
+
+    # --- Phase 4 rank-4: LAG member binding ---
+    if (
+        second == "ether-options"
+        and len(tokens) >= 4
+        and tokens[2] == "802.3ad"
+        and lag_state is not None
+    ):
+        ae_name = tokens[3]
+        state["lag_member_of"] = ae_name
+        entry = lag_state.setdefault(ae_name, {"members": [], "mode": "active"})
+        if name not in entry["members"]:
+            entry["members"].append(name)
+        return
+
+    # --- Phase 4 rank-4: trunk native VLAN ---
+    if second == "native-vlan-id" and len(tokens) >= 3:
+        try:
+            state["trunk_native_vlan"] = int(tokens[2])
         except ValueError:
             pass
         return
@@ -828,6 +1036,54 @@ def _apply_interfaces(
             except ValueError:
                 pass
 
+        # --- Phase 4 rank-4: L2 family ethernet-switching ---
+        # ``unit 0 family ethernet-switching interface-mode access|trunk``
+        if (
+            unit_num == 0
+            and len(tokens) >= 7
+            and tokens[3] == "family"
+            and tokens[4] == "ethernet-switching"
+            and tokens[5] == "interface-mode"
+        ):
+            mode = tokens[6]
+            if mode in ("access", "trunk"):
+                target_state["switchport_mode"] = mode
+
+        # ``unit 0 family ethernet-switching vlan members <NAME>``
+        if (
+            unit_num == 0
+            and len(tokens) >= 8
+            and tokens[3] == "family"
+            and tokens[4] == "ethernet-switching"
+            and tokens[5] == "vlan"
+            and tokens[6] == "members"
+        ):
+            target_state.setdefault(
+                "l2_vlan_member_names", [],
+            ).append(tokens[7])
+
+        # --- Phase 4 rank-4: IRB SVI L3 ---
+        # ``set interfaces irb unit <vid> family inet address <ip>/<prefix>``
+        if (
+            name == "irb"
+            and irb_state is not None
+            and len(tokens) >= 7
+            and tokens[3] == "family"
+            and tokens[4] == "inet"
+            and tokens[5] == "address"
+        ):
+            addr = tokens[6]
+            if "/" in addr:
+                ip_str, prefix_str = addr.split("/", 1)
+                try:
+                    prefix = int(prefix_str)
+                    entry = irb_state.setdefault(unit_num, {"ipv4": []})
+                    pair = (ip_str, prefix)
+                    if pair not in entry["ipv4"]:
+                        entry["ipv4"].append(pair)
+                except ValueError:
+                    pass
+
 
 def _apply_interface_range(
     tokens: list[str],
@@ -897,9 +1153,14 @@ def _apply_interface_range(
     # Everything else parses-and-ignores.
 
 
-def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
+def _apply_vlans(
+    tokens: list[str],
+    intent: CanonicalIntent,
+    irb_state: dict[int, dict[str, Any]] | None = None,
+) -> None:
     """``set vlans <NAME> vlan-id <N>``
     ``set vlans <NAME> vxlan vni <VNI>``  (GAP 6)
+    ``set vlans <NAME> l3-interface irb.<vid>``  (Phase 4 rank-4)
     """
     if len(tokens) < 3:
         return
@@ -914,6 +1175,19 @@ def _apply_vlans(tokens: list[str], intent: CanonicalIntent) -> None:
             intent.vlans.append(CanonicalVlan(id=vid, name=vlan_name))
         else:
             existing.name = vlan_name
+        return
+    # Phase 4 rank-4: l3-interface binding.  Capture the name->vid
+    # link so the post-pass can attach IRB addresses to the right
+    # CanonicalVlan.
+    if tokens[1] == "l3-interface" and irb_state is not None:
+        irb_target = tokens[2]
+        if irb_target.startswith("irb."):
+            try:
+                vid = int(irb_target[4:])
+            except ValueError:
+                return
+            entry = irb_state.setdefault(vid, {"ipv4": []})
+            entry["vlan_name"] = vlan_name
         return
     if (
         tokens[1] == "vxlan"

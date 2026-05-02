@@ -78,6 +78,18 @@ def render_intent(tree: Any) -> str:
             f"{type(tree).__name__}"
         )
 
+    # Materialise port-centric switchport state from VLAN-centric
+    # membership lists.  Required for cross-vendor renders from
+    # codecs that emit no per-port stanzas (Aruba AOS-S, OPNsense)
+    # — without this, a tree whose only L2 information lives in
+    # ``CanonicalVlan.tagged_ports`` / ``untagged_ports`` would
+    # render zero L2 config on Junos.  Idempotent + additive —
+    # same-vendor round-trips where iface fields are already
+    # populated are no-ops.  Mirrors the same call in the Cisco
+    # IOS-XE CLI render path.  Phase 4 rank-4 finding (~22 cells).
+    from ...canonical.transforms import project_vlan_to_switchport
+    project_vlan_to_switchport(tree)
+
     out: list[str] = []
 
     # --- system ---
@@ -201,6 +213,38 @@ def render_intent(tree: Any) -> str:
     for _rname, lines in range_emit_by_name.items():
         out.extend(lines)
 
+    # --- L2 / LAG / SVI lookups (Phase 4 rank-4) ---
+    #
+    # Junos references VLANs by NAME (not VID) inside
+    # ``family ethernet-switching vlan members``; build a
+    # vid -> vlan-key lookup once.  ``vlan_key`` mirrors the
+    # convention used a few lines below in the ``set vlans`` block:
+    # use ``vlan.name`` when populated, fall back to ``VLAN-<id>``.
+    vlan_name_by_id: dict[int, str] = {}
+    for _v in tree.vlans:
+        vlan_name_by_id[_v.id] = _v.name or f"VLAN-{_v.id}"
+
+    # LAG mode lookup so we know whether to emit ``lacp active /
+    # passive`` or static (no LACP).  LAG name is the canonical-side
+    # vendor-native name (Cisco/Arista ``Port-Channel10``,
+    # Aruba/AOS-S ``Trk1``, MikroTik ``bond1``).  Map to Junos's
+    # ``ae<N>`` form via :func:`_lag_name_to_ae`.
+    lag_mode_by_canonical_name = {
+        lag.name: (lag.mode or "active") for lag in tree.lags
+    }
+    lag_ae_by_canonical_name: dict[str, str] = {}
+    _used_ae_ids: set[int] = set()
+    _next_ae_fallback_state = [0]  # list-of-one so closures can mutate
+    for lag in tree.lags:
+        ae_name, ae_id = _lag_name_to_ae(
+            lag.name, _used_ae_ids, _next_ae_fallback_state[0],
+        )
+        if ae_id is not None:
+            _used_ae_ids.add(ae_id)
+        else:
+            _next_ae_fallback_state[0] += 1
+        lag_ae_by_canonical_name[lag.name] = ae_name
+
     # --- interfaces ---
     for iface in tree.interfaces:
         name = iface.name
@@ -294,6 +338,79 @@ def render_intent(tree: Any) -> str:
                 f"set interfaces {name} unit 0 family inet6 "
                 f"address {v6.ip}/{v6.prefix_length}"
             )
+
+        # --- L2 switchport emission (Phase 4 rank-4) ---
+        #
+        # Junos models L2 ports as ``unit 0 family ethernet-
+        # switching`` with ``interface-mode access|trunk`` and
+        # ``vlan members <NAME>`` (NAME, not VID).
+        # ``trunk_native_vlan`` surfaces as ``native-vlan-id <vid>``
+        # at the iface level.  Emitted after IP addresses so the
+        # L2 lines follow the L3 lines in deterministic order.
+        emitted_l2 = False
+        if iface.switchport_mode == "access":
+            out.append(
+                f"set interfaces {name} unit 0 family ethernet-switching "
+                f"interface-mode access"
+            )
+            if iface.access_vlan is not None:
+                vname = vlan_name_by_id.get(
+                    iface.access_vlan, f"VLAN-{iface.access_vlan}",
+                )
+                out.append(
+                    f"set interfaces {name} unit 0 family "
+                    f"ethernet-switching vlan members "
+                    f"{_quote_if_needed(vname)}"
+                )
+            emitted_l2 = True
+        elif iface.switchport_mode == "trunk":
+            out.append(
+                f"set interfaces {name} unit 0 family ethernet-switching "
+                f"interface-mode trunk"
+            )
+            for vid in iface.trunk_allowed_vlans:
+                vname = vlan_name_by_id.get(vid, f"VLAN-{vid}")
+                out.append(
+                    f"set interfaces {name} unit 0 family "
+                    f"ethernet-switching vlan members "
+                    f"{_quote_if_needed(vname)}"
+                )
+            if iface.trunk_native_vlan is not None:
+                out.append(
+                    f"set interfaces {name} native-vlan-id "
+                    f"{iface.trunk_native_vlan}"
+                )
+            emitted_l2 = True
+
+        # --- LAG membership emission (Phase 4 rank-4) ---
+        #
+        # Junos puts LAG membership on the child:
+        # ``set interfaces <member> ether-options 802.3ad ae<N>``.
+        # Map the canonical LAG name (Cisco/Arista
+        # ``Port-Channel10``, Aruba ``Trk1``, MikroTik ``bond1``)
+        # to the matching ``ae<N>`` via the lookup built above.
+        emitted_lag_member = False
+        if iface.lag_member_of:
+            ae_name = lag_ae_by_canonical_name.get(iface.lag_member_of)
+            if ae_name is None:
+                # The canonical tree carries a lag_member_of pointer
+                # but no matching CanonicalLAG record (parser drift
+                # or partial input).  Synthesise one inline so the
+                # rendered config still wires the member up.
+                ae_name, ae_id = _lag_name_to_ae(
+                    iface.lag_member_of, _used_ae_ids,
+                    _next_ae_fallback_state[0],
+                )
+                if ae_id is not None:
+                    _used_ae_ids.add(ae_id)
+                else:
+                    _next_ae_fallback_state[0] += 1
+                lag_ae_by_canonical_name[iface.lag_member_of] = ae_name
+            out.append(
+                f"set interfaces {name} ether-options 802.3ad {ae_name}"
+            )
+            emitted_lag_member = True
+
         # Placeholder: the parse side creates an interface entry
         # for every ``set interfaces <name> ...`` line, even when
         # the trailing tokens land entirely in unmodelled (Tier-3)
@@ -303,12 +420,63 @@ def render_intent(tree: Any) -> str:
         # so round-trip keeps the interface in the canonical
         # tree even when the range block alone carries all its
         # attributes.
-        if not has_renderable_attr and not is_range_member:
+        if (
+            not has_renderable_attr
+            and not is_range_member
+            and not emitted_l2
+            and not emitted_lag_member
+        ):
             out.append(f"set interfaces {name}")
+
+    # --- aggregated-ether (LAG) stanzas (Phase 4 rank-4) ---
+    #
+    # Junos requires:
+    #   * ``set chassis aggregated-devices ethernet device-count <N>``
+    #     once at the chassis level — N must be at least the highest
+    #     ae<id> in use; we use ``max(used_ae_ids) + 1``.
+    #   * ``set interfaces ae<N> aggregated-ether-options lacp <mode>``
+    #     per LAG.  Member binding lives on the child via
+    #     ``ether-options 802.3ad ae<N>`` (emitted inside the iface
+    #     loop above).
+    if tree.lags:
+        if _used_ae_ids:
+            device_count = max(_used_ae_ids) + 1
+        else:
+            device_count = max(len(tree.lags), 1)
+        out.append(
+            f"set chassis aggregated-devices ethernet device-count "
+            f"{device_count}"
+        )
+        for lag in tree.lags:
+            ae_name = lag_ae_by_canonical_name.get(lag.name)
+            if ae_name is None:
+                # Shouldn't happen — every CanonicalLAG was assigned
+                # an ae-name in the lookup pass — but guard anyway.
+                continue
+            mode = lag_mode_by_canonical_name.get(lag.name, "active")
+            # Junos LACP modes: ``active`` | ``passive``.  Static
+            # (non-LACP) bundles emit no ``lacp`` line at all.
+            if mode in ("active", "passive"):
+                out.append(
+                    f"set interfaces {ae_name} aggregated-ether-options "
+                    f"lacp {mode}"
+                )
 
     # --- vlans + VLAN-to-VNI mappings (GAP 6) ---
     # Pre-index VXLAN VNIs by vlan_id for matched emission.
     vni_by_vlan = {v.vlan_id: v.vni for v in tree.vxlan_vnis}
+    # Pre-index irb.<vid> interfaces so SVI emission can defer to
+    # an explicit ``irb.<vid>`` CanonicalInterface when one is
+    # already in the tree (preserves identity for round-trip on
+    # fixtures that carry the irb stanzas as interfaces, e.g.
+    # the Batfish ``junos2541`` EVPN-Type-5 capture).
+    existing_irb_vids: set[int] = set()
+    for _i in tree.interfaces:
+        if _i.name.startswith("irb."):
+            try:
+                existing_irb_vids.add(int(_i.name[4:]))
+            except ValueError:
+                pass
     for vlan in tree.vlans:
         vlan_key = vlan.name or f"VLAN-{vlan.id}"
         out.append(
@@ -318,6 +486,36 @@ def render_intent(tree: Any) -> str:
             out.append(
                 f"set vlans {_quote_if_needed(vlan_key)} vxlan vni "
                 f"{vni_by_vlan[vlan.id]}"
+            )
+        # --- SVI L3 emission (Phase 4 rank-4) ---
+        #
+        # When a CanonicalVlan carries IPv4 addresses AND no
+        # explicit irb.<vid> CanonicalInterface exists in the tree,
+        # synthesise the SVI via Junos's ``irb`` (Integrated
+        # Routing and Bridging) interface plus the
+        # ``set vlans <NAME> l3-interface irb.<vid>`` binding.  When
+        # an explicit irb.<vid> iface IS present, the iface loop
+        # already emitted its ``family inet address`` lines — only
+        # emit the l3-interface binding here.
+        if vlan.ipv4_addresses and vlan.id not in existing_irb_vids:
+            for addr in vlan.ipv4_addresses:
+                out.append(
+                    f"set interfaces irb unit {vlan.id} family inet "
+                    f"address {addr.ip}/{addr.prefix_length}"
+                )
+            out.append(
+                f"set interfaces irb unit {vlan.id} vlan-id {vlan.id}"
+            )
+            out.append(
+                f"set vlans {_quote_if_needed(vlan_key)} l3-interface "
+                f"irb.{vlan.id}"
+            )
+        elif vlan.id in existing_irb_vids:
+            # Explicit irb.<vid> iface present — just emit the
+            # l3-interface binding so reparse can re-attach it.
+            out.append(
+                f"set vlans {_quote_if_needed(vlan_key)} l3-interface "
+                f"irb.{vlan.id}"
             )
 
     # GAP-EVPN-2: emit ``set switch-options vtep-source-interface ...``
@@ -547,6 +745,51 @@ _QUOTE_NEEDED_RE = re.compile(r"[\s\"';$`\\]")
 # contain a slash (``ge-0/0/0``) to distinguish from normal names
 # like ``irb.10`` where the dot is part of the base port name.
 _SUBIFACE_RE = re.compile(r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+)\.(?P<unit>\d+)$")
+
+
+# Pattern for extracting a digit suffix from a canonical LAG name.
+# ``Port-Channel10`` -> ``10``; ``Trk1`` -> ``1``; ``bond5`` -> ``5``.
+# Digits anchored at the END of the name to handle shapes where the
+# vendor prefix is not separated by a delimiter.
+_LAG_DIGIT_SUFFIX_RE = re.compile(r"(\d+)\s*$")
+
+
+def _lag_name_to_ae(
+    name: str,
+    used_ae_ids: set[int],
+    fallback_index: int,
+) -> tuple[str, int | None]:
+    """Map a canonical LAG name to a Junos ``ae<N>`` interface name.
+
+    Phase 4 rank-4 helper.  Strategy:
+
+    * Extract the trailing digit run from *name* (e.g. ``Port-Channel10``
+      -> ``10``, ``Trk1`` -> ``1``, ``bond5`` -> ``5``).  If the
+      resulting numeric id is not already in *used_ae_ids*, return
+      ``(f"ae{N}", N)``.
+    * Otherwise, fall back to ``(f"ae{fallback_index}", None)`` —
+      caller is expected to bump its fallback counter on receiving
+      ``None``.  This handles edge cases where two distinct canonical
+      LAG names happen to extract the same digit suffix (e.g.
+      ``Port-Channel1`` colliding with ``bond1``).
+
+    Returns:
+        Tuple ``(ae_name, ae_id_or_None)``.  ``ae_id_or_None`` is the
+        integer id when the digit suffix was usable; ``None`` when we
+        fell back to enumeration.
+    """
+    if not name:
+        return (f"ae{fallback_index}", None)
+    m = _LAG_DIGIT_SUFFIX_RE.search(name)
+    if m is None:
+        return (f"ae{fallback_index}", None)
+    try:
+        ae_id = int(m.group(1))
+    except ValueError:
+        return (f"ae{fallback_index}", None)
+    if ae_id in used_ae_ids:
+        return (f"ae{fallback_index}", None)
+    return (f"ae{ae_id}", ae_id)
 
 
 def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
