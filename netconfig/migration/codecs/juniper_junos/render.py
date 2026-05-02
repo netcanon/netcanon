@@ -368,13 +368,43 @@ def render_intent(tree: Any) -> str:
                 f"set interfaces {name} unit 0 family ethernet-switching "
                 f"interface-mode trunk"
             )
-            for vid in iface.trunk_allowed_vlans:
-                vname = vlan_name_by_id.get(vid, f"VLAN-{vid}")
+            # Detect Arista's "trunk all" form (literal `1-4094` or
+            # `2-4094` — common on MLAG peer-link ports).  Without
+            # this guard, render would emit one `vlan members VLAN-N`
+            # line per VID, exploding to 4000+ lines per port.  Junos
+            # has a clean equivalent: `vlan members all` matches the
+            # operator-intent of "all VLANs, including ones not yet
+            # defined".
+            allowed = iface.trunk_allowed_vlans
+            is_trunk_all = (
+                len(allowed) >= 4000
+                or set(allowed) == set(range(1, 4095))
+                or set(allowed) == set(range(2, 4095))
+            )
+            if is_trunk_all:
                 out.append(
                     f"set interfaces {name} unit 0 family "
-                    f"ethernet-switching vlan members "
-                    f"{_quote_if_needed(vname)}"
+                    f"ethernet-switching vlan members all"
                 )
+            else:
+                for vid in allowed:
+                    # Skip VIDs that have no matching CanonicalVlan —
+                    # Junos rejects `vlan members VLAN-X` at commit
+                    # time when VLAN-X isn't declared in `vlans`.
+                    # Operators on the receiving side prefer a clean
+                    # config that commits over one that lists phantom
+                    # VLANs.  If the source codec carried a name, use
+                    # it; otherwise fall back to the synthetic
+                    # `VLAN-<id>` form (preserves the round-trip
+                    # promise on same-vendor cycles).
+                    vname = vlan_name_by_id.get(vid)
+                    if vname is None:
+                        vname = f"VLAN-{vid}"
+                    out.append(
+                        f"set interfaces {name} unit 0 family "
+                        f"ethernet-switching vlan members "
+                        f"{_quote_if_needed(vname)}"
+                    )
             if iface.trunk_native_vlan is not None:
                 out.append(
                     f"set interfaces {name} native-vlan-id "

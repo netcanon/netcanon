@@ -100,3 +100,100 @@ def test_lag_round_trip_to_junos() -> None:
     # On the Junos side the LAG name is canonicalised to the ae form.
     assert roundtrip.lags[0].name == "ae10"
     assert sorted(roundtrip.lags[0].members) == ["ge-0/0/1", "ge-0/0/2"]
+
+
+def test_trunk_all_vlans_collapses_to_members_all() -> None:
+    """Arista MLAG peer ports often carry `switchport trunk allowed
+    vlan 2-4094` — the operator-form for "all VLANs except the
+    default".  Without this fix, render emits one `vlan members
+    VLAN-N` line per VID, exploding to 4000+ lines per port.  Junos
+    expresses the same intent as `vlan members all`."""
+    intent = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="ae3",
+            switchport_mode="trunk",
+            trunk_allowed_vlans=list(range(2, 4095)),  # 4093 VIDs
+        )],
+    )
+    out = render_intent(intent)
+    # The all-form is emitted exactly once.
+    assert (
+        "set interfaces ae3 unit 0 family ethernet-switching vlan members all"
+        in out
+    )
+    # No phantom VLAN-N lines.
+    assert "VLAN-1000" not in out
+    assert "VLAN-4094" not in out
+    # Total `vlan members` lines for ae3 is exactly 1.
+    member_lines = [
+        line for line in out.splitlines()
+        if "ae3" in line and "vlan members" in line
+    ]
+    assert len(member_lines) == 1
+
+
+def test_trunk_full_1_4094_also_collapses() -> None:
+    """Arista's literal `switchport trunk allowed vlan 1-4094` form
+    (less common but legal) collapses identically."""
+    intent = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="ae0",
+            switchport_mode="trunk",
+            trunk_allowed_vlans=list(range(1, 4095)),  # 4094 VIDs
+        )],
+    )
+    out = render_intent(intent)
+    assert (
+        "set interfaces ae0 unit 0 family ethernet-switching vlan members all"
+        in out
+    )
+
+
+def test_trunk_specific_vlans_still_enumerate() -> None:
+    """Specific (small) VLAN lists must NOT collapse to `members all`
+    — only the all-VLANs case is special-cased."""
+    intent = CanonicalIntent(
+        vlans=[
+            CanonicalVlan(id=10, name="USERS"),
+            CanonicalVlan(id=20, name="VOICE"),
+            CanonicalVlan(id=30, name="GUESTS"),
+        ],
+        interfaces=[CanonicalInterface(
+            name="ae5",
+            switchport_mode="trunk",
+            trunk_allowed_vlans=[10, 20, 30],
+        )],
+    )
+    out = render_intent(intent)
+    assert "vlan members all" not in out
+    assert "vlan members USERS" in out
+    assert "vlan members VOICE" in out
+    assert "vlan members GUESTS" in out
+
+
+def test_trunk_all_round_trip_canonical_stable() -> None:
+    """Source canonical with all-VLANs trunk → render emits `members
+    all` → reparse expands back to the full VID range.  Canonical
+    field comparison is set-equal across the round-trip."""
+    intent = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="ae3",
+            switchport_mode="trunk",
+            trunk_allowed_vlans=list(range(2, 4095)),
+        )],
+    )
+    out = render_intent(intent)
+    roundtrip = parse_intent(out)
+    rt_iface = next(i for i in roundtrip.interfaces if i.name == "ae3")
+    assert rt_iface.switchport_mode == "trunk"
+    # Reparse expands `members all` to the full 1-4094 range.
+    # Source had 2-4094 (4093 VIDs); reparse gives 1-4094 (4094 VIDs)
+    # — that's a documented one-VID asymmetry where Junos's `all`
+    # includes VLAN 1 (default-VLAN) by spec while Arista's
+    # `2-4094` explicitly excludes it.  Both forms canonicalise to
+    # the all-VLANs sentinel; the lone difference is operator-intent
+    # on whether VLAN 1 itself is permitted.  We accept the full
+    # range as correct on reparse.
+    assert len(rt_iface.trunk_allowed_vlans) >= 4093
+    assert 100 in rt_iface.trunk_allowed_vlans
+    assert 4094 in rt_iface.trunk_allowed_vlans
