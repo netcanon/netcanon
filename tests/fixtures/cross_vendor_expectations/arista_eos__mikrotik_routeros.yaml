@@ -1,0 +1,558 @@
+# Cross-vendor expectations: arista_eos -> mikrotik_routeros
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/arista_eos_to_mikrotik_routeros/
+#
+# Phase 3 follow-up pair.  Arista EOS is a DC-class enterprise switch
+# (DCS-7280SR / 7050X / 7060X / 7300 series) with rich VRF / EVPN /
+# VXLAN / dynamic-routing support.  MikroTik RouterOS targets SMB /
+# WISP / power-user markets with a router-first model and optional
+# bridge for switching.  This is the asymmetrically harder direction
+# of the pair: Arista's DC fabric data (EVPN, MAC-VRF, L3-VRF, EVPN-
+# VXLAN bindings) has no first-class home on RouterOS, while the
+# basic-services surface (hostname / DNS / NTP / IPv4-IPv6 addresses /
+# static routes / SNMP v1+v2c) round-trips with documented losses.
+#
+# Asymmetry on this direction concentrates on:
+#
+#   * EVPN / VXLAN / MAC-VRF / L3-VRF — Arista's DC-fabric surface
+#     is rich; RouterOS does not model any of it.  Major asymmetric
+#     loss; see vxlan_evpn_unsupported.md.
+#   * Switchport mode plane mismatch — Arista's interface-centric
+#     access/trunk model versus RouterOS's bridge-VLAN-filtering
+#     plane (Plane 2) which the MikroTik codec parses partially in
+#     v1.
+#   * VLAN-SVI absorption versus VLAN sub-interface — Arista's
+#     ``interface Vlan<N>`` first-class L3 entity versus RouterOS's
+#     ``/interface vlan name=vlan<N>`` + ``/ip address`` two-section
+#     form.  Round-trips at the address level; loses the SVI's
+#     description and VRF binding.
+#   * Hash-format incompatibility — Arista's Linux-crypt SHA-512
+#     dominant case versus RouterOS's vendor-private password format
+#     not surfaced in /export.  Operator MUST re-set passwords on
+#     the RouterOS target.
+
+meta:
+  source_vendor: arista_eos
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    DC-class Arista EOS switch (DCS-7280SR-class leaf, 7050X /
+    7060X spine) replaced by a MikroTik RouterOS deployment
+    (typical: lab / branch / WISP-fronted edge consolidating off
+    a previously over-provisioned Arista estate, or operators
+    repurposing inherited Arista hardware behind a RouterOS L3
+    boundary).  The basic-services surface (hostname / DNS / NTP /
+    IPv4-IPv6 addresses / static routes / SNMP v1+v2c / local users
+    / RADIUS) round-trips with documented losses; the DC-fabric
+    surface (EVPN-VXLAN, MAC-VRF, L3-VRF) drops on the cross-pair
+    because RouterOS does not model it.
+  certainty: medium
+  references:
+    - id: arista_vlan_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vlans.md
+      title: "Arista EOS VLAN Configuration Guide"
+      source_url: "https://www.arista.com/en/um-eos/eos-virtual-lans-vlans"
+      retrieved: "2026-05-01"
+    - id: arista_iface_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/interfaces.md
+      title: "Arista EOS Interface Configuration"
+      source_url: "https://www.arista.com/en/um-eos/eos-interface-configuration"
+      retrieved: "2026-05-01"
+    - id: arista_static_routes
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/static_routes.md
+      title: "Arista EOS Static Routing"
+      source_url: "https://www.arista.com/en/um-eos/eos-routing-overview"
+      retrieved: "2026-05-01"
+    - id: arista_snmp_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/snmp_aaa.md
+      title: "Arista EOS SNMP Configuration Guide"
+      source_url: "https://www.arista.com/en/um-eos/eos-snmp"
+      retrieved: "2026-05-01"
+    - id: arista_user_security
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/local_users.md
+      title: "Arista EOS User Security"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-05-01"
+    - id: arista_lag_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/lags.md
+      title: "Arista EOS Link Aggregation (LACP, MLAG)"
+      source_url: "https://www.arista.com/en/um-eos/eos-link-aggregation-control-protocol-lacp"
+      retrieved: "2026-05-01"
+    - id: arista_radius_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/snmp_aaa.md
+      title: "Arista EOS RADIUS configuration"
+      source_url: "https://www.arista.com/en/um-eos/eos-aaa"
+      retrieved: "2026-05-01"
+    - id: arista_evpn_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "Arista EOS Configuring EVPN"
+      source_url: "https://www.arista.com/en/um-eos/eos-configuring-evpn"
+      retrieved: "2026-05-01"
+    - id: arista_vxlan_cg
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "Arista EOS VXLAN Configuration Guide"
+      source_url: "https://www.arista.com/en/um-eos/eos-vxlan-configuration"
+      retrieved: "2026-05-01"
+    - id: arista_system_services
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/system_services.md
+      title: "Arista EOS System Configuration"
+      source_url: "https://www.arista.com/en/um-eos/eos-system-management"
+      retrieved: "2026-05-01"
+    - id: mikrotik_identity
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/system_services.md
+      title: "Identity — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992856/Identity"
+      retrieved: "2026-05-01"
+    - id: mikrotik_clock
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/system_services.md
+      title: "Clock — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/40992866/Clock"
+      retrieved: "2026-05-01"
+    - id: mikrotik_dns
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/system_services.md
+      title: "DNS — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/37748767/DNS"
+      retrieved: "2026-05-01"
+    - id: mikrotik_ntp
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/system_services.md
+      title: "NTP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/37748794/NTP"
+      retrieved: "2026-05-01"
+    - id: mikrotik_iface_naming
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/interfaces.md
+      title: "Ethernet ports / interface naming — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-05-01"
+    - id: mikrotik_bridge_vlan
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vlans.md
+      title: "Basic VLAN switching (bridge VLAN filtering) — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/103841826/Basic+VLAN+switching"
+      retrieved: "2026-05-01"
+    - id: mikrotik_vlan
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vlans.md
+      title: "VLAN — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-05-01"
+    - id: mikrotik_ip_routing
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/static_routes.md
+      title: "IP Routing — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328084/IP+Routing"
+      retrieved: "2026-05-01"
+    - id: mikrotik_snmp
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/snmp_aaa.md
+      title: "SNMP — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-05-01"
+    - id: mikrotik_user
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/local_users.md
+      title: "User — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978504/User"
+      retrieved: "2026-05-01"
+    - id: mikrotik_radius
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/snmp_aaa.md
+      title: "RADIUS Client — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/13402205/RADIUS"
+      retrieved: "2026-05-01"
+    - id: mikrotik_bonding
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/lags.md
+      title: "Bonding — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-05-01"
+    - id: mikrotik_vrf
+      path: docs/vendor-references/arista_eos_to_mikrotik_routeros/vxlan_evpn_unsupported.md
+      title: "VRF — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/95584418/VRF"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks CanonicalIntent top-down per
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: good
+    note: >
+      Arista ``hostname ks-leaf-01`` -> RouterOS ``/system identity /
+      set name=ks-leaf-01``.  Identical semantic; Arista accepts bare
+      tokens, RouterOS accepts bare or quoted but the codec emits
+      bare for hostname-safe characters.  Hostname round-trips
+      losslessly.
+    references: [arista_system_services, mikrotik_identity]
+
+  domain:
+    disposition: lossy
+    reason: >
+      Arista ``dns domain example.net`` parses into the canonical
+      ``domain`` field.  RouterOS has no first-class top-level FQDN
+      directive; the closest analogue is ``/ip dns / set
+      domain=<fqdn>`` which is a per-resolver attribute, not a
+      device-identity attribute.  The MikroTik render emits no
+      direct domain line — operator must add ``/ip dns set domain=``
+      manually if a default search domain is desired.
+    references: [arista_system_services, mikrotik_dns]
+
+  dns_servers:
+    disposition: good
+    note: >
+      Arista ``ip name-server vrf default 10.0.0.53`` (one line per
+      server, with the per-VRF qualifier always ``default`` on
+      typical configs) -> RouterOS ``/ip dns / set
+      servers=10.0.0.53,10.0.0.54`` (single comma-separated value).
+      Round-trip preserves address ordering.  The ``vrf default``
+      qualifier is dropped on canonical because the canonical
+      ``dns_servers`` is a flat ``list[str]``; non-default-VRF DNS
+      resolution on Arista (rare) would not survive the cross-pair.
+    references: [arista_system_services, mikrotik_dns]
+
+  ntp_servers:
+    disposition: good
+    note: >
+      Arista ``ntp server 10.0.0.123`` (one line per server) ->
+      RouterOS ``/system ntp client / set servers=10.0.0.123,...``
+      (comma-separated single attribute).  Both vendors implement
+      RFC 5905 NTPv4; the canonical truncation to bare addresses
+      drops Arista per-server modifiers (``prefer`` / ``iburst`` /
+      ``key`` / ``source``) that RouterOS's ``/system ntp client``
+      does not surface anyway.
+    references: [arista_system_services, mikrotik_ntp]
+
+  timezone:
+    disposition: lossy
+    reason: >
+      Arista ``clock timezone US/Pacific`` (Olson / IANA tz database
+      name) versus RouterOS ``/system clock / set
+      time-zone-name=America/Los_Angeles`` (also Olson).  Both
+      vendors accept Olson form, BUT Arista's name space is the
+      slightly older ``US/Pacific`` form whereas RouterOS prefers
+      the modern ``America/Los_Angeles`` form.  Both are valid IANA
+      entries, but auto-rendering Arista's older alias on RouterOS
+      may produce a deprecation warning or fail validation on some
+      RouterOS builds.  Operator-curated mapping recommended.
+    references: [arista_system_services, mikrotik_clock]
+
+  syslog_servers:
+    disposition: lossy
+    reason: >
+      Arista ``logging host 10.0.0.20`` (with optional ``vrf X
+      severity Y protocol UDP`` modifiers) -> RouterOS ``/system
+      logging action add target=remote remote=10.0.0.20`` plus a
+      separate ``/system logging add action=remote topics=...``
+      rule.  RouterOS splits destination from filter; canonical
+      surface stores host addresses only, so per-severity /
+      per-facility / per-VRF semantics drop on round-trip.
+    references: [arista_system_services]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      Per-interface scalars (name, description, enabled, MTU,
+      ipv4_addresses, ipv6_addresses, dhcp_client) round-trip with
+      documented per-field caveats below.  Structural lossy bits:
+      (1) Arista's flat ``Ethernet1`` / ``Ethernet2/1`` naming maps
+      to RouterOS's flat ``etherN`` via the rename mesh — speed
+      hint is absent on both sides so the rename is direct;
+      (2) Arista's first-class ``interface Loopback0`` maps to a
+      RouterOS empty-bridge with ``/ip address`` (interface_type
+      inference handles the role bit but not byte-identical);
+      (3) Arista's ``interface Vlan<N>`` SVI maps to RouterOS's
+      ``/interface vlan name=vlan<N>`` + ``/ip address`` two-
+      section form, with the SVI's description landing on
+      ``comment=`` and the VRF binding dropping (Arista ``vrf
+      <name>`` on the SVI has no canonical-stable target on
+      RouterOS today); (4) Arista's ``interface Management1``
+      out-of-band port has no RouterOS analogue and falls back to
+      a regular ether interface on render.
+    references: [arista_iface_cg, mikrotik_iface_naming]
+
+  vlans:
+    disposition: lossy
+    reason: >
+      VLAN id round-trips cleanly.  ``name`` is conflated with the
+      RouterOS L3 interface name (per the MikroTik codec's
+      ``LossyPath`` entry on ``/vlans/vlan/name``: e.g. Arista
+      ``vlan 10 / name USERS`` lifts to canonical ``id=10
+      name="USERS"``, but RouterOS's wire form stores ``name=USERS``
+      on the ``/interface vlan`` row alongside ``vlan-id=10``).
+      ``description`` has no RouterOS field at all and drops on
+      render.  Arista's port-centric switchport surface (``switchport
+      access vlan`` / ``switchport trunk allowed vlan``) lands on
+      RouterOS bridge VLAN filtering (Plane 2), which the MikroTik
+      codec parses partially in v1 — render emits a partially
+      populated bridge-VLAN table.  SVI absorption (Arista
+      ``interface Vlan100 / ip address X/N`` -> canonical
+      ``CanonicalVlan.ipv4_addresses``) round-trips good via
+      RouterOS ``/interface vlan`` + ``/ip address``.
+    references: [arista_vlan_cg, mikrotik_vlan, mikrotik_bridge_vlan]
+
+  static_routes:
+    disposition: lossy
+    reason: >
+      Default-VRF IPv4 routes round-trip cleanly: Arista
+      ``ip route 10.50.0.0/16 10.0.0.2`` -> RouterOS ``/ip route
+      add dst-address=10.50.0.0/16 gateway=10.0.0.2``.  Both
+      vendors accept CIDR natively.  IPv6 routes (Arista
+      ``ipv6 route ::/0 2001:db8:0:1::2``) lift to canonical
+      ``CanonicalStaticRoute`` with ``destination`` in CIDR form —
+      RouterOS render emits ``/ipv6 route add`` with the same
+      shape.  Lossy bits: (1) per-VRF Arista routes (``ip route
+      vrf TENANT_A ...``) drop to the global table on render
+      because the canonical model lacks a vrf field on
+      ``CanonicalStaticRoute`` (deferred — lands alongside VRF
+      wire-up); (2) Arista route-tag / metric overrides are
+      partially modelled (metric carried, tag dropped); (3)
+      blackhole / Null0 semantics not modelled canonically (Arista
+      has the form; RouterOS has the ``blackhole=yes`` flag — both
+      drop with a banner on cross-pair).
+    references: [arista_static_routes, mikrotik_ip_routing]
+
+  # ── Tier 2 — auto-translate with review banner ──
+
+  dhcp_servers:
+    disposition: lossy
+    reason: >
+      Arista's per-VLAN ``ip dhcp pool <name>`` block (when
+      configured — DC leafs typically delegate DHCP to a separate
+      service) maps to RouterOS's three-section form (``/ip pool``
+      + ``/ip dhcp-server network`` + ``/ip dhcp-server``).  The
+      MikroTik codec joins on parse and emits the three on render.
+      Lossy bits: (1) Arista's ``ip helper-address`` relay form
+      (more common than server pools on DC leafs) is not modelled
+      canonically and drops on parse; (2) Cisco/Arista ``ip dhcp
+      excluded-address`` multi-fragment exclusions compress to a
+      single start_ip/end_ip range on canonical; (3) static
+      reservations and DHCP option codes (option 43 / 82) are not
+      modelled.  Most Arista DC leaf deployments use external DHCP
+      servers anyway; this field is typically empty on
+      ``CanonicalIntent`` after Arista parse.
+
+  snmp:
+    disposition: lossy
+    reason: >
+      v1/v2c surface (community / location / contact) round-trips
+      cleanly.  Trap hosts: Arista supports multiple ``snmp-server
+      host`` declarations; RouterOS supports only a single
+      ``trap-target=`` — multi-target Arista source drops to the
+      first host with a banner, the rest land in raw_sections.  v3
+      USM has multiple cliffs: (1) Arista's ``auth sha256 / sha384
+      / sha512`` and ``priv aes192 / aes256`` collapse to RouterOS's
+      narrower ``MD5/SHA1`` + ``DES/AES`` (= AES-128) — the codec
+      maps SHA-2 family to SHA1 and AES-192/256 to AES-128 with a
+      banner; (2) passphrases are engineID-salted per RFC 3414 and
+      never cross-portable — operator MUST re-key on the RouterOS
+      target; (3) Arista's group / view-based access control has no
+      first-class RouterOS equivalent (RouterOS gates v3 access via
+      read-access= / write-access= flags on the same ``/snmp
+      community add v3=yes`` entry); group field drops on render.
+    references: [arista_snmp_cg, mikrotik_snmp]
+
+  lags:
+    disposition: lossy
+    reason: >
+      Arista ``interface Port-Channel10`` + per-member
+      ``channel-group 10 mode active`` -> RouterOS ``/interface
+      bonding add slaves=ether4,ether5 mode=802.3ad name=bond1``.
+      Mode mapping: ``active`` -> ``802.3ad``, ``passive`` ->
+      ``802.3ad`` (no separate passive on RouterOS), ``on``
+      (static) -> ``balance-xor`` (closest non-LACP analogue with a
+      banner).  Naming convention differs (``Port-Channel10`` vs
+      ``bond1``); the rename mesh canonicalises.  Arista MLAG /
+      M-LAG (multi-chassis link aggregation) collapses to plain
+      LACP on render because RouterOS has no MC-LAG equivalent —
+      operator review banner emits.  RouterOS-only modes
+      (active-backup, balance-rr, balance-tlb, balance-alb,
+      broadcast) have no Arista equivalent and would only appear in
+      the inverse direction.
+    references: [arista_lag_cg, mikrotik_bonding]
+
+  local_users:
+    disposition: lossy
+    reason: >
+      Arista's numeric ``privilege 0..15`` plus ``role
+      <network-admin|network-operator|...>`` two-axis model versus
+      RouterOS's named groups (``full`` / ``write`` / ``read`` /
+      custom) requires operator-curated mapping.  Default mapping:
+      privilege 15 + role network-admin -> full, privilege 1 + role
+      network-operator -> read, privilege 7 -> write.  Password
+      hash formats are NOT cross-compatible: Arista's modern
+      ``secret sha512 $6$...`` (Linux-crypt SHA-512), legacy
+      ``secret 5 $1$...`` (MD5), and ``secret 7 ...`` (Cisco
+      type-7 reversible obfuscation) are all Arista-only on the
+      wire; RouterOS stores passwords in a vendor-private format
+      that is not surfaced in /export at all.  The codec passes the
+      Arista-side hash through verbatim into a RouterOS ``comment=``
+      so operator has it during re-key, but operator MUST set
+      passwords on the RouterOS target after migration.
+    references: [arista_user_security, mikrotik_user]
+
+  radius_servers:
+    disposition: lossy
+    reason: >
+      Host / auth_port / acct_port round-trip cleanly.  Shared
+      secret encoding: Arista's ``radius-server host X key K`` form
+      (with optional ``key 7`` reversible obfuscation) -> RouterOS
+      ``/radius add address=X secret=K``.  Both codecs pass through
+      verbatim; the receiving RouterOS daemon will reject if it
+      does not match the server's expectation.  Service binding
+      (RouterOS ``service=login,ppp,wireless,hotspot``) versus
+      method-list / server-group (Arista ``aaa group server radius``
+      + ``aaa authentication login default group ... local``) is
+      not modelled canonically — Arista-side method-list richness
+      lands in raw_sections; RouterOS render defaults to
+      ``service=login`` with a banner.
+    references: [arista_radius_cg, mikrotik_radius]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      Arista codec capability matrix lists ``/vxlan-vnis/vni``,
+      ``/vxlan-vnis/source-interface``, and ``/vxlan-vnis/udp-port``
+      under SUPPORTED — Arista is the canonical fabric-bearing
+      source vendor.  RouterOS codec capability matrix lists all
+      three under UNSUPPORTED ("RouterOS VXLAN exists but is rare
+      in canonical scope and not modelled in v1.").  Cross-pair
+      drops to unsupported because the target side has no render
+      path.  The Arista synthetic kitchen-sink carries five VNI
+      records (vlan 10/20/100 -> vni 10010/10020/10100 + the L3-VNI
+      50100 for vrf TENANT_A) plus the Loopback0 source-interface
+      and the 4789 UDP port — all of which silently drop on the
+      RouterOS render with an operator review-required banner.
+      This is the major asymmetric loss in this direction.
+    references: [arista_vxlan_cg, arista_evpn_cg]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Arista codec lists ``/evpn-type5-routes/route`` under LOSSY
+      with the rationale that EVPN Type-5 announcements are an
+      IMPLICIT property of CanonicalRoutingInstance.l3_vni rather
+      than per-prefix records.  RouterOS does not model EVPN at
+      all.  Cross-pair surface is effectively unsupported — no
+      RouterOS render path exists, and the canonical
+      ``evpn_type5_routes`` list is empty after Arista parse anyway.
+      Operators relying on selective-prefix export across a
+      DC-fabric-to-RouterOS boundary will see a review-required
+      banner; the policy/route-map intent must be re-implemented
+      on RouterOS using firewall filters or routing filters
+      out-of-canonical-scope.
+    references: [arista_evpn_cg]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      Arista codec capability matrix lists
+      ``/routing-instances/instance`` under SUPPORTED — Arista
+      ``vrf instance TENANT_A`` + ``ip routing vrf TENANT_A`` plus
+      RD/RT bindings under ``router bgp`` lift cleanly to
+      ``CanonicalRoutingInstance``.  RouterOS 7+ has ``/ip vrf``
+      but the MikroTik codec does not yet wire up the parser or
+      renderer — the canonical ``routing_instances`` list is empty
+      after RouterOS parse, AND there is no render path for the
+      reverse direction.  In this direction (Arista source carries
+      VRFs; RouterOS target has no render path), the cross-pair
+      surface is unsupported with a banner.  When MikroTik-side
+      wire-up lands, the cross-pair surface will UPGRADE to lossy:
+      RouterOS keeps RD/RT under BGP rather than the VRF block, and
+      RouterOS has no MAC-VRF / EVPN-Type-5 first-class concept,
+      so even when both sides parse VRFs the
+      route_distinguisher / rt_imports / rt_exports / l3_vni fields
+      will be lossy on the cross-pair.
+    references: [arista_evpn_cg, mikrotik_vrf]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier 3 by design — never auto-rendered.  Arista raw_sections
+      content (``router bgp`` / ``router ospf`` / ``router isis`` /
+      ``ip access-list`` / ``policy-map`` / ``mlag configuration``)
+      is vendor-private and drops with a banner.  This is a
+      significant source of cross-vendor information loss for
+      Arista DC leaf configs — the raw_sections typically carry
+      hundreds of lines of fabric / policy / ACL plumbing that
+      RouterOS has no place for.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; not a translation field."
+
+  source_format:
+    disposition: not_applicable
+    note: "Same as source_vendor — informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (``apply-groups`` statement preservation per
+      GAP 9b).  Arista EOS source never populates this list.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific companion to apply_groups.  Always empty on
+      this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The basic-services surface (hostname / DNS / NTP / IPv4-IPv6
+#     addresses / static routes) is high-confidence: vendor docs are
+#     clear and both codecs have established parse+render coverage.
+#
+#   * The switching-plane surface (vlans / interfaces switchport
+#     fields) is medium-confidence: the philosophy mismatch (Arista
+#     interface-centric switchport vs RouterOS two-plane bridge VLAN
+#     filtering) plus the partial Plane-2 wire-up on the MikroTik
+#     codec mean cross-vendor render may produce a partially
+#     populated bridge-VLAN table.
+#
+#   * The SNMPv3 USM surface is medium-confidence: documented
+#     algorithm-set divergence (Arista SHA-2 family / AES-192/256
+#     versus RouterOS SHA1 / AES-128 / DES) plus engineID-salted
+#     passphrases mean cross-vendor v3 migrations always require
+#     operator re-key.
+#
+#   * The local-users surface is confidently lossy: RouterOS does
+#     not surface password material in /export, so even if Arista's
+#     SHA-512 hash were Linux-crypt-compatible (it is, but RouterOS
+#     does not store crypt() hashes), the round-trip would still
+#     break on the RouterOS side.  Operator MUST re-set passwords
+#     manually.
+#
+#   * VRF / EVPN / VXLAN / MAC-VRF surface is the major asymmetric
+#     loss in this direction.  Arista carries fully-modelled fabric
+#     data; RouterOS has no render path.  Marked unsupported
+#     uniformly for transparency.  When MikroTik /ip vrf wire-up
+#     lands, the cross-pair surface will UPGRADE to lossy in the
+#     basic-VRF subset (the EVPN/VXLAN bits stay unsupported
+#     regardless).
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes — canonical schema gap; lands alongside
+#     VRF wire-up.  Marked unsupported above for transparency.
+#
+#   * Arista's ``ip helper-address`` DHCP relay form — no canonical
+#     field; drops on parse.  Inverse-direction concerns (RouterOS
+#     /ip dhcp-relay) noted in the reverse pair.
+#
+#   * Arista's MLAG / M-LAG multi-chassis surface — collapses to
+#     plain LACP on render; full multi-chassis semantics
+#     out-of-canonical-scope.
