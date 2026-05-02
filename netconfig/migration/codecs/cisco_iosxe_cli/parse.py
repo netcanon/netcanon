@@ -46,6 +46,7 @@ from ...canonical.intent import (
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
+    CanonicalRoutingInstance,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -188,6 +189,59 @@ _LOCAL_USER_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Top-level system-services lines.  Cisco IOS-XE accepts ``ip name-server``
+# either at global scope OR under a DHCP pool stanza (already handled
+# inside :func:`_parse_dhcp_pools`).  The top-level form may carry an
+# optional ``vrf <name>`` qualifier between ``name-server`` and the IP
+# list, and Cisco accepts MULTIPLE servers space-separated on one line —
+# e.g. ``ip name-server 1.1.1.1 8.8.8.8`` is two servers, not one.
+# Mirrors arista_eos prior art (same wire syntax in the IOS family).
+_TOP_NAME_SERVER_RE = re.compile(
+    r"^ip\s+name-server\s+(?:vrf\s+\S+\s+)?(.+)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+# ``ip domain name X`` is the modern (post-12.4T) form.  ``ip
+# domain-name X`` (hyphenated) is the legacy form Cisco IOS shipped
+# with for years and which still appears in real captures from older
+# devices and from operators who learned the syntax pre-12.4T.  Accept
+# both — they mean the same thing.
+_TOP_DOMAIN_RE = re.compile(
+    r"^ip\s+domain(?:\s+name|-name)\s+(\S+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_TOP_NTP_SERVER_RE = re.compile(
+    r"^ntp\s+server\s+(?:vrf\s+\S+\s+)?(\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+# ``vrf definition <name>`` opens a VRF stanza; sub-commands include
+# ``description X``, ``rd <rd>``, ``route-target {import|export|both}
+# <rt>``, and ``address-family ipv4 / exit-address-family`` markers
+# (the markers themselves carry no canonical state — they just gate
+# the RT import/export sub-block on the wire).
+_VRF_DEFINITION_RE = re.compile(
+    r"^vrf\s+definition\s+(\S+)\s*$", re.IGNORECASE,
+)
+_VRF_DESCRIPTION_RE = re.compile(
+    r"^\s+description\s+(.+)$", re.IGNORECASE,
+)
+_VRF_RD_RE = re.compile(
+    r"^\s+rd\s+(\S+)\s*$", re.IGNORECASE,
+)
+# ``route-target both X`` is shorthand for "import X" + "export X" —
+# canonicalise by appending to BOTH lists.
+_VRF_RT_RE = re.compile(
+    r"^\s+route-target\s+(import|export|both)\s+(\S+)\s*$",
+    re.IGNORECASE,
+)
+
+# ``vrf forwarding <name>`` inside an interface stanza assigns the
+# interface to a VRF.  IOS-XE legacy form is ``ip vrf forwarding
+# <name>``; both still appear in real captures.
+_IFACE_VRF_FORWARDING_RE = re.compile(
+    r"^\s+(?:ip\s+)?vrf\s+forwarding\s+(\S+)\s*$", re.IGNORECASE,
+)
+
 
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XE ``show running-config`` output into a
@@ -218,6 +272,18 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # System-level fields
     intent.hostname = _extract_hostname(raw)
+
+    # Top-level system services: domain name, DNS resolvers, NTP
+    # servers.  Mirrors arista_eos prior art — same wire syntax in the
+    # IOS family.  Without these, a Cisco-CLI capture round-tripping
+    # through any other codec drops these fields silently.
+    _parse_globals(raw, intent)
+
+    # VRF definitions (``vrf definition <name>`` top-level stanzas).
+    # Per-interface ``vrf forwarding <name>`` membership is set by
+    # :func:`_parse_interfaces`; this helper harvests the parent
+    # declarations + their RD / RT metadata.
+    intent.routing_instances = _parse_routing_instances(raw)
 
     # Interfaces
     intent.interfaces = _parse_interfaces(raw)
@@ -287,6 +353,120 @@ def _extract_hostname(raw: str) -> str:
     return m.group(1) if m else ""
 
 
+def _parse_globals(raw: str, intent: CanonicalIntent) -> None:
+    """Harvest top-level system-services lines into ``intent``.
+
+    Three cross-vendor scalars / lists currently dropped on the floor
+    by the cisco_iosxe_cli parser before this helper landed:
+
+    * ``ip name-server [vrf <name>] <ip> [<ip> ...]`` →
+      :attr:`CanonicalIntent.dns_servers`.  Cisco accepts MULTIPLE
+      servers space-separated on one line — split and extend.  The
+      optional VRF qualifier is matched-and-discarded (canonical
+      doesn't model per-resolver VRF; downstream codecs that emit
+      DNS resolvers in the global VRF are correct for ~all real
+      deployments).  Mirrors arista_eos prior art.
+    * ``ip domain name <fqdn>`` (modern) / ``ip domain-name <fqdn>``
+      (legacy hyphenated form) → :attr:`CanonicalIntent.domain`.
+      Both forms still surface in real captures.
+    * ``ntp server [vrf <name>] <ip>`` →
+      :attr:`CanonicalIntent.ntp_servers`.  One server per line
+      (unlike name-server).  Mirrors arista_eos prior art.
+
+    The helper mutates ``intent`` in place — keeps :func:`parse_intent`
+    a flat sequence of phase calls.
+    """
+    for m in _TOP_NAME_SERVER_RE.finditer(raw):
+        # Cisco allows multiple servers space-separated on one line:
+        # ``ip name-server 1.1.1.1 8.8.8.8 9.9.9.9`` is three resolvers.
+        for token in m.group(1).split():
+            intent.dns_servers.append(token)
+    m = _TOP_DOMAIN_RE.search(raw)
+    if m:
+        intent.domain = m.group(1)
+    for m in _TOP_NTP_SERVER_RE.finditer(raw):
+        intent.ntp_servers.append(m.group(1))
+
+
+def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
+    """Extract ``vrf definition <name>`` blocks from IOS config text.
+
+    A Cisco IOS-XE VRF stanza looks like::
+
+        vrf definition TENANT_A
+         description tenant a
+         rd 65000:1
+         address-family ipv4
+          route-target export 65000:1
+          route-target import 65000:1
+         exit-address-family
+
+    We harvest::
+
+        CanonicalRoutingInstance(
+            name="TENANT_A",
+            description="tenant a",
+            route_distinguisher="65000:1",
+            rt_exports=["65000:1"],
+            rt_imports=["65000:1"],
+        )
+
+    The ``address-family`` / ``exit-address-family`` markers carry no
+    canonical state on their own — they're wire-syntax framing for the
+    nested route-target lines.  ``route-target both X`` is shorthand
+    for "import X" + "export X" and we expand it canonically.
+
+    Mirrors the block-walker pattern used by :func:`_parse_dhcp_pools`
+    and :func:`_parse_radius_servers`: open on the header regex, absorb
+    indented sub-lines, close on the first non-indented / ``!`` line.
+    """
+    instances: list[CanonicalRoutingInstance] = []
+    current: CanonicalRoutingInstance | None = None
+
+    for line in raw.splitlines():
+        header = _VRF_DEFINITION_RE.match(line)
+        if header:
+            if current is not None:
+                instances.append(current)
+            current = CanonicalRoutingInstance(name=header.group(1))
+            continue
+
+        if current is None:
+            continue
+
+        # Stanza terminator: blank-after-block ``!`` or any line that
+        # isn't indented (i.e. a sibling top-level stanza).  Cisco's
+        # ``exit-address-family`` is itself indented so it doesn't
+        # close the VRF stanza, only the inner address-family block —
+        # which we don't track separately.
+        if line.startswith("!") or (line and not line[0].isspace()):
+            instances.append(current)
+            current = None
+            continue
+
+        dm = _VRF_DESCRIPTION_RE.match(line)
+        if dm:
+            current.description = dm.group(1).strip()
+            continue
+        rm = _VRF_RD_RE.match(line)
+        if rm:
+            current.route_distinguisher = rm.group(1)
+            continue
+        rtm = _VRF_RT_RE.match(line)
+        if rtm:
+            direction = rtm.group(1).lower()
+            rt = rtm.group(2)
+            if direction in ("import", "both"):
+                current.rt_imports.append(rt)
+            if direction in ("export", "both"):
+                current.rt_exports.append(rt)
+            continue
+
+    if current is not None:
+        instances.append(current)
+    return instances
+
+
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     """Extract interface stanzas from IOS config text."""
     lines = raw.splitlines()
@@ -312,6 +492,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "lag_member_of": None,
                 "mtu": None,
                 "ipv6": [],
+                "vrf": "",
             }
             continue
 
@@ -405,6 +586,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["lag_member_of"] = f"Port-channel{int(cgm.group(1))}"
             continue
 
+        vfm = _IFACE_VRF_FORWARDING_RE.match(line)
+        if vfm:
+            current["vrf"] = vfm.group(1)
+            continue
+
     if current is not None:
         interfaces.append(_build_canonical_interface(current))
 
@@ -436,6 +622,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
         mtu=raw.get("mtu"),
+        vrf=raw.get("vrf", ""),
     )
 
 
