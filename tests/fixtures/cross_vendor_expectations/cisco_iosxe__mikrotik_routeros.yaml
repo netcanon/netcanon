@@ -1,0 +1,599 @@
+# Cross-vendor fidelity expectations: cisco_iosxe -> mikrotik_routeros
+#
+# Source: cisco_iosxe codec — OpenConfig NETCONF YANG XML (Phase-0.5
+# stub).  This is the NETCONF/OpenConfig sibling of cisco_iosxe_cli.
+# Both target the same Cisco device family; the asymmetry on this
+# cross-pair is dominated by the cisco_iosxe SOURCE codec being a
+# stub whose parse() reads ONLY the openconfig-interfaces subtree
+# (interfaces, IPv4, IPv6, description, enable, IANA type).
+#
+# Target: mikrotik_routeros codec — RouterOS /export verbose text.
+# The MikroTik render itself is feature-complete on the canonical
+# surface (hostname / DNS / NTP / VLANs / static_routes / SNMP /
+# LAGs / local_users / DHCP / RADIUS), but receives an empty
+# canonical tree for those fields because the cisco_iosxe NETCONF
+# parser never populated them.
+#
+# Direction-specific framing: for fields the cisco_iosxe codec's
+# CapabilityMatrix declares `supported` but its parse() never
+# extracts (system/*, vlans, snmp, static-routes), the disposition
+# here is `not_applicable` — the structural absence is on the SOURCE
+# side, NOT a target render-side gap.  Compare with the inverse
+# direction (mikrotik_routeros -> cisco_iosxe) where the target-side
+# render gap dominates and the disposition is `unsupported`.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/
+#
+# Authored 2026-05-01 as part of Phase 3 cross-mesh audit (one of
+# fifteen parallel pairs).
+
+meta:
+  source_vendor: cisco_iosxe
+  target_vendor: mikrotik_routeros
+  primary_use_case: >
+    OpenConfig-driven NETCONF backup of a Cisco IOS-XE device
+    consumed into a RouterOS-shaped target — typical when a
+    NETCONF orchestration pipeline already exists and the
+    operator wants RouterOS output for use elsewhere.  The
+    cisco_iosxe parse path is interface-only, so the resulting
+    RouterOS render carries interface-only content too.  For a
+    real Cisco-to-MikroTik migration with hostname / DNS / NTP /
+    VLAN / SNMP / static-route content, route through
+    cisco_iosxe_cli first — that codec's parse coverage is full
+    and the sibling pair (cisco_iosxe_cli__mikrotik_routeros)
+    covers the wider canonical surface.
+  certainty: medium
+  references:
+    - id: oc-interfaces
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/openconfig_yang_scope.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/ipv6_addresses.md
+      title: "openconfig-if-ip YANG schema docs (IPv4 / IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-system
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/openconfig_yang_scope.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc-vlan
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/vlan_render_gap.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: oc-aggregate
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/lag_render_gap.md
+      title: "openconfig-if-aggregate YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-aggregate.html"
+      retrieved: "2026-05-01"
+    - id: oc-network-instance
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/openconfig_yang_scope.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: scope-summary
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/openconfig_yang_scope.md
+      title: "What the cisco_iosxe NETCONF source actually carries"
+      source_url: "https://openconfig.net/projects/models/"
+      retrieved: "2026-05-01"
+    - id: interface-fields
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/interface_fields.md
+      title: "Interface canonical-core fields (per-field disposition)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: vlan-render-gap
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/vlan_render_gap.md
+      title: "VLAN render gap — top-level vlans never reach RouterOS render"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/88014957/VLAN"
+      retrieved: "2026-05-01"
+    - id: snmp-render-gap
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/snmp_render_gap.md
+      title: "SNMP render gap — source codec ignores OpenConfig SNMP"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8978519/SNMP"
+      retrieved: "2026-05-01"
+    - id: dhcp-render-gap
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/dhcp_render_gap.md
+      title: "DHCP server scope — OpenConfig has no DHCP model"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/24805500/DHCP"
+      retrieved: "2026-05-01"
+    - id: lag-render-gap
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/lag_render_gap.md
+      title: "LAG render gap — aggregate / LACP augments not parsed"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/8323193/Bonding"
+      retrieved: "2026-05-01"
+    - id: ipv6-link-local
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/ipv6_addresses.md
+      title: "IPv6 link-local handling — scope hard-coded global on parse"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/328121/IPv6"
+      retrieved: "2026-05-01"
+    - id: routeros-iface
+      path: docs/vendor-references/cisco_iosxe_to_mikrotik_routeros/interface_fields.md
+      title: "Ethernet / Interface — RouterOS"
+      source_url: "https://help.mikrotik.com/docs/spaces/ROS/pages/41746442/Ethernet"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe NETCONF parser walks <interfaces> only and does
+      not extract <system><hostname>.  intent.hostname is always empty
+      on this direction, so there is nothing for the MikroTik render
+      to drop.  The CapabilityMatrix declares /system/hostname
+      "supported" aspirationally; flips to "good" once parse-side wire-
+      up lands (RouterOS /system identity is a clean direct map).
+    references: [oc-system, scope-summary]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      OpenConfig models domain via openconfig-system <domain-name>;
+      the cisco_iosxe codec does not parse it.  intent.domain is
+      always empty.  RouterOS does not surface a top-level FQDN
+      identity field anyway, so even with bidirectional wire-up the
+      mapping would be lossy via /ip dns set domain=.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract <system><dns><servers>.
+      intent.dns_servers is always empty on this direction.  Flips to
+      "good" once parse-side wire-up lands (RouterOS /ip dns set
+      servers= accepts a clean comma-separated list).
+    references: [oc-system, scope-summary]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract <system><ntp><servers>.
+      intent.ntp_servers is always empty.  Flips to "good" once parse-
+      side wire-up lands (RouterOS /system ntp client set servers=
+      accepts the same shape).
+    references: [oc-system, scope-summary]
+
+  timezone:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract
+      <system><clock><timezone-name>.  intent.timezone is always
+      empty.  Even with bidirectional wire-up the mapping is lossy
+      because OpenConfig uses IANA tz identifiers and RouterOS uses
+      the same format (so the canonical-to-RouterOS direction would
+      actually be "good"); the loss is upstream of this cross-pair.
+    references: [oc-system]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract
+      <system><logging><remote-servers>.  intent.syslog_servers is
+      always empty.  Flips to "lossy" once parse-side wire-up lands
+      (RouterOS /system logging is a richer two-section model than
+      the canonical host-list captures).
+    references: [oc-system, scope-summary]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips: the cisco_iosxe parser
+      produces CanonicalInterface records and the MikroTik render
+      walks them.  Per-field drift is itemised below — name,
+      description, enabled, ipv4_addresses are good; interface_type,
+      mtu, ipv6_addresses (link-local scope) are lossy; switchport /
+      VLAN / LAG / VRF / DHCP-client fields are not_applicable
+      because the cisco_iosxe parser does not extract the
+      corresponding OpenConfig augments.
+    references: [oc-interfaces, interface-fields]
+
+  "interfaces[].name":
+    disposition: good
+    note: >
+      OpenConfig <interface><name> -> RouterOS interface name (after
+      the rename mesh translates Cisco's speed-encoded name to
+      RouterOS's flat etherN form).  Without the rename mesh, the
+      literal Cisco name (e.g. GigabitEthernet0/0/1) lands on the
+      RouterOS render verbatim and the operator sees an incongruous
+      interface name; the device accepts it but it looks wrong.
+    references: [oc-interfaces, routeros-iface]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Free-text round-trip.  cisco_iosxe parses <config><description>;
+      MikroTik render emits as comment="<text>".
+    references: [oc-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      OpenConfig YANG-bool <enabled> -> RouterOS disabled= (inverted).
+      Strict YANG-bool parsing accepts only "true" / "false" (case-
+      insensitive); anything else raises ParseError on the cisco_iosxe
+      side, so the canonical bool is always well-formed for the
+      MikroTik render.
+    references: [oc-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      cisco_iosxe parses the IANA ifType ident verbatim from
+      <config><type>.  MikroTik render does NOT emit a corresponding
+      directive — RouterOS has no IANA-ident concept; its parser re-
+      derives the type from the interface-name prefix (etherN ->
+      ethernetCsmacd, vlanN -> l3ipvlan, bondN -> ieee8023adLag, empty
+      bridge -> softwareLoopback emulation).  Most types round-trip
+      harmlessly because the RouterOS inference table agrees with the
+      canonical IANA ident; the asymmetry surfaces with non-standard
+      names (e.g. a Loopback-typed interface named "Loopback0" becomes
+      a RouterOS interface whose type re-inferred as ethernetCsmacd).
+    references: [oc-interfaces, interface-fields]
+
+  "interfaces[].mtu":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe codec parses <config><mtu> into the intermediate
+      dict but does NOT carry it through to CanonicalInterface.mtu —
+      the canonical-bridge helper drops it on the way through.  This
+      is documented as LossyPath("/interfaces/interface/config/mtu")
+      on the codec's capability matrix.  Even though the MikroTik
+      render accepts MTU on /interface ethernet set mtu=, the source-
+      side wire-through gap means the MTU never reaches the canonical
+      tree.
+    references: [oc-interfaces, scope-summary]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      OpenConfig <subinterface><ipv4><addresses><address> ->
+      RouterOS /ip address add address=A.B.C.D/N interface=...  Full
+      list round-trip including secondary addresses.
+    references: [oc-if-ip]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe canonical-bridge hard-codes scope="global" on
+      every parsed IPv6 address (link-local inference not yet wired).
+      RouterOS /ipv6 address treats fe80::/10 addresses under a
+      separate link-local=yes flag; explicit fe80:: literals from the
+      source XML are mis-classified as global on the canonical record
+      and the MikroTik render emits a contradictory configuration.
+      In practice rarely triggered (most fe80:: addresses are auto-
+      derived rather than declared explicitly); but the lossy
+      classification is correct for the explicit case.
+    references: [oc-if-ip, ipv6-link-local]
+
+  "interfaces[].switchport_mode":
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk the openconfig-vlan:
+      switched-vlan augment under <ethernet>.  intent.interfaces[].
+      switchport_mode is always None on this direction (the routed-
+      port default).  RouterOS render emits no bridge VLAN filtering
+      because the canonical surface is empty.
+    references: [oc-vlan, vlan-render-gap]
+
+  "interfaces[].access_vlan":
+    disposition: not_applicable
+    note: Same parse-side gap as switchport_mode.
+    references: [oc-vlan, vlan-render-gap]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: not_applicable
+    note: Same parse-side gap.
+    references: [oc-vlan, vlan-render-gap]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: not_applicable
+    note: Same parse-side gap.
+    references: [oc-vlan, vlan-render-gap]
+
+  "interfaces[].voice_vlan":
+    disposition: not_applicable
+    note: >
+      Doubly not_applicable — the cisco_iosxe parser doesn't extract
+      voice_vlan from OpenConfig (codec gap), AND RouterOS has no
+      voice-VLAN concept on the render side.
+    references: [oc-vlan]
+
+  "interfaces[].lag_member_of":
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract the openconfig-if-
+      aggregate:aggregate-id leaf on member interfaces.
+      intent.interfaces[].lag_member_of is always empty.  Member
+      interfaces appear on the canonical tree as standalone records;
+      the parent-LAG back-pointer is lost.
+    references: [oc-aggregate, lag-render-gap]
+
+  "interfaces[].dhcp_client":
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract the OpenConfig DHCP-
+      client augment.  intent.interfaces[].dhcp_client is always False
+      on this direction.  RouterOS render emits no /ip dhcp-client
+      lines.
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract <network-instances>
+      bindings.  intent.interfaces[].vrf is always empty.  RouterOS
+      VRF parsing is also not yet wired (matrix declares
+      /routing-instances/instance unsupported).  Doubly not_applicable.
+    references: [oc-network-instance]
+
+  "interfaces[].default_name":
+    disposition: not_applicable
+    note: >
+      RouterOS-specific factory-binding discriminator.  cisco_iosxe
+      source never populates this field; MikroTik render falls back
+      to using the canonical name as both name= and (effectively)
+      default-name= via the find idiom.
+    references: [routeros-iface]
+
+  vlans:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk <vlans>/<vlan> top-level
+      definitions or the per-interface switched-vlan augment.
+      intent.vlans is always empty on this direction.  RouterOS
+      render emits no VLAN-section content from the empty list.
+      Synthesised SVI interfaces (intent.interfaces[name="Vlan10"])
+      DO survive via the interfaces walk and emit as /interface vlan
+      records, but the top-level VLAN definitions that should
+      accompany them are absent.
+    references: [oc-vlan, vlan-render-gap]
+
+  static_routes:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk <network-instances> /
+      <protocols><protocol identifier="STATIC">.
+      intent.static_routes is always empty.  CapabilityMatrix
+      declares /routing/static-route "supported" aspirationally;
+      flips to "good" once parse-side wire-up lands (RouterOS /ip
+      route is a clean direct map for default-VRF routes).
+    references: [oc-network-instance, scope-summary]
+
+  # ── Tier 2 — auto-translate with review banner ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      Two layers of absence: (1) the cisco_iosxe parser does not
+      extract DHCP server pools (OpenConfig has no first-class DHCP-
+      server model; Cisco IOS-XE exposes DHCP via the
+      Cisco-IOS-XE-dhcp.yang native YANG module which the codec does
+      not bridge), and (2) the codec is OpenConfig-only.
+      intent.dhcp_servers is always empty.  RouterOS render emits no
+      /ip pool / /ip dhcp-server / /ip dhcp-server network lines.
+    references: [oc-system, dhcp-render-gap]
+
+  snmp:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not extract <system><snmp>.
+      intent.snmp is always None on this direction.  CapabilityMatrix
+      declares /snmp/community / location / contact / trap-host
+      "supported" aspirationally and /snmp/v3-user "unsupported"
+      explicitly (Phase 0.5 stub; SNMPv3 USM requires the
+      Cisco-IOS-XE-snmp native YANG module, not bridged).  Flips to
+      "lossy" once parse-side wire-up lands for v1/v2c (RouterOS
+      supports the surface cleanly with documented v3 algorithm-set
+      divergence).
+    references: [oc-system, snmp-render-gap]
+
+  "snmp.community":
+    disposition: not_applicable
+    note: Same parse-side gap as snmp.
+    references: [snmp-render-gap]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: Same parse-side gap.
+    references: [snmp-render-gap]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: Same parse-side gap.
+    references: [snmp-render-gap]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: Same parse-side gap.
+    references: [snmp-render-gap]
+
+  "snmp.v3_users":
+    disposition: not_applicable
+    note: >
+      Doubly not_applicable — parse-side gap PLUS the cisco_iosxe
+      matrix declares /snmp/v3-user "unsupported" explicitly (Phase
+      0.5 stub; SNMPv3 USM requires Cisco-IOS-XE-snmp native YANG
+      bridging that is not in scope for this codec).  Even if v1/v2c
+      SNMP eventually wires up, v3 stays absent on the cisco_iosxe
+      source until native-YANG bridging lands.
+    references: [snmp-render-gap]
+
+  lags:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk openconfig-if-aggregate
+      aggregator records or the openconfig-lacp <lacp> container.
+      intent.lags is always empty on this direction.  RouterOS render
+      emits no /interface bonding lines.  LAG-shaped interfaces (e.g.
+      Port-channel1) DO survive as standalone CanonicalInterface
+      records via the interfaces walk, but the member-relationship
+      and LACP mode are lost.
+    references: [oc-aggregate, lag-render-gap]
+
+  local_users:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk <system><aaa>
+      <authentication><users>.  intent.local_users is always empty.
+      Flips to "lossy" once parse-side wire-up lands (Cisco hash
+      formats - type 5/8/9 - are not directly compatible with
+      RouterOS's vendor-private hash format; operator must re-set
+      passwords on the target).
+    references: [oc-system]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser does not walk <system><aaa>
+      <server-groups>.  intent.radius_servers is always empty.
+      Flips to "lossy" once parse-side wire-up lands (shared-secret
+      encoding differs between vendors; service-binding versus
+      method-list semantics not modelled canonically).
+    references: [oc-system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: unsupported
+    reason: >
+      cisco_iosxe codec capability matrix lists /vxlan-vnis/vni as
+      unsupported ("VXLAN not modelled in this NETCONF/OpenConfig
+      stub codec.  CLI sibling defers VXLAN wire-up until Catalyst
+      demand arrives; NETCONF stays in lockstep.").  MikroTik codec
+      capability matrix also lists /vxlan-vnis/vni as unsupported
+      ("RouterOS VXLAN exists but is rare in canonical scope and not
+      modelled in v1.").  Cross-pair surface unsupported on both
+      sides.
+    references: [oc-network-instance]
+
+  evpn_type5_routes:
+    disposition: unsupported
+    reason: >
+      Neither codec models EVPN.  cisco_iosxe NETCONF stub does not
+      extract evpn routes; RouterOS does not model EVPN at all.
+      Cross-pair surface effectively unsupported.
+    references: [oc-network-instance]
+
+  routing_instances:
+    disposition: unsupported
+    reason: >
+      The cisco_iosxe codec does not parse <network-instances>
+      records.  RouterOS 7+ has /ip vrf but the MikroTik codec does
+      not yet wire up the parser either.  Cross-pair surface empty
+      regardless of structural compatibility.  When wire-up lands on
+      both sides, the cross-pair surface will upgrade to lossy:
+      RouterOS keeps RD/RT under BGP rather than the VRF block, so
+      RD/RT will be lossy on the cross-pair.
+    references: [oc-network-instance]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 dict of section-name -> raw text that the pipeline
+      carries through for display but never auto-renders.  The
+      cisco_iosxe NETCONF source produces no raw_sections content
+      (no equivalent of "section bytes preserved verbatim" on the
+      OpenConfig wire); MikroTik render ignores any that arrives.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: "Set by the source codec on parse; not a translation field."
+
+  source_format:
+    disposition: not_applicable
+    note: "Same as source_vendor — informational metadata only."
+
+  source_version:
+    disposition: not_applicable
+    note: "OS version hint from the parser; not a translation field."
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (apply-groups statement preservation per GAP 9b).
+      cisco_iosxe NETCONF source never populates this list.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific companion to apply_groups.  Always empty on this
+      cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The structural framing is high-confidence: the cisco_iosxe
+#     codec's parse() is in-tree code that any reader can verify, and
+#     the conclusion that it walks <interfaces> only is verifiable by
+#     code inspection.
+#
+#   * The interface canonical-core dispositions (good for name /
+#     description / enabled / ipv4 / ipv6; lossy for type / mtu / v6
+#     link-local) are confidence-high — the cisco_iosxe matrix and
+#     the mikrotik_routeros matrix both agree on the same surface.
+#
+#   * The non-interface not_applicable dispositions are confidence-
+#     medium: it's mechanically true that the parser doesn't extract
+#     today, but the matrix declarations as `supported` (rather than
+#     `unsupported`) make the codec's INTENT clear — these should
+#     round-trip eventually.  An operator running this today must
+#     understand this is a Phase-0.5 codec.
+#
+#   * The IPv6 link-local lossy classification is medium-confidence:
+#     the cisco_iosxe codec hard-codes scope="global" on parse, so
+#     the loss is on the source side regardless of what the MikroTik
+#     render does.  When parse-side link-local awareness lands, this
+#     flips to "good" for global / "lossy" for explicit fe80::
+#     literals.
+#
+# Deferred items (not researched in depth this pass):
+#
+#   * Per-VRF static routes — canonical schema gap; lands alongside
+#     VRF wire-up.
+#
+#   * RouterOS firewall / NAT / queues / wireless configuration —
+#     Tier-3 by design; remain in raw_sections for review.  These
+#     are inverse-direction concerns and noted in the
+#     mikrotik_routeros__cisco_iosxe.yaml inverse pair.
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The `unsupported` vs `not_applicable` distinction is doing a
+#     lot of work here.  For fields where the SOURCE codec's parser
+#     does not extract data (every non-interface field on the
+#     cisco_iosxe NETCONF stub), `not_applicable` is correct — there
+#     is no data being dropped, just no data arriving.  For fields
+#     where both codecs declare the path unsupported in their
+#     matrices (vxlan_vnis, evpn, routing_instances), `unsupported`
+#     with explicit reason is correct.  Mixing these would obscure
+#     the actionable insight: "wire up the cisco_iosxe parser to
+#     extract <system>/<vlans>/<snmp>" is mechanically different
+#     from "wait for OpenConfig to grow a DHCP-server augment"
+#     (which may never happen).
+#
+#   * The cisco_iosxe codec's narrow parse scope in the SOURCE role
+#     is symmetric with its narrow render scope in the TARGET role
+#     (see the inverse direction).  Wiring up the parse side would
+#     convert ~12 not_applicable dispositions in this YAML to
+#     good (or lossy where vendor mismatch dominates).
