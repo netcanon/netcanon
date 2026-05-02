@@ -1,0 +1,626 @@
+# Cross-vendor fidelity expectations: cisco_iosxe -> arista_eos
+#
+# Source: cisco_iosxe codec — OpenConfig NETCONF YANG XML.  Distinct
+# from cisco_iosxe_cli (operator-paste running-config text); both
+# target the same Cisco device family but parse different wire formats.
+# Target: arista_eos codec (EOS `show running-config` text), `certified`-
+# grade.
+#
+# Direction-specific framing: the dominant asymmetry on this direction
+# is OPPOSITE to the forward (`arista_eos -> cisco_iosxe`) pair.
+# Forward: rich Arista source produces a populated canonical tree, target
+# NETCONF render silently drops most of it.  Reverse (this pair): the
+# cisco_iosxe parse path walks `<interfaces>` only and never populates
+# `hostname`, `domain`, `dns_servers`, `ntp_servers`, `vlans`,
+# `static_routes`, `routing_instances`, `lags`, `local_users`,
+# `radius_servers`, or `snmp` from the source XML.  These fields are
+# empty on the canonical tree input to the Arista render — there is
+# no data to drop.
+#
+# For these fields the disposition is `not_applicable` (parser never
+# produces) rather than `unsupported` (target codec semantically
+# declines to emit declared canonical data).  Same operational meaning
+# — the operator gets nothing on the wire — but a structurally
+# different schema label that distinguishes "data loss happened
+# upstream of the codec" from "the target codec declined to emit
+# declared data".
+#
+# The Arista EOS target codec is by contrast `certified` and emits
+# the full canonical surface: a hypothetical fully-wired cisco_iosxe
+# parser would round-trip through this pair cleanly.  The limitation
+# is purely on the source-codec parse-side — once the cisco_iosxe
+# parser walks `<system>`, `<vlans>`, `<network-instances>`, `<snmp>`,
+# etc., this YAML's `not_applicable` rows flip to `good` or `lossy`
+# per the underlying canonical-model fidelity.
+#
+# Schema spec: tests/fixtures/cross_vendor_expectations/README.md
+# Vendor reference cache: docs/vendor-references/cisco_iosxe_to_arista_eos/
+#
+# Authored 2026-05-01 alongside the forward direction.
+
+meta:
+  source_vendor: cisco_iosxe
+  target_vendor: arista_eos
+  primary_use_case: >
+    Cross-format migration: snapshot a Cisco Catalyst 9K / ISR4K /
+    ASR1K device through NETCONF/OpenConfig and re-emit Arista EOS
+    `running-config` for human review or for pasting into a sibling
+    Arista device.  Demonstrates that the OpenConfig surface (as
+    parsed by this codec) is a `narrow projection` of the full
+    device config — a faithful Arista render of a NETCONF snapshot
+    is NOT a recovery of the original Cisco device's full state.
+    Operators wanting full fidelity across vendors should route
+    through cisco_iosxe_cli (certified) on the source side instead.
+  certainty: medium
+  references:
+    - id: oc-interfaces
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/interface-fields.md
+      title: "openconfig-interfaces YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html"
+      retrieved: "2026-05-01"
+    - id: oc-if-ip
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/ipv6-addresses.md
+      title: "openconfig-if-ip YANG schema docs (IPv4 / IPv6 augment)"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html"
+      retrieved: "2026-05-01"
+    - id: oc-system
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/openconfig-yang-scope.md
+      title: "openconfig-system YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-system.html"
+      retrieved: "2026-05-01"
+    - id: oc-vlan
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vlan-render-gap.md
+      title: "openconfig-vlan YANG schema docs"
+      source_url: "https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-vlan.html"
+      retrieved: "2026-05-01"
+    - id: oc-network-instance
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vrf-render-gap.md
+      title: "OpenConfig network-instance use cases"
+      source_url: "https://openconfig.net/docs/models/network_instance/"
+      retrieved: "2026-05-01"
+    - id: oc-evpn
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vxlan-evpn-gap.md
+      title: "openconfig-evpn YANG model (GitHub)"
+      source_url: "https://github.com/openconfig/public/tree/master/release/models/evpn"
+      retrieved: "2026-05-01"
+    - id: cisco-yang-blog
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/openconfig-yang-scope.md
+      title: "Native, IETF, OpenConfig... Why so many YANG models? (Cisco Blogs)"
+      source_url: "https://blogs.cisco.com/developer/which-yang-model-to-use"
+      retrieved: "2026-05-01"
+    - id: iosxe-prog-guide-1715
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/openconfig-yang-scope.md
+      title: "Programmability Configuration Guide, Cisco IOS XE 17.15.x — NETCONF Protocol"
+      source_url: "https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/prog/configuration/1715/b_1715_programmability_cg/m_1715_prog_yang_netconf.html"
+      retrieved: "2026-05-01"
+    - id: cisco-snmp-yang
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/snmp-render-gap.md
+      title: "Cisco-IOS-XE-snmp.yang vendor model (YangModels GitHub)"
+      source_url: "https://github.com/YangModels/yang/blob/main/vendor/cisco/xe/1651/Cisco-IOS-XE-snmp.yang"
+      retrieved: "2026-05-01"
+    - id: arista-iface-cg
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/interface-fields.md
+      title: "Arista EOS Interface Configuration (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-interface-configuration"
+      retrieved: "2026-05-01"
+    - id: arista-ethernet-ports
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/interface-fields.md
+      title: "Arista EOS Ethernet Ports (4.36.0F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-ethernet-ports"
+      retrieved: "2026-05-01"
+    - id: arista-vlan-cg
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vlan-render-gap.md
+      title: "Arista EOS VLAN Configuration (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-vlan-configuration"
+      retrieved: "2026-05-01"
+    - id: arista-user-security
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/snmp-render-gap.md
+      title: "Arista EOS User Security (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-user-security"
+      retrieved: "2026-05-01"
+    - id: arista-vxlan-cg
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vxlan-evpn-gap.md
+      title: "Arista EOS VXLAN Configuration Guide (4.36.0F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-vxlan-configuration"
+      retrieved: "2026-05-01"
+    - id: arista-evpn-cg
+      path: docs/vendor-references/cisco_iosxe_to_arista_eos/vxlan-evpn-gap.md
+      title: "Arista EOS Configuring EVPN (4.35.2F)"
+      source_url: "https://www.arista.com/en/um-eos/eos-configuring-evpn"
+      retrieved: "2026-05-01"
+
+# ---------------------------------------------------------------------------
+# Per-field expectations.  Walks every top-level CanonicalIntent field
+# (and meaningful sub-fields) defined in
+# netconfig/migration/canonical/intent.py.
+# ---------------------------------------------------------------------------
+
+per_field_expectation:
+
+  # ── Tier 1 — auto-translatable scalars / lists ──
+
+  hostname:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe NETCONF parser walks `<interfaces>` only and
+      never populates intent.hostname.  Even when the source XML
+      includes `<system><config><hostname>`, the parser ignores it.
+      Disposition is `not_applicable` (parser never produces) rather
+      than `lossy` (would imply data loss after canonical tree
+      population).  Once the parser wires `<system>` parsing this
+      flips to good — Arista accepts free-form hostnames identically
+      to Cisco.
+    references: [oc-system]
+
+  domain:
+    disposition: not_applicable
+    note: >
+      Same parse-side wire-up gap.  Parser doesn't read
+      `<system><config><domain-name>` today.  Flips to good once
+      wired.
+    references: [oc-system]
+
+  dns_servers:
+    disposition: not_applicable
+    note: >
+      Same parse-side wire-up gap.  Parser doesn't read
+      `<system><dns><servers>`.  Flips to good once wired (Arista
+      `ip name-server vrf default <addr>`).
+    references: [oc-system]
+
+  ntp_servers:
+    disposition: not_applicable
+    note: >
+      Same parse-side wire-up gap.  Parser doesn't read
+      `<system><ntp><servers>`.  Flips to good once wired.
+    references: [oc-system]
+
+  timezone:
+    disposition: not_applicable
+    note: >
+      Parser doesn't read `<system><clock><config><timezone-name>`.
+      Once wired this flips to lossy: OpenConfig prefers IANA tz
+      database identifiers (`America/Los_Angeles`); Arista accepts
+      both abbreviations (PST/EST) and Olson IDs but the rendered
+      `clock timezone <name>` must match the operator's expectation.
+      Cross-format mapping requires an operator-curated table.
+    references: [oc-system]
+
+  syslog_servers:
+    disposition: not_applicable
+    note: >
+      Parser doesn't read `<system><logging><remote-servers>`.
+      Flips to good once wired (host-list surface; Arista
+      `logging host <addr>`).
+    references: [oc-system]
+
+  interfaces:
+    disposition: lossy
+    reason: >
+      The interface list itself round-trips through the NETCONF
+      codec's parse path — name / description / enabled /
+      interface_type / IPv4 / IPv6 are good or lossy.  The lossy
+      classification reflects per-field drift listed below: switchport
+      / VLAN / LAG / VRF / DHCP-client fields are not_applicable
+      (NETCONF parser doesn't read them today; wire-up gap), and MTU
+      is not_applicable (parsed into the intermediate dict but not
+      carried through `_iface_dict_to_canonical`).  Name flips
+      capitalisation on Port-channel and loses speed token on
+      `GigabitEthernet*`.
+    references: [oc-interfaces, arista-iface-cg]
+
+  "interfaces[].name":
+    disposition: lossy
+    reason: >
+      Cisco `GigabitEthernet0/0/0` / `TenGigabitEthernet1/0/49` ->
+      Arista `Ethernet1` / `Ethernet49` via the rename mesh.  This
+      is the better direction for the speed hint (source name carries
+      the speed token; rename mesh sheds it onto a flat-numbered name
+      shape that doesn't carry one) — no information loss on speed
+      identification.  The rename itself is the dominant transformation.
+      Port-channel naming flips capitalisation: Cisco `Port-channel<N>`
+      (lower-case c) -> Arista `Port-Channel<N>` (capital C); rename
+      mesh canonicalises if cross-pane overrides are configured.
+    references: [oc-interfaces, arista-ethernet-ports]
+
+  "interfaces[].description":
+    disposition: good
+    note: >
+      Cisco `<config><description>` text -> Arista `description
+      "<text>"` verbatim.  XML escaping handled on parse.
+    references: [oc-interfaces]
+
+  "interfaces[].enabled":
+    disposition: good
+    note: >
+      YANG bool `<enabled>true</enabled>` -> Arista `no shutdown`
+      (default; not explicitly emitted); `<enabled>false</enabled>`
+      -> Arista `shutdown`.  Strict YANG parsing on the cisco_iosxe
+      side rejects non-true/false text.
+    references: [oc-interfaces]
+
+  "interfaces[].interface_type":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe parser reads the IANA interface-type ident
+      verbatim from `<config><type>` (e.g. `ianaift:ethernetCsmacd`).
+      The Arista codec on render does not emit interface_type
+      explicitly — Arista names encode the type implicitly via prefix
+      (`Ethernet*`, `Loopback*`, `Port-Channel*`, `Vlan*`).  Result:
+      the IANA ident from the source is dropped on render; the Arista
+      output relies on name prefix matching what the original ident
+      indicated.  Asymmetric on edge cases — a Cisco source with a
+      `<type>` ident that doesn't match the name prefix conventions
+      (rare, but permissible per OpenConfig) loses the inconsistency.
+    references: [oc-interfaces]
+
+  "interfaces[].mtu":
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe parser DOES read `<config><mtu>` into its
+      intermediate parsed dict (see `_parse_config()`) but the
+      canonical bridge `_iface_dict_to_canonical()` does NOT copy
+      `mtu` onto CanonicalInterface.mtu.  Result: intent.interfaces[].mtu
+      is always None on this direction; the Arista render never emits
+      `mtu N`.  Disposition is `not_applicable` (parse-side bridge
+      gap; no data ever reaches canonical) rather than `lossy`.
+    references: [oc-interfaces]
+
+  "interfaces[].ipv4_addresses":
+    disposition: good
+    note: >
+      Cisco `<subinterface index=0><ipv4><addresses>` -> Arista
+      `ip address X/N` (CIDR form).  Round-trip lossless for the
+      (ip, prefix) tuple.  Multiple addresses per subinterface emit
+      as multiple Arista `ip address ... secondary` directives.
+    references: [oc-if-ip]
+
+  "interfaces[].ipv6_addresses":
+    disposition: lossy
+    reason: >
+      The cisco_iosxe parser hard-codes scope="global" on every
+      parsed IPv6 address (see
+      `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
+      Even when the source XML carries draft `address-type` augment
+      indicating link-local, the canonical record receives
+      scope="global".  The Arista render emits `ipv6 address X/N`
+      without the `link-local` keyword regardless.  For a `fe80::/10`
+      address, Arista REJECTS the output on commit — EOS requires
+      the keyword for `fe80::/10` addresses.  This is a real
+      operational failure, not just a metadata loss; mitigated by
+      the fact that production NETCONF datastores rarely expose
+      explicit operator-declared link-local addresses.  Doubly
+      upstream of the codec pair: parse-side scope inference is
+      missing.
+    references: [oc-if-ip, arista-iface-cg]
+
+  "interfaces[].switchport_mode":
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk the `openconfig-vlan`
+      `switched-vlan` augment under `<ethernet>`.  Even when the
+      source XML carries switchport state (which Catalyst devices
+      emit), the parser skips it.  Disposition is `not_applicable`
+      because intent.interfaces[].switchport_mode is None after
+      parse — there is no data for the Arista render to drop.  When
+      parser is extended this flips to good (Arista mirrors Cisco
+      switchport CLI nearly verbatim).
+    references: [oc-vlan]
+
+  "interfaces[].access_vlan":
+    disposition: not_applicable
+    note: >
+      Same `switched-vlan` parse-side wire-up gap.  Flips to good
+      once wired.
+    references: [oc-vlan]
+
+  "interfaces[].trunk_allowed_vlans":
+    disposition: not_applicable
+    note: >
+      Same wire-up gap.  Flips to good once wired (OpenConfig
+      `trunk-vlans` leaf-list maps cleanly to Arista `switchport
+      trunk allowed vlan <list>`).
+    references: [oc-vlan]
+
+  "interfaces[].trunk_native_vlan":
+    disposition: not_applicable
+    note: Same wire-up gap. Flips to good once wired.
+    references: [oc-vlan]
+
+  "interfaces[].voice_vlan":
+    disposition: not_applicable
+    note: >
+      Same wire-up gap, plus an additional model-coverage gap:
+      OpenConfig's voice-VLAN augment isn't universally supported.
+      May remain lossy even after switched-vlan parser wire-up.
+    references: [oc-vlan]
+
+  "interfaces[].lag_member_of":
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk the `openconfig-if-aggregate`
+      augment.  `<aggregate-id>` leaf under `<ethernet>` would
+      indicate Port-channel membership; parser skips it.  Flips to
+      good once wired.
+    references: [oc-interfaces]
+
+  "interfaces[].dhcp_client":
+    disposition: not_applicable
+    note: >
+      Parser doesn't walk the OpenConfig DHCP-client augment.  Flips
+      to good once wired (`ip address dhcp` on Arista render).
+    references: [oc-interfaces]
+
+  "interfaces[].vrf":
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `<network-instances>` (where
+      VRF interface-membership lives in OpenConfig).  intent.interfaces[].vrf
+      stays empty regardless of source content.  Arista target codec
+      DOES emit `vrf <name>` interface sub-command when the canonical
+      record carries it — wire-up the parser side and this flips to
+      good.
+    references: [oc-network-instance]
+
+  vlans:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `<vlans>` (top-level OpenConfig
+      VLAN list).  intent.vlans is empty after parse regardless of
+      source XML content.  Arista target render walks intent.vlans
+      and emits `vlan N / name X` blocks; receives nothing here.
+      Flips to good once wired (canonical-stable surface: id / name /
+      description / port-membership; Arista has tighter name
+      character constraints than OpenConfig but most operator names
+      are well within both).
+    references: [oc-vlan]
+
+  static_routes:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk
+      `<network-instances><protocols><protocol identifier=STATIC>`.
+      intent.static_routes is empty after parse.  Arista target
+      render emits `ip route DEST/N GW`; receives nothing here.
+      Flips to good for default-VRF routes once wired; per-VRF
+      routes remain lossy until `CanonicalStaticRoute` gains a `vrf`
+      field.
+    references: [oc-network-instance]
+
+  # ── Tier 2 — auto-translate with review ──
+
+  dhcp_servers:
+    disposition: not_applicable
+    note: >
+      OpenConfig has no fully-baked DHCP server model in widely-
+      deployed Cisco IOS-XE versions.  The NETCONF parser doesn't
+      attempt to read DHCP XML.  Disposition stays `not_applicable`
+      (no input to render); arista_eos codec also doesn't currently
+      parse `ip dhcp pool` blocks, so the field is bidirectionally
+      empty regardless of pipeline.
+    references: [oc-system]
+
+  snmp:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk SNMP XML (neither
+      openconfig-system nor Cisco-IOS-XE-snmp native YANG bridging).
+      intent.snmp is None after parse.  Arista target render walks
+      intent.snmp and emits the full `snmp-server` family; receives
+      nothing here.  Flips to good once wired for v1/v2c surface;
+      v3 stays lossy because of engine-ID-derived hash incompatibility
+      across vendors (re-keying required on the target).
+    references: [cisco-snmp-yang, arista-user-security]
+
+  "snmp.community":
+    disposition: not_applicable
+    note: Parse-side wire-up gap. Same as `snmp` above.
+    references: [cisco-snmp-yang]
+
+  "snmp.location":
+    disposition: not_applicable
+    note: Parse-side wire-up gap. Same as `snmp` above.
+    references: [cisco-snmp-yang]
+
+  "snmp.contact":
+    disposition: not_applicable
+    note: Parse-side wire-up gap. Same as `snmp` above.
+    references: [cisco-snmp-yang]
+
+  "snmp.trap_hosts":
+    disposition: not_applicable
+    note: Parse-side wire-up gap. Same as `snmp` above.
+    references: [cisco-snmp-yang]
+
+  "snmp.v3_users":
+    disposition: not_applicable
+    note: >
+      Doubly: the cisco_iosxe codec capability matrix lists
+      /snmp/v3-user under `unsupported` explicitly (Phase-0.5 stub;
+      SNMPv3 USM requires Cisco-IOS-XE-snmp native YANG bridging).
+      Parser doesn't read v3 user XML; intent.snmp is None after
+      parse.  Once wired (via Cisco-IOS-XE-snmp native YANG
+      bridging), v3 users still don't round-trip cleanly across
+      vendors — engine-ID-derived hashes require re-keying on the
+      target.
+    references: [cisco-snmp-yang, arista-user-security]
+
+  lags:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `openconfig-if-aggregate`.
+      intent.lags is empty after parse.  Arista target render emits
+      `interface Port-Channel<N>` + member `channel-group N mode <m>`
+      bindings; receives nothing here.  Flips to good once wired.
+    references: [oc-interfaces]
+
+  local_users:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `<system><aaa>`.
+      intent.local_users is empty after parse.  Arista target render
+      walks intent.local_users and emits `username X role <name>
+      secret <type> <hash>`.  Flips to lossy once wired — hash-format
+      incompatibility (Cisco type-9 `$9$` scrypt / type-8 PBKDF2 vs
+      Arista Linux crypt() family `$1$` MD5 / `$5$` SHA-256 / `$6$`
+      SHA-512) forces re-keying on the target.
+    references: [oc-system, arista-user-security]
+
+  radius_servers:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `<system><aaa><server-groups>`.
+      intent.radius_servers is empty after parse.  Arista target
+      render emits `radius-server host X key K` directives; receives
+      nothing here.  Flips to lossy once wired (positional vs keyword
+      arg differences; default-port semantics drift).
+    references: [oc-system]
+
+  # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
+
+  vxlan_vnis:
+    disposition: not_applicable
+    note: >
+      The cisco_iosxe codec declares every `/vxlan-vnis/*` path as
+      `unsupported` in its capability matrix.  Parser doesn't populate
+      intent.vxlan_vnis regardless of source XML.  Arista target
+      render is the most VXLAN-mature in the suite (`/vxlan-vnis/*`
+      under `supported`) and would emit `interface Vxlan1` + per-VLAN
+      and per-VRF VNI mappings if the canonical tree carried data;
+      receives nothing here.  Flips to good once both the parser and
+      render bridge to native YANG VXLAN content.
+    references: [oc-evpn, arista-vxlan-cg]
+
+  evpn_type5_routes:
+    disposition: not_applicable
+    note: >
+      No codec populates per-prefix EVPN Type-5 records today.
+      Canonical surface for Type-5 intent is
+      CanonicalRoutingInstance.l3_vni (lands when VRF + VXLAN wire
+      up).  Source-side absent; bidirectionally not_applicable.
+    references: [oc-evpn, arista-evpn-cg]
+
+  # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
+
+  routing_instances:
+    disposition: not_applicable
+    note: >
+      The NETCONF parser doesn't walk `<network-instances>`.
+      intent.routing_instances is empty after parse.  Arista target
+      render walks intent.routing_instances and emits `vrf instance
+      <name>` + `ip routing vrf <name>` + per-VRF `router bgp / vrf
+      X` blocks (RD + RTs).  Flips to good once parser is wired —
+      this is the highest-value cross-format wire-up opportunity for
+      Cisco -> Arista DC EVPN-VXLAN flows.  instance_type stays lossy
+      (Cisco has no per-VRF instance-type discriminator, always
+      vrf; Arista models mac-vrf for per-VLAN BGP signalling).
+    references: [oc-network-instance, arista-evpn-cg]
+
+  # ── Tier 3 — informational only (never auto-rendered) ──
+
+  raw_sections:
+    disposition: not_applicable
+    note: >
+      Tier-3 by design.  NETCONF parser populates raw_sections only
+      with leftover XML it can't classify (typically empty); Arista
+      renderer ignores raw_sections entirely on this side of the
+      pipeline.  Same shape as all cross-pairs.
+
+  # ── Metadata ──
+
+  source_vendor:
+    disposition: not_applicable
+    note: >
+      Set by the source codec on parse; the target codec doesn't
+      consume it.  Not a translation field.
+
+  source_format:
+    disposition: not_applicable
+    note: Same as source_vendor — informational metadata only.
+
+  source_version:
+    disposition: not_applicable
+    note: OS version hint from the parser; not a translation field.
+
+  # ── Vendor-provenance hints ──
+
+  apply_groups:
+    disposition: not_applicable
+    note: >
+      Junos-specific (`apply-groups` statement preservation per GAP
+      9b).  Cisco IOS-XE and Arista codecs do not emit apply_groups;
+      field is always empty on this cross-pair.
+
+  group_content:
+    disposition: not_applicable
+    note: >
+      Junos-specific (group-scoped set-line tails).  Same as
+      apply_groups — empty on this cross-pair.
+
+# ---------------------------------------------------------------------------
+# Notes on confidence
+# ---------------------------------------------------------------------------
+#
+# certainty=medium because:
+#
+#   * The cross-format framing is high-confidence: vendor docs are
+#     clear that OpenConfig is a translation overlay, and the
+#     upstream-loss framing for fields the cisco_iosxe parser doesn't
+#     extract is sound.
+#
+#   * The per-field disposition is heavily skewed to
+#     `not_applicable` because the cisco_iosxe parser walks
+#     `<interfaces>` only.  This is materially honest about the
+#     codec's current state but means the YAML is uninformative
+#     about post-wire-up behaviour.  When parse-side wire-up lands
+#     this YAML will need substantial revision to flip
+#     `not_applicable` -> `good` / `lossy` for the canonical-modelled
+#     fields.
+#
+#   * The structural framing of "loss happens upstream of the codec"
+#     for fields the cisco_iosxe parser doesn't extract is the most
+#     useful observation in this YAML.  Operators using NETCONF ->
+#     Arista CLI as a backup-reformat workflow must understand
+#     they're getting a faithful render of a narrow projection, not
+#     a full-fidelity recovery of the original Cisco device config.
+#
+#   * The IPv6 link-local lossy classification on this direction is
+#     more authoritative than on the forward direction: Arista is
+#     STRICT about the `link-local` keyword (rejects bare `fe80::/10`
+#     declarations on commit), so the parser-side scope-inference
+#     gap manifests as a real operational failure on the target.
+#     Operators with explicit link-local declarations on the source
+#     see commit failures on the rendered Arista config.
+#
+# Deferred items: none — every CanonicalIntent top-level field is
+# enumerated above with a concrete disposition.  The honest
+# classification today is overwhelmingly `not_applicable` because
+# the parser doesn't populate the fields; this is not a deferred
+# audit question, it's an accurate snapshot of the codec's current
+# behaviour.
+#
+# Surprises uncovered authoring this pair:
+#
+#   * The pair structurally mirrors the cisco_iosxe -> cisco_iosxe_cli
+#     pair — same source codec, same parse-side narrow scope, same
+#     dominant `not_applicable` classification.  The differences
+#     are limited to a few cross-vendor specifics: name rename mesh
+#     (Cisco -> Arista direction LOSES less than Arista -> Cisco;
+#     speed token sheds into a flat shape rather than defaulting in),
+#     and IPv6 link-local stricter on Arista commit semantics.
+#
+#   * The Arista target codec is `certified` (richer than the
+#     cisco_iosxe_cli `certified` target on EVPN-VXLAN) but the
+#     parser-side narrow scope on the cisco_iosxe source means none
+#     of that target richness is exercised on this direction.  Once
+#     `<network-instances>` parsing lands, the VXLAN/EVPN dispositions
+#     flip to `good` (Arista is fully wired) — this is the highest-
+#     value wire-up opportunity for Cisco -> Arista DC migrations.
+#
+#   * The `interface_type` lossy classification is asymmetric here:
+#     Cisco source carries an explicit IANA ident (`ianaift:ethernetCsmacd`)
+#     that gets consumed by the canonical bridge but is NOT re-emitted
+#     on the Arista render side (Arista names encode type implicitly
+#     via prefix; the type field is informational on Arista output).
+#     The reverse-direction `lossy` was speed-hint-loss; this
+#     direction's `lossy` is type-ident-shed.
