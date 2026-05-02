@@ -94,14 +94,20 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert intent.domain == "example.net"
 
     # ── Tier 1 — interfaces ──
-    # Seven zones from the fixture (wan, lan, opt1..opt5).
+    # Seven zones (wan, lan, opt1..opt5) backed by the physical names
+    # in each zone's <if> child.  Canonical name = <if> text (per
+    # opnsense/parse.py::_parse_interface_zone_canonical) so cross-
+    # vendor round-trips preserve the original port-name identity
+    # through the lossy zone-tag sanitisation in render.
     iface_names = [i.name for i in intent.interfaces]
-    assert iface_names == ["wan", "lan", "opt1", "opt2", "opt3", "opt4", "opt5"]
+    assert iface_names == [
+        "em0", "em1", "vlan0.20", "vlan0.30", "em2", "em3", "em4",
+    ]
 
     by_name = {i.name: i for i in intent.interfaces}
 
-    # WAN — IPv4 only, MTU set, enabled.
-    wan = by_name["wan"]
+    # WAN zone (<if>em0</if>) — IPv4 only, MTU set, enabled.
+    wan = by_name["em0"]
     assert wan.enabled is True
     assert wan.description == "WAN uplink to upstream carrier"
     assert wan.mtu == 1500
@@ -110,8 +116,8 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert wan.ipv4_addresses[0].prefix_length == 30
     assert wan.ipv6_addresses == []
 
-    # LAN — dual-stack global IPv6.
-    lan = by_name["lan"]
+    # LAN zone (<if>em1</if>) — dual-stack global IPv6.
+    lan = by_name["em1"]
     assert lan.enabled is True
     assert lan.ipv4_addresses[0].ip == "192.168.10.1"
     assert lan.ipv4_addresses[0].prefix_length == 24
@@ -120,19 +126,19 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert lan.ipv6_addresses[0].prefix_length == 64
     assert lan.ipv6_addresses[0].scope == "global"
 
-    # opt1 — VLAN child, IPv4 only.
-    opt1 = by_name["opt1"]
+    # opt1 zone (<if>vlan0.20</if>) — VLAN child, IPv4 only.
+    opt1 = by_name["vlan0.20"]
     assert opt1.description == "Voice VLAN gateway"
     assert opt1.ipv4_addresses[0].ip == "192.168.20.1"
 
-    # opt2 — link-local IPv6 scope normalisation (fe80::/10).
-    opt2 = by_name["opt2"]
+    # opt2 zone (<if>vlan0.30</if>) — link-local IPv6 scope normalisation.
+    opt2 = by_name["vlan0.30"]
     assert len(opt2.ipv6_addresses) == 1
     assert opt2.ipv6_addresses[0].ip == "fe80::1"
     assert opt2.ipv6_addresses[0].scope == "link-local"
 
-    # opt5 — disabled (no <enable/> element).
-    assert by_name["opt5"].enabled is False
+    # opt5 zone (<if>em4</if>) — disabled (no <enable/> element).
+    assert by_name["em4"].enabled is False
 
     # ── Tier 1 — VLANs (id + name) ──
     vlan_ids = sorted(v.id for v in intent.vlans)
@@ -181,17 +187,20 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     assert pool.lease_time == 7200
 
     # ── Tier 2 — LAGs + reverse-link ──
+    # LAG <members> carries physical port names (em2, em3) — matches
+    # real OPNsense and aligns with the canonical iface name now
+    # being sourced from <if> text.
     assert len(intent.lags) == 1
     lag = intent.lags[0]
     assert lag.name == "lagg0"
-    assert lag.members == ["opt3", "opt4"]
+    assert lag.members == ["em2", "em3"]
     assert lag.mode == "active"  # proto=lacp -> active
-    # Reverse-link from interface back to LAG.
-    assert by_name["opt3"].lag_member_of == "lagg0"
-    assert by_name["opt4"].lag_member_of == "lagg0"
+    # Reverse-link from interface back to LAG (by canonical name = <if> text).
+    assert by_name["em2"].lag_member_of == "lagg0"
+    assert by_name["em3"].lag_member_of == "lagg0"
     # Non-members must NOT be back-linked.
-    assert by_name["wan"].lag_member_of is None
-    assert by_name["opt1"].lag_member_of is None
+    assert by_name["em0"].lag_member_of is None  # wan zone
+    assert by_name["vlan0.20"].lag_member_of is None  # opt1 zone
 
     # ── Tier 2 — SNMP v2c community + sysinfo + traps ──
     assert intent.snmp is not None

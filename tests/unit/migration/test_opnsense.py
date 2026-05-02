@@ -57,14 +57,21 @@ class TestParse:
         assert len(tree.interfaces) == 1
 
     def test_zone_interfaces_flatten_to_list(self):
-        """OPNsense's native XML has <wan>, <lan>, <opt1> keyed by role.
-        Parser flips them into a list of ``{'zone': 'wan', …}`` dicts
-        so iter_xpaths can emit list-key-free schema paths."""
+        """OPNsense's native XML has <wan>, <lan>, <opt1> keyed by role,
+        each carrying a ``<if>`` child that names the underlying physical
+        interface (``em0`` / ``em1`` / ``em2``).  The parser prefers the
+        ``<if>`` text as the canonical name so that round-trips through
+        ``_zone_tag_for``'s lossy sanitisation preserve the original
+        port-name identity for cross-vendor intents.  See
+        ``netconfig/migration/codecs/opnsense/parse.py``
+        ``_parse_interface_zone_canonical`` for the resolution rule.
+        """
         xml = FIXTURES.joinpath("config_simple.xml").read_text()
         tree = OPNsenseCodec().parse(xml)
         ifaces = tree.interfaces
-        zones = [i.name for i in ifaces]
-        assert zones == ["wan", "lan", "opt1"]
+        names = [i.name for i in ifaces]
+        # <if>em0</if>, <if>em1</if>, <if>em2</if> in the fixture
+        assert names == ["em0", "em1", "em2"]
 
     def test_enable_flag_element_becomes_python_true(self):
         """<enable/> is a flag — empty element means enabled."""
@@ -76,13 +83,20 @@ class TestParse:
         assert tree.interfaces[0].ipv4_addresses[0].prefix_length == 30
         assert isinstance(tree.interfaces[0].ipv4_addresses[0].prefix_length, int)
 
-    def test_empty_zone_skipped(self):
-        """Empty zone stubs aren't worth carrying through the tree."""
+    def test_empty_zone_round_trips_as_named_iface(self):
+        """An empty zone stub used to be dropped under the "no <if> AND
+        zero children → return None" rule.  That rule was load-bearing
+        in the empty-zone-drop defect: render emitted self-closing
+        ``<optN/>`` for sparse interfaces and parse then dropped them,
+        so disabled-only / IPless ifaces lost their canonical record
+        on round-trip.  The rule is gone — a named zone with no
+        children round-trips as a CanonicalInterface with just the
+        zone-tag name set (legacy fallback path)."""
         raw = """<?xml version="1.0"?>
 <opnsense><interfaces><opt9/></interfaces></opnsense>"""
         tree = OPNsenseCodec().parse(raw)
-        # opt9 had no content → not in the interface list.
-        assert tree.interfaces == []
+        assert len(tree.interfaces) == 1
+        assert tree.interfaces[0].name == "opt9"
 
 
 class TestParseErrors:

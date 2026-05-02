@@ -296,21 +296,20 @@
       <maxleasetime>86400</maxleasetime>
     </lan>
   </dhcpd>
-  <!-- LAGs — one LACP lagg bundling opt3 + opt4.  Parser maps
-       proto=lacp -> CanonicalLAG.mode="active" and reverse-links
-       opt3/opt4 above to lag_member_of="lagg0".
+  <!-- LAGs — one LACP lagg bundling em2 + em3 (the physical members
+       backing zones opt3/opt4).  Parser maps proto=lacp ->
+       CanonicalLAG.mode="active" and reverse-links members to
+       lag_member_of="lagg0" by matching CanonicalInterface.name.
 
-       NOTE: real OPNsense XML stores BSD device names (em2, em3)
-       in <members>, but the parser's reverse-link compares against
-       CanonicalInterface.name (the zone tag).  We use zone names
-       here so the synthetic kitchen-sink exercises the
-       lag_member_of wire-through end-to-end; cross-vendor
-       expectations (tests/fixtures/cross_vendor_expectations/
-       opnsense__cisco_iosxe_cli.yaml) document this assumption. -->
+       Canonical interface names come from the <if> child of each
+       zone (see opnsense/parse.py::_parse_interface_zone_canonical),
+       so the LAG <members> list must reference physical port names
+       to drive the reverse-link — matching real OPNsense XML, which
+       stores BSD device names in <members>. -->
   <laggs version="1.0.0">
     <lagg uuid="fakeuuid-lagg-0000-0000-000000000001">
       <laggif>lagg0</laggif>
-      <members>opt3,opt4</members>
+      <members>em2,em3</members>
       <proto>lacp</proto>
       <descr>Bonded uplink to core switch</descr>
     </lagg>

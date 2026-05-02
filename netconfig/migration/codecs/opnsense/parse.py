@@ -349,15 +349,29 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
 def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None:
     """Parse one ``<wan>``/``<lan>``/``<optN>`` element into a
-    :class:`CanonicalInterface`.  Returns ``None`` for empty stubs."""
-    # Zone name = element tag (wan, lan, opt1, etc.)
-    zone = el.tag
+    :class:`CanonicalInterface`.
+
+    Canonical name resolution: prefer the ``<if>`` child's text when
+    present (real OPNsense XML always carries it: ``<lan><if>igb0</if>``;
+    our render emits it carrying the canonical name verbatim so the
+    round-trip survives ``_zone_tag_for``'s lossy sanitisation).  Fall
+    back to the element tag for legacy XML that lacks ``<if>``.
+
+    Empty-zone-stub rule was previously: if ``<if>`` was missing AND
+    the element had zero children, return None.  This dropped sparse
+    interfaces (disabled-only, no IP, no descr) on round-trip.  The
+    rule is now removed — named-but-empty zones round-trip as a
+    CanonicalInterface with just the name set.  The truly degenerate
+    case (empty tag with no children AND no ``<if>``) is rare in real
+    OPNsense output and the resulting CanonicalInterface is harmless.
+    """
     if_el = el.find("if")
-    if if_el is None or not (if_el.text or "").strip():
-        # No physical interface assigned — skip this zone.
-        if len(list(el)) == 0:
-            return None
-    iface = CanonicalInterface(name=zone)
+    if if_el is not None and if_el.text and if_el.text.strip():
+        iface_name = if_el.text.strip()
+    else:
+        # Legacy fallback for XML that lacks <if> — use the zone tag.
+        iface_name = el.tag
+    iface = CanonicalInterface(name=iface_name)
     descr_el = el.find("descr")
     if descr_el is not None and descr_el.text:
         iface.description = descr_el.text.strip()

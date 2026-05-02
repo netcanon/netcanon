@@ -123,11 +123,48 @@ def render_canonical(intent: CanonicalIntent) -> str:
     # names.  Use the interface name as the zone if it looks like an
     # OPNsense zone (wan/lan/optN), otherwise sanitise the name into
     # a valid XML tag (must start with a letter; no slashes/spaces).
+    #
+    # The sanitisation in ``_zone_tag_for`` is non-invertible (it
+    # lower-cases, replaces non-alphanumerics with ``_``, prepends
+    # ``if_`` for digit-leading names) — ``Ethernet0`` -> ``ethernet0``,
+    # ``1/A1`` -> ``if_1_a1``, ``A1`` -> ``a1``.  To keep the round-trip
+    # invertible we ALWAYS emit a stable ``<if>`` child carrying the
+    # canonical iface name verbatim; the parser prefers ``<if>`` text
+    # over the zone tag so the original port-name identity survives
+    # parse -> render -> parse cycles.  This mirrors real OPNsense XML,
+    # where ``<if>`` carries the underlying physical port name (e.g.
+    # ``<lan><if>igb0</if>...</lan>``).
+    #
+    # Two cooperating defects this addresses:
+    #   1. Empty-zone drop — render previously emitted self-closing
+    #      ``<optN/>`` for sparse interfaces (no IP, no descr, disabled),
+    #      which the parser then dropped via the "no children" rule.
+    #      The mandatory ``<if>`` child guarantees the zone is never
+    #      empty so disabled / sparse ifaces survive round-trip.
+    #   2. Zone-tag mangling — ``_zone_tag_for`` is lossy; the ``<if>``
+    #      child carries the unmangled name so reparse can recover it.
     if intent.interfaces:
         ifaces_el = ET.SubElement(root, "interfaces")
+        used_tags: dict[str, int] = {}
         for iface in intent.interfaces:
-            zone_name = _zone_tag_for(iface.name)
+            base_tag = _zone_tag_for(iface.name)
+            # Disambiguate collisions: if two distinct canonical names
+            # sanitise to the same tag (e.g. ``A1`` and ``a1`` both
+            # collapse to ``a1``), append ``_2``, ``_3``, ... so
+            # element identity stays unique within ``<interfaces>``.
+            seen = used_tags.get(base_tag, 0)
+            if seen == 0:
+                zone_name = base_tag
+            else:
+                zone_name = f"{base_tag}_{seen + 1}"
+            used_tags[base_tag] = seen + 1
             zone_el = ET.SubElement(ifaces_el, zone_name)
+            # Always emit ``<if>`` FIRST carrying the canonical name
+            # verbatim — keeps the iface name round-trippable across
+            # the lossy zone-tag sanitisation, and ensures sparse /
+            # disabled-only interfaces are never empty (so the parser
+            # doesn't drop them under the empty-stub rule).
+            ET.SubElement(zone_el, "if").text = iface.name
             if iface.description:
                 ET.SubElement(zone_el, "descr").text = iface.description
             if iface.enabled:
