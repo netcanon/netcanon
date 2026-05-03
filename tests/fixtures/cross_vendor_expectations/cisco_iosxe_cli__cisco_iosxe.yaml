@@ -278,13 +278,21 @@ per_field_expectation:
     references: [oc-interfaces]
 
   "interfaces[].ipv6_addresses":
-    disposition: good
-    note: >
-      GAP-EVPN-3 wired IPv6 in both codecs.  CLI parser handles
-      `ipv6 address <addr>/<prefix>` and the NETCONF codec emits the
-      `<ipv6><addresses><address>` subtree.  Link-local scope
-      discriminator is not yet inferred from the wire by either
-      codec (treated as global).
+    disposition: lossy
+    reason: >
+      GAP-EVPN-3 wired IPv6 in both codecs: CLI parser handles
+      `ipv6 address <addr>/<prefix>` and the NETCONF codec emits
+      the `<ipv6><addresses><address>` subtree.  Address values
+      themselves round-trip cleanly.  HOWEVER, the link-local
+      scope discriminator is not yet inferred from the wire by
+      either codec (both treat ``fe80::/10`` addresses as
+      ``scope="global"``).  Phase 4 evidence: ``kitchen_sink.txt``
+      shows ``fe80::1`` round-tripping with ``scope="global"``
+      instead of ``"link-local"``.  Demote from ``good`` to
+      ``lossy``; flips back to ``good`` once scope inference
+      lands (sub-field split into
+      ``interfaces[].ipv6_addresses[].scope`` once the comparator
+      supports nested-record sub-fielding).
     references: [oc-interfaces]
 
   "interfaces[].switchport_mode":

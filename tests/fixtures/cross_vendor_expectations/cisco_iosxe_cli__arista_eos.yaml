@@ -242,13 +242,17 @@ per_field_expectation:
     references: [local_users]
 
   radius_servers:
-    disposition: good
-    note: >
-      Both vendors round-trip the canonical
-      ``host / key / auth_port / acct_port`` tuple cleanly via
-      ``radius-server host`` (Arista) / ``radius server <name>`` +
-      ``address ipv4`` (Cisco IOS-XE modern form).  Shared-secret
-      preservation is opaque per the canonical schema.
+    disposition: unsupported
+    reason: >
+      Phase 4 evidence (kitchen_sink fixture: source has 2 RADIUS
+      servers; target has 0) shows the ``arista_eos`` codec has no
+      ``radius-server host`` parse or render path today — the cross-
+      pair drops the canonical RADIUS server list entirely.  Demote
+      from ``good`` to ``unsupported`` until the Arista codec wires
+      ``radius-server host`` parse + render.  Was previously documented
+      as round-tripping cleanly via the
+      ``host / key / auth_port / acct_port`` tuple, but the wire-up
+      assumption was wrong.
     references: [aaa]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──

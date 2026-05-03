@@ -534,14 +534,22 @@ per_field_expectation:
   # ── Tier 2 — LAGs ──
 
   lags:
-    disposition: good
-    note: >
-      Cisco's ``Port-channel<N>`` maps to Junos's ``ae<N>``.  LACP
-      mode (active / passive / static) preserved.  PAgP modes
+    disposition: lossy
+    reason: >
+      Vendor-correct LAG rename: Cisco's ``Port-channel<N>`` maps to
+      Junos's ``ae<N>``.  Member lists, LACP mode (active / passive /
+      static), and aggregation semantics all preserved — only the
+      ``lags[].name`` token differs by design.  Phase 4 comparator
+      flags this as drift on the whole-record name comparison
+      (``batfish_cisco_interface.txt``, ``user_contrib_cat9300_iosxe1712.txt``,
+      ``kitchen_sink.txt`` all show the same Port-channel<N> ↔ ae<N>
+      rename being reported as a CODEC_BUG).  Demote from ``good``
+      to ``lossy`` to acknowledge the rename — vendor-correct LAG
+      rename, comparator currently flags as drift.  PAgP modes
       (``auto`` / ``desirable``) are Cisco-only; Junos source never
-      populates these.  Junos's required chassis-wide ``device-
-      count`` allocation has no Cisco analogue; render synthesises
-      a default value.
+      populates these.  Junos's required chassis-wide ``device-count``
+      allocation has no Cisco analogue; render synthesises a default
+      value.
     references: [cisco-etherchannel, junos-lag-overview, junos-ae-example]
 
   # ── Tier 2 — local users ──
