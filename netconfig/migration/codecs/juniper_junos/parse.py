@@ -290,6 +290,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
             switchport_mode=state.get("switchport_mode"),
             trunk_native_vlan=state.get("trunk_native_vlan"),
             lag_member_of=state.get("lag_member_of"),
+            # Wave-6 render-side emit at 5edf800 surfaces
+            # ``set interfaces <name> unit 0 family inet dhcp`` for
+            # ``iface.dhcp_client=True``.  Parser symmetry: recognise
+            # the same token shape and round-trip the flag.
+            dhcp_client=state.get("dhcp_client", False),
         )
         for ip, prefix in state.get("ipv4", []):
             iface.ipv4_addresses.append(
@@ -962,6 +967,45 @@ def _apply_interfaces(
             pass
         return
 
+    # ``interfaces <name>.<unit> family inet dhcp`` — the dotted-unit
+    # shorthand for ``unit <N> family inet dhcp``.  Wave-6 render
+    # symmetry: only the bare-unit-0 form is currently emitted, but
+    # operators can paste either form and we should round-trip both.
+    # Any other ``family`` payload on the dotted-unit form falls
+    # through to parse-and-ignore (the regular sub-finding for IPv4
+    # / IPv6 addresses on dotted-unit names is out of scope here).
+    if (
+        second == "family"
+        and len(tokens) == 4
+        and tokens[2] == "inet"
+        and tokens[3] == "dhcp"
+    ):
+        # Resolve dotted-unit ``<name>.<unit>`` to the right state
+        # bucket: unit 0 collapses onto the parent interface (matching
+        # the ``unit 0 family inet dhcp`` branch above); units 1+ are
+        # distinct sub-interfaces with compound names.
+        m = re.match(r"^(.+)\.(\d+)$", name)
+        if m:
+            parent, unit_str = m.group(1), m.group(2)
+            try:
+                unit_num = int(unit_str)
+            except ValueError:
+                return
+            if unit_num == 0:
+                target_state = iface_state.setdefault(parent, {})
+                # The bucket originally created under the dotted name
+                # is empty / spurious — drop it so it doesn't leak
+                # an empty ``ge-0/0/0.0`` interface into materialisation.
+                iface_state.pop(name, None)
+            else:
+                target_state = state
+            target_state["dhcp_client"] = True
+        else:
+            # No unit suffix — treat as bare interface (rare but
+            # possible for non-physical names).
+            state["dhcp_client"] = True
+        return
+
     # ``interfaces <name> unit <N> ...``
     if second == "unit" and len(tokens) >= 3:
         try:
@@ -1002,6 +1046,19 @@ def _apply_interfaces(
                         existing.append(pair)
                 except ValueError:
                     pass
+        # ``unit <N> family inet dhcp`` — parser symmetry for the
+        # wave-6 render-side emit at 5edf800.  Junos models the DHCP
+        # client as a property of ``family inet`` (replacing the
+        # ``address`` clause); same-vendor round-trip and any
+        # cross-vendor flow that lands on Junos-set-input must
+        # recover ``iface.dhcp_client=True``.
+        if (
+            len(tokens) == 6
+            and tokens[3] == "family"
+            and tokens[4] == "inet"
+            and tokens[5] == "dhcp"
+        ):
+            target_state["dhcp_client"] = True
         # GAP-EVPN-3: ``unit <N> family inet6 address <ipv6>/<prefix>``.
         # Junos treats global / link-local uniformly here (unlike
         # Cisco / Arista which keyword-tag link-local); we infer the
