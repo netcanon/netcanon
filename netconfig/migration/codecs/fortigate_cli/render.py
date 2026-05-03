@@ -58,9 +58,125 @@ from .parse import (
 )
 from .vlan_heuristics import (
     looks_like_vlan_iface as _looks_like_vlan_iface,
-    parent_for_vlan_iface as _parent_for_vlan_iface,
+    parent_for_vlan_iface as _parent_for_vlan_iface_fallback,
     vlan_id_for as _vlan_id_for,
 )
+
+
+# RFC1918 private-IPv4 prefixes — used by the LAN-preference scorer
+# in ``_parent_for_vlan_iface`` to spot canonical interfaces that
+# look like the operator's LAN side (vs. the WAN, which is typically
+# a public/DHCP-assigned address or no address at all).
+_RFC1918_NETWORKS = (
+    ipaddress.IPv4Network("10.0.0.0/8"),
+    ipaddress.IPv4Network("172.16.0.0/12"),
+    ipaddress.IPv4Network("192.168.0.0/16"),
+)
+
+
+def _has_private_ipv4(iface: CanonicalInterface) -> bool:
+    """Return True when *iface* has at least one RFC1918 IPv4
+    address.  Used as a LAN-side signal in the VLAN-parent scorer."""
+    for addr in iface.ipv4_addresses:
+        try:
+            ip = ipaddress.IPv4Address(addr.ip)
+        except (ipaddress.AddressValueError, ValueError):
+            continue
+        for net in _RFC1918_NETWORKS:
+            if ip in net:
+                return True
+    return False
+
+
+def _port_index_for(name: str) -> int:
+    """Extract the trailing numeric index from a port-shape name
+    (e.g. ``port5`` -> 5, ``wan2`` -> 2, ``ixl0`` -> 0).  Returns 0
+    when no trailing digits are present.  Used as a tiebreaker in the
+    VLAN-parent scorer — higher port-index ports are slightly less
+    likely to be the WAN (which conventionally lands on port1/wan1)."""
+    m = re.search(r"(\d+)$", name)
+    return int(m.group(1)) if m else 0
+
+
+def _parent_for_vlan_iface(
+    name: str,
+    deduped_ifaces: list[CanonicalInterface],
+) -> str | None:
+    """Resolve the parent physical interface for a VLAN sub-interface
+    with a deterministic LAN-preference scorer.
+
+    Finding 21 (``user_smoke_findings.md``): the original
+    :func:`vlan_heuristics.parent_for_vlan_iface` walks
+    *deduped_ifaces* post-elision and picks the first non-VLAN match.
+    With OPNsense source where ``igc0`` (WAN, DHCP-client) and
+    ``port1`` (LAN, ixl0-renamed with a static RFC1918 address) both
+    survive elision, the legacy iteration ordering picks WAN first —
+    wrong.
+
+    Scoring scheme (per candidate):
+
+    * ``+10`` — has a private RFC1918 IPv4 (192.168/16, 10/8, 172.16/12)
+    * ``+5``  — has L2 trunk semantics (``trunk_allowed_vlans`` set)
+    * ``-5``  — ``dhcp_client=True`` (likely the WAN)
+
+    These are the *signal* components.  A candidate's port-index
+    (trailing digits in the name) is layered in as a deterministic
+    tiebreaker — when two candidates tie on signal score, the higher
+    port-index wins (WAN is conventionally on ``port1`` / ``wan1``,
+    so a higher index is slightly less WAN-like).  Port-index is
+    NEVER allowed to *create* a positive score on its own — that
+    would silently change the legacy first-non-VLAN fallback
+    behaviour for signal-free trees and break round-trip stability
+    on existing tests.
+
+    When NO candidate has any positive signal (signal score <= 0 on
+    every iface), fall back to
+    :func:`vlan_heuristics.parent_for_vlan_iface` for byte-identity
+    backward compatibility — pre-Finding-21 behaviour for canonical
+    trees with bare-stub interfaces and no LAN/WAN discriminators.
+
+    The dotted-form fast path (``port1.10`` -> parent ``port1``) is
+    delegated to the fallback helper so a single source of truth
+    handles dotted-form parents.
+    """
+    # Dotted-form fast path delegates to the legacy helper.
+    if "." in name:
+        return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
+
+    candidates = [
+        i for i in deduped_ifaces
+        if not _looks_like_vlan_iface(i.name)
+        and i.interface_type != "ianaift:l3ipvlan"
+    ]
+    if not candidates:
+        return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
+
+    scored: list[tuple[int, int, int, int, str]] = []
+    for idx, cand in enumerate(candidates):
+        signal = 0
+        if _has_private_ipv4(cand):
+            signal += 10
+        if cand.trunk_allowed_vlans:
+            signal += 5
+        if cand.dhcp_client:
+            signal -= 5
+        port_idx = _port_index_for(cand.name)
+        # Sort key (lowest first wins because we negate signal):
+        #   1. -signal       (highest signal first)
+        #   2. -port_idx     (highest port-index first as tiebreaker)
+        #   3. idx           (enumeration order — final deterministic
+        #                     tiebreaker for byte-identity)
+        scored.append((-signal, -port_idx, idx, signal, cand.name))
+
+    scored.sort()
+    top = scored[0]
+    # If the top candidate has zero or negative signal, no candidate
+    # has positive LAN evidence — preserve the legacy first-non-VLAN
+    # fallback so signal-free trees keep their pre-Finding-21
+    # ordering (existing tests pin port1 over port2 in this state).
+    if top[3] <= 0:
+        return _parent_for_vlan_iface_fallback(name, deduped_ifaces)
+    return top[4]
 
 
 def _build_vlan_children(
@@ -118,12 +234,14 @@ def _build_vlan_children(
     if tree.lags:
         parent_name = tree.lags[0].name
     if parent_name is None:
-        for cand in deduped_ifaces:
-            if not _looks_like_vlan_iface(cand.name) and (
-                cand.interface_type != "ianaift:l3ipvlan"
-            ):
-                parent_name = cand.name
-                break
+        # Finding 21: route synthesised VLAN children through the
+        # LAN-preference scorer so OPNsense-style sources where both
+        # WAN (``igc0``, dhcp_client) and LAN (``port1``, RFC1918
+        # static) survive elision anchor on the LAN.  The synthetic
+        # child names are ``vlan<id>`` (no dot) so the scorer's
+        # signal-based ranking applies — dotted-form fast path is
+        # not relevant here.
+        parent_name = _parent_for_vlan_iface("vlan", deduped_ifaces)
 
     iface_by_name = {i.name: i for i in deduped_ifaces}
 
@@ -466,6 +584,23 @@ def render_intent(tree: Any) -> str:
                 mask = _prefix_to_mask(addr.prefix_length)
                 out.append(f"        set ip {addr.ip} {mask}")
                 out.append("        set mode static")
+            elif iface.dhcp_client:
+                # Finding 20 (``user_smoke_findings.md``): foreign
+                # DHCP-client interfaces (OPNsense ``<ipaddr>dhcp
+                # </ipaddr>`` parsed to ``CanonicalInterface.dhcp_client
+                # =True`` in commit ``c16d2c0``) need FortiOS's
+                # ``set mode dhcp`` line so the WAN port is configured
+                # as a DHCP client rather than a static-mode interface
+                # with no IP.  Reference: docs.fortinet.com/document/
+                # fortigate/7.6.6/cli-reference/190194324/config-
+                # system-interface ``set mode {static | dhcp}``.
+                # Mutual exclusion with the static branch is enforced
+                # by the ``elif`` — when both are set on the canonical
+                # tree (a contradictory state the schema technically
+                # permits), the static path wins.  FortiOS treats the
+                # explicit ``set ip`` as the dominant source so this
+                # is the safe-deploy choice.
+                out.append("        set mode dhcp")
             # GAP-EVPN-3: IPv6 addresses.  FortiOS uses CIDR
             # natively (``set ip6-address <addr>/<prefix>``); only
             # one v6 address per interface fits the FortiOS schema.

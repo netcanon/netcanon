@@ -452,25 +452,24 @@ class TestOpnsenseSupergateEndToEnd:
         return tgt.render(intent)
 
     def test_no_igc0_stub(self) -> None:
-        """Finding 8 (post sub-finding 9a): the WAN igc0 used to be
-        elided as an empty stub because the OPNsense parser silently
-        dropped ``<ipaddr>dhcp</ipaddr>`` and the resulting
-        canonical iface had zero content.  After 9a the parser now
-        sets ``CanonicalInterface.dhcp_client=True``, so igc0 is no
-        longer empty and survives the FortiGate render's empty-stub
-        elision (``_iface_is_empty_stub`` correctly returns False on
-        dhcp_client).  The WAN block is now legitimately preserved
-        — operators see ``edit "igc0" / set status up / next``.
-        FortiGate's render-side ``set mode dhcp`` emit for foreign
-        DHCP-client interfaces is a separate followup (sub-finding
-        9b for fortigate) tracked outside this scope."""
+        """Finding 8 (post sub-finding 9a + Finding 20): the WAN
+        igc0 used to be elided as an empty stub because the OPNsense
+        parser silently dropped ``<ipaddr>dhcp</ipaddr>`` and the
+        resulting canonical iface had zero content.  After 9a the
+        parser now sets ``CanonicalInterface.dhcp_client=True``, so
+        igc0 is no longer empty and survives the FortiGate render's
+        empty-stub elision.  After Finding 20 the FortiGate render
+        emits ``set mode dhcp`` for the DHCP-client iface — operators
+        now see ``edit "igc0" / set mode dhcp / set status up / next``
+        instead of a bare status-only block."""
         out = self._render_supergate()
         assert 'edit "igc0"' in out
-        # WAN block currently emits status only (no DHCP-mode emit
-        # path exists yet on FortiGate render); guard the shape so
-        # the followup commit can flip it.
-        # Sanity: the block doesn't accidentally reuse a static IP.
-        assert "set ip" not in _slice_block(out, 'edit "igc0"')
+        block = _slice_block(out, 'edit "igc0"')
+        # Sanity: the block doesn't accidentally inject a static IP.
+        assert "set ip" not in block
+        # Finding 20: DHCP-client mode is now emitted for foreign
+        # DHCP-client interfaces.
+        assert "set mode dhcp" in block
 
     def test_vlan_children_have_ip(self) -> None:
         """Finding 5: each of the 5 OPNsense VLANs gets an IP."""
@@ -483,24 +482,23 @@ class TestOpnsenseSupergateEndToEnd:
         assert "set ip 192.168.150.1 255.255.255.0" in out
 
     def test_vlan_children_anchored_on_lan(self) -> None:
-        """Finding 6 (post sub-finding 9a): the VLAN parent picker
-        used to elect the FIRST surviving canonical interface.
-        Pre-9a this was port1 (the renamed LAN) because igc0 was
-        elided as empty.  Post-9a igc0 survives, and its sanitised
-        FortiGate-name (``igc0``, since FortiGate has no role to
-        rename it to) sorts before the LAN.  This test now documents
-        the regression: VLAN children DO anchor on igc0.  Fixing
-        this properly belongs in fortigate_cli/render.py
-        ``_parent_for_vlan_iface`` (prefer the LAN over the WAN);
-        tracked as a separate followup so the OPNsense parser fix
-        can land cleanly without expanding scope into fortigate
-        render logic."""
+        """Finding 6 + Finding 21 (now resolved): VLAN children must
+        anchor on the LAN (``port1``, RFC1918 ``192.168.88.2/24``)
+        rather than the WAN stub (``igc0``, ``dhcp_client=True``).
+
+        Pre-9a: igc0 was elided as empty so the legacy first-non-VLAN
+        fallback landed on port1 by accident.  Post-9a: igc0 survived
+        but its enumeration order before port1 caused VLANs to
+        anchor on the WAN — the bug Finding 21 documented.  Post-21:
+        the LAN-preference scorer in ``_parent_for_vlan_iface`` ranks
+        port1 (private IPv4) above igc0 (DHCP-client demerit), so all
+        five VLAN children correctly bind to port1."""
         out = self._render_supergate()
-        # All 5 source VLANs are bound to SOME parent — confirm
-        # their count matches expectation across both candidates.
         igc0_anchors = out.count('set interface "igc0"')
         port1_anchors = out.count('set interface "port1"')
-        assert igc0_anchors + port1_anchors >= 5
+        # All 5 VLAN children must anchor on the LAN, not the WAN.
+        assert port1_anchors >= 5
+        assert igc0_anchors == 0
 
     def test_domain_emitted(self) -> None:
         """Finding 12: domain example.test surfaces."""
