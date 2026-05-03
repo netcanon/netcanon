@@ -234,13 +234,55 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 if scope_el is not None and scope_el.text
                 else ""
             )
-            # Admin privilege is determined by group membership,
-            # NOT by <scope>.  In OPNsense, <scope> distinguishes
-            # system-managed accounts from network/LDAP accounts;
-            # both system and user-scope accounts can be admins
-            # (via groupname="admins") or regular users.
-            is_admin = groupname == "admins"
-            _ = scope  # reserved for future use; shape validated
+            # Per-user <priv> elements grant WebGUI privileges directly.
+            # OPNsense's "page-all" privilege is the "WebGUI - All pages"
+            # token (operationally equivalent to admin) — when present
+            # on a <user> element it elevates regardless of group
+            # membership.  Real OPNsense exports may carry multiple
+            # <priv> children (one per privilege token) so iterate
+            # rather than just .find().  See:
+            # https://docs.opnsense.org/manual/firewall_users.html
+            # (User privileges section).
+            user_privs = {
+                (p.text or "").strip().lower()
+                for p in user_el.findall("priv")
+                if p.text and p.text.strip()
+            }
+            # Admin privilege detection (sub-finding 19).  Two
+            # cooperating sources of truth, with explicit
+            # ``<groupname>`` taking precedence so we don't regress
+            # the synthetic / legacy shape that uses groupname as
+            # the privilege carrier:
+            #
+            #   * If ``<groupname>`` is present, it is authoritative:
+            #     ``admins`` → 15, anything else → 1.  This preserves
+            #     ``test_scope_does_not_determine_privilege`` (a
+            #     ``<scope>system</scope>`` + ``<groupname>users
+            #     </groupname>`` user stays at priv 1) and the
+            #     kitchen_sink fixture's per-user groupname semantics.
+            #   * If ``<groupname>`` is ABSENT (the real-OPNsense
+            #     shape — group membership lives under ``<system>/
+            #     <group>/<member>UID,UID</member></group>``, not on
+            #     the user), fall back to scope/priv heuristics:
+            #         - ``<scope>system</scope>`` → 15.  Real OPNsense
+            #           reserves system scope for built-in privileged
+            #           accounts (root, operator); non-admin daemon
+            #           users don't surface under ``<system>/<user>``.
+            #         - ``page-all`` in any per-user ``<priv>`` element
+            #           → 15.  Direct "WebGUI - All pages" grant.
+            #
+            # The supergate real fixture's root (scope=system, no
+            # groupname) and api (scope=user, priv=page-all, no
+            # groupname) both elevate correctly under this rule.
+            # Refs: https://docs.opnsense.org/manual/firewall_users.html
+            # (User privileges, Groups).
+            if groupname:
+                is_admin = groupname == "admins"
+            else:
+                is_admin = (
+                    scope == "system"
+                    or "page-all" in user_privs
+                )
             intent.local_users.append(CanonicalLocalUser(
                 name=name,
                 privilege_level=15 if is_admin else 1,
@@ -388,7 +430,22 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
             pass
     ipaddr_el = el.find("ipaddr")
     subnet_el = el.find("subnet")
-    if ipaddr_el is not None and ipaddr_el.text and subnet_el is not None and subnet_el.text:
+    # Sub-finding 9a: ``<ipaddr>dhcp</ipaddr>`` is the DHCP-client
+    # keyword.  Real OPNsense WAN zones carry this when the upstream
+    # ISP runs DHCP (``<wan><if>igc0</if><ipaddr>dhcp</ipaddr></wan>``).
+    # Treat it as a DHCP-client signal (CanonicalInterface.dhcp_client)
+    # and skip the static-IP append — "dhcp" is not a valid IPv4
+    # address and previously fell through silently, dropping the
+    # WAN-DHCP intent on cross-vendor render paths (Cisco IOS-XE,
+    # MikroTik RouterOS, Junos all consume ``iface.dhcp_client`` to
+    # emit their respective ``ip address dhcp`` / ``family inet
+    # dhcp`` lines).  Case-insensitive — operators occasionally
+    # type "DHCP" by hand.  See OPNsense docs:
+    # https://docs.opnsense.org/manual/interfaces.html
+    # (Configure - IPv4 Configuration Type - DHCP).
+    if ipaddr_el is not None and ipaddr_el.text and ipaddr_el.text.strip().lower() == "dhcp":
+        iface.dhcp_client = True
+    elif ipaddr_el is not None and ipaddr_el.text and subnet_el is not None and subnet_el.text:
         try:
             iface.ipv4_addresses.append(CanonicalIPv4Address(
                 ip=ipaddr_el.text.strip(),
@@ -406,8 +463,29 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
     # ``6to4``) are NOT static addresses and don't fit the canonical
     # CanonicalIPv6Address record — parse-and-ignore those (the
     # downstream codec doesn't have a way to render them anyway).
+    #
+    # Sub-finding 9a (IPv6 leg): canonical schema currently lacks a
+    # ``dhcp_client_v6`` field on CanonicalInterface — the v4
+    # ``dhcp_client`` flag is the only DHCP-client primitive.  When
+    # an OPNsense interface declares ``<ipaddrv6>dhcp6</ipaddrv6>``
+    # or ``<ipaddrv6>slaac</ipaddrv6>`` we log at INFO so the gap is
+    # observable (operators investigating "why didn't my v6 DHCP
+    # config translate?" can grep the logs) and skip — adding the
+    # canonical field is out of scope for this fix per the
+    # "don't expand into the canonical layer" directive.  See
+    # https://docs.opnsense.org/manual/interfaces.html
+    # (Configure - IPv6 Configuration Type) for the keyword set.
     ipaddrv6_el = el.find("ipaddrv6")
     subnetv6_el = el.find("subnetv6")
+    if ipaddrv6_el is not None and ipaddrv6_el.text:
+        v6_text = ipaddrv6_el.text.strip().lower()
+        if v6_text in ("dhcp6", "slaac", "track6", "6rd", "6to4"):
+            logger.info(
+                "opnsense: <ipaddrv6>%s</ipaddrv6> on zone <%s> "
+                "not wired to canonical (no dhcp_client_v6 / slaac "
+                "field on CanonicalInterface yet); skipping",
+                v6_text, el.tag,
+            )
     if (
         ipaddrv6_el is not None
         and ipaddrv6_el.text

@@ -154,10 +154,28 @@ def render_canonical(intent: CanonicalIntent) -> str:
                     )
                     body = review.removeprefix("<!-- ").removesuffix(" -->")
                     user_el.append(ET.Comment(body))
-            ET.SubElement(user_el, "scope").text = "system"
-            ET.SubElement(user_el, "groupname").text = (
-                "admins" if user.privilege_level == 15 else "users"
+            # Sub-finding 19 round-trip: emit ``<scope>system</scope>``
+            # only for admin-tier users so the parser's new symmetric
+            # rule (scope=system OR priv=page-all OR groupname=admins
+            # → admin) doesn't mis-elevate non-admin users on
+            # re-parse.  Real OPNsense reserves ``system`` scope for
+            # built-in privileged accounts (root, operator) and uses
+            # ``user`` scope for everything else; this aligns with
+            # that convention and keeps within-vendor round-trip
+            # stable.  Mirror the priv elevation symmetrically: emit
+            # ``<priv>page-all</priv>`` for admin users so a
+            # privilege-15 record from any source (including ones
+            # that lacked the ``admins`` groupname on parse) survives
+            # parse → render → parse.
+            is_admin = user.privilege_level == 15
+            ET.SubElement(user_el, "scope").text = (
+                "system" if is_admin else "user"
             )
+            ET.SubElement(user_el, "groupname").text = (
+                "admins" if is_admin else "users"
+            )
+            if is_admin:
+                ET.SubElement(user_el, "priv").text = "page-all"
 
     # Interfaces — render as zone-keyed elements.
     # For canonical intents from OTHER vendors we need to assign zone
@@ -223,9 +241,19 @@ def render_canonical(intent: CanonicalIntent) -> str:
                 ET.SubElement(zone_el, "enable")
             if iface.mtu is not None:
                 ET.SubElement(zone_el, "mtu").text = str(iface.mtu)
+            # Sub-finding 9a round-trip: a CanonicalInterface with
+            # ``dhcp_client=True`` represents the OPNsense WAN-DHCP
+            # shape (``<ipaddr>dhcp</ipaddr>``).  Emit the keyword
+            # form so parse → render → parse preserves the flag.
+            # Static IPs take precedence — a DHCP-client interface
+            # with a manually-pinned address shouldn't exist in
+            # OPNsense's data model, but if both are set the static
+            # wins (matches the parser's IF/ELIF order).
             if iface.ipv4_addresses:
                 ET.SubElement(zone_el, "ipaddr").text = iface.ipv4_addresses[0].ip
                 ET.SubElement(zone_el, "subnet").text = str(iface.ipv4_addresses[0].prefix_length)
+            elif iface.dhcp_client:
+                ET.SubElement(zone_el, "ipaddr").text = "dhcp"
             # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
             # Only one v6 address fits the OPNsense schema.
             if iface.ipv6_addresses:
