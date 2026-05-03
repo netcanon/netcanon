@@ -43,6 +43,112 @@ _MODE_TO_AOS_TRUNK_TYPE = {
 }
 
 
+#: AOS-S native physical / logical port-name shapes.  Used by the
+#: foreign-port-stub elision path (Finding 8 in
+#: ``user_smoke_findings.md``).  Names that do NOT match this shape
+#: are foreign-vendor source-port leftovers (``igc0`` from OPNsense,
+#: ``ge-0/0/0`` from Junos, ``eth0`` from Linux-style sources) — they
+#: get elided when the canonical iface has no body content beyond the
+#: default ``enabled=True``.  Mirrors the Junos tiered-elision policy
+#: from ``juniper_junos/render.py::_IS_JUNOS_PHYSICAL_PORT_RE``.
+#:
+#: AOS-S native shapes covered (matches what the codec's own
+#: :func:`port_names.format_port_identity` emits):
+#:
+#: * Bare port number — ``24`` (standalone switch).
+#: * Stacked port — ``1/24`` (VSF stack member 1, port 24).
+#: * Letter-slot uplink — ``1/A1`` (uplink module on chassis).
+#: * Loopback — ``loopback0`` through ``loopback7``.
+#: * VLAN SVI bare name — ``vlanN`` (rare on AOS-S since L3 absorbs
+#:   into the ``vlan N`` block, but tolerate for robustness).
+#: * OOBM — ``oobm`` (the dedicated mgmt sentinel).
+#: * Trunk — ``trk1`` / ``Trk1`` (LAG names).
+_IS_AOS_PHYSICAL_PORT_RE = re.compile(
+    r"^(?:"
+    r"\d+"                       # bare port: 24
+    r"|\d+/\d+"                  # stacked: 1/24
+    r"|\d+/[A-Za-z]\d+"          # letter-slot uplink: 1/A1
+    r"|loopback\d+"              # loopback: loopback1
+    r"|vlan\d+"                  # vlan SVI: vlan10 (rare on AOS-S)
+    r"|oobm"                     # OOBM management
+    r"|[Tt]rk\d+"                # LAG: trk1 / Trk1
+    r")$"
+)
+
+
+#: VLAN-id-encoding interface name patterns.  Used by the SVI-IP
+#: lookup (Finding 4) to discover an L3 SVI on a sibling
+#: :class:`CanonicalInterface` when the canonical
+#: :class:`CanonicalVlan` itself doesn't carry ``ipv4_addresses``.
+#:
+#: Matched forms (id captured in group 1):
+#:
+#: * ``Vlan10`` / ``vlan10`` — Cisco / generic factory-default.
+#: * ``<parent>.<N>`` — dotted form (``vlan0.10`` from OPNsense's
+#:   ``<if>vlan0.10</if>`` SVI binding, ``port1.10`` from FortiGate
+#:   round-trip).  Parent is consumed but ignored — only the id
+#:   matters for SVI-IP discovery.
+_VLAN_ID_BARE_RE = re.compile(r"^[Vv]lan(\d+)$")
+_VLAN_ID_DOTTED_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*\.(\d+)$")
+
+
+def _vlan_iface_id(name: str) -> int | None:
+    """Extract a VLAN id encoded in an interface name, if any.
+
+    Returns the integer id when *name* matches one of the
+    VLAN-id-encoding shapes (see :data:`_VLAN_ID_BARE_RE` /
+    :data:`_VLAN_ID_DOTTED_RE`); returns ``None`` for shapes that
+    don't carry a VLAN id (physical ports, LAGs, loopbacks).
+    """
+    m = _VLAN_ID_BARE_RE.match(name)
+    if m:
+        return int(m.group(1))
+    m = _VLAN_ID_DOTTED_RE.match(name)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _has_renderable_body(iface: Any) -> bool:
+    """Return True when *iface* has any content worth emitting.
+
+    Foreign-vendor source-port stubs (``igc0`` from OPNsense, ``eth0``
+    from Linux-style sources) often appear in the canonical tree with
+    only the default ``enabled=True`` flag — no description, no IPs,
+    no MTU override, no L2 config.  These add noise to the AOS-S
+    output without conveying any operator-actionable state.
+
+    "Body" here = description, ipv4/ipv6 addresses, MTU non-default,
+    explicitly disabled, switchport mode set, voice/access/trunk
+    VLAN bindings, or LAG membership.  ``enabled=True`` alone (the
+    default) is NOT body — it's the implicit admin-up state.
+
+    Mirrors the Junos tiered-elision rule from
+    ``juniper_junos/render.py``.
+    """
+    if iface.description:
+        return True
+    if iface.ipv4_addresses or iface.ipv6_addresses:
+        return True
+    if iface.mtu is not None:
+        return True
+    if not iface.enabled:
+        return True
+    if iface.switchport_mode is not None:
+        return True
+    if iface.access_vlan is not None:
+        return True
+    if iface.trunk_allowed_vlans:
+        return True
+    if iface.trunk_native_vlan is not None:
+        return True
+    if iface.voice_vlan is not None:
+        return True
+    if iface.lag_member_of:
+        return True
+    return False
+
+
 #: Hash algorithms AOS-S accepts in the ``password manager user-name
 #: <name> <alg> <hash>`` form.  Verified against Aruba's published
 #: docs (Aruba 3810M/5400R Access Security Guide for AOS-S 16.11,
@@ -198,6 +304,16 @@ def render_intent(tree: Any) -> str:
     if tree.hostname:
         lines.append(f'hostname "{tree.hostname}"')
 
+    # Domain suffix — AOS-S form is ``ip dns domain-name <name>``,
+    # verified against Aruba AOS-S 16.10/16.11 Management &
+    # Configuration Guide ("Configuring a DNS entry") and the
+    # AOS-S 16.11 IPv6 KB ``ip-dns-dom-nam.htm`` command-reference
+    # page.  Finding 12 in ``user_smoke_findings.md``: OPNsense
+    # source carries ``<domain>example.test</domain>`` which Aruba
+    # was previously dropping silently.
+    if tree.domain:
+        lines.append(f"ip dns domain-name {tree.domain}")
+
     for server in tree.dns_servers:
         lines.append(f"ip dns server-address priority 1 {server}")
 
@@ -335,6 +451,27 @@ def render_intent(tree: Any) -> str:
         iface.name: iface for iface in tree.interfaces
         if iface.name.lower().startswith("vlan")
     }
+    # Pre-index VLAN-id-encoding interfaces so the SVI-IP lookup
+    # below is O(1) per VLAN.  Covers Cisco-style ``Vlan10``, OPNsense
+    # ``vlan0.10`` (the ``<if>`` element value the parser carries
+    # through verbatim from the ``<optN>`` zone), FortiGate
+    # ``port1.10`` dotted form, and any other interface whose name
+    # encodes a VLAN id via :func:`_vlan_iface_id`.  Used to recover
+    # SVI L3 from cross-vendor sources that keep VLAN-id and
+    # SVI-L3 on separate canonical objects (Finding 4 in
+    # ``user_smoke_findings.md`` — OPNsense supergate fixture).
+    iface_by_vlan_id: dict[int, Any] = {}
+    for iface in tree.interfaces:
+        vid = _vlan_iface_id(iface.name)
+        if vid is not None and iface.ipv4_addresses:
+            # First match wins — multiple SVIs for the same VLAN id
+            # is a malformed canonical and shouldn't happen in
+            # practice; we'd rather emit one SVI line than zero.
+            iface_by_vlan_id.setdefault(vid, iface)
+    # Track which interfaces were absorbed so the per-iface emission
+    # loop skips them (otherwise we'd emit `interface vlan0.10` after
+    # the L3 was already rolled into `vlan 10`).
+    absorbed_iface_names: set[str] = set()
     for vlan in tree.vlans:
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
@@ -348,17 +485,29 @@ def render_intent(tree: Any) -> str:
                 f"   tagged {_format_port_list(vlan.tagged_ports)}"
             )
         # SVI absorption — codepath 2 of 3.  See
-        # ._svi_absorption for the full rule.  SVI address may
-        # live on the vlan itself (same-vendor round-trip) OR on
-        # a ``Vlan<N>`` CanonicalInterface (cross-vendor input
-        # from a codec that keeps VLAN L3 separate) — honour
-        # whichever has data so both input shapes render
-        # identically.  Corresponding Vlan<N> iface is skipped
+        # ._svi_absorption for the full rule.  SVI address may live
+        # on:
+        #   1. the canonical VLAN itself (same-vendor round-trip);
+        #   2. a ``Vlan<N>`` CanonicalInterface (Cisco-style cross-
+        #      vendor input);
+        #   3. ANY CanonicalInterface whose name encodes the VLAN id
+        #      via :func:`_vlan_iface_id` (OPNsense ``vlan0.10``,
+        #      FortiGate ``port1.10``, generic ``vlan10``).
+        # Honour whichever has data so all three input shapes render
+        # identically.  The corresponding sibling iface is skipped
         # further down the interface emission loop.
         addrs = list(vlan.ipv4_addresses)
         svi_iface = vlan_ifaces_by_name.get(f"Vlan{vlan.id}")
         if not addrs and svi_iface is not None:
             addrs = list(svi_iface.ipv4_addresses)
+            if addrs:
+                absorbed_iface_names.add(svi_iface.name)
+        if not addrs:
+            id_match = iface_by_vlan_id.get(vlan.id)
+            if id_match is not None:
+                addrs = list(id_match.ipv4_addresses)
+                if addrs:
+                    absorbed_iface_names.add(id_match.name)
         for addr in addrs:
             lines.append(
                 f"   ip address {addr.ip}/{addr.prefix_length}"
@@ -418,6 +567,25 @@ def render_intent(tree: Any) -> str:
             continue
         if iface.name == "oobm":
             continue
+        # Drop interfaces whose L3 was already absorbed into a VLAN
+        # block above (covers OPNsense-style ``vlan0.10`` SVI
+        # entries — see SVI-IP lookup in the VLAN render loop).
+        if iface.name in absorbed_iface_names:
+            continue
+        # Foreign-vendor source-port stub elision (Finding 8 in
+        # ``user_smoke_findings.md``).  When the canonical name
+        # doesn't match an AOS-S native shape AND the iface has no
+        # body content beyond default ``enabled=True``, drop it.
+        # Mirrors the Junos tiered-elision policy from
+        # ``juniper_junos/render.py``.  Foreign names with real body
+        # (description, IPs, MTU, disabled) are KEPT so operators
+        # see the source content even though the port name will
+        # need post-deploy editing.  Native-shape names with empty
+        # bodies are KEPT for round-trip stability (matches Junos
+        # treatment of ``ge-0/0/0``-shape stubs).
+        if not _IS_AOS_PHYSICAL_PORT_RE.match(iface.name):
+            if not _has_renderable_body(iface):
+                continue
         physical_ifaces.append(iface)
     seen_names: dict[str, list[Any]] = {}
     name_order: list[str] = []
