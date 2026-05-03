@@ -127,6 +127,146 @@ plus updates to `test_port_names.py` / `test_local_users_wire_through.py`
 
 ---
 
+## OPEN — surfaced by OPNsense supergate user-contrib smoke test
+
+Source fixture: real OPNsense 25.x `config.xml` from a "supergate"
+home router (igc0 WAN DHCP + ixl0 LAN at 192.168.88.2/24, lo0
+loopback, 5 VLANs on ixl0 (USER 10, MGMT 11, SERVER 20, CLUSTER 100,
+IOT 150) with L3 SVI on each via `opt1`-`opt5`, 2 local users with
+bcrypt $2y$11$ hashes, 17 DNS A-record overrides, 11 DHCP static
+reservations + 5 DHCP scopes, 16 firewall rules, 3 NAT port
+forwards, IDS-config-but-disabled).
+
+Targets exercised: aruba_aoss, fortigate_cli, juniper_junos,
+mikrotik_routeros, cisco_iosxe_cli, arista_eos.
+
+### Severity ranking
+
+| # | Issue | Severity | Targets | Locus | Effort |
+|---|---|---|---|---|---|
+| 1 | arista_eos bcrypt leaks as `secret 5 bcrypt:...` | **CRITICAL (security)** | arista_eos | render hash-emit | small |
+| 2 | cisco_iosxe_cli bcrypt leaks as `secret 5 bcrypt:...` | **CRITICAL (security)** | cisco_iosxe_cli | render hash-emit | small |
+| 3 | Junos `set interfaces irb.10 unit 0 ...` malformed | **CRITICAL (deploy block)** | juniper_junos | render SVI emit | small |
+| 4 | Aruba L3 SVI IPs dropped entirely (vlan declared, `interface vlan N / ip address` missing) | **CRITICAL (5 networks unreachable)** | aruba_aoss | render SVI emit | medium |
+| 5 | FortiGate VLAN child has type/vlanid/parent but no IP | **CRITICAL (5 networks unreachable)** | fortigate_cli | render `_build_vlan_children` SVI lookup | medium |
+| 6 | FortiGate VLAN parent bound to igc0 (WAN) instead of LAN port | **CRITICAL** | fortigate_cli | render parent-lookup | small |
+| 7 | MikroTik VLAN parent / LAN IP split (LAN on sfp-sfpplus0, VLANs on synthesized bridge1) | **CRITICAL** | mikrotik_routeros | render bridge-synth conditional | medium |
+| 8 | `interface igc0` literal stub leaks across 4 codecs | high | aruba, fortigate, cisco, arista | render empty-stub elision | small per codec |
+| 9 | Junos no WAN DHCP emit (igc0 entirely dropped, source has `<ipaddr>dhcp</ipaddr>`) | high | juniper_junos | render WAN/DHCP path | small |
+| 10 | Firewall + NAT + DHCP + DNS-overrides all silently dropped | medium | all 6 targets | NEW render paths per codec | **LARGE — deferred to next session** |
+| 11 | VLAN name (`<vlans><descr>`) vs SVI description (`<opt1><descr>`) inconsistent | low | informational | canonical descr reconciliation | low (decide policy first) |
+| 12 | Domain `example.test` only emitted on cisco_iosxe_cli + junos | medium | aruba, fortigate, mikrotik, arista | render domain emit | small per codec |
+| 13 | MikroTik users have wrong group (`read` instead of `full`/`operator`) and no password | medium | mikrotik_routeros | render user-group mapping | small |
+
+### Notes on issue 1 + 2 (hash leak)
+
+Wave 2 added cross-vendor hash gating in `_user_secrets.is_migratable`
+and wired aruba_aoss, fortigate_cli, juniper_junos, opnsense to
+call it.  arista_eos and cisco_iosxe_cli were NOT in the wave 2
+scope and still emit `secret 5 bcrypt:$2y$11$...` for foreign hashes.
+Fix is to mirror the wave 2 pattern (commit `b2036aa` fortigate is the
+cleanest model): import the helper, gate the password emit, fall
+back to a `! password manager user-name "X" -- review: ...` comment
+when not migratable.  Also fix the wrong type tag — `secret 5` is
+md5crypt; bcrypt should never appear with that tag regardless of the
+gate decision.
+
+### Notes on issue 3 (Junos `irb.X unit 0`)
+
+Junos render emits `set interfaces irb.10 unit 0 family inet
+address 192.168.10.1/24`.  In Junos syntax `irb.10` is shorthand
+for `irb unit 10`, so adding `unit 0` produces `irb unit 10 unit 0`
+— invalid.  Fix: emit either `set interfaces irb unit 10 ...` or
+`set interfaces irb.10 ...` (no `unit 0` suffix).  The render path
+likely loops over canonical interfaces with `unit=0` as the default
+without recognising that the parent has already encoded a unit via
+the `.N` suffix.
+
+### Notes on issues 4 + 5 (SVI IP drops)
+
+Both Aruba and FortiGate declare the VLANs but drop the L3 SVI IPs:
+
+- Aruba: `vlan N / name "X" / exit` with no follow-up `interface
+  vlan N / ip address X.X.X.X/Y` block.
+- FortiGate: `edit "vlanN" / set type vlan / set vlanid N / set
+  interface "..." / next` with no `set ip A.B.C.D M.M.M.M`.
+
+Wave 2 commit `b2036aa` added FortiGate's `_build_vlan_children`
+helper specifically to fix this for c9300 source — but apparently
+the SVI-IP lookup walks `tree.vlans[].ipv4_addresses` whereas the
+OPNsense parser stores VLAN SVI IPs on the corresponding
+`CanonicalInterface` (the opt1-opt5 entries).  Fix: extend the
+SVI-IP lookup to also walk interfaces with matching `vlan_id`
+binding.  Mirror the same fix on the Aruba SVI render path
+(which currently looks like it doesn't emit SVI L3 at all).
+
+### Notes on issue 7 (MikroTik bridge synthesis)
+
+Wave 2 commit `3f528b7` synthesises `/interface bridge add
+name=bridge1` when canonical tree has VLANs but no real bridges.
+For OPNsense source, `ixl0` IS the parent — bridge synthesis
+should NOT fire when source already has a parent interface.
+Conditional needs: only synthesise when there's no canonical
+"parent of this VLAN" interface.  When ixl0 is the parent, VLANs
+should bind to its target-side rename (`sfp-sfpplus0`), and the
+LAN IP should also land there or on a per-vendor convention
+that keeps everything cohesive.
+
+### Notes on issue 8 (igc0 stub elision)
+
+Junos already elides correctly (commit `0fdf7e9` tiered policy).
+arista_eos, cisco_iosxe_cli, aruba_aoss, fortigate_cli all emit
+some flavour of `interface igc0` (or `edit "igc0"` for FortiGate)
+verbatim because the OPNsense source-vendor port name is preserved
+in the canonical model and these codecs have no rule to elide
+content-free non-native ports.  Mirror the Junos tiered elision
+policy: skip empty stubs unless they're VRF-bound, parent of a
+sub-unit, or match the target's physical-port shape.
+
+### Notes on issue 10 (wide silent drops — deferred)
+
+OPNsense source has rich firewall (16 `<filter><rule>` entries),
+NAT (3 `<nat><rule>` port forwards), DHCP (5 `<dhcp_ranges>`
+scopes + 11 `<hosts>` static reservations via dnsmasq), DNS
+overrides (17 `<unboundplus><hosts>` A records), and IDS config.
+None of this appears in any target output.
+
+Cross-vendor render paths for these would be substantial new
+work per codec:
+- RouterOS: `/ip firewall filter`, `/ip firewall nat`, `/ip
+  dhcp-server`, `/ip dns static`
+- FortiGate: `config firewall policy`, `config firewall vip`,
+  `config system dhcp server`, `config system dns-database`
+- Junos: `set firewall family inet filter`, `set security nat`,
+  `set system services dhcp`, `set system static-host-mapping`
+- Cisco IOS-XE / Arista: `ip access-list extended`, `ip nat
+  inside source`, `ip dhcp pool`, `ip host`
+- Aruba AOS-S: limited firewall (ACLs only); DHCP server pool;
+  `ip dns server-domain-name`
+
+Deferred to a separate session — too large for the current
+sweep.  See cluster E in the session triage.
+
+### Cluster mapping (parallel codec-grouped agents)
+
+The 13 OPEN findings (excluding cluster E) split cleanly into
+6 per-codec agents:
+
+| Codec | Findings owned | Files |
+|---|---|---|
+| arista_eos | 1, 8 (igc0), 12 (domain) | arista_eos render |
+| cisco_iosxe_cli | 2, 8, 12 (already does it actually) | cisco_iosxe_cli render |
+| juniper_junos | 3, 9 | junos render |
+| aruba_aoss | 4, 8, 12 | aruba render |
+| fortigate_cli | 5, 6, 8, 12 | fortigate render + port_names |
+| mikrotik_routeros | 7, 12, 13 | mikrotik render + port_names |
+
+Finding 11 (descr reconciliation) is informational — both source
+fields are different by design; render fidelity preserves both.
+No action.
+
+---
+
 ## RESOLVED — Cisco c9300-24ux smoke test (all 9 issues fixed)
 
 Wave-2 sweep on `fix/phase4-top-codec-fixes` shipped fixes for all
