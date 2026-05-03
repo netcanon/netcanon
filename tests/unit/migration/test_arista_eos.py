@@ -970,3 +970,258 @@ class TestProbe:
 
     def test_json_input_returns_none(self):
         assert AristaEOSCodec.probe("{\"a\": 1}") is None
+
+
+# ---------------------------------------------------------------------------
+# Cross-vendor hash gate (issue #1 in user_smoke_findings.md)
+# ---------------------------------------------------------------------------
+
+
+class TestCrossVendorHashGate:
+    """Wave 2 hash-policy gate.  Foreign-source hashes that Arista's
+    ``secret`` command cannot consume must NEVER reach the wire as
+    payload — render falls back to a ``! password manager ...
+    review:`` comment so the operator gets an explicit reset signal
+    and the rendered config commits clean.
+
+    Mirrors the existing FortiGate / Junos / OPNsense gates from
+    Wave 2 (commit ``b2036aa`` is the cleanest model).
+    """
+
+    def test_arista_bcrypt_hash_emits_review_comment(self):
+        """OPNsense-source bcrypt (``$2y$..``) cannot be consumed
+        by EOS — render must elide the payload AND attach a review
+        comment naming the algorithm.  Before Wave 2 this leaked as
+        ``secret 5 bcrypt:$2y$..`` (CRITICAL security disclosure +
+        wrong type tag)."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="root",
+                    privilege_level=15,
+                    role="user",
+                    hashed_password="bcrypt:$2y$11$fakeBcryptHashForRootSyntheticOnly",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        # Payload must NOT appear anywhere in the output.
+        assert "$2y$" not in out, (
+            "bcrypt payload leaked through the hash gate:\n" + out
+        )
+        assert "fakeBcryptHashForRoot" not in out
+        # The bare prefix line is fine (no secret tag).
+        assert "secret 5 bcrypt" not in out
+        # Review comment must be present, in Arista (``!``) syntax.
+        assert "! password manager" in out
+        assert 'user-name "root"' in out
+        assert "bcrypt" in out
+        # And the username line itself still emits (just without
+        # the ``secret ...`` suffix) so role/privilege survive.
+        assert "username root" in out
+        assert "role user" in out
+
+    def test_arista_native_sha512_passes_through(self):
+        """Native vendor-tagged ``arista:sha512:$6$..`` rounds
+        trip via ``secret sha512 $6$..`` (existing behaviour — the
+        gate must not regress this)."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="ops",
+                    privilege_level=15,
+                    role="network-admin",
+                    hashed_password="arista:sha512:$6$abc$defghijkl",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert (
+            "username ops privilege 15 role network-admin "
+            "secret sha512 $6$abc$defghijkl"
+        ) in out
+        assert "review:" not in out
+
+    def test_arista_md5crypt_passes_through(self):
+        """Native vendor-tagged ``arista:5:$1$..`` (md5crypt) emits
+        ``secret 5 $1$..`` — the legitimate md5crypt path that the
+        old ``secret 5 <anything>`` fallback was masquerading as."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="legacy",
+                    privilege_level=1,
+                    hashed_password="arista:5:$1$foo$barbazquux",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "username legacy secret 5 $1$foo$barbazquux" in out
+        assert "review:" not in out
+
+    def test_arista_plaintext_emits_secret_zero(self):
+        """A canonical plaintext password (no ``alg:`` separator)
+        emits ``secret 0 <password>``, which is EOS's plaintext
+        form (the device hashes on commit)."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="seeded",
+                    privilege_level=1,
+                    hashed_password="hunter2",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "username seeded secret 0 hunter2" in out
+
+
+# ---------------------------------------------------------------------------
+# Empty-stub elision (issue #8 in user_smoke_findings.md)
+# ---------------------------------------------------------------------------
+
+
+class TestEmptyInterfaceStubElision:
+    """Tiered policy mirroring Junos commit ``0fdf7e9``: skip empty
+    interface stubs unless the iface (a) carries renderable content,
+    (b) matches an Arista physical-port shape, or (c) is referenced
+    elsewhere (VRF binding, vlan member list)."""
+
+    def test_arista_foreign_port_stub_elided(self):
+        """OPNsense ``igc0`` arriving via a cross-vendor render
+        with no body must NOT appear in the Arista output — the
+        EOS commit-time validator would reject ``interface igc0``
+        as an unknown interface."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(name="igc0"),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface igc0" not in out
+
+    def test_arista_native_port_with_no_body_kept(self):
+        """An empty ``Ethernet0`` stub (operator-style placeholder)
+        IS preserved — same-vendor round-trip stability requires
+        the bare line so reparse restores the iface canonical."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(name="Ethernet1"),
+                CanonicalInterface(name="Loopback0"),
+                CanonicalInterface(name="Management1"),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface Ethernet1" in out
+        assert "interface Loopback0" in out
+        assert "interface Management1" in out
+
+    def test_arista_vrf_referenced_foreign_port_kept(self):
+        """A foreign-named iface bound to a VRF MUST keep its bare
+        line so the EOS commit-time validator can resolve the
+        VRF-binding line in the routed-block — even though the
+        port name is non-native, the canonical tree wires the VRF
+        membership through it."""
+        from netconfig.migration.canonical.intent import (
+            CanonicalRoutingInstance,
+        )
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="igc0",
+                    vrf="WAN",
+                ),
+            ],
+            routing_instances=[
+                CanonicalRoutingInstance(
+                    name="WAN",
+                    instance_type="vrf",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface igc0" in out
+        assert "vrf WAN" in out
+
+    def test_arista_vlan_member_foreign_port_kept(self):
+        """A foreign-named iface that appears in a VLAN's
+        tagged_ports list IS referenced from elsewhere — the
+        L2 graph would break if we elided it."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(name="igc0"),
+            ],
+            vlans=[
+                CanonicalVlan(
+                    id=10,
+                    name="USERS",
+                    tagged_ports=["igc0"],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface igc0" in out
+
+    def test_arista_foreign_port_with_body_kept(self):
+        """A foreign-named iface that DOES carry renderable
+        content (description, IP, MTU, ...) is preserved — the
+        elision rule only kicks in for fully empty stubs."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="igc0",
+                    description="WAN uplink",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface igc0" in out
+        assert "description WAN uplink" in out
+
+    def test_arista_native_breakout_port_kept(self):
+        """``Ethernet50/3`` (QSFP breakout child) is also a
+        native shape — keep the bare line on round-trip."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(name="Ethernet50/3"),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "interface Ethernet50/3" in out
+
+
+# ---------------------------------------------------------------------------
+# Domain emit (issue #12 in user_smoke_findings.md)
+# ---------------------------------------------------------------------------
+
+
+class TestDomainEmit:
+    """Canonical-side ``tree.domain`` must surface as Arista's
+    ``dns domain <X>`` line so cross-vendor renders carrying a
+    domain (e.g. OPNsense ``<domain>example.test</domain>``) don't
+    silently drop it."""
+
+    def test_arista_domain_emits_dns_domain_line(self):
+        intent = CanonicalIntent(
+            hostname="sw1",
+            domain="example.test",
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "dns domain example.test" in out
+
+    def test_arista_no_domain_emits_no_line(self):
+        """Defensive: empty / unset domain should NOT emit a
+        bare ``dns domain`` line."""
+        intent = CanonicalIntent(hostname="sw1")
+        out = AristaEOSCodec().render(intent)
+        assert "dns domain" not in out

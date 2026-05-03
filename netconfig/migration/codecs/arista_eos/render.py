@@ -24,8 +24,55 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._user_secrets import (
+    classify_hash,
+    format_review_comment,
+)
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
+
+
+# Algorithms whose payloads Arista's ``secret`` command can consume
+# natively.  Keys are the algorithm tokens emitted by
+# :func:`classify_hash`; values are the matching ``secret <N>``
+# type-tag tokens for the EOS CLI:
+#
+#   * ``plaintext`` (no separator) -> ``secret 0 <password>``
+#   * ``5`` (Cisco bare-digit form, ``5 $1$..``) -> ``secret 5 $1$..``
+#   * ``md5crypt`` (alias used by some sources) -> ``secret 5 $1$..``
+#   * ``sha512`` (Arista vendor-tagged or generic ``$6$``)
+#     -> ``secret sha512 $6$..``
+#
+# Anything outside this set (bcrypt ``$2y$``, Cisco type-7/8/9,
+# FortiGate ENC blobs) cannot be re-emitted on Arista — the codec
+# has to fall back to a review-comment line so the source hash
+# never reaches the wire.  Issue #1 in user_smoke_findings.md
+# (CRITICAL security disclosure: bcrypt was leaking through the
+# previous opaque ``secret 5 bcrypt:$2y$..`` fallback).
+_ARISTA_SECRET_TYPE: dict[str, str] = {
+    "plaintext": "0",
+    "5":         "5",
+    "md5crypt":  "5",
+    "sha512":    "sha512",
+}
+
+
+# Native Arista physical-port name shapes.  Used by the empty-stub
+# elision predicate to decide whether a content-free canonical
+# iface is "really there" (target-vendor-shaped operator stub
+# with no body) vs a foreign-vendor leak (e.g. OPNsense ``igc0``
+# arriving via a cross-vendor render).  Mirrors the Junos
+# ``_IS_JUNOS_PHYSICAL_PORT_RE`` policy from commit ``0fdf7e9``.
+_IS_ARISTA_PHYSICAL_PORT_RE = re.compile(
+    r"^(?:"
+    r"Ethernet\d+(?:/\d+)?"           # Ethernet1, Ethernet50/3 breakout
+    r"|Loopback\d+"                   # Loopback0
+    r"|Vlan\d+"                       # Vlan10 (SVI)
+    r"|Management\d+"                 # Management1
+    r"|Port-Channel\d+"               # Port-Channel5
+    r"|Vxlan\d+"                      # Vxlan1 (always emitted with body)
+    r")$"
+)
 
 
 def render_intent(tree: Any) -> str:
@@ -90,6 +137,34 @@ def render_intent(tree: Any) -> str:
             out.append("!")
 
     # --- Local users ---
+    #
+    # Hash-emit policy (Wave 2, fixes finding #1 in
+    # user_smoke_findings.md — CRITICAL security disclosure).
+    # Before the fix, foreign hashes from any source vendor were
+    # emitted verbatim under an opaque ``secret 5 <blob>`` line,
+    # which:
+    #
+    #   1. Leaked the literal hash payload onto the wire (a
+    #      security finding when the source captured a bcrypt
+    #      ``$2y$..`` from an OPNsense / pfSense / FreeBSD box).
+    #   2. Used the wrong type tag — ``secret 5`` means md5crypt
+    #      to EOS; bcrypt is not natively consumable.  EOS would
+    #      either reject at commit time or, worse, treat the
+    #      literal as opaque junk.
+    #
+    # Now we consult :func:`classify_hash` to identify the
+    # algorithm, look it up in :data:`_ARISTA_SECRET_TYPE` to
+    # find the correct ``secret <N>`` tag, and only emit when the
+    # algorithm is one Arista actually accepts (plaintext / md5crypt
+    # / sha512).  Anything else falls through to a comment-form
+    # ``! password manager user-name "X" -- review:`` line so the
+    # operator gets an explicit "reset this password" signal and
+    # the rendered config commits clean.
+    #
+    # Round-trip path: native parse stores hashes as
+    # ``arista:<alg>:<payload>`` (the vendor-tagged form), which
+    # ``classify_hash`` resolves to ``(<alg>, <payload>)`` — so
+    # the existing native round-trip stays byte-identical.
     if tree.local_users:
         for user in tree.local_users:
             parts = [f"username {user.name}"]
@@ -98,15 +173,27 @@ def render_intent(tree: Any) -> str:
             if user.role:
                 parts.append(f"role {user.role}")
             if user.hashed_password:
-                vendor, _, tail = user.hashed_password.partition(":")
-                if vendor == "arista" and ":" in tail:
-                    # Round-trip: ``arista:<alg>:<hash>`` →
-                    # ``secret <alg> <hash>``.
-                    alg, _, hsh = tail.partition(":")
-                    parts.append(f"secret {alg} {hsh}")
-                else:
-                    # Foreign hash — emit as opaque secret 5.
-                    parts.append(f"secret 5 {user.hashed_password}")
+                algorithm, payload = classify_hash(user.hashed_password)
+                secret_tag = _ARISTA_SECRET_TYPE.get(algorithm)
+                if secret_tag is None:
+                    # Unmigratable hash (bcrypt, Cisco type-7/8/9,
+                    # FortiGate ENC, ...).  Emit only the
+                    # ``username ... role ...`` prefix (no secret
+                    # line), then attach an Arista-syntax review
+                    # comment in place of the password line.  We
+                    # reuse the shared ``hash``-syntax helper and
+                    # locally translate the leading ``# `` prefix
+                    # to Arista's canonical ``! `` so cross-codec
+                    # diffs stay readable.
+                    out.append(" ".join(parts))
+                    review = format_review_comment(
+                        user.name, algorithm, comment_syntax="hash",
+                    )
+                    if review.startswith("# "):
+                        review = "! " + review[2:]
+                    out.append(review)
+                    continue
+                parts.append(f"secret {secret_tag} {payload}")
             else:
                 parts.append("nopassword")
             out.append(" ".join(parts))
@@ -141,7 +228,68 @@ def render_intent(tree: Any) -> str:
     # `lag_member_of` on each member + a `CanonicalLAG` record in
     # `tree.lags`; render needs both.
     lag_mode_by_name = {lag.name: (lag.mode or "active") for lag in tree.lags}
+
+    # --- empty-stub elision policy (issue #8 in
+    #     user_smoke_findings.md, mirrors Junos commit 0fdf7e9) ---
+    #
+    # Cross-vendor renders into Arista used to leak foreign-vendor
+    # port names like OPNsense's ``igc0`` / ``ixl0`` verbatim,
+    # because the canonical tree preserves the source-side iface
+    # name and our render walked every entry unconditionally.  The
+    # result was a stanza-cluster of empty ``interface igc0\n!``
+    # lines which EOS will reject at commit time (igc0 is not a
+    # known interface on any Arista platform).
+    #
+    # Tiered policy: skip empty stubs UNLESS one of the following
+    # justifies keeping the bare line —
+    #
+    #   (a) the iface carries renderable content (description,
+    #       IPs, MTU, switchport, LAG membership, disabled, VRF
+    #       binding),
+    #   (b) the name matches an Arista-native physical port shape
+    #       (``Ethernet<N>`` / ``Loopback<N>`` / ``Vlan<N>`` /
+    #       ``Management<N>`` / ``Port-Channel<N>``) — preserves
+    #       same-vendor round-trip stability for operator-style
+    #       empty-port stubs,
+    #   (c) the iface is referenced from elsewhere — VRF binding
+    #       (``iface.vrf`` set) demands the line so EOS's commit-
+    #       time validator finds the interface, and vlan member
+    #       lists (``CanonicalVlan.tagged_ports`` /
+    #       ``untagged_ports``) keep the L2 graph intact.
+    vlan_member_names: set[str] = set()
+    for v in tree.vlans:
+        for name in v.tagged_ports:
+            vlan_member_names.add(name)
+        for name in v.untagged_ports:
+            vlan_member_names.add(name)
+
     for iface in tree.interfaces:
+        has_renderable_attr = (
+            bool(iface.description)
+            or bool(iface.ipv4_addresses)
+            or bool(iface.ipv6_addresses)
+            or iface.mtu is not None
+            or not iface.enabled
+            or iface.switchport_mode is not None
+            or iface.access_vlan is not None
+            or bool(iface.trunk_allowed_vlans)
+            or bool(iface.lag_member_of)
+        )
+        is_native_port = bool(
+            _IS_ARISTA_PHYSICAL_PORT_RE.match(iface.name)
+        )
+        is_referenced = (
+            bool(iface.vrf) or iface.name in vlan_member_names
+        )
+        if (
+            not has_renderable_attr
+            and not is_native_port
+            and not is_referenced
+        ):
+            # Foreign-vendor empty stub (e.g. OPNsense ``igc0``
+            # leaking through a cross-vendor render).  Skip.
+            continue
+
         out.append(f"interface {iface.name}")
         if iface.description:
             out.append(f"   description {iface.description}")
