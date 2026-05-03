@@ -77,7 +77,7 @@ def render_canonical(intent: CanonicalIntent) -> str:
     # a single canonical block.
     has_system_content = (
         intent.hostname or intent.domain or intent.local_users
-        or intent.radius_servers
+        or intent.radius_servers or intent.dns_servers
     )
     if has_system_content:
         sys_el = ET.SubElement(root, "system")
@@ -85,6 +85,16 @@ def render_canonical(intent: CanonicalIntent) -> str:
             ET.SubElement(sys_el, "hostname").text = intent.hostname
         if intent.domain:
             ET.SubElement(sys_el, "domain").text = intent.domain
+        # System DNS servers — emit one ``<dnsserver>`` per entry to
+        # match the real-OPNsense shape (repeated children, NOT a
+        # comma-joined single element).  This is the inverse of the
+        # parser branch that walks ``<system>/<dnsserver>`` children
+        # into ``intent.dns_servers``.  Per-DHCP-pool DNS lists are a
+        # different field (``CanonicalDHCPPool.dns_servers``) emitted
+        # later under ``<dhcpd>/<zone>/<dnsserver>`` as a comma-joined
+        # value — that wire-form is intentionally distinct.
+        for dns_ip in intent.dns_servers:
+            ET.SubElement(sys_el, "dnsserver").text = dns_ip
         # RADIUS servers (Tier 2).  Emit a <system>/<authserver>
         # element per server, typed "radius", with the canonical
         # host/secret/ports preserved.

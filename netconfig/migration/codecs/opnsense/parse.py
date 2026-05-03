@@ -175,6 +175,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
         dm = sys_el.find("domain")
         if dm is not None and dm.text:
             intent.domain = dm.text.strip()
+        # System DNS servers — real OPNsense stores top-level
+        # resolver targets as repeated ``<system>/<dnsserver>`` children
+        # (one IP per element), distinct from per-DHCP-pool DNS-server
+        # lists which live under ``<dhcpd>/<zone>/<dnsserver>``.  See
+        # tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml
+        # (lines 221, 223) and the "DNS Servers" section of
+        # https://docs.opnsense.org/manual/settings_general.html.
+        for dns_el in sys_el.findall("dnsserver"):
+            if dns_el.text and dns_el.text.strip():
+                intent.dns_servers.append(dns_el.text.strip())
         # Local users — <system>/<user> entries.  OPNsense stores
         # users at the same level as <hostname>, each with name,
         # descr, password (bcrypt $2y$), uid, and an optional
