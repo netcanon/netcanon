@@ -351,8 +351,29 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # Without this, per-interface `switchport access vlan 20` /
     # `switchport trunk allowed vlan 11,20` never reaches the
     # target config.  See translator-plans.txt BUG 3.
+    #
+    # Phantom-VLAN guard: ``project_switchport_to_vlan`` synthesises
+    # bare :class:`CanonicalVlan` records for any VID referenced by a
+    # ``switchport ... vlan`` line that didn't have a matching top-
+    # level ``vlan <N>`` stanza (or SVI).  The shared transform's
+    # built-in guard only suppresses synthesis for the exact full
+    # ``1-4094`` / ``2-4094`` "trunk all" sentinel; partial wide ranges
+    # (e.g. ``switchport trunk allowed vlan 100-3000``) silently
+    # inflate ``tree.vlans`` from a handful of legitimate entries to
+    # thousands of phantom records — flagged by the arista_eos source
+    # Phase 4b agent as a top-3 fix (15 source VLANs → 4093 canonical
+    # VLANs in the worst real-capture case).  Snapshot the legitimate
+    # VLAN ids (explicit stanzas + SVI-synthesised) BEFORE projection,
+    # then prune any VLAN whose id wasn't in the snapshot AFTER.  The
+    # ``tagged_ports`` / ``untagged_ports`` membership info added to
+    # the surviving VLANs is preserved — only the phantom-only entries
+    # introduced by the projection get dropped.  ``trunk_allowed_vlans``
+    # on the per-interface side is not touched by this guard, so the
+    # full L2 attribute round-trips back out unchanged.
+    legitimate_vlan_ids = {v.id for v in intent.vlans}
     from ...canonical.transforms import project_switchport_to_vlan
     project_switchport_to_vlan(intent)
+    intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     # Parse-end summary: lets ops answer "did parse succeed?" from
     # a debug-level log line without needing to inspect the
