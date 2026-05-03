@@ -171,16 +171,25 @@ when not migratable.  Also fix the wrong type tag — `secret 5` is
 md5crypt; bcrypt should never appear with that tag regardless of the
 gate decision.
 
-### Notes on issue 3 (Junos `irb.X unit 0`)
+### Notes on issue 3 (Junos `irb.X unit 0`) — FIXED
 
-Junos render emits `set interfaces irb.10 unit 0 family inet
+Junos render emitted `set interfaces irb.10 unit 0 family inet
 address 192.168.10.1/24`.  In Junos syntax `irb.10` is shorthand
-for `irb unit 10`, so adding `unit 0` produces `irb unit 10 unit 0`
-— invalid.  Fix: emit either `set interfaces irb unit 10 ...` or
-`set interfaces irb.10 ...` (no `unit 0` suffix).  The render path
-likely loops over canonical interfaces with `unit=0` as the default
-without recognising that the parent has already encoded a unit via
-the `.N` suffix.
+for `irb unit 10`, so adding `unit 0` produced `irb unit 10 unit 0`
+— invalid.  Fix landed in
+`netconfig/migration/codecs/juniper_junos/render.py`: a new
+`_LOGICAL_SVI_NAME_RE` matches `irb.<N>` / `vlan.<N>` names in
+the iface loop and routes them through the sub-interface branch
+with parent=``irb`` (or ``vlan``) and unit=``N``, so the emitted
+form becomes `set interfaces irb unit 10 family inet address
+192.168.10.1/24` — accepted by Junos's commit-time validator.
+
+Verification: 4 new unit tests in
+`tests/unit/migration/codecs/juniper_junos/test_l2_render_and_dot_zero_parse.py`
+(`test_irb_dot_unit_renders_without_double_unit`,
+`test_irb_multiple_units_render_correctly`,
+`test_physical_port_unit_0_still_emits` regression guard,
+`test_irb_dot_unit_round_trip_canonical_stable`).
 
 ### Notes on issues 4 + 5 (SVI IP drops)
 
@@ -222,6 +231,50 @@ in the canonical model and these codecs have no rule to elide
 content-free non-native ports.  Mirror the Junos tiered elision
 policy: skip empty stubs unless they're VRF-bound, parent of a
 sub-unit, or match the target's physical-port shape.
+
+### Notes on issue 9 (Junos no WAN DHCP) — canonical-layer-DEFERRED
+
+OPNsense source has `<wan><ipaddr>dhcp</ipaddr>` on igc0 — DHCP
+client semantic.  Junos render emits no equivalent because Junos's
+empty-stub elision (correctly) suppresses an interface with no
+static IP / no description / no MTU / no L2.
+
+Investigation: `CanonicalInterface.dhcp_client: bool` exists on
+the schema (`netconfig/migration/canonical/intent.py` line 139)
+and IS consumed by both Cisco IOS-XE and MikroTik render paths
+(`if iface.dhcp_client: out.append(" ip address dhcp")` /
+equivalent).  But the OPNsense parser
+(`netconfig/migration/codecs/opnsense/parse.py
+_parse_interface_zone_canonical`) only handles static
+`<ipaddr>X.X.X.X</ipaddr>` + `<subnet>N</subnet>`; the
+`<ipaddr>dhcp</ipaddr>` keyword path is dropped on the floor.
+
+**Scope decision:** the render-side fix (Junos emit
+`set interfaces ge-0/0/X unit 0 family inet dhcp` when
+`iface.dhcp_client=True`) is trivially small but currently
+unreachable from OPNsense-source pipelines because the canonical
+field is never populated.  Deferred in this session per the
+"don't expand scope into the canonical layer" directive.  The
+proper fix lives across two codecs:
+
+- `opnsense/parse.py`: detect `<ipaddr>dhcp</ipaddr>` (also
+  `dhcp6` for v6) and set `iface.dhcp_client=True` instead of
+  silently skipping the address.
+- `juniper_junos/render.py`: emit
+  `set interfaces <name> unit 0 family inet dhcp` when
+  `iface.dhcp_client=True`, AND skip the empty-stub elision for
+  the same interface (dhcp_client makes it non-empty).
+
+Sub-finding logged for follow-up:
+
+| # | Issue | Severity | Targets | Locus | Effort |
+|---|---|---|---|---|---|
+| 9a | OPNsense parser silently drops `<ipaddr>dhcp</ipaddr>` (no `dhcp_client` set) | medium | opnsense parse | parse interface-zone | small |
+| 9b | Junos render has no `family inet dhcp` emit path for `iface.dhcp_client=True` | medium | juniper_junos render | render interface loop | small |
+
+Both small; both blocked on each other landing for the WAN-DHCP
+end-to-end signal to surface.  Defer-as-a-pair until the OPNsense
+parser side is in scope.
 
 ### Notes on issue 10 (wide silent drops — deferred)
 

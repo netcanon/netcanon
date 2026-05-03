@@ -350,7 +350,32 @@ def render_intent(tree: Any) -> str:
         # CanonicalInterface named ``<parent>.<N>``.  Render has to
         # split the compound name back into parent + unit so the
         # emitted set-lines use Junos's native grammar.
+        #
+        # Logical SVI names (``irb.<vid>`` / ``vlan.<vid>``) follow
+        # the same Junos shorthand — ``irb.10`` IS ``irb unit 10``
+        # in native Junos grammar — but ``_split_subiface_name``
+        # deliberately rejects them (its ``parent`` group requires
+        # a ``<media>-<fpc>/<pic>/<port>`` shape) so they used to
+        # fall through to the regular-interface branch below and
+        # render as ``set interfaces irb.10 unit 0 family inet
+        # address ...`` — which Junos's commit-time validator
+        # rejects because ``irb.10 unit 0`` expands to ``irb unit
+        # 10 unit 0``.  The cross-vendor render INTO Junos for
+        # any source codec that emits SVIs (OPNsense, Cisco IOS-XE
+        # ``Vlan10`` -> ``irb.10`` via the rename mesh) would
+        # silently produce a non-deployable config.  Issue #3 in
+        # ``user_smoke_findings.md``.
+        #
+        # Detect the irb.N / vlan.N shape and route through the
+        # sub-interface branch with parent="irb" (or "vlan") and
+        # unit_num=N so the same correct ``set interfaces irb
+        # unit 10 family inet address ...`` lines come out.
         parent, unit_num = _split_subiface_name(name)
+        if parent is None or unit_num is None:
+            m = _LOGICAL_SVI_NAME_RE.match(name)
+            if m is not None:
+                parent = m.group("parent")
+                unit_num = int(m.group("unit"))
         if parent is not None and unit_num is not None:
             # Sub-interface — emit under parent / unit <N>.
             # GAP 7: include access_vlan in the "renderable"
@@ -916,6 +941,20 @@ _IS_JUNOS_PHYSICAL_PORT_RE = re.compile(
 # contain a slash (``ge-0/0/0``) to distinguish from normal names
 # like ``irb.10`` where the dot is part of the base port name.
 _SUBIFACE_RE = re.compile(r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+)\.(?P<unit>\d+)$")
+
+
+# Logical SVI names where the trailing ``.<N>`` IS the Junos unit
+# number (``irb.10`` is shorthand for ``irb unit 10``; same for
+# ``vlan.<N>`` on older platforms).  The render path treats these
+# the same as physical sub-interfaces — split into parent + unit
+# so the emitted ``set interfaces`` lines use Junos's native
+# grammar (``set interfaces irb unit 10 family inet address ...``)
+# rather than the malformed double-unit form (``irb.10 unit 0
+# family ...``) that the iface loop's regular branch would
+# otherwise produce.  Issue #3 in user_smoke_findings.md.
+_LOGICAL_SVI_NAME_RE = re.compile(
+    r"^(?P<parent>irb|vlan)\.(?P<unit>\d+)$"
+)
 
 
 # Pattern for extracting a digit suffix from a canonical LAG name.

@@ -171,6 +171,127 @@ def test_trunk_specific_vlans_still_enumerate() -> None:
     assert "vlan members GUESTS" in out
 
 
+def test_irb_dot_unit_renders_without_double_unit() -> None:
+    """Issue #3 in ``user_smoke_findings.md`` (CRITICAL deploy block).
+
+    A canonical ``CanonicalInterface(name="irb.10", ipv4_addresses=...)``
+    used to render as ``set interfaces irb.10 unit 0 family inet
+    address 192.168.10.1/24`` — Junos's commit-time validator rejects
+    this because ``irb.10`` is shorthand for ``irb unit 10``, so the
+    line expands to ``irb unit 10 unit 0``.  Cross-vendor renders
+    into Junos from any source codec that produces SVI names
+    (OPNsense ``opt1``-``opt5``, Cisco ``Vlan10``) would silently
+    deploy a non-committable config.
+
+    The fix routes ``irb.<N>`` (and ``vlan.<N>``) names through the
+    sub-interface branch with parent=``irb`` and unit=``N`` so the
+    emitted line is ``set interfaces irb unit 10 family inet
+    address ...`` — the form Junos's commit-time validator accepts.
+    """
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="irb.10",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip="192.168.10.1", prefix_length=24,
+                    ),
+                ],
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    # The malformed double-unit form must not appear anywhere.
+    assert "irb.10 unit 0" not in out
+    # The native Junos form is emitted instead.
+    assert (
+        "set interfaces irb unit 10 family inet "
+        "address 192.168.10.1/24"
+    ) in out
+
+
+def test_irb_multiple_units_render_correctly() -> None:
+    """The OPNsense supergate fixture has 5 SVIs — irb.10/.11/.20/
+    .100/.150 — each carrying its own L3 address.  All five must
+    render in the native Junos form (``irb unit <vid>``) so the
+    rendered config commits cleanly."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name=f"irb.{vid}",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip=f"192.168.{vid}.1", prefix_length=24,
+                    ),
+                ],
+            )
+            for vid in (10, 11, 20, 100, 150)
+        ],
+    )
+    out = render_intent(intent)
+    for vid in (10, 11, 20, 100, 150):
+        # Native Junos form present.
+        assert (
+            f"set interfaces irb unit {vid} family inet "
+            f"address 192.168.{vid}.1/24"
+        ) in out
+        # Malformed double-unit form not present.
+        assert f"irb.{vid} unit 0" not in out
+
+
+def test_physical_port_unit_0_still_emits() -> None:
+    """Regression guard: standard physical ports without a ``.<N>``
+    suffix still take the regular-interface branch and emit ``set
+    interfaces ge-0/0/0 unit 0 family inet address ...`` — only
+    Junos logical SVI names (``irb.<N>`` / ``vlan.<N>``) are routed
+    through the sub-interface branch."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="ge-0/0/0",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip="10.1.1.1", prefix_length=30,
+                    ),
+                ],
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert (
+        "set interfaces ge-0/0/0 unit 0 family inet "
+        "address 10.1.1.1/30"
+    ) in out
+
+
+def test_irb_dot_unit_round_trip_canonical_stable() -> None:
+    """Render an ``irb.10`` SVI with an IP, reparse, and confirm the
+    canonical tree round-trips cleanly.  Without an l3-interface
+    binding the irb.<vid> interface is preserved as-is by the parser
+    (see step 3 in ``parse_intent``'s post-pass)."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="irb.10",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip="192.168.10.1", prefix_length=24,
+                    ),
+                ],
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    roundtrip = parse_intent(out)
+    irb_iface = next(
+        (i for i in roundtrip.interfaces if i.name == "irb.10"), None,
+    )
+    assert irb_iface is not None
+    assert len(irb_iface.ipv4_addresses) == 1
+    assert irb_iface.ipv4_addresses[0].ip == "192.168.10.1"
+    assert irb_iface.ipv4_addresses[0].prefix_length == 24
+
+
 def test_trunk_all_round_trip_canonical_stable() -> None:
     """Source canonical with all-VLANs trunk → render emits `members
     all` → reparse expands back to the full VID range.  Canonical
