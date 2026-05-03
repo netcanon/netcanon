@@ -272,6 +272,19 @@ def _apply_system_dns(block: _ConfigBlock, intent: CanonicalIntent) -> None:
     secondary = block.settings.get("secondary")
     if secondary:
         intent.dns_servers.append(secondary[0])
+    # ``set domain "<fqdn>"`` is the FortiOS-native domain-name form
+    # inside ``config system dns`` (mirrors render emit at
+    # ``fortigate_cli/render.py`` ~line 450).  Without this read the
+    # renderer-emitted line was silently dropped on parse, breaking
+    # round-trip ``parse(render(tree))`` for ``CanonicalIntent.domain``
+    # (Phase 4b finding flagged by 3 agents — arista_eos, opnsense,
+    # cisco_iosxe_cli source-side).  The DHCP-pool ``set domain``
+    # handler (~line 707) targets a different field
+    # (``CanonicalDHCPPool.domain_name``, the per-pool search domain)
+    # and remains unchanged.
+    domain = block.settings.get("domain")
+    if domain:
+        intent.domain = domain[0]
 
 
 def _apply_system_ntp(block: _ConfigBlock, intent: CanonicalIntent) -> None:
