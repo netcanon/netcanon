@@ -84,12 +84,32 @@ _IS_AOS_PHYSICAL_PORT_RE = re.compile(
 #: Matched forms (id captured in group 1):
 #:
 #: * ``Vlan10`` / ``vlan10`` — Cisco / generic factory-default.
-#: * ``<parent>.<N>`` — dotted form (``vlan0.10`` from OPNsense's
-#:   ``<if>vlan0.10</if>`` SVI binding, ``port1.10`` from FortiGate
-#:   round-trip).  Parent is consumed but ignored — only the id
-#:   matters for SVI-IP discovery.
+#: * ``<svi-parent>.<N>`` — dotted form, RESTRICTED to parent names
+#:   that are unambiguously SVI hosts on their source vendor:
+#:
+#:   * ``vlan<digits?>.<N>`` — OPNsense ``<if>vlan0.10</if>``,
+#:     where the parent itself is a VLAN device.
+#:   * ``irb.<N>`` — Junos Integrated Routing and Bridging unit
+#:     (the literal name ``irb`` is reserved on Junos for VLAN
+#:     SVIs).
+#:   * ``port<digits>.<N>`` — FortiGate VLAN sub-interface, the
+#:     vendor's canonical SVI shape (FortiGate has no separate
+#:     ``interface Vlan<N>`` concept; the dot1Q sub-interface IS
+#:     the L3 termination for that VLAN).
+#:
+#:   The earlier broader pattern ``^[A-Za-z][A-Za-z0-9_-]*\.\d+$``
+#:   was too permissive — it matched Cisco / Arista routed
+#:   sub-interfaces (``Ethernet1.10``, ``Port-Channel10.30``) which
+#:   are 802.1Q L3 sub-interfaces on a routed parent, NOT the
+#:   absorbed-into-VLAN SVI shape that Aruba consumes.  Stamping a
+#:   sub-interface's IP onto an unrelated ``vlan N`` block was the
+#:   Phase 4b "SVI absorption over-attribution" bug (see
+#:   ``test_svi_absorption_over_attribution.py``).  The fix is the
+#:   narrower whitelist below.
 _VLAN_ID_BARE_RE = re.compile(r"^[Vv]lan(\d+)$")
-_VLAN_ID_DOTTED_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]*\.(\d+)$")
+_VLAN_ID_DOTTED_RE = re.compile(
+    r"^(?:[Vv]lan\d*|irb|port\d+)\.(\d+)$"
+)
 
 
 def _vlan_iface_id(name: str) -> int | None:
