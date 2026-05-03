@@ -273,3 +273,97 @@ def test_aruba_domain_absent_emits_nothing() -> None:
     intent = CanonicalIntent()
     out = ArubaAOSSCodec().render(intent)
     assert "ip dns domain-name" not in out
+
+
+# ---------------------------------------------------------------------------
+# Finding 15 — Aruba LAN IP drop (port-mapping gap)
+# ---------------------------------------------------------------------------
+
+
+def test_aruba_opnsense_lan_ip_survives_port_rename() -> None:
+    """End-to-end: an OPNsense-source ``ixl0`` LAN interface
+    (``CanonicalInterface(name="ixl0", ipv4_addresses=...)``) must
+    survive ``translate_port_names`` and reach Aruba's render path
+    with its IP intact.
+
+    Finding #15 root cause: Aruba's ``format_port_identity`` had
+    a ``port == 0 -> None`` short-circuit that fired for every
+    OPNsense BSD device name (every NIC's first instance has
+    port=0: ``ixl0`` / ``igb0`` / ``em0`` / ``ix0``).  Combined
+    with the orchestrator's ``strip_unmappable=True`` default,
+    every foreign-source LAN interface was stripped from the
+    canonical tree before render was called — its IP went with it.
+
+    The fix removes the ``port == 0`` guard in the kind=physical
+    branch.  ``ixl0`` now maps to AOS-S ``"1"``; LAN IP appears
+    in the rendered config.  Mgmt-vrf-bound Cisco interfaces
+    still route through the kind=mgmt branch (returns ``"oobm"``)
+    via the wave-2 cascade (commit ``56a4cde``).
+    """
+    from netconfig.migration.canonical.port_names import (
+        translate_port_names,
+    )
+    from netconfig.migration.codecs.opnsense.codec import (
+        OPNsenseCodec,
+    )
+
+    intent = CanonicalIntent(
+        hostname="supergate",
+        interfaces=[
+            CanonicalInterface(
+                name="ixl0",  # OPNsense LAN device
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="192.168.88.2", prefix_length=24,
+                )],
+            ),
+        ],
+    )
+
+    src_codec = OPNsenseCodec()
+    tgt_codec = ArubaAOSSCodec()
+    translate_port_names(intent, src_codec, tgt_codec, rename_map=None)
+
+    # After rename, the canonical interface's name is the
+    # AOS-S native form ``"1"`` (port=0 collapsed to port 1).
+    iface_names = {iface.name for iface in intent.interfaces}
+    assert "1" in iface_names, (
+        f"Expected ixl0 to rename to '1', got {iface_names!r}"
+    )
+
+    # And the LAN IP survives into the rendered config.
+    out = tgt_codec.render(intent)
+    assert "interface 1" in out
+    assert "ip address 192.168.88.2/24" in out
+
+
+def test_aruba_opnsense_igb_lan_ip_survives_port_rename() -> None:
+    """Same shape as the ixl0 test but exercises the Intel igb
+    driver name (1G NIC, the dominant case on home-lab supergate
+    deployments).  Confirms the ``port=0`` fix is driver-agnostic
+    — any BSD ``<driver>0`` name behaves the same way.
+    """
+    from netconfig.migration.canonical.port_names import (
+        translate_port_names,
+    )
+    from netconfig.migration.codecs.opnsense.codec import (
+        OPNsenseCodec,
+    )
+
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(
+                name="igb0",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.0.1", prefix_length=24,
+                )],
+            ),
+        ],
+    )
+    src = OPNsenseCodec()
+    tgt = ArubaAOSSCodec()
+    translate_port_names(intent, src, tgt, rename_map=None)
+    iface_names = {iface.name for iface in intent.interfaces}
+    assert "1" in iface_names
+
+    out = tgt.render(intent)
+    assert "ip address 10.0.0.1/24" in out

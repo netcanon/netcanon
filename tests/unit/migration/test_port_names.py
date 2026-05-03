@@ -259,26 +259,66 @@ class TestCiscoToAruba:
         ident = src.classify_port_name("Loopback42")
         assert tgt.format_port_identity(ident) is None
 
-    def test_aruba_port_zero_maps_to_oobm(self):
-        """Cisco ``GigabitEthernet0/0`` is the OOBM Mgmt-vrf port
-        (port=0, kind=mgmt-classified by Cisco's classifier when it
-        recognises Mgmt-vrf semantics, OR physical/port=0 fallback).
-        AOS-S has a dedicated ``oobm`` top-level configuration block
-        per the Aruba Management & Configuration Guide ("Out-of-Band
-        Management" chapter); the Aruba formatter returns the sentinel
-        name ``oobm`` so the renderer emits the correct top-level
-        block instead of silently dropping the management interface."""
+    def test_aruba_foreign_port_zero_maps_to_aos_port_one(self):
+        """Source vendors with port=0 (OPNsense BSD device names like
+        ``ixl0``/``igb0``/``em0``, Cisco ``GigabitEthernet0/0`` without
+        Mgmt-vrf binding) map to Aruba ``"1"`` rather than being dropped.
+
+        Finding #15 in user_smoke_findings.md: the previous
+        ``port==0 -> None`` short-circuit silently lost foreign-source
+        LAN IPs (OPNsense ``<lan><if>ixl0</if><ipaddr>...</ipaddr>``).
+
+        The mgmt-kind path that DOES need to drop is exercised by
+        Arista's ``Management1`` test below (kind=mgmt → ``"oobm"``)
+        and by the wave-2 Mgmt-vrf cascade test
+        (``test_mgmt_vrf_cascades_to_aruba_oobm``); a Cisco Gi0/0
+        without Mgmt-vrf still arrives here with kind=physical and
+        is handled by collapsing to ``"1"``.  The render-side
+        collision detector (commit ``7d93085``) catches duplicate
+        emission at output time when multiple foreign ports happen
+        to collapse to the same Aruba name."""
         src = CiscoIOSXECLICodec()
         tgt = ArubaAOSSCodec()
         ident = src.classify_port_name("GigabitEthernet0/0")
         assert ident.port == 0
-        # Cisco's classifier returns kind=physical/port=0 here (not
-        # kind=mgmt) since GigabitEthernet0/0 isn't *always* the
-        # OOBM port — depends on platform.  For physical/port=0 the
-        # Aruba formatter still returns None (no port 0 in AOS-S).
-        # The mgmt-kind path is exercised by Arista's `Management1`
-        # which classifies as kind=mgmt.
-        assert tgt.format_port_identity(ident) is None
+        assert ident.kind == "physical"
+        # Cisco Gi0/0 without Mgmt-vrf binding lands as kind=physical
+        # and now maps to AOS-S port "1" (was None pre-fix).
+        assert tgt.format_port_identity(ident) == "1"
+
+    def test_aruba_opnsense_ixl0_maps_to_aos_port_one(self):
+        """OPNsense ``ixl0`` (Intel ixl driver, first NIC instance —
+        the canonical LAN port for many supergate/protectli boxes) now
+        maps to Aruba ``"1"`` instead of being silently dropped.
+
+        Finding #15 root cause: every OPNsense BSD device name has
+        port=0 for its first instance (igb0, em0, ix0, ixl0).  The
+        previous Aruba ``port==0 -> None`` guard fired for all of
+        them, dropping the LAN canonical interface (and its IP)
+        before render was called.  Now the LAN IP survives the
+        port-rename step and reaches Aruba's render path."""
+        from netconfig.migration.codecs.opnsense.codec import (
+            OPNsenseCodec,
+        )
+        src = OPNsenseCodec()
+        tgt = ArubaAOSSCodec()
+        ident = src.classify_port_name("ixl0")
+        assert ident.port == 0
+        assert ident.kind == "physical"
+        assert tgt.format_port_identity(ident) == "1"
+
+    def test_aruba_opnsense_igb0_maps_to_aos_port_one(self):
+        """Same root-cause as ``ixl0`` but for the Intel igb driver
+        (1G NIC, common on home / SOHO OPNsense deployments)."""
+        from netconfig.migration.codecs.opnsense.codec import (
+            OPNsenseCodec,
+        )
+        src = OPNsenseCodec()
+        tgt = ArubaAOSSCodec()
+        ident = src.classify_port_name("igb0")
+        assert ident.port == 0
+        assert ident.kind == "physical"
+        assert tgt.format_port_identity(ident) == "1"
 
     def test_arista_management_maps_to_oobm(self):
         """Arista's ``Management1`` classifies as kind=mgmt; AOS-S

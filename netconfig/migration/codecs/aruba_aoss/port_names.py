@@ -140,13 +140,31 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         # alone.  Bail with a warning.
         if identity.module and identity.module != 0:
             return None
-        # Aruba has no port 0.  Cisco's ``GigabitEthernet0/0`` is
-        # the dedicated OOBM management port — Aruba's equivalent
-        # is the separate OOBM concept (not in the regular port-
-        # name space), so leave verbatim + warn instead of
-        # collapsing to bogus ``"1"`` via ``port or 1``.
-        if identity.port == 0:
-            return None
+        # Foreign-source port-zero handling (finding #15 in
+        # user_smoke_findings.md).  Aruba's port-name space starts
+        # at 1, but many source vendors use port=0 as the first
+        # NIC instance:
+        #
+        # * OPNsense BSD device names — ``ixl0``, ``igb0``, ``em0``,
+        #   ``ix0`` — every driver's first unit is 0.
+        # * Cisco ``GigabitEthernet0/0`` — historically OOBM, but
+        #   the wave-2 ``Mgmt-vrf`` cascade (commit ``56a4cde``)
+        #   promotes it to ``kind="mgmt"`` when the source binds
+        #   the interface to a management VRF, routing it through
+        #   the mgmt branch (returns ``"oobm"``).  A Cisco Gi0/0
+        #   without Mgmt-vrf binding lands here and collapses to
+        #   Aruba ``"1"``; the render-side collision detector
+        #   (commit ``7d93085``) catches duplicate emission at
+        #   output time, so we degrade gracefully.
+        #
+        # FortiGate, MikroTik, Cisco, and Junos all accept port=0
+        # similarly (FortiGate→``port1``, MikroTik→``sfp-sfpplus0``,
+        # Cisco→``Gi0/0``, Junos→``xe-0/0/0``); Aruba's previous
+        # ``port==0 → None`` short-circuit was the outlier and
+        # silently dropped foreign-source LAN IPs (e.g. OPNsense
+        # `<lan><if>ixl0</if><ipaddr>192.168.88.2</ipaddr>`).
+        # Downstream branches already use ``identity.port or 1``,
+        # which collapses both ``None`` and ``0`` to ``1``.
         if identity.subslot_letter:
             # 1/A1 style (uplink module).
             return (
