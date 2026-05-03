@@ -332,13 +332,23 @@ per_field_expectation:
     references: [mikrotik_ip_address, opnsense-interfaces]
 
   interfaces[].ipv6_addresses:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       RouterOS ``/ipv6 address add address=2001:db8::1/64
       interface=etherN`` ↔ OPNsense ``<ipaddrv6>`` + ``<subnetv6>``.
-      ``scope`` discriminator (global / link-local) preserved —
-      RouterOS addresses in ``fe80::/10`` are normalised to
-      ``scope="link-local"`` on parse.
+      The OPNsense ``<interfaces>`` XML schema models exactly one
+      ``<ipaddrv6>`` / ``<subnetv6>`` per zone, so when a RouterOS
+      source carries multiple v6 addresses on one interface (e.g. a
+      global ``2001:db8:0:1::2/64`` plus an explicit link-local
+      ``fe80::1/64``) only the first survives on render — additional
+      addresses would have to live as ``<virtualip><vip>`` records,
+      which neither the OPNsense parser nor renderer wires up today.
+      Link-local in particular is doubly synthetic: OPNsense auto-
+      derives ``fe80::/10`` from the interface MAC, so explicit
+      preservation of a parsed link-local entry has no first-class
+      schema slot.  ``scope`` discriminator on the canonical side is
+      still set on parse (``fe80::/10`` -> ``scope="link-local"``)
+      but does not survive the render bottleneck.
     references: [mikrotik_ip_address, opnsense-interfaces]
 
   interfaces[].switchport_mode:
