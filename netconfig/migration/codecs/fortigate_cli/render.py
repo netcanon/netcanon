@@ -833,6 +833,11 @@ def render_intent(tree: Any) -> str:
                 out.append(f"        set gateway {route.gateway}")
             if route.interface:
                 out.append(f'        set device "{route.interface}"')
+            if route.description:
+                # FortiOS uses ``set comment`` (singular) on
+                # ``config router static`` entries; max 255 chars.
+                # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
+                out.append(f'        set comment "{route.description}"')
             out.append("    next")
         out.append("end")
 
