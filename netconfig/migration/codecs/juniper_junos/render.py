@@ -137,10 +137,22 @@ def render_intent(tree: Any) -> str:
         # gets an explicit "reset this password manually" signal
         # without a security regression in the deployed config.
         # Finding #16 in user_smoke_findings.md.
+        # Cross-vendor canonical sources tag md5crypt payloads in
+        # several shapes (``md5crypt:$1$..``, ``5 $1$..``); the shared
+        # _TARGET_ACCEPTS["juniper_junos"] set doesn't include those
+        # algorithm tokens, but Junos's commit-time hasher consumes
+        # any ``$1$..`` payload natively.  :func:`_is_md5crypt_tagged`
+        # widens the migratable set codec-locally so cross-vendor
+        # render-into-Junos doesn't drop the user when the source
+        # canonical happens to use a tagged form rather than a bare
+        # crypt string.  Empty ``hashed_password`` falls through to
+        # the bare ``class`` line below — Junos accepts that form
+        # as a console-only / no-password account.
         if (
             user.hashed_password
             and not user.hashed_password.startswith("junos:")
             and not is_migratable(user.hashed_password, "juniper_junos")
+            and not _is_md5crypt_tagged(user.hashed_password)
         ):
             algorithm, _payload = classify_hash(user.hashed_password)
             out.append(
@@ -1052,6 +1064,33 @@ def _split_subiface_name(name: str) -> tuple[str | None, int | None]:
         return (m.group("parent"), int(m.group("unit")))
     except ValueError:
         return (None, None)
+
+
+def _is_md5crypt_tagged(hashed: str) -> bool:
+    """Return True when ``hashed`` is a tagged form of md5crypt that
+    Junos can consume via ``authentication encrypted-password``.
+
+    The shared :func:`is_migratable` allowlist for Junos covers
+    plaintext, the native ``junos:`` tag, and the bare ``$6$..`` /
+    ``$1$..`` crypt strings (those classify as algorithm="plaintext"
+    and pass through unconditionally).  It does NOT cover the
+    Cisco-source canonical shapes ``md5crypt:$1$..`` and ``5 $1$..``
+    where the algorithm token explicitly tags the payload.
+
+    Junos's commit-time hasher recognises any ``$1$..`` payload
+    regardless of how it was tagged on the canonical side, so the
+    safe expansion is: when the algorithm is a known synonym for
+    md5crypt AND the payload still starts with ``$1$``, treat it
+    as locally-migratable.  Mirrors Arista's ``_ARISTA_SECRET_TYPE``
+    table which maps both ``5`` and ``md5crypt`` to the same
+    ``secret 5 ..`` emit form.
+    """
+    if not hashed:
+        return False
+    algorithm, payload = classify_hash(hashed)
+    if algorithm not in ("md5crypt", "1", "5"):
+        return False
+    return payload.startswith("$1$")
 
 
 def _quote_if_needed(s: str) -> str:

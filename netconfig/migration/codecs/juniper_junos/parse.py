@@ -401,6 +401,19 @@ def parse_intent(raw: str) -> CanonicalIntent:
         iface = iface_by_name.get(name)
         if iface is None:
             continue
+        # Defensive default: ``vlan members`` declared without an
+        # explicit ``interface-mode`` line is unusual but not
+        # syntactically illegal — Junos's commit-time validator
+        # treats ``vlan members`` as trunk semantics by default (the
+        # tagged form is the more general one; access is a strict
+        # subset that requires an explicit mode declaration).  Without
+        # this default the membership info is silently dropped from
+        # the canonical tree, breaking cross-vendor renders that read
+        # from VLAN-centric tagged_ports / untagged_ports.  Same-vendor
+        # round-trips with explicit modes are unaffected — those take
+        # the matching branch below before we reach this default.
+        if iface.switchport_mode is None:
+            iface.switchport_mode = "trunk"
         if iface.switchport_mode == "access":
             # Access mode: the first resolved member becomes the
             # access_vlan (operators rarely declare more than one).
@@ -442,6 +455,25 @@ def parse_intent(raw: str) -> CanonicalIntent:
     #    Aruba/OPNsense -> Junos render case the rank-4 fix
     #    targets always emits a fresh irb.<vid> with no VRF binding,
     #    which IS safe to fold onto the vlan.
+    # Two source-shape cases produce IRB IPs:
+    #
+    #   a) ``set interfaces irb unit <vid> family inet address ...``
+    #      — IPs land in ``irb_state[vid]["ipv4"]`` via the
+    #      ``name == "irb"`` branch in ``_apply_interfaces``.
+    #   b) ``set interfaces irb.<vid> unit 0 family inet address ...``
+    #      — the dotted-name shorthand operators sometimes paste, and
+    #      the shape produced by block-form -> set-form conversion
+    #      when the source authored ``irb { unit <vid> { ... } }``.
+    #      These IPs land on the materialised
+    #      ``CanonicalInterface(name="irb.<vid>")`` because the
+    #      ``irb_state`` branch only fires for ``name == "irb"``.
+    #
+    # Both cases must fold onto the matching vlan when an
+    # ``l3-interface irb.<vid>`` binding declares the SVI intent —
+    # otherwise the SVI IP is silently lost from the VLAN-centric
+    # view that downstream renderers (Aruba, OPNsense) consume.
+    # See ``project_switchport_to_vlan`` for the symmetric fix on
+    # the per-port vlan-members surface.
     bound_vids: set[int] = set()
     for vid, irb_entry in irb_state.items():
         if "vlan_name" not in irb_entry:
@@ -463,6 +495,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
             stub_name = irb_entry.get("vlan_name", f"VLAN-{vid}")
             vlan = CanonicalVlan(id=vid, name=stub_name)
             intent.vlans.append(vlan)
+        # Source-shape (a): IPs gathered from ``set interfaces irb
+        # unit <vid>`` lines via the irb_state accumulator.
         for ip, prefix in irb_entry.get("ipv4", []):
             existing_addrs = {
                 (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
@@ -471,6 +505,24 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 vlan.ipv4_addresses.append(
                     CanonicalIPv4Address(ip=ip, prefix_length=prefix)
                 )
+        # Source-shape (b): IPs that landed on a materialised
+        # ``CanonicalInterface(name="irb.<vid>")`` because the source
+        # used the dotted-name shorthand instead of the ``unit <vid>``
+        # form.  Carry them over too so the vlan ends up with the SVI
+        # IP regardless of which input shape the operator used.
+        if sub_iface is not None and sub_iface.ipv4_addresses:
+            existing_addrs = {
+                (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
+            }
+            for addr in sub_iface.ipv4_addresses:
+                pair = (addr.ip, addr.prefix_length)
+                if pair not in existing_addrs:
+                    vlan.ipv4_addresses.append(
+                        CanonicalIPv4Address(
+                            ip=addr.ip, prefix_length=addr.prefix_length,
+                        )
+                    )
+                    existing_addrs.add(pair)
         bound_vids.add(vid)
 
     # 4. Prune the synthetic ``irb`` carrier and any ``irb.<vid>``
