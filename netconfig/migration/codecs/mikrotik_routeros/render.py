@@ -165,7 +165,35 @@ def render_intent(tree: Any) -> str:
         i for i in tree.interfaces
         if i.interface_type == "ianaift:bridge"
     ]
-    if bridge_ifaces:
+    # Cross-vendor sources (Cisco / Junos / OPNsense / FortiGate)
+    # don't model an L2 software-bridge primitive the way RouterOS
+    # does, so parse produces zero ``ianaift:bridge`` interfaces.
+    # The /interface vlan block below pins every VLAN child to
+    # ``interface=bridge1`` by convention — RouterOS rejects a
+    # ``/interface vlan add interface=bridge1 ...`` line when
+    # ``bridge1`` doesn't exist yet.  Synthesise the parent
+    # declaration ONLY in this cross-vendor case (no real bridges
+    # in the canonical tree).  Same-vendor round-trips have their
+    # own bridges (``downstream``, ``upstream``, ``br-lan``) and
+    # must NOT gain a phantom ``bridge1`` — the round-trip
+    # stability guard in
+    # ``tests/unit/migration/test_real_captures.py`` would catch
+    # the regression.  Surfaced by the user smoke-test on a Cisco
+    # c9300-24ux source (issue #4 in
+    # ``tests/fixtures/real/user_smoke_findings.md``).  RouterOS
+    # docs:
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
+    # — ``interface=`` must reference an existing parent.
+    has_vlan_to_render = bool(tree.vlans) or any(
+        i.interface_type == "ianaift:l3ipvlan"
+        or _is_vlan_name(i.name)
+        for i in tree.interfaces
+    )
+    needs_synthetic_bridge1 = (
+        has_vlan_to_render and not bridge_ifaces
+    )
+    emitted_bridge_names: set[str] = set()
+    if bridge_ifaces or needs_synthetic_bridge1:
         lines.append("/interface bridge")
         for iface in bridge_ifaces:
             parts = ["add"]
@@ -173,6 +201,13 @@ def render_intent(tree: Any) -> str:
                 parts.append(f'comment="{_escape(iface.description)}"')
             parts.append(f"name={_quote_if_needed(iface.name)}")
             lines.append(" ".join(parts))
+            emitted_bridge_names.add(iface.name)
+        # The synthetic add is idempotent — track which bridge
+        # names have already been emitted so re-entry would not
+        # double up.
+        if needs_synthetic_bridge1 and "bridge1" not in emitted_bridge_names:
+            lines.append("add name=bridge1")
+            emitted_bridge_names.add("bridge1")
         lines.append("")
 
     # ----- /interface bonding (Tier 2 LAGs) -----

@@ -310,10 +310,23 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         parent = identity.meta.get("mikrotik_parent")
         if parent:
             return f"{parent}.{identity.index}"
-        # Without a parent-interface hint, fall back to a default
-        # parent (most common: primary bridge).  Caller can
-        # override via rename_map.
-        return f"bridge.{identity.index}"
+        # Without a parent-interface hint, fall back to the
+        # conventional ``vlanN`` form.  This matches the name the
+        # /interface vlan render block emits (``add interface=
+        # bridge1 name=vlanN vlan-id=N``); the /ip address loop then
+        # emits ``interface=vlanN`` consistently.  Previously we
+        # fell back to ``bridge.{index}`` which (a) is not a real
+        # RouterOS interface name (the dotted form is reserved for
+        # parent.id sub-interface lookups, where ``bridge`` alone
+        # would have to exist as a parent — typically the bridge is
+        # named ``bridge1`` not bare ``bridge``) and (b) didn't
+        # match the ``name=vlan{id}`` convention used elsewhere in
+        # the renderer, so the SVI canonical name and the rendered
+        # VLAN interface name disagreed.  Surfaced by the user
+        # smoke-test on a Cisco c9300-24ux source (issue #4 in
+        # ``tests/fixtures/real/user_smoke_findings.md``).  Caller
+        # can still override via rename_map.
+        return f"vlan{identity.index}"
     if identity.kind == "loopback":
         return "lo" if identity.index in (None, 0) else f"loopback{identity.index}"
     if identity.kind == "tunnel":
