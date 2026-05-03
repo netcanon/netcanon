@@ -182,4 +182,20 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "tunnel":
         kind = identity.meta.get("opnsense_tunnel_kind") or "gif"
         return f"{kind}{identity.index or 0}"
+    if identity.kind == "mgmt":
+        # OPNsense has no native VRF / dedicated OOBM-port concept —
+        # all interfaces live in the same flat ``<interfaces>`` zone
+        # space, distinguished only by zone name (``wan`` / ``lan`` /
+        # ``opt<N>``).  Best-effort cross-vendor mapping for a source-
+        # vendor management interface (Cisco Mgmt-vrf-bound port,
+        # Arista ``Management1``, Junos ``fxp0``) is a dedicated
+        # ``opt_mgmt`` zone — the ``opt_*`` prefix preserves OPNsense
+        # zone-naming convention (see OPNsense docs at
+        # docs.opnsense.org/manual/interfaces.html, "Optional
+        # interfaces are commonly named opt1, opt2, …" — operator-
+        # named opt zones are also supported and survive the GUI's
+        # zone-assignment workflow).  The renderer pairs this with a
+        # ``<descr>Management</descr>`` element so operators see the
+        # role at a glance in the OPNsense UI.
+        return "opt_mgmt"
     return None

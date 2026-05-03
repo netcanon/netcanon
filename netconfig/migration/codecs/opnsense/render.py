@@ -205,8 +205,19 @@ def render_canonical(intent: CanonicalIntent) -> str:
             # disabled-only interfaces are never empty (so the parser
             # doesn't drop them under the empty-stub rule).
             ET.SubElement(zone_el, "if").text = iface.name
+            # kind=mgmt cascade marker — when the canonical interface
+            # carries the explicit mgmt role (cisco_iosxe_cli's
+            # Mgmt-vrf promotion, arista's Management<N> classifier,
+            # junos's fxp0), surface a ``<descr>Management</descr>``
+            # so the OPNsense UI labels the zone clearly even when
+            # the source had no human-readable description.  An
+            # operator-supplied description still wins.  Documented
+            # at docs.opnsense.org/manual/interfaces.html — the
+            # ``<descr>`` element is the zone label in the GUI.
             if iface.description:
                 ET.SubElement(zone_el, "descr").text = iface.description
+            elif iface.kind == "mgmt":
+                ET.SubElement(zone_el, "descr").text = "Management"
             if iface.enabled:
                 ET.SubElement(zone_el, "enable")
             if iface.mtu is not None:

@@ -272,7 +272,27 @@ def format_port_identity(identity: PortIdentity) -> str | None:
             return f"gre{identity.index or 1}"
         return f"gre{identity.index or 1}"
     if identity.kind == "mgmt":
-        return "mgmt"
+        # FortiGate's standard out-of-band management port on
+        # FG-100F+ hardware (FG-100F, FG-200F, FG-400F, FG-600F,
+        # FG-1000F, FG-3000F, ...) is named ``mgmt1`` — see
+        # Fortinet's FG-100F datasheet (docs.fortinet.com/document/
+        # fortigate/hardware/fortigate-100f-data-sheet) which lists
+        # the dedicated MGMT1/MGMT2 RJ-45 ports.  Smaller FG-60F /
+        # FG-80F appliances use bare ``mgmt`` (no number); we
+        # standardise on ``mgmt1`` for cross-vendor cascade because
+        # it's the canonical name across the FG-100F+ family
+        # (the mid-to-high-range hardware most operators target as
+        # a Cisco c9300 / c9500 replacement).  Same-vendor round-
+        # trip preserves the operator's original choice via the
+        # ``fortigate_role`` meta hint (handled in the physical
+        # branch above), so this default only fires for cross-
+        # vendor sources where the source name carries no FortiGate
+        # role meta.
+        if identity.meta.get("fortigate_role") == "mgmt":
+            # Same-vendor round-trip: preserve original index.
+            port_num = identity.port or 1
+            return f"mgmt{port_num}" if port_num > 1 else "mgmt"
+        return "mgmt1"
     # svi, virtual, breakout, unknown — no deterministic FortiGate
     # form (user picks the VL_XXX / LAG_XXX name).
     return None
