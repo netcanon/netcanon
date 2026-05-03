@@ -564,6 +564,21 @@ def render_intent(tree: Any) -> str:
                 # Parent of one or more sub-units — round-trip
                 # stability needs the bare line.
                 out.append(f"set interfaces {name}")
+            elif _IS_JUNOS_PHYSICAL_PORT_RE.match(name):
+                # Junos-shaped physical port name (``ge-0/0/0``,
+                # ``xe-1/0/24``, ``et-0/0/0``, ``mge-0/0/0``,
+                # ``fxp0``, ``me0``, ``lo0``).  Junos parse creates
+                # canonical entries for unmodelled (Tier-3) L2
+                # grammar like the older ``unit 0 family ethernet-
+                # switching port-mode trunk`` form (ksator EX4550
+                # fixture, GAP 3 origin).  For round-trip stability
+                # on Junos source, keep the bare line so reparse
+                # restores the iface canonical.  Sub-interfaces
+                # (``irb.1``, ``ge-0/0/0.100``) and non-Junos names
+                # (``Vlan1``, ``Ethernet1/1``) deliberately don't
+                # match — they're either logical-only or come from
+                # a cross-vendor rename and the leak fix wins.
+                out.append(f"set interfaces {name}")
             # else: fully empty, no reference, no children — skip.
 
     # --- aggregated-ether (LAG) stanzas (Phase 4 rank-4) ---
@@ -878,6 +893,24 @@ def render_intent(tree: Any) -> str:
 
 
 _QUOTE_NEEDED_RE = re.compile(r"[\s\"';$`\\]")
+
+# Junos physical port-name shapes.  Used by the empty-stub
+# elision predicate to decide whether a content-free canonical
+# iface is "really there" (Junos source with Tier-3 L2 grammar
+# the parser couldn't surface) and therefore needs the bare
+# placeholder for parse->render->parse stability.  Matches the
+# core families from the ``port_names`` module's
+# ``classify_port_name``: media+FPC/PIC/port (``ge-0/0/24``),
+# router-style fxp0 / me0, and the loopback / irb base names.
+# Sub-interfaces (``ge-0/0/0.100``, ``irb.1``) deliberately
+# don't match — they're logical-only and an empty sub-iface in
+# canonical means "no logical attributes", which is fine to drop.
+_IS_JUNOS_PHYSICAL_PORT_RE = re.compile(
+    r"^(?:"
+    r"(?:[a-z]{2,4})-\d+/\d+/\d+"     # ge-X/Y/Z, xe-, et-, mge-, etc.
+    r"|fxp\d+|me\d+|vme|lo\d+|irb"   # mgmt + loopback + irb base
+    r")$"
+)
 
 # ``<parent>.<unit>`` — e.g. ``ge-0/0/0.100``.  ``parent`` must
 # contain a slash (``ge-0/0/0``) to distinguish from normal names
