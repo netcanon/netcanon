@@ -239,14 +239,50 @@ per_field_expectation:
   # ── Tier 2 — LAGs ──
 
   lags:
-    disposition: good
-    note: "Arista 'Port-Channel N' maps to Junos 'ae N'. LACP mode (active/passive/static) preserved via 'set interfaces aeN aggregated-ether-options lacp {active|passive}'."
+    disposition: lossy
+    reason: >
+      Arista 'Port-Channel N' is parsed by Junos as 'ae N' on
+      round-trip (Junos's mandated naming convention for
+      aggregated-ethernet bundles).  LACP mode (active/passive/
+      static) preserves via 'set interfaces aeN aggregated-ether-
+      options lacp {active|passive}'.  The lag NAME itself does
+      NOT round-trip: ``lags[].name`` re-emerges as ``ae<N>`` after
+      Junos parse (canonical-shape correct for Junos's wire format
+      but the comparator can't equate the two without a name-
+      rename mesh).  Member lists round-trip via the per-member
+      ``ge-0/0/<N>`` rename.  Arista MLAG (``mlag <id>``) has no
+      Junos analogue and drops.  See
+      ``tests/fixtures/real/phase4_findings_arista_eos.md`` for
+      the per-fixture cell evidence (batfish_labval_dc1_leaf2a +
+      kitchen_sink — 5 lag renames + Port-Channel10/20→ae10/20).
 
   # ── Tier 2 — local users ──
 
   local_users:
-    disposition: good
-    note: "Both vendors share the Linux crypt() hash family ($1$ MD5, $5$ SHA-256, $6$ SHA-512). Hash bytes round-trip losslessly; authentication may still fail post-migration if Arista salted with username (default) and username changes between platforms."
+    disposition: lossy
+    reason: >
+      Both vendors share the Linux crypt() hash family ($1$ MD5,
+      $5$ SHA-256, $6$ SHA-512); hash BYTES round-trip cleanly for
+      $6$ SHA-512 entries.  However, several documented losses
+      surface as drift on the comparator:
+      (1) ``hashed_password`` carries a vendor-prefix tag (the
+      arista_eos parser tags as ``arista:sha512:$6$...`` while the
+      Junos parser tags its own re-parse as ``junos:$6$...``).
+      Vendor-prefix asymmetry is by design — each codec marks
+      provenance — but the strings differ on round-trip.
+      (2) ``privilege_level`` (Arista's integer 1-15) collapses on
+      Junos: Junos has no integer privilege model, only role
+      names, so non-default values round-trip as 1.
+      (3) ``role`` — Junos injects a default role of
+      ``super-user`` when the source role is blank, so the
+      empty-string Arista value re-emerges as ``super-user`` on
+      Junos round-trip.
+      (4) MD5 ($1$) hash entries are dropped by the Junos render
+      path (only $6$ SHA-512 survives) — count drift per the
+      ``ksator_dcs_7150s64`` and ``synthetic/kitchen_sink`` cells
+      (real codec-level loss, NOT a stale expectation).
+      See ``tests/fixtures/real/phase4_findings_arista_eos.md``
+      for per-fixture cell evidence.
     references: [arista-user-security, junos-password-cli, junos-kb-password-format]
 
   # ── Tier 2 — RADIUS ──

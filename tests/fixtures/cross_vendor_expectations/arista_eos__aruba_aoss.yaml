@@ -203,20 +203,28 @@ per_field_expectation:
     references: [port_naming, vlans, ip_addressing]
 
   vlans:
-    disposition: good
-    note: >
-      VLAN id, name, description, tagged_ports, untagged_ports,
-      and ipv4_addresses (SVI absorption) round-trip cleanly.
-      Arista's per-port ``switchport access vlan N`` /
-      ``switchport trunk allowed vlan ...`` re-projects via
-      ``project_switchport_to_vlan`` to the canonical VLAN-
+    disposition: lossy
+    reason: >
+      VLAN id, name, description, tagged_ports, untagged_ports
+      round-trip cleanly.  Arista's per-port ``switchport access
+      vlan N`` / ``switchport trunk allowed vlan ...`` re-projects
+      via ``project_switchport_to_vlan`` to the canonical VLAN-
       centric port-membership lists; Aruba render emits
-      ``vlan N / untagged ... / tagged ...``.  SVI absorption:
-      Arista's ``interface Vlan100 / ip address X/N`` lands on
-      CanonicalVlan.ipv4_addresses; Aruba render emits the
-      address inline on the ``vlan 100`` stanza.  Caveat:
-      Arista's ``interface Vlan<N> / vrf TENANT_A`` SVIs have
-      the ``vrf`` field silently dropped on Aruba render (see
+      ``vlan N / untagged ... / tagged ...``.  SVI absorption is
+      the lossy bit: Aruba's ``_svi_absorption.absorbs_svi_into_vlan``
+      pulls the ``interface Vlan<N> / ip address X/N`` SVI onto
+      CanonicalVlan.ipv4_addresses on round-trip parse, which is
+      the correct canonical-shape translation for Aruba's VLAN-
+      centric L3 model — but it means MLAG/peer VLANs that share a
+      VRF SVI gain ``ipv4_addresses`` they did NOT carry on the
+      Arista source (Arista's per-VLAN SVI maps 1:1 to a VLAN id;
+      Aruba flattens shared SVI state across the VRF).  Comparator
+      sees this as drift but it is documented canonical-shape
+      translation, not a codec bug — see
+      ``tests/fixtures/real/phase4_findings_arista_eos.md`` for
+      the per-fixture cell evidence and the Wave 7b/C confirmation.
+      Caveat: Arista's ``interface Vlan<N> / vrf TENANT_A`` SVIs
+      have the ``vrf`` field silently dropped on Aruba render (see
       vrf_unsupported.md).
     references: [vlans]
 

@@ -338,8 +338,8 @@ per_field_expectation:
     references: [vxlan, vrf]
 
   routing_instances:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Arista EOS codec parses ``vrf instance <name>`` blocks AND
       walks ``router bgp / vrf <name>`` sub-stanzas to extract RD
       + RT communities.  Cisco IOS-XE codec render path emits
@@ -351,14 +351,23 @@ per_field_expectation:
       unsupported) is irrelevant on a one-way Arista -> Cisco
       migration where only the render side runs.
 
-      Limitation: Arista's ``route-target import evpn 65001:100``
-      form (with the EVPN keyword) gets stripped to a plain RT;
-      Cisco IOS-XE re-emits as a generic route-target under the
-      IPv4 AF.  Fine for plain L3VPN; loses fidelity for EVPN
-      deployments — the EVPN-specific RT routing-instance entries
-      get the ``mac-vrf`` instance_type which the Cisco renderer
-      does not emit (see mac_vrf.md and the routing_instances
-      mac-vrf carve-out below).
+      Lossy bits:
+      (1) ``instance_type`` — Arista's EVPN MAC-VRF records
+      (``router bgp / vlan N``) land on canonical with
+      instance_type="mac-vrf"; Cisco IOS-XE has no MAC-VRF
+      emission path so they re-parse as plain ``vrf`` instance-
+      type.  Documented in mac_vrf.md.
+      (2) ``l3_vni`` — Arista's ``vxlan vrf <name> vni <N>`` lands
+      on CanonicalRoutingInstance.l3_vni at parse but the Cisco
+      IOS-XE render path has no NVE / l2vpn-evpn emission so the
+      L3 VNI value drops on round-trip alongside the rest of the
+      VXLAN surface (see ``vxlan_vnis`` for the parent decision).
+      (3) Arista's ``route-target import evpn 65001:100`` form
+      (with the EVPN keyword) gets stripped to a plain RT on
+      Cisco re-emission.
+      See ``tests/fixtures/real/phase4_findings_arista_eos.md``
+      for the per-fixture cell evidence (karneliuk_a_eos1 +
+      kitchen_sink).
     references: [vrf, mac_vrf]
 
   # ── Tier 3 — informational only (never auto-rendered) ──
