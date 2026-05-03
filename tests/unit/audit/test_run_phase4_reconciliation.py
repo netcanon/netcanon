@@ -373,3 +373,325 @@ def test_reconcile_cell_handles_render_error() -> None:
     assert result["non_ok_status"] is True
     assert result["field_variances"] == {}
     assert result["summary"]["fields_total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# STRUCTURAL_ONLY collapse — one structural drift signal per (cell,
+# parent-list), not amplified across every per-field key on that list.
+#
+# The bug being fixed: when ``interfaces`` had a wholesale list-length
+# drift (``count drift: 17 → 2 (interfaces)`` or ``all 5 interfaces
+# dropped``), Phase 1 emitted that as a single string under
+# ``drift``.  The pre-fix comparator's ``_subfield_drift_in_list``
+# returned True for every sub-field on a string-drift parent — so each
+# of ``interfaces[].description``, ``interfaces[].mtu``,
+# ``interfaces[].enabled``, ... got an independent CODEC_BUG entry,
+# multiplying one structural signal across N per-field keys.
+#
+# Fix: the FIRST sub-field of each list-parent in each cell keeps its
+# original variance class (typically CODEC_BUG when expected="good"),
+# carrying the ``drift_summary`` string in drift_detail.  Subsequent
+# sub-fields of the SAME parent list in the SAME cell are reclassified
+# STRUCTURAL_ONLY (low severity), with a ``structural_owner`` pointer
+# back to the YAML key that owns the canonical signal.  Real per-field
+# drift on surviving rows (which Phase 1 represents via a per-record
+# dict, surfaced as ``per_record`` in drift_detail) is NEVER collapsed.
+# ---------------------------------------------------------------------------
+
+
+def test_count_drift_emits_single_signal_per_cell() -> None:
+    """Wholesale ``count drift`` on ``interfaces`` should fire ONE
+    CODEC_BUG (on the first per-field key encountered) and reclassify
+    every other per-field key on the same list to STRUCTURAL_ONLY."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "juniper_junos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 17,
+                "target_count": 2,
+                "drift": "count drift: 17 → 2 (interfaces)",
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].name": {"disposition": "good"},
+            "interfaces[].description": {"disposition": "good"},
+            "interfaces[].enabled": {"disposition": "good"},
+            "interfaces[].mtu": {"disposition": "good"},
+            "interfaces[].ipv4_addresses": {"disposition": "good"},
+            "interfaces[].ipv6_addresses": {"disposition": "good"},
+            "interfaces[].lag_member_of": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    # First sub-field encountered (insertion order: ``name``) owns the
+    # canonical CODEC_BUG signal.
+    assert fv["interfaces[].name"]["variance"] == recon.VAR_CODEC_BUG
+    assert fv["interfaces[].name"]["severity"] == "high"
+    name_dd = fv["interfaces[].name"]["drift_detail"]
+    assert isinstance(name_dd.get("drift_summary"), str)
+    assert "count drift" in name_dd["drift_summary"]
+    # Every subsequent sub-field of ``interfaces`` collapses to
+    # STRUCTURAL_ONLY with a back-pointer to the canonical owner.
+    for key in (
+        "interfaces[].description",
+        "interfaces[].enabled",
+        "interfaces[].mtu",
+        "interfaces[].ipv4_addresses",
+        "interfaces[].ipv6_addresses",
+        "interfaces[].lag_member_of",
+    ):
+        assert fv[key]["variance"] == recon.VAR_STRUCTURAL_ONLY, (
+            f"{key} should be STRUCTURAL_ONLY, got {fv[key]['variance']}"
+        )
+        assert fv[key]["severity"] == "low"
+        assert fv[key]["drift_detail"]["structural_owner"] == (
+            "interfaces[].name"
+        )
+    # Aggregate: exactly one CODEC_BUG, six STRUCTURAL_ONLY, no other
+    # high-severity finding.
+    assert result["summary"][recon.VAR_CODEC_BUG] == 1
+    assert result["summary"][recon.VAR_STRUCTURAL_ONLY] == 6
+    assert result["summary"]["severity_high"] == 1
+    assert result["summary"]["severity_low"] == 6
+
+
+def test_count_drift_with_real_per_field_drift_preserves_both() -> None:
+    """If Phase 1 surfaces per-record drift (``per_record`` populated
+    in drift_detail) — i.e. the surviving rows actually differ on a
+    sub-field — that per-field signal MUST keep its CODEC_BUG, even
+    when another sub-field on the same list has a structural-only
+    drift.  This guards against masking real per-field drift behind
+    the structural-collapse rule."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "juniper_junos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            # One field with per-record drift on the surviving rows
+            # (counts match) — should fire CODEC_BUG with per_record
+            # detail, NOT collapse.
+            "interfaces": {
+                "preserved": False,
+                "source_count": 4,
+                "target_count": 4,
+                "drift": {
+                    "interfaces[0] {'name': 'eth0'}": {
+                        "description": {
+                            "source": "uplink-A",
+                            "target": "uplink-B",
+                        },
+                    },
+                },
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].name": {"disposition": "good"},
+            "interfaces[].description": {"disposition": "good"},
+            "interfaces[].mtu": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    # ``description`` actually drifted per-record — keeps CODEC_BUG.
+    assert fv["interfaces[].description"]["variance"] == recon.VAR_CODEC_BUG
+    assert "per_record" in fv["interfaces[].description"]["drift_detail"]
+    # ``name`` and ``mtu`` did NOT drift on any surviving row — they
+    # come back as ``preserved`` (the parent's drift dict doesn't
+    # mention them) and so don't become STRUCTURAL_ONLY either.
+    assert fv["interfaces[].name"]["variance"] == recon.VAR_ALIGNED
+    assert fv["interfaces[].mtu"]["variance"] == recon.VAR_ALIGNED
+    # Nothing collapses to STRUCTURAL_ONLY here — there's no wholesale
+    # list-length signal in play.
+    assert result["summary"][recon.VAR_STRUCTURAL_ONLY] == 0
+    assert result["summary"][recon.VAR_CODEC_BUG] == 1
+
+
+def test_count_drift_plus_real_per_field_drift_on_same_list_both_emit() -> None:
+    """Edge case combining both signals on the SAME list parent: a
+    wholesale ``count drift`` PLUS per-record drift on a surviving
+    row's sub-field.  The per-record-driven sub-field MUST keep its
+    CODEC_BUG signal; only the structural-only sub-fields collapse.
+
+    In practice Phase 1 emits either a string OR a per-record dict, not
+    both — so this scenario cannot reach the comparator from the real
+    pipeline.  But the comparator must be defensive against that
+    invariant being relaxed in the future, so we still test the case
+    by handing it both signals manually.
+
+    Implementation note: ``actual_disposition`` reads the parent's
+    ``drift`` value once.  When the upstream emits a dict with
+    per-record drill-down, ``_slice_list_subfield`` produces a
+    ``per_record`` slice and the structural-collapse condition (which
+    requires a string ``drift_summary``) doesn't fire — so even on the
+    same list parent, the per-record entry goes through unmolested."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "juniper_junos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 4,
+                "target_count": 4,
+                "drift": {
+                    "interfaces[2] {'name': 'eth2'}": {
+                        "description": {
+                            "source": "old", "target": "new",
+                        },
+                    },
+                },
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].description": {"disposition": "good"},
+            "interfaces[].mtu": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    # Real per-record drift survives as a CODEC_BUG with per_record
+    # detail.
+    assert fv["interfaces[].description"]["variance"] == recon.VAR_CODEC_BUG
+    assert "per_record" in fv["interfaces[].description"]["drift_detail"]
+    # ``mtu`` wasn't in any per-record diff — disposition is preserved,
+    # so it shows up as ALIGNED rather than STRUCTURAL_ONLY (no
+    # structural signal to collapse onto).
+    assert fv["interfaces[].mtu"]["variance"] == recon.VAR_ALIGNED
+
+
+def test_no_count_drift_no_change_in_behavior() -> None:
+    """When the parent list preserves entirely, every per-field key
+    classifies as ALIGNED (good) — no STRUCTURAL_ONLY artefact, no
+    CODEC_BUG."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "juniper_junos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {"preserved": True, "source_count": 4, "target_count": 4},
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].name": {"disposition": "good"},
+            "interfaces[].description": {"disposition": "good"},
+            "interfaces[].mtu": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    for key in (
+        "interfaces[].name",
+        "interfaces[].description",
+        "interfaces[].mtu",
+    ):
+        assert fv[key]["variance"] == recon.VAR_ALIGNED
+    assert result["summary"][recon.VAR_STRUCTURAL_ONLY] == 0
+    assert result["summary"][recon.VAR_CODEC_BUG] == 0
+    assert result["summary"][recon.VAR_ALIGNED] == 3
+
+
+def test_count_drift_on_vlans_also_collapses() -> None:
+    """The collapse rule applies to any list parent, not just
+    ``interfaces``.  A wholesale ``all N vlans dropped`` parent should
+    behave the same way."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "mikrotik_routeros",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "vlans": {
+                "preserved": False,
+                "source_count": 5,
+                "target_count": 0,
+                "drift": "all 5 vlans dropped",
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "vlans[].id": {"disposition": "good"},
+            "vlans[].name": {"disposition": "good"},
+            "vlans[].interface_members": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    # First key claims the canonical structural CODEC_BUG.
+    assert fv["vlans[].id"]["variance"] == recon.VAR_CODEC_BUG
+    assert "all 5 vlans dropped" in (
+        fv["vlans[].id"]["drift_detail"]["drift_summary"]
+    )
+    # Subsequent keys collapse.
+    assert fv["vlans[].name"]["variance"] == recon.VAR_STRUCTURAL_ONLY
+    assert fv["vlans[].interface_members"]["variance"] == (
+        recon.VAR_STRUCTURAL_ONLY
+    )
+    assert result["summary"][recon.VAR_CODEC_BUG] == 1
+    assert result["summary"][recon.VAR_STRUCTURAL_ONLY] == 2
+
+
+def test_structural_only_class_listed_in_all_variances() -> None:
+    """``ALL_VARIANCES`` is the canonical roster — STRUCTURAL_ONLY must
+    be in it so aggregate / matrix renderers tally it."""
+    assert recon.VAR_STRUCTURAL_ONLY in recon.ALL_VARIANCES
+
+
+def test_structural_only_does_not_count_as_high_severity() -> None:
+    """Severity totals must keep CODEC_BUG and STRUCTURAL_ONLY apart —
+    the whole point of the new class is to stop a structural signal
+    from inflating the high-severity bucket."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": "juniper_junos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 10,
+                "target_count": 3,
+                "drift": "count drift: 10 → 3 (interfaces)",
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].name": {"disposition": "good"},
+            "interfaces[].description": {"disposition": "good"},
+            "interfaces[].mtu": {"disposition": "good"},
+            "interfaces[].enabled": {"disposition": "good"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    # Pre-fix this cell would have contributed 4 to severity_high.
+    # Post-fix: 1 high, 3 low.
+    assert result["summary"]["severity_high"] == 1
+    assert result["summary"]["severity_low"] == 3

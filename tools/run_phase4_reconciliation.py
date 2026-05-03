@@ -31,6 +31,22 @@ classifies the (actual, expected) tuple into one of:
                               drift anyway — usually because the field is
                               absent on both sides and a sentinel mismatch
                               triggered)
+* ``STRUCTURAL_ONLY``        — drifted-but-only-because-the-parent-list-row-
+                              count-changed.  When ``interfaces[]`` has 17
+                              source rows and 2 target rows, every sub-field
+                              of the missing 15 trivially "drifts"; we
+                              don't want to multiply that one structural
+                              signal across description / mtu / enabled /
+                              ipv4_addresses / ... — so the FIRST sub-field
+                              of each affected list parent in each cell
+                              keeps its CODEC_BUG / EXPECTED_LOSSY / etc.
+                              class and carries the ``drift_summary``
+                              string; subsequent sub-fields of the same
+                              list in the same cell are reclassified
+                              STRUCTURAL_ONLY (low severity).  Real
+                              per-field drift on surviving rows (carried
+                              via ``per_record`` slices in drift_detail)
+                              is NEVER collapsed.
 
 The variance class drives downstream Phase 4b investigation: agents
 only need to look at the CODEC_BUG buckets per source vendor; the
@@ -100,6 +116,18 @@ VAR_EXPECTED_LOSSY = "EXPECTED_LOSSY"
 VAR_EXPECTED_UNSUPPORTED = "EXPECTED_UNSUPPORTED"
 VAR_METHODOLOGY_UNDER = "METHODOLOGY_ISSUE_under"
 VAR_METHODOLOGY_OVER = "METHODOLOGY_ISSUE_over"
+# Sub-field of a list (interfaces[], vlans[], routing_instances[], ...)
+# that drifted ONLY because the parent list's row count differs (or the
+# whole list was dropped / appeared).  We can't pin the drift to this
+# specific sub-field — every sub-field of the missing rows would
+# trivially "drift" — so we collapse the per-cell signal: the FIRST
+# sub-field of each affected parent in each cell keeps the original
+# variance class (typically CODEC_BUG) carrying the structural drift
+# detail, and every subsequent sub-field of the SAME parent in the SAME
+# cell gets STRUCTURAL_ONLY (low severity, distinct from CODEC_BUG so
+# severity totals stay honest).  This stops a single "row-count drift"
+# signal from multiplying across N per-field keys on the same list.
+VAR_STRUCTURAL_ONLY = "STRUCTURAL_ONLY"
 
 ALL_VARIANCES = (
     VAR_ALIGNED,
@@ -108,6 +136,7 @@ ALL_VARIANCES = (
     VAR_EXPECTED_UNSUPPORTED,
     VAR_METHODOLOGY_UNDER,
     VAR_METHODOLOGY_OVER,
+    VAR_STRUCTURAL_ONLY,
 )
 
 
@@ -456,6 +485,16 @@ def reconcile_cell(
     counts: Counter[str] = Counter()
     severity_counts: Counter[str] = Counter()
     missing_in_phase1 = 0
+    # Track which list-parents have already had a sub-field claim the
+    # structural-drift signal in this cell.  Subsequent sub-fields of
+    # the SAME parent that drifted PURELY because of the wholesale
+    # list-length signal get reclassified as STRUCTURAL_ONLY rather
+    # than amplifying the count-drift across N per-field keys.  Each
+    # entry maps parent-list name -> the YAML key that "owns" the
+    # structural signal (kept for cross-references in the per-record
+    # JSON, useful when an investigator wants to find the canonical
+    # CODEC_BUG entry that this STRUCTURAL_ONLY entry is shadowing).
+    structural_parent_claimed: dict[str, str] = {}
 
     for yaml_field_key, entry in per_field.items():
         if not isinstance(entry, dict):
@@ -482,6 +521,35 @@ def reconcile_cell(
             }
             continue
         variance, severity = derive_variance(actual, expected)
+
+        # Structural-only collapse — only applies to drifted list
+        # sub-fields where the underlying drift is purely a wholesale
+        # list-length / list-dropped string (no per-record dict).  Real
+        # per-field drift carries a ``per_record`` slice in
+        # drift_detail and is left untouched; structural-only
+        # drift_detail carries a ``drift_summary`` string and is
+        # collapsed to a single entry per (cell, parent-list).
+        if (
+            actual == "drifted"
+            and "[]." in yaml_field_key
+            and isinstance(drift_detail, dict)
+            and isinstance(drift_detail.get("drift_summary"), str)
+            and "per_record" not in drift_detail
+        ):
+            parent_name = yaml_field_key.split("[].", 1)[0]
+            if parent_name in structural_parent_claimed:
+                # Another sub-field already carried the structural
+                # signal for this parent — collapse this one to
+                # STRUCTURAL_ONLY so it doesn't multiply the count.
+                variance = VAR_STRUCTURAL_ONLY
+                severity = "low"
+                drift_detail = dict(drift_detail)
+                drift_detail["structural_owner"] = (
+                    structural_parent_claimed[parent_name]
+                )
+            else:
+                structural_parent_claimed[parent_name] = yaml_field_key
+
         record: dict[str, Any] = {
             "actual": actual,
             "expected": expected,
@@ -713,6 +781,7 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         VAR_METHODOLOGY_UNDER: "low/medium",
         VAR_METHODOLOGY_OVER: "low",
         VAR_CODEC_BUG: "**high**",
+        VAR_STRUCTURAL_ONLY: "low",
     }
     for v in ALL_VARIANCES:
         lines.append(f"| {v} | {agg.get(v, 0)} | {severity_for[v]} |")
