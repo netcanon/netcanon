@@ -446,8 +446,8 @@ per_field_expectation:
   # ── Tier 1 — static routes ──
 
   static_routes:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Aruba's ``ip route X/N <gw>`` (CIDR) and dotted-mask
       ``ip route DEST MASK <gw>`` both normalise to canonical
       CIDR form via ``_dest_mask_to_cidr``; Junos render emits
@@ -456,7 +456,18 @@ per_field_expectation:
       normalises to a ``0.0.0.0/0`` canonical record.  Aruba never
       carries per-VRF static routes (no VRF concept), so the
       Junos-only ``set routing-instances X routing-options static``
-      form is structurally absent on this direction.
+      form is structurally absent on this direction.  Lossy bit:
+      when an Aruba source carries BOTH ``ip default-gateway <gw>``
+      AND ``ip route 0.0.0.0 0.0.0.0 <gw>`` (same next-hop), both
+      normalise to byte-identical canonical
+      ``CanonicalStaticRoute(destination='0.0.0.0/0', next_hop=<gw>)``
+      records and the Junos round-trip dedups them
+      (``set routing-options static route 0.0.0.0/0 next-hop <gw>``
+      can only land once).  The dedup is canonical-correct
+      behaviour — the two source directives express the same
+      forwarding intent — but the comparator surfaces a count drift
+      (source N -> target N-1) because the source-side parser
+      preserves both records.
     references: [aruba-static-routes, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──

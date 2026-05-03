@@ -183,18 +183,26 @@ per_field_expectation:
     references: [port_naming, vlans, ip_addressing]
 
   vlans:
-    disposition: good
-    note: >
-      VLAN id, name, description, tagged_ports, untagged_ports, and
-      ipv4_addresses (SVI absorption) round-trip cleanly.  Aruba's
-      VLAN-centric ``untagged 1-24`` / ``tagged 25-26`` populates
-      the canonical port-membership lists directly; Cisco render
-      emits per-port ``switchport access vlan N`` /
+    disposition: lossy
+    reason: >
+      VLAN id, name, description, tagged_ports, and ipv4_addresses
+      (SVI absorption) round-trip cleanly for non-default VLANs.
+      Aruba's VLAN-centric ``untagged 1-24`` / ``tagged 25-26``
+      populates the canonical port-membership lists directly; Cisco
+      render emits per-port ``switchport access vlan N`` /
       ``switchport trunk allowed vlan ...`` after
       ``project_vlan_to_switchport`` re-projects.  SVI absorption:
       Aruba's ``vlan 100 / ip address X/N`` lands on
       CanonicalVlan.ipv4_addresses; Cisco render emits a separate
-      ``interface Vlan100`` stanza.
+      ``interface Vlan100`` stanza.  VLAN 1 default-membership is
+      structurally lossy on this cross-pair: when the source has
+      non-VLAN-1 ports whose membership is set via Aruba's explicit
+      ``vlan N / untagged <ports>``, the Cisco render rewrites them
+      as ``switchport access vlan 1`` (the implicit Cisco default)
+      and the round-trip re-parses those ports onto VLAN 1, not the
+      original source VLAN.  Operators migrating Aruba captures with
+      mixed VLAN-1 + non-VLAN-1 untagged membership must verify
+      access-VLAN assignments on the Cisco target post-migration.
     references: [vlans]
 
   static_routes:
