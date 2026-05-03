@@ -255,7 +255,7 @@ sweep.
 
 ---
 
-## RESOLVED — OPNsense supergate post-fix re-paste (4 of 5 fixed, 1 carried)
+## RESOLVED — OPNsense supergate post-fix re-paste (all 5 fixed; 19 deferred to canonical-layer wave)
 
 After the wave-4 sweep landed, the user re-pasted the OPNsense
 supergate config and inspected each target's output again.  All 13
@@ -268,7 +268,7 @@ investigation work and is carried forward as Phase 5.
 
 | # | Issue | Fix commit | Approach |
 |---|---|---|---|
-| 15 | Aruba LAN IP silently dropped — `format_port_identity` returns None for foreign port names | CARRIED → Phase 5 | Investigation needed; same shape as c9300 wave-2 #3 but inverted (zero emit, not duplicate emit). |
+| 15 | Aruba LAN IP silently dropped — `format_port_identity` returns None for foreign port names | `a316372` | Removed the unconditional `port == 0 → None` guard in `aruba_aoss/port_names.py`'s kind=physical branch.  Was authored to protect Cisco Gi0/0 OOBM, but every OPNsense BSD device name has port=0 for its first instance (`ixl0`/`igb0`/`em0`/`ix0`) — combined with the orchestrator's `strip_unmappable=True` default, the entire LAN canonical interface (and its IP) was being stripped before render.  Wave-2 Mgmt-vrf cascade (`56a4cde`) already routes real Cisco OOBM (kind=mgmt) through a different branch returning `oobm`, so the port=0 guard was redundant for that case.  Cisco Gi0/0 without Mgmt-vrf now collapses to Aruba `"1"` — render-side collision detector (`7d93085`) catches duplicate emission at output time. |
 | 16 | Junos + Arista emit orphan `username X class user` / `username X role user` declarations on hash-gate (creates passwordless accounts) | `0c1a31f` (junos), `bcac363` (arista) | Mirror cisco_iosxe_cli's continue-on-unmigratable pattern.  Junos: `is_migratable("juniper_junos")` gate → emit review comment + `continue`.  Arista: equivalent local check via `_ARISTA_SECRET_TYPE.get(algorithm) is None` (semantically equivalent; arista_eos isn't a key in `_TARGET_ACCEPTS` and the helper module was off-limits in scope). |
 | 17 | Arista `vlan N / name <SPACED NAME>` unquoted — Arista's tokenizer rejects spaces in names | `bcac363` | Underscore replacement (`re.sub(r"\s+", "_", name.strip())`) per Arista AVD Style Guide convention (`corporate_100`).  NOT quoting — Arista doesn't accept quoted names natively for `vlan name`. |
 | 18 | MikroTik silently omits password on hash-gate (no review-comment marker) | `943410a` | Interleaved `# password manager user-name "X" -- review: ... cannot be re-used on RouterOS` comment immediately above each `add group=… name=X` line.  Matches FortiGate/Cisco per-user emit alignment. |
