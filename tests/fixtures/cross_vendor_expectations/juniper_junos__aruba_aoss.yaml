@@ -351,11 +351,20 @@ per_field_expectation:
       access mode) -> Aruba's per-VLAN ``untagged <port>`` list.
 
   interfaces[].trunk_allowed_vlans:
-    disposition: good
-    note: >
-      Junos's ``family ethernet-switching vlan members [ <name> ...
-      ]`` (in trunk mode) -> Aruba's per-VLAN ``tagged <port>``
-      list.
+    disposition: lossy
+    reason: >
+      Explicit ``vlan members [ v100 v200 ]`` lists round-trip
+      cleanly via Aruba's per-VLAN ``tagged <port>`` projection.
+      The Junos shorthand ``set interfaces ae0 unit 0 family
+      ethernet-switching vlan members all`` is parsed as a
+      canonical sentinel expansion to ``range(1, 4095)``; Aruba's
+      render path drops the 4094-entry trunk-allowed list (no
+      first-class all-VLANs trunk shorthand on AOS-S), so
+      cross-vendor round-trip on Junos sources carrying ``vlan
+      members all`` loses the trunk-allowed projection entirely.
+      Either keep ``all`` as a canonical sentinel or accept the
+      drop on Aruba targets.
+    references: [junos-vlans-statement, aruba-vlans]
 
   interfaces[].trunk_native_vlan:
     disposition: lossy

@@ -376,8 +376,8 @@ per_field_expectation:
   # ── Tier 2 — LAGs ──
 
   lags:
-    disposition: good
-    note: "Junos 'ae<N>' maps to Arista 'Port-Channel<N+1>' (zero-based -> one-based; default rename mesh). LACP mode (active/passive/static) preserved: Junos 'aggregated-ether-options lacp active' on the LAG -> Arista 'channel-group N mode active' on each member. Min-links preserved. Junos's chassis-wide 'aggregated-devices ethernet device-count' has no Arista parallel and drops on render (Arista provisions LAGs on demand)."
+    disposition: lossy
+    reason: "Vendor-correct LAG rename — Junos 'ae<N>' maps to Arista 'Port-Channel<N+1>' (zero-based -> one-based; default rename mesh) per the documented port-name mesh.  The comparator flags the lag.name string mismatch as drift even though members + LACP mode + min-links round-trip cleanly.  LACP mode (active/passive/static) preserved: Junos 'aggregated-ether-options lacp active' on the LAG -> Arista 'channel-group N mode active' on each member.  Min-links preserved.  Junos's chassis-wide 'aggregated-devices ethernet device-count' has no Arista parallel and drops on render (Arista provisions LAGs on demand)."
     references: [junos-lag-overview, junos-ae-example, arista-port-channels]
 
   # ── Tier 2 — local users ──
@@ -437,7 +437,9 @@ per_field_expectation:
     references: [junos-instance-type, arista-evpn-cg]
 
   routing_instances[].name:
-    disposition: good
+    disposition: lossy
+    reason: "Tracks the parent ``routing_instances`` disposition.  Junos's instance-type=virtual-router (CE-LAN style L3 isolation without RD/RT) is unsupported on Arista and drops with a validation banner — when a Junos source carries a virtual-router instance (e.g. kitchen_sink's RTR_C), its name is dropped along with the instance, and the routing_instances list count drifts.  vrf and mac-vrf instance names round-trip cleanly; only virtual-router / l2vpn names drop."
+    references: [junos-instance-type, arista-evpn-cg]
 
   routing_instances[].instance_type:
     disposition: lossy

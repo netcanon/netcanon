@@ -394,10 +394,17 @@ per_field_expectation:
     references: [junos-vlans-statement]
 
   interfaces[].lag_member_of:
-    disposition: good
-    note: >
-      Junos's ``set interfaces X gigether-options 802.3ad ae<N>``
-      maps to Cisco's ``channel-group N mode active``.
+    disposition: lossy
+    reason: >
+      Vendor-correct LAG rename — Junos's ``set interfaces X
+      gigether-options 802.3ad ae<N>`` populates
+      ``CanonicalInterface.lag_member_of='ae<N>'`` and Cisco's
+      ``channel-group N mode active`` round-trips to
+      ``lag_member_of='Port-channel<N>'``.  The comparator flags the
+      ``ae<N>`` -> ``Port-channel<N>`` string mismatch as drift even
+      though the binding is preserved per the documented port-name
+      mesh.  Member-to-LAG association round-trips cleanly; only the
+      string form changes between vendors.
     references: [junos-lag-overview, cisco-etherchannel]
 
   interfaces[].dhcp_client:
@@ -422,10 +429,20 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos's ``set vlans <name> vlan-id N`` maps to Cisco's
-      ``vlan N``.
+      ``vlan N`` for explicit per-VLAN bindings (round-trips
+      cleanly).  The Junos shorthand ``set interfaces ae0 unit 0
+      family ethernet-switching vlan members all`` is parsed as a
+      canonical sentinel expansion to ``range(1, 4095)`` — which
+      Cisco then renders as 4094 entries in the vlan-database, and
+      reparse balloons ``vlans[].id`` to a 4094-element list.  Any
+      Junos source carrying ``vlan members all`` produces large
+      structural drift in the cell count even though the operator
+      intent (allow-all-VLANs) is preserved.  Either keep ``all`` as
+      a canonical sentinel or accept the count drift.
+    references: [junos-vlans-statement, cisco-vlan-cg]
 
   vlans[].name:
     disposition: good
@@ -536,12 +553,15 @@ per_field_expectation:
   # ── Tier 2 — LAGs ──
 
   lags:
-    disposition: good
-    note: >
-      Junos's ``ae<N>`` maps to Cisco's ``Port-channel<N>``.  LACP
-      mode (active / passive / static) preserved; Junos has no
-      PAgP analogue.  Junos's chassis-wide ``device-count``
-      allocation drops on Cisco render (Cisco auto-allocates).
+    disposition: lossy
+    reason: >
+      Vendor-correct LAG rename — Junos's ``ae<N>`` maps to Cisco's
+      ``Port-channel<N>`` per the documented port-name mesh.  The
+      comparator flags the lag.name string mismatch as drift even
+      though members + LACP mode round-trip cleanly.  LACP mode
+      (active / passive / static) preserved; Junos has no PAgP
+      analogue.  Junos's chassis-wide ``device-count`` allocation
+      drops on Cisco render (Cisco auto-allocates).
     references: [junos-lag-overview, junos-ae-example, cisco-etherchannel]
 
   # ── Tier 2 — local users ──
