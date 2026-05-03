@@ -40,6 +40,7 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._naming import sanitise_hostname
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -88,7 +89,12 @@ def render_intent(tree: Any) -> str:
     out.append("service timestamps log datetime msec")
     out.append("!")
     if tree.hostname:
-        out.append(f"hostname {tree.hostname}")
+        # IOS-XE's hostname parser greedy-matches ``\S+`` and silently
+        # drops the trailing tokens — ``hostname Quinta Router`` round-
+        # trips as ``Quinta``.  Sanitise whitespace runs to ``_`` so the
+        # wire form is consumable.  Single-token names unchanged;
+        # cross-vendor concern flagged by mikrotik_routeros Phase 4b.
+        out.append(f"hostname {sanitise_hostname(tree.hostname)}")
         out.append("!")
     if tree.domain:
         out.append(f"ip domain name {tree.domain}")
