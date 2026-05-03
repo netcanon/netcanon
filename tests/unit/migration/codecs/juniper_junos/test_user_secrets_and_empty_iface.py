@@ -62,7 +62,7 @@ def test_unmigratable_cisco_type_9_emits_comment_review() -> None:
     # The review-comment line is present, naming the user.
     assert (
         '# password manager user-name "netadmin" -- review: '
-        "9 hash from source vendor cannot be re-used on this target"
+        "9 hash from source vendor cannot be re-used on Junos"
     ) in out
     # The dangerous payload never appears anywhere in the output.
     assert "$9$" not in out

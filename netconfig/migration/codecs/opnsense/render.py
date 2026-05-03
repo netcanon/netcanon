@@ -150,6 +150,7 @@ def render_canonical(intent: CanonicalIntent) -> str:
                     algorithm, _payload = classify_hash(user.hashed_password)
                     review = format_review_comment(
                         user.name, algorithm, comment_syntax="xml",
+                        target_label="OPNsense",
                     )
                     body = review.removeprefix("<!-- ").removesuffix(" -->")
                     user_el.append(ET.Comment(body))

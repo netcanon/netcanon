@@ -224,3 +224,34 @@ def test_format_review_comment_unknown_syntax_falls_back_to_hash() -> None:
     """Unknown comment_syntax values silently fall back to hash form."""
     line = format_review_comment("admin", "9", "klingon")
     assert line.startswith("# password manager")
+
+
+def test_format_review_comment_target_label_default_is_this_target() -> None:
+    """When target_label is omitted the body keeps the generic
+    "this target" wording — preserves byte-identity for callers
+    that haven't been updated to pass a vendor-specific label."""
+    line = format_review_comment("netadmin", "9")
+    assert "cannot be re-used on this target" in line
+
+
+def test_format_review_comment_target_label_overrides_default() -> None:
+    """A vendor-specific target_label replaces the generic
+    "this target" wording without changing surrounding structure."""
+    line = format_review_comment(
+        "netadmin", "bcrypt", target_label="Cisco IOS-XE",
+    )
+    assert "cannot be re-used on Cisco IOS-XE" in line
+    assert "this target" not in line
+
+
+def test_format_review_comment_target_label_works_with_xml_syntax() -> None:
+    """target_label composes with comment_syntax — XML body stays
+    XML-comment-safe (no ``--`` substrings) regardless of label."""
+    line = format_review_comment(
+        "admin", "9", comment_syntax="xml", target_label="OPNsense",
+    )
+    assert line.startswith("<!-- ")
+    assert line.endswith(" -->")
+    assert "cannot be re-used on OPNsense" in line
+    body = line.removeprefix("<!-- ").removesuffix(" -->")
+    assert "--" not in body

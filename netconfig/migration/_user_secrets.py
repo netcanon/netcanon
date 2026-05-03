@@ -145,6 +145,7 @@ def format_review_comment(
     user_name: str,
     algorithm: str,
     comment_syntax: str = "hash",
+    target_label: str = "this target",
 ) -> str:
     """Build a one-line review comment naming an unmigratable hash.
 
@@ -152,7 +153,7 @@ def format_review_comment(
     diffs read consistently::
 
         password manager user-name "<name>" -- review: <alg> hash from
-        source vendor cannot be re-used on this target; reset this
+        source vendor cannot be re-used on <target_label>; reset this
         user password manually
 
     ``comment_syntax`` selects the comment delimiter:
@@ -167,9 +168,12 @@ def format_review_comment(
     ``exclamation`` Cisco IOS / IOS-XE, Arista EOS
     ============  ==========================================
 
-    The wording uses "this target" rather than naming a specific
-    vendor — codecs that prefer vendor-specific phrasing (Aruba does)
-    can keep building their comment line themselves.
+    ``target_label`` lets each codec inject a vendor-specific label
+    ("Cisco IOS-XE", "Junos", "Arista EOS", "FortiOS", "RouterOS")
+    so operator-readable comments name the actual target rather
+    than the generic "this target" default.  Aruba builds its own
+    comment line locally with "AOS-S" wording — this parameter
+    matches that pattern for codecs that consume the helper.
 
     XML safety: the XML 1.0 spec forbids the literal ``--`` substring
     inside a comment body (``<!-- ... -->``); the parser treats it as
@@ -188,6 +192,6 @@ def format_review_comment(
     body = (
         f'password manager user-name "{user_name}" {separator} review: '
         f"{algorithm} hash from source vendor cannot be re-used on "
-        f"this target; reset this user password manually"
+        f"{target_label}; reset this user password manually"
     )
     return f"{prefix}{body}{suffix}"

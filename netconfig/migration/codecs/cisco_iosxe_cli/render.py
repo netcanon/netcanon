@@ -117,6 +117,7 @@ def render_intent(tree: Any) -> str:
             out.append(
                 format_review_comment(
                     u.name, algorithm, comment_syntax="exclamation",
+                    target_label="Cisco IOS-XE",
                 )
             )
             continue

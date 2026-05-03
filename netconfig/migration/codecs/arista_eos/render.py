@@ -188,6 +188,7 @@ def render_intent(tree: Any) -> str:
                     out.append(" ".join(parts))
                     review = format_review_comment(
                         user.name, algorithm, comment_syntax="hash",
+                        target_label="Arista EOS",
                     )
                     if review.startswith("# "):
                         review = "! " + review[2:]

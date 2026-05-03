@@ -611,7 +611,7 @@ def render_intent(tree: Any) -> str:
                         user.hashed_password,
                     )
                     out.append(
-                        f"        {format_review_comment(user.name, algorithm, comment_syntax='hash')}"
+                        f"        {format_review_comment(user.name, algorithm, comment_syntax='hash', target_label='FortiOS')}"
                     )
             # Map canonical privilege back to accprofile.
             accprofile = (

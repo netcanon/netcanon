@@ -176,6 +176,7 @@ def render_intent(tree: Any) -> str:
                 out.append(
                     format_review_comment(
                         user.name, algorithm, comment_syntax="hash",
+                        target_label="Junos",
                     )
                 )
 
