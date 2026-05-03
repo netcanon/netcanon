@@ -229,18 +229,25 @@ per_field_expectation:
     references: [vlans]
 
   static_routes:
-    disposition: good
-    note: >
-      Default-VRF routes round-trip cleanly: FortiOS ``set dst
-      DEST MASK / set gateway GW`` -> RouterOS ``/ip route add
-      dst-address=DEST/N gateway=GW`` via codec mask <-> CIDR
-      helpers.  Default route ``set dst 0.0.0.0 0.0.0.0`` round-
-      trips.  FortiOS ``set device "<iface>"`` populates the
-      canonical interface field; RouterOS render emits
-      ``gateway=<iface>`` form when needed.  Description and metric
-      semantics differ (FortiOS distance default 10 vs RouterOS
-      default 1) so the integer preserves but its priority meaning
-      shifts on the target.
+    disposition: lossy
+    reason: >
+      Default-VRF routes round-trip cleanly at the dst/gateway level:
+      FortiOS ``set dst DEST MASK / set gateway GW`` -> RouterOS
+      ``/ip route add dst-address=DEST/N gateway=GW`` via codec mask
+      <-> CIDR helpers, and the default route ``set dst 0.0.0.0
+      0.0.0.0`` round-trips.  However, the canonical ``interface``
+      field drops on render when ``gateway`` is also populated:
+      ``mikrotik_routeros/render.py`` (``/ip route`` branch) only
+      emits the ``interface=`` parameter on the gateway-empty path,
+      so a FortiOS route with both ``set device "<iface>"`` and
+      ``set gateway GW`` re-parses with ``interface=""``.  RouterOS
+      lacks a clean two-field representation; the closest native
+      form is ``gateway=GW%IFACE`` (the ``%iface`` modifier
+      documented under the MikroTik help.mikrotik.com ``/ip+routing``
+      page) which the codec does not currently emit.  Description
+      and metric semantics also differ (FortiOS distance default 10
+      vs RouterOS default 1) so the integer preserves but its
+      priority meaning shifts on the target.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──
