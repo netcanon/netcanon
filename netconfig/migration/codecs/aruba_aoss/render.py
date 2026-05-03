@@ -26,6 +26,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._user_secrets import classify_hash, is_migratable
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
@@ -51,29 +52,22 @@ _MODE_TO_AOS_TRUNK_TYPE = {
 #: the cross-vendor migration hazard from Cisco / Arista — operator
 #: must reset the password rather than re-use the hash).  Cisco
 #: type-5 (md5crypt) and type-9 (scrypt) are also unmigratable.
+#:
+#: This set expresses Aruba-NATIVE emit forms.  The cross-vendor
+#: migratability gate (which algorithms AOS-S literally cannot
+#: consume) lives in :mod:`netconfig.migration._user_secrets` and
+#: is shared with fortigate_cli, juniper_junos, and opnsense codecs.
 _AOS_KNOWN_ALGORITHMS = {"sha1", "sha256", "plaintext"}
-
-#: Algorithms whose hashes AOS-S literally cannot consume — emit a
-#: comment-form `; password manager ... -- review:` line and skip
-#: the ``password ...`` command, so the rendered config commits
-#: clean and the operator gets an explicit reminder rather than a
-#: line AOS-S would reject (or worse: accept-as-plaintext garbage).
-_AOS_UNMIGRATABLE_ALGORITHMS = {
-    "sha512",      # Arista / Junos $6$ hashes
-    "5",           # Cisco IOS type-5 (md5crypt with leading "5 ")
-    "9",           # Cisco IOS-XE type-9 (scrypt with leading "9 ")
-    "8",           # Cisco IOS-XE type-8 (PBKDF2-SHA256)
-    "7",           # Cisco IOS type-7 reversible XOR (sometimes leading "7 ")
-    "bcrypt",      # OPNsense / pfSense
-    "fortios",     # FortiGate ENC-encrypted
-}
 
 
 def _split_aos_hash(hashed: str) -> tuple[str, str]:
     """Split a canonical ``hashed_password`` into (aos-algorithm, hash).
 
-    Canonical entries carry hashes from multiple vendors in a few
-    shapes.  Map each to the closest AOS-S algorithm keyword:
+    Thin wrapper over the shared :func:`classify_hash` /
+    :func:`is_migratable` policy in
+    :mod:`netconfig.migration._user_secrets`.  Maps the shared
+    helper's output to the historical Aruba return shape so the
+    upstream caller and the existing unit tests stay unchanged:
 
         ``sha1:<hex>``        -> ("sha1", "<hex>")        [native]
         ``sha256:<hex>``      -> ("sha256", "<hex>")      [native]
@@ -88,31 +82,24 @@ def _split_aos_hash(hashed: str) -> tuple[str, str]:
     but operationally-broken ``plaintext "..."`` line.  Operators
     see an explicit "reset this password" reminder.
     """
-    # Vendor-tagged form: ``arista:sha512:<...>`` / ``cisco:type9:<...>``
-    # Tagged forms have TWO colons; the first segment is the source
-    # vendor and the second is the algorithm.
-    if ":" in hashed:
-        first, _, rest = hashed.partition(":")
-        if rest and ":" in rest:
-            alg, _, _val = rest.partition(":")
-            alg_low = alg.lower()
-            if alg_low in _AOS_UNMIGRATABLE_ALGORITHMS:
-                return "__unmigratable__", alg_low
-            if alg_low in _AOS_KNOWN_ALGORITHMS:
-                return alg, _val
-        # Single-colon form: ``alg:<value>``
-        alg_low = first.lower()
-        if alg_low in _AOS_KNOWN_ALGORITHMS:
-            return first, rest
-        if alg_low in _AOS_UNMIGRATABLE_ALGORITHMS:
-            return "__unmigratable__", alg_low
-        # Unknown algorithm — preserve verbatim under plaintext.
-        return "plaintext", hashed
-    # Bare leading-digit Cisco form: ``5 $1$...`` / ``9 $9$...``.
-    head, _, _tail = hashed.partition(" ")
-    if head in _AOS_UNMIGRATABLE_ALGORITHMS:
-        return "__unmigratable__", head
-    # No algorithm tag — last-resort plaintext wrap.
+    alg, payload = classify_hash(hashed)
+    # Aruba-native algorithm — emit verbatim using the AOS-S
+    # ``password manager <alg> <hash>`` form.  ``_AOS_KNOWN_ALGORITHMS``
+    # is the Aruba-local emit-form vocabulary; the shared helper's
+    # accepted-set covers exactly the same three for ``aruba_aoss``,
+    # but keeping this check local documents the AOS-S CLI grammar
+    # that consumes the ``alg`` token verbatim.
+    if alg in _AOS_KNOWN_ALGORITHMS:
+        return alg, payload
+    # Cross-vendor unmigratable hash — surface via comment-form
+    # review line.  The shared policy decides; Aruba just adapts.
+    if not is_migratable(hashed, "aruba_aoss"):
+        return "__unmigratable__", alg
+    # Unreachable in practice: every algorithm outside
+    # ``_AOS_KNOWN_ALGORITHMS`` should fail the shared helper's
+    # migratability gate.  Defensive plaintext wrap of the original
+    # preserves Aruba's historical "verbatim under plaintext"
+    # fallback for any unforeseen algorithm token.
     return "plaintext", hashed
 
 
@@ -294,12 +281,12 @@ def render_intent(tree: Any) -> str:
     # Role derives from privilege: 15 -> manager, anything else ->
     # operator (AOS-S has no "superuser+limited" gradient like
     # Cisco's 1-15 scale; both roles are binary).  Hashes from
-    # other codecs (Cisco type-5/9, FortiGate bcrypt, OPNsense
-    # bcrypt) get emitted verbatim under a best-effort
-    # ``plaintext`` algorithm marker — real AOS-S will reject
-    # non-sha1 hashes at config-push time, but render is lossless
-    # from the canonical's perspective and the lossiness surfaces
-    # on deploy rather than silently here.
+    # other codecs that AOS-S cannot consume (Cisco type-5/7/8/9,
+    # Arista/Junos sha512, FortiGate ENC, OPNsense bcrypt) surface
+    # as comment-form ``review:`` lines per the shared
+    # :mod:`netconfig.migration._user_secrets` policy — operator
+    # gets an explicit "reset this password" prompt rather than a
+    # garbled line AOS-S would reject (or, worse, accept-as-plaintext).
     for user in tree.local_users:
         aos_role = "manager" if user.privilege_level == 15 else "operator"
         hash_alg, hash_val = _split_aos_hash(user.hashed_password)
