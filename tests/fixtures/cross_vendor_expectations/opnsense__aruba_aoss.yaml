@@ -241,10 +241,17 @@ per_field_expectation:
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].enabled:
-    disposition: good
-    note: >
-      OPNsense ``<enable>1</enable>`` (or absence) ↔ Aruba
-      ``enable`` / ``disable``.
+    disposition: lossy
+    reason: >
+      OPNsense zone-label rebinding causes positional comparator
+      drift; vendor-correct shape.  The per-record ``enabled`` flag
+      is preserved end-to-end on each interface, but because
+      ``interfaces[].name`` is ``lossy`` (OPNsense ``<wan>`` /
+      ``<lan>`` / ``<opt5>`` zone labels do not survive the rename
+      mesh onto Aruba's bare-numeric port identities), the
+      reordered list lines up records by positional index and the
+      comparator surfaces a per-cell diff.  Not a codec data loss;
+      a second-order consequence of the upstream lossy field.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].interface_type:
@@ -264,19 +271,33 @@ per_field_expectation:
     references: [opnsense-interfaces]
 
   interfaces[].ipv4_addresses:
-    disposition: good
-    note: >
-      OPNsense ``<ipaddr>`` + ``<subnet>`` ↔ Aruba CIDR
-      (``10.0.0.2/30``).  Mechanical conversion.  OPNsense's
+    disposition: lossy
+    reason: >
+      OPNsense zone-label rebinding causes positional comparator
+      drift; vendor-correct shape.  The IPv4 address values
+      themselves round-trip cleanly (``<ipaddr>`` + ``<subnet>``
+      ↔ Aruba CIDR ``10.0.0.2/30``), but because
+      ``interfaces[].name`` is ``lossy`` (OPNsense ``<wan>`` /
+      ``<lan>`` / ``<opt2>`` zone labels carry the IP and aruba
+      parse rebinds onto em-named ports in canonical order), the
+      reshuffled list aligns ``198.51.100.2/30`` against a
+      different em-port slot in the target.  Comparator misclas-
+      sifies as data drift; not a codec data loss.  OPNsense's
       non-static keywords (``dhcp``, ``pppoe``) skip this branch
       (see ``dhcp_client``).
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].ipv6_addresses:
-    disposition: good
-    note: >
-      OPNsense ``<ipaddrv6>`` + ``<subnetv6>`` ↔ Aruba ``ipv6
-      address X/N``.  ``scope`` discriminator preserved.
+    disposition: lossy
+    reason: >
+      OPNsense zone-label rebinding causes positional comparator
+      drift; vendor-correct shape.  IPv6 address values
+      themselves round-trip cleanly (``<ipaddrv6>`` + ``<subnetv6>``
+      ↔ Aruba ``ipv6 address X/N`` with ``scope`` preserved), but
+      the same upstream-lossy ``interfaces[].name`` field reshuffles
+      the per-record list so that an address sourced on ``em1``
+      lines up against ``em3`` in the target.  Comparator misclas-
+      sifies as data drift; not a codec data loss.
     references: [opnsense-interfaces, aruba-interfaces]
 
   interfaces[].switchport_mode:

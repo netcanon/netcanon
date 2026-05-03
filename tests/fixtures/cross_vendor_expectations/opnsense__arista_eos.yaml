@@ -507,15 +507,20 @@ per_field_expectation:
     references: [opnsense-users, arista-user-security]
 
   radius_servers:
-    disposition: good
-    note: >
-      OPNsense ``<authserver>`` with ``<host>`` /
-      ``<radius_secret>`` / ``<radius_auth_port>`` /
-      ``<radius_acct_port>`` ↔ Arista ``radius-server host <ip>
-      key <secret>`` (with default ports 1812 / 1813).  Round-
-      trips host / port pair / shared key cleanly.  OPNsense's
-      per-server protocol / timeout fields drop on render (no
-      canonical model).
+    disposition: unsupported
+    reason: >
+      The arista_eos codec has no RADIUS surface today —
+      ``netconfig/migration/codecs/arista_eos/parse.py`` and
+      ``render.py`` contain zero references to ``radius`` (case-
+      insensitive).  The canonical ``radius_servers`` list
+      populated by the OPNsense parser (``<authserver>`` blocks
+      with ``<host>`` / ``<radius_secret>`` / ``<radius_auth_port>``
+      / ``<radius_acct_port>``) is silently dropped on Arista
+      render.  Implementing the full EOS RADIUS render
+      (``radius-server host <ip> auth-port 1812 acct-port 1813
+      key <key>``) plus parse counterpart is a feature lift on
+      the codec backlog; until that lands, the field is unreach-
+      able on this direction.
     references: [opnsense-radius, arista-snmp-cg]
 
   # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
