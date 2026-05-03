@@ -271,6 +271,25 @@ def format_port_identity(identity: PortIdentity) -> str | None:
         if kind == "gre":
             return f"gre{identity.index or 1}"
         return f"gre{identity.index or 1}"
+    if identity.kind == "svi":
+        # Cross-vendor SVI sources (Cisco ``Vlan11``, OPNsense
+        # ``vlan0.10``, Junos ``irb.10``) all classify as kind=svi
+        # with ``index`` set to the VLAN id.  FortiGate's native form
+        # is ``vlan<id>`` (factory-default; matched by
+        # ``_looks_like_vlan_iface`` in :mod:`vlan_heuristics`).
+        # Returning a deterministic FortiGate-shape name here means
+        # the SVI iface survives ``translate_port_names`` with its
+        # ``ipv4_addresses`` intact -- the renderer's emit loop then
+        # picks them up as a regular ``edit "vlan<id>"`` block, fully
+        # populated.  Without this branch the formatter returned
+        # None, the orchestrator dropped the SVI iface, and the
+        # render's ``_build_vlan_children`` synthesiser had to
+        # fabricate an empty vlan stub from the bare ``CanonicalVlan``
+        # (Finding 5 in user_smoke_findings.md: OPNsense source SVI
+        # IPs vanished entirely from FortiGate output).
+        if identity.index is not None and identity.index > 0:
+            return f"vlan{identity.index}"
+        return None
     if identity.kind == "mgmt":
         # FortiGate's standard out-of-band management port on
         # FG-100F+ hardware (FG-100F, FG-200F, FG-400F, FG-600F,

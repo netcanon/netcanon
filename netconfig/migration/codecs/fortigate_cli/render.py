@@ -24,11 +24,20 @@ the canonical→FortiGate LACP-mode map with :mod:`.parse` — those
 live in the parse module and are imported here to avoid duplication.
 VLAN-naming helpers (``_looks_like_vlan_iface``, ``_vlan_id_for``,
 ``_parent_for_vlan_iface``) come from :mod:`.vlan_heuristics`.
+
+Empty-stub elision (Finding 8 in user_smoke_findings.md) mirrors the
+Junos tiered policy: cross-vendor sources frequently leave empty
+canonical-interface stubs after port-rename (OPNsense ``igc0`` WAN
+with ``<ipaddr>dhcp</ipaddr>`` parses to a content-free
+:class:`CanonicalInterface`).  We elide those when their NAME doesn't
+match a FortiGate-native physical-port shape — preserving same-vendor
+round-trip stability while suppressing foreign-vendor leaks.
 """
 
 from __future__ import annotations
 
 import ipaddress
+import re
 from typing import Any
 
 from ..base import RenderError
@@ -69,12 +78,33 @@ def _build_vlan_children(
 
     * **Parent** -- first :class:`CanonicalLAG` on the tree (operators
       almost always trunk VLANs over a LAG); fall back to the first
-      non-VLAN-shaped interface in *deduped_ifaces* if no LAG
-      exists; ``None`` when neither candidate is available.
-    * **SVI IP** -- the canonical's ``CanonicalVlan.ipv4_addresses``
-      directly if populated; else walk *deduped_ifaces* for a
-      matching ``Vlan<id>`` interface name (Cisco-style) and copy
-      its ``ipv4_addresses[0]``.
+      non-VLAN-shaped, non-empty-stub interface in *deduped_ifaces*
+      if no LAG exists; ``None`` when neither candidate is available.
+      Preferring an interface that carries L3 / L2 content over a
+      bare WAN stub matters for OPNsense sources where the WAN is a
+      DHCP-only ``igc0`` with no canonical content (Finding 6 in
+      ``user_smoke_findings.md``); the bare stub gets elided by the
+      caller before this function runs, so the fallback naturally
+      lands on the LAN port.
+
+    * **SVI IP** resolution order:
+        1. ``CanonicalVlan.ipv4_addresses`` directly (Cisco-source
+           parsers merge ``interface Vlan<N>`` IPs into the VLAN
+           record; FortiGate-source round-trip carries the IP via
+           the vlan child interface).
+        2. Sibling interface whose VLAN id resolves to the same
+           ``vlan.id``.  Covers cross-vendor sources where the SVI
+           IP lives on a separate interface record:
+            * Cisco-style ``Vlan<id>`` (already merged into
+              ``vlan.ipv4_addresses`` by the cisco parser; this
+              fallback covers paths that bypass that merge).
+            * OPNsense-style ``vlan0.<id>`` dotted form (Finding 5
+              in ``user_smoke_findings.md`` — opt1-opt5 zones store
+              the SVI IP on a ``CanonicalInterface`` named after
+              the OPNsense ``<vlanif>`` rather than merging into
+              the VLAN record).
+            * FortiGate-native ``vlan<id>`` from cross-vendor
+              translation through :func:`format_port_identity`.
 
     Returns a list of dicts with keys ``name``, ``vlanid``,
     ``parent``, ``ip``, ``mask`` -- empty list when *tree.vlans* is
@@ -97,6 +127,19 @@ def _build_vlan_children(
 
     iface_by_name = {i.name: i for i in deduped_ifaces}
 
+    # Pre-build a {vlan_id -> first matching iface} index from the
+    # canonical interface list.  Walking interfaces by ``_vlan_id_for``
+    # covers every cross-vendor SVI iface shape (Cisco ``Vlan11``,
+    # OPNsense ``vlan0.10``, FortiGate-native ``vlan10`` after
+    # rename) without per-shape special cases.
+    iface_by_vlan_id: dict[int, CanonicalInterface] = {}
+    for cand in deduped_ifaces:
+        if not cand.ipv4_addresses:
+            continue
+        cand_vid = _vlan_id_for(cand.name, tree.vlans)
+        if cand_vid is not None and cand_vid not in iface_by_vlan_id:
+            iface_by_vlan_id[cand_vid] = cand
+
     children = []
     for vlan in tree.vlans:
         ip = ""
@@ -109,6 +152,9 @@ def _build_vlan_children(
             except Exception:
                 mask = ""
         else:
+            # Step 2a: Cisco/FortiGate-native exact-name lookup
+            # (kept as fast-path for clarity even though the vlan-id
+            # walk below would also catch these).
             for cand_name in (f"Vlan{vlan.id}", f"vlan{vlan.id}"):
                 cand = iface_by_name.get(cand_name)
                 if cand and cand.ipv4_addresses:
@@ -119,6 +165,17 @@ def _build_vlan_children(
                     except Exception:
                         mask = ""
                     break
+            # Step 2b: walk by resolved vlan_id for foreign SVI
+            # iface shapes (OPNsense ``vlan0.<id>`` etc.).
+            if not ip:
+                cand = iface_by_vlan_id.get(vlan.id)
+                if cand and cand.ipv4_addresses:
+                    addr = cand.ipv4_addresses[0]
+                    ip = addr.ip
+                    try:
+                        mask = _prefix_to_mask(addr.prefix_length)
+                    except Exception:
+                        mask = ""
 
         children.append({
             "name": f"vlan{vlan.id}",
@@ -128,6 +185,106 @@ def _build_vlan_children(
             "mask": mask,
         })
     return children
+
+
+# FortiGate-native physical-port name shapes.  Used by the empty-
+# stub elision predicate to decide whether a content-free canonical
+# iface is "really there" (FortiOS-source intra-vendor round-trip
+# shapes) and therefore needs the bare ``edit "<name>" / set status
+# up / next`` block, vs. a cross-vendor leak (``igc0``, ``ge-0/0/0``)
+# that should be suppressed entirely.  Mirrors the Junos tiered
+# elision policy from ``juniper_junos/render.py`` (commit ``0fdf7e9``).
+#
+# Patterns:
+#   * ``port<N>``                      -- generic FG-100F+ numbering
+#   * ``port-<stack>-<module>-<port>`` -- multi-axis disambiguator
+#                                         (Cisco c9300 source path)
+#   * ``mgmt`` / ``mgmt<N>``           -- out-of-band management
+#   * ``wan<N>`` / ``lan`` / ``lan<N>`` -- role-coded physical
+#   * ``dmz<N>`` / ``ha<N>`` / ``modem<N>``
+#   * ``internal`` / ``internal<N>``   -- hw-switch member / aggregate
+#   * ``vlan<N>``                      -- vlan child interface
+#   * ``loopback<N>``
+#   * ``fortilink`` / ``fortilink<N>`` -- NPU-fastpath default
+#   * ``a`` / ``b``                    -- FG-60F/61F bare letters
+#   * ``ssl.root``                     -- SSL-VPN root tunnel
+#   * ``gre<N>``                       -- GRE tunnel
+_IS_FORTIGATE_PHYSICAL_PORT_RE = re.compile(
+    r"^(?:"
+    r"port(?:\d+|-\d+-\d+-\d+)"   # port1, port-1-1-1
+    r"|mgmt\d*"
+    r"|wan\d*"
+    r"|lan\d*"
+    r"|dmz\d*"
+    r"|ha\d*"
+    r"|modem\d*"
+    r"|internal\d*"
+    r"|vlan\d+"
+    r"|loopback\d+"
+    r"|fortilink\d*"
+    r"|[ab]"
+    r"|ssl\.root"
+    r"|gre\d+"
+    r")$",
+    re.IGNORECASE,
+)
+
+
+def _iface_is_empty_stub(iface: CanonicalInterface) -> bool:
+    """Return True when *iface* carries zero renderable canonical
+    content (no IP, no description, no MTU override, no L2/LAG/VLAN
+    state, no VRF binding) AND the source codec didn't bother
+    populating ``interface_type`` (a strong signal of "foreign
+    source that left the type empty because its grammar doesn't
+    distinguish here" -- OPNsense parser is the canonical example).
+
+    Such stubs leak across vendor boundaries: OPNsense's WAN
+    ``<wan><if>igc0</if><ipaddr>dhcp</ipaddr></wan>`` parses to a
+    bare canonical iface with ``enabled=True``, ``interface_type=""``
+    and nothing else, because OPNsense's ``dhcp`` keyword isn't
+    representable as a static :class:`CanonicalIPv4Address`.  After
+    cross-vendor port rename the foreign name (``igc0``) survives
+    verbatim because FortiGate has no role to map it to, producing
+    ``edit "igc0" / set status up / next`` blocks in the output.
+    These blocks are pure noise on the FortiGate side -- the operator
+    wants the target's native WAN port (``port1`` / ``wan1``) instead.
+
+    Any non-empty ``interface_type`` (L2 / L3 / LAG / loopback /
+    tunnel / ethernetCsmacd / etc.) means the source codec made a
+    deliberate choice about what this iface is, and intra-vendor
+    round-trip stability requires us to preserve it -- e.g. FortiGate
+    source ``ssl.root`` / ``l2t.root`` / ``default-mesh`` parse with
+    ``interface_type="ianaift:ethernetCsmacd"`` and zero per-iface
+    attrs; eliding them would silently drop the SD-WAN / SSL-VPN /
+    wireless-mesh objects from a FortiGate -> FortiGate round-trip.
+    """
+    if iface.interface_type:
+        return False
+    return not (
+        iface.description
+        or iface.ipv4_addresses
+        or iface.ipv6_addresses
+        or iface.mtu is not None
+        or iface.switchport_mode
+        or iface.access_vlan is not None
+        or iface.trunk_allowed_vlans
+        or iface.lag_member_of
+        or iface.vrf
+        or iface.dhcp_client
+        or (not iface.enabled)        # explicit shutdown is meaningful
+    )
+
+
+def _is_fortigate_native_name(name: str) -> bool:
+    """Return True when *name* matches a FortiOS-native interface
+    shape (physical port, mgmt, vlan child, loopback, tunnel).
+
+    Used to decide whether a content-free interface should be
+    preserved for round-trip stability (FortiGate-native names) or
+    elided as a cross-vendor leak (foreign names like ``igc0``,
+    ``ge-0/0/0``, ``ether1``).
+    """
+    return bool(_IS_FORTIGATE_PHYSICAL_PORT_RE.match(name))
 
 
 def render_intent(tree: Any) -> str:
@@ -152,12 +309,27 @@ def render_intent(tree: Any) -> str:
         out.append("end")
 
     # --- system dns ---
-    if tree.dns_servers:
+    # ``set domain "<fqdn>"`` is the FortiOS-native domain-name
+    # configuration form, sitting alongside the primary / secondary
+    # resolver IPs inside ``config system dns``.  Single-domain
+    # canonical (``CanonicalIntent.domain``) renders as a one-entry
+    # ``set domain "<value>"`` line; FortiOS accepts a comma-
+    # separated list for multi-domain DNS suffix search but the
+    # canonical model only carries one (Finding 12 in
+    # ``user_smoke_findings.md``).  Emit the ``config system dns``
+    # block when EITHER DNS resolvers OR the domain are populated
+    # so a domain-only OPNsense source (DNS resolution provided by
+    # upstream WAN DHCP) still surfaces the FQDN suffix.
+    # Reference: docs.fortinet.com/document/fortigate/7.6.6/cli-
+    # reference/190194324/config-system-dns.
+    if tree.dns_servers or tree.domain:
         out.append("config system dns")
         if len(tree.dns_servers) >= 1:
             out.append(f"    set primary {tree.dns_servers[0]}")
         if len(tree.dns_servers) >= 2:
             out.append(f"    set secondary {tree.dns_servers[1]}")
+        if tree.domain:
+            out.append(f'    set domain "{tree.domain}"')
         out.append("end")
 
     # --- system ntp (nested subtable) ---
@@ -199,6 +371,17 @@ def render_intent(tree: Any) -> str:
     # order -- first occurrence wins, later collisions get a
     # ``# port collision: ...`` comment instead of a duplicate
     # ``edit "..."`` block (which FortiOS rejects on commit).
+    #
+    # Empty-stub elision (Finding 8 in
+    # tests/fixtures/real/user_smoke_findings.md) folds in here:
+    # cross-vendor sources that leave content-free ifaces with
+    # foreign names (OPNsense ``igc0`` WAN -> DHCP-only stub;
+    # Junos-source ``ge-0/0/0`` mgmt-vrf shell) get suppressed
+    # entirely.  FortiGate-native names (``port1``, ``mgmt``,
+    # ``vlan10``) keep the bare ``edit "<name>" / set status ... /
+    # next`` block for same-vendor round-trip stability.  The
+    # predicate uses the tiered policy from Junos (commit
+    # ``0fdf7e9``): empty AND not native -> elide.
     seen_iface_names = set()
     deduped_ifaces = []
     collision_comments = []
@@ -208,6 +391,16 @@ def render_intent(tree: Any) -> str:
                 f"# port collision: {iface.name} already emitted earlier; "
                 f"duplicate dropped -- review source names for unique mapping"
             )
+            continue
+        # Cross-vendor empty-stub leak (Finding 8): foreign-shaped
+        # name with no canonical content -> elide so the rendered
+        # output isn't polluted by the source vendor's port-naming
+        # leaking through verbatim.
+        if (
+            _iface_is_empty_stub(iface)
+            and not _is_fortigate_native_name(iface.name)
+            and iface.name not in lag_by_name
+        ):
             continue
         seen_iface_names.add(iface.name)
         deduped_ifaces.append(iface)
@@ -256,7 +449,13 @@ def render_intent(tree: Any) -> str:
                 # freely (VL_100, DATA, etc.) so name alone isn't
                 # sufficient.
                 vid = _vlan_id_for(iface.name, tree.vlans)
-                parent = _parent_for_vlan_iface(iface.name, tree.interfaces)
+                # Use the elided iface list (post-stub-removal) so
+                # the parent fallback prefers a real LAN port over a
+                # bare WAN stub like OPNsense's ``igc0`` (Finding 6
+                # in user_smoke_findings.md).  The pre-elision tree
+                # still has ``igc0`` as its first iface, which would
+                # incorrectly anchor every VLAN child to the WAN.
+                parent = _parent_for_vlan_iface(iface.name, deduped_ifaces)
                 if vid is not None:
                     out.append("        set type vlan")
                     out.append(f"        set vlanid {vid}")

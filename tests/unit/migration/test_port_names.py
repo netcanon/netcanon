@@ -347,20 +347,31 @@ class TestSviAbsorption:
         # coverage for "we didn't accidentally silence everything".
         assert any("Tunnel99" in w and "tunnel" in w for w in result.warnings)
 
-    def test_svi_warning_still_fires_when_target_does_not_absorb(self):
+    def test_svi_renames_cleanly_when_target_has_native_form(self):
+        """FortiGate doesn't absorb SVIs into the VLAN stanza (vlan
+        child interfaces are separate ``edit "vlan<id>"`` entries),
+        but it DOES have a deterministic native name shape for SVI
+        identities: ``vlan<id>``.  Cross-vendor source SVIs (Cisco
+        ``Vlan99``, OPNsense ``vlan0.99``) format to the same
+        ``vlan99`` post-rename, carrying their ``ipv4_addresses``
+        through the rename pass so the FortiGate render's
+        ``_build_vlan_children`` synthesis can absorb the IP via the
+        sibling-iface walk (Finding 5 in user_smoke_findings.md).
+        Result: no "no native representation" warning, name applied
+        directly.  Mirrors :func:`test_svi_warning_suppressed_when_
+        target_absorbs` for absorbing targets — both paths suppress
+        the warning, just for different reasons."""
         from netconfig.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="Vlan99")],
         )
-        # FortiGate doesn't absorb SVIs (VLAN subinterfaces are
-        # user-named separate entities); FortiGate's format for SVI
-        # kind returns None → orchestrator should still warn.
         result = translate_port_names(
             intent, CiscoIOSXECLICodec(), FortiGateCLICodec(),
         )
-        assert any("Vlan99" in w for w in result.warnings)
+        assert not any("Vlan99" in w for w in result.warnings)
+        assert result.applied.get("Vlan99") == "vlan99"
 
 
 class TestDropSemantic:
