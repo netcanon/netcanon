@@ -218,16 +218,43 @@ proper fix lives across two codecs:
   `iface.dhcp_client=True`, AND skip the empty-stub elision for
   the same interface (dhcp_client makes it non-empty).
 
-Sub-finding logged for follow-up:
+Resolved as a paired wave:
 
-| # | Issue | Severity | Targets | Locus | Effort |
-|---|---|---|---|---|---|
-| 9a | OPNsense parser silently drops `<ipaddr>dhcp</ipaddr>` (no `dhcp_client` set) | medium | opnsense parse | parse interface-zone | small |
-| 9b | Junos render has no `family inet dhcp` emit path for `iface.dhcp_client=True` | medium | juniper_junos render | render interface loop | small |
+| # | Issue | Fix commit | Approach |
+|---|---|---|---|
+| 9a | OPNsense parser silently drops `<ipaddr>dhcp</ipaddr>` (no `dhcp_client` set) | `c16d2c0` | Case-insensitive `dhcp` keyword match in `_parse_interface_zone_canonical` sets `iface.dhcp_client=True` and skips the static-IP append.  Round-trip-safe via OPNsense render emitting `<ipaddr>dhcp</ipaddr>` symmetrically. |
+| 9b | Junos render has no `family inet dhcp` emit path for `iface.dhcp_client=True` | `5edf800` | Render emits `set interfaces {name} unit 0 family inet dhcp` when `iface.dhcp_client=True AND not iface.ipv4_addresses` (Junos rejects both at commit time — mutual exclusion guard).  Elision predicate updated: `dhcp_client` joins `has_renderable_attr` so DHCP-only ifaces survive the tiered-elision policy. |
+| 19 | OPNsense parser doesn't elevate `privilege_level` for `<scope>system</scope>` / `<priv>page-all</priv>` users | `c16d2c0` | 3-gate heuristic: `<groupname>` is authoritative when present (admins → priv 15); fallback gates on `<scope>system</scope>` OR `<priv>page-all</priv>` in user_privs.  Round-trip stable via symmetric render: priv-15 users emit `<scope>system</scope>` + `<groupname>admins</groupname>` + `<priv>page-all</priv>`. |
 
-Both small; both blocked on each other landing for the WAN-DHCP
-end-to-end signal to surface.  Defer-as-a-pair until the OPNsense
-parser side is in scope.
+**End-to-end flow:** OPNsense `<wan><ipaddr>dhcp</ipaddr></wan>` → canonical `dhcp_client=True` → Junos `set interfaces ge-0/0/X unit 0 family inet dhcp`.  Both sides committed within minutes of each other in the canonical-layer paired wave.
+
+**Caught-and-fixed during the wave:** two existing FortiGate test
+assertions in `test_render_opnsense_smoke.py` were *workarounds*
+encoding the parser bug — they asserted `igc0` got elided as
+empty stub because pre-fix `dhcp_client` was always False.
+Post-fix, `igc0` legitimately survives FortiGate's
+`_iface_is_empty_stub` check.  Same shape as the bug-pinning
+tests fixed in Phase 3a (Arista bcrypt) and Phase 5 (Aruba port
+zero) — pre-existing tests can encode the bug they were written
+to document.
+
+**Two new FortiGate sub-findings logged** (out-of-scope for the
+canonical-layer wave; future fortigate render work):
+
+| # | Issue | Severity | Locus |
+|---|---|---|---|
+| 20 | FortiGate render should emit `set mode dhcp` for foreign DHCP-client interfaces | medium | fortigate_cli render |
+| 21 | FortiGate `_parent_for_vlan_iface` should prefer LAN over WAN | low | fortigate_cli render |
+
+**Out-of-scope (not in this wave):**
+- IPv6 DHCPv6 / SLAAC — `CanonicalInterface` schema has no
+  `dhcp_client_v6` field.  The OPNsense parser logs
+  `dhcp6`/`slaac`/`track6`/`6rd`/`6to4` keywords at INFO and
+  skips them; canonical-layer expansion deferred.
+- Junos parser symmetry for `family inet dhcp` — Junos own
+  parse doesn't recognise the `dhcp` token, so same-vendor
+  Junos round-trip drops the DHCP intent.  Logged as a
+  separate sub-finding for parser-side cleanup.
 
 ### Notes on issue 10 (wide silent drops — deferred)
 
