@@ -67,7 +67,47 @@ plus updates to `test_port_names.py` / `test_local_users_wire_through.py`
 
 ---
 
-## OPEN — surfaced by Cisco c9300-24ux user contrib smoke test
+## RESOLVED — Cisco c9300-24ux smoke test (all 9 issues fixed)
+
+Wave-2 sweep on `fix/phase4-top-codec-fixes` shipped fixes for all
+9 issues raised by the c9300 smoke test.  Final regression on the
+combined wave: **2666 passed, 57 skipped, 0 failed**.  The
+mechanical Phase 4 reconciliation matrix (CODEC_BUG count) went
+UP slightly after this wave — that's expected, because the
+Phase 3 expectation YAMLs were authored against pre-fix render
+output and now drift against the new (correct) behavior.
+Expectation-YAML refresh is the next phase, not a regression in
+this one.
+
+### Resolution map
+
+| # | Issue | Fix commit | Approach |
+|---|---|---|---|
+| 1 | Cisco type-9 hash leak (4 targets) | `da8883f` (helper), `b2036aa` (fortigate), `7fbd44d` + `0fdf7e9` (junos), `10d8195` (opnsense) | Shared `netconfig/migration/_user_secrets.py` helper with `is_migratable(hashed, target_vendor)`.  Each codec gates the password emit; unmigratable hashes become review-comment lines (no payload leak) |
+| 2 | FortiGate duplicate `edit "portN"` | `b2036aa` | Multi-axis disambiguation in `format_port_identity` (`port-<stack>-<module>-<port>` for non-default coords) + render-time dedup belt-and-braces |
+| 3 | Aruba `interface 1/1` collision | `7d93085` | Render-time collision detection keyed on `iface.name`; emits one review-comment block naming each collider's `description`, then emits the first interface only |
+| 4 | MikroTik missing `bridge1` declaration + `bridge.11` typo | `3f528b7` | Synthesise `/interface bridge add name=bridge1` once when canonical has VLANs but no real bridges; SVI fallback name `bridge.N` → `vlanN` |
+| 5 | OPNsense VLAN tags lack `<if>` parent | `10d8195` | VLAN-emit walks canonical interfaces to find SVI parent; falls back to first lagg → first physical.  Full schema (`if`, `tag`, `pcp`, `proto`, `descr`, `vlanif`) verified against real fixture + OPNsense docs |
+| 6 | FortiGate no VLAN child interface | `b2036aa` | New `_build_vlan_children` helper resolves IP from `CanonicalVlan.ipv4_addresses` (or sibling `Vlan<id>` stub fallback); emits `edit "vlanN" / set type vlan / set vlanid N / set interface "LAG1"` blocks; dedups against source-named VLANs |
+| 7 | MikroTik port-name collision (sfp-sfpplus1 ×N) | `dc4847d` | Flat global-index scheme `(stack-1)*1000 + module*100 + port` for non-default coords; bonus 25G `sfp28-N` cage split (was sharing `sfp-sfpplus` with 10G) |
+| 8 | Mgmt-vrf cross-vendor mapping | `56a4cde` | cisco_iosxe_cli parser promotes `kind=physical` → `kind=mgmt` when VRF name matches `^(?:mgmt[-_]?vrf|management(?:[-_]?vrf)?|mgmt)$`.  Cascades to Aruba `oobm` block automatically (Junos already handled via routing-instances) |
+| 9 | Junos empty interface stubs | `7fbd44d` + `281a9ee` + `0fdf7e9` | Tiered policy: skip empty stubs UNLESS (a) VRF-bound (Junos commit-time validator requires it), (b) parent of `name.unit` sub-iface, or (c) matches Junos physical-port shape (round-trip stability) |
+
+### New shared scaffolding
+
+- `netconfig/migration/_user_secrets.py` — cross-codec hash-policy helper with `classify_hash`, `is_migratable`, `format_review_comment`.  Public API stable; consumed by fortigate / junos / opnsense.  Aruba retains its own inline logic (older, equivalent, deferred refactor).
+- `CanonicalInterface.kind` — now respected by `translate_port_names` so source-side kind promotions (e.g. cisco Mgmt-vrf → kind=mgmt) propagate through port-rename to target codecs' kind=mgmt handlers.
+
+### Follow-ups (out of scope for this wave)
+
+- Refresh Phase 3 expectation YAMLs to absorb the new render output (CODEC_BUG count regression on the matrix is methodology drift, not real bugs).
+- `format_review_comment(comment_syntax="xml")` produces `-- review:` which is forbidden inside XML comments.  OPNsense codec post-processes to `- review:` locally; lift this into the helper if any other XML codec ever lands.
+- FortiGate and OPNsense kind=mgmt rendering paths (issue 8 cascade only reaches Aruba today; the canonical model now carries the right info but the FortiGate / OPNsense renderers don't yet special-case it).
+- Aruba `_split_aos_hash` refactor to consume the shared helper (cleanup, not bug-fix).
+
+---
+
+## (Original) OPEN section — Cisco c9300-24ux user contrib smoke test
 
 Source fixture: real Cisco IOS-XE `show running-config` from a
 Catalyst c9300-24ux (24 × Te1/0/X base + 4 × Gi1/1/X uplink + 8 ×
@@ -223,12 +263,21 @@ output without losing semantic.
 
 ---
 
-## Triage decision pending from user
+## Triage decision (resolved)
 
-Last user instruction was to flag and ask priority.  My
-recommendation was to start with issue #1 (cross-target type-9
-hash policy) since it's a security bug across 4 codecs and shares
-root cause.  Then #2-5 (deploy-blocking syntax issues), then
-#6-9 (correctness gaps with workarounds).
+User directed: "all in order of dependency and maximize
+parallelization by use of external agents."  Executed as:
 
-Awaiting user direction on which to tackle first.
+- **Wave 0** — investigation (read-only) confirmed canonical
+  hash storage shape and that Aruba's existing fix already
+  catches the Cisco-source `9 $9$...` form (the issue table
+  above documented the BEFORE state).
+- **Wave 1** — `da8883f` shared `_user_secrets.py` helper
+  (24 tests, regression green).
+- **Wave 2** — 7 parallel agents, one per issue cluster, with
+  same-file overlaps merged into single agents.  All landed.
+- **Wave 3** — full regression, mesh + reconciliation regen,
+  this doc updated.
+
+Total: 1 helper module + 9 issue fixes shipped in 10 commits
+on top of `abcfa8e`.
