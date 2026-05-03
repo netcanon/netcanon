@@ -142,6 +142,8 @@ def render_intent(tree: Any) -> str:
         and i.interface_type != "ianaift:bridge"
         and i.interface_type != "ianaift:ieee8023adLag"
         and i.interface_type != "ianaift:l3ipvlan"
+        and not _is_loopback_type(i)
+        and not _is_tunnel_type(i)
     ]
     if ethernet_ifaces:
         lines.append("/interface ethernet")
@@ -192,6 +194,25 @@ def render_intent(tree: Any) -> str:
     bridge_ifaces = [
         i for i in tree.interfaces
         if i.interface_type == "ianaift:bridge"
+    ]
+    # Loopback interfaces in RouterOS have no native primitive --
+    # the documented idiom is an empty bridge with no slaves
+    # (RouterOS community wiki at
+    # https://wiki.mikrotik.com/wiki/Manual:Creating_IPv6_loopback_address
+    # plus the RouterOS Bridging+Switching docs at
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/Bridging+and+Switching).
+    # Without an explicit declaration, a cross-vendor source that
+    # carried a loopback (Cisco ``Loopback0``, Junos ``lo0``, Arista
+    # ``Loopback1``) would get its loopback name dropped on render
+    # AND have its IP synthesised as a stub via ``/ip address add
+    # interface=lo0`` -- the device would create a phantom ``lo0``
+    # ethernet interface with no factory backing.  Emitting the
+    # bridge declaration up front means the ``/ip address`` row
+    # binds to a real interface.  Phase 4b cisco_iosxe (NETCONF)
+    # cross-vendor finding.
+    loopback_ifaces = [
+        i for i in tree.interfaces
+        if _is_loopback_type(i)
     ]
     # Cross-vendor sources (Cisco / Junos / OPNsense / FortiGate)
     # don't model an L2 software-bridge primitive the way RouterOS
@@ -245,9 +266,26 @@ def render_intent(tree: Any) -> str:
         and vlan_parent_iface is None
     )
     emitted_bridge_names: set[str] = set()
-    if bridge_ifaces or needs_synthetic_bridge1:
+    if bridge_ifaces or loopback_ifaces or needs_synthetic_bridge1:
         lines.append("/interface bridge")
         for iface in bridge_ifaces:
+            parts = ["add"]
+            if iface.description:
+                parts.append(f'comment="{_escape(iface.description)}"')
+            parts.append(f"name={_quote_if_needed(iface.name)}")
+            lines.append(" ".join(parts))
+            emitted_bridge_names.add(iface.name)
+        # Loopback interfaces — same /interface bridge section,
+        # no slaves attached.  The default protocol-mode is fine
+        # for an unattached bridge; we deliberately don't pin it
+        # (matches the same-vendor round-trip baseline where
+        # MikroTik /export also omits the default).  Comment
+        # carries the canonical description through.
+        for iface in loopback_ifaces:
+            if iface.name in emitted_bridge_names:
+                # Pathological case where an iface is typed both
+                # bridge AND loopback — already emitted, skip.
+                continue
             parts = ["add"]
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
@@ -282,6 +320,60 @@ def render_intent(tree: Any) -> str:
                 f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
             )
             parts.append(f"name={lag.name}")
+            lines.append(" ".join(parts))
+        lines.append("")
+
+    # ----- /interface gre (tunnel emission) -----
+    # Cross-vendor sources (Cisco ``interface Tunnel0``, Junos
+    # ``gr-0/0/0``, FortiGate ``gre1``) populate
+    # ``interface_type='ianaift:tunnel'`` for tunnel interfaces.
+    # Without a dedicated render branch the iface name only
+    # surfaces as a target of ``/ip address add interface=<name>``
+    # and RouterOS synthesises a phantom stub on the wire.
+    # Emitting an explicit ``/interface gre add name=<name>``
+    # declaration up front means the address binding is well-
+    # formed.  RouterOS docs:
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/24805531/GRE
+    # -- ``/interface gre add name=... remote-address=...
+    # local-address=...``.
+    #
+    # The canonical :class:`CanonicalInterface` does NOT carry
+    # tunnel endpoint addresses (no ``local_address`` /
+    # ``remote_address`` fields in v1).  We therefore emit the
+    # declaration with a placeholder ``remote-address=0.0.0.0``
+    # and a review comment so the operator knows to populate the
+    # real endpoint pair before deployment.  EoIP / IPIP / IPSEC
+    # tunnel sub-types are deferred: the canonical model has no
+    # discriminator to choose between the RouterOS
+    # ``/interface gre`` / ``/interface eoip`` / ``/interface
+    # ipip`` shapes, so we pick GRE as the most common cross-
+    # vendor case (matches Cisco ``Tunnel0`` default mode, Junos
+    # ``gr-`` / ``ip-`` interfaces, FortiGate ``gre<N>``).
+    # Operators migrating EoIP-specific configs will need to
+    # rewrite the section by hand.  Phase 4b cisco_iosxe
+    # (NETCONF) cross-vendor finding.
+    tunnel_ifaces = [
+        i for i in tree.interfaces
+        if _is_tunnel_type(i)
+    ]
+    if tunnel_ifaces:
+        lines.append("/interface gre")
+        for iface in tunnel_ifaces:
+            parts = ["add"]
+            # Carry source description; otherwise emit a default
+            # review note so operators see the placeholder warning.
+            if iface.description:
+                parts.append(f'comment="{_escape(iface.description)}"')
+            else:
+                parts.append(
+                    'comment="review: tunnel endpoint placeholder -- set local-address/remote-address"'
+                )
+            parts.append(f"name={_quote_if_needed(iface.name)}")
+            # Placeholder endpoint -- canonical model in v1 carries
+            # no tunnel local/remote address pair.  Without
+            # ``remote-address`` RouterOS rejects the add line; we
+            # pick 0.0.0.0 as an obvious sentinel.
+            parts.append("remote-address=0.0.0.0")
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -363,6 +455,22 @@ def render_intent(tree: Any) -> str:
         lines.append("")
 
     # ----- /ip route -----
+    # RouterOS combines an IP next-hop and an outgoing interface
+    # into a single ``gateway=`` argument using the
+    # ``<ip>%<iface>`` form (the same shape the device displays
+    # under ``immediate-gw=`` for resolved recursive routes).
+    # See RouterOS Manual: IP/Route --
+    # https://wiki.mikrotik.com/wiki/Manual:IP/Route -- and the
+    # RouterOS Policy Routing reference at
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/59965508/Policy+Routing
+    # which both document the ``gateway=<ip>%<iface>`` shape.
+    #
+    # The previous emit was an ``elif`` ladder which silently
+    # dropped the interface field whenever both ``gateway`` and
+    # ``interface`` were populated on the canonical record (e.g.
+    # FortiGate ``set gateway 192.168.1.1`` + ``set device port1``
+    # on the same static route).  Phase 4b fortigate_cli
+    # cross-vendor finding.
     if tree.static_routes:
         lines.append("/ip route")
         for route in tree.static_routes:
@@ -370,7 +478,11 @@ def render_intent(tree: Any) -> str:
             if route.description:
                 parts.append(f'comment="{_escape(route.description)}"')
             parts.append(f"dst-address={route.destination}")
-            if route.gateway:
+            if route.gateway and route.interface:
+                # Both populated -- RouterOS combined form pins the
+                # next-hop IP to a specific egress interface.
+                parts.append(f"gateway={route.gateway}%{route.interface}")
+            elif route.gateway:
                 parts.append(f"gateway={route.gateway}")
             elif route.interface:
                 parts.append(f"gateway={route.interface}")
@@ -644,6 +756,58 @@ def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
     if len(candidates) == 1:
         return candidates[0]
     return None
+
+
+#: Canonical interface_type values that mean "this is a loopback".
+#: ``ianaift:softwareLoopback`` is the IANA-IF-MIB type (the
+#: canonical form per :class:`CanonicalInterface`).  The bare
+#: ``softwareLoopback`` form is accepted for parity with codecs
+#: that normalise without the prefix.
+_LOOPBACK_TYPES = frozenset(
+    {"ianaift:softwareLoopback", "softwareLoopback"}
+)
+
+#: Canonical interface_type values that mean "this is a tunnel".
+#: ``ianaift:tunnel`` is the IANA-IF-MIB type used by FortiGate /
+#: Cisco / Junos parsers when classifying ``Tunnel<N>`` /
+#: ``gre<N>`` / ``ssl.root`` interfaces.
+_TUNNEL_TYPES = frozenset(
+    {"ianaift:tunnel", "tunnel"}
+)
+
+#: Loopback name shape recognised regardless of ``interface_type``.
+#: Mirrors the loopback branch in :mod:`.port_names` and the regex
+#: used in :func:`_identify_vlan_parent` -- keeps the two
+#: classification points aligned.
+_LOOPBACK_NAME_RE = re.compile(r"^(lo|loopback)\d*$", re.IGNORECASE)
+
+
+def _is_loopback_type(iface: Any) -> bool:
+    """Return True if ``iface`` is a loopback by canonical type or
+    by name shape.
+
+    The ``interface_type`` check covers cross-vendor sources that
+    populate the IANA-IF-MIB type (FortiGate, Junos).  The name-
+    shape fallback covers sources that leave the type empty but
+    use the canonical loopback naming (Cisco IOS-XE NETCONF,
+    Arista EOS), so a renamed ``Loopback0`` -> ``lo0`` still gets
+    the right declaration on the wire.
+    """
+    if iface.interface_type in _LOOPBACK_TYPES:
+        return True
+    return bool(_LOOPBACK_NAME_RE.match(iface.name))
+
+
+def _is_tunnel_type(iface: Any) -> bool:
+    """Return True if ``iface.interface_type`` indicates a tunnel.
+
+    No name-shape fallback here -- tunnel naming is more vendor-
+    specific (``Tunnel0``, ``gre1``, ``gr-0/0/0``, ``ssl.root``)
+    and conflating one of those shapes with a loopback or
+    ethernet would be silently wrong.  Codecs that emit tunnels
+    MUST populate :attr:`CanonicalInterface.interface_type`.
+    """
+    return iface.interface_type in _TUNNEL_TYPES
 
 
 def _quote_if_needed(value: str) -> str:
