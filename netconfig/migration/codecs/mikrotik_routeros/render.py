@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..._user_secrets import classify_hash, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ..base import RenderError
 from .parse import (
@@ -50,11 +51,38 @@ _CANONICAL_MODE_TO_ROUTEROS_BONDING = {
 }
 
 
-_CANONICAL_PRIVILEGE_TO_ROUTEROS_GROUP = {
-    15: "full",
-    10: "write",
-    1: "read",
-}
+#: Canonical-privilege → RouterOS user-group threshold mapping.
+#: RouterOS ships three built-in groups (``read``, ``write``,
+#: ``full``).  Most source vendors use Cisco's 0-15 numeric scale —
+#: 15 = admin, 0-1 = read-only, with intermediate values mapping to
+#: operator roles (Junos super-user → 15, operator → 10, read-only
+#: → 1).  Mapping is threshold-based (``>=`` cutoffs) rather than
+#: an exact lookup so real captures with intermediate values resolve
+#: to a sane RouterOS group instead of the safe-default ``read``.
+#: Use :func:`_routeros_group_for_privilege` to resolve.
+_PRIVILEGE_FULL_THRESHOLD = 15
+_PRIVILEGE_WRITE_THRESHOLD = 10
+
+
+def _routeros_group_for_privilege(level: int) -> str:
+    """Map a canonical privilege level to a RouterOS user group.
+
+    Threshold rules (most-permissive cutoff wins):
+
+    * ``>= 15`` → ``full`` (admin / superuser).
+    * ``>= 10`` → ``write`` (operator / can-modify).
+    * ``< 10``  → ``read`` (read-only / safe default).
+
+    The ``read`` floor also covers the canonical default of ``1``
+    declared on :class:`CanonicalLocalUser`, which source codecs
+    leave untouched when they can't determine privilege from the
+    source config.
+    """
+    if level >= _PRIVILEGE_FULL_THRESHOLD:
+        return "full"
+    if level >= _PRIVILEGE_WRITE_THRESHOLD:
+        return "write"
+    return "read"
 
 
 # ---------------------------------------------------------------------------
@@ -168,20 +196,39 @@ def render_intent(tree: Any) -> str:
     # Cross-vendor sources (Cisco / Junos / OPNsense / FortiGate)
     # don't model an L2 software-bridge primitive the way RouterOS
     # does, so parse produces zero ``ianaift:bridge`` interfaces.
-    # The /interface vlan block below pins every VLAN child to
-    # ``interface=bridge1`` by convention — RouterOS rejects a
-    # ``/interface vlan add interface=bridge1 ...`` line when
-    # ``bridge1`` doesn't exist yet.  Synthesise the parent
-    # declaration ONLY in this cross-vendor case (no real bridges
-    # in the canonical tree).  Same-vendor round-trips have their
-    # own bridges (``downstream``, ``upstream``, ``br-lan``) and
-    # must NOT gain a phantom ``bridge1`` — the round-trip
-    # stability guard in
+    # The /interface vlan block below normally pins every VLAN
+    # child to ``interface=bridge1`` by convention — RouterOS
+    # rejects a ``/interface vlan add interface=bridge1 ...``
+    # line when ``bridge1`` doesn't exist yet.
+    #
+    # BUT: when the source already has a clear "VLAN parent" port
+    # (OPNsense ``ixl0`` carrying all five VLANs, or a Cisco
+    # router-on-stick with one trunk physical port), we should
+    # bind the VLANs to that interface's target-side rename
+    # instead of synthesising ``bridge1``.  The bridge-synth path
+    # was added for the c9300-style switching topology where
+    # there's no single L3 / trunk anchor, just many switchports.
+    # Synthesising bridge1 unconditionally hides the source's
+    # router-on-stick topology and routes the LAN IP and the
+    # VLANs onto disjoint interfaces.
+    #
+    # Identification rule (kept deliberately narrow for the common
+    # case): exactly ONE non-vlan / non-bridge / non-lag /
+    # non-loopback interface that carries either an L3 IP or L2
+    # trunk semantics.  When zero or many candidates exist, fall
+    # back to bridge1.  See :func:`_identify_vlan_parent` for the
+    # full logic.
+    #
+    # Same-vendor round-trips with real bridges (``downstream``,
+    # ``upstream``, ``br-lan``) keep their parents — synthetic
+    # bridge1 is only added when no other parent exists.  The
+    # round-trip stability guard in
     # ``tests/unit/migration/test_real_captures.py`` would catch
-    # the regression.  Surfaced by the user smoke-test on a Cisco
-    # c9300-24ux source (issue #4 in
-    # ``tests/fixtures/real/user_smoke_findings.md``).  RouterOS
-    # docs:
+    # a phantom ``bridge1`` regression.  Surfaced by the c9300
+    # smoke test (issue #4 in
+    # ``tests/fixtures/real/user_smoke_findings.md``) and refined
+    # by the OPNsense supergate smoke test (issue #7 same file).
+    # RouterOS docs:
     # https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
     # — ``interface=`` must reference an existing parent.
     has_vlan_to_render = bool(tree.vlans) or any(
@@ -189,8 +236,13 @@ def render_intent(tree: Any) -> str:
         or _is_vlan_name(i.name)
         for i in tree.interfaces
     )
+    vlan_parent_iface = (
+        _identify_vlan_parent(tree) if has_vlan_to_render else None
+    )
     needs_synthetic_bridge1 = (
-        has_vlan_to_render and not bridge_ifaces
+        has_vlan_to_render
+        and not bridge_ifaces
+        and vlan_parent_iface is None
     )
     emitted_bridge_names: set[str] = set()
     if bridge_ifaces or needs_synthetic_bridge1:
@@ -209,6 +261,15 @@ def render_intent(tree: Any) -> str:
             lines.append("add name=bridge1")
             emitted_bridge_names.add("bridge1")
         lines.append("")
+    # The VLAN children below bind to whichever parent we resolved.
+    # Synthetic bridge1 wins only when no source-side parent was
+    # identified; otherwise we use the source-side parent's
+    # (already-renamed) target name verbatim.
+    vlan_parent_name = (
+        vlan_parent_iface
+        if vlan_parent_iface is not None
+        else "bridge1"
+    )
 
     # ----- /interface bonding (Tier 2 LAGs) -----
     if tree.lags:
@@ -248,7 +309,11 @@ def render_intent(tree: Any) -> str:
             parts = ["add"]
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
-            parts.append("interface=bridge1")   # convention: single bridge
+            # Bind to the parent we resolved above — either an
+            # identified source-side parent's renamed target name
+            # (router-on-stick: OPNsense ixl0 → sfp-sfpplus0) or
+            # the synthesised ``bridge1`` (switching topology).
+            parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
             lines.append(" ".join(parts))
@@ -264,7 +329,7 @@ def render_intent(tree: Any) -> str:
             parts = ["add"]
             if vlan.name and vlan.name != synthetic_name:
                 parts.append(f'comment="{_escape(vlan.name)}"')
-            parts.append("interface=bridge1")
+            parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
             parts.append(f"name={synthetic_name}")
             parts.append(f"vlan-id={vlan.id}")
             lines.append(" ".join(parts))
@@ -438,13 +503,33 @@ def render_intent(tree: Any) -> str:
     if tree.local_users:
         lines.append("/user")
         for user in tree.local_users:
-            # Map canonical privilege back to RouterOS group.
-            # Unknown/odd privilege levels fall back to ``read``
-            # (least privilege) per safe-default principle.
-            group = _CANONICAL_PRIVILEGE_TO_ROUTEROS_GROUP.get(
-                user.privilege_level, "read"
-            )
+            # Map canonical privilege onto a RouterOS built-in
+            # group via threshold rules; safe default is ``read``.
+            group = _routeros_group_for_privilege(user.privilege_level)
             parts = ["add", f"group={group}", f"name={user.name}"]
+            # Password emit gating: RouterOS only accepts plaintext
+            # (``mikrotik_routeros`` -> {plaintext} in the central
+            # ``_user_secrets._TARGET_ACCEPTS`` policy).  Foreign
+            # hashes (bcrypt from OPNsense, type-9 from Cisco, $6$
+            # from Arista, FortiOS ENC blobs) are NOT migratable —
+            # RouterOS re-hashes the supplied value internally and
+            # leaking the hash literal as a "password" would set
+            # the user's password to the literal hash string, an
+            # auth bypass for anyone who has read access to the
+            # original config.  When the canonical carries a
+            # plaintext password, emit it; when foreign-hashed,
+            # skip the field and let the operator reset the
+            # password manually post-migration.  Surfaced by
+            # OPNsense supergate smoke test (issue #13 in
+            # ``tests/fixtures/real/user_smoke_findings.md``).
+            if user.hashed_password and is_migratable(
+                user.hashed_password, "mikrotik_routeros",
+            ):
+                _alg, payload = classify_hash(user.hashed_password)
+                if payload:
+                    parts.append(
+                        f"password={_quote_if_needed(payload)}"
+                    )
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -471,6 +556,72 @@ def render_intent(tree: Any) -> str:
 # ---------------------------------------------------------------------------
 # Render helpers
 # ---------------------------------------------------------------------------
+
+
+def _identify_vlan_parent(tree: CanonicalIntent) -> str | None:
+    """Find the single canonical interface that should anchor VLAN
+    children, or return None when no clear anchor exists.
+
+    Rationale: when the source config is a router-on-stick (single
+    physical / LAG port carrying the LAN IP and all VLAN tags —
+    e.g. OPNsense ``ixl0`` carrying VLAN 10/11/20/100/150 plus the
+    LAN IP), the MikroTik render should bind the VLAN children to
+    that port's renamed target name and skip the ``bridge1`` synth.
+    When the source is a many-port switching topology (Cisco c9300
+    with 24 trunk ports) there's no single anchor and we fall back
+    to bridge1.
+
+    The "single anchor" is identified by:
+
+      1. Excluding VLAN-shape, bridge-shape, LAG-shape and loopback
+         interfaces (those have their own sections).
+      2. From the rest, picking interfaces that look like an L3
+         port (non-empty ``ipv4_addresses`` / ``ipv6_addresses``)
+         OR an L2 trunk (non-empty ``trunk_allowed_vlans``).
+      3. Returning the unique candidate's ``name`` if and only if
+         exactly ONE candidate exists.
+
+    The narrow "exactly one" rule avoids over-engineering for the
+    multi-parent case (some VLANs on port A, some on port B) —
+    falling back to bridge1 is wrong-but-deployable in that
+    rare case, while picking an arbitrary candidate would be
+    silently wrong.  The OPNsense supergate fixture is the
+    motivating single-parent case (see issue #7 in
+    ``tests/fixtures/real/user_smoke_findings.md``).
+
+    Note: this runs AFTER ``translate_port_names`` has rewritten
+    the interface names, so the returned value is already in the
+    target codec's naming convention.  No further renaming
+    required at the call site.
+    """
+    candidates: list[str] = []
+    for iface in tree.interfaces:
+        if _looks_like_vlan_iface(iface.name):
+            continue
+        if _looks_like_bridge_iface(iface.name):
+            continue
+        if _looks_like_lag_iface(iface.name):
+            continue
+        if iface.interface_type in (
+            "ianaift:bridge",
+            "ianaift:ieee8023adLag",
+            "ianaift:l3ipvlan",
+            "ianaift:softwareLoopback",
+            "softwareLoopback",
+        ):
+            continue
+        # Loopback name shape (lo, loN, loopbackN) — the canonical
+        # interface_type isn't always populated, so guard by name
+        # too.  Mirrors the loopback branch in port_names.classify.
+        if re.match(r"^(lo|loopback)\d*$", iface.name, re.IGNORECASE):
+            continue
+        has_l3 = bool(iface.ipv4_addresses) or bool(iface.ipv6_addresses)
+        has_trunk = bool(iface.trunk_allowed_vlans)
+        if has_l3 or has_trunk:
+            candidates.append(iface.name)
+    if len(candidates) == 1:
+        return candidates[0]
+    return None
 
 
 def _quote_if_needed(value: str) -> str:
