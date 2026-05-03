@@ -240,12 +240,22 @@ per_field_expectation:
     references: [oc-interfaces]
 
   "interfaces[].interface_type":
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       NETCONF source carries the IANA interface-type ident verbatim
       (e.g. `ianaift:ethernetCsmacd`).  The CLI render path encodes
-      type implicitly in the interface name (the name prefix
-      determines the type) so this round-trip is byte-perfect.
+      type implicitly in the interface name; on re-parse,
+      `cisco_iosxe_cli/parse.py:91` infers ifType from a name-prefix
+      lookup that hard-codes `"vlan": "ianaift:l3ipvlan"`.  This
+      flips an OpenConfig source `Vlan10` carrying
+      `ianaift:l2vlan` (135 — bridge / 802.1Q sub-interface) to
+      `ianaift:l3ipvlan` (136 — routed VLAN / SVI).  Both choices
+      are defensible — OpenConfig models a Catalyst SVI as
+      `l2vlan` (underlying L2-VLAN-tagged port), IOS-XE CLI
+      `interface Vlan10` always implies a routed SVI — but the
+      same-vendor cross-format round-trip is NOT byte-perfect for
+      SVIs.  No code change planned; one canonical choice across
+      the codebase isn't justified by a single fixture cell.
     references: [oc-interfaces]
 
   "interfaces[].mtu":

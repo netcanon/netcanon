@@ -250,13 +250,19 @@ per_field_expectation:
     references: [oc-interfaces]
 
   "interfaces[].ipv4_addresses":
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       cisco_iosxe parser walks `<subinterface><ipv4><addresses>`;
       OPNsense target render emits `<ipaddr>` + `<subnet>` (CIDR
       prefix length).  Multiple IPv4 addresses per Cisco interface
       degrade to the primary only on the canonical model (one
-      address per interface).
+      address per interface) — `opnsense/render.py` only emits
+      `iface.ipv4_addresses[0]`, declared as a one-IP-per-zone
+      modelling limit in the codec docstring.  In the kitchen_sink
+      fixture, GigabitEthernet0/0/1 (3 addrs) and 0/0/3 (2 addrs)
+      both collapse to the primary.  Bridging into OPNsense
+      `<virtualip>` blocks for secondaries is a feature ask, not a
+      bug fix.
     references: [oc-if-ip, opnsense-interfaces]
 
   "interfaces[].ipv6_addresses":

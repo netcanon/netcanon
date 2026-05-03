@@ -210,14 +210,18 @@ per_field_expectation:
     references: [interface_fields]
 
   "interfaces[].description":
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       OpenConfig `<config><description>` text -> FortiOS `set alias
       "<text>"`.  FortiOS caps alias at 25 characters — longer Cisco
       descriptions truncate on FortiGate render.  Cisco IOS-XE caps
       description at 240 characters per the Interface and Hardware
       Component Configuration Guide, so truncation is plausible on
-      real captures.
+      real captures.  The fortigate_cli codec already declares this
+      via LossyPath at `/interfaces/interface/config/description`;
+      the kitchen_sink fixture exercises five interfaces with
+      descriptions of 30/34/40/44/33 chars which all truncate at
+      byte 25 on FortiGate render.
     references: [interface_fields]
 
   "interfaces[].enabled":
