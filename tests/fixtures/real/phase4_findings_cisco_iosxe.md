@@ -1,359 +1,356 @@
-# Phase 4b — `cisco_iosxe` (NETCONF / OpenConfig XML) source findings
+# Phase 4b findings — source vendor: cisco_iosxe (NETCONF)
+
+Generated against `_phase4_runs/latest.json`.  7 CODEC_BUG
+entries across 6 target codecs.  Distribution: aruba_aoss (1),
+cisco_iosxe_cli (2), fortigate_cli (1), juniper_junos (1),
+mikrotik_routeros (1), opnsense (1).
 
 Source codec: `cisco_iosxe` (Phase-0.5 NETCONF / OpenConfig stub —
-`netconfig/migration/codecs/cisco_iosxe/codec.py`).  This codec's
-`parse()` walks the `<interfaces>` subtree only; every other declared-
-`supported` capability matrix path (system, vlans, network-instances,
-snmp, routing) is aspirational wire-up that hasn't landed.  Most cells
-in the cross-mesh therefore exhibit `METHODOLOGY_ISSUE_under` (parse
-side never populates) rather than CODEC_BUG.
+`netconfig/migration/codecs/cisco_iosxe/codec.py`).  Its `parse()` walks
+the `<interfaces>` subtree only; every other declared-`supported`
+matrix path (system, vlans, network-instances, snmp, routing) is
+aspirational wire-up that hasn't landed.  All seven CODEC_BUGs surface
+on the interface subtree (the only subtree this source codec
+populates), and all seven point at target-codec or expectation-YAML
+defects rather than at the cisco_iosxe NETCONF parser itself.
 
-Inputs reconciled:
+Sole fixture exercising this source codec: a synthetic 10-interface
+kitchen-sink (`tests/fixtures/synthetic/cisco_iosxe/kitchen_sink.xml`)
+covering ethernet, loopback, tunnel, l2vlan / SVI, ieee8023adLag,
+multi-IPv4, dual-stack, and enabled-false.  No real captures yet
+(Phase-0.5 status; no published OpenConfig `<get-config>` dump in the
+corpus).  Narrow-fixture caveat: the seven CODEC_BUGs may be a
+floor, not a ceiling, on what real captures would surface.
 
-* `tests/fixtures/real/_phase4_runs/latest.json` (run
-  `2026-05-02T06:54:10Z`, mesh run `20260501T141211Z.json`)
-* `tests/fixtures/cross_vendor_expectations/cisco_iosxe__<target>.yaml`
-  for the seven cross-vendor pairs (intra-vendor self-pair has no YAML
-  by Phase-3 design)
-* The lone fixture exercising this source codec is
-  `tests/fixtures/synthetic/cisco_iosxe/kitchen_sink.xml` — a 10-
-  interface OpenConfig snapshot covering ethernet, loopback, tunnel,
-  l2vlan / SVI, ieee8023adLag, multi-IPv4, dual-stack, and
-  enabled-false.  No real captures for this codec yet (Phase-0.5
-  status; no published OpenConfig <get-config> dump in the corpus).
+## Triage classification (3 buckets: A real-bug / B stale-YAML / C acceptable-lossy)
 
-## CODEC_BUG counts per target
+* **Bucket A — real codec bug:** the target codec drops or mangles
+  data the canonical model carries; expectation YAML is honestly
+  optimistic; fix is a code change in the target codec.
+* **Bucket B — stale / wrong YAML expectation:** the codec already
+  declares a `LossyPath` or has documented modelling limits that the
+  pair YAML's `disposition: good` contradicts; the YAML's own `note`
+  often spells out the loss.  Fix is a YAML correction (`good` →
+  `lossy`).
+* **Bucket C — acceptable lossy / not a bug:** behaviour is
+  documented, expected, and the YAML correctly anticipates it; the
+  reconciliation flag is a comparator artefact (typically a count-
+  drift cascade where structural collapse is doing its job but a
+  per-field diff still surfaces).  No fix needed; resolved by
+  upstream comparator hygiene or by a sibling fix in another bucket.
 
-| Target              | CODEC_BUG | Notes                               |
-|---------------------|----------:|-------------------------------------|
-| arista_eos          |         0 | All drift covered by EXPECTED_LOSSY |
-| aruba_aoss          |         4 | name / description / enabled / ipv4 |
-| cisco_iosxe (self)  |         0 | Self round-trip, no YAML            |
-| cisco_iosxe_cli     |         2 | interface_type / ipv4_addresses     |
-| fortigate_cli       |         1 | description                         |
-| juniper_junos       |         0 | All drift covered by EXPECTED_LOSSY |
-| mikrotik_routeros   |         4 | name / description / enabled / ipv4 |
-| opnsense            |         1 | ipv4_addresses                      |
-| **Σ**               |    **12** |                                     |
+## Bucket totals
 
-The 12 high-severity CODEC_BUG findings reduce to **five distinct root
-causes**, none of which are bugs in the cisco_iosxe (NETCONF) source
-codec itself.  All actionable fixes live in target codecs or in the
-expectation YAMLs.
+| Bucket | Count | Action |
+|---|---:|---|
+| A | 4 | Code fix in target codec (aoss parse regex, mikrotik render branch, cisco_iosxe_cli ipv4 secondary, opnsense secondary IP modelling) |
+| B | 3 | Flip pair-YAML disposition `good` → `lossy` (cisco_iosxe_cli ipv4 + interface_type; opnsense ipv4) |
+| C | 0 | none — every flagged cell here is a real defect or stale doc |
+| **Σ** | **7** | |
 
----
+The seven findings reduce to **four distinct codec defects** and
+**three YAML hygiene corrections**.  Some defects manifest in more
+than one cell (the count-drift cascades especially); the bucket totals
+above count cells, not root causes.
 
-## Finding 1 — aruba_aoss & mikrotik_routeros: count drift cascades
+## Per-cell findings
 
-**Pairs affected:** `cisco_iosxe → aruba_aoss` (4 CODEC_BUGs),
-`cisco_iosxe → mikrotik_routeros` (4 CODEC_BUGs).  `name`,
-`description`, `enabled`, `ipv4_addresses` all flagged on the same
-underlying drift.
+### Target: aruba_aoss
 
-**What drifted.**  Phase-1 `field_disposition.interfaces`:
+**1 entry.  Bucket A.**
 
-* aruba_aoss: `source_count=10 → target_count=3` (only `Loopback0`,
-  `Loopback1`, `Tunnel100` survive the round-trip).  All seven
-  ethernet / Vlan10 / Port-channel1 records lost.
-* mikrotik_routeros: `source_count=10 → target_count=8`.
+* **Field:** `interfaces[].name`
+* **Drift detail:** count drift `10 → 8 (interfaces)`.  Source emits
+  10 interfaces; target re-parse produces 8.  Reconciler reports the
+  cascade on `name` because `interfaces` itself is `lossy` in the
+  pair YAML, so `interfaces[].name` is the highest-severity child
+  field that flips to `CODEC_BUG` (pair YAML labels it `good`).
+* **Likely missing records:** seven of the ten source interfaces are
+  Cisco-shaped multi-slash names (`GigabitEthernet0/0/0` …
+  `0/0/4`, `Port-channel1`, `Vlan10`).  AOS-S parser regex
+  `_IFACE_HEADER_RE` (`netconfig/migration/codecs/aruba_aoss/parse.py:207`)
+  accepts at most one `/` segment.  When the AOS-S render emits
+  `interface GigabitEthernet0/0/0` (no port-rename mesh applied), the
+  re-parse drops every multi-slash name.  Loopback / Tunnel / Vlan
+  names also miss the regex.
+* **Codec locus:** `aruba_aoss/parse.py:_IFACE_HEADER_RE`
+  (regex too narrow) **and/or** `aruba_aoss/render.py` (render path
+  fails to apply the port-rename mesh that the YAML's note explicitly
+  promises is in place — "AOS-S target render emits via the
+  port-rename mesh").  The render-says-A / parse-rejects-A asymmetry
+  is the canonical "render-emits-but-parse-rejects" mismatch.
+* **Fix options:**
+  1. Widen the AOS-S parse regex to accept multi-slash port names
+     (cheap; defers the asymmetric-rename tech debt).
+  2. Apply the port-rename mesh on the AOS-S render side so emitted
+     bytes use AOS-S-shape names that the parser does match.  This
+     matches what the pair YAML claims is happening today.
 
-The Phase-4 reconciliation script blames every per-iface field as
-drifted because the records simply aren't present on the target side
-to compare — the count drift swallows seven (or two) sub-fields each.
-Same actual bug surfaces as four CODEC_BUGs in the field-variances
-JSON because the Phase-3 YAML labels each of name / description /
-enabled / ipv4_addresses as `good`.
+### Target: cisco_iosxe_cli
 
-**Codec responsible.**  Target codecs.  The cisco_iosxe NETCONF parser
-emits all 10 interfaces correctly into the canonical tree; the loss
-happens on render → re-parse.
+**2 entries.  Bucket A (1) + Bucket B (1, but with a coordinated A
+half).**
 
-**Likely fix locations:**
+#### Cell 2a — `interfaces[].ipv4_addresses` — Bucket A (code) + B (YAML)
 
-1. `netconfig/migration/codecs/aruba_aoss/parse.py:174-176` —
-   `_IFACE_HEADER_RE = re.compile(r'^interface\s+("?[A-Za-z]*\d+(?:/\d+)?"?)\s*$')`.
-   The regex accepts at most one `/` segment, so the AOS-S parser
-   silently drops Cisco-shaped names like `GigabitEthernet0/0/0`,
-   `GigabitEthernet0/0/1` etc. on re-parse.  The render side
-   (`render.py:329`) emits `interface GigabitEthernet0/0/0` literally
-   without applying any port-rename mesh, so the bytes the renderer
-   writes don't match what the parser reads back.  This is the
-   canonical "render-emits-but-parse-rejects" mismatch.  Two ways to
-   fix:
-   * widen the parse regex to accept multi-slash port names (cheap;
-     keeps the asymmetric-rename tech debt deferred); OR
-   * have the AOS-S render path apply the port-rename mesh on
-     `iface.name` before emitting (architecturally cleaner; this is
-     the same fix the cross-vendor expectation YAMLs anticipate when
-     they say "via the port-rename mesh").
-2. `netconfig/migration/codecs/mikrotik_routeros/render.py:85-110` —
-   the mikrotik render only emits `/interface ethernet`,
-   `/interface bridge`, `/interface bonding`, `/interface vlan`
-   stanzas.  Loopback (`ianaift:softwareLoopback`) and Tunnel
-   (`ianaift:tunnel`) interfaces from the source canonical have no
-   corresponding RouterOS branch and never reach the wire — only
-   their IPv4 addresses survive via `/ip address add` lines pointing
-   at non-existent interfaces, which the re-parse can't reattach.
-   Fix: add a Loopback / Tunnel emission branch (RouterOS uses
-   `/interface ovpn-server`, `/interface gre`, `/interface bridge`
-   for loopback emulation depending on platform; the canonical
-   `interface_type` should drive the choice).
+* **Drift detail:** `GigabitEthernet0/0/1` source carries three IPv4
+  addresses (10.0.10.1/24, 10.0.11.1/24, 10.0.12.1/24); target after
+  CLI render + re-parse carries only the first.
+  `GigabitEthernet0/0/3` source carries two (172.16.0.1/30,
+  172.16.100.1/24 — the latter from a dot1q sub-interface absorbed
+  onto the parent); target carries only the first.
+* **Codec locus — render side:**
+  `netconfig/migration/codecs/cisco_iosxe_cli/render.py:253-255`
+  emits every address as a bare `ip address X.X.X.X MASK` — Cisco
+  IOS-XE rejects this on a real device (only the first is primary;
+  the rest must be `ip address X.X.X.X MASK secondary`).
+* **Codec locus — parse side:**
+  `netconfig/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
+  has the inverse defect: an explicit `if not current["ipv4"]:
+  # primary only` guard discards every line beyond the first.  Even
+  if the renderer emitted the `secondary` keyword the parser would
+  drop them today.  Both halves must change for multi-IPv4 to
+  round-trip.
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__cisco_iosxe_cli.yaml:263`
+  labels `interfaces[].ipv4_addresses` as `good`.  Even after the
+  code fix above, the pair YAML's `note` still applies — but the
+  current state is that this is a real codec defect AND the YAML is
+  optimistic.  Bucket A primary; Bucket B until the fix lands (then
+  Bucket A clears the defect and the YAML stays correct as-is).
+* **Recommended action:** coordinated render + parse change to emit
+  / accept `secondary` for index>=1.  Don't flip the YAML — fix the
+  code instead, since this is the same-vendor cross-format pair
+  where `good` is genuinely the right disposition once `secondary`
+  round-trips.
 
-**Test that would catch the fix.**
+#### Cell 2b — `interfaces[].interface_type` — Bucket B
 
-* For aruba_aoss: a unit test in
-  `tests/unit/migration/codecs/aruba_aoss/test_parse_iface_header.py`
-  asserting that
-  `_IFACE_HEADER_RE.match("interface GigabitEthernet0/0/0")` is
-  non-None (currently None — silently dropped).  Equivalent via the
-  full pipeline: a `tests/integration/migration/test_aruba_aoss_round_trip.py`
-  fixture pasting Cisco-shaped names and asserting iface count
-  preserves.
-* For mikrotik_routeros: a unit test asserting that
-  `render_intent(intent_with_loopback)` emits a `/interface bridge`
-  (or platform-equivalent) entry for a `softwareLoopback` interface,
-  and the round-trip preserves the iface count.
+* **Drift detail:** source `Vlan10` carries
+  `interface_type="ianaift:l2vlan"` (from the OpenConfig
+  `<type>ianaift:l2vlan</type>`); target after CLI re-parse carries
+  `ianaift:l3ipvlan`.
+* **Codec locus:**
+  `netconfig/migration/codecs/cisco_iosxe_cli/parse.py:91` hard-codes
+  `"vlan": "ianaift:l3ipvlan"` in the name-prefix → IANA-ifType
+  lookup.  IANA distinguishes `l2vlan` (135 — bridge / 802.1Q
+  sub-interface) from `l3ipvlan` (136 — routed VLAN / SVI carrying
+  L3).  OpenConfig models a Catalyst SVI as `l2vlan` (the underlying
+  hardware port is L2-VLAN-tagged); IOS-XE's CLI behaviour
+  (`interface Vlan10` always implies a routed SVI) fits `l3ipvlan`.
+  Both choices are defensible; neither codec is "wrong".
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__cisco_iosxe_cli.yaml:242-249`
+  labels `interfaces[].interface_type` as `good` with a note
+  claiming "byte-perfect" round-trip.  The same-vendor cross-format
+  round-trip is **not** byte-perfect for SVIs — the IANA ident flips.
+  The YAML is wrong.  Pure Bucket B.
+* **Recommended action:** flip the pair YAML disposition to `lossy`
+  with a reason citing the inferred-type asymmetry.  No code change
+  needed unless the team wants to enforce one canonical choice
+  across the codebase (currently not justified for one fixture
+  cell).
 
----
+### Target: fortigate_cli
 
-## Finding 2 — cisco_iosxe_cli & fortigate_cli & opnsense: secondary IPv4 addresses dropped on render / re-parse
+**1 entry.  Bucket B.**
 
-**Pairs affected:** `cisco_iosxe → cisco_iosxe_cli` (1 CODEC_BUG on
-`ipv4_addresses`), `cisco_iosxe → opnsense` (1 CODEC_BUG on
-`ipv4_addresses`).  Same symptom on `cisco_iosxe → fortigate_cli`
-(secondary addresses lost) but already absorbed into the description
-finding because that pair's `ipv4_addresses` YAML disposition is
-`lossy`.
+* **Field:** `interfaces[].description`
+* **Drift detail:** five interface descriptions exceed 25 characters
+  (`WAN uplink to upstream carrier` 30, `LAN downlink (campus
+  distribution)` 34, `Reserved for future expansion (shutdown)` 40,
+  `L3 routed port with dot1q subinterface trunk` 44, `Router ID /
+  iBGP peering loopback` 33).  All five truncated at byte 25 by the
+  FortiGate render.
+* **Codec locus:**
+  `netconfig/migration/codecs/fortigate_cli/render.py:545-548` emits
+  `iface.description[:25]` with the comment "FortiOS alias caps at
+  25 chars per spec".  This is documented, not a bug.
+  `fortigate_cli/codec.py` declares
+  `LossyPath(path="/interfaces/interface/config/description",
+  reason="FortiOS limits alias to 25 characters; longer
+  descriptions from other vendors will be truncated.")`.
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__fortigate_cli.yaml:212-221`
+  labels the field `good` but its own `note` says "FortiOS caps
+  alias at 25 characters — longer Cisco descriptions truncate on
+  FortiGate render".  The note contradicts the disposition.  Pure
+  Bucket B.
+* **Recommended action:** flip the pair YAML disposition `good` →
+  `lossy` and use the existing `note` text verbatim as the `reason`.
+  No code change — the codec already declares the loss correctly via
+  `LossyPath`.
 
-**What drifted.**  The kitchen_sink fixture's `GigabitEthernet0/0/1`
-carries three IPv4 addresses (10.0.10.1/24, 10.0.11.1/24,
-10.0.12.1/24); `GigabitEthernet0/0/3` carries two
-(172.16.0.1/30, 172.16.100.1/24 — the latter from a dot1q
-sub-interface absorbed onto the parent).  After cisco_iosxe NETCONF
-parse the canonical correctly carries all addresses; after rendering
-into the CLI / OPNsense target and re-parsing, only the first
-address survives.
+### Target: juniper_junos
 
-**Codec responsible.**  Target codecs.  Two distinct mechanisms:
+**1 entry.  Bucket A.**
 
-* `cisco_iosxe_cli`:
-  * Render
-    (`netconfig/migration/codecs/cisco_iosxe_cli/render.py:202-204`)
-    emits every address as a bare `ip address X.X.X.X MASK` —
-    Cisco IOS-XE rejects this on a real device (only the first is
-    primary; the rest must be `ip address X.X.X.X MASK secondary`).
-  * Parse
-    (`netconfig/migration/codecs/cisco_iosxe_cli/parse.py:347-353`)
-    has the inverse defect: an explicit `if not current["ipv4"]:
-    # primary only` guard discards every line beyond the first.  So
-    even if the renderer emitted the `secondary` keyword, the parser
-    would still drop them today.  Both halves need fixing for
-    multi-IPv4 to round-trip.
-* `opnsense`
-  (`netconfig/migration/codecs/opnsense/render.py:137-139`) emits
-  only `iface.ipv4_addresses[0]` to `<ipaddr>` + `<subnet>`.  This
-  is documented in the codec docstring and capability matrix as a
+* **Field:** `interfaces[].name`
+* **Drift detail:** count drift `10 → 9 (interfaces)`.  One interface
+  drops on the round-trip into Junos.
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__juniper_junos.yaml:241-253`
+  labels `interfaces[].name` as `good`, claiming "Loopback / SVI /
+  Port-channel sources route through the rename mesh too" (Cisco
+  `Vlan100` → Junos `irb.100`; `Port-channel1` → `ae1`; `Loopback0`
+  → `lo0`).  If the rename mesh handles all 10 source names the
+  count should be preserved; that one interface is dropping
+  indicates a name the mesh fails to translate or a Junos render
+  branch missing for one canonical interface_type.
+* **Codec locus:** Junos render path; specifically a missing emission
+  branch for one of {Tunnel100 (`ianaift:tunnel`), Loopback1 (v6-
+  only software loopback), or one of the multi-IP ethernets where
+  the v4 list-len breaks Junos's per-unit address modelling}.  Not
+  fully diagnosable from the comparator dump alone (truncated source
+  list — see narrow-fixture caveat).
+* **Recommended action:** drill into the Junos render with the
+  kitchen_sink fixture in a unit test asserting `len(parse(render
+  (intent)).interfaces) == 10`.  The diff will name the dropped
+  interface and point at the missing branch.  Likely candidates,
+  ranked by prior art across vendors:
+  1. `Tunnel100` (GRE) — Junos uses `gr-0/0/0.<unit>`; if the
+     port-rename mesh has no entry for ianaift:tunnel sources the
+     interface won't reach the renderer.
+  2. `Loopback1` (IPv6-only) — Junos `lo0` typically allows
+     multiple units; if the renderer keys off `iface.ipv4_addresses`
+     to decide whether to emit, an IPv6-only loopback drops.
+
+### Target: mikrotik_routeros
+
+**1 entry.  Bucket A.**
+
+* **Field:** `interfaces[].name`
+* **Drift detail:** count drift `10 → 11 (interfaces)`.  Net
+  growth — target re-parse produces *more* interfaces than source.
+  Target sample names: `bridge1`, `Vlan10`, `GigabitEthernet0/0/0`
+  (the rest truncated by comparator dump).  RouterOS's
+  `/ip address add interface=...` lines synthesise a stub interface
+  on re-parse if the named interface wasn't declared via
+  `/interface ethernet|bridge|...`.
+* **Codec locus:**
+  `netconfig/migration/codecs/mikrotik_routeros/render.py` emits
+  `/interface ethernet`, `/interface bridge`, `/interface bonding`,
+  `/interface vlan` stanzas.  Loopback (`ianaift:softwareLoopback`)
+  and Tunnel (`ianaift:tunnel`) interfaces from the source canonical
+  have no corresponding RouterOS branch and never reach the wire as
+  `/interface` records — only their IPv4 addresses survive via
+  `/ip address add interface=Loopback0` lines pointing at non-
+  existent interfaces.  On re-parse, the RouterOS parser inflates
+  every distinct `interface=` value into a stub canonical interface,
+  producing the count overshoot rather than undershoot.
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__mikrotik_routeros.yaml:202-211`
+  labels `interfaces[].name` as `good` with a note about the
+  rename-mesh translating Cisco speed-encoded names to RouterOS
+  flat etherN form.  The `good` disposition is wrong for source
+  fixtures carrying Loopback / Tunnel — but flipping the YAML
+  doesn't fix the drift, since real users will hit this on captures
+  that include loopbacks.  Real Bucket A.
+* **Recommended action:** add a Loopback / Tunnel emission branch
+  in `mikrotik_routeros/render.py` driven by canonical
+  `interface_type` (RouterOS uses `/interface bridge` for loopback
+  emulation, `/interface gre` / `/interface ovpn` for tunnels,
+  depending on platform).  Same fix removes a class of count-drift
+  cascades for any source codec carrying loopback or tunnel
+  interfaces.
+
+### Target: opnsense
+
+**1 entry.  Bucket B.**
+
+* **Field:** `interfaces[].ipv4_addresses`
+* **Drift detail:** identical to the cisco_iosxe_cli case —
+  `GigabitEthernet0/0/1` 3 addrs → 1, `GigabitEthernet0/0/3` 2
+  addrs → 1.  Only the primary survives.
+* **Codec locus:**
+  `netconfig/migration/codecs/opnsense/render.py:252-254` emits only
+  `iface.ipv4_addresses[0]` to `<ipaddr>` + `<subnet>`.  This is
+  declared in the codec docstring and capability matrix as a
   one-IP-per-zone modelling limit; OPNsense has `<virtualip>` blocks
   but the canonical emitter doesn't bridge into them.
+* **YAML status:**
+  `cross_vendor_expectations/cisco_iosxe__opnsense.yaml:252-260`
+  labels the field `good` but its own `note` says "Multiple IPv4
+  addresses per Cisco interface degrade to the primary only on the
+  canonical model (one address per interface)".  The note
+  contradicts the disposition.  Pure Bucket B.
+* **Recommended action:** flip the pair YAML disposition `good` →
+  `lossy` and use the existing `note` text verbatim as the `reason`.
+  Code change to render into `<virtualip>` is a feature ask, not a
+  bug fix — defer until a real capture asks for it.
 
-**Likely fix location.**
+## Recommended fix work
 
-* CLI: parse and render both, with a coordinated change.  The cleanest
-  fix is to extend the CLI render to emit `secondary` for index>=1 and
-  the parser to accept `secondary` as a continuation (preserving
-  primary-first ordering on the canonical list).
-* OPNsense: render the secondary addresses into `<virtualip>` (or at
-  minimum surface them as XML comments so the data isn't silently
-  dropped — same pattern the codec already uses for unmodelled DHCP
-  pools).
+Ordered by severity × leverage (a single fix that clears multiple
+cells across the cross-mesh ranks above one-cell fixes):
 
-Honest skepticism: the OPNsense expectation YAML
-(`cisco_iosxe__opnsense.yaml:252-260`) says `ipv4_addresses` is `good`
-but the note explicitly says "Multiple IPv4 addresses per Cisco
-interface degrade to the primary only on the canonical model (one
-address per interface)."  The note contradicts the disposition — this
-is a **YAML expectation bug**.  The disposition should be `lossy` with
-that note.  Same critique applies to `cisco_iosxe__cisco_iosxe_cli.yaml`:
-the YAML says `good` but a same-vendor round-trip that loses
-secondaries is `lossy`, not `good`.
-
-**Test that would catch the fix.**
-
-* Unit test in `tests/unit/migration/codecs/cisco_iosxe_cli/test_render_ipv4_secondary.py`
-  asserting `render(intent_with_3_v4_addrs)` emits `ip address X
-  MASK secondary` for the second and third addresses.
-* Round-trip integration test asserting
-  `len(parse(render(intent_with_3_v4_addrs)).interfaces[0].ipv4_addresses) == 3`.
-* OPNsense: unit test on the render asserting that
-  `iface.ipv4_addresses[1:]` either become `<virtualip>` entries OR
-  are surfaced as a comment (the test should encode whichever
-  decision the team makes).
-
----
-
-## Finding 3 — cisco_iosxe_cli: SVI interface_type drift (l2vlan → l3ipvlan)
-
-**Pair affected:** `cisco_iosxe → cisco_iosxe_cli` (1 CODEC_BUG on
-`interfaces[].interface_type`).
-
-**What drifted.**  Source `Vlan10` carries
-`interface_type="ianaift:l2vlan"` from the OpenConfig
-`<type>ianaift:l2vlan</type>` element.  Round-trip target carries
-`ianaift:l3ipvlan`.
-
-**Codec responsible.**  Target codec, but it's a vendor-modelling
-ambiguity rather than a clean bug.
-`netconfig/migration/codecs/cisco_iosxe_cli/parse.py:90` hard-codes
-`"vlan": "ianaift:l3ipvlan"` in the name-prefix → IANA-ifType lookup.
-The IANA registry distinguishes:
-
-* `l2vlan` (135) — bridge / IEEE 802.1Q VLAN sub-interface
-* `l3ipvlan` (136) — routed VLAN / SVI carrying L3
-
-OpenConfig models a Catalyst SVI as `l2vlan` because the underlying
-hardware port is L2-VLAN-tagged; IOS-XE's CLI behavior (`interface
-Vlan10` always implies a routed SVI) is closer to `l3ipvlan`.  Both
-choices are defensible.
-
-**Likely fix location.**  Pick one and align both codecs:
-
-* If we say "Cisco SVI is always l3ipvlan", change the cisco_iosxe
-  NETCONF parser to map the source `<type>` to `l3ipvlan` when the
-  iface name starts with `Vlan` (override the wire value).  Keeps
-  the CLI parser as-is.  This is a parse-side wire-up choice on the
-  NETCONF codec.
-* If we say "preserve what the wire said", change the CLI parser
-  to map name-prefix `Vlan` to `l2vlan` when the source IANA ident
-  was l2vlan, OR widen the canonical model so `interface_type`
-  carries an alternation (`l2vlan|l3ipvlan` set).
-
-The honest framing: this is an inferred-type asymmetry already
-flagged in the cross-vendor YAMLs (e.g.
-`cisco_iosxe__cisco_iosxe_cli.yaml:242-249` calls `interface_type`
-`good`, but the same-vendor cross-format round-trip clearly isn't
-byte-perfect for SVIs).  The cisco_iosxe_cli pair YAML's `good`
-disposition for `interface_type` is **another YAML expectation bug**
-— it should be `lossy` with the inferred-type note.
-
-**Test that would catch the fix.**  Unit test asserting that
-`parse_cli("interface Vlan10\n ip address 10.10.10.1 255.255.255.0\n")
-.interfaces[0].interface_type` matches whatever the chosen-canonical
-form says (currently `l3ipvlan`; would need to flip if we adopt
-"preserve l2vlan" semantics).
-
----
-
-## Finding 4 — fortigate_cli: description truncated to 25 chars
-
-**Pair affected:** `cisco_iosxe → fortigate_cli` (1 CODEC_BUG on
-`interfaces[].description`).
-
-**What drifted.**  Six interfaces with descriptions longer than 25
-characters (e.g. `WAN uplink to upstream carrier` — 30 chars) are
-truncated at byte 25 by the FortiGate render.
-
-**Codec responsible.**  This is **not** a bug — it's an intentional,
-well-documented capability-matrix limit.
-
-* `netconfig/migration/codecs/fortigate_cli/render.py:117-120` emits
-  `iface.description[:25]` with the comment "FortiOS alias caps at
-  25 chars per spec."
-* `netconfig/migration/codecs/fortigate_cli/codec.py:144-150`
-  declares `LossyPath(path="/interfaces/interface/config/description",
-  reason="FortiOS limits alias to 25 characters; longer descriptions
-  from other vendors will be truncated.")`.
-
-**Likely fix location.**  YAML expectation, not codec.  The pair YAML
-`tests/fixtures/cross_vendor_expectations/cisco_iosxe__fortigate_cli.yaml:212-221`
-correctly explains the truncation in the note ("FortiOS caps alias at
-25 characters — longer Cisco descriptions truncate on FortiGate
-render") but contradicts itself by labelling the disposition `good`.
-Should be `lossy` with that exact note as the reason.
-
-**Test that would catch the fix.**  None code-side — this is a
-documentation correctness issue.  The Phase-4 reconciliation already
-catches it; the fix is to align the YAML disposition with the codec's
-declared `LossyPath`.
-
----
-
-## Finding 5 — Mikrotik description drift (sub-finding of count drift)
-
-The mikrotik_routeros CODEC_BUG on `description` is the same count-
-drift cascade as Finding 1; once two interfaces are silently dropped
-on render (Loopback / Tunnel emission gap), every per-iface field on
-those records reads as drifted.  No separate fix needed beyond
-Finding 1.
-
----
-
-## Skepticism on METHODOLOGY_ISSUE_under findings
-
-Per Phase-4 brief: when source emits zero records for a field
-(`source_count=0`), Phase-1 trivial preservation can produce
-`METHODOLOGY_ISSUE_under` flags that look like drift.  Spot-checking
-a handful of these on the cisco_iosxe → arista_eos cell (35 such
-findings) confirms they are honestly described by the YAML's
-`not_applicable` dispositions (parser doesn't populate `<system>`,
-`<vlans>`, `<network-instances>`, etc., so every system / vlan /
-routing / snmp / lag / aaa field is `(not_populated, not_applicable)`
-which the reconciliation labels `METHODOLOGY_ISSUE_under, severity=low`).
-None of these warrant promotion to a CODEC_BUG; they are
-fixture-coverage gaps masquerading as variances and the YAMLs already
-classify them correctly.
-
-When the cisco_iosxe codec graduates from Phase-0.5 stub to wired
-parse (`<system>`, `<vlans>`, etc.), a substantial Phase-3 YAML
-revision will be needed: most `not_applicable` dispositions will flip
-to `good` or `lossy`.  The pair YAMLs flag this explicitly in their
-"Notes on confidence" sections.
-
----
-
-## Top 3 actionable fix locations
-
-1. **`netconfig/migration/codecs/aruba_aoss/parse.py:174-176`** —
-   widen `_IFACE_HEADER_RE` to accept multi-slash Cisco-shaped port
-   names (or fix the render to apply port-rename mesh).  Single-line
-   regex change unblocks 4 of the 12 CODEC_BUGs and the comparable
-   render-emits-but-parse-rejects issue is likely to recur for any
-   non-AOS-S source codec.
-2. **`netconfig/migration/codecs/cisco_iosxe_cli/parse.py:347-353`
-   + `render.py:202-204`** — coordinated change to emit / accept
+1. **`netconfig/migration/codecs/aruba_aoss/parse.py:207`** — widen
+   `_IFACE_HEADER_RE` to accept multi-slash Cisco-shaped port names
+   (or fix the AOS-S render to apply the port-rename mesh, which
+   the YAML claims is already happening).  Single-line regex change
+   unblocks 1 CODEC_BUG on this source vendor and the underlying
+   render-emits-but-parse-rejects asymmetry recurs for any non-AOS-S
+   source codec — high cross-vendor leverage.  Add a unit test in
+   `tests/unit/migration/codecs/aruba_aoss/test_parse_iface_header.py`
+   asserting `_IFACE_HEADER_RE.match("interface GigabitEthernet0/0/0")`
+   is non-`None`.
+2. **`netconfig/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
+   + `render.py:253-255`** — coordinated change to emit / accept
    `secondary` keyword for IPv4 addresses index >= 1.  Unblocks 1
-   CODEC_BUG on the same-vendor cross-format pair AND makes the
+   CODEC_BUG on this same-vendor cross-format pair AND makes the
    codec emit syntactically valid Cisco config (currently a real
    IOS-XE device would reject the second `ip address` without
-   `secondary`).
-3. **`netconfig/migration/codecs/mikrotik_routeros/render.py:85-110`**
-   — add a Loopback / Tunnel emission branch driven by canonical
-   `interface_type`.  Unblocks 4 CODEC_BUGs on the cisco_iosxe →
-   mikrotik pair and removes a class of count-drift cascades for
-   any source codec carrying loopback or tunnel interfaces.
+   `secondary`).  Add unit test on render
+   (`test_render_ipv4_secondary`) and round-trip test
+   (`len(parse(render(intent_with_3_v4)).interfaces[0].ipv4_addresses)
+   == 3`).
+3. **`netconfig/migration/codecs/mikrotik_routeros/render.py`** —
+   add Loopback / Tunnel emission branches driven by canonical
+   `interface_type`.  Unblocks 1 CODEC_BUG here and eliminates the
+   count-drift overshoot for any source codec that carries
+   non-ethernet / non-VLAN canonical interfaces (every CLI source
+   codec eventually).
 
-YAML hygiene fixes (no code change, single-commit corrections):
+YAML hygiene fixes (no code change; single-commit corrections that
+clear three of the seven cells immediately):
 
-* `tests/fixtures/cross_vendor_expectations/cisco_iosxe__fortigate_cli.yaml:212-221`
+* `cross_vendor_expectations/cisco_iosxe__fortigate_cli.yaml:212-221`
   — flip `interfaces[].description` from `good` to `lossy` (note
   already explains the 25-char truncation).
-* `tests/fixtures/cross_vendor_expectations/cisco_iosxe__opnsense.yaml:252-260`
-  — flip `interfaces[].ipv4_addresses` from `good` to `lossy` (note
+* `cross_vendor_expectations/cisco_iosxe__opnsense.yaml:252-260` —
+  flip `interfaces[].ipv4_addresses` from `good` to `lossy` (note
   already explains "degrade to the primary only").
-* `tests/fixtures/cross_vendor_expectations/cisco_iosxe__cisco_iosxe_cli.yaml:263-280`
-  — flip `interfaces[].ipv4_addresses` from `good` to `lossy`
-  (multi-address loss); flip `interfaces[].interface_type` from
-  `good` to `lossy` (l2vlan/l3ipvlan inference asymmetry).
+* `cross_vendor_expectations/cisco_iosxe__cisco_iosxe_cli.yaml:242-249`
+  — flip `interfaces[].interface_type` from `good` to `lossy` with
+  a reason citing the l2vlan/l3ipvlan SVI inference asymmetry.
+  (The same file's `interfaces[].ipv4_addresses` at line 263 stays
+  `good` — that one is Bucket A waiting on the code fix above.)
+
+A separate task to investigate but not fix here:
+
+* **Junos render-side missing branch** (Bucket A entry on the
+  juniper_junos cell).  Comparator dump truncates the target list
+  so the dropped interface isn't directly visible from
+  `latest.json`.  Add a focused round-trip unit test under
+  `tests/unit/migration/codecs/juniper_junos/` against the
+  kitchen_sink intent and inspect which canonical interface_type the
+  Junos render skips; fix that branch.
 
 ## See also
 
 * `tests/fixtures/real/PHASE4_RECONCILIATION.md` — top-level summary
-  matrix this report drills into for cisco_iosxe-as-source.
+  matrix that this report drills into for cisco_iosxe-as-source.
 * `tests/fixtures/real/_phase4_runs/latest.json` — raw per-cell
   CODEC_BUG records this report classifies.
-* `tests/fixtures/cross_vendor_expectations/README.md` — schema
-  spec the YAML expectations this report critiques are written
-  against.
+* `tests/fixtures/cross_vendor_expectations/cisco_iosxe__<target>.yaml`
+  — pair-specific expectation YAMLs cited in each Bucket B finding.
+* Sibling Phase-4b reports under
+  `tests/fixtures/real/phase4_findings_<vendor>.md` — the
+  cisco_iosxe_cli, juniper_junos, mikrotik_routeros, fortigate_cli,
+  opnsense, and aruba_aoss reports cover the reverse direction of
+  every cell touched here.
 * `netconfig/migration/codecs/cisco_iosxe/codec.py` — the
   Phase-0.5 stub source codec; the parse-side wire-up gap that
-  dominates METHODOLOGY_ISSUE_under counts is documented in its
+  dominates `METHODOLOGY_ISSUE_under` counts (and which is *not*
+  driving any of the 7 CODEC_BUGs above) is documented in its
   module docstring and capability-matrix notes.

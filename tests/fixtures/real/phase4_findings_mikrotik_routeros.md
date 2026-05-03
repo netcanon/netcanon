@@ -1,378 +1,157 @@
-# Phase 4b findings — source codec `mikrotik_routeros`
-
-Investigation of every cell where ``source_codec == "mikrotik_routeros"`` in
-``tests/fixtures/real/_phase4_runs/latest.json`` (run started 2026-05-02T06:54:10Z,
-joining the 2026-05-01 cross-mesh drift matrix against the 7 Phase-3
-``mikrotik_routeros__<target>.yaml`` expectation files).
-
-Scope: 40 cells (5 fixtures × 8 targets, intra-vendor self-pair has no Phase-3
-YAML and shows empty ``field_variances``).  Source fixtures reconciled:
-
-| Fixture | Tier |
-|---|---|
-| ``tests/fixtures/real/mikrotik/ntc_ip_address_export.rsc`` | real |
-| ``tests/fixtures/real/mikrotik/routeros_diff_verbose_export.rsc`` | real |
-| ``tests/fixtures/real/mikrotik/taqavi_initial_provisioning.rsc`` | real |
-| ``tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc`` | real |
-| ``tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc`` | synthetic |
-
-Aggregate variance counts across these 40 cells:
-
-| Variance | Count |
-|---|---:|
-| ALIGNED | 184 |
-| METHODOLOGY_ISSUE_under | 763 |
-| EXPECTED_LOSSY | 106 |
-| EXPECTED_UNSUPPORTED | 29 |
-| MISSING_PHASE1 | 105 |
-| METHODOLOGY_ISSUE_over | 7 |
-| **CODEC_BUG** | **6** |
-
-All six CODEC_BUG findings are severity=high and surface on cells whose
-``render_status=ok`` and ``roundtrip_parse_status=ok`` — i.e. the bytes shipped
-clean but a piece of canonical content disappeared somewhere along the
-parse → render → re-parse arc.
-
----
-
-## 1. Per-finding triage
-
-### Finding A — hostname truncated/dropped on whitespace (2 cells)
-
-**Drift**
-
-| # | Fixture | Target | Drift |
-|---|---|---|---|
-| A1 | ``mikrotik/routeros_diff_verbose_export.rsc`` | ``arista_eos`` | ``hostname: 'Quinta Router' -> ''`` |
-| A2 | ``mikrotik/routeros_diff_verbose_export.rsc`` | ``cisco_iosxe_cli`` | ``hostname: 'Quinta Router' -> 'Quinta'`` |
-
-**Source line** (``routeros_diff_verbose_export.rsc:424``):
-
-```
-/system identity
-set name="Quinta Router"
-```
-
-**Root cause — render-side bug on the *target* codecs.**
-
-The mikrotik parse side is correct: ``_parse_kv`` strips the surrounding
-quotes (``parse.py:244-246``), so ``intent.hostname == "Quinta Router"`` is
-populated faithfully.
-
-The bug is in the target render paths emitting an unquoted, unsanitised
-hostname token:
-
-- ``netconfig/migration/codecs/arista_eos/render.py:42-44`` emits
-  ``f"hostname {tree.hostname}"`` -> ``hostname Quinta Router``.  When the
-  same string is then handed back to ``arista_eos/parse.py:53``, the
-  pattern ``re.compile(r"^hostname\s+(\S+)\s*$", re.MULTILINE)`` *fails to
-  match at all* — the trailing ``\s*$`` anchor doesn't accept the space and
-  ``Router`` token, so the second-parse hostname comes back empty.
-- ``netconfig/migration/codecs/cisco_iosxe_cli/render.py:85-87`` emits the
-  same way.  The IOS-XE CLI parser pattern is more permissive
-  (``r"^hostname\s+(\S+)"`` with no ``$`` anchor — ``parse.py:127``), so it
-  recovers ``Quinta`` but silently drops ``Router``.
-
-Real Arista EOS / Cisco IOS-XE CLI **do not** accept whitespace in
-``hostname`` — both vendors require a single token.  The right fix is
-target-render sanitisation: replace whitespace runs with ``-`` (or ``_``)
-before the ``f"hostname …"`` line, and log a debug-level note that the
-source's free-form name was normalised.
-
-**Likely fix locations**
-
-- ``netconfig/migration/codecs/arista_eos/render.py`` (the ``if tree.hostname:`` block at line 42-44).
-- ``netconfig/migration/codecs/cisco_iosxe_cli/render.py`` (the ``if tree.hostname:`` block at line 85-87).
-- Optionally tighten ``arista_eos/parse.py:53`` to either drop the ``\s*$``
-  anchor or accept the rest-of-line so the whitespace-tolerant *render*
-  doesn't double-fail in legacy configs an operator pasted in.  This is a
-  follow-up, not the primary fix — real EOS rejects the input upstream.
-
-**Test that would catch the fix**
-
-A ``tests/unit/migration/test_real_captures.py`` (or new
-``tests/unit/migration/codecs/test_hostname_sanitisation.py``) parametrise
-that builds a ``CanonicalIntent(hostname="Quinta Router")``, calls each
-target render, and asserts the rendered config (a) contains exactly one
-``hostname`` line and (b) re-parses to a *non-empty* hostname.  Today both
-of these would fail for arista_eos and the second would partially fail for
-cisco_iosxe_cli.
-
----
-
-### Finding B — system DNS / NTP servers dropped on cisco_iosxe_cli round-trip (2 cells)
-
-**Drift**
-
-| # | Fixture | Target | Drift |
-|---|---|---|---|
-| B1 | ``synthetic/mikrotik_routeros/kitchen_sink.rsc`` | ``cisco_iosxe_cli`` | ``all 2 dns_servers dropped`` (``['1.1.1.1', '8.8.8.8']`` -> ``[]``) |
-| B2 | ``synthetic/mikrotik_routeros/kitchen_sink.rsc`` | ``cisco_iosxe_cli`` | ``all 2 ntp_servers dropped`` (``['10.0.0.123', 'pool.ntp.org']`` -> ``[]``) |
-
-**Source lines** (``kitchen_sink.rsc:123-127``):
-
-```
-/system dns
-set servers=1.1.1.1,8.8.8.8
-
-/system ntp client
-set enabled=yes servers=10.0.0.123,pool.ntp.org
-```
-
-**Root cause — target parse-side bug in cisco_iosxe_cli.**
-
-The mikrotik parse side correctly populates ``intent.dns_servers`` and
-``intent.ntp_servers`` (verified locally — comma-split in ``parse.py:262-279``).
-The cisco_iosxe_cli render path correctly emits ``ip name-server <addr>``
-(``render.py:122-125``) and ``ntp server <addr>`` (``render.py:126-129``)
-lines — confirmed by direct exec: the rendered text contains all four
-lines verbatim.
-
-The drop happens on the **second parse** in the cross-mesh harness:
-``cisco_iosxe_cli/parse.py`` does NOT extract top-level ``ip name-server``
-or ``ntp server`` stanzas into ``intent.dns_servers`` / ``intent.ntp_servers``.
-Searching ``parse.py`` for ``name-server`` / ``ntp server`` returns only
-*nested* DHCP-pool DNS handling at line 760-764 (``current.dns_servers`` on
-a DHCP pool, NOT system-level).  ``intent.dns_servers`` and
-``intent.ntp_servers`` are never populated by this parser.
-
-This is a coverage gap (parser doesn't read its own renderer's output),
-not a bug only visible from a foreign source — every codec that round-
-trips through ``cisco_iosxe_cli`` would surface it.
-
-**Likely fix location**
-
-``netconfig/migration/codecs/cisco_iosxe_cli/parse.py`` — add module-level
-regex constants and call sites alongside the existing ``_extract_hostname``
-/ ``_parse_static_routes`` / etc. block at line 219-249:
-
-```python
-_DNS_SERVER_RE = re.compile(r"^ip name-server\s+(?:vrf\s+\S+\s+)?(\S+)\s*$", re.MULTILINE)
-_NTP_SERVER_RE = re.compile(r"^ntp server\s+(?:vrf\s+\S+\s+)?(\S+)", re.MULTILINE)
-```
-
-(Mirror the patterns in ``arista_eos/parse.py:54-60`` — same vendor family,
-same wire syntax, prior art.)
-
-**Test that would catch the fix**
-
-A round-trip test in ``tests/unit/migration/test_cisco_iosxe_cli_codec.py``
-(or augment the synthetic-kitchen-sink round-trip suite) that builds an
-intent with non-empty ``dns_servers`` / ``ntp_servers``, runs
-``render_intent`` then ``parse_intent``, and asserts the lists survive.
-This same gap probably explains a chunk of CODEC_BUG cells from other
-sources targeting cisco_iosxe_cli — a single fix here would clear several
-cross-mesh entries.
-
----
-
-### Finding C — fortigate_cli static-route ``description`` not emitted (1 cell, 4 routes)
-
-**Drift**
-
-| # | Fixture | Target | Drift |
-|---|---|---|---|
-| C1 | ``synthetic/mikrotik_routeros/kitchen_sink.rsc`` | ``fortigate_cli`` | All 4 ``static_routes[].description`` source values dropped (``'Default route to ISP'`` ... -> ``''``) |
-
-**Source lines** (``kitchen_sink.rsc:65-69``):
-
-```
-/ip route
-add comment="Default route to ISP" dst-address=0.0.0.0/0 gateway=198.51.100.1
-add comment="Branch network via core" dst-address=10.50.0.0/16 gateway=10.0.0.254
-...
-```
-
-**Root cause — render-side bug in fortigate_cli.**
-
-Mikrotik ``_parse_ip_route`` correctly maps ``comment="…"`` to
-``CanonicalStaticRoute.description``.  FortiGate's render block
-(``netconfig/migration/codecs/fortigate_cli/render.py:333-345``) emits
-``set dst`` / ``set gateway`` / ``set device`` but never emits
-``set comments "..."``.  FortiGate config syntax for ``config router
-static`` supports a ``set comments`` line — it's just missing.
-
-**Likely fix location**
-
-``netconfig/migration/codecs/fortigate_cli/render.py:333-345`` — add an
-``if route.description:`` clause after the existing optional-field clauses
-that emits ``set comments "<description>"`` (FortiGate quotes string
-values containing spaces).
-
-**Test that would catch the fix**
-
-Either (a) a new dedicated unit test for fortigate static-route render in
-``tests/unit/migration/test_fortigate_cli_codec.py`` asserting that
-``CanonicalStaticRoute(description="Default route to ISP", ...)``
-round-trips through render, or (b) a kitchen-sink-style unit test that
-diffs the rendered fortigate config against an expected snippet.  The
-former is cheaper and easier to attribute.
-
----
-
-### Finding D — opnsense drops the IPv6 link-local alongside global (1 cell)
-
-**Drift**
-
-| # | Fixture | Target | Drift |
-|---|---|---|---|
-| D1 | ``synthetic/mikrotik_routeros/kitchen_sink.rsc`` | ``opnsense`` | ``ether1.ipv6_addresses``: source has ``[2001:db8:0:1::2/64 (global), fe80::1/64 (link-local)]``, target has ``[2001:db8:0:1::2/64]`` only |
-
-**Source lines** (``kitchen_sink.rsc:60-61``):
-
-```
-/ipv6 address
-add address=2001:db8:0:1::2/64 interface=ether1
-add address=fe80::1/64 interface=ether1 advertise=no
-```
-
-**Root cause — render-side schema limit in opnsense.**
-
-``netconfig/migration/codecs/opnsense/render.py:142-144`` deliberately
-emits only ``ipv6_addresses[0]`` because the OPNsense ``<interfaces>``
-XML schema has exactly one ``<ipaddrv6>`` / ``<subnetv6>`` per zone.
-Additional v6 addresses on the same interface land in the OPNsense GUI as
-*virtual IPs* (``<virtualip><vip>...``), not as repeated zone children.
-
-Whether this is a *bug* or *expected lossy* is a judgement call:
-
-- If the expectation YAML treats per-interface multi-v6 as ``lossy`` (which
-  it should given the OPNsense schema), this finding should reclassify to
-  EXPECTED_LOSSY.  Recommend updating
-  ``tests/fixtures/cross_vendor_expectations/mikrotik_routeros__opnsense.yaml``
-  to set ``interfaces[].ipv6_addresses`` expectation to ``lossy`` with a
-  ``mode: SINGLE_V6_PER_ZONE_PLUS_VIRTUALIP`` note rather than fixing the
-  render path.
-- If the YAML deliberately demands full preservation (because OPNsense
-  *can* model this via ``<virtualip>``), the right fix is in
-  ``opnsense/render.py:142-144`` — emit ``ipv6_addresses[0]`` to the zone
-  and emit ``ipv6_addresses[1:]`` as ``<virtualip><vip>`` records under a
-  parallel ``<virtualip>`` element.
-
-**Recommended fix:** start with the YAML correction (downgrade to
-EXPECTED_LOSSY).  The ``<virtualip>`` extension is a worthwhile but
-distinct change with its own parser counterpart in
-``opnsense/parse.py:407-420`` to read ``virtualip``/``vip`` records back
-into ``CanonicalInterface.ipv6_addresses``.
-
-**Test that would catch a render-side fix**
-
-If the ``<virtualip>`` route is taken: a unit test on
-``opnsense/render.py`` rendering an interface with two IPv6 addresses,
-asserting both survive a round-trip through ``opnsense/parse.py``.
-
----
-
-## 2. METHODOLOGY_ISSUE_under skepticism (source_count=0 demotion)
-
-Per the prompt's directive: demote findings where the source had zero of
-the field in question.
-
-The 763 ``METHODOLOGY_ISSUE_under`` rows in mikrotik-source cells consist
-mostly of **non-list scalar fields** (``apply_groups``, ``group_content``,
-``evpn_type5_routes``, ``domain``, ``raw_sections``, ``timezone``,
-``source_format``, ``source_vendor``, etc.) where the source codec
-populates these as ``"preserved"`` *because the canonical placeholder
-exists with a default value*, and the YAML expected ``"not_applicable"`` /
-``"unsupported"``.
-
-These are genuine **YAML-side methodology drift** (the expectation YAML
-should mark them ``lossy``-with-zero-count or ``not_applicable`` with an
-explicit-zero source side), not target codec bugs.
-
-For the **list-shaped** fields (``dhcp_servers``, ``radius_servers``,
-``snmp``, ``static_routes``, ``vlans``, ``lags``, ``local_users``,
-``syslog_servers``, ``ntp_servers``, ``dns_servers``) where source content
-is non-empty (verified — ``kitchen_sink.rsc`` populates all of them) the
-``METHODOLOGY_ISSUE_under`` classification is correct in shape: the
-expectation YAML claims the target loses these (``expected: lossy`` /
-``unsupported``) but the harness observes ``preserved``.  The fix is to
-upgrade the expectation YAMLs to ``"good"`` for those fields where the
-target codec actually preserves them.
-
-No CODEC_BUG demotions arise from the source_count=0 check — all 6
-CODEC_BUG cells have non-zero source content.
-
----
-
-## 3. METHODOLOGY_ISSUE_over rows (7 cells)
-
-For completeness — these are low-severity drift signals where the
-expectation YAML claimed the field would be ``not_applicable`` but the
-target rendered something:
-
-- ``interfaces[].default_name`` -> ``cisco_iosxe`` on 5 fixtures.
-  ``default_name`` is mikrotik-internal (``ether2`` original-name vs.
-  ``name=`` user-rename).  Cisco_iosxe canonical retains the field name
-  but populates the empty string; the YAML's ``not_applicable`` is more
-  accurate than ``drifted``.  **Recommended:** update the YAMLs to mark
-  the field with an ``ignored: true`` flag or filter it out at the
-  reconciliation layer (this is a pure scoping/expectation issue, not a
-  codec bug).
-- ``vlans[].description`` -> ``juniper_junos`` on 2 fixtures.  Same
-  pattern — the canonical field is preserved but the YAML predicted
-  ``not_applicable``.  Update the expectation YAML.
-
-These are all severity=low; no urgent action required.
-
----
-
-## 4. Bond-interface ``description`` propagation check
-
-The integrator agent flagged that mikrotik render drops bond-interface
-``description`` (whitelisted in
-``tests/unit/migration/test_synthetic_kitchen_sink_round_trips.py
-::_KNOWN_ROUNDTRIP_GAPS["mikrotik_routeros::kitchen_sink.rsc"]``).
-
-I checked whether this propagates to other targets as a CODEC_BUG.  It
-does **not**.  The drop is observed inside the ``interfaces`` /
-``lags`` field on every target's kitchen_sink cell, but in every case
-the field's ``variance`` is either ``EXPECTED_LOSSY`` (where the YAML
-already classifies the lag/interface complex as lossy — arista_eos,
-aruba_aoss, cisco_iosxe_cli, juniper_junos), ``EXPECTED_UNSUPPORTED``
-(cisco_iosxe), or ``METHODOLOGY_ISSUE_under`` (fortigate_cli, opnsense
-where the YAML undersells preservation but the bond-description piece is
-absorbed inside the broader interfaces+lags drift).
-
-So the bond-description gap is a **mikrotik-internal round-trip TODO**
-(parse mikrotik -> intent -> render mikrotik drops description), not a
-cross-vendor CODEC_BUG.  Fix would live in
-``netconfig/migration/codecs/mikrotik_routeros/render.py`` — the
-``/interface bonding`` emission stanza must add the ``comment="…"``
-key when ``CanonicalInterface.description`` is non-empty.  Once fixed,
-the entry can be removed from
-``test_synthetic_kitchen_sink_round_trips.py::_KNOWN_ROUNDTRIP_GAPS``.
-
----
-
-## 5. Top three actionable fix locations
-
-Ranked by leverage (number of cross-mesh cells cleared per fix):
-
-1. **``cisco_iosxe_cli/parse.py`` — add system-level ``ip name-server`` /
-   ``ntp server`` parsing.**  Single drop-in pair of regex+loop additions
-   in the parse function around line 219-249.  Mirrors arista_eos
-   precedent (``arista_eos/parse.py:54-60``).  Clears Findings B1, B2 and
-   likely several CODEC_BUG cells from other sources targeting
-   cisco_iosxe_cli.
-2. **``arista_eos/render.py:42-44`` and ``cisco_iosxe_cli/render.py:85-87``
-   — sanitise ``tree.hostname`` whitespace before emission.**  Two-line
-   change in each codec; clears Findings A1, A2 and any future cell where
-   a multi-word hostname round-trips through these targets.
-3. **``fortigate_cli/render.py:333-345`` — emit ``set comments "..."``
-   for ``CanonicalStaticRoute.description``.**  Single ``if`` clause;
-   clears Finding C1 (4 routes in the kitchen-sink fixture) and any other
-   source whose static routes carry comments.
-
-Finding D (opnsense IPv6 multi-address) is more naturally a YAML
-correction than a render fix — recommend the YAML route first.
-
----
+# Phase 4b findings — source vendor: mikrotik_routeros
+
+Generated against `tests/fixtures/real/_phase4_runs/latest.json`.  Filter:
+`source_codec == "mikrotik_routeros"` AND `field_variances[*].variance ==
+"CODEC_BUG"`.
+
+**4 CODEC_BUG findings** across 4 distinct (target, field) cells — by far
+the smallest source-vendor bucket in the Phase 4 mesh.  Distribution:
+arista_eos (1), cisco_iosxe_cli (1), fortigate_cli (1), opnsense (1).
+
+The five mikrotik_routeros source fixtures driving these cells are:
+
+* `tests/fixtures/real/mikrotik/ntc_ip_address_export.rsc`
+* `tests/fixtures/real/mikrotik/routeros_diff_verbose_export.rsc`
+* `tests/fixtures/real/mikrotik/taqavi_initial_provisioning.rsc`
+* `tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc`
+* `tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc`
+
+## Triage classification (3 buckets: A real-bug / B stale-YAML / C acceptable-lossy)
+
+* **Bucket A — real codec bug**: target codec drops or mangles data the
+  source carried and the YAML promised would survive.  Codec locus is
+  the parse or render path of the *target*.
+* **Bucket B — stale YAML**: the YAML expectation overstates what the
+  current codec stack can actually do given target-vendor schema limits.
+  Drift is real but expectations should be downgraded to `lossy`.
+* **Bucket C — acceptable lossy**: benign canonicalisation (dedup,
+  normalisation) the YAML already documents as fine elsewhere.
+
+## Bucket totals
+
+| Bucket | Count | Action |
+|---:|---:|---|
+| A | 3 | Fix target render paths (arista_eos hostname, cisco_iosxe_cli hostname, fortigate_cli static-route comment) |
+| B | 1 | Downgrade YAML expectation (opnsense `interfaces[].ipv6_addresses` — schema limit on multi-v6 per zone) |
+| C | 0 | — |
+
+## Per-cell findings
+
+### Target: arista_eos (Σ 1 codec bug)
+
+#### Bug MT-1 (Bucket A): hostname containing whitespace round-trips to empty
+
+* **Field**: `hostname`
+* **Cell**: `mikrotik/routeros_diff_verbose_export.rsc -> arista_eos`
+* **Drift detail**: source `'Quinta Router'` -> target `''`.
+* **Source line** (`/system identity / set name="Quinta Router"`): mikrotik
+  parser correctly strips quotes and stores the literal two-word string in
+  `intent.hostname`.
+* **Codec locus**: arista_eos render-side bug.
+  `netconfig/migration/codecs/arista_eos/render.py:97-98` emits
+  `f"hostname {tree.hostname}"` -> `hostname Quinta Router`, an invalid
+  Arista line.  When that text is fed back through
+  `arista_eos/parse.py:53` (`re.compile(r"^hostname\s+(\S+)\s*$",
+  re.MULTILINE)`), the trailing `\s*$` anchor refuses to match because
+  ` Router` is left on the line — the second-pass parse returns no
+  hostname, hence the empty target value.
+* **Phase 3 expectation**: `mikrotik_routeros__arista_eos.yaml` declares
+  `hostname: good`.
+* **Likely fix**: arista render must sanitise whitespace (replace runs
+  with `-` or `_`) before emitting the `hostname` line.  Real Arista EOS
+  rejects whitespace upstream, so the canonicalisation is required.
+
+### Target: cisco_iosxe_cli (Σ 1 codec bug)
+
+#### Bug MT-2 (Bucket A): hostname containing whitespace truncates at first space
+
+* **Field**: `hostname`
+* **Cell**: `mikrotik/routeros_diff_verbose_export.rsc -> cisco_iosxe_cli`
+* **Drift detail**: source `'Quinta Router'` -> target `'Quinta'`.
+* **Codec locus**: cisco_iosxe_cli render-side bug.
+  `netconfig/migration/codecs/cisco_iosxe_cli/render.py:90-91` emits
+  `f"hostname {tree.hostname}"` unsanitised.  The cisco_iosxe_cli parser
+  pattern is more permissive (`r"^hostname\s+(\S+)"` at
+  `parse.py:128`, no `$` anchor) so it captures `Quinta` but silently
+  drops `Router`.  Real IOS-XE rejects whitespace in hostnames upstream.
+* **Phase 3 expectation**: `mikrotik_routeros__cisco_iosxe_cli.yaml`
+  declares `hostname: good`.
+* **Likely fix**: same as MT-1 — sanitise whitespace before emission.
+
+### Target: fortigate_cli (Σ 1 codec bug)
+
+#### Bug MT-3 (Bucket A): static-route description not emitted
+
+* **Field**: `static_routes` (sub-field `description` on every record)
+* **Cell**: `synthetic/mikrotik_routeros/kitchen_sink.rsc -> fortigate_cli`
+* **Drift detail**: 4 routes; on each, source `description` (`"Default
+  route to ISP"`, `"Branch network via core"`, `"Blackhole RFC1918
+  leakage"`, `"IPv6 default"`) -> target `""`.  Counts match (4 / 4);
+  only `description` drifts.
+* **Codec locus**: fortigate_cli render-side bug.
+  `netconfig/migration/codecs/fortigate_cli/render.py:814-827` emits the
+  `config router static / edit N / set dst / set gateway / set device /
+  next` block but never emits `set comments "..."` — the canonical
+  `route.description` is silently discarded.  FortiOS supports
+  `set comments` on `config router static` entries.
+* **Phase 3 expectation**: `mikrotik_routeros__fortigate_cli.yaml`
+  declares `static_routes: good`.
+* **Likely fix**: add `if route.description: out.append(f'        set
+  comments "{route.description}"')` to the per-route block.
+
+### Target: opnsense (Σ 1 codec bug)
+
+#### Bug MT-4 (Bucket B): IPv6 link-local dropped (one v6 per zone schema)
+
+* **Field**: `interfaces[].ipv6_addresses` (per-record, on `ether1`)
+* **Cell**: `synthetic/mikrotik_routeros/kitchen_sink.rsc -> opnsense`
+* **Drift detail**: source `[2001:db8:0:1::2/64 (global), fe80::1/64
+  (link-local)]` -> target `[2001:db8:0:1::2/64]` only.
+* **Codec locus**: opnsense render-side schema limit.
+  `netconfig/migration/codecs/opnsense/render.py:259-261` deliberately
+  emits only `ipv6_addresses[0]` because the OPNsense `<interfaces>`
+  XML schema models exactly one `<ipaddrv6>` / `<subnetv6>` per zone.
+  Additional v6 addresses on one interface are not first-class in the
+  zone schema (they would have to live as `<virtualip><vip>` records).
+  OPNsense also auto-derives link-local from the MAC, so explicit
+  preservation is doubly synthetic.
+* **Phase 3 expectation**: `mikrotik_routeros__opnsense.yaml` declares
+  `interfaces[].ipv6_addresses: good` with a note implying scope is
+  preserved — overstates schema reality.
+* **Recommended action**: downgrade YAML to `lossy` with reason
+  `OPNsense schema models one ipv6 address per zone; link-local is
+  auto-derived` rather than invest in a `<virtualip>` extension that
+  would also need a parser counterpart in
+  `opnsense/parse.py`.  Bucket B.
+
+## Top-2 actionable fixes (low CODEC_BUG count -> 2 not 3)
+
+1. **Hostname whitespace sanitisation in target renderers** — clears
+   MT-1 and MT-2 with a 2-line change in each of
+   `netconfig/migration/codecs/arista_eos/render.py:97-98` and
+   `netconfig/migration/codecs/cisco_iosxe_cli/render.py:90-91`.
+   Helper could live as a shared `_sanitise_hostname` in
+   `migration/_user_secrets.py`-adjacent helper if other vendors
+   replicate the pattern (real Arista / IOS-XE both reject whitespace).
+2. **fortigate_cli static-route `set comments` emission** — single
+   conditional in `netconfig/migration/codecs/fortigate_cli/render.py`
+   between lines 825 and 826 (after `set device`, before `next`).
+   Clears MT-3 (4 routes) and any other source whose static routes
+   carry comments.
+
+The opnsense ipv6 case (MT-4) is a YAML downgrade rather than a code
+fix — handled in the cross_vendor_expectations YAML edit, not the codec.
 
 ## See also
 
-- ``tests/fixtures/real/PHASE4_RECONCILIATION.md`` — overall Phase 4b skeleton
-- ``tests/fixtures/real/_phase4_runs/latest.json`` — per-cell raw data
-- ``tests/fixtures/cross_vendor_expectations/mikrotik_routeros__*.yaml`` — Phase 3 expectations under audit
-- ``netconfig/migration/codecs/mikrotik_routeros/`` — source codec under investigation
-- ``tests/unit/migration/test_synthetic_kitchen_sink_round_trips.py`` — ``_KNOWN_ROUNDTRIP_GAPS`` for the bond-description gap
+* `tests/fixtures/real/PHASE4_RECONCILIATION.md` — overall Phase 4b skeleton
+* `tests/fixtures/real/_phase4_runs/latest.json` — raw per-cell data
+* `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__arista_eos.yaml`
+* `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__cisco_iosxe_cli.yaml`
+* `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__fortigate_cli.yaml`
+* `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__opnsense.yaml`
+* `netconfig/migration/codecs/mikrotik_routeros/parse.py` — confirmed
+  source-side parsing of `hostname`, `static_routes[].description`, and
+  `interfaces[].ipv6_addresses` is correct; bugs are all on the target
+  side (arista/cisco_iosxe_cli/fortigate render) or in the OPNsense
+  YAML expectation.
