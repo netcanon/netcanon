@@ -32,6 +32,11 @@ from __future__ import annotations
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from ..._user_secrets import (
+    classify_hash,
+    format_review_comment,
+    is_migratable,
+)
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
@@ -100,19 +105,59 @@ def render_canonical(intent: CanonicalIntent) -> str:
             )
 
         # Local users (Tier 2).  Map canonical admin -> admins
-        # group, anything else -> users.  Strip the "bcrypt:" tag
-        # from the hash (OPNsense's <password> field carries the
-        # raw $2y$... value).  Foreign hashes are emitted verbatim
-        # — OPNsense will reject non-bcrypt at auth time but our
-        # canonical carries them faithfully.
+        # group, anything else -> users.  OPNsense's ``<password>``
+        # element only consumes bcrypt (``$2y$10$...``) hashes —
+        # FreeBSD's PHP-side password_verify() rejects everything
+        # else.  Foreign hashes (Cisco type-5/8/9, Arista sha512,
+        # FortiGate ENC, plain md5crypt) cannot be re-used; emitting
+        # them as-is leaks the source hash literal as the password
+        # element value (CRITICAL security bug — see
+        # tests/fixtures/real/user_smoke_findings.md issue #1).
+        #
+        # Policy lives in :mod:`netconfig.migration._user_secrets`
+        # (``_TARGET_ACCEPTS["opnsense"] = {plaintext, bcrypt}``).
+        # When the hash is unmigratable, emit a comment-form review
+        # line INSIDE the ``<user>`` element naming the source
+        # algorithm so the operator knows what to reset from, and
+        # skip the ``<password>`` child entirely.  Plaintext is
+        # accepted verbatim (operator-supplied).
         for user in intent.local_users:
             user_el = ET.SubElement(sys_el, "user")
             ET.SubElement(user_el, "name").text = user.name
             if user.hashed_password:
-                _alg, _, raw_hash = user.hashed_password.partition(":")
-                # If no "alg:" prefix, use the whole thing verbatim.
-                hash_out = raw_hash if raw_hash else user.hashed_password
-                ET.SubElement(user_el, "password").text = hash_out
+                if is_migratable(user.hashed_password, "opnsense"):
+                    # Strip the ``alg:`` tag so OPNsense's
+                    # <password> element carries the raw value
+                    # (e.g. ``$2y$10$...`` for bcrypt; the literal
+                    # password for plaintext).
+                    algorithm, payload = classify_hash(user.hashed_password)
+                    if algorithm == "plaintext":
+                        hash_out = payload or user.hashed_password
+                    else:
+                        hash_out = payload
+                    ET.SubElement(user_el, "password").text = hash_out
+                else:
+                    # Comment-form review line — XML comment syntax
+                    # places a sibling <!-- ... --> node inside the
+                    # <user> element so the operator sees a clear
+                    # "reset this password" reminder rather than a
+                    # broken hash literal masquerading as bcrypt.
+                    #
+                    # XML disallows ``--`` inside comment bodies
+                    # (it terminates the comment prematurely), so
+                    # we strip the helper's literal ``-- review:``
+                    # separator down to a single dash for XML
+                    # safety while keeping the same wording.
+                    algorithm, _payload = classify_hash(user.hashed_password)
+                    review = format_review_comment(
+                        user.name, algorithm, comment_syntax="xml",
+                    )
+                    body = (
+                        review.removeprefix("<!-- ")
+                        .removesuffix(" -->")
+                        .replace("-- review:", "- review:")
+                    )
+                    user_el.append(ET.Comment(body))
             ET.SubElement(user_el, "scope").text = "system"
             ET.SubElement(user_el, "groupname").text = (
                 "admins" if user.privilege_level == 15 else "users"
@@ -180,20 +225,43 @@ def render_canonical(intent: CanonicalIntent) -> str:
                 ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
                 ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
 
-    # VLANs — emit <vlans><vlan> per CanonicalVlan.  We mirror the
-    # minimal shape the parser reads back: <tag> (required) + <descr>
-    # (for the human-readable name).  Real OPNsense <vlan> elements
-    # carry additional metadata (uuid, if, pcp, vlanif) but those
-    # aren't in the canonical — OPNsense happily re-ingests XML
-    # without them.  Round-trip stability only needs parser/render
-    # symmetry on the fields we canonicalise.
+    # VLANs — emit <vlans><vlan> per CanonicalVlan.  Real OPNsense
+    # <vlan> elements REQUIRE a <if> child naming the parent
+    # physical / lagg interface; without it the VLAN cannot bind
+    # at the kernel level and OPNsense's UI also refuses to save.
+    # See real fixtures under tests/fixtures/real/opnsense/ — every
+    # <vlan> carries <if>, <tag>, <pcp>, <proto/>, <descr>, <vlanif>
+    # in that order, and the OPNsense docs at
+    # https://docs.opnsense.org/manual/other-interfaces.html confirm
+    # parent-interface + tag are mandatory.  Emitting a <vlan> with
+    # only <tag> (the prior bug) leaked invalid XML to operators
+    # — see tests/fixtures/real/user_smoke_findings.md issue #5.
+    #
+    # Parent-interface lookup walks LAGs and physical interfaces in
+    # canonical order: prefer a LAG that carries this VLAN on its
+    # trunk, then fall back to "first lagg", then "first physical".
     if intent.vlans:
         vlans_el = ET.SubElement(root, "vlans")
+        parent_default = _vlan_parent_default(intent)
         for vlan in intent.vlans:
             vlan_el = ET.SubElement(vlans_el, "vlan")
+            parent_if = _vlan_parent_for(vlan, intent, parent_default)
+            ET.SubElement(vlan_el, "if").text = parent_if
             ET.SubElement(vlan_el, "tag").text = str(vlan.id)
+            ET.SubElement(vlan_el, "pcp").text = "0"
+            ET.SubElement(vlan_el, "proto")
             if vlan.name:
                 ET.SubElement(vlan_el, "descr").text = vlan.name
+            # OPNsense convention: <vlanif> carries the synthesised
+            # device name "<parent>_vlan<tag>" used by the kernel
+            # to instantiate the 802.1Q child interface.  Real
+            # exports use both this form and the FreeBSD-historical
+            # "vlan0.<tag>" sequential form; the parent_vlan_tag
+            # form is unambiguous when multiple parents carry
+            # different VLANs.
+            ET.SubElement(vlan_el, "vlanif").text = (
+                f"{parent_if}_vlan{vlan.id}"
+            )
 
     # DHCP pools (Tier 2).  OPNsense keys DHCP config by interface
     # zone; use the canonical pool's ``interface`` field as the
@@ -311,6 +379,91 @@ def _render_interface_zone(iface: dict[str, Any], parent: ET.Element) -> None:
 def _render_enable_flag(value: Any) -> str:
     """No-op converter for the ``enable`` flag — empty element, no text."""
     return ""
+
+
+def _vlan_parent_default(intent: CanonicalIntent) -> str:
+    """Pick a deterministic default parent interface for VLAN bindings.
+
+    OPNsense VLANs without an obvious SVI / trunk anchor still need a
+    parent ``<if>`` to be valid XML.  We walk the canonical tree in a
+    fixed order and pick the first match:
+
+    1. The first LAG (``intent.lags[0].name``) — multi-vendor hardware
+       almost always trunks VLANs over a LAG to a downstream switch,
+       so this is the right answer for the common case.
+    2. The first physical-looking interface (i.e. not a Vlan SVI, not a
+       Loopback, not the magic ``oobm`` zone).  Order is canonical
+       insertion order — codecs preserve it.
+    3. ``"lan"`` as a last-resort literal — mirrors OPNsense's default
+       zone name when no hardware is declared.  Operators will need
+       to rewire this manually but at least the XML is structurally
+       valid.
+    """
+    if intent.lags:
+        return intent.lags[0].name
+    for iface in intent.interfaces:
+        lname = iface.name.lower()
+        if lname.startswith("vlan"):
+            continue
+        if lname.startswith("loopback") or lname.startswith("lo"):
+            continue
+        if iface.name == "oobm":
+            continue
+        return iface.name
+    return "lan"
+
+
+def _vlan_parent_for(
+    vlan: Any,
+    intent: CanonicalIntent,
+    default: str,
+) -> str:
+    """Resolve the parent physical / lagg interface for a single VLAN.
+
+    Lookup order:
+
+    1. A LAG whose ``trunk_allowed_vlans`` (declared on its members or
+       on the LAG-named interface) contains ``vlan.id`` — this is the
+       most common cross-vendor binding when the source codec emits
+       VLANs on a port-channel trunk.
+    2. A physical / non-VLAN interface whose ``trunk_allowed_vlans``
+       contains ``vlan.id``.
+    3. The deterministic ``default`` (first lagg / first physical /
+       ``"lan"``) returned by :func:`_vlan_parent_default`.
+
+    The lookup intentionally does NOT consult the VLAN's own SVI L3
+    binding — OPNsense's ``<if>`` is the L2 trunk parent, not the L3
+    interface.  Codecs that emit a Vlan-named SVI ``CanonicalInterface``
+    are signalling routing intent, not the trunk anchor.
+    """
+    # Pass 1 — a LAG whose interface row carries this VLAN on its
+    # allowed-trunk list, or a LAG whose member is bound on it.
+    for lag in intent.lags:
+        # Match the LAG-named interface itself (some codecs put the
+        # trunk list on the LAG).
+        for iface in intent.interfaces:
+            if iface.name != lag.name:
+                continue
+            if vlan.id in iface.trunk_allowed_vlans:
+                return lag.name
+        # Match any LAG member that carries this VLAN.
+        for member in lag.members:
+            for iface in intent.interfaces:
+                if iface.name == member and vlan.id in iface.trunk_allowed_vlans:
+                    return lag.name
+    # Pass 2 — a non-LAG, non-VLAN interface carrying this VLAN.
+    lag_member_set = {
+        m for lag in intent.lags for m in lag.members
+    }
+    for iface in intent.interfaces:
+        lname = iface.name.lower()
+        if lname.startswith("vlan"):
+            continue
+        if iface.name in lag_member_set:
+            continue
+        if vlan.id in iface.trunk_allowed_vlans:
+            return iface.name
+    return default
 
 
 def _zone_tag_for(name: str) -> str:
