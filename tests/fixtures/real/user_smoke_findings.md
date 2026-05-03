@@ -238,23 +238,30 @@ tests fixed in Phase 3a (Arista bcrypt) and Phase 5 (Aruba port
 zero) — pre-existing tests can encode the bug they were written
 to document.
 
-**Two new FortiGate sub-findings logged** (out-of-scope for the
-canonical-layer wave; future fortigate render work):
+**Two new FortiGate sub-findings caught during canonical-layer wave** — both resolved in the follow-up wave:
 
-| # | Issue | Severity | Locus |
+| # | Issue | Fix commit | Approach |
 |---|---|---|---|
-| 20 | FortiGate render should emit `set mode dhcp` for foreign DHCP-client interfaces | medium | fortigate_cli render |
-| 21 | FortiGate `_parent_for_vlan_iface` should prefer LAN over WAN | low | fortigate_cli render |
+| 20 | FortiGate render should emit `set mode dhcp` for foreign DHCP-client interfaces | `abaa2a6` | New branch in interface-emit loop: when `iface.dhcp_client=True AND not iface.ipv4_addresses`, emit `set mode dhcp` and skip `set ip`.  Defensive: when both are set, prefer static (FortiOS treats explicit IP as dominant). |
+| 21 | FortiGate `_parent_for_vlan_iface` should prefer LAN over WAN | `abaa2a6` | New scoring helper `_parent_for_vlan_iface`: `+10` if RFC1918 IPv4, `+5` if `trunk_allowed_vlans` populated, `-5` if `dhcp_client=True`.  Port-index is tiebreaker only — never allowed to create positive signal alone (otherwise signal-free trees flip ordering).  Falls back to legacy `vlan_heuristics.parent_for_vlan_iface` when no signal evidence (byte-identity backward compat).  Bonus: `_build_vlan_children` had its own duplicate parent picker — rerouted to the new scoring function so synthesised `vlan<id>` entries also benefit. |
+
+**Junos parser symmetry resolved separately** — commit `2b2c743`:
+
+| # | Issue | Fix commit | Approach |
+|---|---|---|---|
+| (sym) | Junos parser doesn't recognise `family inet dhcp` token (same-vendor round-trip drops DHCP intent) | `2b2c743` | Both `set interfaces X unit N family inet dhcp` and dotted-unit `set interfaces X.N family inet dhcp` shapes recognised → set `dhcp_client=True`.  Caught a real bug en route: materialiser was missing `dhcp_client=` on the `CanonicalInterface` constructor — fixed inline. |
+
+**Arista helper consolidation** — commit `ba47a20`:
+
+| # | Issue | Fix commit | Approach |
+|---|---|---|---|
+| (cleanup) | Arista's local `_ARISTA_SECRET_TYPE.get(algorithm) is None` check was DRY-equivalent to `is_migratable("arista_eos")` but the helper hadn't been wired (Phase 3a noted) | `ba47a20` | Added `arista_eos` entry to `_TARGET_ACCEPTS` (`{plaintext, 5, md5crypt, sha512}` — matches `_ARISTA_SECRET_TYPE` keys exactly).  Refactored gate to call `is_migratable`; `_ARISTA_SECRET_TYPE` retained as emit-form dispatch (algorithm → `secret <N>` tag).  Byte-identity confirmed via 4 existing assertion tests. |
 
 **Out-of-scope (not in this wave):**
 - IPv6 DHCPv6 / SLAAC — `CanonicalInterface` schema has no
   `dhcp_client_v6` field.  The OPNsense parser logs
   `dhcp6`/`slaac`/`track6`/`6rd`/`6to4` keywords at INFO and
   skips them; canonical-layer expansion deferred.
-- Junos parser symmetry for `family inet dhcp` — Junos own
-  parse doesn't recognise the `dhcp` token, so same-vendor
-  Junos round-trip drops the DHCP intent.  Logged as a
-  separate sub-finding for parser-side cleanup.
 
 ### Notes on issue 10 (wide silent drops — deferred)
 
