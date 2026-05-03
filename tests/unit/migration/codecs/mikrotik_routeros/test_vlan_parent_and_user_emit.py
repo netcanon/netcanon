@@ -50,6 +50,7 @@ These tests pin:
    has no global domain command.
 """
 
+import pytest
 from netconfig.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
@@ -62,6 +63,9 @@ from netconfig.migration.codecs.mikrotik_routeros.render import (
     render_intent,
 )
 
+
+
+pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # Finding 7 — bridge synthesis conditional on VLAN parent identification

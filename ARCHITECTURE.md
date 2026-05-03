@@ -361,6 +361,55 @@ returns a ranked list.  Structural markers that discriminate vendors:
 
 ---
 
+## Cross-cutting render-time policies
+
+Some concerns are vendor-agnostic and live in shared sibling modules
+at the migration-package root rather than per-codec.  Each policy is
+called by multiple codecs to keep cross-vendor behaviour consistent:
+
+**Hash-portability policy** (`netconfig/migration/_user_secrets.py`).
+When a render path consumes `CanonicalLocalUser.hashed_password`, it
+calls `is_migratable(hashed, target_vendor)` to decide whether the
+target's CLI accepts that hash form.  Cross-vendor mismatches (e.g.
+Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
+`format_review_comment(...)` line in the appropriate per-codec
+syntax instead of leaking the hash literal as plaintext.  Per-target
+accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
+
+**Naming-value sanitisation** (`netconfig/migration/_naming.py`).
+Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
+in hostname / domain / VRF-name tokens; renderers call
+`sanitise_hostname()` so the wire form round-trips through the
+target's own parser.  Source state preserved on canonical, sanitised
+only at the wire boundary.
+
+**Switchport ↔ VLAN projection**
+(`netconfig/migration/canonical/transforms.py`).  The
+canonical model carries L2 membership both ways: per-iface
+`switchport_mode`/`access_vlan`/`trunk_allowed_vlans` AND per-vlan
+`tagged_ports`/`untagged_ports`.  Codecs whose parse populates only
+one direction call `project_switchport_to_vlan(intent)` (or the
+inverse `project_vlan_to_switchport`) as a post-pass for round-trip
+stability.  The forward helper guards the Junos `vlan members all`
+sentinel (`range(1,4095)`) to avoid synthesising 4094 phantom VLANs.
+
+**`kind=mgmt` cascade**.  Source-side codecs promote
+`CanonicalInterface.kind` from `physical` to `mgmt` when context
+indicates an out-of-band management interface (e.g. cisco_iosxe_cli
+parser detects `Mgmt-vrf` binding on a `GigabitEthernet0/0`).
+Target codecs route `kind=mgmt` interfaces through dedicated emit
+paths: Aruba `oobm` block, FortiGate `mgmt1` port, OPNsense
+`opt_mgmt` zone, Junos routing-instance binding.  Honours the
+canonical `kind` field; never emit a regular physical port for
+mgmt-classified interfaces.
+
+When adding a new codec, audit each policy and decide whether to
+opt in.  Most cases: opt in.  Re-implementing the policy locally is
+the wrong call — see `netconfig/migration/codecs/README.md`
+"Cross-codec shared utilities" section.
+
+---
+
 ## Target profiles (hardware-aware rename-modal metadata)
 
 **Where:** `definitions/target_profiles/*.yaml` +
@@ -661,6 +710,47 @@ surfaces the current corpus doesn't touch.
 Mocking single entry point: **SSH collection is mocked at
 `netconfig.api.routes.backups.get_collector`, never at `ConnectHandler`
 or `paramiko.SSHClient` directly** (see CLAUDE.md hard rule).
+
+### Cross-mesh fidelity audit harness
+
+Beyond the test layers above, a separate audit harness lives at
+`tools/run_full_mesh.py` (Phase 1: mechanical drift) +
+`tools/run_phase4_reconciliation.py` (Phase 4: classify drift
+against per-pair Phase-3 expectation YAMLs in
+`tests/fixtures/cross_vendor_expectations/`).  Output committed as
+`tests/fixtures/real/CROSS_MESH_RESULTS.md` and
+`tests/fixtures/real/PHASE4_RECONCILIATION.md`.
+
+Phase 4 classifies every `(source_codec, target_codec, fixture,
+field)` cell into one of seven variance classes:
+
+* **ALIGNED** — drift matches expectation; no action.
+* **CODEC_BUG** — drifted where YAML says `disposition: good`.
+  This is the high-severity signal — real cross-vendor drift the
+  codec author should fix.
+* **EXPECTED_LOSSY** — drifted, YAML says `disposition: lossy`
+  (acknowledged loss).
+* **EXPECTED_UNSUPPORTED** — drifted, YAML says
+  `disposition: unsupported` (target vendor has no equivalent).
+* **METHODOLOGY_ISSUE_under** — YAML says `lossy`/`unsupported` but
+  the cell actually aligns (over-claiming loss).
+* **METHODOLOGY_ISSUE_over** — YAML says `good` but cell is
+  `not_applicable` (over-claiming applicability).
+* **STRUCTURAL_ONLY** — list-row count drift (e.g. 17 source
+  interfaces → 2 target interfaces) collapsed to a single signal
+  per cell-parent rather than amplified across N per-field keys.
+  Added to prevent a single `count drift: 17 → 2 (interfaces)`
+  signal from inflating CODEC_BUG by 6× across `interfaces[].mtu`,
+  `interfaces[].description`, etc.  Per-record drift on surviving
+  rows still fires CODEC_BUG normally.
+
+Per-source-vendor investigation reports under
+`tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell
+triage: real bug (codec fix), stale expectation (YAML refresh), or
+acceptable lossy (reclassify).  This audit is what gates
+"is-the-cross-vendor-translation-honest?" — failing CODEC_BUG cells
+become backlog items for codec waves; failing METHODOLOGY cells
+flag expectation drift.
 
 ---
 

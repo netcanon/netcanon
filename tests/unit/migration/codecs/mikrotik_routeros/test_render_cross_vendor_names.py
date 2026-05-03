@@ -11,6 +11,7 @@ interface that isn't already owned by the VLAN, bridge, or LAG
 sections, and confirm the round-trip preserves attributes.
 """
 
+import pytest
 from netconfig.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
@@ -19,6 +20,9 @@ from netconfig.migration.canonical.intent import (
 from netconfig.migration.codecs.mikrotik_routeros.parse import parse_intent
 from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
 
+
+
+pytestmark = pytest.mark.unit
 
 def test_render_non_ether_iface_preserves_attrs():
     """Non-`ether*` names emit /interface ethernet rows with attrs intact."""

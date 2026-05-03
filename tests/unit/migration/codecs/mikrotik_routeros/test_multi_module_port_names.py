@@ -34,6 +34,7 @@ the per-PORT numbering (the bit before the dash) is still flat.
 that ships SFP28 (CCR2004-1G-12S+2XS).
 """
 
+import pytest
 from netconfig.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
@@ -53,6 +54,9 @@ from netconfig.migration.codecs.mikrotik_routeros.render import (
     render_intent,
 )
 
+
+
+pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # 1. Multi-module 10G ports must produce distinct names.

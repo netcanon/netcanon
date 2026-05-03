@@ -24,6 +24,7 @@ opnsense target round-trip via the canonical tree).
 
 from __future__ import annotations
 
+import pytest
 from netconfig.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
@@ -36,6 +37,9 @@ from netconfig.migration.codecs.opnsense import OPNsenseCodec
 from netconfig.migration.codecs.opnsense.parse import parse_intent
 from netconfig.migration.codecs.opnsense.render import render_intent
 
+
+
+pytestmark = pytest.mark.unit
 
 def test_opnsense_renders_snmp_community() -> None:
     intent = CanonicalIntent()

@@ -34,6 +34,7 @@ must exist before the child is committed.  See RouterOS VLAN docs:
 https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
 """
 
+import pytest
 from netconfig.migration.canonical.port_names import PortIdentity
 from netconfig.migration.canonical.intent import (
     CanonicalInterface,
@@ -46,6 +47,9 @@ from netconfig.migration.codecs.mikrotik_routeros.port_names import (
 )
 from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
 
+
+
+pytestmark = pytest.mark.unit
 
 def test_bridge_declaration_emitted_when_vlan_references_it():
     """When a VLAN-bound interface references bridge1, the renderer

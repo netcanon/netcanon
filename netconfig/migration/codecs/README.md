@@ -251,6 +251,59 @@ a dedicated `test_<feature>_wire_through.py` file.
 
 ---
 
+## Cross-codec shared utilities
+
+Codecs are NOT siloed.  Some concerns are vendor-agnostic and live
+in shared sibling modules at the migration-package root.  When
+authoring a new codec, import from these instead of re-implementing
+the policy locally:
+
+* **`netconfig/migration/_user_secrets.py`** — cross-vendor
+  hash-portability policy.  Public API: `classify_hash(hashed)`,
+  `is_migratable(hashed, target_vendor)`, `format_review_comment(
+  user_name, algorithm, comment_syntax, target_label)`.  Each
+  target codec calls `is_migratable()` before emitting a password
+  line; on miss, emit a `format_review_comment(...)` line in the
+  appropriate per-codec syntax (`hash` / `semicolon` / `slash` /
+  `xml` / `exclamation`) and skip the password command.  NEVER fall
+  back to plaintext (would leak the hash literal as the password).
+  Per-target accepted-algorithm sets live in
+  `_TARGET_ACCEPTS[<vendor>]`.
+
+* **`netconfig/migration/_naming.py`** — naming-value sanitisation.
+  Public API: `sanitise_hostname(name, separator="_")`.  Some target
+  CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace in
+  hostname / domain / VRF-name tokens; the renderer collapses
+  whitespace runs to `_` so the wire form round-trips.  Source state
+  is preserved on the canonical model — sanitisation happens only at
+  the wire boundary.
+
+* **`netconfig/migration/canonical/transforms.py::project_switchport_to_vlan`**
+  — projects per-iface switchport state (`switchport_mode`,
+  `access_vlan`, `trunk_allowed_vlans`) back into VLAN-centric
+  `vlan.tagged_ports` / `vlan.untagged_ports` lists.  Codecs whose
+  parse loop populates per-iface VLAN membership but not the
+  symmetric per-VLAN port lists call this as a parse post-pass for
+  round-trip stability.  Currently called by `arista_eos`,
+  `aruba_aoss`, `cisco_iosxe_cli`, `juniper_junos`.  Helper
+  internally guards the Junos `vlan members all` sentinel
+  (`range(1,4095)`) to avoid synthesising 4094 phantom CanonicalVlans.
+
+* **`netconfig/migration/canonical/transforms.py::project_vlan_to_switchport`**
+  — the symmetric direction.  Materialises port-centric switchport
+  state from VLAN-centric membership lists.  Cisco IOS-XE CLI and
+  Junos render paths call this so cross-vendor renders from codecs
+  that emit no per-port stanzas (Aruba's `vlan N / untagged 1/1-1/47`
+  form, OPNsense's `<vlans>`-only) still produce L2 config on the
+  target side.
+
+When you find yourself wanting per-codec versions of "is this hash
+re-emittable?", "is this name CLI-safe?", or "what does VLAN N's
+tagged-port set look like?", add to one of the helpers above
+instead of duplicating logic in your codec.
+
+---
+
 ## Gotchas
 
 ### `parse()` must not lose information on round-trip

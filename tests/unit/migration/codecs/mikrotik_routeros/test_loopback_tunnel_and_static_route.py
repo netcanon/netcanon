@@ -48,6 +48,7 @@ RouterOS doc references (cited in render.py comments):
   https://wiki.mikrotik.com/wiki/Manual:IP/Route
 """
 
+import pytest
 from netconfig.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
@@ -56,6 +57,9 @@ from netconfig.migration.canonical.intent import (
 )
 from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
 
+
+
+pytestmark = pytest.mark.unit
 
 # ---------------------------------------------------------------------------
 # Issue 1: Loopback / Tunnel emission

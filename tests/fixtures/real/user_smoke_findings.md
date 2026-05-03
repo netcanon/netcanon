@@ -377,12 +377,23 @@ this one.
 - `netconfig/migration/_user_secrets.py` — cross-codec hash-policy helper with `classify_hash`, `is_migratable`, `format_review_comment`.  Public API stable; consumed by fortigate / junos / opnsense.  Aruba retains its own inline logic (older, equivalent, deferred refactor).
 - `CanonicalInterface.kind` — now respected by `translate_port_names` so source-side kind promotions (e.g. cisco Mgmt-vrf → kind=mgmt) propagate through port-rename to target codecs' kind=mgmt handlers.
 
-### Follow-ups (out of scope for this wave)
+### Follow-ups — RESOLVED in subsequent waves
 
-- Refresh Phase 3 expectation YAMLs to absorb the new render output (CODEC_BUG count regression on the matrix is methodology drift, not real bugs).
-- `format_review_comment(comment_syntax="xml")` produces `-- review:` which is forbidden inside XML comments.  OPNsense codec post-processes to `- review:` locally; lift this into the helper if any other XML codec ever lands.
-- FortiGate and OPNsense kind=mgmt rendering paths (issue 8 cascade only reaches Aruba today; the canonical model now carries the right info but the FortiGate / OPNsense renderers don't yet special-case it).
-- Aruba `_split_aos_hash` refactor to consume the shared helper (cleanup, not bug-fix).
+All four follow-ups originally noted at the c9300 wave have since
+landed:
+
+- **Phase 3 expectation YAML refresh** — Wave 8 (commits
+  `34e211a`/`acd7ed5`/`346b04f`/`00d2f2b`/`b4ac859`/`cd22cc1`/
+  `b0b1dd5`/`5c070b7`).  CODEC_BUG matrix dropped 93 → 53.
+- **XML-comment-safe `format_review_comment`** — commit `65186e6`
+  (Phase C wave).  `comment_syntax="xml"` now produces single-hyphen
+  `- review:` natively; OPNsense codec no longer post-processes.
+- **FortiGate + OPNsense kind=mgmt rendering** — commit `b0a9596`
+  (Phase C wave).  Both codecs now consume `kind=mgmt` and emit the
+  appropriate vendor-specific shape.
+- **Aruba `_split_aos_hash` consolidation into shared helper** —
+  commit `6e9a654` (Phase C wave).  Aruba now routes through
+  `_user_secrets.is_migratable("aruba_aoss")` like the other codecs.
 
 ---
 
