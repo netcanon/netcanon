@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ..._user_secrets import classify_hash, is_migratable
+from ..._user_secrets import classify_hash, format_review_comment, is_migratable
 from ...canonical.intent import CanonicalIntent, CanonicalVlan
 from ..base import RenderError
 from .parse import (
@@ -506,7 +506,6 @@ def render_intent(tree: Any) -> str:
             # Map canonical privilege onto a RouterOS built-in
             # group via threshold rules; safe default is ``read``.
             group = _routeros_group_for_privilege(user.privilege_level)
-            parts = ["add", f"group={group}", f"name={user.name}"]
             # Password emit gating: RouterOS only accepts plaintext
             # (``mikrotik_routeros`` -> {plaintext} in the central
             # ``_user_secrets._TARGET_ACCEPTS`` policy).  Foreign
@@ -518,10 +517,16 @@ def render_intent(tree: Any) -> str:
             # auth bypass for anyone who has read access to the
             # original config.  When the canonical carries a
             # plaintext password, emit it; when foreign-hashed,
-            # skip the field and let the operator reset the
-            # password manually post-migration.  Surfaced by
-            # OPNsense supergate smoke test (issue #13 in
+            # skip the field AND emit a ``# password manager …
+            # -- review:`` comment immediately above the ``add``
+            # line so the operator has a deterministic signal that
+            # a hash existed and must be reset manually.  Without
+            # the review comment the user appears to have been
+            # created with no password, with no hint that one was
+            # ever set.  Surfaced by OPNsense supergate smoke test
+            # (issues #13 + #18 in
             # ``tests/fixtures/real/user_smoke_findings.md``).
+            parts = ["add", f"group={group}", f"name={user.name}"]
             if user.hashed_password and is_migratable(
                 user.hashed_password, "mikrotik_routeros",
             ):
@@ -530,6 +535,23 @@ def render_intent(tree: Any) -> str:
                     parts.append(
                         f"password={_quote_if_needed(payload)}"
                     )
+            elif user.hashed_password:
+                # Unmigratable foreign hash — emit review comment
+                # just above this user's add line.  Interleaved
+                # shape (rather than block-first) keeps each
+                # comment visually adjacent to its user, mirroring
+                # the FortiGate / Cisco-IOSXE per-user pattern.
+                algorithm, _payload = classify_hash(
+                    user.hashed_password,
+                )
+                lines.append(
+                    format_review_comment(
+                        user.name,
+                        algorithm,
+                        comment_syntax="hash",
+                        target_label="RouterOS",
+                    )
+                )
             lines.append(" ".join(parts))
         lines.append("")
 

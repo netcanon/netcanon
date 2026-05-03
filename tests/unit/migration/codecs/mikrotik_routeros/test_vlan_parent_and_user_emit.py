@@ -403,18 +403,138 @@ def test_user_with_foreign_hash_emits_no_password_field():
     )
     out = render_intent(intent)
 
-    # All three foreign hashes skip the password field.
+    # All three foreign hashes skip the password field on the
+    # user's ``add ... name=<n>`` line.  The review-comment line
+    # carries ``user-name "<n>"`` which doesn't match the
+    # ``name=<n>`` substring, so we limit the check to add lines.
     for line_user in ("root", "cisco", "arista"):
-        # The line for this user must not carry a password field.
         for line in out.splitlines():
-            if f"name={line_user}" in line:
+            if f" name={line_user}" in line:
                 assert "password=" not in line, (
                     f"foreign-hash leak on user {line_user!r}: {line!r}"
                 )
-    # And the literal hash strings don't appear anywhere in output.
+    # The literal hash payloads must never appear anywhere in the
+    # output — neither in the add line nor in the review comment.
     assert "$2y$11$" not in out
     assert "$9$fakeType9Hash" not in out
-    assert "sha512" not in out
+    assert "$6$fakesha512crypthash" not in out
+
+
+# ---------------------------------------------------------------------------
+# Finding 18 — review-comment line for unmigratable hashes
+# ---------------------------------------------------------------------------
+
+
+def test_mikrotik_unmigratable_hash_emits_review_comment():
+    """Foreign bcrypt hash from OPNsense → RouterOS render emits a
+    ``# password manager user-name "<n>" -- review: bcrypt hash …``
+    line immediately above the ``add group=... name=<n>`` line.
+    Without this signal an operator reading the migrated config
+    sees a user with no password and no hint that one ever
+    existed.  The user is still added (the comment supplements,
+    doesn't replace, the ``add`` line).  Surfaced as issue #18 in
+    ``tests/fixtures/real/user_smoke_findings.md``.
+    """
+    intent = CanonicalIntent(
+        local_users=[
+            CanonicalLocalUser(
+                name="root",
+                privilege_level=15,
+                hashed_password=(
+                    "bcrypt:$2y$11$fakeBcryptHashForReviewLineTest"
+                ),
+            ),
+        ],
+    )
+    out = render_intent(intent)
+
+    expected_comment = (
+        '# password manager user-name "root" -- review: bcrypt hash '
+        "from source vendor cannot be re-used on RouterOS; reset "
+        "this user password manually"
+    )
+    assert expected_comment in out, (
+        f"expected review comment not found in render output:\n{out}"
+    )
+    # The user is still added with the right group / name — the
+    # comment supplements rather than replaces the add line.
+    assert "add group=full name=root" in out, out
+
+    # The comment line precedes the add line (interleaved shape).
+    lines = out.splitlines()
+    comment_idx = next(
+        i for i, line in enumerate(lines)
+        if line == expected_comment
+    )
+    add_idx = next(
+        i for i, line in enumerate(lines)
+        if line == "add group=full name=root"
+    )
+    assert comment_idx < add_idx, (
+        f"comment line at {comment_idx} expected before add line at "
+        f"{add_idx}\n{out}"
+    )
+
+
+def test_mikrotik_user_with_no_hashed_password_no_comment():
+    """A user with an empty ``hashed_password`` (canonical default)
+    has no hash to review — emit the ``add`` line cleanly without
+    a spurious comment.  Regression guard so we don't pollute the
+    output when the source genuinely had no password.
+    """
+    intent = CanonicalIntent(
+        local_users=[
+            CanonicalLocalUser(name="bare", privilege_level=15),
+        ],
+    )
+    out = render_intent(intent)
+    assert "add group=full name=bare" in out
+    # No review comment at all.
+    assert "review:" not in out, out
+    assert "password manager" not in out, out
+
+
+def test_mikrotik_user_with_plaintext_password_no_comment():
+    """Plaintext passwords ARE migratable to RouterOS — the
+    ``password=`` field emits and NO review comment is needed.
+    The comment is only for hashes RouterOS can't consume.
+    """
+    intent = CanonicalIntent(
+        local_users=[
+            CanonicalLocalUser(
+                name="admin",
+                privilege_level=15,
+                hashed_password="hunter2",
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert "add group=full name=admin password=hunter2" in out
+    assert "review:" not in out, out
+    assert "password manager" not in out, out
+
+
+def test_mikrotik_review_comment_uses_routeros_label():
+    """The ``target_label="RouterOS"`` parameter to
+    ``format_review_comment`` is threaded through so the operator
+    sees the actual target name rather than the helper's generic
+    ``"this target"`` default.  Phase-2 helper extension (commit
+    ``0074bda``) added the parameter; this test pins the call shape.
+    """
+    intent = CanonicalIntent(
+        local_users=[
+            CanonicalLocalUser(
+                name="op",
+                privilege_level=10,
+                hashed_password="9 $9$fakeType9Hash$",
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    # Generic default must NOT leak through.
+    assert "this target" not in out, out
+    # RouterOS label appears in the review-line wording.
+    assert "cannot be re-used on RouterOS" in out, out
 
 
 def test_user_with_empty_hash_emits_no_password_field():
