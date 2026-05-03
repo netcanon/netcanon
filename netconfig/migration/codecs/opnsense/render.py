@@ -143,20 +143,15 @@ def render_canonical(intent: CanonicalIntent) -> str:
                     # "reset this password" reminder rather than a
                     # broken hash literal masquerading as bcrypt.
                     #
-                    # XML disallows ``--`` inside comment bodies
-                    # (it terminates the comment prematurely), so
-                    # we strip the helper's literal ``-- review:``
-                    # separator down to a single dash for XML
-                    # safety while keeping the same wording.
+                    # The shared helper natively produces an
+                    # XML-comment-safe body (single-dash separator
+                    # for ``comment_syntax="xml"``) so we can embed
+                    # the body directly without local post-processing.
                     algorithm, _payload = classify_hash(user.hashed_password)
                     review = format_review_comment(
                         user.name, algorithm, comment_syntax="xml",
                     )
-                    body = (
-                        review.removeprefix("<!-- ")
-                        .removesuffix(" -->")
-                        .replace("-- review:", "- review:")
-                    )
+                    body = review.removeprefix("<!-- ").removesuffix(" -->")
                     user_el.append(ET.Comment(body))
             ET.SubElement(user_el, "scope").text = "system"
             ET.SubElement(user_el, "groupname").text = (

@@ -167,10 +167,23 @@ def format_review_comment(
     The wording uses "this target" rather than naming a specific
     vendor — codecs that prefer vendor-specific phrasing (Aruba does)
     can keep building their comment line themselves.
+
+    XML safety: the XML 1.0 spec forbids the literal ``--`` substring
+    inside a comment body (``<!-- ... -->``); the parser treats it as
+    premature termination of the comment.  When ``comment_syntax`` is
+    ``"xml"`` the body separator collapses from ``--`` to a single
+    ``-`` so the output is embeddable directly into XML without
+    post-processing.  All other comment syntaxes keep the ``--``
+    separator byte-for-byte (Aruba / FortiGate / Junos rely on it).
     """
     prefix, suffix = _COMMENT_PREFIXES.get(comment_syntax, ("# ", ""))
+    # XML 1.0 disallows ``--`` inside comment bodies — collapse to a
+    # single hyphen for the xml variant only.  Other syntaxes keep the
+    # original ``-- review:`` separator byte-identical (existing Aruba
+    # / FortiGate / Junos output stays unchanged).
+    separator = "-" if comment_syntax == "xml" else "--"
     body = (
-        f'password manager user-name "{user_name}" -- review: '
+        f'password manager user-name "{user_name}" {separator} review: '
         f"{algorithm} hash from source vendor cannot be re-used on "
         f"this target; reset this user password manually"
     )

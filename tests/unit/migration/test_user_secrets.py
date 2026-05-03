@@ -179,6 +179,42 @@ def test_format_review_comment_xml_syntax() -> None:
     assert line.endswith(" -->")
 
 
+def test_format_review_comment_xml_no_double_hyphen() -> None:
+    """XML 1.0 forbids ``--`` inside comment bodies (the parser treats
+    it as premature termination of the comment).  The helper must
+    produce output that is embeddable directly into XML without any
+    local post-processing.
+
+    Asserts zero ``--`` substrings appear between the leading ``<!--``
+    and trailing ``-->`` delimiters.  Also verifies well-formedness
+    by reparsing the output through ``xml.etree.ElementTree``.
+    """
+    import xml.etree.ElementTree as ET
+
+    line = format_review_comment("netadmin", "9", "xml")
+    # Strip the comment delimiters before scanning the body.
+    body = line.removeprefix("<!-- ").removesuffix(" -->")
+    assert "--" not in body, (
+        f"XML comment body must not contain '--': {body!r}"
+    )
+    # Wording invariant — the separator is a single ``-``.
+    assert "- review:" in body
+    # Reparse to confirm the output is well-formed XML when wrapped
+    # in a root element (ElementTree.fromstring rejects ``--`` inside
+    # comments at parse time).
+    ET.fromstring(f"<root>{line}</root>")
+
+
+def test_format_review_comment_non_xml_keeps_double_hyphen() -> None:
+    """Non-XML comment syntaxes preserve the original ``-- review:``
+    separator byte-for-byte — Aruba AOS-S, FortiGate, and Junos all
+    emit lines with this exact phrasing.  Changing it would break
+    cross-vendor diff stability."""
+    for syntax in ("hash", "semicolon", "slash"):
+        line = format_review_comment("netadmin", "9", syntax)
+        assert "-- review:" in line, syntax
+
+
 def test_format_review_comment_default_is_hash() -> None:
     line = format_review_comment("admin", "9")
     assert line.startswith("# password manager")
