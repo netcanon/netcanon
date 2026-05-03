@@ -255,6 +255,61 @@ sweep.
 
 ---
 
+## OPEN — surfaced by the OPNsense supergate post-fix re-paste
+
+After the wave-4 sweep landed, the user re-pasted the OPNsense
+supergate config and inspected each target's output again.  All 13
+original findings were verified resolved or properly deferred —
+but the cleaner output exposed 5 additional issues that the
+pre-fix noise had been masking.
+
+### Severity ranking
+
+| # | Issue | Severity | Targets | Locus | Effort |
+|---|---|---|---|---|---|
+| 15 | Aruba LAN IP (`192.168.88.2/24` on ixl0) silently dropped — no `interface 1/1` (or equivalent) emitted | **high** (network unreachable) | aruba_aoss | port_names + render | medium |
+| 16 | Junos + Arista emit `username X class user` / `username X role user` declarations with no auth on hash-gate, creating passwordless accounts; Cisco's full-drop pattern is cleaner | medium | juniper_junos, arista_eos | render hash-gate | small per codec |
+| 17 | Arista `vlan N / name <SPACED NAME>` emitted unquoted — Arista's tokenizer treats space as terminator → likely deploy-rejecting | medium | arista_eos | render vlan-name emit | small |
+| 18 | MikroTik silently omits password on hash-gate (no comment-form review line) — every other codec emits a `# password manager … -- review:` marker | low (operator-friendliness) | mikrotik_routeros | render hash-gate | small |
+| 19 | OPNsense parser doesn't elevate `privilege_level` for `<scope>system</scope>` (root) or `<priv>page-all</priv>` (api) — these users land on RouterOS as `group=read` despite admin intent | medium (canonical-layer) | opnsense parse | parse user-zone | small |
+
+### Cosmetic note
+
+Hash review comment text uses the helper's default body
+"cannot be re-used on **this target**" everywhere except
+Aruba (which builds the comment locally and says "AOS-S").
+Operators can still understand intent, but per-vendor
+labels would be slightly more informative.  Fixed by adding
+a `target_label` parameter to `_user_secrets.format_review_comment`
+and threading vendor labels through each codec.
+
+### Notes on finding 15 (Aruba LAN IP drop)
+
+Pre-fix paste also dropped this — it was masked by the cosmetic
+`interface igc0 enable exit` block being present.  Removing
+the elision noise (finding 8 fix in commit `2c15ec0`) made it
+visible that the LAN-port canonical interface (carrying
+`192.168.88.2/24` from OPNsense `<lan>`) is being dropped
+entirely from Aruba's output.
+
+Same shape as the c9300 wave-2 finding #3 (Aruba `1/1` collision)
+but on the OTHER side: there it was duplicate emission; here it's
+zero emission.  Likely root cause: Aruba's `format_port_identity`
+returns `None` for OPNsense source's `ixl0` (foreign port name
+not mappable to AOS-S `1/N` / loopback / vlan / oobm shape) → the
+canonical interface gets filtered out of `translate_port_names`
+or downstream.
+
+FortiGate maps ixl0 → `port1`, Cisco IOS-XE → `TenGigabitEthernet0/0`,
+Junos → `xe-0/0/0` — only Aruba loses it.  Investigation +
+fix is medium-effort: needs Aruba to either (a) pick a
+deterministic AOS-S port name for foreign-source physical
+interfaces, or (b) preserve the foreign name verbatim with body
+content (the elision predicate already keeps non-empty stubs;
+the issue is upstream of render at port-rename).
+
+---
+
 ## RESOLVED — Cisco c9300-24ux smoke test (all 9 issues fixed)
 
 Wave-2 sweep on `fix/phase4-top-codec-fixes` shipped fixes for all
