@@ -409,12 +409,60 @@ def render_intent(tree: Any) -> str:
     # Physical / named interfaces.  Skip Vlan<N> stubs that were
     # already handled inside the VLAN stanza, and skip oobm (handled
     # above as a top-level block).
+    #
+    # Collision detection: cross-vendor port-rename can map two
+    # distinct source interfaces to the same Aruba name (Cisco c9300's
+    # ``AppGigabitEthernet1/0/1`` and ``TenGigabitEthernet1/0/1`` both
+    # collapse to AOS-S ``1/1`` because they share the same stack/
+    # module/port coordinates and Aruba has no dedicated app-hosting
+    # virtual concept).  Emitting two ``interface 1/1`` stanzas would
+    # be rejected by AOS-S.  Group physical interfaces by name; emit
+    # only the FIRST occurrence and surface every collision via a
+    # comment-form review block so the operator can decide which
+    # source to keep / which to drop manually.  ``description`` is
+    # the realistic disambiguator — cross-vendor port-rename rewrites
+    # ``iface.name`` but preserves ``description`` from the source
+    # config, so operators see the original vendor-name in the
+    # collision review block.
+    physical_ifaces: list[Any] = []
     for iface in tree.interfaces:
         lname = iface.name.lower()
         if lname.startswith("vlan"):
             continue
         if iface.name == "oobm":
             continue
+        physical_ifaces.append(iface)
+    seen_names: dict[str, list[Any]] = {}
+    name_order: list[str] = []
+    for iface in physical_ifaces:
+        if iface.name not in seen_names:
+            seen_names[iface.name] = []
+            name_order.append(iface.name)
+        seen_names[iface.name].append(iface)
+    # Surface collisions up-front so the comment block reads as a
+    # contiguous review header rather than getting interleaved with
+    # the per-interface stanzas below.
+    for nm in name_order:
+        group = seen_names[nm]
+        if len(group) <= 1:
+            continue
+        lines.append(
+            f"; interface {nm} collides — kept first occurrence, "
+            f"skipped {len(group) - 1} duplicate(s) (review)"
+        )
+        for dup in group:
+            descriptor = dup.description or dup.name
+            lines.append(f";   collided source: {descriptor}")
+
+    rendered_names: set[str] = set()
+    for iface in physical_ifaces:
+        lname = iface.name.lower()
+        if iface.name in rendered_names:
+            # Duplicate canonical name maps to the same Aruba port —
+            # already flagged in the comment block above; skip the
+            # stanza so AOS-S doesn't see two ``interface <name>``.
+            continue
+        rendered_names.add(iface.name)
         # Loopback interfaces use AOS-S `interface loopback <N>`
         # syntax; the rest of the body (ip address, ipv6 address,
         # description) is identical to the physical-port form.
