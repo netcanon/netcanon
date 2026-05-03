@@ -142,6 +142,31 @@ class CanonicalInterface(BaseModel):
                                                 # Matches a
                                                 # ``CanonicalRoutingInstance.name``
                                                 # declared at the top level.
+    kind: str = ""                              # Logical role override: ``""``
+                                                # (default) means "infer from
+                                                # name via the codec's
+                                                # ``classify_port_name``";
+                                                # any other value (matches
+                                                # :data:`PortKind`) overrides
+                                                # the inferred kind during
+                                                # cross-vendor port-name
+                                                # translation.  Used when the
+                                                # source vendor encodes the
+                                                # role in CONTEXT rather than
+                                                # in the interface name —
+                                                # e.g. Cisco IOS-XE
+                                                # ``GigabitEthernet0/0`` with
+                                                # ``vrf forwarding Mgmt-vrf``
+                                                # is semantically a mgmt
+                                                # port, but the name alone
+                                                # classifies as
+                                                # ``physical``.  The parser
+                                                # sets ``kind="mgmt"`` so the
+                                                # rename mesh can cascade to
+                                                # every target's existing
+                                                # kind=mgmt handling
+                                                # (Aruba ``oobm`` block,
+                                                # Junos management VRF, etc).
 
 
 class CanonicalVlan(BaseModel):

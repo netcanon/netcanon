@@ -322,6 +322,23 @@ def translate_port_names(
     warnings: list[str] = []
     memo: dict[str, str] = {}
 
+    # Per-interface kind overrides — populated by source codecs that
+    # detect logical role (mgmt, etc.) from CONTEXT rather than from
+    # the interface name.  Cisco IOS-XE CLI is the canonical example:
+    # ``GigabitEthernet0/0`` with ``vrf forwarding Mgmt-vrf`` is
+    # semantically the OOBM port but the name alone classifies as
+    # kind="physical".  The parser sets ``CanonicalInterface.kind =
+    # "mgmt"``; the override is applied AFTER classify_port_name so
+    # the source codec doesn't have to thread context through its
+    # pure name-based classifier.  The override cascades: every
+    # target's kind=mgmt handling (Aruba ``oobm``, etc.) fires
+    # automatically — no per-target codec changes required.
+    kind_overrides: dict[str, str] = {
+        iface.name: iface.kind
+        for iface in intent.interfaces
+        if getattr(iface, "kind", "")
+    }
+
     def resolve(name: str) -> str:
         # Idempotent + cached: resolving the same input twice returns
         # the same output without re-classifying.
@@ -347,6 +364,17 @@ def translate_port_names(
             )
             memo[name] = name
             return name
+        # Apply CanonicalInterface.kind override — used when the source
+        # vendor's interface-name alone undersells the role (Cisco
+        # ``GigabitEthernet0/0`` with ``vrf forwarding Mgmt-vrf`` is
+        # semantically mgmt but the name says physical).  The parser
+        # set the override; we honour it before the target's formatter
+        # sees the identity so kind=mgmt cascades through every
+        # target's existing kind=mgmt handling automatically.
+        if name in kind_overrides:
+            ident = ident.model_copy(
+                update={"kind": kind_overrides[name]},
+            )
         out = target_codec.format_port_identity(ident)
         if out is None or out == "":
             # Target codecs that absorb SVI L3 state into the VLAN

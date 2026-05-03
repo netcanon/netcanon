@@ -242,6 +242,32 @@ _IFACE_VRF_FORWARDING_RE = re.compile(
     r"^\s+(?:ip\s+)?vrf\s+forwarding\s+(\S+)\s*$", re.IGNORECASE,
 )
 
+# Heuristic: a VRF whose name matches one of these is semantically the
+# device's out-of-band management VRF.  Cisco operator convention is
+# ``Mgmt-vrf`` (the default OOBM VRF on Catalyst 9000 / 9300 / 9500
+# platforms) but real captures also use ``mgmt``, ``management``,
+# ``MGMTVRF``, ``mgmt_vrf``, etc.  Matching is case-insensitive on the
+# canonical regex form ``mgmt(-_)?vrf?`` plus the bare names ``mgmt`` /
+# ``management``.  Conservative on purpose — we only promote when the
+# VRF name is unambiguously management, never on user-defined VRFs
+# that merely START with ``Mgmt`` (e.g. ``MgmtTenant_A``).
+_MGMT_VRF_RE = re.compile(
+    r"^(?:mgmt[-_]?vrf|management(?:[-_]?vrf)?|mgmt)$",
+    re.IGNORECASE,
+)
+
+
+def _is_mgmt_vrf(vrf_name: str) -> bool:
+    """Return True when *vrf_name* matches the management-VRF heuristic.
+
+    Used by :func:`_parse_interfaces` to promote interfaces bound to a
+    management VRF from ``kind="physical"`` to ``kind="mgmt"`` so the
+    cross-vendor port-rename mesh cascades the role to every target's
+    existing kind=mgmt handling (Aruba ``oobm`` block, etc).  See the
+    ``_MGMT_VRF_RE`` comment for the matched name forms.
+    """
+    return bool(_MGMT_VRF_RE.match(vrf_name or ""))
+
 
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse IOS-XE ``show running-config`` output into a
@@ -493,6 +519,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "mtu": None,
                 "ipv6": [],
                 "vrf": "",
+                "kind": "",
             }
             continue
 
@@ -588,7 +615,31 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
 
         vfm = _IFACE_VRF_FORWARDING_RE.match(line)
         if vfm:
-            current["vrf"] = vfm.group(1)
+            vrf_name = vfm.group(1)
+            current["vrf"] = vrf_name
+            # Mgmt-vrf cascade: when the interface's VRF name matches
+            # the management heuristic AND the interface name doesn't
+            # already classify as a more-specific kind (loopback, SVI,
+            # LAG, tunnel — those win because the name encodes a
+            # stronger signal than VRF context), promote the canonical
+            # kind to "mgmt".  This signals to the cross-vendor port-
+            # rename mesh that the interface is the device's OOBM
+            # port, so every target's existing kind=mgmt handling
+            # (Aruba ``oobm`` block, etc.) fires automatically — even
+            # though Cisco's ``GigabitEthernet0/0`` name alone would
+            # classify as kind="physical".  See translator-plans.txt
+            # / user_smoke_findings issue 8 for the cross-target
+            # cascade discussion.
+            if not current["kind"] and _is_mgmt_vrf(vrf_name):
+                # Only promote when the name's classification is the
+                # generic "physical" kind; loopback / SVI / LAG /
+                # tunnel names take precedence (e.g. a Loopback0
+                # placed in Mgmt-vrf is still semantically a loopback
+                # for cross-vendor purposes).
+                from . import port_names as _port_names
+                ident = _port_names.classify_port_name(current["name"])
+                if ident.kind == "physical":
+                    current["kind"] = "mgmt"
             continue
 
     if current is not None:
@@ -623,6 +674,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         lag_member_of=raw.get("lag_member_of"),
         mtu=raw.get("mtu"),
         vrf=raw.get("vrf", ""),
+        kind=raw.get("kind", ""),
     )
 
 
