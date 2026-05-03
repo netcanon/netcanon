@@ -345,6 +345,7 @@ def render_intent(tree: Any) -> str:
             or (not iface.enabled)
             or bool(iface.ipv4_addresses)
             or bool(iface.ipv6_addresses)              # GAP-EVPN-3
+            or iface.dhcp_client                       # sub-finding 9b
         )
         # Structural collapse: if this interface is a member of
         # an auto-synthesised range, suppress the shared-attr
@@ -412,6 +413,17 @@ def render_intent(tree: Any) -> str:
                     f"set interfaces {parent} unit {unit_num} "
                     f"vlan-id {iface.access_vlan}"
                 )
+            # Sub-finding 9b: DHCP client.  Junos models the DHCP
+            # client as a property of ``family inet`` (replacing the
+            # ``address`` clause).  Emit the family inet dhcp form
+            # only when no static IPv4 address is also configured —
+            # Junos rejects ``family inet dhcp`` alongside a static
+            # ``address`` line at commit time.
+            if iface.dhcp_client and not iface.ipv4_addresses:
+                out.append(
+                    f"set interfaces {parent} unit {unit_num} "
+                    f"family inet dhcp"
+                )
             for addr in iface.ipv4_addresses:
                 out.append(
                     f"set interfaces {parent} unit {unit_num} "
@@ -443,6 +455,18 @@ def render_intent(tree: Any) -> str:
             out.append(f"set interfaces {name} disable")
         if emit_mtu:
             out.append(f"set interfaces {name} mtu {iface.mtu}")
+        # Sub-finding 9b: DHCP client.  Junos models the DHCP client
+        # as ``family inet dhcp`` on ``unit 0``, replacing the static
+        # ``address`` clause.  Emit only when no static IPv4 address
+        # is configured — Junos rejects ``family inet dhcp`` alongside
+        # a static ``address`` line at commit time.  Cisco IOS-XE
+        # ``ip address dhcp`` and MikroTik DHCP-client interfaces
+        # canonicalise to ``iface.dhcp_client=True`` and reach this
+        # path on render-into-Junos cross-vendor flows.
+        if iface.dhcp_client and not iface.ipv4_addresses:
+            out.append(
+                f"set interfaces {name} unit 0 family inet dhcp"
+            )
         # IPv4 addresses — emit under unit 0 (v1's convention).
         for addr in iface.ipv4_addresses:
             out.append(

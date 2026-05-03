@@ -281,3 +281,108 @@ def test_irb_with_l3_address_still_emits() -> None:
     # The SVI L3 binding is emitted via the vlan path (l3-interface)
     # and the explicit irb.10 iface contributes its address line.
     assert "set vlans USERS l3-interface irb.10" in out
+
+
+# ---------------------------------------------------------------------------
+# Sub-finding 9b — DHCP client emit (family inet dhcp)
+# ---------------------------------------------------------------------------
+
+
+def test_junos_dhcp_client_emits_family_inet_dhcp() -> None:
+    """``CanonicalInterface(dhcp_client=True)`` translates to Junos's
+    ``set interfaces <name> unit 0 family inet dhcp`` — a property of
+    ``family inet`` that replaces the static ``address`` clause.
+    Cisco IOS-XE ``ip address dhcp`` and MikroTik DHCP-client
+    interfaces canonicalise to this field; without the emit path
+    they were silently dropped on render-into-Junos cross-vendor
+    flows."""
+    intent = CanonicalIntent(
+        hostname="dhcp-client-host",
+        interfaces=[
+            CanonicalInterface(name="ge-0/0/0", dhcp_client=True),
+        ],
+    )
+    out = render_intent(intent)
+    assert "set interfaces ge-0/0/0 unit 0 family inet dhcp" in out
+
+
+def test_junos_dhcp_client_keeps_interface_through_elision() -> None:
+    """Regression guard: an interface whose ONLY content is
+    ``dhcp_client=True`` (no static IP, no description, no L2 / LAG /
+    VRF state) must still be emitted.  Without the elision-predicate
+    update, the empty-stub heuristic would drop it as bodyless and
+    the DHCP client config would never make it into the rendered
+    output."""
+    intent = CanonicalIntent(
+        hostname="dhcp-only",
+        interfaces=[
+            CanonicalInterface(name="ge-0/0/0", dhcp_client=True),
+        ],
+    )
+    out = render_intent(intent)
+    # The dhcp emit line is present (proves elision didn't drop it).
+    assert "set interfaces ge-0/0/0 unit 0 family inet dhcp" in out
+
+
+def test_junos_dhcp_client_with_description_emits_both() -> None:
+    """When a DHCP-client interface also carries a description, BOTH
+    the description line AND the ``family inet dhcp`` line must be
+    emitted — neither is suppressed by the other.  Models the common
+    WAN-uplink shape on edge routers."""
+    intent = CanonicalIntent(
+        hostname="edge-router",
+        interfaces=[
+            CanonicalInterface(
+                name="ge-0/0/0",
+                description="WAN uplink",
+                dhcp_client=True,
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert 'set interfaces ge-0/0/0 description "WAN uplink"' in out
+    assert "set interfaces ge-0/0/0 unit 0 family inet dhcp" in out
+
+
+def test_junos_static_ip_does_not_emit_dhcp() -> None:
+    """Regression guard: an interface configured with a static IPv4
+    address and no DHCP client (default ``dhcp_client=False``) must
+    NOT emit the ``family inet dhcp`` line — only the existing static
+    ``family inet address`` path applies.  Junos rejects
+    ``family inet dhcp`` alongside a static ``address`` clause at
+    commit time, so the two emit paths are mutually exclusive."""
+    intent = CanonicalIntent(
+        hostname="static-ip-host",
+        interfaces=[
+            CanonicalInterface(
+                name="ge-0/0/0",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip="192.0.2.1", prefix_length=24,
+                    ),
+                ],
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    assert (
+        "set interfaces ge-0/0/0 unit 0 family inet address "
+        "192.0.2.1/24"
+    ) in out
+    assert "family inet dhcp" not in out
+
+
+def test_junos_no_dhcp_no_ip_still_elides() -> None:
+    """Regression guard: a fully empty foreign-shaped interface name
+    (``Vlan1`` after a Cisco→Junos rename, no IP, no description, no
+    DHCP, no VRF binding, no sub-units) is STILL elided by the empty-
+    stub policy.  The dhcp_client predicate addition must not weaken
+    the existing tiered elision behaviour for non-DHCP-client cases."""
+    intent = CanonicalIntent(
+        hostname="elided-host",
+        interfaces=[CanonicalInterface(name="irb.1")],
+    )
+    out = render_intent(intent)
+    # Pure-leak case stays elided; the dhcp_client guard is False.
+    assert "set interfaces irb.1" not in out
+    assert "family inet dhcp" not in out
