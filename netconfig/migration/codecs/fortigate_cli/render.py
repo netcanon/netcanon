@@ -32,6 +32,11 @@ import ipaddress
 from typing import Any
 
 from ..base import RenderError
+from ..._user_secrets import (
+    classify_hash,
+    format_review_comment,
+    is_migratable,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -47,6 +52,82 @@ from .vlan_heuristics import (
     parent_for_vlan_iface as _parent_for_vlan_iface,
     vlan_id_for as _vlan_id_for,
 )
+
+
+def _build_vlan_children(
+    tree: CanonicalIntent,
+    deduped_ifaces: list[CanonicalInterface],
+) -> list[dict]:
+    """Build the VLAN-on-parent child interface list (Issue #6).
+
+    For every canonical VLAN, synthesise a FortiOS-style child
+    entry that the renderer emits inside ``config system interface``
+    as ``edit "vlan<id>" / set type vlan / set vlanid <id> / set
+    interface "<parent>" / set ip <addr> <mask>``.
+
+    Resolution rules:
+
+    * **Parent** -- first :class:`CanonicalLAG` on the tree (operators
+      almost always trunk VLANs over a LAG); fall back to the first
+      non-VLAN-shaped interface in *deduped_ifaces* if no LAG
+      exists; ``None`` when neither candidate is available.
+    * **SVI IP** -- the canonical's ``CanonicalVlan.ipv4_addresses``
+      directly if populated; else walk *deduped_ifaces* for a
+      matching ``Vlan<id>`` interface name (Cisco-style) and copy
+      its ``ipv4_addresses[0]``.
+
+    Returns a list of dicts with keys ``name``, ``vlanid``,
+    ``parent``, ``ip``, ``mask`` -- empty list when *tree.vlans* is
+    empty.  Caller filters out names that already appear in
+    *deduped_ifaces* (intra-vendor round-trip pre-emits them).
+    """
+    if not tree.vlans:
+        return []
+
+    parent_name = None
+    if tree.lags:
+        parent_name = tree.lags[0].name
+    if parent_name is None:
+        for cand in deduped_ifaces:
+            if not _looks_like_vlan_iface(cand.name) and (
+                cand.interface_type != "ianaift:l3ipvlan"
+            ):
+                parent_name = cand.name
+                break
+
+    iface_by_name = {i.name: i for i in deduped_ifaces}
+
+    children = []
+    for vlan in tree.vlans:
+        ip = ""
+        mask = ""
+        if vlan.ipv4_addresses:
+            addr = vlan.ipv4_addresses[0]
+            ip = addr.ip
+            try:
+                mask = _prefix_to_mask(addr.prefix_length)
+            except Exception:
+                mask = ""
+        else:
+            for cand_name in (f"Vlan{vlan.id}", f"vlan{vlan.id}"):
+                cand = iface_by_name.get(cand_name)
+                if cand and cand.ipv4_addresses:
+                    addr = cand.ipv4_addresses[0]
+                    ip = addr.ip
+                    try:
+                        mask = _prefix_to_mask(addr.prefix_length)
+                    except Exception:
+                        mask = ""
+                    break
+
+        children.append({
+            "name": f"vlan{vlan.id}",
+            "vlanid": vlan.id,
+            "parent": parent_name,
+            "ip": ip,
+            "mask": mask,
+        })
+    return children
 
 
 def render_intent(tree: Any) -> str:
@@ -110,9 +191,45 @@ def render_intent(tree: Any) -> str:
         if lag.name not in existing_iface_names
     ]
     all_ifaces = list(tree.interfaces) + synthetic_lag_ifaces
-    if all_ifaces:
+
+    # Render-time port-name collision guard (Issue #2 from
+    # tests/fixtures/real/user_smoke_findings.md).  Belt-and-braces
+    # alongside the multi-axis disambiguation in
+    # :func:`port_names.format_port_identity`.  We dedup by emission
+    # order -- first occurrence wins, later collisions get a
+    # ``# port collision: ...`` comment instead of a duplicate
+    # ``edit "..."`` block (which FortiOS rejects on commit).
+    seen_iface_names = set()
+    deduped_ifaces = []
+    collision_comments = []
+    for iface in all_ifaces:
+        if iface.name in seen_iface_names:
+            collision_comments.append(
+                f"# port collision: {iface.name} already emitted earlier; "
+                f"duplicate dropped -- review source names for unique mapping"
+            )
+            continue
+        seen_iface_names.add(iface.name)
+        deduped_ifaces.append(iface)
+
+    # VLAN child interface synthesis (Issue #6).
+    vlan_children = _build_vlan_children(tree, deduped_ifaces)
+    existing_vlan_ids = set()
+    for cand in deduped_ifaces:
+        vid = _vlan_id_for(cand.name, tree.vlans)
+        if vid is not None:
+            existing_vlan_ids.add(vid)
+    vlan_children = [
+        v for v in vlan_children
+        if v["name"] not in seen_iface_names
+        and v["vlanid"] not in existing_vlan_ids
+    ]
+
+    if deduped_ifaces or vlan_children:
         out.append("config system interface")
-        for iface in all_ifaces:
+        for c in collision_comments:
+            out.append(f"    {c}")
+        for iface in deduped_ifaces:
             out.append(f'    edit "{iface.name}"')
             if iface.description:
                 # FortiOS alias caps at 25 chars per spec.
@@ -168,6 +285,18 @@ def render_intent(tree: Any) -> str:
                 out.append("        set status up")
             else:
                 out.append("        set status down")
+            out.append("    next")
+
+        # VLAN child interface emit (Issue #6).
+        for child in vlan_children:
+            out.append(f'    edit "{child["name"]}"')
+            out.append("        set type vlan")
+            out.append(f'        set vlanid {child["vlanid"]}')
+            if child.get("parent"):
+                out.append(f'        set interface "{child["parent"]}"')
+            if child.get("ip") and child.get("mask"):
+                out.append(f'        set ip {child["ip"]} {child["mask"]}')
+                out.append("        set mode static")
             out.append("    next")
         out.append("end")
 
@@ -251,20 +380,39 @@ def render_intent(tree: Any) -> str:
         out.append("config system admin")
         for user in tree.local_users:
             out.append(f'    edit "{user.name}"')
-            # Strip the "fortios:" tag when rendering back to a
-            # FortiGate target (lossless for intra-vendor
-            # round-trip); foreign hashes get emitted verbatim
-            # under a generic ENC marker — deploy-time rejection
-            # is the intended failure mode.
+            # Hash-portability gate (Issue #1a from
+            # tests/fixtures/real/user_smoke_findings.md).  Foreign
+            # hashes (Cisco type-5/7/8/9, Arista sha512, OPNsense
+            # bcrypt) are NOT consumable by FortiOS's ``set password
+            # ENC <blob>`` -- that ENC blob has FortiOS-internal key
+            # semantics, NOT a generic "any hash" wrapper.  Before
+            # the fix the renderer leaked the literal source hash on
+            # the wire (e.g. ``set password ENC 9 $9$...``) which
+            # FortiOS would either reject at commit time or, worse,
+            # parse as garbage.  Now we consult the shared
+            # :mod:`netconfig.migration._user_secrets` policy and
+            # emit a comment-form ``review:`` line instead, naming
+            # the source algorithm so the operator knows exactly
+            # which user to reset.  Native fortigate hashes tagged
+            # ``fortios:<blob>`` still pass through unchanged.
             if user.hashed_password:
-                alg, _, raw = user.hashed_password.partition(":")
-                if alg == "fortios":
-                    out.append(f"        set password {raw}")
-                elif raw:
-                    out.append(f"        set password ENC {raw}")
+                if is_migratable(user.hashed_password, "fortigate_cli"):
+                    alg, _, raw = user.hashed_password.partition(":")
+                    if alg == "fortios":
+                        out.append(f"        set password {raw}")
+                    elif raw:
+                        out.append(f"        set password ENC {raw}")
+                    else:
+                        out.append(
+                            f"        set password ENC "
+                            f"{user.hashed_password}"
+                        )
                 else:
+                    algorithm, _payload = classify_hash(
+                        user.hashed_password,
+                    )
                     out.append(
-                        f"        set password ENC {user.hashed_password}"
+                        f"        {format_review_comment(user.name, algorithm, comment_syntax='hash')}"
                     )
             # Map canonical privilege back to accprofile.
             accprofile = (

@@ -226,19 +226,29 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     """
     if identity.kind == "physical":
         role = identity.meta.get("fortigate_role", "port")
-        # Same-vendor round-trip for FG-60F bare ``a``/``b`` FortiLink
-        # ports: if the source carried a letter hint, emit it back.
-        # Cross-vendor sources won't populate the letter, so the
-        # regular numeric path handles the generic ``fortilink1`` /
-        # ``fortilink2`` case.
         letter = identity.meta.get("fortigate_fortilink_letter")
         if role == "fortilink" and letter:
             return letter
         if role == "port":
+            # Multi-axis disambiguation for Cisco-style sources (Issue
+            # #2 in tests/fixtures/real/user_smoke_findings.md).
+            # ``stack/module/port`` collapses to ``portN`` when both
+            # stack <= 1 and module in {0, None}; otherwise we use
+            # the hyphenated ``port-<stack>-<module>-<port>`` form so
+            # Te1/0/1 (stack=1, module=0) stays ``port1`` while
+            # Gi1/1/1 (stack=1, module=1) becomes ``port-1-1-1``.
+            stack = identity.stack
+            module = identity.module
+            if (stack is not None and stack > 1) or (
+                module is not None and module > 0
+            ):
+                s = stack if stack is not None else 0
+                m = module if module is not None else 0
+                p = identity.port if identity.port is not None else 0
+                return f"port-{s}-{m}-{p}"
             return f"port{identity.port or 1}"
         if identity.port and identity.port > 1:
             return f"{role}{identity.port}"
-        # Role-only bare form (e.g. wan = wan1, lan = lan).
         return role if role in ("lan",) else f"{role}{identity.port or 1}"
     if identity.kind == "hw_aggregate":
         # Only FortiGate has this concept.  Same-vendor target
