@@ -647,10 +647,20 @@ def render_intent(tree: Any) -> str:
         if tree.snmp.contact:
             out.append(f'    set contact-info "{tree.snmp.contact}"')
         out.append("end")
-        if tree.snmp.community:
+        # FortiOS nests trap targets inside ``config system snmp
+        # community / config hosts`` — there is no top-level "trap
+        # destinations" surface independent of a community record.  When
+        # the canonical tree carries trap_hosts but no community (e.g.
+        # cross-vendor sources where SNMPv3 is the primary monitoring
+        # path and v2c is suppressed), synthesise a minimal ``public``
+        # community so the trap-target list still survives the render.
+        # Without this fallback, ``trap_hosts`` silently drops on
+        # render-side and the operator's monitoring stops working.
+        if tree.snmp.community or tree.snmp.trap_hosts:
             out.append("config system snmp community")
             out.append("    edit 1")
-            out.append(f'        set name "{tree.snmp.community}"')
+            community_name = tree.snmp.community or "public"
+            out.append(f'        set name "{community_name}"')
             if tree.snmp.trap_hosts:
                 out.append("        config hosts")
                 for idx, host in enumerate(tree.snmp.trap_hosts, start=1):
