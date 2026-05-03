@@ -126,15 +126,25 @@ def test_native_junos_hash_passes_through() -> None:
 
 
 def test_empty_interface_skipped() -> None:
-    """An interface with no IPs, no description, default MTU,
-    enabled, no L2 / LAG state, and no routing-instance binding
-    is pure noise on Junos — skip emit entirely."""
+    """A non-Junos-shaped interface (e.g. cross-vendor source's
+    ``Vlan1`` after rename to ``irb.1``) with no IPs, no
+    description, default MTU, enabled, no L2 / LAG state, and no
+    routing-instance binding is pure noise on Junos — skip emit
+    entirely.
+
+    Junos-shaped physical port names (``ge-0/0/0``, ``xe-1/0/24``,
+    ``fxp0``) keep the placeholder for parse->render->parse
+    stability with Junos sources whose Tier-3 L2 grammar (older
+    ``port-mode`` form) doesn't surface in canonical — see
+    ``test_render_empty_interface_is_skipped`` for that case.
+    """
     intent = CanonicalIntent(
         hostname="lab-sw1",
-        interfaces=[CanonicalInterface(name="ge-0/0/0")],
+        interfaces=[CanonicalInterface(name="irb.1")],
     )
     out = render_intent(intent)
-    assert "set interfaces ge-0/0/0" not in out
+    # Pure-leak case (Cisco Vlan1 → irb.1 rename, no L3) is skipped.
+    assert "set interfaces irb.1" not in out
 
 
 def test_routing_instance_referenced_interface_emits_cleanly() -> None:

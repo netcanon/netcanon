@@ -553,31 +553,29 @@ class TestRenderInterfaces:
         assert "10.0.1.1/24" in out
         assert out.index("10.0.0.1/24") < out.index("10.0.1.1/24")
 
-    def test_render_empty_interface_is_skipped(self):
-        """Phase 4 follow-on (issue #9 in user_smoke_findings.md).
+    def test_render_bare_interface_preserves_junos_physical_for_round_trip(self):
+        """Updated regression guard for the bare-interface round-trip
+        bug surfaced by the ksator EX4550 fixture (originally GAP 3).
 
-        Originally GAP 3: Junos parse creates an interface entry for
-        every ``set interfaces <name> ...`` line seen — including
-        lines whose trailing tokens are all Tier-3 grammar (e.g.
-        ``unit 0 family ethernet-switching ...``) the canonical tree
-        can't carry.  The early fix kept a bare ``set interfaces
-        <name>`` placeholder so the interface survived re-parse.
+        Junos parse creates an interface entry for every
+        ``set interfaces <name> ...`` line seen — including lines
+        whose trailing tokens are all Tier-3 grammar (e.g.
+        ``unit 0 family ethernet-switching port-mode trunk``) that
+        the canonical tree can't carry.  Those interfaces end up
+        with no description, no IP, enabled=True — nothing the
+        canonical model surfaces.
 
-        That round-trip benefit was outweighed by a cross-vendor
-        downside: Cisco IOS-XE renders into Junos started leaking
-        ``set interfaces irb.1`` and ``set interfaces ge-0/0/0``
-        stubs whenever a Cisco vlan interface or a ``vrf
-        forwarding`` reference produced a content-free canonical
-        interface.  The new policy: empty interfaces (no L3, L2,
-        LAG, MTU, or admin state) are skipped on render unless a
-        routing-instance binding requires them OR they're the
-        parent of one or more sub-units (``irb`` parent of
-        ``irb.100``).  Tier-3-only Junos round-trips with no
-        sub-unit children lose the bare stub — acceptable because
-        nothing canonical-modelled lives on it.
+        Round-trip stability fix: render emits ``set interfaces
+        <name>`` as a placeholder declaration so the interface
+        survives re-parse — but ONLY when ``<name>`` matches a
+        Junos physical-port shape (``ge-X/Y/Z``, ``xe-X/Y/Z``,
+        ``et-X/Y/Z``, ``mge-X/Y/Z``, ``fxp0``, ``me0``, ``lo0``,
+        ``irb``).  Cross-vendor renames into Junos (Cisco
+        ``Vlan1`` → ``irb.1``, etc.) deliberately don't match —
+        skipping their empty stubs is the user_smoke_findings
+        issue #9 fix.
         """
         intent = CanonicalIntent(
-            hostname="lab-sw1",
             interfaces=[
                 CanonicalInterface(
                     name="xe-0/0/0",
@@ -588,12 +586,27 @@ class TestRenderInterfaces:
         )
         codec = JunosCodec()
         rendered = codec.render(intent)
-        # New policy: empty interface stub is suppressed entirely.
-        assert "set interfaces xe-0/0/0" not in rendered
-        # Re-parse: hostname survives, no interface entry created.
+        assert "set interfaces xe-0/0/0\n" in rendered or (
+            rendered.rstrip().endswith("set interfaces xe-0/0/0")
+        )
+        # Round-trip stability: the iface canonical comes back.
         reparsed = codec.parse(rendered)
-        assert reparsed.hostname == "lab-sw1"
-        assert reparsed.interfaces == []
+        assert len(reparsed.interfaces) == 1
+        assert reparsed.interfaces[0].name == "xe-0/0/0"
+
+    def test_render_empty_irb_subiface_skipped(self):
+        """Cross-vendor renames into Junos (e.g. Cisco ``Vlan1`` →
+        ``irb.1``) with no L3 attributes deliberately drop the
+        empty ``set interfaces irb.1`` stub.  Sub-iface names
+        (those with ``.``) are logical-only on Junos — an empty
+        canonical sub-iface means there's nothing to declare.
+        Issue #9 in user_smoke_findings.md."""
+        intent = CanonicalIntent(
+            hostname="lab-sw1",
+            interfaces=[CanonicalInterface(name="irb.1")],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces irb.1" not in out
 
 
 class TestRenderVlans:
