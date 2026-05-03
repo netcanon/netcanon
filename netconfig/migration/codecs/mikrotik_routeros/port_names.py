@@ -193,15 +193,87 @@ def classify_port_name(name: str) -> PortIdentity:
     return PortIdentity(kind="unknown", original=name)
 
 
+def _flat_port_index(identity: PortIdentity) -> int:
+    """Collapse a multi-coordinate physical port into a deterministic
+    flat RouterOS port number.
+
+    RouterOS uses **flat numbering** for ``ether<N>`` / ``sfp<N>`` /
+    ``sfp-sfpplus<N>`` / ``qsfpplus<N>`` (per
+    https://help.mikrotik.com/docs/spaces/ROS/pages/8323191/Ethernet ).
+    It does NOT have a concept of per-module slots in the port NAME
+    (QSFP sub-interface lanes are the one exception, expressed as
+    ``qsfpplus<port>-<lane>``).  The cross-vendor orchestrator can
+    therefore receive a :class:`PortIdentity` from a vendor that DOES
+    encode hierarchical coordinates (Cisco c9300 stack:
+    ``Te1/0/1..24`` plus ``Te1/1/1..8`` plus ``Fo1/1/1..2`` plus
+    ``Twe1/1/1..2``) and the only safe single-pass collapse is to
+    encode (stack, module, port) into one monotonically-increasing
+    integer that is unique across the whole identity space.
+
+    Scheme — chosen to keep the existing single-module ``ether1`` /
+    ``sfp-sfpplus1`` numbering UNCHANGED for the common case and to
+    spread non-zero-module ports into distinct numeric ranges that
+    won't realistically collide with anything an operator would
+    type by hand:
+
+        * ``stack`` is 1-or-None and ``module`` is 0-or-None →
+          return ``port`` (e.g. Cisco ``Gi1/0/24`` → ``ether24``,
+          MikroTik ``ether1`` round-trip → ``ether1``).  Equivalent
+          to the pre-fix behaviour for every shape that didn't
+          collide.
+        * Else → return ``(stack-1)*1000 + module*100 + port``
+          (Cisco ``Te1/1/1`` → ``sfp-sfpplus101``, ``Te1/1/8`` →
+          ``sfp-sfpplus108``, ``Te2/0/1`` → ``sfp-sfpplus1001``).
+
+    The 100-port / 1000-port spacing leaves ample headroom for
+    realistic line-card port counts (line cards top out at ~96
+    ports in practice) and for the largest stack switches (16
+    members on a c9500-stack).  Two source ports with identical
+    (stack, module, port) coordinates would have collided anyway —
+    the pre-fix behaviour silently emitted duplicate
+    ``[ find name=sfp-sfpplus1 ]`` lines because every
+    ``module>0`` port collapsed to the same name.
+
+    User smoke-test issue #7 (``tests/fixtures/real/
+    user_smoke_findings.md``) surfaced this on a 41-port Cisco
+    c9300 source.
+    """
+    stack = identity.stack if identity.stack is not None else 1
+    module = identity.module if identity.module is not None else 0
+    port = identity.port if identity.port is not None else 1
+    if stack <= 1 and module == 0:
+        return port
+    return (stack - 1) * 1000 + module * 100 + port
+
+
 def format_port_identity(identity: PortIdentity) -> str | None:
     """Render a :class:`PortIdentity` as a RouterOS port name.
 
     Physical-port prefix selection uses (in priority order):
 
       1. ``meta["mikrotik_cage"]`` — exact same-vendor cage type.
-      2. ``name_speed_hint`` — maps 40G/100G to ``qsfpplus``,
-         10G/25G to ``sfp-sfpplus``.
+      2. ``name_speed_hint`` — 40G/100G → ``qsfpplus<N>``, 25G →
+         ``sfp28-<N>``, 10G → ``sfp-sfpplus<N>``.
       3. Falls back to ``ether<N>`` (RJ45 gigabit default).
+
+    The numeric suffix is derived via :func:`_flat_port_index` so
+    multi-module / stacked source identities (Cisco
+    ``Te1/0/24`` + ``Te1/1/1`` + ``Fo1/1/1``) produce DISTINCT
+    RouterOS names — RouterOS's flat ``sfp-sfpplus<N>`` /
+    ``qsfpplus<N>`` numbering forces the hierarchical coordinates
+    to flatten somewhere, and doing it inside the formatter keeps
+    the cross-vendor bridge free of vendor-pair conditionals.  See
+    :func:`_flat_port_index` for the collision-free scheme.
+
+    25G and 10G are also separated into distinct cage prefixes
+    (``sfp28-`` vs ``sfp-sfpplus``) — RouterOS hardware that ships
+    SFP28 cages exposes them as ``sfp28-1`` / ``sfp28-2`` (CCR2004-
+    1G-12S+2XS, see the ``sfp28_ids`` invariant in
+    ``tests/unit/migration/test_target_profile_shipped.py``).
+    Without the split, a Cisco source mixing 10G ``Te1/1/1..8`` and
+    25G ``Twe1/1/1..2`` on the same module would still collide
+    after flattening because both speeds previously mapped to
+    ``sfp-sfpplus``.
 
     Tunnel formatter defaults to ``gre<N>`` when the source-side
     tunnel subtype is absent — most portable cross-vendor form.
@@ -210,22 +282,26 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     ``mgmt``) and for unnamed ``virtual`` identities.
     """
     if identity.kind == "physical":
-        port = identity.port or 1
+        flat = _flat_port_index(identity)
         cage = identity.meta.get("mikrotik_cage")
         if cage == "sfp":
-            return f"sfp{port}"
+            return f"sfp{flat}"
         if cage == "sfpplus":
-            return f"sfp-sfpplus{port}"
+            return f"sfp-sfpplus{flat}"
         if identity.name_speed_hint in ("40gig", "100gig"):
-            return f"qsfpplus{port}"
-        if identity.name_speed_hint in ("10gig", "25gig"):
-            return f"sfp-sfpplus{port}"
-        return f"ether{port}"
+            return f"qsfpplus{flat}"
+        if identity.name_speed_hint == "25gig":
+            return f"sfp28-{flat}"
+        if identity.name_speed_hint == "10gig":
+            return f"sfp-sfpplus{flat}"
+        return f"ether{flat}"
     if identity.kind == "breakout":
         # MikroTik expresses QSFP+ breakout lanes with the ``-<lane>``
-        # suffix on the parent QSFP name.
+        # suffix on the parent QSFP name.  The QSFP port number itself
+        # still goes through the multi-module flatten so cross-vendor
+        # breakout parents from non-zero modules don't collide.
         return (
-            f"qsfpplus{identity.port or 1}"
+            f"qsfpplus{_flat_port_index(identity)}"
             f"-{identity.breakout_lane or 1}"
         )
     if identity.kind == "lag":
