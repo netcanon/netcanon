@@ -865,7 +865,10 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
 
     lines.append("## See also\n")
     lines.append(
-        "- ``tools/run_phase4_reconciliation.py`` — generation script\n"
+        "- ``tools/run_phase4_reconciliation.py`` — generation script "
+        "(its module docstring defines every variance class, including "
+        "the structural-collapse rule that produces "
+        "``STRUCTURAL_ONLY`` entries)\n"
         "- ``tests/fixtures/real/_phase4_runs/`` — per-run JSON outputs "
         "(gitignored except the latest, which is committed for Phase 4b "
         "agents to read)\n"
@@ -874,6 +877,9 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         "- ``tests/fixtures/real/CROSS_MESH_RESULTS.md`` — Phase 1 "
         "mechanical drift matrix (the input this report joins against)\n"
         "- ``tools/run_full_mesh.py`` — Phase 1 generator\n"
+        "- ``tests/fixtures/real/user_smoke_findings.md`` — operator-"
+        "spotted issues + methodology improvements (incl. the 2026-05-03 "
+        "structural-collapse comparator fix)\n"
     )
     return "\n".join(lines) + "\n"
 

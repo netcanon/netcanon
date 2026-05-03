@@ -17,8 +17,68 @@ Branch this file lives on: `fix/phase4-top-codec-fixes`.
   attribution
 - [`CROSS_MESH_RESULTS.md`](CROSS_MESH_RESULTS.md) — Phase 1
   mechanical drift matrix
+- [`../../../tools/run_phase4_reconciliation.py`](../../../tools/run_phase4_reconciliation.py)
+  — module docstring defines the variance classes (CODEC_BUG,
+  EXPECTED_LOSSY, EXPECTED_UNSUPPORTED, METHODOLOGY_*,
+  STRUCTURAL_ONLY) and the structural-collapse rule
 - `git log fix/phase4-top-codec-fixes` — chronological commit history
   of fixes landed this session
+
+---
+
+## Methodology improvements (this session)
+
+### `STRUCTURAL_ONLY` variance class — comparator over-counting fix (commit `9db1eb9`)
+
+**Symptom:** after the Wave 2 codec sweep, the Phase 4 reconciliation
+showed CODEC_BUG count rising 254 → 345 (+91).  Triage revealed that
+all 100 new CODEC_BUG entries shared the shape `interfaces[].<field>`
+with `drift_summary: "count drift: N → M (interfaces)"` and zero
+per-record detail — i.e. a single structural row-count signal from
+Phase 1's list-drift summarizer was being amplified across every
+per-field key the YAML keyed for that list (description, mtu, enabled,
+ipv4_addresses, …).
+
+**Why it surfaced now:** Wave 2 fixes (Junos empty-stub elision,
+FortiGate VLAN-child emit, MikroTik bridge synthesis) deliberately
+changed interface row counts.  Pre-Wave-2 the same multiplication
+artefact was present but hidden — the genuinely-bug count was always
+~108, with ~146 false multiplications baked into the 254 baseline.
+
+**Fix (`9db1eb9`):** new `STRUCTURAL_ONLY` variance class.  In
+`reconcile_cell`, the first sub-field of each list parent that
+drifted PURELY on a structural list-length signal keeps its original
+variance class (typically `CODEC_BUG`) and carries the
+`drift_summary` string.  Every subsequent sub-field of the SAME
+parent in the SAME cell collapses to `STRUCTURAL_ONLY` (low
+severity), with a `structural_owner` pointer back to the YAML key
+that owns the canonical signal.
+
+**Safety constraint (tested):** the collapse only fires when
+`isinstance(drift_summary, str) AND "per_record" not in drift_detail`.
+Real per-field drift on surviving rows produces a `per_record` slice
+(counts match → Phase 1 emits a per-record dict) and is **never**
+collapsed.  See
+`tests/unit/audit/test_run_phase4_reconciliation.py::test_count_drift_with_real_per_field_drift_preserves_both`
+and `::test_count_drift_plus_real_per_field_drift_on_same_list_both_emit`.
+
+**Aggregate impact (post-fix):**
+
+| Variance class | Pre-fix | Post-fix | Δ |
+|---|---:|---:|---:|
+| ALIGNED | 2395 | 2395 | 0 |
+| CODEC_BUG (severity=high) | 345 | 108 | -237 |
+| EXPECTED_LOSSY | 998 | 865 | -133 |
+| EXPECTED_UNSUPPORTED | 730 | 484 | -246 |
+| METHODOLOGY_ISSUE_under | 7355 | 7355 | 0 |
+| METHODOLOGY_ISSUE_over | 142 | 13 | -129 |
+| **STRUCTURAL_ONLY** (new, low severity) | — | 745 | +745 |
+
+The 108 post-fix CODEC_BUG count is the true cross-vendor drift
+signal — every entry is either (a) a single canonical structural
+signal per cell-parent OR (b) per-field semantic drift on
+surviving rows.  No multiplication.  Phase 4b investigation
+agents now operate on a much higher signal-to-noise input.
 
 ---
 
