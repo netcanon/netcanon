@@ -107,6 +107,20 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         if name not in lst:
             lst.append(name)
 
+    # "Trunk all" sentinel detection: when an interface's
+    # ``trunk_allowed_vlans`` is the full 1-4094 (or 2-4094) range,
+    # this is the operator-form of "all VLANs allowed" — equivalent
+    # to Junos ``vlan members all`` / Arista ``switchport trunk
+    # allowed vlan all``.  Projecting that into VLAN-centric
+    # tagged_ports would synthesise 4094 phantom VLAN records, each
+    # of which renders out and reparses with a generated name (e.g.
+    # ``VLAN-N``), breaking round-trip stability and producing
+    # nonsensical 4000-line VLAN dumps on cross-vendor renders.  Skip
+    # projection on the trunk-all form; the renderer side detects
+    # this same shape and emits the appropriate "all" sentinel.
+    _TRUNK_ALL_RANGE_FULL = set(range(1, 4095))
+    _TRUNK_ALL_RANGE_OPERATIONAL = set(range(2, 4095))
+
     for iface in intent.interfaces:
         mode = iface.switchport_mode
         if mode is None:
@@ -115,8 +129,14 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
             if iface.access_vlan is not None:
                 _add_unique(_vlan(iface.access_vlan).untagged_ports, iface.name)
         elif mode == "trunk":
-            for vid in iface.trunk_allowed_vlans:
-                _add_unique(_vlan(vid).tagged_ports, iface.name)
+            allowed_set = set(iface.trunk_allowed_vlans)
+            is_trunk_all = (
+                allowed_set == _TRUNK_ALL_RANGE_FULL
+                or allowed_set == _TRUNK_ALL_RANGE_OPERATIONAL
+            )
+            if not is_trunk_all:
+                for vid in iface.trunk_allowed_vlans:
+                    _add_unique(_vlan(vid).tagged_ports, iface.name)
             native = iface.trunk_native_vlan
             if native is not None:
                 vlan = _vlan(native)

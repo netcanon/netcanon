@@ -873,6 +873,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
             if m_iface is not None and m_iface.lag_member_of is None:
                 m_iface.lag_member_of = lag.name
 
+    # Bug 3 transpose: mirror any per-port switchport state into the
+    # VLAN-centric tagged_ports / untagged_ports lists.  AOS-S source
+    # is natively VLAN-centric so this is normally a no-op against
+    # native captures, but cross-vendor parses that arrive here with
+    # per-iface switchport_mode / access_vlan / trunk_allowed_vlans
+    # populated (e.g. via shared post-passes) need the projection so
+    # round-trip stability is preserved.  See translator-plans.txt BUG 3.
+    from ...canonical.transforms import project_switchport_to_vlan
+    project_switchport_to_vlan(intent)
+
     logger.debug(
         "aruba_aoss parsed: hostname=%r ifaces=%d vlans=%d "
         "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",

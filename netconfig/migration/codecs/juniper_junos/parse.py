@@ -521,6 +521,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
         except AttributeError:
             pass
 
+    # Bug 3 transpose: mirror per-port switchport state into the
+    # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
+    # centric renderers (Aruba, OPNsense) can emit the membership.
+    # Junos parses ethernet-switching subcommands into per-iface
+    # switchport_mode / access_vlan / trunk_allowed_vlans; without
+    # this projection, those bindings never reach a VLAN-centric
+    # target.  See translator-plans.txt BUG 3.
+    from ...canonical.transforms import project_switchport_to_vlan
+    project_switchport_to_vlan(intent)
+
     logger.debug(
         "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
         "vxlan_vnis=%d vrfs=%d routes=%d users=%d snmp=%s "
