@@ -1017,10 +1017,13 @@ class TestCrossVendorHashGate:
         assert "! password manager" in out
         assert 'user-name "root"' in out
         assert "bcrypt" in out
-        # And the username line itself still emits (just without
-        # the ``secret ...`` suffix) so role/privilege survive.
-        assert "username root" in out
-        assert "role user" in out
+        # Wave-4 follow-up (finding #16): the orphan ``username X
+        # role Y`` declaration line is now dropped entirely.
+        # Leaving it with no ``secret`` clause created a
+        # passwordless account on commit, defeating the gate.  The
+        # comment alone signals operator intent.  See the dedicated
+        # regression guard in ``TestHashGateFullDrop`` below.
+        assert "username root" not in out
 
     def test_arista_native_sha512_passes_through(self):
         """Native vendor-tagged ``arista:sha512:$6$..`` rounds
@@ -1225,3 +1228,151 @@ class TestDomainEmit:
         intent = CanonicalIntent(hostname="sw1")
         out = AristaEOSCodec().render(intent)
         assert "dns domain" not in out
+
+
+# ---------------------------------------------------------------------------
+# Hash-gate full drop (issue #16 in user_smoke_findings.md)
+# ---------------------------------------------------------------------------
+
+
+class TestHashGateFullDrop:
+    """Wave-4 fix: when an unmigratable hash hits the gate, the
+    entire ``username X role Y`` declaration is dropped — only the
+    review comment survives.  Mirrors the cisco_iosxe_cli pattern.
+    Leaving the prefix line alone (no ``secret``) created a
+    passwordless account at commit time, defeating the gate."""
+
+    def test_arista_unmigratable_hash_drops_username_declaration_entirely(self):
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="root",
+                    privilege_level=15,
+                    role="user",
+                    hashed_password="bcrypt:$2y$11$fakeBcryptHashSynthetic",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        # The review comment is present (and uses the new
+        # target_label="Arista EOS" wording from commit 0074bda).
+        assert "! password manager" in out
+        assert 'user-name "root"' in out
+        assert "cannot be re-used on Arista EOS" in out
+        # The orphan declaration line MUST NOT appear anywhere.
+        assert "username root role" not in out
+        assert "username root privilege" not in out
+        # Defence in depth: no bare ``username root`` form either.
+        for line in out.splitlines():
+            assert not line.startswith("username root"), (
+                f"orphan username line leaked through the gate: {line!r}"
+            )
+
+    def test_arista_migratable_hash_still_emits_username_declaration(self):
+        """Regression guard: a migratable hash (sha512) MUST still
+        emit the full ``username ... secret sha512 ...`` line."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="ops",
+                    privilege_level=15,
+                    role="network-admin",
+                    hashed_password="arista:sha512:$6$abc$defghijkl",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert (
+            "username ops privilege 15 role network-admin "
+            "secret sha512 $6$abc$defghijkl"
+        ) in out
+        assert "review:" not in out
+
+    def test_arista_plaintext_password_still_emits_username_declaration(self):
+        """Regression guard: a plaintext password is migratable —
+        emits ``secret 0 ...`` not a review comment."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            local_users=[
+                CanonicalLocalUser(
+                    name="seeded",
+                    privilege_level=1,
+                    hashed_password="hunter2",
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "username seeded secret 0 hunter2" in out
+        assert "review:" not in out
+
+
+# ---------------------------------------------------------------------------
+# VLAN name sanitising (issue #17 in user_smoke_findings.md)
+# ---------------------------------------------------------------------------
+
+
+class TestVlanNameSanitise:
+    """Arista's ``name`` clause is whitespace-tokenised — a space
+    in the name causes the EOS tokenizer to treat the trailing word
+    as an unrecognized argument and rejects the line at commit
+    time.  The vendor docs (EOS User Manual / Virtual LANs) state
+    spaces are not permitted; AVD's style guide uses underscores
+    as the separator.  Render replaces every whitespace run with a
+    single underscore so cross-vendor names like OPNsense's
+    ``USER VLAN`` survive as ``USER_VLAN``."""
+
+    def test_arista_vlan_name_with_space_is_underscored(self):
+        intent = CanonicalIntent(
+            hostname="sw1",
+            vlans=[CanonicalVlan(id=10, name="USER VLAN")],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   name USER_VLAN" in out
+        # The unsanitised raw form must NOT appear.
+        assert "name USER VLAN" not in out
+
+    def test_arista_vlan_name_single_token_unchanged(self):
+        """Same-vendor round-trip stability: a single-token name
+        like ``USERS`` (from a real Arista capture) emits unchanged.
+        """
+        intent = CanonicalIntent(
+            hostname="sw1",
+            vlans=[CanonicalVlan(id=10, name="USERS")],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   name USERS" in out
+
+    def test_arista_vlan_name_with_special_chars_handled(self):
+        """Names with hyphens / digits / underscores but no
+        whitespace pass through verbatim — the sanitiser is
+        whitespace-only, deliberately conservative."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            vlans=[CanonicalVlan(id=20, name="MY-VLAN_01")],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   name MY-VLAN_01" in out
+
+    def test_arista_vlan_name_multiple_spaces_collapsed(self):
+        """Multiple consecutive spaces collapse to a single
+        underscore (``re.sub(r"\\s+", "_", ...)``)."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            vlans=[CanonicalVlan(id=30, name="THREE  WORD  NAME")],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   name THREE_WORD_NAME" in out
+
+    def test_arista_vlan_name_leading_trailing_whitespace_stripped(self):
+        """Defensive: leading/trailing whitespace from sloppy
+        parsing of foreign sources gets stripped before the
+        underscore replace, so we never emit ``name _USERS_``."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            vlans=[CanonicalVlan(id=40, name="  USERS  ")],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   name USERS" in out
+        assert "name _" not in out

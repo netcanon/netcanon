@@ -167,33 +167,36 @@ def render_intent(tree: Any) -> str:
     # the existing native round-trip stays byte-identical.
     if tree.local_users:
         for user in tree.local_users:
+            # Hash-gate: when the source hash isn't in
+            # :data:`_ARISTA_SECRET_TYPE` (i.e. EOS's ``secret``
+            # command can't consume the payload), drop the entire
+            # ``username`` declaration and emit ONLY the review
+            # comment.  Mirrors the cisco_iosxe_cli pattern
+            # (render.py ~line 113): leaving an orphan ``username
+            # X role Y`` line with no ``secret`` clause creates a
+            # passwordless account on commit, defeating the gate.
+            # Finding #16 in user_smoke_findings.md (post-fix
+            # re-paste).
+            if user.hashed_password:
+                algorithm, payload = classify_hash(user.hashed_password)
+                secret_tag = _ARISTA_SECRET_TYPE.get(algorithm)
+                if secret_tag is None:
+                    review = format_review_comment(
+                        user.name, algorithm,
+                        comment_syntax="exclamation",
+                        target_label="Arista EOS",
+                    )
+                    out.append(review)
+                    continue
+            else:
+                secret_tag = None
+                payload = ""
             parts = [f"username {user.name}"]
             if user.privilege_level and user.privilege_level != 1:
                 parts.append(f"privilege {user.privilege_level}")
             if user.role:
                 parts.append(f"role {user.role}")
             if user.hashed_password:
-                algorithm, payload = classify_hash(user.hashed_password)
-                secret_tag = _ARISTA_SECRET_TYPE.get(algorithm)
-                if secret_tag is None:
-                    # Unmigratable hash (bcrypt, Cisco type-7/8/9,
-                    # FortiGate ENC, ...).  Emit only the
-                    # ``username ... role ...`` prefix (no secret
-                    # line), then attach an Arista-syntax review
-                    # comment in place of the password line.  We
-                    # reuse the shared ``hash``-syntax helper and
-                    # locally translate the leading ``# `` prefix
-                    # to Arista's canonical ``! `` so cross-codec
-                    # diffs stay readable.
-                    out.append(" ".join(parts))
-                    review = format_review_comment(
-                        user.name, algorithm, comment_syntax="hash",
-                        target_label="Arista EOS",
-                    )
-                    if review.startswith("# "):
-                        review = "! " + review[2:]
-                    out.append(review)
-                    continue
                 parts.append(f"secret {secret_tag} {payload}")
             else:
                 parts.append("nopassword")
@@ -215,11 +218,24 @@ def render_intent(tree: Any) -> str:
         out.append("!")
 
     # --- VLANs ---
+    # Arista's ``name`` clause is whitespace-tokenised — a space in
+    # the name causes the tokenizer to treat the trailing word as an
+    # unrecognized argument and rejects the line at commit time.  The
+    # vendor docs (``EOS User Manual / Virtual LANs (VLANs)``,
+    # https://www.arista.com/en/um-eos/eos-virtual-lans-vlans) state
+    # explicitly that spaces are not permitted; AVD's style guide
+    # uses underscores as the separator (e.g. ``corporate_100``).
+    # We sanitise cross-vendor-sourced VLAN names by replacing every
+    # whitespace run with a single underscore so canonical names like
+    # OPNsense's ``USER VLAN`` render as ``USER_VLAN``.  Single-token
+    # names (the same-vendor round-trip case) emit unchanged.
+    # Finding #17 in user_smoke_findings.md (post-fix re-paste).
     if tree.vlans:
         for vlan in tree.vlans:
             out.append(f"vlan {vlan.id}")
             if vlan.name:
-                out.append(f"   name {vlan.name}")
+                safe_name = re.sub(r"\s+", "_", vlan.name.strip())
+                out.append(f"   name {safe_name}")
         out.append("!")
 
     # --- Interfaces ---
