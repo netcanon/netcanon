@@ -553,25 +553,31 @@ class TestRenderInterfaces:
         assert "10.0.1.1/24" in out
         assert out.index("10.0.0.1/24") < out.index("10.0.1.1/24")
 
-    def test_render_bare_interface_emits_placeholder(self):
-        """Regression guard for the bare-interface round-trip bug
-        surfaced by the ksator EX4550 fixture (GAP 3).
+    def test_render_empty_interface_is_skipped(self):
+        """Phase 4 follow-on (issue #9 in user_smoke_findings.md).
 
-        Junos parse creates an interface entry for every
-        ``set interfaces <name> ...`` line seen — including lines
-        whose trailing tokens are all Tier-3 grammar (e.g.
-        ``unit 0 family ethernet-switching ...``) that the canonical
-        tree can't carry.  Those interfaces end up with no
-        description, no IP, enabled=True — nothing renderable.
+        Originally GAP 3: Junos parse creates an interface entry for
+        every ``set interfaces <name> ...`` line seen — including
+        lines whose trailing tokens are all Tier-3 grammar (e.g.
+        ``unit 0 family ethernet-switching ...``) the canonical tree
+        can't carry.  The early fix kept a bare ``set interfaces
+        <name>`` placeholder so the interface survived re-parse.
 
-        Before the fix: render dropped them silently, so the
-        interface count shrank on round-trip and parse(render(tree))
-        was not stable.
-
-        After the fix: render emits ``set interfaces <name>`` as a
-        placeholder declaration so the interface survives re-parse.
+        That round-trip benefit was outweighed by a cross-vendor
+        downside: Cisco IOS-XE renders into Junos started leaking
+        ``set interfaces irb.1`` and ``set interfaces ge-0/0/0``
+        stubs whenever a Cisco vlan interface or a ``vrf
+        forwarding`` reference produced a content-free canonical
+        interface.  The new policy: empty interfaces (no L3, L2,
+        LAG, MTU, or admin state) are skipped on render unless a
+        routing-instance binding requires them OR they're the
+        parent of one or more sub-units (``irb`` parent of
+        ``irb.100``).  Tier-3-only Junos round-trips with no
+        sub-unit children lose the bare stub — acceptable because
+        nothing canonical-modelled lives on it.
         """
         intent = CanonicalIntent(
+            hostname="lab-sw1",
             interfaces=[
                 CanonicalInterface(
                     name="xe-0/0/0",
@@ -582,13 +588,12 @@ class TestRenderInterfaces:
         )
         codec = JunosCodec()
         rendered = codec.render(intent)
-        assert "set interfaces xe-0/0/0\n" in rendered or (
-            rendered.rstrip().endswith("set interfaces xe-0/0/0")
-        )
-        # Round-trip stability.
+        # New policy: empty interface stub is suppressed entirely.
+        assert "set interfaces xe-0/0/0" not in rendered
+        # Re-parse: hostname survives, no interface entry created.
         reparsed = codec.parse(rendered)
-        assert len(reparsed.interfaces) == 1
-        assert reparsed.interfaces[0].name == "xe-0/0/0"
+        assert reparsed.hostname == "lab-sw1"
+        assert reparsed.interfaces == []
 
 
 class TestRenderVlans:

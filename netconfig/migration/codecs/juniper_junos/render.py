@@ -24,6 +24,20 @@ quoted via :func:`_quote_if_needed`; free-text fields use
 vendor tag get their prefix stripped on render so
 ``parse(render(tree))`` is a true round-trip.
 
+Cross-vendor user-secret hashes (Cisco type-9 ``9 $9$..``,
+FortiGate ``ENC ..``, etc.) cannot be re-used on Junos.  The
+``..._user_secrets`` module's :func:`is_migratable` policy gate
+decides per-hash whether to emit ``set system login user X
+authentication encrypted-password "..."`` or fall back to a
+``# password manager user-name "X" -- review:`` comment line.
+Junos comments use ``#`` (or ``/* .. */``) so :func:`format_review_comment`
+is called with ``comment_syntax="hash"``.  Empty interface stubs
+(no IP / no description / no L2 / no LAG / no VRF binding, and
+not the parent of any sub-unit) are suppressed entirely; VRF-bound
+stubs keep the bare ``set interfaces <name>`` line because Junos's
+commit-time validator requires the interface to be defined under
+``[edit interfaces]`` before a routing-instance can reference it.
+
 Apply-groups inheritance is wired both ways: parse buckets group
 content separately and replays it via the two-pass dispatch in
 ``parse.py``; render re-emits the captured group bodies + the
@@ -46,6 +60,11 @@ import logging
 import re
 from typing import Any
 
+from ..._user_secrets import (
+    classify_hash,
+    format_review_comment,
+    is_migratable,
+)
 from ...canonical.intent import CanonicalIntent
 
 logger = logging.getLogger(__name__)
@@ -119,17 +138,46 @@ def render_intent(tree: Any) -> str:
             f"class {_quote_if_needed(role)}"
         )
         if user.hashed_password:
-            # Strip the ``junos:`` vendor tag on render; canonical
-            # storage prefixes it on parse to mark Junos-sourced
-            # hashes.
             hsh = user.hashed_password
             if hsh.startswith("junos:"):
-                hsh = hsh[len("junos:"):]
-            out.append(
-                f"set system login user {_quote_if_needed(user.name)} "
-                f"authentication encrypted-password "
-                f"{_quote_always(hsh)}"
-            )
+                # Native Junos hash — strip the vendor tag and emit
+                # verbatim.  Round-trip path: parse stores
+                # ``junos:<crypt>``, render strips it back out.  No
+                # migratability check needed here — by definition the
+                # hash came from a Junos parser.
+                out.append(
+                    f"set system login user {_quote_if_needed(user.name)} "
+                    f"authentication encrypted-password "
+                    f"{_quote_always(hsh[len('junos:'):])}"
+                )
+            elif is_migratable(hsh, "juniper_junos"):
+                # Foreign-source hash whose algorithm Junos can
+                # consume natively (sha512 -> $6$ / md5crypt -> $1$
+                # via Junos's commit-time hasher; plaintext is
+                # always emit-safe).  Strip the canonical
+                # ``vendor:alg:`` prefix and emit just the payload.
+                _alg, payload = classify_hash(hsh)
+                out.append(
+                    f"set system login user {_quote_if_needed(user.name)} "
+                    f"authentication encrypted-password "
+                    f"{_quote_always(payload)}"
+                )
+            else:
+                # Unmigratable hash (Cisco type-5/7/8/9 scrypt,
+                # FortiGate ENC, OPNsense bcrypt) — Junos's commit-
+                # time hasher cannot consume this format and would
+                # either reject it at deploy time or, worse, accept
+                # the literal as a plaintext password (severe
+                # security bug — issue #1 in user_smoke_findings.md).
+                # Emit a ``#``-syntax review comment so the operator
+                # gets an explicit "reset this password" signal and
+                # the rendered config commits clean.
+                algorithm, _payload = classify_hash(hsh)
+                out.append(
+                    format_review_comment(
+                        user.name, algorithm, comment_syntax="hash",
+                    )
+                )
 
     # --- structural collapse detection (render-side auto-
     #     synthesise interface-range blocks for ≥3 interfaces
@@ -244,6 +292,39 @@ def render_intent(tree: Any) -> str:
         else:
             _next_ae_fallback_state[0] += 1
         lag_ae_by_canonical_name[lag.name] = ae_name
+
+    # --- empty-interface elision predicate ------------------------
+    #
+    # When an interface carries zero canonical content (no L3 IPs,
+    # no description, no MTU, enabled, no L2 / LAG state), the only
+    # value of emitting ``set interfaces <name>`` is to declare the
+    # interface so a *routing-instance* binding can reference it,
+    # OR because there are sub-units (``<name>.<vid>``) that need a
+    # parent stub on reparse to keep the canonical-iface list stable.
+    # Cisco IOS-XE ``vrf forwarding Mgmt-vrf`` translates into
+    # ``iface.vrf="Mgmt-vrf"`` on the canonical side, which triggers
+    # a ``set routing-instances Mgmt-vrf interface <name>.0`` line
+    # below — Junos's commit-time validator requires the interface
+    # to be defined under ``[edit interfaces]`` before that
+    # reference resolves (KB: "Interface must already be defined
+    # under [edit interfaces]").  Without that VRF binding (and
+    # without any sub-units), an empty stub is pure noise in the
+    # rendered config.  Issue #9 in user_smoke_findings.md.
+    iface_is_vrf_bound: dict[str, bool] = {
+        i.name: bool(i.vrf) for i in tree.interfaces
+    }
+    # Names that show up as the parent of an ``<name>.<unit>`` sub-
+    # interface — e.g. ``irb`` is the parent of ``irb.100``.
+    # Junos parse creates BOTH a parent-name canonical and a unit
+    # canonical for ``set interfaces <parent> unit <N> ...`` lines
+    # (the parent is bodyless when no per-iface attrs land on it),
+    # so a stable parse->render->parse cycle requires the parent
+    # stub to be re-emitted.
+    iface_has_subunits: set[str] = set()
+    for i in tree.interfaces:
+        if "." in i.name:
+            parent_name = i.name.rsplit(".", 1)[0]
+            iface_has_subunits.add(parent_name)
 
     # --- interfaces ---
     for iface in tree.interfaces:
@@ -441,22 +522,49 @@ def render_intent(tree: Any) -> str:
             )
             emitted_lag_member = True
 
-        # Placeholder: the parse side creates an interface entry
-        # for every ``set interfaces <name> ...`` line, even when
-        # the trailing tokens land entirely in unmodelled (Tier-3)
-        # grammar like ``unit 0 family ethernet-switching ...``.
-        # Or: the interface IS range-collapsed with no per-
-        # interface specifics (no IP) — still need a placeholder
-        # so round-trip keeps the interface in the canonical
-        # tree even when the range block alone carries all its
+        # Empty-stub handling: the parse side creates an interface
+        # entry for every ``set interfaces <name> ...`` line, even
+        # when the trailing tokens land entirely in unmodelled
+        # (Tier-3) grammar like ``unit 0 family ethernet-switching
+        # ...``.  Or: the interface IS range-collapsed with no
+        # per-interface specifics (no IP) — still need a placeholder
+        # so round-trip keeps the interface in the canonical tree
+        # even when the range block alone carries all its
         # attributes.
+        #
+        # When the canonical record is fully empty (no body, not in
+        # an interface-range, no L2 / LAG): emit the bare line ONLY
+        # when (a) a routing-instance binding requires it, OR (b)
+        # this name is the parent of a sub-unit (``irb`` is parent
+        # of ``irb.100``; reparse round-trip needs the parent
+        # canonical to come back).  Otherwise skip entirely.
+        # Cross-vendor renders into Junos used to leak ``set
+        # interfaces irb.1`` and ``set interfaces ge-0/0/0`` stubs
+        # from Cisco-source canonical trees where a Vlan or a
+        # ``vrf forwarding Mgmt-vrf`` binding produced an interface
+        # record with no other state.  Issue #9 in
+        # tests/fixtures/real/user_smoke_findings.md.
         if (
             not has_renderable_attr
             and not is_range_member
             and not emitted_l2
             and not emitted_lag_member
         ):
-            out.append(f"set interfaces {name}")
+            if iface_is_vrf_bound.get(name, False):
+                # VRF-bound stub — keep the bare line so Junos's
+                # commit-time validator finds the interface, with
+                # an explanatory comment so operators don't wonder
+                # why it's bodyless.
+                out.append(
+                    f"# set interfaces {name} -- bare stub kept; "
+                    f"required by routing-instance binding below"
+                )
+                out.append(f"set interfaces {name}")
+            elif name in iface_has_subunits:
+                # Parent of one or more sub-units — round-trip
+                # stability needs the bare line.
+                out.append(f"set interfaces {name}")
+            # else: fully empty, no reference, no children — skip.
 
     # --- aggregated-ether (LAG) stanzas (Phase 4 rank-4) ---
     #
