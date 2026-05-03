@@ -125,6 +125,31 @@ def render_intent(tree: Any) -> str:
 
     # --- login users ---
     for user in tree.local_users:
+        # Hash-gate FIRST: when the source hash is unmigratable to
+        # Junos, drop the user entirely.  Emitting just the bare
+        # ``set system login user X class Y`` line (without any
+        # ``authentication encrypted-password`` line) creates a
+        # passwordless account at commit time on Junos — strictly
+        # worse than the source state.  Mirror Cisco IOS-XE's
+        # ``continue``-on-unmigratable pattern (cisco_iosxe_cli/
+        # render.py line ~117): emit the review comment naming the
+        # user and skip the rest of the user-emit body.  Operator
+        # gets an explicit "reset this password manually" signal
+        # without a security regression in the deployed config.
+        # Finding #16 in user_smoke_findings.md.
+        if (
+            user.hashed_password
+            and not user.hashed_password.startswith("junos:")
+            and not is_migratable(user.hashed_password, "juniper_junos")
+        ):
+            algorithm, _payload = classify_hash(user.hashed_password)
+            out.append(
+                format_review_comment(
+                    user.name, algorithm, comment_syntax="hash",
+                    target_label="Junos",
+                )
+            )
+            continue
         if user.role:
             role = user.role
         elif user.privilege_level >= 15:
@@ -150,34 +175,19 @@ def render_intent(tree: Any) -> str:
                     f"authentication encrypted-password "
                     f"{_quote_always(hsh[len('junos:'):])}"
                 )
-            elif is_migratable(hsh, "juniper_junos"):
+            else:
                 # Foreign-source hash whose algorithm Junos can
                 # consume natively (sha512 -> $6$ / md5crypt -> $1$
                 # via Junos's commit-time hasher; plaintext is
                 # always emit-safe).  Strip the canonical
                 # ``vendor:alg:`` prefix and emit just the payload.
+                # Unmigratable hashes were already short-circuited
+                # via the ``continue`` above.
                 _alg, payload = classify_hash(hsh)
                 out.append(
                     f"set system login user {_quote_if_needed(user.name)} "
                     f"authentication encrypted-password "
                     f"{_quote_always(payload)}"
-                )
-            else:
-                # Unmigratable hash (Cisco type-5/7/8/9 scrypt,
-                # FortiGate ENC, OPNsense bcrypt) — Junos's commit-
-                # time hasher cannot consume this format and would
-                # either reject it at deploy time or, worse, accept
-                # the literal as a plaintext password (severe
-                # security bug — issue #1 in user_smoke_findings.md).
-                # Emit a ``#``-syntax review comment so the operator
-                # gets an explicit "reset this password" signal and
-                # the rendered config commits clean.
-                algorithm, _payload = classify_hash(hsh)
-                out.append(
-                    format_review_comment(
-                        user.name, algorithm, comment_syntax="hash",
-                        target_label="Junos",
-                    )
                 )
 
     # --- structural collapse detection (render-side auto-

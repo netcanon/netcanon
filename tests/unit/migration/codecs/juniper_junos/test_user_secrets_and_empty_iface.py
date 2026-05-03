@@ -96,6 +96,74 @@ def test_arista_sha512_migrates_to_junos_dollar_six() -> None:
     assert "review:" not in out
 
 
+def test_junos_unmigratable_hash_drops_user_declaration_entirely() -> None:
+    """Finding #16 in user_smoke_findings.md.  When the source hash
+    is unmigratable to Junos (e.g. OPNsense bcrypt ``$2y$..``), the
+    renderer must NOT emit a bare ``set system login user X class Y``
+    line — that creates a passwordless account at Junos commit
+    time, strictly worse than the source state.  Mirror Cisco
+    IOS-XE's full-drop pattern: only the ``# password manager ..
+    -- review:`` comment line remains, signalling the operator to
+    reset the password manually.
+    """
+    intent = CanonicalIntent(
+        hostname="opnsense-source",
+        local_users=[
+            CanonicalLocalUser(
+                name="root",
+                privilege_level=15,
+                # Synthetic OPNsense-tagged bcrypt — looks real,
+                # isn't.  The ``opnsense:bcrypt:`` prefix is the
+                # canonical-store form OPNsense's parser writes.
+                hashed_password="opnsense:bcrypt:$2y$11$fakeBcryptSaltAndHash",
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    # Review comment IS present, naming the user + the source
+    # algorithm + the per-codec target label.
+    assert (
+        '# password manager user-name "root" -- review: '
+    ) in out
+    assert "cannot be re-used on Junos" in out
+    # Crucially, NO ``set system login user root`` declaration
+    # anywhere in the output — that would create a passwordless
+    # account on Junos.
+    assert "set system login user root" not in out
+    # And no encrypted-password line either.
+    assert "authentication encrypted-password" not in out
+
+
+def test_junos_migratable_hash_still_emits_user_declaration() -> None:
+    """Regression guard: a migratable hash (sha512crypt ``$6$..``,
+    which Junos accepts natively at commit time) must continue to
+    produce both the ``set system login user X class Y`` line AND
+    the ``authentication encrypted-password ...`` line.  The hash-
+    gate continue must only fire on unmigratable hashes.
+    """
+    intent = CanonicalIntent(
+        hostname="lab-junos",
+        local_users=[
+            CanonicalLocalUser(
+                name="root",
+                privilege_level=15,
+                hashed_password="$6$saltyMcSalt$fakeSha512HashPayload",
+            ),
+        ],
+    )
+    out = render_intent(intent)
+    # User declaration IS present.
+    assert "set system login user root class super-user" in out
+    # Encrypted-password line IS present, with the raw payload
+    # (sha512crypt is consumable by Junos's commit-time hasher).
+    assert (
+        'set system login user root authentication encrypted-password '
+        '"$6$saltyMcSalt$fakeSha512HashPayload"'
+    ) in out
+    # And no review comment for this user.
+    assert "review:" not in out
+
+
 def test_native_junos_hash_passes_through() -> None:
     """Native Junos parses store ``junos:<hash>``; render should
     strip just the prefix.  This is the existing round-trip
