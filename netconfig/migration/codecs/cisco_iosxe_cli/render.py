@@ -40,6 +40,11 @@ import ipaddress
 import re
 from typing import Any
 
+from ..._user_secrets import (
+    classify_hash,
+    format_review_comment,
+    is_migratable,
+)
 from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -91,14 +96,30 @@ def render_intent(tree: Any) -> str:
 
     # --- local users ---
     # Cisco form: `username X privilege N secret <type> <hash>`.
-    # Canonical hashed_password preserves whatever opaque hash the
-    # source emitted.  Same-vendor (Cisco→Cisco) round-trip carries
-    # the type-5/9 marker through verbatim; cross-vendor sources
-    # (Aruba sha1, FortiGate ENC, OPNsense bcrypt) emit under a
-    # generic ``5`` marker — Cisco will reject at config-push but
-    # the data is preserved for the operator to reconcile.  Empty
-    # password renders ``nopassword`` (legitimate Cisco form).
+    # Canonical ``hashed_password`` preserves whatever opaque hash the
+    # source captured.  Same-vendor (Cisco→Cisco) round-trip carries
+    # the type-5 / 8 / 9 marker through verbatim.  Cross-vendor hashes
+    # (Arista sha512, OPNsense bcrypt $2y$, FortiGate ENC, ...) are
+    # NOT consumable by IOS-XE's ``secret`` parser — IOS-XE only
+    # accepts type 0 / 5 / 8 / 9.  Before this gate the renderer
+    # leaked the literal foreign hash under ``secret 5`` (security
+    # disclosure: the bcrypt hash leaks on the wire) AND tagged
+    # bcrypt as md5crypt (wrong type marker).  We now consult the
+    # shared :mod:`netconfig.migration._user_secrets` policy and emit
+    # a comment-form ``review:`` line in IOS comment syntax (``! ``)
+    # when the hash is unmigratable.  Empty password renders
+    # ``nopassword`` (legitimate Cisco form).
     for u in tree.local_users:
+        if u.hashed_password and not is_migratable(
+            u.hashed_password, "cisco_iosxe_cli",
+        ):
+            algorithm, _payload = classify_hash(u.hashed_password)
+            out.append(
+                format_review_comment(
+                    u.name, algorithm, comment_syntax="exclamation",
+                )
+            )
+            continue
         parts = [f"username {u.name}"]
         if u.privilege_level and u.privilege_level != 1:
             parts.append(f"privilege {u.privilege_level}")
@@ -192,26 +213,55 @@ def render_intent(tree: Any) -> str:
         return (kind, _natural_port_sort_key(iface.name))
 
     ordered_ifaces = sorted(tree.interfaces, key=_iface_sort_key)
+
+    # Empty-stub elision (mirrors Junos commit `0fdf7e9`, finding #8
+    # in tests/fixtures/real/user_smoke_findings.md).  Cross-vendor
+    # source codecs preserve the source's port-name verbatim on the
+    # canonical CanonicalInterface (OPNsense ``igc0`` / ``ixl0``,
+    # MikroTik ``ether1``, etc.).  Without elision the IOS-XE render
+    # leaks ``interface igc0`` literal stubs that have no body — pure
+    # noise for an operator reading the rendered config and not even
+    # accepted as a valid port name on the target device.  We emit
+    # the bare ``interface NAME`` line ONLY when one of the following
+    # holds:
+    #
+    #   (a) the canonical record carries any renderable body
+    #       (description / IPs / MTU / shutdown / L2 / LAG / VRF),
+    #   (b) the interface is referenced from a VLAN port-list
+    #       (untagged / tagged) — Cisco needs the iface declared so
+    #       the access/trunk binding has somewhere to live, OR
+    #   (c) the interface name matches an IOS-XE physical-port shape
+    #       (preserves round-trip for same-vendor renders that
+    #       capture only Tier-3 grammar on a port).
+    #
+    # Names referenced from VLAN port lists.
+    vlan_referenced_names: set[str] = set()
+    for v in tree.vlans:
+        for n in v.tagged_ports:
+            vlan_referenced_names.add(n)
+        for n in v.untagged_ports:
+            vlan_referenced_names.add(n)
+
     for iface in ordered_ifaces:
-        out.append(f"interface {iface.name}")
+        body: list[str] = []
         if iface.description:
-            out.append(f" description {iface.description}")
+            body.append(f" description {iface.description}")
         if iface.vrf:
-            out.append(f" vrf forwarding {iface.vrf}")
+            body.append(f" vrf forwarding {iface.vrf}")
         # IPv4 addresses — Cisco needs dotted-decimal masks.
         for addr in iface.ipv4_addresses:
             mask = _prefix_to_mask(addr.prefix_length)
-            out.append(f" ip address {addr.ip} {mask}")
+            body.append(f" ip address {addr.ip} {mask}")
         # GAP-EVPN-3: IPv6 addresses — IOS-XE uses CIDR natively
         # (no dotted-mask form for v6).  Link-local re-emits the
         # explicit keyword.
         for v6 in iface.ipv6_addresses:
             if v6.scope == "link-local":
-                out.append(
+                body.append(
                     f" ipv6 address {v6.ip}/{v6.prefix_length} link-local"
                 )
             else:
-                out.append(
+                body.append(
                     f" ipv6 address {v6.ip}/{v6.prefix_length}"
                 )
         # Switchport — emit the mode FIRST (operator-natural
@@ -227,17 +277,17 @@ def render_intent(tree: Any) -> str:
         # silently drop the inactive-mode declarations and break
         # canonical-stable round-trip on those captures.
         if iface.switchport_mode in ("access", "trunk"):
-            out.append(f" switchport mode {iface.switchport_mode}")
+            body.append(f" switchport mode {iface.switchport_mode}")
         if iface.access_vlan is not None:
-            out.append(
+            body.append(
                 f" switchport access vlan {iface.access_vlan}"
             )
         if iface.voice_vlan is not None:
-            out.append(
+            body.append(
                 f" switchport voice vlan {iface.voice_vlan}"
             )
         if iface.trunk_native_vlan is not None:
-            out.append(
+            body.append(
                 f" switchport trunk native vlan "
                 f"{iface.trunk_native_vlan}"
             )
@@ -245,11 +295,11 @@ def render_intent(tree: Any) -> str:
             vlan_list = ",".join(
                 str(v) for v in iface.trunk_allowed_vlans
             )
-            out.append(
+            body.append(
                 f" switchport trunk allowed vlan {vlan_list}"
             )
         if iface.mtu is not None:
-            out.append(f" mtu {iface.mtu}")
+            body.append(f" mtu {iface.mtu}")
         # LAG-membership marker.  Mode normalisation: canonical
         # ``active`` → LACP active; ``passive`` → LACP passive;
         # ``static`` → mode ``on`` (no LACP).
@@ -264,16 +314,39 @@ def render_intent(tree: Any) -> str:
                 "on": "on",
             }.get(mode.lower(), "active")
             if lag_num is not None:
-                out.append(
+                body.append(
                     f" channel-group {lag_num} mode {wire_mode}"
                 )
         # Enabled state — Cisco default is ``no shutdown`` so
         # we only emit when explicitly disabled.  Parsers that
         # didn't see ``shutdown`` leave enabled=True.
         if not iface.enabled:
-            out.append(" shutdown")
+            body.append(" shutdown")
         if iface.dhcp_client:
-            out.append(" ip address dhcp")
+            body.append(" ip address dhcp")
+
+        # Elision predicate.
+        is_native_port = bool(_IS_CISCO_PHYSICAL_PORT_RE.match(iface.name))
+        is_vlan_referenced = iface.name in vlan_referenced_names
+        if not body and not is_native_port and not is_vlan_referenced:
+            # Foreign port name with no body and no incoming reference —
+            # skip entirely.  Suppresses ``interface igc0`` /
+            # ``interface ether1`` etc. from cross-vendor renders.
+            continue
+        if not body and is_vlan_referenced and not is_native_port:
+            # Foreign port referenced from a VLAN port list — keep the
+            # bare ``interface NAME`` line so the membership has a
+            # binding target, but flag for operator review.
+            out.append(f"interface {iface.name}")
+            out.append(
+                f"! interface {iface.name} -- review: foreign port "
+                f"name preserved from source vendor; rename to a "
+                f"native IOS-XE port before deploy"
+            )
+            out.append("!")
+            continue
+        out.append(f"interface {iface.name}")
+        out.extend(body)
         out.append("!")
 
     # --- VLANs ---
@@ -384,6 +457,65 @@ def render_intent(tree: Any) -> str:
     return "\n".join(out) + "\n"
 
 
+# Cisco IOS-XE physical-port name shapes.  Used by the empty-stub
+# elision predicate (mirrors the Junos pattern in
+# ``juniper_junos/render.py::_IS_JUNOS_PHYSICAL_PORT_RE``) to decide
+# whether a content-free canonical iface is "really there" (same-
+# vendor source where the parser captured only Tier-3 grammar) or a
+# foreign port name leaking through from a cross-vendor source
+# (OPNsense ``igc0``, MikroTik ``ether1``, etc.) that should be
+# elided from the rendered config.  Covers the IOS-XE families an
+# operator would expect to see on real hardware (including the
+# wide-and-weird Batfish-corpus families like ``Crypto-Engine``,
+# ``Wideband-Cable``, ``Wlan-GigabitEthernet``, ``Dot11Radio``).
+# Match is case-insensitive because real IOS-XE accepts both
+# ``Vlan100`` and ``vlan100`` (parse-side treats them identically).
+_CISCO_PORT_PREFIX_ALTS = "|".join((
+    # Ethernet families.
+    r"FastEthernet",
+    r"GigabitEthernet",
+    r"TenGigabitEthernet",
+    r"TwentyFiveGigE",
+    r"FortyGigabitEthernet",
+    r"HundredGigE",
+    r"AppGigabitEthernet",
+    r"Ethernet",
+    # Aggregate / virtual.
+    r"Port-channel",
+    r"Loopback",
+    r"Vlan",
+    r"Tunnel-ip6",
+    r"Tunnel-ip",
+    r"Tunnel",
+    r"Management",
+    r"BDI",
+    r"Serial",
+    r"Async",
+    r"Null",
+    r"VirtualPortGroup",
+    r"Multilink",
+    r"Dialer",
+    r"Group-Async",
+    r"BVI",
+    r"pseudowire",
+    r"nve",
+    r"GMPLS",
+    r"Voice",
+    # Wireless / Cable / WiFi families.
+    r"Dot11Radio",
+    r"Wlan-GigabitEthernet",
+    r"Wlan-ap",
+    r"Wideband-Cable",
+    r"Modular-Cable",
+    r"Cable",
+    r"Crypto-Engine",
+))
+_IS_CISCO_PHYSICAL_PORT_RE = re.compile(
+    rf"^(?:{_CISCO_PORT_PREFIX_ALTS})[\s\d/.:]*$",
+    re.IGNORECASE,
+)
+
+
 def _prefix_to_mask(prefix: int) -> str:
     """Convert a CIDR prefix length to a dotted-decimal subnet mask.
 
@@ -454,41 +586,48 @@ def _split_cisco_hash(hashed: str) -> tuple[str, str]:
       * 9 — scrypt
 
     Canonical hashed_password preserves whatever shape the source
-    parser captured.  Two recognised input shapes (per the Cisco
-    parser convention in :func:`_parse_local_users`):
+    parser captured.  This helper assumes the caller has ALREADY
+    consulted :func:`netconfig.migration._user_secrets.is_migratable`
+    and confirmed the hash is consumable by IOS-XE — the un-
+    migratable path emits a review-comment line above instead of
+    calling this function.  Recognised migratable shapes:
 
-      * ``"<type-digit> <hash>"`` — produced by Cisco's own parser
-        when the source was ``secret <N> <hash>``.  Round-trip case;
-        emits verbatim with the captured type preserved.
-      * Foreign-vendor hash bytes — Aruba sha1, FortiGate ENC,
-        OPNsense bcrypt, etc.  Tag as type-5 (MD5-crypt) so the
-        emitted line is syntactically valid Cisco; deploy-time the
-        device will reject the foreign hash and the operator
-        re-keys.  Same policy as every other codec's
-        cross-vendor-hash handling (lossless on canonical, lossy on
-        deploy).
-
-    Heuristic detection:
-
-      * Leading ``"<digit> "`` — round-trip form, split on first
-        space; honour the captured type.
-      * ``$1$...`` — Cisco type-5 raw → emit ``5 $1$...``
-      * ``$8$...`` / ``$9$...`` — Cisco type-8/9 raw → emit verbatim
-        under their corresponding type digit.
-      * Anything else — foreign-vendor hash, tag as type-5.
+      * ``"<type-digit> <hash>"`` (digits 5 / 8 / 9) — round-trip
+        form produced by the Cisco parser.  Honours the captured
+        type marker.
+      * ``"<vendor>:<alg>:<payload>"`` / ``"<alg>:<payload>"`` —
+        normalised tagged form.  ``5`` / ``md5crypt`` / ``8`` / ``9``
+        map to their corresponding type digit.
+      * ``$1$...`` raw — md5crypt → emit ``5 $1$...``
+      * ``$8$...`` / ``$9$...`` raw — emit ``8 ..`` / ``9 ..``
+      * Anything else — treat as plaintext → ``secret 0 <literal>``.
     """
     if not hashed:
         return ("0", "")
-    # Round-trip form ``<digit> <rest>`` (Cisco parser stored
-    # ``f"{type} {hash}"`` to preserve the source's type marker).
-    if (len(hashed) >= 2 and hashed[0].isdigit() and hashed[1] == " "):
-        return (hashed[0], hashed[2:])
+    # Vendor-tagged forms (``cisco:5:$1$..``, ``md5crypt:$1$..``,
+    # ``9:$9$..``).  Use classify_hash for normalisation so we don't
+    # duplicate parsing logic.
+    algorithm, payload = classify_hash(hashed)
+    if algorithm in {"5", "md5crypt"}:
+        return ("5", payload or hashed)
+    if algorithm == "7":
+        return ("7", payload or hashed)
+    if algorithm == "8":
+        return ("8", payload or hashed)
+    if algorithm == "9":
+        return ("9", payload or hashed)
+    # ``classify_hash`` returns ``("plaintext", ...)`` for raw $1$..
+    # blobs (no leading ``5 `` marker, no vendor tag).  Detect and
+    # promote to type-5 here so cross-vendor sources that store md5
+    # crypt as a bare ``$1$..`` still emit under the right tag.
     if hashed.startswith("$9$"):
         return ("9", hashed)
     if hashed.startswith("$8$"):
         return ("8", hashed)
     if hashed.startswith("$1$"):
         return ("5", hashed)
-    # Foreign-vendor hash — best-effort tag as type-5 so the syntax
-    # is valid.  Deploy-time rejection is the intended failure mode.
-    return ("5", hashed)
+    # Plaintext literal (only path reachable via the migratable-gate
+    # for non-empty values that weren't algorithm-tagged).  IOS-XE
+    # ``secret 0`` is the documented form for unhashed passwords; the
+    # device hashes on commit.
+    return ("0", hashed)

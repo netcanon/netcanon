@@ -65,6 +65,7 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #:   re-hashes the supplied password itself.  Plaintext only.
 _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "aruba_aoss":        frozenset({"plaintext", "sha1", "sha256"}),
+    "cisco_iosxe_cli":   frozenset({"plaintext", "5", "7", "8", "9", "md5crypt"}),
     "fortigate_cli":     frozenset({"plaintext", "fortios"}),
     "juniper_junos":     frozenset({"plaintext", "junos_type1", "sha512"}),
     "opnsense":          frozenset({"plaintext", "bcrypt"}),
@@ -132,10 +133,11 @@ def is_migratable(hashed: str, target_vendor: str) -> bool:
 
 
 _COMMENT_PREFIXES: dict[str, tuple[str, str]] = {
-    "hash":      ("# ", ""),
-    "semicolon": ("; ", ""),
-    "slash":     ("/* ", " */"),
-    "xml":       ("<!-- ", " -->"),
+    "hash":        ("# ", ""),
+    "semicolon":   ("; ", ""),
+    "slash":       ("/* ", " */"),
+    "xml":         ("<!-- ", " -->"),
+    "exclamation": ("! ", ""),
 }
 
 
@@ -155,14 +157,15 @@ def format_review_comment(
 
     ``comment_syntax`` selects the comment delimiter:
 
-    ===========  ==========================================
-    Value        Vendors
-    ===========  ==========================================
-    ``hash``     Cisco IOS / IOS-XE, MikroTik, fortigate
-    ``semicolon`` Aruba AOS-S, Junos
-    ``slash``    C-style block (rarely used)
-    ``xml``      OPNsense XML config
-    ===========  ==========================================
+    ============  ==========================================
+    Value         Vendors
+    ============  ==========================================
+    ``hash``      MikroTik, fortigate, Junos
+    ``semicolon`` Aruba AOS-S
+    ``slash``     C-style block (rarely used)
+    ``xml``       OPNsense XML config
+    ``exclamation`` Cisco IOS / IOS-XE, Arista EOS
+    ============  ==========================================
 
     The wording uses "this target" rather than naming a specific
     vendor — codecs that prefer vendor-specific phrasing (Aruba does)
