@@ -27,14 +27,14 @@ from typing import Any
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
+    is_migratable,
 )
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
 
-# Algorithms whose payloads Arista's ``secret`` command can consume
-# natively.  Keys are the algorithm tokens emitted by
-# :func:`classify_hash`; values are the matching ``secret <N>``
+# Arista-local emit-form vocabulary: maps the algorithm tokens
+# emitted by :func:`classify_hash` to the matching ``secret <N>``
 # type-tag tokens for the EOS CLI:
 #
 #   * ``plaintext`` (no separator) -> ``secret 0 <password>``
@@ -42,6 +42,14 @@ from ..base import RenderError
 #   * ``md5crypt`` (alias used by some sources) -> ``secret 5 $1$..``
 #   * ``sha512`` (Arista vendor-tagged or generic ``$6$``)
 #     -> ``secret sha512 $6$..``
+#
+# This table is the codec-LOCAL emit-form dispatch (similar to
+# Aruba's ``_AOS_KNOWN_ALGORITHMS``); the cross-vendor migratability
+# decision (which algorithms EOS literally cannot consume) lives in
+# the shared :mod:`netconfig.migration._user_secrets` module under
+# ``_TARGET_ACCEPTS["arista_eos"]``, and is consulted via
+# :func:`is_migratable`.  The keys here mirror that accepted set
+# exactly — keep them in sync.
 #
 # Anything outside this set (bcrypt ``$2y$``, Cisco type-7/8/9,
 # FortiGate ENC blobs) cannot be re-emitted on Arista — the codec
@@ -152,14 +160,19 @@ def render_intent(tree: Any) -> str:
     #      either reject at commit time or, worse, treat the
     #      literal as opaque junk.
     #
-    # Now we consult :func:`classify_hash` to identify the
-    # algorithm, look it up in :data:`_ARISTA_SECRET_TYPE` to
-    # find the correct ``secret <N>`` tag, and only emit when the
-    # algorithm is one Arista actually accepts (plaintext / md5crypt
-    # / sha512).  Anything else falls through to a comment-form
-    # ``! password manager user-name "X" -- review:`` line so the
-    # operator gets an explicit "reset this password" signal and
-    # the rendered config commits clean.
+    # Now we consult the shared :func:`is_migratable` policy as the
+    # canonical source-of-truth for "can EOS consume this hash";
+    # when migratable, :func:`classify_hash` resolves the algorithm
+    # token and :data:`_ARISTA_SECRET_TYPE` (the codec-local emit-
+    # form vocabulary) supplies the matching ``secret <N>`` tag.
+    # The shared accepted-set covers exactly the same algorithms as
+    # ``_ARISTA_SECRET_TYPE`` — keeping the dispatch table local
+    # documents the EOS CLI grammar that consumes the tag verbatim
+    # (similar to Aruba's ``_AOS_KNOWN_ALGORITHMS``).  Unmigratable
+    # hashes fall through to a comment-form ``! password manager
+    # user-name "X" -- review:`` line so the operator gets an
+    # explicit "reset this password" signal and the rendered config
+    # commits clean.
     #
     # Round-trip path: native parse stores hashes as
     # ``arista:<alg>:<payload>`` (the vendor-tagged form), which
@@ -167,11 +180,11 @@ def render_intent(tree: Any) -> str:
     # the existing native round-trip stays byte-identical.
     if tree.local_users:
         for user in tree.local_users:
-            # Hash-gate: when the source hash isn't in
-            # :data:`_ARISTA_SECRET_TYPE` (i.e. EOS's ``secret``
-            # command can't consume the payload), drop the entire
-            # ``username`` declaration and emit ONLY the review
-            # comment.  Mirrors the cisco_iosxe_cli pattern
+            # Hash-gate: when the shared policy reports the source
+            # hash isn't migratable to ``arista_eos`` (i.e. EOS's
+            # ``secret`` command can't consume the payload), drop
+            # the entire ``username`` declaration and emit ONLY the
+            # review comment.  Mirrors the cisco_iosxe_cli pattern
             # (render.py ~line 113): leaving an orphan ``username
             # X role Y`` line with no ``secret`` clause creates a
             # passwordless account on commit, defeating the gate.
@@ -179,8 +192,7 @@ def render_intent(tree: Any) -> str:
             # re-paste).
             if user.hashed_password:
                 algorithm, payload = classify_hash(user.hashed_password)
-                secret_tag = _ARISTA_SECRET_TYPE.get(algorithm)
-                if secret_tag is None:
+                if not is_migratable(user.hashed_password, "arista_eos"):
                     review = format_review_comment(
                         user.name, algorithm,
                         comment_syntax="exclamation",
@@ -188,6 +200,7 @@ def render_intent(tree: Any) -> str:
                     )
                     out.append(review)
                     continue
+                secret_tag = _ARISTA_SECRET_TYPE[algorithm]
             else:
                 secret_tag = None
                 payload = ""

@@ -55,6 +55,16 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #:
 #: * ``aruba_aoss`` accepts ``plaintext`` plus the two hex hash forms
 #:   AOS-S's ``password manager`` command can ingest verbatim.
+#: * ``arista_eos`` accepts ``plaintext`` plus the algorithms whose
+#:   payloads EOS's ``secret`` command can consume natively:
+#:   ``"5"`` (Cisco bare-digit md5crypt), ``"md5crypt"`` (synonym
+#:   tagged form), and ``"sha512"`` (Arista vendor-tagged or generic
+#:   ``$6$``).  These keys mirror :data:`_ARISTA_SECRET_TYPE` in
+#:   ``codecs/arista_eos/render.py`` exactly — the shared helper
+#:   gates migratability while the codec-local table dispatches
+#:   ``algorithm -> "secret <N>"`` tag for the emit form.
+#: * ``cisco_iosxe_cli`` accepts the Cisco-native bare-digit forms
+#:   plus the ``md5crypt`` alias.
 #: * ``fortigate_cli`` only accepts its own ``ENC <blob>`` format
 #:   (tagged ``fortios:`` here); foreign hashes cannot be consumed.
 #: * ``juniper_junos`` accepts crypt-format $1$ (md5) and $6$
@@ -65,6 +75,7 @@ _UNIVERSALLY_UNMIGRATABLE: frozenset[str] = frozenset({
 #:   re-hashes the supplied password itself.  Plaintext only.
 _TARGET_ACCEPTS: dict[str, frozenset[str]] = {
     "aruba_aoss":        frozenset({"plaintext", "sha1", "sha256"}),
+    "arista_eos":        frozenset({"plaintext", "5", "md5crypt", "sha512"}),
     "cisco_iosxe_cli":   frozenset({"plaintext", "5", "7", "8", "9", "md5crypt"}),
     "fortigate_cli":     frozenset({"plaintext", "fortios"}),
     "juniper_junos":     frozenset({"plaintext", "junos_type1", "sha512"}),

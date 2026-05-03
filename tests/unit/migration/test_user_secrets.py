@@ -13,6 +13,7 @@ from __future__ import annotations
 import pytest
 
 from netconfig.migration._user_secrets import (
+    _TARGET_ACCEPTS,
     _UNIVERSALLY_UNMIGRATABLE,
     classify_hash,
     format_review_comment,
@@ -138,6 +139,50 @@ def test_is_migratable_unknown_target_only_plaintext() -> None:
     """Unknown target vendors are conservatively treated as plaintext-only."""
     assert is_migratable("hello", "made_up_vendor") is True
     assert is_migratable("9 $9$abc", "made_up_vendor") is False
+
+
+def test_arista_eos_in_target_accepts() -> None:
+    """``arista_eos`` accepts plaintext + the three algorithms whose
+    payloads EOS's ``secret`` command can consume natively (md5crypt-
+    aliases ``"5"``/``"md5crypt"`` and ``"sha512"``).  Mirrors
+    ``_ARISTA_SECRET_TYPE`` in ``codecs/arista_eos/render.py`` —
+    keep these in sync (the codec uses ``is_migratable`` as the
+    gate, then the local table for emit-form dispatch).
+    """
+    assert "arista_eos" in _TARGET_ACCEPTS
+    assert _TARGET_ACCEPTS["arista_eos"] == frozenset(
+        {"plaintext", "5", "md5crypt", "sha512"}
+    )
+
+
+def test_is_migratable_arista_eos_known_algorithms() -> None:
+    """Each algorithm Arista's ``secret`` command can consume
+    natively must report as migratable through the shared helper."""
+    assert is_migratable("hunter2", "arista_eos") is True
+    assert is_migratable("5 $1$salt$md5crypthash", "arista_eos") is True
+    assert is_migratable(
+        "arista:5:$1$salt$md5crypthash", "arista_eos"
+    ) is True
+    assert is_migratable(
+        "md5crypt:$1$salt$md5crypthash", "arista_eos"
+    ) is True
+    assert is_migratable(
+        "arista:sha512:$6$salt$sha512hash", "arista_eos"
+    ) is True
+    assert is_migratable(
+        "sha512:$6$salt$sha512hash", "arista_eos"
+    ) is True
+
+
+def test_is_migratable_arista_eos_rejects_bcrypt() -> None:
+    """Bcrypt ``$2y$`` cannot be consumed by EOS's ``secret``
+    command — the previous opaque ``secret 5 bcrypt:$2y$..``
+    fallback was issue #1 in ``user_smoke_findings.md`` (CRITICAL
+    security disclosure).  Gate must report unmigratable so the
+    Arista codec falls through to the review-comment line."""
+    assert is_migratable(
+        "bcrypt:$2y$11$saltbcryptpayload", "arista_eos"
+    ) is False
 
 
 def test_universally_unmigratable_membership() -> None:
