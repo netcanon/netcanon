@@ -367,12 +367,26 @@ per_field_expectation:
     references: [junos-iface-fundamentals, opnsense-interfaces]
 
   interfaces[].ipv6_addresses:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos ``family inet6 address X/N`` ↔ OPNsense ``<ipaddrv6>``
       + ``<subnetv6>``.  ``scope`` discriminator (global / link-
-      local) preserved.  Junos's auto-detect of ``fe80::/10``
-      prefixes survives the canonical scope normalisation.
+      local) preserved on the surviving address.  Junos's
+      auto-detect of ``fe80::/10`` prefixes survives the canonical
+      scope normalisation.
+      Wave 10 γ-3: downgraded from ``good`` to ``lossy`` because
+      the OPNsense ``<ipaddrv6>`` element is a SINGLE-VALUED slot
+      per zone (the schema cannot express more than one static
+      IPv6 address per interface), and FreeBSD's network stack
+      auto-derives the fe80::/64 link-local from the NIC MAC at
+      kernel-init time per RFC 4862 SLAAC.  Operators do not
+      typically declare explicit link-locals on OPNsense; the
+      FreeBSD kernel handles this end-to-end.  When a Junos
+      source carries BOTH a global and an explicit link-local on
+      the same interface, the OPNsense renderer emits the global
+      address (the operator-meaningful one) and drops the
+      link-local since FreeBSD will recreate it on apply.  This
+      is documented vendor schema behaviour, not a codec defect.
     references: [junos-iface-fundamentals, opnsense-interfaces]
 
   interfaces[].switchport_mode:

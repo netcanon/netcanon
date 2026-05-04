@@ -78,6 +78,33 @@ def test_canonical_lag_name_recognises_aruba_trk_form() -> None:
     )
 
 
+def test_canonical_lag_name_recognises_fortigate_agg_form() -> None:
+    """FortiGate's aggregate-interface ``agg<N>`` is the vendor-native
+    LAG name (per FortiOS CLI Reference ``config system interface``
+    with ``type aggregate``).  Wave 10 γ-3 extended the regex so
+    cross-vendor renames against ae<N> / Port-channel<N> don't fire
+    spurious CODEC_BUG against ``interfaces[].lag_member_of``."""
+    assert recon._canonical_lag_name("agg1") == recon._canonical_lag_name(
+        "ae1"
+    )
+    assert recon._canonical_lag_name("agg2") == recon._canonical_lag_name(
+        "Port-channel2"
+    )
+
+
+def test_canonical_lag_name_recognises_routeros_bond_form() -> None:
+    """RouterOS bonding-interface ``bond<N>`` is the vendor-native LAG
+    name (per RouterOS bonding-interface documentation).  Wave 10 γ-3
+    extended the regex to recognise it as semantically equivalent to
+    ae<N> / Port-channel<N>."""
+    assert recon._canonical_lag_name("bond1") == recon._canonical_lag_name(
+        "ae1"
+    )
+    assert recon._canonical_lag_name("bond2") == recon._canonical_lag_name(
+        "Port-channel2"
+    )
+
+
 def test_canonical_lag_name_returns_none_for_non_lag_names() -> None:
     """Names that don't match a LAG shape return ``None`` so the caller
     falls back to raw equality.  Critical regression guard: we MUST NOT

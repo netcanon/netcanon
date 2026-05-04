@@ -174,17 +174,23 @@ ALL_VARIANCES = (
 # lag_member_of``) produces spurious CODEC_BUG findings against fields
 # whose Phase 3 expectation YAML correctly says ``good``.
 #
-# :func:`_canonical_lag_name` recognises the four documented LAG
+# :func:`_canonical_lag_name` recognises the documented LAG name
 # shapes and returns a stable canonical token (``"LAG<N>"``).  Names
 # that don't match (loopbacks, VLANs, physical port names, free-form
 # strings like ``fortilink`` / ``lacp trunk``) return ``None`` so the
 # caller falls back to raw equality and surfaces real drift.
 #
 # The regex is intentionally strict — anchored on both ends and
-# allowing ONLY the four documented prefixes.  See Wave 9 β.
+# allowing ONLY the documented prefixes.  See Wave 9 β for the
+# original four shapes (ae / Po / Port-channel / trk); Wave 10 γ-3
+# extended the set to include FortiGate's ``agg<N>`` (per FortiOS CLI
+# Reference, ``config system interface`` with ``type aggregate``) and
+# RouterOS's ``bond<N>`` (per RouterOS bonding-interface
+# documentation), both of which are vendor-native LAG-bundle names
+# that round-trip semantically equivalent to ae<N> / Port-channel<N>.
 
 _LAG_NAME_RE = re.compile(
-    r"^(?:ae|Po|Port-channel|Port-Channel|trk|Trk)(\d+)$",
+    r"^(?:ae|Po|Port-channel|Port-Channel|trk|Trk|agg|bond)(\d+)$",
 )
 
 
@@ -193,9 +199,9 @@ def _canonical_lag_name(name: Any) -> str | None:
 
     Returns ``"LAG<N>"`` for documented LAG shapes
     (``ae<N>`` / ``Po<N>`` / ``Port-channel<N>`` / ``Port-Channel<N>``
-    / ``trk<N>`` / ``Trk<N>``); returns ``None`` for any other input
-    (including ``None``, empty strings, loopback / VLAN / physical-port
-    names).
+    / ``trk<N>`` / ``Trk<N>`` / ``agg<N>`` / ``bond<N>``); returns
+    ``None`` for any other input (including ``None``, empty strings,
+    loopback / VLAN / physical-port names).
 
     Args:
         name: The vendor-native interface name, typically pulled from

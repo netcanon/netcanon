@@ -104,6 +104,42 @@ def _infer_type(iface_name: str) -> str:
     return "ianaift:other"
 
 
+def _is_link_local_v6(addr: str) -> bool:
+    """Return True iff *addr* is in the IPv6 link-local prefix
+    fe80::/10 (RFC 4291 §2.4).
+
+    Per IANA the link-local prefix covers the range fe80:: through
+    febf::: the first byte is 0xfe and the second nibble is 8/9/a/b
+    (binary 1111111010 — ten leading 1s).  Cisco / Arista classically
+    require the operator to add the ``link-local`` keyword on the
+    interface line, but the prefix itself is unambiguous regardless
+    of vendor decoration; this lets us recover the correct scope on
+    raw fe80:: lines that omit the keyword.
+
+    Returns False for malformed inputs (the caller has the
+    responsibility for downstream parse-time validation; here we just
+    classify scope and leave the ipaddress library to reject the
+    address at canonical-build time if needed).  Accepts the
+    too-many-``::`` shape ``FE80:A8::2DA::1689`` that some NTC
+    fixtures contain — we only inspect the leading characters.
+
+    Args:
+        addr: The bare IPv6 address token (no prefix length).
+
+    Returns:
+        True when *addr* lower-cases to ``fe[89ab]...``; False
+        otherwise.  Empty / non-string inputs return False.
+    """
+    if not addr:
+        return False
+    lo = addr.lower()
+    return (
+        len(lo) >= 3
+        and lo[:2] == "fe"
+        and lo[2] in ("8", "9", "a", "b")
+    )
+
+
 def _mask_to_prefix(mask_str: str) -> int:
     """Convert a dotted-decimal subnet mask to a CIDR prefix length.
 
@@ -596,13 +632,30 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # IPv4 form.  The ``link-local`` keyword tags an address as
         # link-local-scope; bare ``ipv6 address fe80::1 link-local``
         # without a prefix takes the implicit /64 from fe80::/10.
+        #
+        # Wave 10 γ-3: also infer scope from the fe80::/10 prefix when
+        # the ``link-local`` keyword is absent.  RFC 4291 §2.4 reserves
+        # fe80::/10 (covers fe80:: through febf::, i.e. first byte is
+        # 0xfe and second nibble is 8/9/a/b) as the link-local prefix
+        # by IANA; an address in that range is ALWAYS link-local
+        # regardless of vendor keyword decoration.  Without this
+        # inference, cisco_iosxe_cli misclassified raw fe80:: lines
+        # (typical on carrier-router fixtures where the operator
+        # writes ``ipv6 address FE80::.../126`` without the keyword)
+        # as ``global``, causing CODEC_BUG drift against juniper_junos
+        # which infers scope from the prefix.  See Wave 10 γ-3.
         v6m = _IPV6_RE.match(line)
         if v6m:
             addr = v6m.group(1)
-            scope = "link-local" if v6m.group(2) else "global"
+            keyword_scope = v6m.group(2)
             if "/" in addr:
                 ip_part, prefix_str = addr.split("/", 1)
                 try:
+                    scope = (
+                        "link-local"
+                        if (keyword_scope or _is_link_local_v6(ip_part))
+                        else "global"
+                    )
                     current["ipv6"].append({
                         "ip": ip_part,
                         "prefix_length": int(prefix_str),
@@ -610,7 +663,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                     })
                 except ValueError:
                     pass
-            elif scope == "link-local":
+            elif keyword_scope or _is_link_local_v6(addr):
+                # Bare address without a prefix — implicit /64 from
+                # fe80::/10 (IOS-XE accepts ``ipv6 address fe80::1
+                # link-local`` syntax).  Still link-local even if the
+                # keyword was elided, so long as the prefix infers it.
                 current["ipv6"].append({
                     "ip": addr,
                     "prefix_length": 64,
