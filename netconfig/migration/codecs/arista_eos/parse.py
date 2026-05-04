@@ -28,6 +28,7 @@ import re
 from typing import Any
 
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
     CanonicalIntent,
@@ -144,6 +145,156 @@ _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
 
 # VLAN stanza: ``vlan <id>`` optionally followed by ``   name <name>``.
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$")
+
+
+# ---------------------------------------------------------------------------
+# DHCP-server pool grammar (Arista EOS User Manual, "DHCP and DHCP Relay"
+# https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay).
+#
+# EOS DHCP-pool form is structurally identical to the Cisco-IOS-XE
+# ``ip dhcp pool`` family for the subset we model (network, default-
+# router, dns-server, domain-name, lease).  EOS adds an explicit
+# ``range <start_ip> <end_ip>`` allocatable-window line that Cisco
+# lacks.  EOS's ``network`` clause accepts BOTH dotted-mask and CIDR
+# forms — the sample doc snippet pairs a USERS pool ``network
+# 10.10.10.0 255.255.255.0`` with a VOICE pool ``network 10.10.20.0
+# /24`` so we tolerate both shapes on parse and emit the dotted form
+# (the older + more universally accepted spelling) on render.
+_DHCP_POOL_HEADER_RE = re.compile(
+    r"^ip\s+dhcp\s+pool\s+(\S+)\s*$", re.IGNORECASE,
+)
+_DHCP_NETWORK_DOTTED_RE = re.compile(
+    r"^\s+network\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s*$",
+    re.IGNORECASE,
+)
+# CIDR form: ``network 10.10.20.0/24`` or ``network 10.10.20.0 /24``
+# (the doc snippet shows the space-separated variant).
+_DHCP_NETWORK_CIDR_RE = re.compile(
+    r"^\s+network\s+(\d+\.\d+\.\d+\.\d+)\s*/\s*(\d+)\s*$",
+    re.IGNORECASE,
+)
+_DHCP_RANGE_RE = re.compile(
+    r"^\s+range\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s*$",
+    re.IGNORECASE,
+)
+_DHCP_DEFAULT_ROUTER_RE = re.compile(
+    r"^\s+default-router\s+(\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
+_DHCP_DNS_SERVER_RE = re.compile(
+    r"^\s+dns-server\s+(.+)$", re.IGNORECASE,
+)
+_DHCP_DOMAIN_NAME_RE = re.compile(
+    r"^\s+domain-name\s+(\S+)", re.IGNORECASE,
+)
+# EOS lease syntax: ``lease <days> [<hours>] [<minutes>]`` or
+# ``lease infinite`` (DHCP-protocol max-uint32 sentinel).
+_DHCP_LEASE_RE = re.compile(
+    r"^\s+lease\s+(\S+)(?:\s+(\d+))?(?:\s+(\d+))?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
+    """Extract ``ip dhcp pool`` stanzas into CanonicalDHCPPool records.
+
+    Mirrors the cisco_iosxe_cli pattern; diverges on the explicit
+    ``range`` line (EOS-only) and on the CIDR-form ``network`` line
+    (EOS accepts both, Cisco only accepts dotted-mask).  Pool name
+    lands on ``CanonicalDHCPPool.interface`` — same convention as
+    cisco_iosxe_cli, fortigate_cli (interface field carries the
+    operator-chosen pool identifier on Cisco-derived grammars).
+    """
+    pools: list[CanonicalDHCPPool] = []
+    current: CanonicalDHCPPool | None = None
+
+    for line in raw.splitlines():
+        header = _DHCP_POOL_HEADER_RE.match(line)
+        if header:
+            if current is not None:
+                pools.append(current)
+            current = CanonicalDHCPPool(interface=header.group(1))
+            continue
+        if current is None:
+            continue
+        # End-of-stanza: ``!`` marker or a non-indented top-level line.
+        if line.startswith("!") or (line and not line[0].isspace()):
+            pools.append(current)
+            current = None
+            continue
+
+        nm = _DHCP_NETWORK_DOTTED_RE.match(line)
+        if nm:
+            ip_str, mask = nm.group(1), nm.group(2)
+            try:
+                prefix = _mask_to_prefix(mask)
+            except ParseError:
+                continue
+            current.network = f"{ip_str}/{prefix}"
+            continue
+        nm = _DHCP_NETWORK_CIDR_RE.match(line)
+        if nm:
+            current.network = f"{nm.group(1)}/{nm.group(2)}"
+            continue
+        rm = _DHCP_RANGE_RE.match(line)
+        if rm:
+            current.start_ip = rm.group(1)
+            current.end_ip = rm.group(2)
+            continue
+        gm = _DHCP_DEFAULT_ROUTER_RE.match(line)
+        if gm:
+            current.gateway = gm.group(1)
+            continue
+        dm = _DHCP_DNS_SERVER_RE.match(line)
+        if dm:
+            servers = dm.group(1).split()
+            current.dns_servers.extend(servers)
+            continue
+        dnm = _DHCP_DOMAIN_NAME_RE.match(line)
+        if dnm:
+            current.domain_name = dnm.group(1)
+            continue
+        lm = _DHCP_LEASE_RE.match(line)
+        if lm:
+            lease_val = lm.group(1).lower()
+            if lease_val == "infinite":
+                current.lease_time = 0xFFFFFFFF
+            else:
+                try:
+                    days = int(lease_val)
+                    hours = int(lm.group(2) or 0)
+                    minutes = int(lm.group(3) or 0)
+                    current.lease_time = (
+                        days * 86400 + hours * 3600 + minutes * 60
+                    )
+                except ValueError:
+                    pass
+
+    if current is not None:
+        pools.append(current)
+    return pools
+
+
+def _mask_to_prefix(mask_str: str) -> int:
+    """Convert a dotted-decimal subnet mask to a CIDR prefix length.
+
+    Local copy of the cisco_iosxe_cli helper — keeping it in-codec
+    avoids a cross-codec import for one regex helper.
+    """
+    try:
+        addr = ipaddress.IPv4Address(mask_str)
+    except ipaddress.AddressValueError:
+        raise ParseError(
+            f"arista_eos: invalid subnet mask {mask_str!r}",
+            snippet=mask_str,
+        )
+    bits = bin(int(addr))[2:]
+    if "01" in bits:
+        raise ParseError(
+            f"arista_eos: non-contiguous subnet mask {mask_str!r}",
+            snippet=mask_str,
+        )
+    return bits.count("1")
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +457,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
             host=host, key=key,
             auth_port=auth_port, acct_port=acct_port,
         ))
+
+    # --- DHCP server pools (Tier 2) — ``ip dhcp pool <name>``
+    #     stanzas.  See module docstring at _parse_dhcp_pools for
+    #     grammar notes.  Vendor doc: Arista EOS User Manual,
+    #     "DHCP and DHCP Relay".
+    intent.dhcp_servers = _parse_dhcp_pools(raw)
 
     # --- VRF declarations (GAP 6) — ``vrf instance <name>`` top-
     #     level lines create CanonicalRoutingInstance records.

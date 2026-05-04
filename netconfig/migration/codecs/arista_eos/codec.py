@@ -127,6 +127,7 @@ class AristaEOSCodec(CodecBase):
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6 demoted
+            "/dhcp_servers/pool",                # Cluster E.1-A
         ],
         lossy=[
             LossyPath(

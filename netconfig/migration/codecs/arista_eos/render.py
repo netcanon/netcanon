@@ -21,6 +21,7 @@ one-line delegator to :func:`render_intent`.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from typing import Any
 
@@ -82,6 +83,26 @@ _IS_ARISTA_PHYSICAL_PORT_RE = re.compile(
     r"|Vxlan\d+"                      # Vxlan1 (always emitted with body)
     r")$"
 )
+
+
+def _cidr_to_dotted_mask(cidr: str) -> tuple[str, str]:
+    """Split a CIDR string into ``(network, dotted_mask)`` for EOS emit.
+
+    Used by the DHCP-pool render to produce the dotted-mask form of
+    ``network <ip> <netmask>``.  EOS also accepts the CIDR form, but
+    the dotted-mask spelling is the older + universally accepted
+    surface (cisco_iosxe_cli render uses the same convention via
+    its own ``_cidr_to_dest_mask`` helper).
+
+    Returns ``("", "")`` for malformed input — caller skips emit.
+    """
+    if "/" not in cidr:
+        return "", ""
+    try:
+        net = ipaddress.IPv4Network(cidr, strict=False)
+    except (ipaddress.AddressValueError, ValueError):
+        return "", ""
+    return str(net.network_address), str(net.netmask)
 
 
 def _normalise_lag_name_to_arista(name: str) -> str | None:
@@ -291,6 +312,66 @@ def render_intent(tree: Any) -> str:
                 parts.append(f'key {server.key}')
             out.append(" ".join(parts))
         out.append("!")
+
+    # --- DHCP server pools (Cluster E.1-A, Tier 2) ---
+    # Reference: Arista EOS User Manual, "DHCP and DHCP Relay"
+    # (https://www.arista.com/en/um-eos/eos-dhcp-and-dhcp-relay).
+    # Pool stanza form:
+    #
+    #   ip dhcp pool <name>
+    #      network <ip> <netmask>
+    #      range <start_ip> <end_ip>
+    #      default-router <ip>
+    #      dns-server <ip> [<ip> ...]
+    #      domain-name <name>
+    #      lease <days> [<hours>] [<minutes>]
+    #
+    # Pool-name resolution mirrors the cisco_iosxe_cli render policy:
+    # prefer the canonical ``interface`` field (which carries the
+    # operator-chosen pool name on Cisco-derived sources), fall back
+    # to a network-derived placeholder.  Slashes in the network
+    # CIDR are sanitised to underscores so the bare name parses
+    # cleanly through EOS's tokenizer.
+    if tree.dhcp_servers:
+        for pool in tree.dhcp_servers:
+            pool_name = (
+                pool.interface or pool.network or "POOL"
+            ).replace("/", "_")
+            out.append(f"ip dhcp pool {pool_name}")
+            if pool.network:
+                net, mask = _cidr_to_dotted_mask(pool.network)
+                if net and mask:
+                    out.append(f"   network {net} {mask}")
+            if pool.start_ip and pool.end_ip:
+                out.append(f"   range {pool.start_ip} {pool.end_ip}")
+            if pool.gateway:
+                out.append(f"   default-router {pool.gateway}")
+            if pool.dns_servers:
+                # EOS accepts space-separated DNS servers on one line
+                # (Cisco-derived grammar); emit as a single line.
+                out.append(
+                    "   dns-server " + " ".join(pool.dns_servers)
+                )
+            if pool.domain_name:
+                out.append(f"   domain-name {pool.domain_name}")
+            if pool.lease_time and pool.lease_time != 86400:
+                if pool.lease_time == 0xFFFFFFFF:
+                    out.append("   lease infinite")
+                else:
+                    days = pool.lease_time // 86400
+                    rem = pool.lease_time - days * 86400
+                    hours = rem // 3600
+                    rem -= hours * 3600
+                    minutes = rem // 60
+                    # EOS accepts and round-trips the d/h/m triple
+                    # even when one or two components are zero
+                    # (sample doc: ``lease 0 12 0`` for 12-hour
+                    # leases).  Always emit the full triple so a
+                    # 12-hour lease doesn't render as bare ``lease 0``.
+                    out.append(
+                        f"   lease {days} {hours} {minutes}"
+                    )
+            out.append("!")
 
     # --- VRF instances (GAP 6) — declare every canonical L3 VRF
     #     via ``vrf instance <name>``.  RD + RTs emit later
