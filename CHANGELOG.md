@@ -11,6 +11,96 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (Cluster E.1 — DHCP-server parse + render for arista_eos and juniper_junos)
+
+The canonical model carries `intent.dhcp_servers: list[CanonicalDHCPPool]`
+(Tier 2) and four codecs (`cisco_iosxe_cli`, `fortigate_cli`,
+`mikrotik_routeros`, `opnsense`) round-tripped DHCP pools before this
+wave.  Two more codecs join: `arista_eos` and `juniper_junos`.
+
+* **arista_eos** (commit `90c093c`) — `ip dhcp pool` grammar parse +
+  render.  Cisco-derived syntax with one EOS-specific addition:
+  inline `range <start> <end>` (Cisco relies on `ip dhcp excluded-
+  address` instead).  Parse tolerates both dotted-mask
+  (`network 10.0.0.0 255.255.255.0`) and CIDR (`network 10.0.0.0/24`)
+  forms; render emits dotted-mask to mirror the cisco_iosxe_cli
+  convention.  Lease-time emitted as full d/h/m triple
+  (`lease 0 12 0`); `lease infinite` round-trips via the DHCP
+  `0xFFFFFFFF` sentinel.  Cited against Arista EOS User Manual,
+  "DHCP and DHCP Relay".
+
+* **juniper_junos** (commit `5bcc89c`) — modern `set access
+  address-assignment pool` + `set system services dhcp-local-server
+  group` two-stage form for render; parser also accepts the legacy
+  `set system services dhcp` form (deprecated on M/MX/SRX since
+  ~2010 but still valid on EX 4.x trains) so old captures still
+  produce `CanonicalDHCPPool` records.  Stable pool/group names
+  derived from `pool.interface` (sanitising `/` and `.` to `_`)
+  with `pool<idx>` fallback by list position.  The runtime's
+  network-prefix matching between groups and pools is approximated
+  with an equal-name link plus a 1-to-1 fallback for hand-authored
+  cross-vendor inputs with mismatched names.  Multi-`range` Junos
+  pools (which the canonical single `start_ip`/`end_ip` slot
+  cannot fully represent) collapse to the first range on parse;
+  surplus ranges drop with a comment.  Cited against Junos OS
+  Network Management — "Configuring Address-Assignment Pools".
+
+Cumulative DHCP coverage post-Cluster-E.1:
+
+  parse  render
+  ✓      ✓      cisco_iosxe_cli   (pre-existing)
+  ✓      ✓      fortigate_cli     (pre-existing)
+  ✓      ✓      mikrotik_routeros (pre-existing)
+  ✓      ✓      opnsense          (pre-existing)
+  ✓      ✓      arista_eos        (Cluster E.1)
+  ✓      ✓      juniper_junos     (Cluster E.1)
+  ✗      stub   aruba_aoss        (intentional — AOS-S is a relay
+                                    platform per the codec's
+                                    architectural decision; render
+                                    emits comment block, no native
+                                    server stanza)
+  ✗      ✗      cisco_iosxe       (NETCONF; OpenConfig DHCP YANG
+                                    is sparse; deferred)
+
+Matrix delta from regen (commit `5fbb106`): no CODEC_BUG
+regression; ALIGNED unchanged at 2298; some EXPECTED_LOSSY /
+EXPECTED_UNSUPPORTED cells shifted to METHODOLOGY_under as the
+new DHCP round-trips begin exercising actual translation where
+they previously trivially aligned (both sides empty
+`dhcp_servers`).  Suite 3091 → 3116 passed (+25 new tests).
+
+### Architectural decision (Cluster E.X deferred — Tier 3 → Tier 2 promotion required)
+
+The original Cluster E plan called for adding render paths for
+firewall rules, NAT rules, DHCP pools, and DNS static-host
+entries across six codecs.  Audit before dispatch revealed:
+
+1. Three of the four surfaces (`firewall_rules`, `nat_rules`,
+   DNS-static) do not exist on the canonical model — only DHCP
+   pools have a `Canonical*` class today.
+2. `firewall_rules` and `nat_rules` are explicitly classified as
+   Tier 3 — "parse for display, never auto-render" — in the
+   canonical model docstring
+   (`netconfig/migration/canonical/intent.py:39-40`).  The
+   docstring's rationale: auto-rendering firewall semantics
+   across vendor-specific zone-pair vs interface-attached vs
+   stateful-vs-stateless models risks shipping configs with
+   unintended security holes.
+
+Cluster E.1 (this commit) addresses only the DHCP slice — the
+single surface that is both Tier 2 and canonically modelled.
+Cluster E.X (firewall, NAT, DNS-static) is deferred pending a
+deliberate architectural conversation about Tier 3 → Tier 2
+promotion, which would require:
+
+* New canonical classes (`CanonicalFirewallRule`,
+  `CanonicalNATRule`, `CanonicalDNSStaticHost`).
+* Updates to the canonical-model docstring's tiering paragraph.
+* Per-codec `CapabilityMatrix.unsupported` listings flipped
+  (probably to `partial` with review-banner UI flagging).
+* Render-path agents only after the schema and capability-matrix
+  groundwork lands.
+
 ### Fixed (Wave 7c — long-tail cross-mesh codec bugs cleared from 42 to 0)
 
 Seven parallel agents (one per source-vendor) walked the post-
