@@ -598,7 +598,12 @@ class TestTreeShapeCompatibility:
 
     def test_cli_tree_validates_against_netconf_caps(self):
         """Parse CLI → validate against the NETCONF codec's capability
-        matrix.  Every supported xpath should be recognized."""
+        matrix.  The interface-subtree xpaths land in ``supported``;
+        the system / vlans / snmp xpaths land in ``unsupported`` (the
+        NETCONF codec's render is a Phase 0.5 stub — see Wave 10γ-2).
+        The validation severity is ``block`` because the NETCONF
+        target honestly declares those un-rendered surfaces as
+        unsupported, but the interfaces still classify cleanly."""
         from netconfig.services.migration_validate import validate_against
 
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
@@ -606,10 +611,15 @@ class TestTreeShapeCompatibility:
         net_codec = CiscoIOSXECodec()
         tree = cli_codec.parse(raw)
         report = validate_against(tree, net_codec, source=cli_codec)
-        assert report.severity in ("ok", "warn")
-        # Every parsed path should be in the supported bucket
-        # (except the lossy 'type' field which is inferred, not from NETCONF).
+        # Interface-subtree paths classify cleanly; non-interface
+        # surfaces (hostname, vlans, snmp, static-routes) classify as
+        # unsupported per the honest matrix.
         assert len(report.supported_paths) >= 4
+        # The walker emits /interfaces/interface/name + per-interface
+        # config xpaths — all supported.
+        assert any(
+            "/interfaces/interface" in p for p in report.supported_paths
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -620,13 +630,20 @@ class TestTreeShapeCompatibility:
 class TestPipelineWithCLICodec:
     def test_cli_to_netconf_plan_succeeds(self):
         """CLI (source) → NETCONF (target): the translate pipeline
-        should complete because both codecs share the canonical tree
-        shape.  Output is OpenConfig XML (from the NETCONF renderer)."""
+        runs to a terminal state because both codecs share the
+        canonical tree shape.  The fixture carries hostname / VLANs /
+        SNMP / etc. that the NETCONF render drops (Phase 0.5 stub),
+        so the matrix's honest unsupported declarations (Wave 10γ-2)
+        flip the validation severity to ``block`` and the job to
+        ``partial``.  The interface subtree is still emitted in the
+        rendered XML."""
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         cli = CiscoIOSXECLICodec()
         net = CiscoIOSXECodec()
         job = run_plan(cli, net, raw)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
         assert job.rendered is not None
         # Rendered output is OpenConfig XML (from the NETCONF renderer).
         assert "<interfaces" in job.rendered

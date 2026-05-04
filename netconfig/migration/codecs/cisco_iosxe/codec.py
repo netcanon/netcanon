@@ -150,15 +150,29 @@ class CiscoIOSXECodec(CodecBase):
     #: matching what :meth:`iter_xpaths` yields on a ``CanonicalIntent``
     #: tree.  (After the canonical-bridge migration the NETCONF codec
     #: emits the same tree shape as the CLI codec.)
+    #:
+    #: Render-coverage honesty (Wave 10γ-2): this codec is a Phase 0.5
+    #: stub whose ``_render_canonical()`` emits ONLY the
+    #: ``openconfig-interfaces`` subtree.  Every other canonical surface
+    #: (system/hostname, system/dns-server, system/ntp-server, vlans,
+    #: routing/static-route, snmp, lags, local_users, radius_servers,
+    #: dhcp_servers, routing_instances, vxlan_vnis, evpn_type5_routes)
+    #: lands on the canonical tree but is silently dropped by render.
+    #: The matrix below honestly declares those surfaces ``unsupported``
+    #: with both granular xpaths (matching :func:`_walk_canonical`'s
+    #: shapes for :func:`validate_against` classification) AND
+    #: top-level field xpaths (matching ``run_full_mesh.py``'s
+    #: field-disposition shape).  Wave 10β-A flagged the previous
+    #: ``supported``-but-unrendered declarations as artifactual
+    #: matrix-honesty violations; this declaration is the fix.
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         adapter="cisco_iosxe",
         vendor_id="cisco_iosxe",
         version_range="16.3+",
         device_classes=[DeviceClass.router, DeviceClass.switch],
         supported=[
-            "/system/hostname",
-            "/system/dns-server",
-            "/system/ntp-server",
+            # Only paths the render path ACTUALLY emits to XML.  Walk
+            # ``_render_canonical()`` to verify every entry below.
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
@@ -167,17 +181,6 @@ class CiscoIOSXECodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
-            "/vlans/vlan/id",
-            "/vlans/vlan/name",
-            "/routing/static-route",
-            # Tier 2 — SNMP (carried through from canonical; NETCONF
-            # renderer ignores on emit but the xpath is declared here
-            # so translations INTO this codec don't see the paths
-            # classified as unsupported).
-            "/snmp/community",
-            "/snmp/location",
-            "/snmp/contact",
-            "/snmp/trap-host",
         ],
         lossy=[
             LossyPath(
@@ -191,6 +194,91 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Granular xpaths (match _walk_canonical's emitted shapes
+            # so validate_against classifies render-time leaves as
+            # unsupported when source-side data is present). ──
+            UnsupportedPath(
+                path="/system/hostname",
+                reason=(
+                    "Phase 0.5 stub render emits only the "
+                    "openconfig-interfaces subtree.  intent.hostname "
+                    "is dropped on render — no `<system>` element in "
+                    "the output XML.  Flips to `supported` once "
+                    "_render_canonical() walks intent.hostname into "
+                    "an openconfig-system `<system><config><hostname>` "
+                    "child."
+                ),
+            ),
+            UnsupportedPath(
+                path="/system/dns-server",
+                reason=(
+                    "Phase 0.5 stub render emits no `<system><dns>` "
+                    "element.  intent.dns_servers dropped on render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/system/ntp-server",
+                reason=(
+                    "Phase 0.5 stub render emits no `<system><ntp>` "
+                    "element.  intent.ntp_servers dropped on render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/id",
+                reason=(
+                    "Phase 0.5 stub render does not walk intent.vlans "
+                    "or emit a top-level `<vlans>` subtree.  "
+                    "Synthesised SVI interfaces "
+                    "(intent.interfaces[name='VlanN']) DO survive via "
+                    "the interfaces walk, but the accompanying VLAN "
+                    "declaration does not."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/name",
+                reason="Same render-side wire-up gap as /vlans/vlan/id.",
+            ),
+            UnsupportedPath(
+                path="/routing/static-route",
+                reason=(
+                    "Phase 0.5 stub render does not walk "
+                    "intent.static_routes or emit "
+                    "`<network-instances>/<protocols><protocol "
+                    "identifier=STATIC>`.  Render-side wire-up gap."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/community",
+                reason=(
+                    "Phase 0.5 stub render does not walk intent.snmp.  "
+                    "v1/v2c surface is render-side wire-up gap; the "
+                    "v3 surface is doubly unsupported (see "
+                    "/snmp/v3-user)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/location",
+                reason="Same render-side wire-up gap as /snmp/community.",
+            ),
+            UnsupportedPath(
+                path="/snmp/contact",
+                reason="Same render-side wire-up gap as /snmp/community.",
+            ),
+            UnsupportedPath(
+                path="/snmp/trap-host",
+                reason="Same render-side wire-up gap as /snmp/community.",
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user",
+                reason=(
+                    "The NETCONF/OpenConfig codec is a stub (Phase 0.5 "
+                    "experimental) — SNMPv3 USM wire-up requires the "
+                    "Cisco-IOS-XE-snmp native YANG module, not covered "
+                    "today.  The ``cisco_iosxe_cli`` sibling codec "
+                    "parses v3 users from ``show running-config`` "
+                    "output instead."
+                ),
+            ),
             UnsupportedPath(
                 path="/vxlan-vnis/vni",
                 reason=(
@@ -209,15 +297,124 @@ class CiscoIOSXECodec(CodecBase):
                 reason="VXLAN not modelled in this codec (see /vxlan-vnis/vni).",
             ),
             UnsupportedPath(
-                path="/snmp/v3-user",
+                path="/routing-instances/instance",
                 reason=(
-                    "The NETCONF/OpenConfig codec is a stub (Phase 0.5 "
-                    "experimental) — SNMPv3 USM wire-up requires the "
-                    "Cisco-IOS-XE-snmp native YANG module, not covered "
-                    "today.  The ``cisco_iosxe_cli`` sibling codec "
-                    "parses v3 users from ``show running-config`` "
-                    "output instead."
+                    "Phase 0.5 stub render does not walk "
+                    "intent.routing_instances or emit "
+                    "`<network-instances>`.  VRF wire-up parallels "
+                    "the cisco_iosxe_cli sibling's deferral."
                 ),
+            ),
+            UnsupportedPath(
+                path="/evpn-type5/route",
+                reason=(
+                    "EVPN Type-5 advertisement requires VXLAN render "
+                    "wire-up plus VRF render wire-up — both deferred "
+                    "in this Phase 0.5 stub."
+                ),
+            ),
+            # ── Top-level field xpaths (match run_full_mesh.py's
+            # ``f\"/{field}\" in unsupported_xpaths`` shape so the
+            # cross-mesh field-disposition matrix flips
+            # ``unsupported_in_target=True`` for cells targeting this
+            # codec). ──
+            UnsupportedPath(
+                path="/hostname",
+                reason="Top-level field marker — see /system/hostname.",
+            ),
+            UnsupportedPath(
+                path="/domain",
+                reason=(
+                    "Phase 0.5 stub render emits no "
+                    "`<system><config><domain-name>`.  intent.domain "
+                    "dropped on render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/dns_servers",
+                reason="Top-level field marker — see /system/dns-server.",
+            ),
+            UnsupportedPath(
+                path="/ntp_servers",
+                reason="Top-level field marker — see /system/ntp-server.",
+            ),
+            UnsupportedPath(
+                path="/timezone",
+                reason=(
+                    "Phase 0.5 stub render emits no "
+                    "`<system><clock>`.  intent.timezone dropped "
+                    "on render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/syslog_servers",
+                reason=(
+                    "Phase 0.5 stub render emits no "
+                    "`<system><logging>`.  intent.syslog_servers "
+                    "dropped on render."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans",
+                reason="Top-level field marker — see /vlans/vlan/id.",
+            ),
+            UnsupportedPath(
+                path="/static_routes",
+                reason="Top-level field marker — see /routing/static-route.",
+            ),
+            UnsupportedPath(
+                path="/snmp",
+                reason="Top-level field marker — see /snmp/community.",
+            ),
+            UnsupportedPath(
+                path="/lags",
+                reason=(
+                    "Phase 0.5 stub render does not walk intent.lags "
+                    "or emit the openconfig-if-aggregate augment.  "
+                    "Render-side wire-up gap."
+                ),
+            ),
+            UnsupportedPath(
+                path="/local_users",
+                reason=(
+                    "Phase 0.5 stub render does not walk "
+                    "intent.local_users or emit "
+                    "`<system><aaa><authentication><users>`.  "
+                    "Render-side wire-up gap."
+                ),
+            ),
+            UnsupportedPath(
+                path="/radius_servers",
+                reason=(
+                    "Phase 0.5 stub render does not walk "
+                    "intent.radius_servers or emit "
+                    "`<system><aaa><server-groups>`.  Render-side "
+                    "wire-up gap."
+                ),
+            ),
+            UnsupportedPath(
+                path="/dhcp_servers",
+                reason=(
+                    "Phase 0.5 stub render does not walk "
+                    "intent.dhcp_servers; OpenConfig has no "
+                    "first-class DHCP-server model in widely-deployed "
+                    "releases either."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing_instances",
+                reason=(
+                    "Top-level field marker — see "
+                    "/routing-instances/instance."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vxlan_vnis",
+                reason="Top-level field marker — see /vxlan-vnis/vni.",
+            ),
+            UnsupportedPath(
+                path="/evpn_type5_routes",
+                reason="Top-level field marker — see /evpn-type5/route.",
             ),
         ],
     )

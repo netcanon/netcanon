@@ -575,10 +575,21 @@ class TestCrossAdapter:
     def test_aruba_to_iosxe_netconf(self):
         """Aruba -> Cisco IOS-XE NETCONF.  Validates that the
         canonical tree generated from VLAN-centric Aruba input renders
-        cleanly into OpenConfig XML."""
+        into OpenConfig XML.
+
+        The cisco_iosxe NETCONF codec is a Phase 0.5 stub whose render
+        emits ONLY the openconfig-interfaces subtree.  Aruba sources
+        carry hostname / VLANs / SNMP / etc. that the target render
+        drops; the matrix honestly declares those surfaces unsupported
+        (Wave 10γ-2), so this run terminates as ``partial`` with a
+        block-severity validation report rather than ``completed``.
+        The ``<interfaces>`` subtree is still emitted — that's the
+        narrow surface this codec covers."""
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         job = run_plan(ArubaAOSSCodec(), CiscoIOSXECodec(), raw)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
         assert "<interfaces" in (job.rendered or "")
 
     def test_cisco_cli_to_aruba(self):

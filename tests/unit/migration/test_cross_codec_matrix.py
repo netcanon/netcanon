@@ -111,12 +111,25 @@ def test_cross_codec_translation_does_not_crash(
 
     job = run_plan(src, tgt, sample)
 
-    assert job.status is MigrationJobStatus.completed, (
-        f"{_pair_id(src_name, tgt_name)}: expected completed, "
-        f"got {job.status.value}; error={job.error!r}"
+    # ``partial`` is a legitimate terminal state when the target
+    # honestly declares some source surfaces as unsupported (e.g. the
+    # cisco_iosxe NETCONF codec is a Phase 0.5 stub whose render emits
+    # only the openconfig-interfaces subtree — Wave 10γ-2 lifted the
+    # remaining surfaces from ``supported`` to ``unsupported``).  The
+    # render still produced output; the job's validation flagged the
+    # gap.  ``completed`` is the happy path; ``partial`` is the
+    # honestly-declared narrow-coverage path.
+    assert job.status in (
+        MigrationJobStatus.completed,
+        MigrationJobStatus.partial,
+    ), (
+        f"{_pair_id(src_name, tgt_name)}: expected terminal-success "
+        f"(completed or partial), got {job.status.value}; "
+        f"error={job.error!r}"
     )
     assert job.rendered, (
-        f"{_pair_id(src_name, tgt_name)}: completed but rendered is empty"
+        f"{_pair_id(src_name, tgt_name)}: terminal-success but "
+        f"rendered is empty"
     )
 
 

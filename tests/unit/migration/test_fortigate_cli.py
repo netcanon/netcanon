@@ -530,9 +530,19 @@ class TestCrossAdapter:
         assert "<hostname>fgt-edge-01</hostname>" in (job.rendered or "")
 
     def test_fortigate_to_iosxe_netconf(self):
+        """FortiGate -> Cisco IOS-XE NETCONF.  The cisco_iosxe NETCONF
+        codec is a Phase 0.5 stub whose render emits ONLY the
+        openconfig-interfaces subtree; FortiGate sources carry
+        hostname / VLANs / etc. that the target render drops.  Wave
+        10γ-2 lifted those un-rendered surfaces from ``supported`` to
+        ``unsupported`` in the matrix, so this run terminates as
+        ``partial`` with a ``block`` validation severity.  The
+        ``<interfaces>`` subtree is still emitted."""
         raw = FIXTURES.joinpath("fortios_simple.conf").read_text()
         job = run_plan(FortiGateCLICodec(), CiscoIOSXECodec(), raw)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
         assert "<interfaces" in (job.rendered or "")
 
     def test_ios_cli_to_fortigate(self):

@@ -403,7 +403,16 @@ end
         assert "gateway=198.51.100.1" in job.rendered
 
     def test_mikrotik_to_iosxe_netconf(self):
-        """MikroTik export rendered as OpenConfig NETCONF XML."""
+        """MikroTik export rendered as OpenConfig NETCONF XML.
+
+        The cisco_iosxe NETCONF codec is a Phase 0.5 stub whose render
+        emits ONLY the openconfig-interfaces subtree.  The MikroTik
+        source carries a hostname (``/system identity / set name=...``)
+        that the target render drops; Wave 10γ-2 lifted ``/system/
+        hostname`` from ``supported`` to ``unsupported`` to honestly
+        reflect this, so the run terminates as ``partial`` with a
+        ``block`` validation severity.  The ``<interfaces>`` subtree
+        is still emitted with the IP and port name."""
         mt_cfg = """\
 /system identity
 set name=mt-to-xe
@@ -417,7 +426,9 @@ add address=10.0.0.2/30 interface=ether1
         src = MikroTikRouterOSCodec()
         tgt = CiscoIOSXECodec()
         job = run_plan(src, tgt, mt_cfg)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
         assert job.rendered is not None
         assert "<interfaces" in job.rendered
         assert "<name>ether1</name>" in job.rendered
