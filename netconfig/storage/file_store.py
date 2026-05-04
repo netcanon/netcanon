@@ -46,8 +46,21 @@ logger = logging.getLogger(__name__)
 
 # Regex to parse filenames produced by this store.
 # Groups: device_type, safe_host, ts, optional collision counter n, extension.
+#
+# **Invariant:** ``device_type`` MUST NOT contain ``_`` and MUST NOT
+# contain ``.``.  The filename grammar uses ``_`` as the separator
+# between ``device_type``, ``safe_host``, and the timestamp segments,
+# so an underscore inside ``device_type`` makes the boundary
+# mathematically ambiguous (the lazy ``.+?`` would absorb only the
+# leading token, mis-locating the file).  A dot inside ``device_type``
+# would collide with the extension separator.  Both classes are
+# rejected by ``DeviceDefinition.type_key_filename_safe`` at definition
+# load time, so by the time a value reaches this regex it is
+# guaranteed safe.  Established convention: a single-token CamelCase
+# vendor key (``Cisco``, ``Fortigate``, ``MikroTik``, ``OPNsense``,
+# ``Aruba``, ``Juniper``, ``Arista``).
 _FILENAME_RE = re.compile(
-    r"^(?P<device_type>.+?)_(?P<safe_host>[^_]+(?:_[^_]+)*)_"
+    r"^(?P<device_type>[^_.]+)_(?P<safe_host>[^_]+(?:_[^_]+)*)_"
     r"(?P<ts>\d{8}_\d{6})(?:_(?P<n>\d+))?\.(?P<ext>[^.]+)$"
 )
 _TS_FORMAT = "%Y%m%d_%H%M%S"

@@ -81,14 +81,14 @@ class TestArubaDefinitionServedByEmbeddedServer:
             server.start()
             try:
                 server.wait_ready(timeout=10.0)
-                url = f"http://127.0.0.1:{port}/api/v1/definitions/aruba_aoss_16.x"
+                url = f"http://127.0.0.1:{port}/api/v1/definitions/Aruba"
                 with urllib.request.urlopen(url, timeout=3) as resp:
                     assert resp.status == 200
                     body = resp.read().decode("utf-8")
                 # Smoke-level fields — full schema validation is in
                 # tests/unit/test_aruba_aoss_definition.py.
-                assert '"type_key":"aruba_aoss_16.x"' in body or \
-                       '"type_key": "aruba_aoss_16.x"' in body
+                assert '"type_key":"Aruba"' in body or \
+                       '"type_key": "Aruba"' in body
                 assert '"netmiko_device_type":"aruba_osswitch"' in body or \
                        '"netmiko_device_type": "aruba_osswitch"' in body
             finally:

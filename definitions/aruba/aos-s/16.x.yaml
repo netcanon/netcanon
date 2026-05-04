@@ -17,7 +17,7 @@
 vendor: Aruba
 os: AOS-S
 version_match: "^16\\."
-type_key: aruba_aoss_16.x
+type_key: Aruba
 priority: 10
 
 file_extension: cfg

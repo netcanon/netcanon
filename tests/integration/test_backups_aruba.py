@@ -106,7 +106,7 @@ def aruba_client(aruba_app):
 
 def _aruba_device(host: str = "192.168.50.10") -> dict:
     return {
-        "type_key": "aruba_aoss_16.x",
+        "type_key": "Aruba",
         "host": host,
         "credentials": {
             "username": "admin",
@@ -134,10 +134,10 @@ class TestArubaDefinitionDiscoverable:
         resp = aruba_client.get("/api/v1/definitions/")
         assert resp.status_code == 200
         keys = {d["type_key"] for d in resp.json()}
-        assert "aruba_aoss_16.x" in keys
+        assert "Aruba" in keys
 
     def test_get_by_key(self, aruba_client):
-        resp = aruba_client.get("/api/v1/definitions/aruba_aoss_16.x")
+        resp = aruba_client.get("/api/v1/definitions/Aruba")
         assert resp.status_code == 200
         data = resp.json()
         assert data["vendor"].lower() == "aruba"
@@ -207,7 +207,7 @@ class TestArubaBackupFileLanding:
         than silently falling back to a different family."""
         job = _post_and_get(aruba_client)
         record = job["results"][0]["config_record"]
-        assert record["filename"].startswith("aruba_aoss_16.x_")
+        assert record["filename"].startswith("Aruba_")
 
 
 # ---------------------------------------------------------------------------

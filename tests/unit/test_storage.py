@@ -371,3 +371,86 @@ class TestResolvePathSecurity:
         record = store.save("Cisco", "192.168.1.1", _ts(), "cfg", "content")
         path = store.resolve_path(record.filename)
         assert path.resolve().is_relative_to(tmp_path.resolve())
+
+
+# ---------------------------------------------------------------------------
+# save → resolve_path round-trip across all canonical type_keys
+# ---------------------------------------------------------------------------
+
+
+class TestFilenameRoundTripCanonicalTypeKeys:
+    """Pin every shipped vendor's ``type_key`` against the file-store
+    filename grammar.
+
+    The grammar uses ``_`` as the separator between ``device_type``,
+    ``safe_host``, and the timestamp segments, so a ``type_key``
+    containing ``_`` would make the boundary ambiguous.  All shipped
+    definitions use single-token CamelCase vendor keys; this test pins
+    that contract by saving a backup for each one and confirming the
+    same store can resolve the filename back.
+
+    Schema-level enforcement lives in ``DeviceDefinition``'s
+    ``type_key_filename_safe`` validator; this is the storage-layer
+    half of the contract.
+    """
+
+    @pytest.mark.parametrize(
+        "type_key",
+        [
+            "Cisco",
+            "Fortigate",
+            "MikroTik",
+            "OPNsense",
+            "Aruba",
+            "Juniper",
+            "Arista",
+        ],
+    )
+    def test_save_then_resolve_round_trips(
+        self, tmp_path: Path, type_key: str,
+    ):
+        store = FileConfigStore(tmp_path)
+        record = store.save(
+            type_key, "192.168.1.10", _ts(), "cfg", "hostname x\n!",
+        )
+        # File lands under {type_key}/{safe_host}/ with the type_key as
+        # the filename prefix.
+        assert record.filename.startswith(f"{type_key}_")
+        # And resolves back to the same on-disk path.
+        path = store.resolve_path(record.filename)
+        assert path.exists()
+        assert path.read_text(encoding="utf-8") == "hostname x\n!"
+        # The reconstructed device_type must equal the original — this
+        # is the regression guard against the BD-Aruba `aruba_aoss_16.x`
+        # ambiguity from before the schema validator was added.
+        listed = [r for r in store.list_configs() if r.filename == record.filename]
+        assert len(listed) == 1
+        assert listed[0].device_type == type_key
+
+    def test_underscore_in_type_key_breaks_round_trip(self, tmp_path: Path):
+        """Documents the constraint that motivated the schema validator.
+
+        The store still ACCEPTS underscored ``device_type`` values at
+        the ``save`` layer (it's just a string passed through), but
+        the filename grammar is mathematically ambiguous: when
+        ``list_configs`` reparses ``aruba_aoss_16.x_lab-01_<ts>.cfg``
+        the regex assigns ``device_type=aruba`` (the leading non-
+        underscore token) and folds the rest into ``safe_host``.  The
+        round-trip is therefore lossy, which is exactly why the
+        schema validator forbids underscore in ``type_key`` up-front.
+        Pinning this here keeps the invariant visible in tests so the
+        next contributor who tries to relax the schema validator sees
+        the cost.
+        """
+        store = FileConfigStore(tmp_path)
+        original_record = store.save(
+            "aruba_aoss_16.x", "lab-01", _ts(), "cfg", "x",
+        )
+        listed = store.list_configs()
+        # The file is on disk and the listing finds it, but the
+        # parsed ``device_type`` does NOT match what was saved —
+        # this is the lossy round-trip the schema validator prevents.
+        assert len(listed) == 1
+        assert listed[0].filename == original_record.filename
+        assert listed[0].device_type == "aruba"  # NOT "aruba_aoss_16.x"
+        assert listed[0].device_type != original_record.device_type

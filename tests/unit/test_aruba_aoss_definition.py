@@ -94,7 +94,7 @@ class TestArubaDefinitionShape:
     def test_type_key(self, aruba_definition):
         # The route lookup is case-sensitive; lock the exact key so
         # downstream device-list templates and tests can rely on it.
-        assert aruba_definition.type_key == "aruba_aoss_16.x"
+        assert aruba_definition.type_key == "Aruba"
 
     def test_priority_set(self, aruba_definition):
         # Family base priority — match the other shipped definitions.
@@ -194,7 +194,7 @@ class TestArubaDefinitionLoaderIntegration:
         loader = DefinitionLoader(defs)
         loaded = loader.load_all()
 
-        assert "aruba_aoss_16.x" in loaded
-        d = loaded["aruba_aoss_16.x"]
+        assert "Aruba" in loaded
+        d = loaded["Aruba"]
         assert d.vendor.lower() == "aruba"
         assert d.collector.netmiko_device_type == "aruba_osswitch"

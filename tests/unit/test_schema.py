@@ -179,6 +179,42 @@ class TestDeviceDefinition:
         with pytest.raises(ValidationError):
             DeviceDefinition(**kwargs)
 
+    def test_type_key_with_underscore_rejected(self):
+        """The file-store filename grammar uses ``_`` as the separator
+        between ``device_type``, ``safe_host``, and ``timestamp``.
+        An underscore inside ``type_key`` makes that boundary
+        ambiguous, so the schema must reject it up-front."""
+        kwargs = _valid_definition_kwargs()
+        kwargs["type_key"] = "aruba_aoss_16.x"
+        with pytest.raises(ValidationError, match="must not contain '_'"):
+            DeviceDefinition(**kwargs)
+
+    def test_type_key_with_dot_rejected(self):
+        """A dot in ``type_key`` collides with the filename extension
+        separator (``.cfg`` / ``.xml``)."""
+        kwargs = _valid_definition_kwargs()
+        kwargs["type_key"] = "Cisco.IOSXE"
+        with pytest.raises(ValidationError, match="must not contain '\\.'"):
+            DeviceDefinition(**kwargs)
+
+    def test_type_key_empty_rejected(self):
+        kwargs = _valid_definition_kwargs()
+        kwargs["type_key"] = ""
+        with pytest.raises(ValidationError):
+            DeviceDefinition(**kwargs)
+
+    def test_type_key_canonical_examples_accepted(self):
+        """All shipped vendor type_keys are single-token CamelCase and
+        validate cleanly."""
+        for canonical in (
+            "Cisco", "Fortigate", "MikroTik", "OPNsense",
+            "Aruba", "Juniper", "Arista",
+        ):
+            kwargs = _valid_definition_kwargs()
+            kwargs["type_key"] = canonical
+            d = DeviceDefinition(**kwargs)
+            assert d.type_key == canonical
+
     def test_missing_connection_raises(self):
         kwargs = _valid_definition_kwargs()
         del kwargs["connection"]

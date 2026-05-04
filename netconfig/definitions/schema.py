@@ -202,6 +202,42 @@ class DeviceDefinition(BaseModel):
     version_match: str = ".*"
     type_key: str
     priority: int = 0
+
+    @field_validator("type_key")
+    @classmethod
+    def type_key_filename_safe(cls, v: str) -> str:
+        """Forbid characters that collide with the file-store filename grammar.
+
+        ``netconfig.storage.file_store`` encodes a backup's filename as
+        ``{type_key}_{safe_host}_{YYYYMMDD_HHMMSS}.{ext}`` and parses it
+        back to recover the device_type, host, and timestamp.  An
+        underscore in ``type_key`` makes that boundary ambiguous (the
+        file-name regex cannot tell where ``type_key`` ends and
+        ``safe_host`` begins), and a dot in ``type_key`` collides with
+        the extension separator.  Both classes are forbidden here so
+        the storage layer's invariants stay sound by construction.
+
+        The established convention across shipped definitions is a
+        single-token CamelCase vendor key (``Cisco``, ``Fortigate``,
+        ``MikroTik``, ``OPNsense``, ``Aruba``, ``Juniper``, ``Arista``).
+        Stick to that shape and this validator never fires.
+        """
+        if "_" in v:
+            raise ValueError(
+                f"type_key {v!r} must not contain '_' — it would make "
+                f"the file-store filename grammar ambiguous (see "
+                f"netconfig/storage/file_store.py).  Use a single-token "
+                f"CamelCase vendor key like 'Cisco' or 'Aruba'."
+            )
+        if "." in v:
+            raise ValueError(
+                f"type_key {v!r} must not contain '.' — it collides with "
+                f"the filename extension separator."
+            )
+        if not v:
+            raise ValueError("type_key must not be empty")
+        return v
+
     os_version: str | None = None
     model: str | None = None
     file_extension: str = "cfg"
