@@ -11,6 +11,106 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (Wave 10α — TRIVIAL_EMPTY variance class for matrix-honesty restoration)
+
+The Phase 4 reconciliation classifier grows from 7 to 8 variance
+classes with the addition of `TRIVIAL_EMPTY` (severity `ok`).
+Definition: "field is empty on both source AND target sides; no
+data to validate the YAML's disposition claim against; cell is
+benignly aligned by absence of data".
+
+The class addresses a methodology-noise problem that surfaced
+when Wave 9γ-A flagged ~200 candidate METHODOLOGY_ISSUE_under
+cells.  Audit before Wave 10β dispatch revealed the actual
+candidate count was 7382 (post-Wave-7c) — and 4169 of those were
+trivially-empty cells where neither source nor target had any
+data for the field, so the cell aligned by absence rather than
+by real cross-vendor preservation.  These cells were generating
+false "YAML over-claim" signals.
+
+The classifier now distinguishes three actual states
+(`preserved` / `drifted` / `trivially_preserved`).  When both
+sides have zero data (lists with `source_count == 0 AND
+target_count == 0`, dicts similarly, scalars matching `_is_empty
+_zero_state`), the actual state is `trivially_preserved` and
+the variance is `TRIVIAL_EMPTY` regardless of YAML disposition.
+
+ARCHITECTURE.md "Cross-mesh fidelity audit harness" subsection
+gains the 8th variance-class bullet documenting the new class.
+
+Tooling-only change.  No codec / canonical / YAML touches.
+
+### Fixed (Wave 10β — selective YAML re-flips on residual real over-claims)
+
+Four parallel per-source-vendor agents walked the post-Wave-10α
+residual of 1769 METHODOLOGY_ISSUE_under cells (real over-claims:
+populated source data preserves through round-trip, YAML claims
+lossy/unsupported).  Three findings landed:
+
+* **`cisco_iosxe_cli → opnsense / dns_servers`** (commit `40de39c`).
+  YAML claimed OPNsense codec didn't parse/emit `<dnsserver>`;
+  capability stale (both directions wired in earlier wave).
+  Re-flip `lossy → good`.
+* **`cisco_iosxe_cli → juniper_junos / routing_instances`** plus
+  7 sub-fields (commit `40de39c`).  YAML cited stale capability-
+  matrix entry claiming `/routing-instances/instance` parse-and-
+  ignore; cisco_iosxe_cli parse populates from `vrf definition`
+  blocks (rd, RT import/export, description, l3_vni); Junos
+  render wires through to `set routing-instances <name>
+  instance-type vrf`.  Re-flip `unsupported → good`.
+* **`opnsense → {arista, aruba, cisco_iosxe_cli, fortigate} /
+  snmp`** plus mikrotik_routeros source ntp_servers / opnsense
+  source dns_servers across multiple targets (commit `ab4d321`).
+  Multiple SNMP sub-surface preservation paths the codec wired in
+  Wave 7c hadn't propagated to expectation YAMLs.  Re-flips on 16
+  trios across opnsense + mikrotik sources.
+* **`fortigate_cli → {arista, cisco_iosxe_cli, opnsense} / vlans`**
+  (commit `888ca19`).  Top-level `vlans` list round-trips at list+id
+  level across all populated fixtures; existing reasons cited
+  sub-field caveats already captured at sub-field disposition
+  level.  Re-flip `lossy → good`.
+
+Wave 10β-A (arista + aruba sources) returned no-op after
+disciplined cross-fixture verification — every candidate was
+justified by a real vendor wire-format constraint not exercised
+by current fixtures.  Same pattern as Wave 9γ-A/B.
+
+Cumulative Wave 10 matrix delta:
+
+  ALIGNED                    2298 → 1479 (-819, real-truth restoration)
+  CODEC_BUG                  0    → 0 (preserved through wave)
+  EXPECTED_LOSSY             940  → 940
+  EXPECTED_UNSUPPORTED       512  → 512
+  METHODOLOGY_ISSUE_under    7382 → 1716 (-5666, 77% reduction)
+  METHODOLOGY_ISSUE_over     23   → 23
+  STRUCTURAL_ONLY            810  → 810
+  TRIVIAL_EMPTY              0    → 6485 (new)
+
+The ALIGNED drop reflects 819 cells correctly reclassified from
+false-positive ALIGNED (trivial-empty alignment) to TRIVIAL_EMPTY.
+The 5666-cell METHODOLOGY_under reduction is the matrix-honesty
+win the wave was scoped to deliver.
+
+### Methodology follow-ups identified during Wave 10β (deferred)
+
+Three comparator/codec gaps surfaced by per-source-agent
+investigation, queued as Wave 10γ candidates if pursued:
+
+* **Sub-field cascade gap in Wave 10α** — TRIVIAL_EMPTY fires
+  at parent list level only; sub-fields with empty data on
+  fixtures with non-empty parent lists cascade as preserved
+  (e.g. `interfaces[].switchport_mode` when interfaces list has
+  rows but no row populates the switchport surface).
+* **`_list_drift_summary` cap-of-5 truncation** in
+  `tools/run_full_mesh.py:438-443` — when 6+ records drift, the
+  6+ are invisible to the per-record drift drill-down so their
+  sub-fields appear preserved.
+* **`cisco_iosxe` (NETCONF) target codec is a Phase 0.5 stub** —
+  render only emits openconfig-interfaces subtree; many fields
+  preserve trivially because the target literally doesn't emit.
+  Either complete the render wire-up (substantial) or
+  reclassify the codec's CapabilityMatrix more aggressively.
+
 ### Added (Cluster E.1 — DHCP-server parse + render for arista_eos and juniper_junos)
 
 The canonical model carries `intent.dhcp_servers: list[CanonicalDHCPPool]`
