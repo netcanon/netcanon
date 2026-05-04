@@ -296,6 +296,13 @@ def compute_field_disposition(
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
+            if preserved and not src_val and not tgt_val:
+                # Both lists empty — preservation is trivial; the YAML's
+                # disposition claim couldn't be tested against any data.
+                # Phase 4 routes these to TRIVIAL_EMPTY so they don't
+                # masquerade as METHODOLOGY_ISSUE_under noise.  See
+                # Wave 10α.
+                record["trivially_preserved"] = True
             if not preserved:
                 drift = _list_drift_summary(field, src_val, tgt_val)
                 record["drift"] = drift
@@ -306,6 +313,10 @@ def compute_field_disposition(
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
+            if preserved and not src_val and not tgt_val:
+                # Both dicts empty — same semantics as the empty-list
+                # case above.  See Wave 10α.
+                record["trivially_preserved"] = True
             if not preserved:
                 record["drift"] = _dict_drift_summary(src_val, tgt_val)
                 # Store the FULL source/target dicts (not key-lists) so
@@ -329,6 +340,10 @@ def compute_field_disposition(
             # same as an empty surface).
             preserved = _scalar_equal(src_val, tgt_val)
             record["preserved"] = preserved
+            if preserved and _is_empty_zero_state(src_val) and _is_empty_zero_state(tgt_val):
+                # Both scalars in their zero state (None / "" / 0 / []).
+                # Same TRIVIAL_EMPTY semantics — see Wave 10α.
+                record["trivially_preserved"] = True
             if not preserved:
                 record["source"] = _scalar_summary(src_val)
                 record["target"] = _scalar_summary(tgt_val)
@@ -339,6 +354,28 @@ def compute_field_disposition(
         out[field] = record
 
     return out
+
+
+def _is_empty_zero_state(value: Any) -> bool:
+    """True iff ``value`` is in its zero state — None, empty string,
+    integer zero, or an empty list / dict / set / tuple.
+
+    Used by :func:`compute_field_disposition` to flag the Wave 10α
+    ``trivially_preserved`` case: both source and target sides have NO
+    data on this field, so the cell aligns benignly by absence rather
+    than by real round-trip preservation.  Phase 4 routes these to
+    TRIVIAL_EMPTY so they stop polluting METHODOLOGY_ISSUE_under.
+
+    Mixed-type defence mirrors :func:`_scalar_equal`: unhashable
+    container values are checked via ``len`` rather than membership.
+    """
+    if value is None:
+        return True
+    if isinstance(value, (str, list, dict, tuple, set)):
+        return len(value) == 0
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return value == 0
+    return False
 
 
 def _scalar_equal(a: Any, b: Any) -> bool:

@@ -656,6 +656,146 @@ def test_count_drift_on_vlans_also_collapses() -> None:
     assert result["summary"][recon.VAR_STRUCTURAL_ONLY] == 2
 
 
+# ---------------------------------------------------------------------------
+# TRIVIAL_EMPTY — both sides empty/zero, no data to validate against
+#
+# Wave 10α.  See the Phase 1 unit tests in test_run_full_mesh.py for the
+# disposition-flag mechanics.  These tests pin the Phase 4 mapping:
+# trivially_preserved (the third actual-disposition literal alongside
+# preserved/drifted) becomes TRIVIAL_EMPTY regardless of expectation.
+# ---------------------------------------------------------------------------
+
+
+def test_derive_variance_trivially_preserved_lossy_is_trivial_empty_ok() -> None:
+    """A trivially-empty cell against a lossy expectation is no longer
+    METHODOLOGY_ISSUE_under — the YAML claim couldn't be tested."""
+    variance, severity = derive_variance("trivially_preserved", "lossy")
+    assert variance == recon.VAR_TRIVIAL_EMPTY
+    assert severity == "ok"
+
+
+def test_derive_variance_trivially_preserved_unsupported_is_trivial_empty_ok() -> None:
+    variance, severity = derive_variance("trivially_preserved", "unsupported")
+    assert variance == recon.VAR_TRIVIAL_EMPTY
+    assert severity == "ok"
+
+
+def test_derive_variance_trivially_preserved_good_is_trivial_empty_ok() -> None:
+    """Even when expectation is ``good``, a trivial-empty cell shouldn't
+    count as ALIGNED — there was no data to actually validate."""
+    variance, severity = derive_variance("trivially_preserved", "good")
+    assert variance == recon.VAR_TRIVIAL_EMPTY
+    assert severity == "ok"
+
+
+def test_derive_variance_trivially_preserved_not_applicable_is_trivial_empty() -> None:
+    variance, severity = derive_variance(
+        "trivially_preserved", "not_applicable",
+    )
+    assert variance == recon.VAR_TRIVIAL_EMPTY
+    assert severity == "ok"
+
+
+def test_preserved_lossy_remains_methodology_under_regression_guard() -> None:
+    """Regression guard: introducing TRIVIAL_EMPTY must NOT swallow
+    real preservation-where-YAML-says-lossy.  Real over-claim signal
+    (populated data preserved on both sides where YAML says lossy)
+    keeps firing METHODOLOGY_ISSUE_under as before."""
+    variance, severity = derive_variance("preserved", "lossy")
+    assert variance == recon.VAR_METHODOLOGY_UNDER
+    assert severity == "low"
+
+
+def test_trivial_empty_class_listed_in_all_variances() -> None:
+    """``ALL_VARIANCES`` is the canonical roster — TRIVIAL_EMPTY must
+    be in it so aggregate / matrix renderers tally it."""
+    assert recon.VAR_TRIVIAL_EMPTY in recon.ALL_VARIANCES
+
+
+def test_actual_disposition_top_level_trivially_preserved() -> None:
+    """Phase 1 record carrying ``preserved=True, trivially_preserved=True``
+    surfaces as actual='trivially_preserved' in the reconciler."""
+    fd = {"vxlan_vnis": {"preserved": True, "trivially_preserved": True}}
+    actual, detail = actual_disposition(fd, "vxlan_vnis")
+    assert actual == "trivially_preserved"
+    assert detail is None
+
+
+def test_actual_disposition_top_level_preserved_without_trivial_flag() -> None:
+    """Without the trivial flag, preserved still maps to plain
+    ``preserved`` (the existing behaviour)."""
+    fd = {"hostname": {"preserved": True}}
+    actual, detail = actual_disposition(fd, "hostname")
+    assert actual == "preserved"
+    assert detail is None
+
+
+def test_reconcile_cell_classifies_trivially_preserved_as_trivial_empty() -> None:
+    """End-to-end: an empty-vs-empty list field against a ``lossy``
+    YAML disposition lands in TRIVIAL_EMPTY, not METHODOLOGY_ISSUE_under.
+    Severity rolls up under ``ok``."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "cisco_iosxe_cli",
+        "target_codec": "arista_eos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "evpn_type5_routes": {
+                "preserved": True,
+                "trivially_preserved": True,
+                "source_count": 0,
+                "target_count": 0,
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "evpn_type5_routes": {"disposition": "lossy"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    assert fv["evpn_type5_routes"]["variance"] == recon.VAR_TRIVIAL_EMPTY
+    assert fv["evpn_type5_routes"]["severity"] == "ok"
+    assert fv["evpn_type5_routes"]["actual"] == "trivially_preserved"
+    assert result["summary"][recon.VAR_TRIVIAL_EMPTY] == 1
+    assert result["summary"][recon.VAR_METHODOLOGY_UNDER] == 0
+    assert result["summary"]["severity_ok"] == 1
+
+
+def test_reconcile_cell_real_methodology_under_still_fires() -> None:
+    """Companion regression guard at the cell level: when the source
+    actually has data and both sides preserved it, the YAML's ``lossy``
+    claim IS being violated → METHODOLOGY_ISSUE_under, not TRIVIAL_EMPTY."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "cisco_iosxe_cli",
+        "target_codec": "arista_eos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "vlans": {
+                "preserved": True,
+                "source_count": 5,
+                "target_count": 5,
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "vlans": {"disposition": "lossy"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    assert fv["vlans"]["variance"] == recon.VAR_METHODOLOGY_UNDER
+    assert result["summary"][recon.VAR_TRIVIAL_EMPTY] == 0
+    assert result["summary"][recon.VAR_METHODOLOGY_UNDER] == 1
+
+
 def test_structural_only_class_listed_in_all_variances() -> None:
     """``ALL_VARIANCES`` is the canonical roster — STRUCTURAL_ONLY must
     be in it so aggregate / matrix renderers tally it."""

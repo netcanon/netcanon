@@ -315,6 +315,108 @@ def test_audited_fields_cover_every_canonical_top_level() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# trivially_preserved — both sides empty, no data to validate against
+# ---------------------------------------------------------------------------
+#
+# Wave 10α.  The post-Wave-7c matrix had 7382 METHODOLOGY_ISSUE_under
+# cells; an audit found that 4169 (56%) were noise — the source fixture
+# had ZERO data for the field, so the target trivially "preserved" zero
+# and the YAML's lossy/unsupported claim could neither be confirmed nor
+# violated.  These cells are now tagged ``trivially_preserved=True`` at
+# Phase 1 so Phase 4 can route them to a new TRIVIAL_EMPTY variance
+# class instead of polluting METHODOLOGY_ISSUE_under.
+
+
+def test_trivially_preserved_fires_when_both_lists_empty() -> None:
+    """Empty list on both sides → preserved AND trivially_preserved.
+    The cell is benignly aligned by absence of data — the YAML's
+    disposition (lossy / unsupported / good) couldn't be tested."""
+    src = CanonicalIntent()  # vxlan_vnis defaults to []
+    tgt = CanonicalIntent()
+    out = compute_field_disposition(src, tgt)
+    rec = out["vxlan_vnis"]
+    assert rec["preserved"] is True
+    assert rec.get("trivially_preserved") is True
+    rec_evpn = out["evpn_type5_routes"]
+    assert rec_evpn["preserved"] is True
+    assert rec_evpn.get("trivially_preserved") is True
+
+
+def test_trivially_preserved_does_not_fire_when_lists_have_content() -> None:
+    """Equal non-empty content is real preservation, NOT trivial.  The
+    flag must be absent / falsy so the Phase 4 reconciler doesn't
+    misclassify a populated round-trip as TRIVIAL_EMPTY."""
+    src = CanonicalIntent(
+        vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
+    )
+    tgt = CanonicalIntent(
+        vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
+    )
+    out = compute_field_disposition(src, tgt)
+    rec = out["vxlan_vnis"]
+    assert rec["preserved"] is True
+    assert not rec.get("trivially_preserved")
+
+
+def test_trivially_preserved_does_not_fire_when_only_one_side_empty() -> None:
+    """Empty → populated (or vice versa) is drift, not preservation; the
+    trivial-empty flag is irrelevant when ``preserved`` is False."""
+    src = CanonicalIntent(
+        vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
+    )
+    tgt = CanonicalIntent()  # empty
+    out = compute_field_disposition(src, tgt)
+    rec = out["vxlan_vnis"]
+    assert rec["preserved"] is False
+    assert not rec.get("trivially_preserved")
+
+
+def test_trivially_preserved_fires_for_empty_scalar_strings() -> None:
+    """Both sides have empty-state scalar (e.g. ``timezone=""``).  This
+    is the dominant noise source for the timezone / domain fields."""
+    src = CanonicalIntent()  # timezone defaults to ""
+    tgt = CanonicalIntent()
+    out = compute_field_disposition(src, tgt)
+    for field in ("hostname", "domain", "timezone"):
+        rec = out[field]
+        assert rec["preserved"] is True
+        assert rec.get("trivially_preserved") is True, (
+            f"{field} with both sides at empty-state must flag trivially_preserved"
+        )
+
+
+def test_trivially_preserved_does_not_fire_for_populated_scalar_match() -> None:
+    """Real preservation of a populated scalar (``hostname='r1'``
+    on both sides) must NOT trip the flag — that's an ALIGNED cell."""
+    src = CanonicalIntent(hostname="r1")
+    tgt = CanonicalIntent(hostname="r1")
+    out = compute_field_disposition(src, tgt)
+    rec = out["hostname"]
+    assert rec["preserved"] is True
+    assert not rec.get("trivially_preserved")
+
+
+def test_trivially_preserved_fires_for_empty_dicts() -> None:
+    """Empty raw_sections / group_content dicts on both sides → trivial.
+    Both fields default to ``{}`` in the canonical model."""
+    src = CanonicalIntent()
+    tgt = CanonicalIntent()
+    out = compute_field_disposition(src, tgt)
+    rec = out["raw_sections"]
+    assert rec["preserved"] is True
+    assert rec.get("trivially_preserved") is True
+
+
+def test_trivially_preserved_does_not_fire_for_populated_equal_dicts() -> None:
+    src = CanonicalIntent(raw_sections={"banner": "MOTD"})
+    tgt = CanonicalIntent(raw_sections={"banner": "MOTD"})
+    out = compute_field_disposition(src, tgt)
+    rec = out["raw_sections"]
+    assert rec["preserved"] is True
+    assert not rec.get("trivially_preserved")
+
+
 def test_mixed_drift_example() -> None:
     src = CanonicalIntent(
         hostname="r1",

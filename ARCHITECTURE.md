@@ -726,7 +726,7 @@ against per-pair Phase-3 expectation YAMLs in
 `tests/fixtures/real/PHASE4_RECONCILIATION.md`.
 
 Phase 4 classifies every `(source_codec, target_codec, fixture,
-field)` cell into one of seven variance classes:
+field)` cell into one of eight variance classes:
 
 * **ALIGNED** — drift matches expectation; no action.
 * **CODEC_BUG** — drifted where YAML says `disposition: good`.
@@ -747,6 +747,20 @@ field)` cell into one of seven variance classes:
   signal from inflating CODEC_BUG by 6× across `interfaces[].mtu`,
   `interfaces[].description`, etc.  Per-record drift on surviving
   rows still fires CODEC_BUG normally.
+* **TRIVIAL_EMPTY** — both sides empty/zero on this field; the
+  cell trivially aligns by absence of data.  Surfaces cases where
+  the test fixture doesn't exercise the field (e.g.
+  `evpn_type5_routes` on a fixture with no EVPN data,
+  `apply_groups` on non-Junos source fixtures, `timezone` /
+  `ntp_servers` when the source declares neither).  Distinct from
+  ALIGNED (which means real preservation of populated data) and
+  from METHODOLOGY_ISSUE_under (which now means real preservation
+  where YAML claimed lossy — actionable over-claim signal).
+  Added Wave 10α to peel ~4169-of-7382 noise cells out of the
+  methodology-issue bucket so the remaining signal is actionable.
+  Severity `ok`.  Phase 1's `compute_field_disposition` flags the
+  upstream `trivially_preserved` boolean; the reconciler routes it
+  here regardless of the YAML's expectation.
 
 **Vendor-correct rename equivalences.** Some canonical-field values
 legitimately differ in spelling across vendors without representing

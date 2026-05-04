@@ -130,6 +130,16 @@ VAR_METHODOLOGY_OVER = "METHODOLOGY_ISSUE_over"
 # severity totals stay honest).  This stops a single "row-count drift"
 # signal from multiplying across N per-field keys on the same list.
 VAR_STRUCTURAL_ONLY = "STRUCTURAL_ONLY"
+# Wave 10α — both source and target sides have NO data on the field
+# (both empty lists / dicts, or both scalars in their zero state).  The
+# cell aligns benignly by absence of data; the YAML's ``lossy`` /
+# ``unsupported`` / ``good`` claim couldn't be tested against any real
+# round-trip.  Distinct from ALIGNED (which marks real preservation of
+# populated data) and from METHODOLOGY_ISSUE_under (which now means
+# real preservation where YAML claimed lossy — actionable over-claim
+# signal).  Severity ``ok``.  Phase 1 sets the upstream flag in
+# ``run_full_mesh.py::compute_field_disposition``.
+VAR_TRIVIAL_EMPTY = "TRIVIAL_EMPTY"
 
 ALL_VARIANCES = (
     VAR_ALIGNED,
@@ -139,6 +149,7 @@ ALL_VARIANCES = (
     VAR_METHODOLOGY_UNDER,
     VAR_METHODOLOGY_OVER,
     VAR_STRUCTURAL_ONLY,
+    VAR_TRIVIAL_EMPTY,
 )
 
 
@@ -228,9 +239,12 @@ def derive_variance(
     class + severity.
 
     Args:
-        actual: One of ``"preserved"`` / ``"drifted"``.  Sourced from
-            the per-field ``preserved`` boolean in the Phase 1 mechanical
-            drift JSON.
+        actual: One of ``"preserved"`` / ``"drifted"`` /
+            ``"trivially_preserved"``.  Sourced from the per-field
+            ``preserved`` + ``trivially_preserved`` flags in the Phase 1
+            mechanical drift JSON.  ``"trivially_preserved"`` (Wave 10α)
+            marks cells where both sides have NO data on this field —
+            the YAML disposition couldn't be tested.
         expected: One of ``"good"`` / ``"lossy"`` / ``"unsupported"`` /
             ``"not_applicable"``.  Sourced from the Phase 3 YAML's
             ``per_field_expectation[<field>].disposition``.
@@ -245,15 +259,23 @@ def derive_variance(
             literal — this is a bug in the caller, not a data
             classification issue.
     """
-    if actual not in ("preserved", "drifted"):
+    if actual not in ("preserved", "drifted", "trivially_preserved"):
         raise ValueError(
-            f"actual must be 'preserved' or 'drifted'; got {actual!r}"
+            f"actual must be 'preserved' / 'drifted' / "
+            f"'trivially_preserved'; got {actual!r}"
         )
     if expected not in ("good", "lossy", "unsupported", "not_applicable"):
         raise ValueError(
             f"expected must be one of "
             f"good/lossy/unsupported/not_applicable; got {expected!r}"
         )
+
+    if actual == "trivially_preserved":
+        # Both sides empty — no data to validate the YAML disposition
+        # against.  Always TRIVIAL_EMPTY / ok regardless of the YAML's
+        # claim; surfaces fixture-coverage gaps without polluting the
+        # methodology-issue signal.  See Wave 10α.
+        return VAR_TRIVIAL_EMPTY, "ok"
 
     if actual == "preserved":
         if expected == "good":
@@ -440,6 +462,12 @@ def actual_disposition(
             return "drifted", _slice_list_subfield(
                 parent, subfield, equivalence=equivalence,
             )
+        # Cascade Wave 10α's TRIVIAL_EMPTY signal to sub-fields: if the
+        # parent list is empty on both sides, every sub-field thereof
+        # is also trivially-empty (there's no row to host the sub-field
+        # in either intent).
+        if parent.get("trivially_preserved"):
+            return "trivially_preserved", None
         return "preserved", None
 
     # Form: "snmp.community" — dict sub-field.
@@ -456,6 +484,12 @@ def actual_disposition(
             return "drifted", _slice_dict_subfield(parent, subfield)
         if sub_drifted:
             return "drifted", _slice_dict_subfield(parent, subfield)
+        # Cascade Wave 10α's TRIVIAL_EMPTY signal to dict sub-fields:
+        # ``snmp`` empty/absent on both sides means every
+        # ``snmp.community`` / ``snmp.location`` / etc. sub-field is
+        # also trivially-empty.
+        if parent.get("trivially_preserved"):
+            return "trivially_preserved", None
         return "preserved", None
 
     # Form: bare top-level field name.
@@ -468,10 +502,19 @@ def actual_disposition(
 def _disposition_from_record(
     record: dict[str, Any],
 ) -> tuple[str, dict[str, Any] | None]:
-    """Map a top-level Phase 1 record's ``preserved`` flag to the
-    actual-disposition string + drift detail.
+    """Map a top-level Phase 1 record's ``preserved`` /
+    ``trivially_preserved`` flags to the actual-disposition string +
+    drift detail.
+
+    Wave 10α adds the ``trivially_preserved`` literal: returned when the
+    Phase 1 record carries ``preserved=True`` AND
+    ``trivially_preserved=True`` (both sides empty / zero on this
+    field — no data to validate the YAML's disposition claim against).
+    See :data:`VAR_TRIVIAL_EMPTY`.
     """
     if record.get("preserved"):
+        if record.get("trivially_preserved"):
+            return "trivially_preserved", None
         return "preserved", None
     detail = {
         k: record.get(k)
@@ -927,6 +970,7 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         VAR_METHODOLOGY_OVER: "low",
         VAR_CODEC_BUG: "**high**",
         VAR_STRUCTURAL_ONLY: "low",
+        VAR_TRIVIAL_EMPTY: "ok",
     }
     for v in ALL_VARIANCES:
         lines.append(f"| {v} | {agg.get(v, 0)} | {severity_for[v]} |")
