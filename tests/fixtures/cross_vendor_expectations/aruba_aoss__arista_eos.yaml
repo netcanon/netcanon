@@ -194,20 +194,31 @@ per_field_expectation:
     references: [port_naming, vlans, ip_addressing]
 
   vlans:
-    disposition: good
-    note: >
-      VLAN id, name, description, tagged_ports, untagged_ports,
-      and ipv4_addresses (SVI absorption) round-trip cleanly.
-      Aruba's VLAN-centric ``untagged 1-24`` / ``tagged 25-26``
-      populates the canonical port-membership lists directly;
-      Arista render emits per-port ``switchport access vlan N`` /
-      ``switchport trunk allowed vlan ...`` after
-      ``project_vlan_to_switchport`` re-projects.  SVI absorption:
-      Aruba's ``vlan 100 / ip address X/N`` lands on
-      CanonicalVlan.ipv4_addresses; Arista render emits a
-      separate ``interface Vlan100 / ip address X/N`` stanza.
-      No CIDR / dotted-mask conversion noise — both vendors
-      emit CIDR natively on the wire.
+    disposition: lossy
+    reason: >
+      VLAN id, description, tagged_ports, untagged_ports, and
+      ipv4_addresses (SVI absorption) round-trip cleanly.  Aruba's
+      VLAN-centric ``untagged 1-24`` / ``tagged 25-26`` populates
+      the canonical port-membership lists directly; Arista render
+      emits per-port ``switchport access vlan N`` / ``switchport
+      trunk allowed vlan ...`` after ``project_vlan_to_switchport``
+      re-projects.  SVI absorption: Aruba's ``vlan 100 / ip address
+      X/N`` lands on CanonicalVlan.ipv4_addresses; Arista render
+      emits a separate ``interface Vlan100 / ip address X/N``
+      stanza.  No CIDR / dotted-mask conversion noise — both
+      vendors emit CIDR natively on the wire.
+
+      Lossy edge: VLAN names with whitespace ("internet sdsl",
+      "printer leraarskamer") get sanitised to "internet_sdsl" /
+      "printer_leraarskamer" on Arista render.  Arista's name
+      tokenizer rejects whitespace per the EOS User Manual /
+      Virtual LANs (VLANs) doc; the codec replaces every
+      whitespace run with a single underscore so the rendered
+      config commits clean (matches AVD's recommended convention).
+      Single-token names round-trip unchanged.  This is a wire-
+      format constraint of the target rather than a translation
+      bug; Aruba sources without whitespace in VLAN names see no
+      drift.
     references: [vlans]
 
   static_routes:
