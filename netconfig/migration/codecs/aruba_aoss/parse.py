@@ -268,11 +268,42 @@ def _dest_to_cidr(dest: str) -> str:
     return dest + "/32"
 
 
+#: AOS-S native port-shape recogniser — used to gate range-expansion
+#: when the token contains ``-``.  AOS-S native port names have one
+#: of these shapes (see :mod:`.port_names` ``classify_port_name``):
+#:   * bare digits             -- ``24``        standalone
+#:   * stack/port              -- ``1/24``      stacked plain
+#:   * stack/letter+digits     -- ``1/A1``      stacked letter-slot
+#:   * letter+digits           -- ``A1``        letter-prefix uplink
+#:   * trunk                   -- ``Trk1``      LAG (case-insensitive)
+#: Foreign port names from cross-vendor renders (Junos ``xe-0/0/0``,
+#: Cisco ``GigabitEthernet1/0/1``, Arista ``Ethernet1``) take other
+#: shapes and must NOT be range-expanded — see commit fixing
+#: ``tagged xe-0/0/0,xe-0/0/2`` getting shredded into
+#: ``["xe", "0/0/0", "0/0/2"]`` on parse-back.
+_AOS_PORT_SHAPE_RE = re.compile(
+    r"^(?:[Tt]rk\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
+)
+
+
 def _parse_port_list(text: str) -> list[str]:
     """Expand AOS-S port-list syntax into individual port names.
 
     Handles ``1-24``, ``1,3,5``, ``A1-A4``, ``1,3-5,A1``.
     Preserves order; de-duplicates.
+
+    Range-expansion is gated on the lo/hi halves both matching an
+    AOS-S native port shape (:data:`_AOS_PORT_SHAPE_RE`).  This keeps
+    foreign-vendor port names that contain hyphens (Junos
+    ``xe-0/0/0``, Cisco breakout ``Hu1/0/1.1`` style) intact when
+    they appear in a cross-vendor round-trip — the round-trip
+    renderer emits them comma-joined, and AOS-S range syntax never
+    legitimately produces a token whose lo half is a non-numeric
+    bare-letter prefix like ``xe``.  Pre-fix, the parser shredded
+    ``xe-0/0/0`` into ``["xe", "0/0/0"]`` because ``-`` was treated
+    as a range delimiter unconditionally; this broke
+    ``vlans[].tagged_ports`` and ``lags[].members`` round-trip on
+    every Junos-source -> Aruba-target cell in the Phase 4 mesh.
     """
     result: list[str] = []
     seen: set[str] = set()
@@ -283,11 +314,22 @@ def _parse_port_list(text: str) -> list[str]:
         if "-" in token:
             lo, hi = token.split("-", 1)
             lo, hi = lo.strip(), hi.strip()
-            expanded = _expand_port_range(lo, hi)
-            for p in expanded:
-                if p not in seen:
-                    seen.add(p)
-                    result.append(p)
+            # Only treat as a range if BOTH endpoints match the
+            # AOS-S native port-shape grammar.  Foreign-vendor names
+            # like ``xe-0/0/0`` have an alpha lo half that doesn't
+            # match the shape regex, so they fall through to the
+            # single-token branch and survive round-trip intact.
+            if _AOS_PORT_SHAPE_RE.match(lo) and _AOS_PORT_SHAPE_RE.match(hi):
+                expanded = _expand_port_range(lo, hi)
+                for p in expanded:
+                    if p not in seen:
+                        seen.add(p)
+                        result.append(p)
+                continue
+            # Not a range — treat the whole token as a single port name.
+            if token not in seen:
+                seen.add(token)
+                result.append(token)
         else:
             if token not in seen:
                 seen.add(token)
@@ -826,6 +868,29 @@ def parse_intent(raw: str) -> CanonicalIntent:
         if vm:
             vlan_id = int(vm.group(1))
             vlan, next_i = _parse_vlan_stanza(lines, i + 1, vlan_id)
+            # Aruba AOS-S VLAN reassignment semantic: when a port
+            # is added to a later VLAN's ``untagged`` list, it is
+            # *moved* from any earlier VLAN's ``untagged`` list.
+            # The VLAN-1 (DEFAULT_VLAN) stanza may claim every
+            # port via ``untagged 1/1-1/24`` while subsequent VLAN
+            # stanzas reassign sub-ranges of those same ports
+            # (``vlan 20 / untagged 1/1-1/12``).  Without override
+            # semantics the parser collects both memberships and
+            # cross-vendor renderers (Junos / Arista) silently
+            # drop the more-specific assignment because their
+            # access-port semantic is single-VLAN-per-port.  HPE
+            # Aruba 2930F config guide ("Configuring VLANs / VLAN
+            # port assignments") confirms move-on-reassign as the
+            # canonical AOS-Switch behaviour.
+            if vlan.untagged_ports:
+                claimed = set(vlan.untagged_ports)
+                for prior_vlan in intent.vlans:
+                    if not prior_vlan.untagged_ports:
+                        continue
+                    prior_vlan.untagged_ports = [
+                        p for p in prior_vlan.untagged_ports
+                        if p not in claimed
+                    ]
             intent.vlans.append(vlan)
             # SVI absorption — codepath 1 of 3.  See
             # ._svi_absorption for the full rule.  AOS-S packs
@@ -880,8 +945,23 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # per-iface switchport_mode / access_vlan / trunk_allowed_vlans
     # populated (e.g. via shared post-passes) need the projection so
     # round-trip stability is preserved.  See translator-plans.txt BUG 3.
-    from ...canonical.transforms import project_switchport_to_vlan
+    from ...canonical.transforms import (
+        project_switchport_to_vlan,
+        project_vlan_to_switchport,
+    )
     project_switchport_to_vlan(intent)
+    # Inverse projection: AOS-S native source is VLAN-centric — its
+    # ``vlan N { tagged <ports> }`` stanzas carry the membership and
+    # the per-iface stanzas have NO ``switchport_mode`` /
+    # ``trunk_allowed_vlans`` lines.  Without this mirror, any cell
+    # that exits Aruba parse with a VLAN-centric tree leaves
+    # ``interfaces[].switchport_mode`` and ``trunk_allowed_vlans``
+    # blank, so a Phase-4 source -> aruba_aoss -> reparse round-trip
+    # loses the per-iface switchport view that the source codec
+    # populated upstream.  Synthesise=False because Aruba's iface
+    # stanza listing IS the canonical port list — we don't want to
+    # add phantom ifaces from VLAN port-lists alone.
+    project_vlan_to_switchport(intent, synthesise_missing=False)
 
     logger.debug(
         "aruba_aoss parsed: hostname=%r ifaces=%d vlans=%d "

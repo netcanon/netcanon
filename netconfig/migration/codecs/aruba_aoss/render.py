@@ -251,15 +251,63 @@ def _lag_mode_to_aos_type(mode: str) -> str:
     return _MODE_TO_AOS_TRUNK_TYPE.get(mode, "lacp")
 
 
+#: AOS-S native port-name shapes that are safe to collapse into a
+#: ``prefix<lo>-prefix<hi>`` range token.  These mirror the parse-
+#: side ``_AOS_PORT_SHAPE_RE`` (in :mod:`.parse`) — only forms the
+#: AOS-S range syntax can legitimately express get folded.  Foreign-
+#: vendor names like ``ae0`` / ``ae1`` (Junos LAG) used to collapse
+#: into ``ae0-ae1``, which is not valid AOS-S and shredded back into
+#: ``["ae", "0", "1"]`` on parse-back; the bracketing prefix here
+#: keeps those names verbatim.
+_AOS_RANGEABLE_PREFIXES: set[str] = set()  # populated lazily; see below
+
+
+def _is_collapsible_aos_prefix(prefix: str) -> bool:
+    """Decide whether ``prefix<digits>`` is a valid AOS-S port name.
+
+    AOS-S accepts these prefix shapes (per :mod:`.port_names`):
+
+      * empty                 -- bare numeric (``24``)
+      * single-letter A-Z     -- letter-prefix uplink (``A1``)
+      * ``<digit>/``          -- stacked plain (``1/24``)
+      * ``<digit>/<letter>``  -- stacked letter-slot (``1/A1``)
+      * ``Trk`` / ``trk``     -- LAG
+
+    Anything else (Junos ``ae``, ``et-``, ``xe-``; Cisco
+    ``GigabitEthernet``; Arista ``Ethernet``; etc.) is a foreign-
+    vendor name that must NOT be range-collapsed because the AOS-S
+    parser would shred ``ae0-ae1`` into ``["ae0", "ae1"]`` (or
+    worse) on parse-back.
+    """
+    if prefix == "":
+        return True
+    if re.match(r"^[A-Za-z]$", prefix):
+        return True
+    if re.match(r"^\d+/[A-Za-z]?$", prefix):
+        return True
+    if prefix.lower() == "trk":
+        return True
+    return False
+
+
 def _format_port_list(ports: list[str]) -> str:
     """Render a flat port list back into AOS-S range syntax.
 
-    Contiguous numeric ports with the same alpha prefix collapse into
-    ``prefix<lo>-prefix<hi>``.  Non-contiguous ports are comma-joined.
+    Contiguous numeric ports with the same AOS-S-native alpha prefix
+    collapse into ``prefix<lo>-prefix<hi>``.  Non-contiguous ports
+    or ports whose prefix isn't a recognised AOS-S native shape are
+    comma-joined verbatim — this guards foreign-vendor port names
+    (Junos ``ae0``, ``xe-0/0/0``, Cisco ``GigabitEthernet1``) that
+    leak through cross-vendor renders, since AOS-S range syntax
+    cannot express them and the parse-side would shred any malformed
+    range back into incoherent pieces.
     """
     if not ports:
         return ""
-    # Group by alpha prefix preserving order.
+    # Group by alpha prefix preserving order.  Only ports that match
+    # the simple ``<alpha>*<digits>$`` shape are eligible for range
+    # collapse; anything else (containing ``-``, ``.``, ``/``-mid-
+    # name, etc.) bypasses the collapse logic and emits verbatim.
     groups: list[tuple[str, list[int]]] = []
     for p in ports:
         m = re.match(r"^([A-Za-z]*)(\d+)$", p)
@@ -267,6 +315,12 @@ def _format_port_list(ports: list[str]) -> str:
             groups.append((p, []))  # non-numeric port — keep as-is
             continue
         prefix, num = m.group(1), int(m.group(2))
+        if not _is_collapsible_aos_prefix(prefix):
+            # Foreign-vendor name (Junos ``ae0``, ``bond1``, etc.).
+            # Emit verbatim — never collapse into a range token that
+            # the AOS-S parser would mis-interpret.
+            groups.append((p, []))
+            continue
         if groups and groups[-1][0] == prefix and groups[-1][1]:
             groups[-1][1].append(num)
         else:
@@ -484,6 +538,20 @@ def render_intent(tree: Any) -> str:
     for iface in tree.interfaces:
         vid = _vlan_iface_id(iface.name)
         if vid is not None and iface.ipv4_addresses:
+            # VRF-bound IRB / SVI interfaces are NOT absorbable.
+            # AOS-S's ``vlan N { ip address ... }`` stanza has no VRF
+            # concept — collapsing a VRF-bound IRB into the vlan
+            # block would silently strip the routing-instance
+            # binding.  The Junos parser preserves these IRBs as
+            # standalone interfaces (see ``juniper_junos/parse.py``
+            # step 3 — IRBs with VRF bindings are NOT folded onto
+            # their CanonicalVlan); the Aruba renderer must respect
+            # that decision.  Surfaced by the Phase 4 mesh's
+            # batfish_evpntype5_router1 fixture, where TENANT-A and
+            # TENANT-B VRFs each carry irb.<vid> instances whose
+            # IPs were ghosting onto sibling VLAN blocks.
+            if iface.vrf:
+                continue
             # First match wins — multiple SVIs for the same VLAN id
             # is a malformed canonical and shouldn't happen in
             # practice; we'd rather emit one SVI line than zero.

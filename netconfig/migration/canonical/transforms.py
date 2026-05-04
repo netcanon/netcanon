@@ -134,7 +134,27 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
                 allowed_set == _TRUNK_ALL_RANGE_FULL
                 or allowed_set == _TRUNK_ALL_RANGE_OPERATIONAL
             )
-            if not is_trunk_all:
+            if is_trunk_all:
+                # Trunk-all sentinel: do NOT synthesise 4094 phantom
+                # VLANs (would render to nonsensical output) but DO
+                # stamp the iface onto every operator-DECLARED VLAN's
+                # tagged_ports.  VLAN-centric targets (Aruba AOS-S)
+                # consume tagged_ports as their substrate; without
+                # this stamp Junos's ``vlan members all`` shape lost
+                # its trunk-mode classification on round-trip — the
+                # source iface had ``trunk_allowed_vlans=[1..4094]``
+                # but no vlan listed it as tagged, so the target
+                # codec's ``project_vlan_to_switchport`` had nothing
+                # to derive trunk-mode from.  Verified against the
+                # Junos OS Routing Devices Configuration Guide
+                # ("Configuring VLANs" §VLAN tagging — ``all``
+                # keyword) and the Aruba 2930M Management &
+                # Configuration Guide ("VLAN-port binding").
+                # Bucket-A fix from
+                # ``phase4_findings_juniper_junos.md``.
+                for vlan in intent.vlans:
+                    _add_unique(vlan.tagged_ports, iface.name)
+            else:
                 for vid in iface.trunk_allowed_vlans:
                     _add_unique(_vlan(vid).tagged_ports, iface.name)
             native = iface.trunk_native_vlan
