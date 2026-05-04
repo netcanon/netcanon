@@ -109,10 +109,20 @@ per_field_expectation:
   # ── Tier 1 — auto-translatable scalars / lists ──
 
   hostname:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       RouterOS ``/system identity / set name=X`` -> Cisco
-      ``hostname X``.  Identical semantic.
+      ``hostname X``.  Identical semantic on the common
+      single-token case.  Lossy caveat: RouterOS accepts quoted
+      multi-word identities (``set name="Quinta Router"``) but
+      Cisco IOS-XE's hostname parser captures only the first
+      ``\S+`` token and silently drops the rest.  The Cisco
+      renderer routes through the shared ``sanitise_hostname``
+      helper to substitute ``_`` for whitespace runs so the
+      emitted line round-trips through the IOS-XE parser; the
+      canonical value drifts from ``Quinta Router`` to
+      ``Quinta_Router`` on the wire.  Operators should expect
+      the underscore form on Cisco.
     references: [mikrotik_identity]
 
   domain:

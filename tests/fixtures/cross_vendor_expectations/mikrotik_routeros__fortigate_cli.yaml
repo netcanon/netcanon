@@ -234,11 +234,13 @@ per_field_expectation:
       Interface-form gateways (``gateway=bridge1``) populate
       canonical ``interface`` and FortiOS render emits ``set
       device "<iface>"`` after rename mesh.  Description (RouterOS
-      ``comment``) drops on FortiOS render (no per-route description
-      on FortiOS).  Distance defaults differ (RouterOS 1, FortiOS 10);
-      integer preserves but priority semantics shift.  IPv6 routes
-      on ``/ipv6 route`` parse but FortiGate codec does not emit
-      ``config router static6`` so IPv6 statics drop on render.
+      ``comment``) round-trips via FortiOS ``set comment "<text>"``
+      on each ``config router static / edit N`` block (singular
+      ``comment``, max 255 chars per FortiOS 7.4 CLI ref).  Distance
+      defaults differ (RouterOS 1, FortiOS 10); integer preserves
+      but priority semantics shift.  IPv6 routes on ``/ipv6 route``
+      parse but FortiGate codec does not emit ``config router
+      static6`` so IPv6 statics drop on render.
     references: [static_routes]
 
   # ── Tier 2 — auto-translate with review ──

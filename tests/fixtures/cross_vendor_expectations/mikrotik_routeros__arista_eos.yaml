@@ -163,13 +163,23 @@ per_field_expectation:
   # ── Tier 1 — auto-translatable scalars / lists ──
 
   hostname:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       RouterOS ``/system identity / set name=ks-edge-01`` -> Arista
-      ``hostname ks-edge-01``.  Identical semantic.  RouterOS
-      accepts both bare and quoted name values; Arista accepts
-      bare only — hostnames containing spaces (rare on RouterOS,
-      not legal on Arista) lose the spaces or fail to apply.
+      ``hostname ks-edge-01``.  Identical semantic on the common
+      single-token case (``good`` modulo the whitespace caveat
+      below).  RouterOS accepts both bare and quoted name values
+      (``set name="Quinta Router"`` is legal); Arista's hostname
+      parser rejects whitespace outright (regex ``\s*$`` refuses
+      multi-token names).  When the source hostname carries
+      embedded whitespace, the Arista renderer routes through the
+      shared ``sanitise_hostname`` helper to substitute ``_`` for
+      whitespace runs so the emitted line is consumable by EOS;
+      the canonical value drifts from ``Quinta Router`` to
+      ``Quinta_Router`` on the wire.  Lossy is therefore the
+      correct disposition: the substitution is unavoidable on the
+      target and the operator should expect the underscore form
+      on EOS.
     references: [mikrotik_identity]
 
   domain:

@@ -567,10 +567,18 @@ def _apply_router_static(
         destination = f"{ip}/{_mask_to_prefix(mask)}"
         gateway_tokens = edit.settings.get("gateway") or [""]
         device_tokens = edit.settings.get("device") or [""]
+        # FortiOS `set comment "<text>"` (singular) is the per-route
+        # description slot; the render emits it via
+        # ``CanonicalStaticRoute.description``.  Closing the parser
+        # gap so the canonical description round-trips through a
+        # FortiGate -> FortiGate (or any source -> FortiGate) pipe.
+        # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
+        comment_tokens = edit.settings.get("comment") or [""]
         intent.static_routes.append(CanonicalStaticRoute(
             destination=destination,
             gateway=gateway_tokens[0],
             interface=device_tokens[0],
+            description=comment_tokens[0],
         ))
 
 

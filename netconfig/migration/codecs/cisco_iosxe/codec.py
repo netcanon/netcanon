@@ -277,6 +277,19 @@ class CiscoIOSXECodec(CodecBase):
         for idx, iface_el in enumerate(interfaces_el.findall(_q("interface"))):
             raw_iface = _parse_interface(iface_el, idx=idx)
             intent.interfaces.append(_iface_dict_to_canonical(raw_iface))
+        # Synthesise CanonicalVlan records from ``Vlan<N>`` SVI
+        # interfaces.  OpenConfig models a routed SVI as a regular
+        # ``<interface>`` with ``<type>ianaift:l2vlan</type>``; this
+        # stub codec does not yet parse a separate ``<vlans>`` subtree.
+        # Without this synthesis VLAN-centric target codecs (Aruba
+        # AOS-S, OPNsense, FortiGate) silently drop the VLAN — their
+        # renderers iterate ``tree.vlans`` to emit ``vlan N`` blocks
+        # and skip ``Vlan<N>`` entries in the per-interface loop.
+        # Mirrors ``_synthesize_vlans_from_svis`` in the cisco_iosxe_cli
+        # sibling parser; both codecs feed the same canonical bridge,
+        # so behaviour stays consistent regardless of which wire-format
+        # the operator captured from.
+        _synthesize_vlans_from_svis(intent)
         logger.debug(
             "cisco_iosxe parsed: hostname=%r ifaces=%d vlans=%d "
             "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",
@@ -840,6 +853,54 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
                 scope="global",
             ))
     return iface
+
+
+#: Match an ``Vlan<N>`` SVI interface name.  Cisco IOS-XE OpenConfig
+#: models the SVI as a regular ``<interface>`` with
+#: ``<type>ianaift:l2vlan</type>``; the VLAN id is encoded only in
+#: the name suffix.  Mirrors the cisco_iosxe_cli sibling parser's
+#: ``_SVI_NAME_RE``; kept independently here to avoid a cross-codec
+#: import.
+import re as _re
+_SVI_NAME_RE = _re.compile(r"^Vlan(\d+)$", _re.IGNORECASE)
+
+
+def _synthesize_vlans_from_svis(intent: "CanonicalIntent") -> None:
+    """Populate ``intent.vlans`` from ``Vlan<N>`` SVI CanonicalInterfaces.
+
+    See module-level :meth:`CiscoIOSXECodec.parse` callsite for
+    rationale.  Behaviour mirrors the same-named helper in the
+    cisco_iosxe_cli sibling (``parse.py``):
+
+    * SVI with no existing VLAN record -> create one with the SVI's
+      IPs attached.
+    * SVI with an existing VLAN record (matching id) -> merge the
+      SVI's IPs in.
+    """
+    from ...canonical.intent import CanonicalVlan
+    existing_by_id: dict[int, "CanonicalVlan"] = {
+        v.id: v for v in intent.vlans
+    }
+    for iface in intent.interfaces:
+        m = _SVI_NAME_RE.match(iface.name)
+        if not m:
+            continue
+        vid = int(m.group(1))
+        existing = existing_by_id.get(vid)
+        if existing is None:
+            synthesised = CanonicalVlan(
+                id=vid,
+                # SVI description is a reasonable fallback for the VLAN
+                # name when no top-level ``<vlans>`` stanza is present.
+                name=iface.description,
+                ipv4_addresses=list(iface.ipv4_addresses),
+            )
+            intent.vlans.append(synthesised)
+            existing_by_id[vid] = synthesised
+            continue
+        for addr in iface.ipv4_addresses:
+            if addr not in existing.ipv4_addresses:
+                existing.ipv4_addresses.append(addr)
 
 
 def _walk(node: Any, prefix: str) -> Iterable[str]:

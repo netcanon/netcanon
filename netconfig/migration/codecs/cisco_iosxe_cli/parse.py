@@ -578,8 +578,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             ip_str = im.group(1)
             mask_str = im.group(2)
             prefix_len = _mask_to_prefix(mask_str)
-            if not current["ipv4"]:  # primary only
-                current["ipv4"].append({"ip": ip_str, "prefix_length": prefix_len})
+            # IOS-XE accepts one primary + multiple secondary addresses
+            # per interface (``ip address X.X.X.X MASK [secondary]``).
+            # The render-side companion in :mod:`.render` emits the
+            # ``secondary`` keyword for index>=1.  Trailing ``secondary``
+            # is captured but not stored — the canonical model represents
+            # the address list ordering as primary-first; the keyword is
+            # recoverable on re-render.  Per Cisco IP Addressing Services
+            # Configuration Guide, IOS-XE 17.x.
+            current["ipv4"].append(
+                {"ip": ip_str, "prefix_length": prefix_len},
+            )
             continue
 
         # GAP-EVPN-3: IPv6 address.  IOS-XE uses CIDR form natively

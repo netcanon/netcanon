@@ -255,10 +255,18 @@ def render_intent(tree: Any) -> str:
             body.append(f" description {iface.description}")
         if iface.vrf:
             body.append(f" vrf forwarding {iface.vrf}")
-        # IPv4 addresses — Cisco needs dotted-decimal masks.
-        for addr in iface.ipv4_addresses:
+        # IPv4 addresses — Cisco needs dotted-decimal masks.  IOS-XE
+        # only accepts ONE primary ``ip address`` per interface; every
+        # subsequent address must be tagged ``secondary`` or the device
+        # rejects the second line.  Per Cisco IP Addressing Services
+        # Configuration Guide, IOS-XE 17.x, "Secondary IP Addressing"
+        # — ``ip address ip-address mask [secondary [vrf vrf-name]]``.
+        # Round-trips with the parse-side companion that drops the
+        # ``secondary`` token before storing in the canonical list.
+        for idx, addr in enumerate(iface.ipv4_addresses):
             mask = _prefix_to_mask(addr.prefix_length)
-            body.append(f" ip address {addr.ip} {mask}")
+            suffix = " secondary" if idx > 0 else ""
+            body.append(f" ip address {addr.ip} {mask}{suffix}")
         # GAP-EVPN-3: IPv6 addresses — IOS-XE uses CIDR natively
         # (no dotted-mask form for v6).  Link-local re-emits the
         # explicit keyword.

@@ -1,22 +1,17 @@
 """
-FortiGate render-side regression: static-route descriptions must emit
-``set comment "<text>"`` inside the ``config router static / edit N``
-block.
+FortiGate render+parse regression: static-route descriptions must
+emit and round-trip via ``set comment "<text>"`` inside the
+``config router static / edit N`` block.
 
 The bug was flagged by the mikrotik_routeros source Phase 4b agent --
 the FortiGate render dropped ``CanonicalStaticRoute.description`` for
 all routes, even though FortiOS supports a ``set comment`` attribute
-(singular, max 255 chars) on each entry.
+(singular, max 255 chars) on each entry.  Phase 4 wave 7c-F closed
+the parse-side gap so a FortiGate -> FortiGate round-trip preserves
+the description.
 
 FortiOS reference:
 https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
-
-NOTE: the parser (``fortigate_cli/parse.py::_apply_router_static``)
-does *not* currently read the ``comment`` field back into
-``CanonicalStaticRoute``, so a FortiGate -> FortiGate round-trip
-through canonical is still lossy on this field.  Closing the loop
-is a parse-side follow-up; this test file covers only the render
-side.
 """
 
 from __future__ import annotations
@@ -98,15 +93,14 @@ def test_fortigate_static_route_description_only_on_described_routes() -> None:
     assert 'set comment "Default upstream"' in out
 
 
-def test_fortigate_static_route_round_trip_description_parser_gap() -> None:
-    """Round-trip through the FortiGate codec is currently LOSSY on
-    ``description`` because the parser does not read ``set comment``
-    back.  This test pins the gap so it's visible: render emits the
-    line, but parse drops it -- a sub-finding for a parse-side
-    follow-up.
+def test_fortigate_static_route_round_trip_description_preserves() -> None:
+    """Round-trip through the FortiGate codec preserves the
+    per-route ``description`` via the ``set comment "<text>"`` slot:
+    render emits the line and parse reads it back.
 
-    Update this test to assert ``description == "Datacentre route"``
-    once the parser is taught to read ``set comment``.
+    This was the gap closed by Phase 4 wave 7c-F (mikrotik_routeros
+    source agent): without parse-side coverage, every cross-vendor
+    pipe ending at FortiGate dropped the description on roundtrip.
     """
     codec = FortiGateCLICodec()
     rendered = codec.render(CanonicalIntent(
@@ -120,10 +114,27 @@ def test_fortigate_static_route_round_trip_description_parser_gap() -> None:
     # Render side carries the description through.
     assert 'set comment "Datacentre route"' in rendered
 
-    # Parse side is currently lossy -- regression-pin the gap.
+    # Parse side now reads `set comment` back into description.
     re_parsed = codec.parse(rendered)
     assert len(re_parsed.static_routes) == 1
     assert re_parsed.static_routes[0].destination == "10.0.0.0/24"
     assert re_parsed.static_routes[0].gateway == "192.168.1.1"
-    # FIXME(parse): teach _apply_router_static to read `set comment`.
-    assert re_parsed.static_routes[0].description == ""
+    assert re_parsed.static_routes[0].description == "Datacentre route"
+
+
+def test_fortigate_static_route_no_comment_parses_empty_description() -> None:
+    """Routes that have no ``set comment`` line parse with an empty
+    description -- byte-identity guard against the parser fabricating
+    a description from another field."""
+    codec = FortiGateCLICodec()
+    rendered = """\
+config router static
+    edit 1
+        set dst 10.0.0.0 255.255.255.0
+        set gateway 192.168.1.1
+    next
+end
+"""
+    parsed = codec.parse(rendered)
+    assert len(parsed.static_routes) == 1
+    assert parsed.static_routes[0].description == ""

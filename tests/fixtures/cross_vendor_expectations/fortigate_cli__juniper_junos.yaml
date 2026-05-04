@@ -514,9 +514,10 @@ per_field_expectation:
       to map ``port1`` -> ``ge-0/0/N``.  Metric semantics differ
       (FortiGate distance / AD-ordering vs Junos preference) so the
       integer preserves but its meaning differs.  FortiGate
-      ``set comment`` is not currently parsed.  Per-VRF static
-      routes (FortiGate ``set vrf <id>``) are unsupported — canonical
-      model lacks a vrf field on CanonicalStaticRoute.
+      ``set comment "<text>"`` now parses into canonical
+      ``description``.  Per-VRF static routes (FortiGate
+      ``set vrf <id>``) are unsupported — canonical model lacks a
+      vrf field on CanonicalStaticRoute.
     references: [fortios-static-routes, junos-static-routing]
 
   # ── Tier 2 — DHCP server ──

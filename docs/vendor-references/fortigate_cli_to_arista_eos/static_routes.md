@@ -89,8 +89,8 @@ static_routes[].description: str
   Operators should review.
 - **description** — `lossy`.  FortiOS `set comment "<desc>"`
   populates canonical; Arista renders `name "<desc>"` modifier.
-  Codec parse coverage on FortiGate's `set comment` may be
-  inconsistent in v1.
+  FortiGate codec parses `set comment` into the canonical
+  description as of Phase 4 wave 7c-F.
 - **Per-VRF routes (FortiOS `set vrf <id>`)** — `unsupported`.
   Canonical model lacks a vrf field on CanonicalStaticRoute, AND
   the FortiGate codec does not currently parse `set vrf` even if
