@@ -438,7 +438,15 @@ def render_intent(tree: Any) -> str:
     # RADIUS servers (Tier 2).  Emit one ``radius-server host``
     # line per server, with the inline key form (keeps each
     # server's secret co-located with its host for readability —
-    # AOS-S accepts both inline and global-key forms).
+    # AOS-S accepts both inline and global-key forms).  When the
+    # canonical record carries non-default UDP ports, emit a
+    # companion ``radius-server host <ip> auth-port <N> acct-port
+    # <N>`` line — AOS-S 16.10 Access Security Guide documents the
+    # cumulative-update grammar (each repeated ``radius-server
+    # host <ip>`` line refines the same entry).  Default ports
+    # (1812 / 1813) are silenced to keep the wire minimal so
+    # existing real-capture round-trips don't pick up spurious
+    # ``auth-port 1812`` lines.
     for server in tree.radius_servers:
         if server.key:
             lines.append(
@@ -446,6 +454,12 @@ def render_intent(tree: Any) -> str:
             )
         else:
             lines.append(f"radius-server host {server.host}")
+        if server.auth_port != 1812 or server.acct_port != 1813:
+            lines.append(
+                f"radius-server host {server.host} "
+                f"auth-port {server.auth_port} "
+                f"acct-port {server.acct_port}"
+            )
 
     # DHCP pools — AOS-S doesn't run a DHCP server on most
     # platforms (it's a DHCP *relay* platform via

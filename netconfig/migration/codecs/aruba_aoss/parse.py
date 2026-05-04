@@ -150,13 +150,26 @@ _PASSWORD_HEAD_RE = re.compile(
 _PASSWORD_HASH_CONTINUATION_RE = re.compile(
     r'^\s*"([^"]+)"\s*$',
 )
-# AOS-S RADIUS forms:
+# AOS-S RADIUS forms (16.10 Access Security Guide):
 #   radius-server host <ip>
 #   radius-server host <ip> key "<secret>"
+#   radius-server host <ip> auth-port <N> acct-port <N>
+#   radius-server host <ip> auth-port <N> acct-port <N> key "<secret>"
+# Each repeated ``radius-server host <ip>`` line refines the same
+# entry on the device (cumulative-update grammar) — the parser
+# captures host first, then folds optional port / key clauses into
+# the matching record so a key on one line + ports on another
+# round-trip onto a single CanonicalRADIUSServer.
 _RADIUS_HOST_RE = re.compile(
     r'^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)'
-    r'(?:\s+key\s+"?([^"]*)"?)?'
+    r'(?:\s+(.*))?'
     r'\s*$',
+    re.IGNORECASE,
+)
+_RADIUS_AUTH_PORT_RE = re.compile(r'\bauth-port\s+(\d+)', re.IGNORECASE)
+_RADIUS_ACCT_PORT_RE = re.compile(r'\bacct-port\s+(\d+)', re.IGNORECASE)
+_RADIUS_INLINE_KEY_RE = re.compile(
+    r'\bkey\s+"?([^"]*)"?\s*$',
     re.IGNORECASE,
 )
 # Global shared-secret fallback (applies to hosts without inline key):
@@ -763,20 +776,58 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
         rad = _RADIUS_HOST_RE.match(stripped_line)
         if rad:
-            # AOS-S can emit either:
-            #   radius-server host 10.0.0.4 key "secret"
-            # or:
+            # AOS-S can emit any of:
             #   radius-server host 10.0.0.4
+            #   radius-server host 10.0.0.4 key "secret"
+            #   radius-server host 10.0.0.4 auth-port 1812 acct-port 1813
+            #   radius-server host 10.0.0.4 auth-port 1812 acct-port 1813
+            #     key "secret"
             # In the keyless form the shared secret lives on a
             # separate ``radius-server key`` line that applies
             # globally — we capture that into a local, then
             # backfill hostless servers after the parse loop.
+            # Repeated ``radius-server host <ip>`` lines refine
+            # the same entry (cumulative-update grammar): the
+            # parser folds port / key clauses onto the existing
+            # record rather than creating duplicates.
             host = rad.group(1)
-            key = (rad.group(2) or "").strip().strip('"')
-            intent.radius_servers.append(CanonicalRADIUSServer(
-                host=host,
-                key=key,
-            ))
+            rest = rad.group(2) or ""
+            auth_port = None
+            acct_port = None
+            key = ""
+            ap = _RADIUS_AUTH_PORT_RE.search(rest)
+            if ap:
+                try:
+                    auth_port = int(ap.group(1))
+                except ValueError:
+                    pass
+            cp = _RADIUS_ACCT_PORT_RE.search(rest)
+            if cp:
+                try:
+                    acct_port = int(cp.group(1))
+                except ValueError:
+                    pass
+            km = _RADIUS_INLINE_KEY_RE.search(rest)
+            if km:
+                key = km.group(1).strip().strip('"')
+            existing = next(
+                (s for s in intent.radius_servers if s.host == host),
+                None,
+            )
+            if existing is None:
+                intent.radius_servers.append(CanonicalRADIUSServer(
+                    host=host,
+                    key=key,
+                    auth_port=auth_port if auth_port is not None else 1812,
+                    acct_port=acct_port if acct_port is not None else 1813,
+                ))
+            else:
+                if key and not existing.key:
+                    existing.key = key
+                if auth_port is not None:
+                    existing.auth_port = auth_port
+                if acct_port is not None:
+                    existing.acct_port = acct_port
             i += 1
             continue
 
