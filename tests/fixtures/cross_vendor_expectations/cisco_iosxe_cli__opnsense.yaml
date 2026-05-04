@@ -148,14 +148,19 @@ per_field_expectation:
     references: [opnsense-system]
 
   dns_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Cisco ``ip name-server`` lines map to OPNsense repeated
-      ``<system>/<dnsserver>`` elements.  The OPNsense codec does
-      not currently parse ``<dnsserver>`` into the canonical
-      ``dns_servers`` list (no parser branch wires it through),
-      and does not currently emit ``<dnsserver>`` on render.
-      Cross-pair drops the resolver list pending wire-up.
+      ``<system>/<dnsserver>`` elements.  Wave 10β re-flip: the
+      original Phase-3 entry claimed the OPNsense codec did not
+      parse or emit ``<dnsserver>``, but the codec DOES wire both
+      directions — render emits one ``<dnsserver>`` element per
+      address (IPv4 + IPv6) and parse populates
+      ``CanonicalIntent.dns_servers`` from the same.  The
+      kitchen_sink synthetic fixture round-trips the full
+      ``['198.51.100.53', '198.51.100.54', '2001:db8:53::1']``
+      list cleanly across all three entries.  The previous
+      "pending wire-up" claim was stale documentation.
     references: [opnsense-system]
 
   ntp_servers:

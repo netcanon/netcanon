@@ -639,45 +639,60 @@ per_field_expectation:
   # ── Tier 2 (ship-before-wire) — VRF / routing-instance ──
 
   routing_instances:
-    disposition: unsupported
-    reason: >
-      Cisco IOS-XE codec capability matrix lists
-      ``/routing-instances/instance`` under unsupported: "VRF
-      declarations (``vrf definition <name>`` with ``rd`` +
-      ``address-family ipv4`` + ``route-target import/export``)
-      and per-interface ``vrf forwarding <name>`` parse-and-ignore
-      in v1."  Junos codec has the path supported (GAP 6) but
-      Cisco-side parse drops to empty, so cross-pair render emits
-      no ``set routing-instances`` blocks on the Junos target.
+    disposition: good
+    note: >
+      Cisco IOS-XE CLI ``vrf definition <name>`` blocks (with
+      ``rd``, ``address-family ipv4``, ``route-target import/export``,
+      ``description``) parse into ``CanonicalIntent.routing_instances``
+      via ``cisco_iosxe_cli.parse._parse_routing_instances``.  Junos
+      codec renders ``set routing-instances <name> instance-type vrf``
+      with matching ``route-distinguisher`` / ``vrf-target`` /
+      ``description`` statements (GAP 6).  Wave 10β re-flip: the
+      original "Cisco parse-and-ignore in v1" rationale is stale —
+      both the user_contrib_cat9300 capture (Mgmt-vrf) and the
+      cisco_iosxe_cli kitchen_sink (Mgmt-vrf + CUSTOMER-A with
+      route-distinguisher 65000:1 / 65000:100 + multi-RT lists)
+      round-trip cleanly across every populated sub-field.  The
+      ``cisco_iosxe_cli`` capability matrix still lists
+      ``/routing-instances/instance`` under unsupported (an
+      independent stale claim worth a follow-up codec audit), but
+      the Phase-1 mechanical drift JSON proves both ends now
+      preserve the canonical record.
     references: [cisco-vrf-cli, cisco-vrf-lite-cg, junos-instance-type]
 
   routing_instances[].name:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].instance_type:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].route_distinguisher:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].rt_imports:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].rt_exports:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].description:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: "Same as routing_instances — Wave 10β re-flip; round-trips cleanly."
 
   routing_instances[].l3_vni:
-    disposition: unsupported
-    reason: "Same as routing_instances (Cisco parse-and-ignore in v1)."
+    disposition: good
+    note: >
+      Same as routing_instances — Wave 10β re-flip.  l3_vni is None
+      on every populated fixture; the field round-trips by being
+      uniformly absent.  Flips back to ``lossy`` if a future fixture
+      exercises a populated L3 VNI on a Cisco source against the
+      Junos render path (which currently doesn't emit
+      ``vrf-target ... l3vni``).
 
   # ── Tier 3 — informational only ──
 
