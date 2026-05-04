@@ -429,19 +429,20 @@ per_field_expectation:
   # ── Tier 1 — VLANs ──
 
   vlans[].id:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Junos's ``set vlans <name> vlan-id N`` maps to Cisco's
-      ``vlan N`` for explicit per-VLAN bindings (round-trips
-      cleanly).  The Junos shorthand ``set interfaces ae0 unit 0
-      family ethernet-switching vlan members all`` is parsed as a
-      canonical sentinel expansion to ``range(1, 4095)`` — which
-      Cisco then renders as 4094 entries in the vlan-database, and
-      reparse balloons ``vlans[].id`` to a 4094-element list.  Any
-      Junos source carrying ``vlan members all`` produces large
-      structural drift in the cell count even though the operator
-      intent (allow-all-VLANs) is preserved.  Either keep ``all`` as
-      a canonical sentinel or accept the count drift.
+      ``vlan N`` for explicit per-VLAN bindings; round-trips cleanly
+      across all observed fixtures (including the qfx5100 capture
+      that carries ``vlan members all`` on aggregated-Ethernet
+      interfaces).  Wave 9γ re-flip: Wave 8 cited a hypothetical
+      sentinel-expansion path (canonical ``vlan members all`` ->
+      ``range(1, 4095)``) that does NOT materialise on the
+      ``vlans[].id`` projection in any current fixture — the
+      all-VLANs trunk shorthand surfaces on
+      ``interfaces[].trunk_allowed_vlans`` instead, which carries
+      its own per-pair disposition.  ``vlans[].id`` itself is the
+      explicit per-VLAN binding list and round-trips losslessly.
     references: [junos-vlans-statement, cisco-vlan-cg]
 
   vlans[].name:
