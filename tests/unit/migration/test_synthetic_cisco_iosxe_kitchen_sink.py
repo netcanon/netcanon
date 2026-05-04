@@ -322,15 +322,22 @@ class TestPopulatesEveryExpectedCanonicalField:
         self, parsed: CanonicalIntent
     ) -> None:
         """The cisco_iosxe NETCONF codec parses ONLY the
-        ``<interfaces>`` subtree.  Top-level system / VLANs /
-        routing / SNMP / users sections stay at their canonical
-        defaults — empty strings, empty lists, ``None``.
+        ``<interfaces>`` subtree.  Top-level system / routing / SNMP /
+        users sections stay at their canonical defaults — empty
+        strings, empty lists, ``None``.
 
         The capability matrix declares many of these as ``supported``
         (so cross-codec translations targeting iosxe don't see the
         paths classified as unsupported) but the parse() stub does
         not yet extract them from XML.  The cisco_iosxe_cli sibling
         provides the working implementation today.
+
+        ``parsed.vlans`` is the intentional exception — the parser
+        post-processes ``Vlan<N>`` SVI interfaces (canonical
+        ``ianaift:l2vlan``) into :class:`CanonicalVlan` records so
+        VLAN-centric target codecs (Aruba, OPNsense, FortiGate)
+        don't silently drop the VLAN on render.  Asserted positively
+        in :class:`TestVlanSynthesisFromSvis` below.
         """
         assert parsed.hostname == ""
         assert parsed.domain == ""
@@ -338,7 +345,6 @@ class TestPopulatesEveryExpectedCanonicalField:
         assert parsed.ntp_servers == []
         assert parsed.timezone == ""
         assert parsed.syslog_servers == []
-        assert parsed.vlans == []
         assert parsed.static_routes == []
         assert parsed.dhcp_servers == []
         assert parsed.snmp is None
@@ -349,6 +355,61 @@ class TestPopulatesEveryExpectedCanonicalField:
         assert parsed.evpn_type5_routes == []
         assert parsed.routing_instances == []
         assert parsed.raw_sections == {}
+
+
+# ---------------------------------------------------------------------------
+# 2b. SVI -> CanonicalVlan synthesis (Wave 7c-D)
+# ---------------------------------------------------------------------------
+
+
+class TestVlanSynthesisFromSvis:
+    """The parser post-processes ``Vlan<N>`` SVI interfaces into
+    :class:`CanonicalVlan` records so VLAN-centric target codecs
+    (Aruba AOS-S, OPNsense, FortiGate) emit ``vlan N`` blocks on
+    render instead of silently dropping the VLAN.  The kitchen_sink
+    fixture exercises a single SVI (``Vlan10`` with l2vlan type and
+    one IPv4 + one IPv6); this class pins the synthesis behaviour.
+
+    Mirrors the same-name behaviour in cisco_iosxe_cli's
+    ``_synthesize_vlans_from_svis``; both codecs must populate
+    ``intent.vlans`` from SVIs so cross-codec round-trips stay
+    consistent regardless of which wire-format the operator
+    captured from.
+    """
+
+    def test_vlans_synthesised_from_svi_iface(
+        self, parsed: CanonicalIntent,
+    ) -> None:
+        assert len(parsed.vlans) == 1
+        assert parsed.vlans[0].id == 10
+
+    def test_synthesised_vlan_carries_svi_ipv4(
+        self, parsed: CanonicalIntent,
+    ) -> None:
+        v = parsed.vlans[0]
+        assert [a.ip for a in v.ipv4_addresses] == ["10.10.10.1"]
+        assert [a.prefix_length for a in v.ipv4_addresses] == [24]
+
+    def test_synthesised_vlan_inherits_svi_description(
+        self, parsed: CanonicalIntent,
+    ) -> None:
+        # SVI description becomes the synthesised VLAN's name (best-
+        # effort fallback when no explicit ``<vlans>`` stanza is on
+        # the wire).
+        assert parsed.vlans[0].name == "User VLAN 10 SVI"
+
+    def test_svi_iface_still_present_in_interfaces(
+        self, parsed: CanonicalIntent,
+    ) -> None:
+        # Synthesis is additive — the source ``Vlan10`` interface
+        # stays in ``intent.interfaces`` so codecs that round-trip
+        # through the iface list (Junos, Arista) don't lose the SVI
+        # identity.  Target-side absorption (e.g. AOS-S folding the
+        # SVI L3 into a ``vlan 10 / ip address`` stanza) is a
+        # render-time decision based on whether the target has a
+        # VLAN-centric or interface-centric model.
+        names = [i.name for i in parsed.interfaces]
+        assert "Vlan10" in names
 
 
 # ---------------------------------------------------------------------------
