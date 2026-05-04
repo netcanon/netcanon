@@ -11,6 +11,83 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Fixed (Wave 10γ — three methodology gaps closed; matrix integrity at 91% noise reduction)
+
+Wave 10β agents flagged three methodology gaps during their
+disciplined per-source-vendor investigation.  Three Wave 10γ
+agents closed all of them:
+
+* **Sub-field cascade gap in TRIVIAL_EMPTY** (commit `2fe7902`).
+  Wave 10α's TRIVIAL_EMPTY classification fired only at parent-list
+  level; sub-fields of parents with rows but empty per-record data
+  cascaded as `preserved` and generated false METHODOLOGY_under
+  signals.  Phase 1 now records `subfields_with_data: list[str]`
+  per list-parent (sorted union of sub-field names with non-empty
+  data on at least one record across both sides); Phase 4's
+  `actual_disposition` cascade consults it and returns
+  `"trivially_preserved"` for sub-fields outside the set.  Cleared
+  ~1014 false METHODOLOGY_under cells.
+* **`_list_drift_summary` cap-of-5 truncation** (commit `2fe7902`).
+  When 6+ records drifted in a list field, records 6+ were
+  invisible to Phase 4's per-record drill-down so their sub-fields
+  appeared preserved.  Cap removed entirely; display-side
+  truncation in `_md_inline` (200 chars) keeps the matrix `.md`
+  legible without losing data.  Surfaced 5 previously-hidden
+  CODEC_BUG cells which γ-3 then resolved.
+* **`cisco_iosxe` (NETCONF) target codec is a Phase 0.5 stub**
+  (commit `f81f3a5`).  Render only emits openconfig-interfaces
+  subtree; many fields preserve trivially because the target
+  literally doesn't emit.  Capability matrix now declares 16
+  top-level field xpaths + 11 granular xpaths as `unsupported`
+  (the un-rendered subtrees: hostname, domain, dns_servers,
+  ntp_servers, timezone, syslog_servers, vlans, static_routes,
+  snmp/{community,location,contact,trap-host,v3-user}, lags,
+  local_users, radius_servers, dhcp_servers, routing_instances,
+  vxlan_vnis, evpn_type5_routes).  New regression-guard test
+  asserts every un-rendered field is declared unsupported —
+  prevents future drift between render expansion and matrix.
+* **5 newly-surfaced CODEC_BUG cells** (commit `2863db8`):
+  * `_canonical_lag_name` regex extended to recognise `agg<N>`
+    (FortiGate aggregate) and `bond<N>` (RouterOS bonding) as
+    LAG-name canonical equivalents to `ae<N>` / `Port-channel<N>`
+    / `trk<N>` — Wave 9β coverage gap.
+  * IPv6 link-local elision on opnsense render is intentional
+    vendor schema policy (FreeBSD auto-derives `fe80::/64`
+    from MAC per RFC 4862 SLAAC); 2 YAML dispositions flipped
+    `good → lossy` with vendor-doc rationale.
+  * cisco_iosxe_cli IPv6 scope classifier now recognises
+    `fe80::/10` prefix per RFC 4291 §2.4 (case-insensitive;
+    tolerant of malformed double-`::` fixtures).
+
+### Cumulative Wave 10 (α + β + γ) matrix arc
+
+The Phase 4 matrix-honesty audit, completed across three sub-waves:
+
+  ALIGNED                    2298 → 1210 (-1088 — false-positive
+                                          ALIGNED reclassified to
+                                          TRIVIAL_EMPTY)
+  CODEC_BUG                  0    → 0    (preserved through wave;
+                                          γ-1 surfaced 5 hidden
+                                          drifts which γ-3 closed)
+  EXPECTED_LOSSY             940  → 949  (+9; small wave-9β/10γ
+                                          reclassifications)
+  EXPECTED_UNSUPPORTED       512  → 532  (+20; cisco_iosxe NETCONF
+                                          honesty correction)
+  METHODOLOGY_ISSUE_under    7382 → 705  (-6677, 91% reduction)
+  METHODOLOGY_ISSUE_over     23   → 23
+  STRUCTURAL_ONLY            810  → 810
+  TRIVIAL_EMPTY              0    → 7736 (new class, severity ok)
+
+Honest cell breakdown:
+  Real verified preservation:          1210 cells
+  Real over-claims (Wave 10β residual): 705 cells
+  Test-data gaps (no fixture data):    7736 cells
+  Documented lossy/unsupported:        1481 cells
+  Structural / methodology delta:       833 cells
+  Codec bugs:                             0 cells
+
+Total: 11965 field-cells classified across 376 cross-mesh cells.
+
 ### Added (Wave 10α — TRIVIAL_EMPTY variance class for matrix-honesty restoration)
 
 The Phase 4 reconciliation classifier grows from 7 to 8 variance
