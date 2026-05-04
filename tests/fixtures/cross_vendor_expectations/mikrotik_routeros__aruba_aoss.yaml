@@ -129,14 +129,15 @@ per_field_expectation:
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       RouterOS ``/system ntp client / set servers=<list>`` (full
       NTPv4) -> Aruba ``sntp server priority N <addr>`` (SNTP).
-      The protocol distinction (full NTP vs SNTP) is lost on the
-      canonical layer (field is ``list[str]``).  Per-server
-      modifiers drop on round-trip.  Functional equivalence at
-      the server-list level for typical campus deployments.
+      The canonical ``list[str]`` round-trips cleanly across this
+      pair; the protocol distinction (full NTP vs SNTP) and any
+      per-server modifiers live outside the canonical surface, so
+      the disposition reflects preservation of the field as
+      canonically modelled (Wave 10β re-flip).
     references: [system_services]
 
   timezone:

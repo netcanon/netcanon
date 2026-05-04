@@ -243,14 +243,13 @@ per_field_expectation:
     references: [opnsense-system, junos-initial-config]
 
   dns_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       OPNsense ``<dnsserver>`` repeated elements map to Junos ``set
-      system name-server <addr>`` lines.  The opnsense codec does
-      not currently parse ``<dnsserver>`` into the canonical
-      ``dns_servers`` list (declared supported in capability matrix,
-      wire-up incomplete); cross-pair drops the resolver list pending
-      OPNsense codec wire-up.
+      system name-server <addr>`` lines via the canonical
+      ``list[str]``.  Wave 10β re-flip after the OPNsense parser
+      landed ``<dnsserver>`` -> ``CanonicalIntent.dns_servers``
+      wire-up.
     references: [opnsense-system, junos-initial-config]
 
   ntp_servers:

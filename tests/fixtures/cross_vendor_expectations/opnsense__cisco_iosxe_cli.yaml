@@ -133,15 +133,13 @@ per_field_expectation:
     references: [opnsense-system]
 
   dns_servers:
-    disposition: lossy
-    reason: >
-      OPNsense's repeated ``<system>/<dnsserver>`` elements would
-      map to Cisco's ``ip name-server`` lines.  The OPNsense codec
-      does not currently parse ``<dnsserver>`` into the canonical
-      ``dns_servers`` list (no parser branch wires it through);
-      the canonical list is empty from an OPNsense source today.
-      Cross-pair therefore emits no Cisco ``ip name-server`` lines.
-      Lands when OPNsense parse wire-up completes.
+    disposition: good
+    note: >
+      OPNsense's repeated ``<system>/<dnsserver>`` elements map
+      to Cisco's ``ip name-server`` lines via the canonical
+      ``list[str]``.  Wave 10β re-flip after the OPNsense parser
+      landed ``<dnsserver>`` -> ``CanonicalIntent.dns_servers``
+      wire-up.
     references: [opnsense-system]
 
   ntp_servers:
@@ -301,10 +299,12 @@ per_field_expectation:
     references: [vrf-not-modeled]
 
   vlans:
-    disposition: lossy
-    reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse — see ``vlans[].*`` entries below.
+    disposition: good
+    note: >
+      The canonical VLAN list round-trips across the pair (Wave
+      10β re-flip from lossy to good — per-VLAN sub-field
+      semantics are documented separately on the ``vlans[].*``
+      entries below).
     references: [opnsense-vlans, cisco-vlan-cg]
 
   vlans[].id:
@@ -390,8 +390,8 @@ per_field_expectation:
     references: [opnsense-dhcp]
 
   snmp:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       v1/v2c surface (community / location / contact / trap_hosts)
       round-trips cleanly — OPNsense ``<snmpd>/<rocommunity>/
       <syslocation>/<syscontact>/<traphost>`` ↔ Cisco
@@ -401,7 +401,10 @@ per_field_expectation:
       OPNsense codec's ``/snmp/v3-user`` unsupported entry).  No
       v3 records to migrate.  Cisco target codec CAN render
       ``snmp-server user`` when the canonical v3_users list is
-      populated; just not from this source.
+      populated; just not from this source.  Wave 10β re-flip
+      from lossy to good — the canonical ``snmp`` dict round-trips
+      with v3 absence captured as not_applicable on the source
+      side rather than an active drop.
     references: [opnsense-snmp]
 
   lags:

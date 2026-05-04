@@ -183,15 +183,13 @@ per_field_expectation:
     references: [opnsense-system, mikrotik_identity]
 
   dns_servers:
-    disposition: lossy
-    reason: >
-      OPNsense's repeated ``<system>/<dnsserver>`` elements would map
-      to RouterOS's single comma-separated ``/ip dns set servers=``
-      value.  The OPNsense codec does not currently parse
-      ``<dnsserver>`` into the canonical ``dns_servers`` list (no
-      parser branch wires it through); canonical list arrives empty
-      from an OPNsense source today.  Lands when OPNsense parse
-      wire-up completes.
+    disposition: good
+    note: >
+      OPNsense's repeated ``<system>/<dnsserver>`` elements map to
+      RouterOS's single comma-separated ``/ip dns set servers=``
+      value via the canonical ``list[str]``.  Wave 10β re-flip
+      after the OPNsense parser landed ``<dnsserver>`` ->
+      ``CanonicalIntent.dns_servers`` wire-up.
     references: [opnsense-system]
 
   ntp_servers:

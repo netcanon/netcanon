@@ -281,14 +281,15 @@ per_field_expectation:
     references: [mikrotik-identity, junos-initial-config]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       Bare-address list round-trips cleanly (RouterOS ``/system ntp
       client / set servers=A,B,...`` -> Junos ``set system ntp
       server A``).  Junos's per-server modifiers (``prefer`` /
-      ``key``) are not modelled canonically; RouterOS source never
-      populates them anyway, so this is "lossy by deferral" rather
-      than active drop.
+      ``key``) live outside the canonical ``list[str]`` surface and
+      RouterOS source never populates them anyway — Wave 10β
+      re-flip from "lossy by deferral" to good once the canonical
+      field demonstrably round-trips across the pair.
     references: [mikrotik-identity, junos-initial-config]
 
   timezone:

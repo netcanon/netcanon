@@ -218,13 +218,12 @@ per_field_expectation:
     references: [mikrotik_identity]
 
   dns_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       RouterOS ``/ip dns / set servers=1.1.1.1,8.8.8.8`` parses into
-      the ``list[str]`` cleanly.  OPNsense capability matrix declares
-      ``/system/dns-server`` supported but the OPNsense codec's render
-      path does not currently emit ``<dnsserver>`` elements.  Cross-
-      pair drops the resolver list pending wire-up.
+      the canonical ``list[str]`` and the OPNsense codec round-trips
+      it through ``<system>/<dnsserver>`` elements (Wave 10β re-flip
+      after wire-up landed on both sides).
     references: [opnsense-system]
 
   ntp_servers:

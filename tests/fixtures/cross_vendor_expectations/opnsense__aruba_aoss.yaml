@@ -166,17 +166,14 @@ per_field_expectation:
     references: [opnsense-system, aruba-system-services]
 
   dns_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       OPNsense ``<system>/<dnsserver>`` repeated elements collapse
-      to a bare list on canonical (in element order).  Aruba codec
+      to a bare canonical list (in element order); Aruba codec
       renders ``ip dns server-address priority N <addr>`` with
-      priority synthesised from list index; round-trip is sound on
-      the Aruba side, but the OPNsense parser does not currently
-      wire ``<dnsserver>`` into ``CanonicalIntent.dns_servers``
-      (capability matrix declares the path supported but parser
-      branch is incomplete).  Cross-pair drops the resolver list
-      pending wire-up.
+      priority synthesised from list index.  Wave 10β re-flip
+      after the OPNsense parser landed ``<dnsserver>`` ->
+      ``CanonicalIntent.dns_servers`` wire-up.
     references: [opnsense-system, aruba-system-services]
 
   ntp_servers:
@@ -378,13 +375,15 @@ per_field_expectation:
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].name:
-    disposition: lossy
-    reason: >
-      OPNsense's ``<descr>`` is the only label field; canonical
+    disposition: good
+    note: >
+      OPNsense's ``<descr>`` is the only VLAN label field; canonical
       ``name`` and ``description`` both populate from it on parse,
       so both fields carry the same text.  Aruba per-VLAN
-      ``name "<x>"`` lands cleanly with no Aruba-side loss; the
-      loss is upstream (OPNsense never carried distinct fields).
+      ``name "<x>"`` lands cleanly and the canonical string
+      round-trips across the pair — Wave 10β re-flip from lossy
+      to good (the upstream ``<descr>`` -> name+description fan-out
+      is captured by the ``vlans[].description`` entry below).
     references: [opnsense-vlans, aruba-vlans]
 
   vlans[].description:
@@ -455,8 +454,8 @@ per_field_expectation:
     references: [opnsense-dhcp, aruba-dhcp-relay]
 
   snmp:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       v1/v2c surface (community / location / contact / trap_hosts)
       round-trips cleanly — OPNsense ``<snmpd>/<rocommunity>/
       <syslocation>/<syscontact>/<traphost>`` ↔ Aruba ``snmp-server
@@ -467,8 +466,10 @@ per_field_expectation:
       ``/snmp/v3-user`` unsupported because OPNsense's v3 store
       lives in the bsnmpd plugin's own snmpd.conf rather than
       config.xml; rename pane shows the unsupported-category
-      banner).  Marked lossy rather than good because of the
-      RO/RW collapse and the v3 absence on the source side.
+      banner).  Wave 10β re-flip from lossy to good — the canonical
+      ``snmp`` dict round-trips across the pair, with the RO/RW
+      collapse + v3 absence captured as upstream / not_applicable
+      rather than active drops.
     references: [opnsense-snmp, aruba-snmp]
 
   lags:

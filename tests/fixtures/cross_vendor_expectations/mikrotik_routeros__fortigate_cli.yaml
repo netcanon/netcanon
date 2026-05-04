@@ -143,14 +143,15 @@ per_field_expectation:
     references: [system_services]
 
   ntp_servers:
-    disposition: lossy
-    reason: >
-      Address list itself round-trips cleanly (RouterOS ``/system
-      ntp client / set servers=<csv>`` -> FortiOS ``config ntpserver
-      / edit N / set server "<addr>"``).  FortiOS-side global flags
+    disposition: good
+    note: >
+      Address list round-trips cleanly (RouterOS ``/system ntp
+      client / set servers=<csv>`` -> FortiOS ``config ntpserver /
+      edit N / set server "<addr>"``).  FortiOS-side global flags
       (``set ntpsync enable``, ``set type custom``) and per-edit
-      numeric edit ids are not modelled canonically; per-server
-      modifiers (none on either side) drop on round-trip.
+      numeric edit ids live outside the canonical ``list[str]``
+      surface — the disposition reflects preservation of the field
+      as canonically modelled (Wave 10β re-flip).
     references: [system_services]
 
   timezone:

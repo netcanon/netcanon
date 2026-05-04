@@ -501,8 +501,8 @@ per_field_expectation:
     references: [opn-dhcp, fgt-dhcp]
 
   snmp:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       v1/v2c surface (community / location / contact / trap_hosts)
       round-trips cleanly — OPNsense ``<snmpd>/<rocommunity> /
       <syslocation> / <syscontact> / <traphost>`` ↔ FortiGate
@@ -516,8 +516,10 @@ per_field_expectation:
       capability matrix declares ``/snmp/v3-user`` unsupported
       because OPNsense's v3 store lives in the bsnmpd plugin's own
       snmpd.conf rather than config.xml; rename pane shows the
-      unsupported-category banner).  Marked lossy rather than good
-      because of the v3 absence on the source side.
+      unsupported-category banner).  Wave 10β re-flip from lossy
+      to good — the canonical ``snmp`` dict round-trips and the
+      v3 absence is not_applicable on the source side rather than
+      an active drop.
     references: [opn-snmp, fgt-snmp]
 
   lags:

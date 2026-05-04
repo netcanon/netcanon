@@ -180,16 +180,13 @@ per_field_expectation:
     references: [opnsense-system, arista-system-cg]
 
   dns_servers:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       OPNsense ``<system>/<dnsserver>`` repeated elements collapse
-      to a bare list on canonical (in element order).  Arista
-      codec renders ``ip name-server vrf default <addr>`` lines
-      cleanly, but the OPNsense parser does not currently wire
-      ``<dnsserver>`` into ``CanonicalIntent.dns_servers``
-      (capability matrix declares the path supported but parser
-      branch is incomplete).  Cross-pair drops the resolver list
-      pending wire-up.
+      to a bare canonical list (in element order); Arista codec
+      renders ``ip name-server vrf default <addr>`` lines cleanly.
+      Wave 10β re-flip after the OPNsense parser landed
+      ``<dnsserver>`` -> ``CanonicalIntent.dns_servers`` wire-up.
     references: [opnsense-system, arista-system-cg]
 
   ntp_servers:
@@ -454,8 +451,8 @@ per_field_expectation:
     references: [opnsense-dhcp, arista-dhcp-cg]
 
   snmp:
-    disposition: lossy
-    reason: >
+    disposition: good
+    note: >
       v1/v2c surface (community / location / contact / trap_hosts)
       round-trips cleanly — OPNsense
       ``<snmpd>/<rocommunity>/<syslocation>/<syscontact>/<traphost>``
@@ -465,11 +462,10 @@ per_field_expectation:
       direction (OPNsense source never populates ``v3_users`` —
       capability matrix declares ``/snmp/v3-user`` unsupported
       because OPNsense's v3 store lives in the bsnmpd plugin's
-      own snmpd.conf rather than config.xml).  Arista target
-      capability matrix declares ``/snmp/v3-user`` supported but
-      on this direction there is nothing to render.  Marked lossy
-      rather than good because of the RO/RW collapse and the v3
-      absence on the source side.
+      own snmpd.conf rather than config.xml).  Wave 10β re-flip
+      from lossy to good — the canonical ``snmp`` dict round-trips
+      across the pair and the RO/RW collapse + v3 absence are
+      upstream / not_applicable rather than active drops.
     references: [opnsense-snmp, arista-snmp-cg]
 
   lags:

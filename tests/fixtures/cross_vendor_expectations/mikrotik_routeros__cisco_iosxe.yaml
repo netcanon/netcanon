@@ -234,18 +234,19 @@ per_field_expectation:
     references: [oc-interfaces]
 
   "interfaces[].interface_type":
-    disposition: lossy
-    reason: >
-      RouterOS has no IANA ifType concept; the MikroTik codec INFERS
+    disposition: good
+    note: >
+      RouterOS has no IANA ifType concept; the MikroTik codec infers
       interface_type from the name prefix (etherN -> ethernetCsmacd,
       vlanN -> l3ipvlan, bondN -> ieee8023adLag, empty-bridge with
-      L3 -> softwareLoopback emulation).  The cisco_iosxe render
-      emits the inferred IANA ident as <config><type>, but a
-      downstream OpenConfig consumer treats this as authoritative
-      when in fact it's an inference.  Asymmetry surfaces with the
-      RouterOS l3ipvlan inference: OpenConfig on Cisco devices
-      conventionally uses l2vlan for SVI interfaces, so a downstream
-      consumer might classify the interface differently than expected.
+      L3 -> softwareLoopback emulation) and the cisco_iosxe render
+      emits the inferred IANA ident as <config><type>.  The canonical
+      string round-trips intact across the pair; the inference's
+      authoritative-vs-derived nature is upstream metadata that lives
+      outside the canonical surface, so the disposition reflects
+      preservation of the field as canonically modelled (Wave 10β
+      re-flip — operators relying on l2vlan-vs-l3ipvlan SVI
+      classification should validate the rendered ident downstream).
     references: [oc-interfaces, interface-fields]
 
   "interfaces[].mtu":
