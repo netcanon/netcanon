@@ -270,7 +270,20 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # CanonicalInterface entries with compound name ``<parent>.<N>``
     # — matches Cisco's per-port dot1Q convention
     # (``GigabitEthernet0/1.100`` is its own CanonicalInterface).
-    for name in sorted(iface_state.keys()):
+    #
+    # Sort key: operator-natural order (``1/1, 1/2, ..., 1/9, 1/10,
+    # 1/11, ..., 1/24``) rather than lexicographic (``1/1, 1/10,
+    # 1/11, ..., 1/2, 1/20, ...``).  The interface order propagates
+    # downstream into ``CanonicalVlan.tagged_ports`` /
+    # ``untagged_ports`` via :func:`project_switchport_to_vlan`,
+    # which iterates ``intent.interfaces`` in declaration order.
+    # Without natural-sort here, Aruba/OPNsense round-trips show
+    # mis-ordered VLAN port lists (the comparator flagged this as
+    # CODEC_BUG on every Aruba->Junos cell with multi-digit port
+    # ranges, e.g. ``1/1..1/24``).  Reuses the shared
+    # ``_natural_port_sort_key`` from canonical/transforms.
+    from ...canonical.transforms import _natural_port_sort_key
+    for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
         iface = CanonicalInterface(
             name=name,
@@ -580,8 +593,22 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # switchport_mode / access_vlan / trunk_allowed_vlans; without
     # this projection, those bindings never reach a VLAN-centric
     # target.  See translator-plans.txt BUG 3.
+    #
+    # Phantom-VLAN guard (Phase 4b Wave 7c-C): mirrors the
+    # cisco_iosxe_cli pattern.  ``project_switchport_to_vlan``
+    # synthesises bare :class:`CanonicalVlan` records for any VID
+    # referenced by a ``vlan members`` line that didn't have a
+    # matching top-level ``vlans <name>`` stanza (or
+    # ``native-vlan-id`` reference).  On a cross-vendor pass from a
+    # source that already pruned phantoms (Cisco IOS-XE), a wide
+    # trunk-allowed range on the rendered Junos output silently re-
+    # inflates the canonical VLAN table.  Snapshot legitimate VLAN
+    # ids BEFORE projection, prune phantoms AFTER.  Trunk-allowed
+    # / access-vlan attributes on each iface stay untouched.
     from ...canonical.transforms import project_switchport_to_vlan
+    legitimate_vlan_ids = {v.id for v in intent.vlans}
     project_switchport_to_vlan(intent)
+    intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     logger.debug(
         "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "

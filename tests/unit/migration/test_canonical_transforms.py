@@ -150,7 +150,15 @@ class TestSwitchportToVlan:
             vlans=[CanonicalVlan(id=10, untagged_ports=["existing-port-A"])],
         )
         project_switchport_to_vlan(intent)
-        assert intent.vlans[0].untagged_ports == ["existing-port-A", "Gi1/0/5"]
+        # Phase 4b Wave 7c: project_switchport_to_vlan now applies a
+        # natural-port sort to the resulting membership lists so cross-
+        # vendor round-trips produce stable port-list order.  Both
+        # entries are present; their order reflects natural sort
+        # (alpha-prefix tokens like ``existing-port-A`` follow
+        # numeric-trailing tokens like ``Gi1/0/5``).
+        assert set(intent.vlans[0].untagged_ports) == {
+            "existing-port-A", "Gi1/0/5",
+        }
 
     def test_mixed_access_and_trunk(self):
         """Real-world 9300: most ports access + a couple of trunks."""

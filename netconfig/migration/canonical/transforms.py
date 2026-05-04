@@ -168,6 +168,21 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         # Any other mode ("dynamic", etc.) is left alone — we don't have
         # enough signal to decide membership.
 
+    # Operator-natural sort of the resulting membership lists.  The
+    # projection above appends in ``intent.interfaces`` iteration
+    # order; for cross-vendor renders that synthesise missing
+    # interfaces (Aruba 1-48 untagged where only 1,2,42-47 had
+    # iface stanzas) the synthesised ports land at the END of
+    # ``intent.interfaces``, producing VLAN port lists like
+    # ``[1, 2, 42, 43, 44, 45, 46, 47, 3, 4, ..., 41, 48]`` on
+    # round-trip.  Sorting here gives every consumer a stable
+    # operator-natural ordering regardless of which order the
+    # source codec materialised its interface records.  Idempotent —
+    # sorting twice is the same as once.
+    for vlan in intent.vlans:
+        vlan.tagged_ports.sort(key=_natural_port_sort_key)
+        vlan.untagged_ports.sort(key=_natural_port_sort_key)
+
 
 def project_vlan_to_switchport(
     intent: CanonicalIntent,
@@ -263,3 +278,72 @@ def project_vlan_to_switchport(
             iface.switchport_mode = "access"
             if iface.access_vlan is None:
                 iface.access_vlan = u_vids[0]
+
+
+_SVI_NAME_RE = re.compile(r"^Vlan(\d+)$", re.IGNORECASE)
+
+
+def project_svi_to_vlan(intent: CanonicalIntent) -> None:
+    """Fold ``interface Vlan<N>`` SVI L3 state onto the matching VLAN.
+
+    Arista EOS / Cisco IOS-XE / EOS-derivative grammars carry the
+    Layer-3 surface for a VLAN on a sibling ``interface Vlan<N>``
+    stanza.  VLAN-centric downstream codecs (Aruba AOS-S, OPNsense)
+    expect the IPv4 to live on :attr:`CanonicalVlan.ipv4_addresses`
+    instead.  Without this projection the SVI IP is invisible to
+    every VLAN-centric renderer - it stays attached to the
+    ``Vlan<N>`` interface but the VLAN record is L3-empty.
+    Originally implemented as ``_synthesize_vlans_from_svis`` in the
+    cisco_iosxe_cli parser; lifted here so every codec that emits
+    SVIs (arista_eos, cisco_iosxe_cli, future cisco_iosxe NETCONF)
+    can call the same logic.
+    See translator-plans.txt "KNOWN DATA-LOSS BUGS / BUG 1".
+
+    Behaviour:
+        * SVI with no matching VLAN record - synthesise a bare
+          :class:`CanonicalVlan` with the SVI's IPs attached and
+          its description as the fallback ``name``.
+        * SVI with an existing VLAN record - merge the SVI's IPs
+          onto :attr:`CanonicalVlan.ipv4_addresses`, de-duped on
+          ``(ip, prefix_length)``.  The existing ``name`` wins.
+        * SVI with no IPs - touched the same way; the bare VLAN
+          still gets created so "this VLAN exists" round-trips.
+
+    Idempotent + additive: walking the same intent twice does not
+    duplicate IPs or VLAN records.
+    """
+    from .intent import CanonicalIPv4Address
+
+    by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
+    for iface in intent.interfaces:
+        m = _SVI_NAME_RE.match(iface.name)
+        if not m:
+            continue
+        vid = int(m.group(1))
+        existing = by_id.get(vid)
+        if existing is None:
+            synthesised = CanonicalVlan(
+                id=vid,
+                name=iface.description,
+                ipv4_addresses=[
+                    CanonicalIPv4Address(
+                        ip=a.ip, prefix_length=a.prefix_length,
+                    )
+                    for a in iface.ipv4_addresses
+                ],
+            )
+            intent.vlans.append(synthesised)
+            by_id[vid] = synthesised
+            continue
+        existing_pairs = {
+            (a.ip, a.prefix_length) for a in existing.ipv4_addresses
+        }
+        for addr in iface.ipv4_addresses:
+            pair = (addr.ip, addr.prefix_length)
+            if pair not in existing_pairs:
+                existing.ipv4_addresses.append(
+                    CanonicalIPv4Address(
+                        ip=addr.ip, prefix_length=addr.prefix_length,
+                    )
+                )
+                existing_pairs.add(pair)

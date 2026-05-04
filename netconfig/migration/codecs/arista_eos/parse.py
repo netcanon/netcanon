@@ -33,6 +33,7 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalRADIUSServer,
     CanonicalRoutingInstance,
     CanonicalVxlan,
     CanonicalLocalUser,
@@ -124,6 +125,19 @@ _USERNAME_RE = re.compile(
     rf"(?:{_WS}+(?P<pwmode>nopassword|secret{_WS}+\S+{_WS}+\S+))?",
     re.MULTILINE,
 )
+
+# RADIUS server line (legacy Cisco-derived one-liner that EOS preserved).
+# Form: ``radius-server host <ip> [auth-port N] [acct-port N] [key SECRET]``
+# Token order is fixed (host first) but the optional clauses may appear in
+# any order on the wire.  Match host + remainder, then post-extract.
+_RADIUS_SERVER_RE = re.compile(
+    r"^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)\s*(.*)$",
+    re.MULTILINE,
+)
+_RADIUS_AUTH_PORT_RE = re.compile(r"\bauth-port\s+(\d+)")
+_RADIUS_ACCT_PORT_RE = re.compile(r"\bacct-port\s+(\d+)")
+# Key payload: bare token or quoted string.  EOS accepts both.
+_RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
 
 _VRF_INSTANCE_RE = re.compile(r"^vrf\s+instance\s+(\S+)\s*$", re.MULTILINE)
 _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
@@ -262,6 +276,37 @@ def parse_intent(raw: str) -> CanonicalIntent:
             role=role,
         ))
 
+    # --- RADIUS servers (Tier 2) ---
+    # Arista accepts the Cisco-derived one-liner form
+    # ``radius-server host <ip> [auth-port N] [acct-port N]
+    # [key SECRET]``.  Round-trip with the matching render path —
+    # host is positional, remaining clauses are order-tolerant.
+    for rad_m in _RADIUS_SERVER_RE.finditer(raw):
+        host = rad_m.group(1)
+        rest = rad_m.group(2) or ""
+        auth_port = 1812
+        acct_port = 1813
+        key = ""
+        ap = _RADIUS_AUTH_PORT_RE.search(rest)
+        if ap:
+            try:
+                auth_port = int(ap.group(1))
+            except ValueError:
+                pass
+        cp = _RADIUS_ACCT_PORT_RE.search(rest)
+        if cp:
+            try:
+                acct_port = int(cp.group(1))
+            except ValueError:
+                pass
+        km = _RADIUS_KEY_RE.search(rest)
+        if km:
+            key = km.group(1) if km.group(1) is not None else km.group(2)
+        intent.radius_servers.append(CanonicalRADIUSServer(
+            host=host, key=key,
+            auth_port=auth_port, acct_port=acct_port,
+        ))
+
     # --- VRF declarations (GAP 6) — ``vrf instance <name>`` top-
     #     level lines create CanonicalRoutingInstance records.
     #     RD + RTs get populated later from the router-bgp pass.
@@ -277,14 +322,42 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # --- router bgp <asn> / vrf <name> / rd + route-target (GAP 6) ---
     _parse_router_bgp(raw, intent)
 
+    # SVI fold: ``interface Vlan<N> / ip address ...`` lines carry
+    # the Layer-3 surface for VLAN <N>.  VLAN-centric renderers
+    # (Aruba AOS-S, OPNsense) read the L3 off
+    # ``CanonicalVlan.ipv4_addresses``, not off the sibling
+    # interface, so without this fold the SVI IP silently drops on
+    # cross-vendor render.  Mirrors the same call in
+    # ``cisco_iosxe_cli/parse.py``.  See translator-plans.txt BUG 1.
+    from ...canonical.transforms import (
+        project_svi_to_vlan,
+        project_switchport_to_vlan,
+    )
+    project_svi_to_vlan(intent)
+
     # Bug 3 transpose: mirror per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
     # centric renderers (Aruba, OPNsense) can emit the membership.
     # Without this, per-interface `switchport access vlan 20` /
     # `switchport trunk allowed vlan 11,20` never reaches the
     # target config.  See translator-plans.txt BUG 3.
-    from ...canonical.transforms import project_switchport_to_vlan
+    #
+    # Phantom-VLAN guard (Phase 4b Wave 7c-C): mirrors the
+    # cisco_iosxe_cli pattern.  ``project_switchport_to_vlan``
+    # synthesises bare :class:`CanonicalVlan` records for any VID
+    # referenced by a ``switchport ... vlan`` line that didn't have
+    # a matching top-level ``vlan <N>`` stanza (or SVI).  On a
+    # cross-vendor pass from a source that already pruned phantoms
+    # (Cisco IOS-XE), a wide ``switchport trunk allowed vlan``
+    # range on the rendered Arista output silently re-inflates the
+    # canonical VLAN table on round-trip parse.  Snapshot the
+    # legitimate VLAN ids BEFORE projection, then prune any VLAN
+    # whose id wasn't in the snapshot AFTER.  ``trunk_allowed_vlans``
+    # on the per-interface side is not touched; the L2 attribute
+    # round-trips back out unchanged.
+    legitimate_vlan_ids = {v.id for v in intent.vlans}
     project_switchport_to_vlan(intent)
+    intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
     logger.debug(
         "arista_eos parsed: hostname=%r ifaces=%d vlans=%d "
@@ -724,6 +797,20 @@ def _apply_iface_subcommand(
         iface.switchport_mode = "trunk"
         tail = line.split(None, 4)[-1]
         iface.trunk_allowed_vlans = _expand_vlan_list(tail)
+        return
+    if line.startswith("switchport trunk native vlan "):
+        # Phase 4b Wave 7c-C: ``switchport trunk native vlan <N>``.
+        # Symmetric with the Cisco IOS-XE / Arista render emit;
+        # without parse symmetry, a Cisco→Arista round-trip flips
+        # native-tagged ports from untagged_ports back into
+        # tagged_ports under :func:`project_switchport_to_vlan`.
+        # Arista EOS accepts the same syntax as Cisco IOS-XE here
+        # (Arista EOS User Manual, "Switchport Configuration").
+        try:
+            iface.trunk_native_vlan = int(line.split()[-1])
+            iface.switchport_mode = "trunk"
+        except ValueError:
+            pass
         return
     if line == "switchport mode trunk":
         iface.switchport_mode = "trunk"
