@@ -80,6 +80,52 @@ signal per cell-parent OR (b) per-field semantic drift on
 surviving rows.  No multiplication.  Phase 4b investigation
 agents now operate on a much higher signal-to-noise input.
 
+### Wave 9 α — dict-typed canonical fields stored as full dicts (not key-lists)
+
+**Symptom:** ~11 spurious `snmp.community` / `snmp.location` /
+`snmp.contact` / `snmp.trap_hosts` `CODEC_BUG` entries on cells
+where the canonical SNMP scalars actually round-tripped fine — only
+`snmp.v3_users` had drifted.  Triage confirmed the comparator
+couldn't tell the difference: every cross-vendor pair with any SNMP
+drift turned every individual SNMP attribute into a CODEC_BUG.
+
+**Root cause:** `tools/run_full_mesh.py::process_cell`'s dict-cell
+branch wrote `record["source"] = list(src_val.keys())` for SNMP-shaped
+fields — a key-list summary, not the actual dict.  When
+`tools/run_phase4_reconciliation.py::_subfield_drift_in_dict` tried to
+compare `snmp.community`, it got two key-lists instead of two dicts,
+returned `None` (no determination possible), and the caller
+conservatively classified as drifted.
+
+**Fix:** dict-typed cells now carry the FULL source/target dicts in
+the Phase 1 record.  Display layer (`_md_inline`) JSON-serialises and
+truncates to 200 chars, so size impact is bounded.  All 11 spurious
+SNMP CODEC_BUGs collapse to ALIGNED.
+
+### Wave 9 β — vendor-correct LAG-name canonicalisation
+
+**Symptom:** Future-proofing.  Multiple Phase 4b agents flagged
+`ae<N>` ↔ `Port-channel<N>` ↔ `trk<N>` as a vendor-correct rename
+(`phase4_findings_arista_eos.md`, `_cisco_iosxe_cli.md`).  Today the
+relevant cells are classified `EXPECTED_LOSSY` in their YAML; as
+those YAMLs mature toward `good`, the rename would manifest as
+spurious CODEC_BUGs on `lags[].name` and `interfaces[].lag_member_of`.
+
+**Fix:** new `_canonical_lag_name(name) -> "LAG<N>" | None` helper +
+`_LAG_NAME_FIELDS = frozenset({"lags[].name",
+"interfaces[].lag_member_of"})`.  When `actual_disposition` resolves
+a list-subfield drift on one of those fields, it canonicalises both
+sides; equal canonical tokens collapse to "preserved".  Anything
+outside the documented LAG shapes (loopback / VLAN / physical-port /
+free-form names like `fortilink` / `lacp trunk`) returns `None` from
+the canonicaliser and falls through to raw equality, so non-LAG
+drift on the same fields still surfaces.
+
+**Aggregate impact (post-fix):** CODEC_BUG dropped 53 → 42 (-11);
+ALIGNED rose 2225 → 2236 (+11).  All deltas attributable to α —
+β is defensive groundwork (no current cells fired LAG-rename
+CODEC_BUGs).
+
 ---
 
 ## Already FIXED this session

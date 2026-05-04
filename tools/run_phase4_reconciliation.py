@@ -84,10 +84,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Callable
 from typing import Any
 
 import yaml
@@ -138,6 +140,80 @@ ALL_VARIANCES = (
     VAR_METHODOLOGY_OVER,
     VAR_STRUCTURAL_ONLY,
 )
+
+
+# ---------------------------------------------------------------------------
+# Vendor-correct LAG-name canonicalisation
+# ---------------------------------------------------------------------------
+#
+# Every vendor names its link-aggregation bundles differently:
+#
+# * Cisco IOS / IOS-XE / NX-OS / Arista EOS — ``Port-channel<N>`` (also
+#   accepts ``Port-Channel<N>`` from older Arista images and the short
+#   alias ``Po<N>``)
+# * Juniper Junos                          — ``ae<N>``
+# * Aruba AOS-S                            — ``trk<N>`` (some images
+#   capitalise to ``Trk<N>``)
+#
+# When a Junos source's ``ae1`` round-trips through a Cisco target, the
+# string token differs by design — the LAG bundle (members + LACP mode
+# + aggregation semantics) is preserved, only the operator-facing name
+# changes.  Treating that string mismatch as drift on
+# ``lags[].name`` (or its downstream effect on ``interfaces[].
+# lag_member_of``) produces spurious CODEC_BUG findings against fields
+# whose Phase 3 expectation YAML correctly says ``good``.
+#
+# :func:`_canonical_lag_name` recognises the four documented LAG
+# shapes and returns a stable canonical token (``"LAG<N>"``).  Names
+# that don't match (loopbacks, VLANs, physical port names, free-form
+# strings like ``fortilink`` / ``lacp trunk``) return ``None`` so the
+# caller falls back to raw equality and surfaces real drift.
+#
+# The regex is intentionally strict — anchored on both ends and
+# allowing ONLY the four documented prefixes.  See Wave 9 β.
+
+_LAG_NAME_RE = re.compile(
+    r"^(?:ae|Po|Port-channel|Port-Channel|trk|Trk)(\d+)$",
+)
+
+
+def _canonical_lag_name(name: Any) -> str | None:
+    """Map a vendor-native LAG name to a stable canonical token.
+
+    Returns ``"LAG<N>"`` for documented LAG shapes
+    (``ae<N>`` / ``Po<N>`` / ``Port-channel<N>`` / ``Port-Channel<N>``
+    / ``trk<N>`` / ``Trk<N>``); returns ``None`` for any other input
+    (including ``None``, empty strings, loopback / VLAN / physical-port
+    names).
+
+    Args:
+        name: The vendor-native interface name, typically pulled from
+            ``CanonicalLAG.name`` or ``CanonicalInterface.lag_member_of``.
+
+    Returns:
+        ``"LAG<N>"`` if the name matches a known LAG shape, else
+        ``None``.
+    """
+    if not isinstance(name, str) or not name:
+        return None
+    m = _LAG_NAME_RE.match(name)
+    if not m:
+        return None
+    return f"LAG{m.group(1)}"
+
+
+#: YAML field-keys whose drift values may be vendor-correct LAG
+#: renames.  When :func:`actual_disposition` resolves a list-subfield
+#: drift on one of these keys, it canonicalises both sides via
+#: :func:`_canonical_lag_name` before classifying — equal canonical
+#: tokens (e.g. ``ae1`` / ``Port-channel1`` → ``LAG1``) collapse the
+#: per-record drift to "preserved".  Anything that doesn't match the
+#: LAG-name regex falls through to raw equality, so non-LAG drift on
+#: these same fields (e.g. ``Loopback0`` → ``lo0``) still surfaces.
+_LAG_NAME_FIELDS: frozenset[str] = frozenset({
+    "lags[].name",
+    "interfaces[].lag_member_of",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -206,7 +282,10 @@ def derive_variance(
 
 
 def _subfield_drift_in_list(
-    parent_record: dict[str, Any], subfield: str,
+    parent_record: dict[str, Any],
+    subfield: str,
+    *,
+    equivalence: Callable[[dict[str, Any]], bool] | None = None,
 ) -> bool | None:
     """For a list-of-records canonical field (e.g. ``interfaces``,
     ``vlans``), determine whether a specific sub-field (e.g. ``name``,
@@ -226,6 +305,19 @@ def _subfield_drift_in_list(
 
     A sub-field has drifted iff its name appears as a key in any of the
     inner per-record diff dicts.
+
+    Args:
+        parent_record: The Phase 1 cell record for the parent list
+            field (e.g. ``interfaces`` or ``lags``).
+        subfield: The sub-field name to check (e.g. ``name``,
+            ``lag_member_of``).
+        equivalence: Optional callable mapping a per-record
+            ``{"source": ..., "target": ...}`` slice to ``True`` when
+            the values are vendor-equivalent (e.g. a documented LAG
+            rename like ``ae1`` ↔ ``Port-channel1``).  When provided,
+            per-record diffs that satisfy the equivalence are skipped
+            so they don't fire drift.  See :data:`_LAG_NAME_FIELDS` /
+            :func:`_canonical_lag_name` for the LAG case.
     """
     if parent_record.get("preserved"):
         return False
@@ -239,11 +331,32 @@ def _subfield_drift_in_list(
     for record_key, record_diffs in drift.items():
         if record_key == "..." or not isinstance(record_diffs, dict):
             continue
-        if subfield in record_diffs:
-            return True
+        if subfield not in record_diffs:
+            continue
+        if equivalence is not None:
+            slice_ = record_diffs[subfield]
+            if isinstance(slice_, dict) and equivalence(slice_):
+                continue
+        return True
     # Drift dict exists but doesn't mention this sub-field — it was
     # preserved across every record that drifted on OTHER fields.
     return False
+
+
+def _lag_name_equivalence(slice_: dict[str, Any]) -> bool:
+    """True iff a per-record drift slice ``{"source": ..., "target":
+    ...}`` is a vendor-correct LAG-name rename.
+
+    Both sides must canonicalise to the same ``LAG<N>`` token via
+    :func:`_canonical_lag_name`.  Anything that doesn't match a LAG
+    shape (None, empty strings, loopback / VLAN / physical names) is
+    NOT equivalent — the caller falls back to surfacing the drift.
+    """
+    src_canon = _canonical_lag_name(slice_.get("source"))
+    tgt_canon = _canonical_lag_name(slice_.get("target"))
+    if src_canon is None or tgt_canon is None:
+        return False
+    return src_canon == tgt_canon
 
 
 def _subfield_drift_in_dict(
@@ -310,9 +423,23 @@ def actual_disposition(
             return "missing", None
         if subfield is None:
             return _disposition_from_record(parent)
-        sub_drifted = _subfield_drift_in_list(parent, subfield)
+        # When the YAML field carries a LAG-name reference, apply the
+        # vendor-correct LAG canonicalisation so renames like
+        # ``ae1`` ↔ ``Port-channel1`` collapse to "preserved" rather
+        # than firing CODEC_BUG.  See :data:`_LAG_NAME_FIELDS` /
+        # :func:`_canonical_lag_name` for the rationale.
+        equivalence = (
+            _lag_name_equivalence
+            if yaml_field_key in _LAG_NAME_FIELDS
+            else None
+        )
+        sub_drifted = _subfield_drift_in_list(
+            parent, subfield, equivalence=equivalence,
+        )
         if sub_drifted:
-            return "drifted", _slice_list_subfield(parent, subfield)
+            return "drifted", _slice_list_subfield(
+                parent, subfield, equivalence=equivalence,
+            )
         return "preserved", None
 
     # Form: "snmp.community" — dict sub-field.
@@ -371,10 +498,20 @@ def _slice_dict_subfield(
 
 
 def _slice_list_subfield(
-    parent: dict[str, Any], subfield: str,
+    parent: dict[str, Any],
+    subfield: str,
+    *,
+    equivalence: Callable[[dict[str, Any]], bool] | None = None,
 ) -> dict[str, Any]:
     """Build a compact drift-detail snippet for a list sub-field — the
     per-record diffs filtered down to just the requested attribute.
+
+    When an ``equivalence`` callable is provided, per-record diffs that
+    satisfy it (e.g. vendor-correct LAG renames like ``ae1`` ↔
+    ``Port-channel1``) are skipped so they don't appear in the
+    drift_detail.  This keeps the slice honest: the
+    ``per_record`` dict only carries diffs that actually drifted under
+    the field's vendor-equivalence rules.
     """
     drift = parent.get("drift")
     snippet: dict[str, Any] = {"subfield": subfield}
@@ -387,8 +524,16 @@ def _slice_list_subfield(
     for record_key, record_diffs in drift.items():
         if not isinstance(record_diffs, dict):
             continue
-        if subfield in record_diffs:
-            per_record[record_key] = record_diffs[subfield]
+        if subfield not in record_diffs:
+            continue
+        slice_ = record_diffs[subfield]
+        if (
+            equivalence is not None
+            and isinstance(slice_, dict)
+            and equivalence(slice_)
+        ):
+            continue
+        per_record[record_key] = slice_
     if per_record:
         snippet["per_record"] = per_record
     return snippet

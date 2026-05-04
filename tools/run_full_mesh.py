@@ -308,8 +308,20 @@ def compute_field_disposition(
             record["target_count"] = len(tgt_val)
             if not preserved:
                 record["drift"] = _dict_drift_summary(src_val, tgt_val)
-                record["source"] = _scalar_summary(list(src_val.keys()))
-                record["target"] = _scalar_summary(list(tgt_val.keys()))
+                # Store the FULL source/target dicts (not key-lists) so
+                # the Phase 4 reconciler's ``_subfield_drift_in_dict``
+                # can resolve per-attribute drift instead of bailing
+                # out and conservatively flagging every attribute as
+                # drifted.  Without this, a single ``snmp.v3_users``
+                # difference manifested as four spurious CODEC_BUG
+                # cells (community / location / contact / trap_hosts)
+                # for cross-vendor pairs that actually preserved those
+                # scalars — see Wave 9 α.  The display layer
+                # (``_md_inline``) JSON-serialises and truncates dicts
+                # to 200 chars, so size impact on the matrix .md is
+                # bounded.
+                record["source"] = src_val
+                record["target"] = tgt_val
         else:
             # Scalar or None vs structured.  None-vs-empty is treated
             # as preserved (the canonical model uses None for "snmp
