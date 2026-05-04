@@ -218,9 +218,16 @@ class TestParse:
         assert {v.id for v in tree.vlans} == {1, 10, 20}
 
         # VLAN 1's 'no untagged 1-24' removes default; 'untagged 25-26,A1'
-        # then adds those back.
+        # then adds those back.  When VLAN 20 subsequently claims
+        # ``untagged 25-26``, AOS-Switch reassigns those ports off
+        # VLAN 1 (move-on-reassign semantic; HPE Aruba 2930F config
+        # guide / "VLAN port assignments").  After the Wave 7c
+        # parser hardening, VLAN 1 retains only ``A1``; ports 25 + 26
+        # land on VLAN 20.
         vlan1 = next(v for v in tree.vlans if v.id == 1)
-        assert vlan1.untagged_ports == ["25", "26", "A1"]
+        assert vlan1.untagged_ports == ["A1"]
+        vlan20 = next(v for v in tree.vlans if v.id == 20)
+        assert vlan20.untagged_ports == ["25", "26"]
 
         # 3 physical interfaces + 2 Vlan SVI interfaces = 5.
         iface_names = {i.name for i in tree.interfaces}
