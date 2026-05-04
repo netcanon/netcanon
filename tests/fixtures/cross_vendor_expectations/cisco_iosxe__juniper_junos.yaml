@@ -239,7 +239,7 @@ per_field_expectation:
     references: [oc-interfaces]
 
   "interfaces[].name":
-    disposition: good
+    disposition: lossy
     note: >
       OpenConfig source emits `<name>GigabitEthernet1/0/1</name>`;
       the parser stores verbatim on CanonicalInterface.name.  Junos
@@ -250,6 +250,12 @@ per_field_expectation:
       the syntax.  Loopback / SVI / Port-channel sources route
       through the rename mesh too (Cisco `Vlan100` -> Junos
       `irb.100`; `Port-channel1` -> `ae1`; `Loopback0` -> `lo0`).
+      Bare-name stub interfaces with no L3 / VLAN / description /
+      LAG-membership content are elided by Junos render — there is
+      no Junos equivalent name to emit and no per-port settings to
+      anchor the record.  Wave 7c (commit `1b1b865`) cleared count
+      drift on every other surface; the remaining bare-stub elision
+      is vendor-wire-correct and reclassified `good → lossy`.
     references: [oc-interfaces, iosxe-interface-cg, junos-iface-naming]
 
   "interfaces[].description":

@@ -200,7 +200,7 @@ per_field_expectation:
     references: [oc-interfaces, interface-fields]
 
   "interfaces[].name":
-    disposition: good
+    disposition: lossy
     note: >
       OpenConfig <interface><name> -> RouterOS interface name (after
       the rename mesh translates Cisco's speed-encoded name to
@@ -208,7 +208,15 @@ per_field_expectation:
       literal Cisco name (e.g. GigabitEthernet0/0/1) lands on the
       RouterOS render verbatim and the operator sees an incongruous
       interface name; the device accepts it but it looks wrong.
-    references: [oc-interfaces, routeros-iface]
+      RouterOS render also synthesises a default `bridge1` interface
+      to host any source-side VLAN sub-interfaces — RouterOS's
+      VLAN model REQUIRES a parent bridge, so this is vendor-wire-
+      correct rather than a translator phantom.  The synthesised
+      bridge inflates the source-vs-target interface count by 1 on
+      fixtures with VLAN sub-interfaces; Wave 7c (commit `1b1b865`)
+      cleared other count drift surfaces and reclassified this
+      `good → lossy` to reflect the structural delta.
+    references: [oc-interfaces, routeros-iface, routeros-bridge]
 
   "interfaces[].description":
     disposition: good
