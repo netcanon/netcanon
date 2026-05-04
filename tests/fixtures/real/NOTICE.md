@@ -97,12 +97,16 @@ re-discover them.
 3. Update this NOTICE with an entry covering origin URL, license, and
    what the file stresses.
 4. The parametrized harness at `tests/unit/migration/test_real_captures.py`
-   picks up every `*.txt` / `*.cfg` / `*.xml` under `<vendor>/`
-   automatically — no further wiring needed.
+   picks up every `*.txt` / `*.cfg` / `*.xml` / `*.conf` / `*.rsc` /
+   `*.set` under `<vendor>/` automatically — no further wiring needed.
 
 ---
 
 ## See also
 
 - [`RESULTS.md`](RESULTS.md) — per-codec certification state and coverage matrix derived from this corpus
+- [`CROSS_MESH_RESULTS.md`](CROSS_MESH_RESULTS.md) — cross-vendor translation fidelity matrix (every fixture × target codec round-trip)
+- [`PHASE4_RECONCILIATION.md`](PHASE4_RECONCILIATION.md) — Phase 4 mechanical-drift × vendor-doc reconciliation
+- [`user_smoke_findings.md`](user_smoke_findings.md) — operator-spotted bugs from manual cross-vendor smoke pasting
 - [`../../README.md`](../../README.md) — test-suite layout (real-capture is the fifth tier alongside unit / integration / E2E / desktop)
+- [`../../testid_reference.md`](../../testid_reference.md) — interactive-element inventory

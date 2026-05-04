@@ -11,6 +11,8 @@ import pytest
 
 from netconfig_desktop.tray import TrayIcon
 
+pytestmark = pytest.mark.desktop
+
 
 @pytest.fixture()
 def patched_tray(mock_pystray, mock_generate_tray_image):

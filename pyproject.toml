@@ -57,6 +57,7 @@ markers = [
     "unit: pure-function tests, no I/O",
     "integration: API-level tests using TestClient, no real SSH",
     "e2e: full browser tests via Playwright against a live server",
+    "desktop: marks tests as desktop-shell tests (deselect with '-m \"not desktop\"')",
     "slow: tests that take longer than 5 seconds",
     "cross_mesh: cross-codec translation matrix tests (category x source x target). Aggregate runtime under this marker must stay under 30s as the matrix grows; if it creeps, add a CI gate or demote the slow case to a layer-A per-codec unit test.",
 ]

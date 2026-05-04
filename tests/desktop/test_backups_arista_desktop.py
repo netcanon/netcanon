@@ -23,14 +23,14 @@ import socket
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 from netconfig.config import Settings
 from netconfig.definitions.loader import DefinitionLoader
 from netconfig.main import create_app
 from netconfig_desktop.server import ServerThread
 
-# Note: desktop tests share the test directory without a dedicated
-# pytest marker — the suite is gated on the testpath ``tests/desktop``
-# rather than a marker (matches existing convention in this dir).
+pytestmark = pytest.mark.desktop
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

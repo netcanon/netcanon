@@ -16,6 +16,8 @@ from starlette.routing import Route
 
 from netconfig_desktop.server import ServerThread
 
+pytestmark = pytest.mark.desktop
+
 
 # ---------------------------------------------------------------------------
 # Helpers

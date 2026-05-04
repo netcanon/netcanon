@@ -38,6 +38,8 @@ from netconfig.collectors.base import BaseCollector
 from netconfig.config import Settings
 from netconfig.main import create_app
 
+pytestmark = pytest.mark.desktop
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 JUNOS_DEF_PATH = REPO_ROOT / "definitions" / "juniper" / "junos" / "22.x.yaml"

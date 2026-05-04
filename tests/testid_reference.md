@@ -14,6 +14,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-jobs`         | `<a>`   | Link to `/jobs`; active on Jobs page |
 | `nav-schedules`    | `<a>`   | Link to `/schedules`; active on Schedules page |
 | `nav-configs`      | `<a>`   | Link to `/configs`; active on Configs page |
+| `nav-devices`      | `<a>`   | Link to `/devices`; active on Devices page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
 | `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netconfig.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
@@ -45,13 +46,12 @@ CSS class names or element structure — so UI refactoring does not break tests.
 
 The inline "banner" on the dashboard was replaced by a global floating
 progress panel defined in `base.html` — see the **Job progress panel**
-section below.  The legacy testids (`job-status-banner`, `job-id-display`,
-`job-status-display`) are still exposed on the panel for backward
-compatibility with existing E2E tests and helpers.
+section below.  Legacy `job-id-display` / `job-status-display` testids
+are still exposed on the panel for backward compatibility with existing
+E2E tests and helpers.
 
 | `data-testid`          | Element | Notes |
 |------------------------|---------|-------|
-| `job-status-banner`    | `<div>` | **Alias** of `job-progress-panel` — the floating widget |
 | `job-id-display`       | `<strong>` | First 8 chars of job UUID + "…" in the panel header |
 | `job-status-display`   | `<span>` | Aggregated job status: `pending` / `running` / `completed` / `partial` / `failed`; hidden visually but readable for tests |
 
@@ -406,6 +406,7 @@ exist yet.
 | `device-run-btn`               | `<button>` | Triggers an immediate backup for this profile |
 | `device-edit-btn`              | `<button>` | Shows/hides the inline edit panel |
 | `device-delete-btn`            | `<button>` | Shows inline confirm — does NOT call `confirm()` |
+| `device-confirm-<id>`          | `<span>` | Inline confirm container revealed by `device-delete-btn`; `<id>` is the device profile UUID. Wraps the Yes/No buttons below |
 | `device-delete-confirm-btn`    | `<button>` | "Yes" — confirms deletion |
 | `device-delete-cancel-btn`     | `<button>` | "No" — cancels and restores Delete button |
 | `device-card-body`             | `<div>` | Config history table; hidden by default |

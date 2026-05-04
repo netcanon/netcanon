@@ -15,6 +15,8 @@ import pytest
 
 from netconfig_desktop.settings import DESKTOP_PORT, desktop_settings
 
+pytestmark = pytest.mark.desktop
+
 
 class TestDesktopPort:
     def test_port_value(self):

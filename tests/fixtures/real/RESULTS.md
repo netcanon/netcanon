@@ -54,6 +54,24 @@ times to a LAG member list when the Batfish kitchen-sink stacked
 seven `channel-group 1 mode <variant>` lines on a single interface.
 Dedupe + regression test landed in the same commit.
 
+**Wave 7c — phantom-VLAN guard + trunk allowed list reconciliation:**
+the trunk-allowed-VLAN re-inflation pattern that motivated the
+Arista + Junos phantom-VLAN guards (see those codec sections) was
+originally proven on cisco_iosxe_cli — the source-side pattern of
+snapshotting legitimate VLAN ids BEFORE `project_switchport_to_vlan`
+and pruning phantoms AFTER landed here first.  See
+`tests/unit/migration/codecs/cisco_iosxe_cli/test_trunk_allowed_phantom_vlan_guard.py`.
+Wave 7c also closed the rendered-secondary IPv4 path on this codec
+(secondary `ip address ... secondary` lines now round-trip stable).
+
+**Wave 10γ-2 — `cisco_iosxe` (NETCONF) Phase 0.5 stub honesty:**
+*not* a parse-side fix on `cisco_iosxe_cli`, but recorded here for
+cross-reference: the NETCONF/OpenConfig target codec's capability
+matrix was corrected to declare 16 additional fields explicit-
+unsupported, fixing 6,677 spurious METHODOLOGY_ISSUE_under cells in
+the cross-mesh matrix.  See CHANGELOG entry "cisco_iosxe (NETCONF)
+target codec is a Phase 0.5 stub".
+
 **Known silent drops (by design):** VRFs, Q-in-Q encap, QoS
 service-policies, interface ACL groups, IPv6 addressing, proxy-ARP,
 uRPF, bandwidth hint.  All mapped to existing roadmap buckets (Tier 3
@@ -308,6 +326,14 @@ recursive block parser handles the full FortiOS `config / edit /
 set / next / end` grammar at production scale with real appliance
 policy tables.
 
+**Wave 7c — static-route `set comment` parse + render symmetry:**
+FortiOS uses singular `set comment "<text>"` (not plural
+`set comments`) on per-route descriptions inside `config router
+static`.  The render path was emitting it correctly but a parser-
+side gap meant round-trips lost the route description.  Fix in
+`netconfig/migration/codecs/fortigate_cli/parse.py` lines around
+570 + `render.py` near 837 makes the path symmetric.
+
 ### Certification decision
 
 **Promoted to `certified`.**  Three real captures across 2 OS
@@ -517,6 +543,18 @@ Nice-to-have follow-ups (not gating):
 
 Parse-tolerance validated across three fixtures covering `set protocols bgp / isis / mpls / lldp / topology-export / vstp`, `set routing-options autonomous-system`, `set groups <name> ...` + `set apply-groups <name>`, `set chassis aggregated-devices`, `set system root-authentication encrypted-password`, `set system services ssh`, `set system radius-server`, `set system login user ... authentication ssh-rsa` — all silently drop without crashing.
 
+**Wave 7c — phantom `ae<N>` interface guard + natural port-name sort
++ trunk-allowed phantom-VLAN guard:** the Junos parser was
+materialising `intent.interfaces` in lexicographic key order, so
+VLAN-centric port lists came back as `['1/1', '1/10', '1/11', ...,
+'1/2', '1/20', ...]` after a round-trip — fixed by sorting iface
+state with the shared `_natural_port_sort_key` helper.  Separately,
+phantom `ae<N>` LAG interfaces created by the implicit-create path
+during round-trip were guarded out (see `test_wave7c_e_phantom_lag_iface.py`).
+The phantom-VLAN guard around `project_switchport_to_vlan` (covered
+in the cisco_iosxe_cli section above) also landed for Junos in the
+same wave.
+
 ### Certification decision
 
 **Promotes to `certified` ✅.**  Five real captures from four distinct Junos majors (15.1 + 17.3 + 18.4 + 25.4) all round-trip cleanly.  The two 25.4 batfish captures close the `≥3 real captures from ≥2 OS versions` bar with room to spare — one VXLAN-EVPN leaf, one MPLS L3VPN PE, both on a current LTS major.  1 bug surfaced + fixed on the promotion path (bare-interface render in GAP 3).
@@ -619,10 +657,49 @@ adding new canonical fields (ongoing roadmap).
 
 ---
 
+### Wave 7c shared utilities
+
+Two cross-codec helpers were extracted during Wave 7c so multiple
+codecs route through one canonical implementation rather than each
+re-deriving the projection:
+
+* **`project_svi_to_vlan`** — folds `interface Vlan<N>` SVI L3 state
+  onto the matching `CanonicalVlan.ipv4_addresses` so VLAN-centric
+  renderers (Arista EOS, Aruba AOS-S) see the addresses.  Originally
+  inlined in `cisco_iosxe._synthesize_vlans_from_svis`; now lifted
+  into `netconfig/migration/canonical/transforms.py` and called from
+  the Cisco IOS-XE CLI, Arista EOS, and Aruba AOS-S parsers.
+* **`_natural_port_sort_key`** — natural sort order for port-style
+  identifiers (`1/1` < `1/2` < `1/10`, not `1/1` < `1/10` < `1/2`).
+  Fixes the lexicographic-key drift in the Junos parser's
+  `intent.interfaces` materialisation that surfaced as VLAN port-list
+  drift on the round-trip.
+
+### Cluster E.1 — DHCP wire-up for arista_eos and juniper_junos
+
+Canonical `intent.dhcp_servers: list[CanonicalDHCPPool]` (Tier 2) was
+already round-tripped by `cisco_iosxe_cli`, `fortigate_cli`,
+`mikrotik_routeros`, and `opnsense`.  Cluster E.1 promotes
+`arista_eos` and `juniper_junos` to full bidirectional DHCP support
+(intentional stub for `aruba_aoss` — relay platform).  New tests
+landed:
+
+* `tests/unit/migration/codecs/arista_eos/test_dhcp_pool_round_trip.py`
+* `tests/unit/migration/codecs/juniper_junos/test_dhcp_pool_round_trip.py`
+* `tests/unit/migration/codecs/juniper_junos/test_dhcp_client_parse.py`
+* `tests/unit/migration/test_dhcp_wire_through.py` — mesh-level invariant
+
+See CHANGELOG entry "Cluster E.1 — DHCP-server parse + render for
+arista_eos and juniper_junos" for the matrix delta.
+
+---
+
 ## See also
 
 - [`../../README.md`](../../README.md) — test-suite layout and how the real-capture harness fits in
 - [`NOTICE.md`](NOTICE.md) — provenance, attribution, and licensing for every fixture in this corpus
+- [`CROSS_MESH_RESULTS.md`](CROSS_MESH_RESULTS.md) — cross-vendor translation fidelity matrix (every fixture × target codec round-trip)
 - [`../../testid_reference.md`](../../testid_reference.md) — interactive-element inventory (the migrate UI surfaces certainty tiers from this matrix)
 - [`PHASE4_RECONCILIATION.md`](PHASE4_RECONCILIATION.md) — cross-mesh fidelity reconciliation matrix (Phase 1 mechanical drift × Phase 3 vendor-doc expectations)
+- [`phase4_findings_arista_eos.md`](phase4_findings_arista_eos.md), [`phase4_findings_aruba_aoss.md`](phase4_findings_aruba_aoss.md), [`phase4_findings_cisco_iosxe.md`](phase4_findings_cisco_iosxe.md), [`phase4_findings_cisco_iosxe_cli.md`](phase4_findings_cisco_iosxe_cli.md), [`phase4_findings_fortigate_cli.md`](phase4_findings_fortigate_cli.md), [`phase4_findings_juniper_junos.md`](phase4_findings_juniper_junos.md), [`phase4_findings_mikrotik_routeros.md`](phase4_findings_mikrotik_routeros.md), [`phase4_findings_opnsense.md`](phase4_findings_opnsense.md) — per-codec Phase 4 findings
 - [`user_smoke_findings.md`](user_smoke_findings.md) — operator-spotted bugs from manual cross-vendor smoke pasting; complements the mechanical reconciliation with human-readable issues

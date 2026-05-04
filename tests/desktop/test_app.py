@@ -12,6 +12,8 @@ import pytest
 
 from netconfig_desktop.app import DesktopApp
 
+pytestmark = pytest.mark.desktop
+
 
 # ---------------------------------------------------------------------------
 # Fixtures

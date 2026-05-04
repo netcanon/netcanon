@@ -1,8 +1,11 @@
 """
 Fixtures for the netconfig_desktop unit tests.
 
-All pywebview, pystray, and uvicorn interactions are mocked so the tests run
-without a display, tray OS service, or live HTTP server.
+All PySide6 (Qt — QApplication / QMainWindow / QWebEngineView), pystray, and
+uvicorn interactions are mocked so the tests run without a display, tray OS
+service, or live HTTP server.  PySide6 sub-modules are injected via
+``sys.modules`` so the desktop package's lazy ``from PySide6.QtXxx import ...``
+calls resolve to MagicMocks.
 """
 from __future__ import annotations
 

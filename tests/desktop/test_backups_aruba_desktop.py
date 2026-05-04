@@ -22,10 +22,14 @@ import urllib.request
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from netconfig.config import Settings
 from netconfig.main import create_app
 from netconfig_desktop.server import ServerThread
 from tests.conftest import FakeCollector
+
+pytestmark = pytest.mark.desktop
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

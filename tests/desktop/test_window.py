@@ -11,6 +11,8 @@ import pytest
 
 from netconfig_desktop.window import WebViewWindow
 
+pytestmark = pytest.mark.desktop
+
 
 @pytest.fixture()
 def win(mock_pyside6, mock_write_ico):

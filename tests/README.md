@@ -9,7 +9,11 @@ tests/
 ├── conftest.py              Root fixtures (FakeCollector, test_settings, test_app)
 ├── fixtures/
 │   ├── definitions.py       Pre-built DeviceDefinition factory functions
-│   └── ssh_responses.py     Canned SSH output strings per vendor
+│   ├── ssh_responses.py     Canned SSH output strings per vendor
+│   ├── module_variants.py   Canonical module-variant allowlist shared with integration tier
+│   ├── synthetic/<vendor>/  Hand-crafted minimal configs per vendor (parser-feature focus)
+│   ├── real/<vendor>/       Real-capture corpus + RESULTS.md + NOTICE.md + CROSS_MESH_RESULTS.md
+│   └── cross_vendor_expectations/  Phase 3 mechanical-drift expectation tables
 ├── unit/                    Pure-function tests, no I/O
 │   ├── test_schema.py       Pydantic schema validation (incl. type_key filename-safety)
 │   ├── test_loader.py       DefinitionLoader (file parsing, priority resolution)
@@ -20,11 +24,20 @@ tests/
 │   ├── api/                 API helper unit tests
 │   ├── audit/               Reconciler-internal unit tests
 │   └── migration/           Codec + canonical-layer unit tests
+│       └── codecs/          Per-vendor codec deep-dive units (arista_eos, aruba_aoss,
+│                            cisco_iosxe, cisco_iosxe_cli, fortigate_cli, juniper_junos,
+│                            mikrotik_routeros, opnsense)
 ├── integration/             API-level tests via FastAPI TestClient
 │   ├── conftest.py          TestClient fixture with mocked get_collector
 │   ├── test_definitions_api.py
 │   ├── test_configs_api.py
-│   └── test_backups_api.py
+│   ├── test_backups_api.py
+│   ├── test_backups_<vendor>.py   Per-vendor backup wiring smoke tests
+│   ├── test_migration_api.py
+│   ├── test_migration_target_profiles_api.py
+│   ├── test_device_profiles_api.py
+│   ├── test_schedules_api.py
+│   └── …                    (etc. — see tests/integration/ for the full set)
 ├── e2e/                     Full browser tests via Playwright
 │   ├── conftest.py          Live Uvicorn server + Playwright base_url
 │   ├── helpers.py           Page-object helpers (NavBar, BackupFormPage, …)
@@ -35,7 +48,8 @@ tests/
     ├── test_server.py       ServerThread (real Uvicorn on a free port)
     ├── test_tray.py         TrayIcon construction, callbacks, stop()
     ├── test_window.py       WebViewWindow lifecycle and _handle_close()
-    └── test_settings.py     Path resolution in frozen vs. dev mode
+    ├── test_settings.py     Path resolution in frozen vs. dev mode
+    └── test_backups_<vendor>_desktop.py  Per-vendor embedded-server smoke tests
 ```
 
 ## Running Tests
@@ -109,6 +123,7 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 | `unit`        | Pure-function tests, no I/O |
 | `integration` | API-level tests using `TestClient`, no real SSH |
 | `e2e`         | Full browser tests via Playwright against a live server |
+| `desktop`     | Desktop-shell tests (PySide6 / pystray fully mocked).  Deselect with `-m "not desktop"`. |
 | `slow`        | Tests that take longer than ~5 seconds |
 | `cross_mesh`  | Cross-codec translation matrix tests (category × source × target).  **Aggregate runtime under this marker must stay under 30 seconds** as the matrix grows; cases running >500ms each should get demoted to Layer A per-codec unit tests.  See [`tests/unit/migration/test_cross_mesh_overrides.py`](unit/migration/test_cross_mesh_overrides.py). |
 
