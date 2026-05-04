@@ -48,6 +48,11 @@ Supported `netmiko_device_type` values (non-exhaustive):
 | Cisco IOS-XE | `cisco_xe` |
 | Fortigate FortiOS | `fortinet` |
 | MikroTik RouterOS | `mikrotik_routeros` |
+| Aruba AOS-S | `aruba_osswitch` |
+| Juniper Junos | `juniper_junos` |
+| Arista EOS | `arista_eos` |
+
+See [`../../definitions/README.md`](../../definitions/README.md) "Vendor-Specific Notes" for the full set of shipped device-definitions and their per-vendor authoring conventions.
 
 > **Why no `terminal length 0`?**  This command is unreliable on some IOS-XE
 > versions and was deliberately removed.  The space-injection approach

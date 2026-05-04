@@ -11,6 +11,107 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (Phase 1 backup-definition expansion: Arista EOS / Aruba AOS-S / Juniper Junos)
+
+Three new device-definition YAMLs land alongside the existing
+Cisco / Fortigate / MikroTik / OPNsense backup definitions, closing
+the gap between migration-codec coverage (8 vendors) and backup-
+collector coverage (was 4, now 7).  Each ships with a netmiko-strategy
+collector wired to the appropriate driver — `arista_eos`,
+`aruba_osswitch`, `juniper_junos` — so users with real hardware in
+those families can now point the backup pipeline at devices and pull
+their `running-config` (or `show configuration | display set | no-more`
+for Junos, where the `set`-form output maps directly onto what
+`juniper_junos.parse_intent` consumes).
+
+* **`definitions/arista/eos/4.32.yaml`** — netmiko `arista_eos` with
+  the standard Cisco-style `cisco_more_paging: true` (per the hard
+  rule against `terminal length 0`).  Probe regexes pinned against
+  DCS / vEOS / CCS chassis families.
+* **`definitions/aruba/aos-s/16.x.yaml`** — netmiko `aruba_osswitch`
+  (the modern AOS-S 16.x driver; `hp_procurve` documented as the
+  legacy alternate for 15.x firmware).  Manager-mode escalation via
+  netmiko's `secret` credential.
+* **`definitions/juniper/junos/22.x.yaml`** — netmiko `juniper_junos`
+  with `cisco_more_paging: false` (Junos uses `| no-more` in the
+  command itself rather than space-injection).  Probe regexes pinned
+  for SRX / EX / MX / QFX `show version` shapes.
+
+Per-vendor unit tests pin the schema, probe regexes, and codec round-
+trip; per-vendor integration tests cover the POST/GET happy path with
+mocked `get_collector` (per the hard rule against patching
+`ConnectHandler` directly); per-vendor desktop tests confirm the
+embedded uvicorn serves the new definitions.
+
+### Added (`type_key` filename-safety constraint)
+
+Authoring a `DeviceDefinition` with `type_key` containing `_` or `.`
+now raises `ValidationError` at load time (validator
+`type_key_filename_safe` on `DeviceDefinition`).  These characters are
+the separators the file-store filename grammar uses
+(`{type_key}_{safe_host}_{ts}.{ext}`), so a `type_key` containing
+either makes the parse mathematically ambiguous — `resolve_path()`
+would mis-route the file because the lazy `.+?` in the device-type
+group absorbs only the leading non-underscore token.
+
+The constraint pins the established convention (single-token
+CamelCase: `Cisco`, `Fortigate`, `MikroTik`, `OPNsense`, `Aruba`,
+`Juniper`, `Arista`).  BD-Aruba's initial `aruba_aoss_16.x` outlier
+(commit `de8e0f3`) and BD-Arista's independent rediscovery of the
+trap (commit `8c9e9d4`) confirmed the rule was load-bearing.  Both
+the schema-level validator and the file-store regex (now using
+`[^_.]+` for the `device_type` group instead of `.+?`) enforce the
+invariant from two angles.  CLAUDE.md "Hard Rules" gains a new
+bullet citing the rule.
+
+### Fixed (Wave 9 cross-mesh comparator: dict-drift false-positive + LAG-rename equivalence)
+
+Two surgical fixes to the Phase 4 reconciliation tooling at
+`tools/run_phase4_reconciliation.py` that tighten matrix integrity
+without touching any codec render or parse code:
+
+* **Wave 9α — `_subfield_drift_in_dict` audit-tooling false positive.**
+  Phase 1 (`tools/run_full_mesh.py::process_cell`) was storing only
+  the top-level keys of dict-typed canonical fields (`snmp`, etc.)
+  as `record["source"]` / `record["target"]`, which left
+  `_subfield_drift_in_dict` unable to determine whether a specific
+  attribute (e.g. `snmp.community`) drifted.  It conservatively
+  fell through to "drifted", inflating the CODEC_BUG count by ~11
+  cells across SNMP attributes for cross-vendor pairs that were
+  actually translating cleanly.  Fix: store the full source/target
+  dicts so the reconciler can walk per-attribute.
+* **Wave 9β — Vendor-correct LAG-rename equivalence.**  Junos
+  `ae<N>`, Cisco `Port-channel<N>` (and `Po<N>`), and Aruba
+  `trk<N>` are the same LAG bundle in different vendor-native
+  spellings.  The comparator now treats these as equivalent for
+  the field-keys in `_LAG_NAME_FIELDS = {"lags[].name",
+  "interfaces[].lag_member_of"}` via a `_lag_name_equivalence`
+  callable plugged into `_subfield_drift_in_list` /
+  `_slice_list_subfield`.  Names not matching a documented LAG
+  shape fall through to raw equality, so non-LAG drift on the
+  same fields still surfaces.  Defensive on current matrix state
+  (no immediate cell drops) but prevents regression as future
+  YAML refreshes tighten `lags` dispositions from `lossy` back
+  to `good`.
+
+### Fixed (Wave 9γ — selective re-flip of Wave 8 over-eager `lossy` reclassifications)
+
+After Wave 8 reclassified ~120 fields from `good → lossy` based on
+per-source-vendor findings reports, three per-source agents (γ-A,
+γ-B, γ-C) walked their assigned scopes to verify each flip was
+justified by genuine drift in at least one fixture for the pair.
+γ-A (arista + aruba) and γ-B (cisco) confirmed every Wave 8 flip
+was correct.  γ-C identified six over-eager flips on
+`juniper_junos -> cisco_iosxe_cli / vlans[].id`: the Wave 8
+hypothesis that Junos `vlan members all` would expand to
+`range(1, 4095)` on the canonical `vlans[].id` projection was
+incorrect — the expansion lands on `interfaces[].trunk_allowed_vlans`
+instead.  Six fixtures (5 real + 1 synthetic) confirm `vlans[].id`
+preserves cleanly across this pair; YAML re-flipped to `good`.
+
+Cumulative Wave 9 matrix delta: ALIGNED 2225 → 2242 (+17), CODEC_BUG
+53 → 42 (-11), METHODOLOGY_ISSUE_under 7370 → 7350 (-20).
+
 ### Refactored (extract `_migration_helpers.py` from `migration.py`)
 
 Final cleanup pass on the `refactor/god-file-cleanup` branch.  The

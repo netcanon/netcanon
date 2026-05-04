@@ -182,6 +182,16 @@ tests use these exclusively — never CSS classes or element structure.  See
   via `connection.cisco_more_paging: true` in the YAML definition.
 - **Never** commit real credentials, device IPs, or secrets.
 - **Never** skip `data-testid` attributes on new interactive template elements.
+- **Never** author a `type_key` containing `_` or `.` in a device-definition
+  YAML.  These characters are the separators the file-store filename grammar
+  uses (`{type_key}_{safe_host}_{ts}.{ext}`), so an underscore or dot inside
+  `type_key` makes the filename parse mathematically ambiguous (the lazy
+  `.+?` would absorb only the leading token, mis-locating the file on
+  `resolve_path`).  Use a single-token CamelCase vendor key like `Cisco`,
+  `Aruba`, `Juniper`.  Enforced by `DeviceDefinition.type_key_filename_safe`
+  at load time and by the file-store regex at parse time — both BD-Aruba
+  and BD-Arista independently rediscovered this trap before the validator
+  existed (commit `a93bee8`), which is why the rule lives here now.
 - **Never** land a code change without updating the docs it renders stale.
   The "Documentation Sync Checklist" above is concrete — if a row applies
   to your change, touch the listed doc in the same commit.  Follow-up

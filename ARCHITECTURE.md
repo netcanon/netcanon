@@ -40,6 +40,10 @@ and renders that tree in another vendor's native format.
 The rest of this document is about the migration layer.  The backup
 layer is architecturally simpler — see
 [`netconfig/collectors/README.md`](netconfig/collectors/README.md).
+Backup definitions ship for Cisco IOS-XE, Fortigate FortiOS, MikroTik
+RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS — see
+[`definitions/README.md`](definitions/README.md) for the per-vendor
+authoring notes.
 
 ---
 
@@ -743,6 +747,21 @@ field)` cell into one of seven variance classes:
   signal from inflating CODEC_BUG by 6× across `interfaces[].mtu`,
   `interfaces[].description`, etc.  Per-record drift on surviving
   rows still fires CODEC_BUG normally.
+
+**Vendor-correct rename equivalences.** Some canonical-field values
+legitimately differ in spelling across vendors without representing
+drift — Junos `ae<N>`, Cisco `Port-channel<N>` (and the `Po<N>`
+abbreviation), and Aruba `trk<N>` are the same LAG bundle expressed
+in vendor-native names.  The reconciler accepts an `equivalence`
+callable on `_subfield_drift_in_list` / `_slice_list_subfield`;
+today it plugs in `_lag_name_equivalence` for the field-keys in
+`_LAG_NAME_FIELDS = {"lags[].name", "interfaces[].lag_member_of"}`.
+Names not matching a documented LAG shape (loopback / VLAN /
+physical-port / free-form interface names) fall through to raw
+equality, so non-LAG drift on the same fields still surfaces
+normally.  Added in commit `faf925f` (Wave 9β); the seven variance
+classes remain unchanged — this just shifts where individual cells
+land between ALIGNED and CODEC_BUG.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell

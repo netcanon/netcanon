@@ -11,10 +11,15 @@ tests/
 │   ├── definitions.py       Pre-built DeviceDefinition factory functions
 │   └── ssh_responses.py     Canned SSH output strings per vendor
 ├── unit/                    Pure-function tests, no I/O
-│   ├── test_schema.py       Pydantic schema validation
+│   ├── test_schema.py       Pydantic schema validation (incl. type_key filename-safety)
 │   ├── test_loader.py       DefinitionLoader (file parsing, priority resolution)
-│   ├── test_storage.py      FileConfigStore (save / list / get / delete)
-│   └── test_models.py       BackupJob, DeviceCredentials, etc.
+│   ├── test_storage.py      FileConfigStore (save / list / get / delete + canonical type_key round-trips)
+│   ├── test_models.py       BackupJob, DeviceCredentials, etc.
+│   ├── definitions/         Per-vendor device-definition YAML lock-in tests
+│   ├── tools/               Audit-harness scripts (run_full_mesh, run_phase4_reconciliation)
+│   ├── api/                 API helper unit tests
+│   ├── audit/               Reconciler-internal unit tests
+│   └── migration/           Codec + canonical-layer unit tests
 ├── integration/             API-level tests via FastAPI TestClient
 │   ├── conftest.py          TestClient fixture with mocked get_collector
 │   ├── test_definitions_api.py

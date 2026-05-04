@@ -18,6 +18,12 @@ Filenames encode all metadata using the convention::
 
 e.g. ``Cisco_192-168-1-1_20260414_120000.cfg``
 
+The ``DeviceType`` segment is the device definition's ``type_key``;
+it must not contain ``_`` or ``.`` (both classes are rejected by
+``DeviceDefinition.type_key_filename_safe`` at load time).  Single-
+token CamelCase vendor keys (``Cisco``, ``Aruba``, ``Juniper``, …)
+are the established convention.
+
 Dots and colons in host addresses are replaced with hyphens so filenames are
 safe on all platforms.  The metadata fields (device type, host, timestamp) are
 recovered by parsing the filename, making the directory self-describing without
