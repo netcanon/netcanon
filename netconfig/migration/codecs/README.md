@@ -297,6 +297,23 @@ the policy locally:
   form, OPNsense's `<vlans>`-only) still produce L2 config on the
   target side.
 
+* **`netconfig/migration/canonical/transforms.py::project_svi_to_vlan`**
+  — synthesises `CanonicalVlan` records from L3 SVI interfaces
+  (`Vlan100`, `irb.100`, etc.) when the source-side parser
+  populates the iface but not the corresponding VLAN.  Added in
+  Wave 7c (commit `ce9725d`) as a shared helper after both
+  arista_eos and cisco_iosxe (NETCONF) parsers grew the same
+  pattern independently; consolidated to keep the SVI-fold
+  semantics consistent across codecs.
+
+* **`netconfig/migration/canonical/transforms.py::_natural_port_sort_key`**
+  — natural-sort key for port-name strings (`1/1, 1/2, 1/10` rather
+  than lex `1/1, 1/10, 1/2`).  Used by `project_switchport_to_vlan`
+  and the Junos parser's port-list materialisation to guarantee
+  cross-vendor list-order parity in `vlan.tagged_ports` /
+  `vlan.untagged_ports`.  Wave 7c (commit `87b2248`) added this as
+  the systemic fix for cross-vendor lexical-order drift.
+
 When you find yourself wanting per-codec versions of "is this hash
 re-emittable?", "is this name CLI-safe?", or "what does VLAN N's
 tagged-port set look like?", add to one of the helpers above

@@ -11,6 +11,103 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Fixed (Wave 7c — long-tail cross-mesh codec bugs cleared from 42 to 0)
+
+Seven parallel agents (one per source-vendor) walked the post-
+Wave-9 reconciliation matrix and resolved every remaining
+`CODEC_BUG` cell.  Cumulative matrix delta:
+
+  ALIGNED                    2242 → 2298 (+56)
+  CODEC_BUG                  42   → 0    (-42, FULL CLEAR)
+  EXPECTED_LOSSY             942  → 944  (+2)
+  EXPECTED_UNSUPPORTED       493  → 514  (+21)
+  METHODOLOGY_ISSUE_under    7350 → 7378 (+28)
+  STRUCTURAL_ONLY            876  → 810  (-66)
+
+Notable codec fixes during the wave:
+
+* **Cisco IOS-XE CLI: `secondary` IPv4 keyword** (commit `87b2248`,
+  Agent C).  Coordinated render+parse fix at
+  `cisco_iosxe_cli/render.py:259-262` and `parse.py:576-585`.
+  Render now emits `ip address X.X.X.X MASK secondary` for index>=1;
+  parser drops the prior primary-only guard.
+* **Arista EOS: phantom-VLAN guard + `switchport trunk native vlan`
+  parse symmetry** (commit `87b2248`, Agent C).  Cross-vendor trunk
+  configs were re-inflating canonical VLAN records on parse round-
+  trip; snapshot-and-prune now mirrors the cisco_iosxe_cli pattern.
+* **Cisco IOS-XE NETCONF: SVI-to-VLAN synthesis** (commit `1b1b865`,
+  Agent D).  `Vlan<N>` SVI interfaces now synthesise
+  `CanonicalVlan` records via the new shared
+  `transforms.project_svi_to_vlan` helper.
+* **Aruba AOS-S: foreign-port-name preservation + RADIUS port grammar**
+  (commits `ce9725d` Agent A, `c344200` Agent G).  Junos-shape ports
+  (`xe-0/0/N`, `et-0/0/N`) now survive round-trip without range-
+  shredding; `radius-server host <ip> auth-port N acct-port N`
+  cumulative-update grammar accepted on parse + emitted on render
+  when ports differ from AOS-S defaults.
+* **Aruba AOS-S: SVI absorption ignored VRF binding on `irb.<vid>`
+  interfaces** (commit `7fd8b14`, Agent B).  Render now skips
+  `iface.vrf`-set entries in `iface_by_vlan_id`.
+* **Juniper Junos: phantom `ae<N>` interface elision** (commit
+  `2d7a7f2`, Agent E).  Junos parse materialisation loop now skips
+  empty iface_state entries whose names appear in lag_state — the
+  CanonicalLAG record alone carries LAG identity.  This correction
+  also debunked a stale Phase 4b "interface-range collapse"
+  hypothesis that had been the assumed root cause for ~3 cells.
+* **Arista EOS: RADIUS render + parse path** (commit `ce9725d`,
+  Agent A).  Closes a count-regression on aruba→arista where source
+  RADIUS servers were being silently dropped by the Arista codec.
+* **Cross-vendor list-order parity** (commit `87b2248`, Agent C).
+  New `transforms._natural_port_sort_key` resolves lexical-order
+  drift on `vlan.tagged_ports` / `vlan.untagged_ports` across all
+  codecs that produce port-list outputs (`1/1, 1/2, 1/10` rather
+  than lex `1/1, 1/10, 1/2`).
+* **Arista EOS: cross-vendor LAG-name normalisation** (commit
+  `ce9725d`, Agent A).  Render now accepts ae/Port-channel/Trk/
+  bond/lagg shapes via shared `_normalise_lag_name_to_arista`,
+  emitting them as the EOS-canonical `Port-Channel<N>` form.
+* **FortiGate CLI: static-route `set comment` parser-side gap**
+  (commit `1b1b865`, Agent F).  `_apply_router_static` now reads
+  `set comment "<text>"` back into `CanonicalStaticRoute.description`
+  (the render side was already emitting; the gap was pinned by a
+  test in commit `60b6199` from an earlier wave).
+* **MikroTik RouterOS: hostname whitespace policy** (commit
+  `1b1b865`, Agent F).  Multi-token RouterOS identity values
+  reclassified `good → lossy` for arista_eos and cisco_iosxe_cli
+  targets — Arista's parser regex `\s*$` rejects multi-token names,
+  Cisco IOS-XE captures only the first `\S+` token; the
+  `sanitise_hostname` substitution is wire-format-correct and
+  documented per HPE Aruba 2930F config guide etc.
+
+The final 3 cells were all `interfaces[].name` count drifts on the
+`cisco_iosxe → {aruba, junos, mikrotik} / kitchen_sink.xml` fixture
+and reflect documented vendor-wire constraints (foreign-name stub
+elision on aruba/junos; phantom `bridge1` synthesised by RouterOS
+to host source-side VLAN sub-interfaces).  Reclassified `good →
+lossy` with explanatory rationale (commit `ec607d8`).
+
+### Added (Wave 7c shared utilities)
+
+Three new helpers in `netconfig/migration/canonical/transforms.py`
+landed during Wave 7c, consolidating patterns that codecs had
+started growing independently:
+
+* **`project_svi_to_vlan(intent)`** — synthesise `CanonicalVlan`
+  records from L3 SVI interfaces (`Vlan100`, `irb.100`, etc.).
+  Codecs whose source-format carries SVIs but not their backing
+  VLAN call this as a parse post-pass.
+* **`_natural_port_sort_key(name)`** — natural-sort key for
+  port-name strings.  Used by `project_switchport_to_vlan` and
+  the Junos parser's port-list materialisation to guarantee
+  cross-vendor list-order parity.
+* **`_normalise_lag_name_to_arista(name)`** in
+  `netconfig/migration/codecs/arista_eos/render.py` — accepts
+  ae / Port-channel / Trk / bond / lagg shapes and emits as the
+  EOS-canonical `Port-Channel<N>` form.
+
+`netconfig/migration/codecs/README.md` "Cross-codec shared utilities"
+section gains entries for the two `transforms.py` helpers.
+
 ### Added (Phase 1 backup-definition expansion: Arista EOS / Aruba AOS-S / Juniper Junos)
 
 Three new device-definition YAMLs land alongside the existing
