@@ -239,4 +239,5 @@ tests use these exclusively — never CSS classes or element structure.  See
 
 - [`README.md`](README.md) — project orientation and quickstart
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer design and migration pipeline
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing capabilities + known limitations (cross-referenced against in-app limitation messages)
 - [`tests/README.md`](tests/README.md) — test-suite layout and mocking strategy
