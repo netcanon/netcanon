@@ -410,14 +410,15 @@ per_field_expectation:
     references: [fgt-vrf-vdom, opn-vrf]
 
   vlans:
-    disposition: lossy
-    reason: >
-      The list itself round-trips for the id field.  Per-VLAN
-      sub-fields collapse or drop — see ``vlans[].*`` entries below.
-      Both vendors share the unusual idiom of modelling VLANs as
-      802.1Q child interfaces (NOT VLAN-centric port lists), which
-      makes this pair relatively clean compared to switch-to-firewall
-      pairs.
+    disposition: good
+    note: >
+      The list itself round-trips at the list / id level — both
+      vendors share the unusual idiom of modelling VLANs as 802.1Q
+      child interfaces (NOT VLAN-centric port lists), which makes
+      this pair relatively clean compared to switch-to-firewall
+      pairs.  Per-VLAN sub-field caveats (collapse or drop) are
+      documented per ``vlans[].*`` entries below rather than
+      bundled into a single ``lossy`` claim on the list itself.
     references: [fgt-vlans, opn-vlans]
 
   vlans[].id:

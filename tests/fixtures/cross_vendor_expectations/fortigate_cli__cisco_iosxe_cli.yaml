@@ -191,20 +191,20 @@ per_field_expectation:
     references: [interface_naming, ip_addressing, switchport, lags]
 
   vlans:
-    disposition: lossy
-    reason: >
-      VLAN id round-trips cleanly.  FortiGate uses the interface
-      edit ID as canonical VLAN name (``VL_100``); Cisco renders
-      ``vlan 100 / name VL_100`` which is mechanical but not
-      operator-readable.  Per-VLAN description is empty after
-      FortiGate parse.  The VLAN-centric port list (``tagged_ports``
-      / ``untagged_ports``) is empty after FortiGate parse —
-      FortiGate's child-interface model encodes membership via the
-      parent's identity, not as a port list per VLAN.  Cross-vendor
-      migration on FortiGate -> Cisco loses port-membership intent;
-      the operator must manually configure ``switchport access vlan
-      X`` on the Cisco target.  vlans[].ipv4_addresses (SVI) does
-      round-trip cleanly via the FortiGate VL-iface ``set ip``.
+    disposition: good
+    note: >
+      The CanonicalVlan list itself round-trips cleanly at the
+      list / id level: FortiGate ``set type vlan / set vlanid <N>``
+      child interfaces project to canonical entries; Cisco renders
+      ``vlan <N>`` declarations that re-parse with matching ids.
+      Per-VLAN sub-field caveats: name (mechanical FortiGate edit-
+      ID -> Cisco name; not operator-readable but lossless), per-
+      VLAN description / tagged_ports / untagged_ports empty after
+      FortiGate parse — child-interface model encodes membership
+      via the parent's identity, not as a port list per VLAN, so
+      operator must manually configure ``switchport access vlan
+      X`` on the Cisco target.  vlans[].ipv4_addresses (SVI)
+      round-trips via the FortiGate VL-iface ``set ip``.
     references: [vlans]
 
   static_routes:
