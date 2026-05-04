@@ -1,0 +1,65 @@
+# Juniper Junos 22.x — current LTS train (22.4R is the published LTS).
+#
+# Pairs with the Juniper Junos migration codec at
+# ``netconfig/migration/codecs/juniper_junos`` so devices backed up via
+# this definition produce the exact ``set``-form text the codec parses.
+# The codec auto-detects block-form input as well, but ``| display set``
+# is the canonical paste shape and avoids the conversion path.
+
+vendor: Juniper
+os: Junos
+version_match: "^22\\."        # any 22.x release (22.1R / 22.4R LTS / etc.)
+type_key: Juniper              # primary lookup key (unique across vendors)
+priority: 10                   # higher than family-base 0; family-base 22.x file
+
+file_extension: cfg
+
+connection:
+  needs_enable: false          # operational mode is the default landing prompt
+  cisco_more_paging: false     # Junos uses ``| no-more`` instead of --More-- paging
+  opnsense_shell_menu: false
+
+commands:
+  pre: []                      # ``| no-more`` on the config command suppresses paging
+  config: "show configuration | display set | no-more"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+>\s*$'              # operational mode: ``user@host>``
+    - '^\{master[^}]*\}\s*$'   # chassis-cluster prefix line e.g. ``{master:0}``
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: juniper_junos
+
+probe:
+  # Pre-backup ``show version`` probe.  Populates DeviceProfile.detected_facts
+  # so operators see what Junos actually reports, and feeds
+  # DefinitionLoader.resolve() so a future 22.4 / 23.x overlay would be
+  # picked when the device runs that release.  Probe failure is non-fatal —
+  # the backup falls back to this family-base definition.
+  command: "show version"
+  patterns:
+    # Capture major.minor only ("22.4") to match overlay os_version pins
+    # rather than full "22.4R3-S2.5" patch strings.  Junos prints the
+    # release as ``Junos: 22.4R3-S2.5`` on EX/QFX/MX and via
+    # ``JUNOS Software Release [22.4R3]`` on SRX — the first form is
+    # universal so we anchor on it.
+    detected_os_version: "^Junos:\\s+(\\d+\\.\\d+)"
+    # Hardware model from the leading ``Model:`` line, e.g.
+    # ``Model: srx340`` -> ``srx340``.  Covers SRX / EX / QFX / MX
+    # families uniformly — the line is identical across chassis types.
+    detected_model: "^Model:\\s+(\\S+)"
+    # Hostname is reported on a leading ``Hostname:`` line in
+    # ``show version`` — useful asset-audit signal even though the
+    # backup pipeline doesn't consume it for definition resolution.
+    detected_hostname: "^Hostname:\\s+(\\S+)"
+
+notes: >
+  Juniper Junos 22.x.  Operational-mode landing — no enable escalation.
+  Paging is suppressed by appending ``| no-more`` to the config command;
+  ``terminal length 0`` does not exist on Junos and is unnecessary here.
+  ``| display set`` flattens the hierarchical config to ``set`` statements,
+  which is the canonical paste form the juniper_junos migration codec
+  parses (block-form is also auto-detected).

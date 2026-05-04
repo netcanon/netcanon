@@ -162,6 +162,22 @@ only via `resolve()`.
   Software revision (e.g. `WC.16.10.0023`), Hardware (chassis SKU + name)
   and Serial Number; patterns anchor per-line via re.MULTILINE.
 
+### Juniper Junos 22.x
+- `collector.netmiko_device_type: juniper_junos` — netmiko's canonical Junos
+  driver; lands in operational mode (`>` prompt) which is sufficient for
+  `show configuration`.  No enable-mode equivalent on Junos.
+- `commands.config: "show configuration | display set | no-more"` —
+  `| display set` flattens the hierarchical config to flat `set` statements
+  (the canonical paste form the `juniper_junos` migration codec parses);
+  `| no-more` suppresses the operational-mode pager so the whole config
+  streams without space-injection.  CLAUDE.md hard rule: never
+  `terminal length 0` (and Junos doesn't have it anyway).
+- `connection.cisco_more_paging: false` — `| no-more` is the Junos
+  equivalent and is applied via the config command itself.
+- `probe.command: show version` — leading `Hostname:` / `Model:` / `Junos:`
+  lines are uniform across SRX / EX / QFX / MX chassis families; regexes
+  capture `major.minor` from the Junos line for overlay-pin matching.
+
 ---
 
 ## See also
