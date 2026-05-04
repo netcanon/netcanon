@@ -92,6 +92,34 @@ by concern and listed alphabetically within each section.
   `definitions/target_profiles/<vendor>/<model>.yaml`. Drives port
   rename and VLAN/user fit-checks in the UI.
 
+## Phase 4 reconciliation
+
+- **ALIGNED** — Phase 4 variance class for a per-cell field that
+  was preserved on round-trip AND expected to be preserved per the
+  Phase 3 vendor-doc-grounded YAML.  Severity: ok.
+- **CODEC_BUG** — Phase 4 variance class for a field that drifted
+  on round-trip when the docs say it should have been preserved.
+  Severity: high — the actionable pile for codec authors.
+- **EXPECTED_LOSSY / EXPECTED_UNSUPPORTED** — Phase 4 variance
+  classes confirming that drift matches a documented vendor
+  limitation or capability gap.  Severity: ok (no codec work
+  required).
+- **METHODOLOGY_ISSUE_under / METHODOLOGY_ISSUE_over** — Phase 4
+  variance classes flagging that the Phase 3 expectation YAML
+  disagrees with reality (the codec preserved a field marked
+  `lossy`, or drifted on a field marked `not_applicable`).
+  Severity: low/medium — usually a docs/expectation update.
+- **STRUCTURAL_ONLY** — Phase 4 sub-class on per-cell drift where
+  every drift signal in a list-shaped field reduces to ordering /
+  representation noise rather than semantic content change.  Used
+  by the Phase 4 comparator to collapse a noisy fan-out into a
+  single signal per cell.
+- **TRIVIAL_EMPTY** — Phase 4 sub-class for fields that drifted
+  only because one side held an empty container (`[]`, `{}`, `""`)
+  and the other held `None`, or vice versa.  Treated as no-signal
+  in the reconciliation summary; useful for filtering audit noise
+  on cells with no real divergence.
+
 ## See also
 
 - [`../README.md`](../README.md) — project orientation and quickstart

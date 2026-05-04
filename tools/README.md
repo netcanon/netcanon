@@ -153,6 +153,7 @@ unsupported / not_applicable, from Phase 3) and bucketed into one of:
 | `ALIGNED`                 | preserved + expected good                                     | ok       |
 | `EXPECTED_LOSSY`          | drifted + expected lossy (matches docs)                       | ok       |
 | `EXPECTED_UNSUPPORTED`    | drifted + expected unsupported (matches docs)                 | ok       |
+| `TRIVIAL_EMPTY`           | drift only because one side held `[]` / `{}` / `""` and the other held `None`; no semantic divergence | ok |
 | `METHODOLOGY_ISSUE_under` | preserved against {lossy/unsupported/N-A} expectation         | low/medium |
 | `METHODOLOGY_ISSUE_over`  | drifted against `not_applicable` expectation                  | low      |
 | `CODEC_BUG`               | drifted + expected good (the docs/code disagreement to fix)   | **high** |
@@ -192,3 +193,12 @@ python tools/run_phase4_reconciliation.py --mesh-json \
   triage each CODEC_BUG finding for an assigned source vendor, and
   produce a per-vendor findings report at
   `tests/fixtures/real/phase4_findings_<source_vendor>.md`.
+
+---
+
+## See also
+
+- [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md) — per-codec real-capture parse certification state
+- [`../tests/fixtures/real/CROSS_MESH_RESULTS.md`](../tests/fixtures/real/CROSS_MESH_RESULTS.md) — Phase 1 mechanical drift matrix produced by `run_full_mesh.py`
+- [`../tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md) — Phase 4a reconciliation skeleton produced by `run_phase4_reconciliation.py`
+- [`../docs/glossary.md`](../docs/glossary.md) — variance-class vocabulary (ALIGNED, CODEC_BUG, TRIVIAL_EMPTY, etc.)

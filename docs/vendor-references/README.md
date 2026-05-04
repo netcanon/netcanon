@@ -89,3 +89,7 @@ the per-field assessment against.
   for the per-pair YAML files this directory backs.
 - `tests/fixtures/real/CROSS_MESH_RESULTS.md` — Phase 1 mechanical
   fidelity matrix that motivates the per-pair grounding.
+- `tools/run_phase4_reconciliation.py` — the Phase 4a reconciler that
+  joins the Phase 1 drift JSON with the per-pair expectation YAMLs
+  this directory backs to bucket each cell into ALIGNED / CODEC_BUG /
+  EXPECTED_LOSSY / etc.

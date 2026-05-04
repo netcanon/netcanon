@@ -118,3 +118,11 @@ which has no pre-built wheel for Python ≥ 3.13 and fails to compile without a
 All `show()` / `hide()` / `destroy()` calls are posted via
 `QMetaObject.invokeMethod(..., QueuedConnection)` so they are safe to call from
 the pystray background thread.
+
+---
+
+## See also
+
+- [`../README.md`](../README.md) — project orientation and quickstart (web + desktop share the same FastAPI backend)
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the four-layer design that desktop wraps
+- [`../CLAUDE.md`](../CLAUDE.md) — parallel-platform contributor directives (the "feature parity" rule lives here)

@@ -25,7 +25,13 @@ ignores directory names.  Use the tree to keep things organised.
 vendor: Cisco                      # Human-readable vendor name (shown in UI)
 os: IOS-XE                         # OS or firmware name
 version_match: "^17\\."            # Regex matched against detected version (future)
-type_key: Cisco                    # Lookup key; must be unique (priority wins on collision)
+type_key: Cisco                    # Lookup key; must be unique (priority wins on collision).
+                                   # MUST NOT contain '_' or '.' — file_store builds backup
+                                   # filenames as ``{type_key}_{safe_host}_{YYYYMMDD_HHmmss}.{ext}``
+                                   # and embeds the extension as ``.{ext}``; underscores or dots
+                                   # in type_key make round-trip parsing ambiguous.  Use plain
+                                   # words (Cisco, Arista, Aruba, Juniper, MikroTik, OPNsense,
+                                   # Fortigate).  Validator enforces this at load time.
 priority: 10                       # Higher values override lower within the family-base set
 
 # ── Overlay qualifiers (layered definitions) ────────────────────────────────

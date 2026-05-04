@@ -80,6 +80,25 @@ This is the backup-layer counterpart to the migration layer's target
 profiles — both subsystems share the vendor slug but have distinct
 schemas.
 
+### `type_key` filename-safe validator
+
+`DeviceDefinition.type_key` is enforced at load time to contain
+neither `_` (underscore) nor `.` (dot).  The constraint exists
+because `netconfig/storage/file_store.py` builds backup filenames as
+`{type_key}_{safe_host}_{YYYYMMDD_HHmmss}.{ext}` and embeds the
+extension as a literal `.{ext}` suffix.  An underscore or dot in
+`type_key` makes round-trip filename parsing ambiguous (e.g.
+`Cisco_IOSXE_routerA_20250101_000000.cfg` vs
+`Cisco_routerA_20250101_000000.cfg` — was `IOSXE` part of the
+type or the hostname?).
+
+Use plain words for `type_key` (Cisco, Arista, Aruba, Juniper,
+MikroTik, OPNsense, Fortigate).  The Pydantic validator raises a
+`ValidationError` at load time on offending YAML, which the loader
+logs as a `WARNING` and skips per the standard error-handling rules
+above.  Existing definitions are conformant; the validator's role is
+to keep new contributions safe.
+
 ### Probe config (`probe`)
 
 A `probe` block on a definition configures a pre-backup "show version"

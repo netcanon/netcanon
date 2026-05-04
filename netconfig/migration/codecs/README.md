@@ -85,8 +85,11 @@ at module level in ``codec.py`` to preserve the cross-codec import
 surface every other codec's ``iter_xpaths`` reuses), and
 **juniper_junos** (two-pass groups-then-top-level dispatch +
 block-form-to-set-form conversion both kept cohesive in
-``parse.py``).  All shipped CLI/XML codecs now follow the split;
-the pattern generalises cleanly to future codecs.  Tests that pin internal symbols
+``parse.py``).  All shipped CLI/XML codecs now follow the split
+EXCEPT `cisco_iosxe` (NETCONF), whose `codec.py` keeps the parse +
+render paths inline because its XML-tree traversal differs enough
+from the CLI-text codecs that the split offered no clarity win;
+the pattern generalises cleanly to future CLI/XML codecs.  Tests that pin internal symbols
 (``_parse_blocks``, ``_prefix_to_mask``, ``_trim_xml_envelope``,
 ``_format_port_list``, ``_parse_port_list``) should import via
 re-export in `codec.py` so the split doesn't break them — see
@@ -244,10 +247,13 @@ Each field on `CanonicalIntent` / `CanonicalInterface` /
 `docs/adding-a-canonical-field.md` at the repo root for the MTU
 wire-through as a worked example.
 
-Rule of thumb: one feature, one commit touching all 5 codecs.  The
-Tier 2 wire-throughs (SNMP v1/v2c + v3 USM, LAGs, local_users, DHCP, RADIUS, MTU)
-each landed as a single commit per feature with regression tests in
-a dedicated `test_<feature>_wire_through.py` file.
+Rule of thumb: one feature, one commit touching every bidirectional
+codec (8 currently shipped: `cisco_iosxe_cli`, `cisco_iosxe`,
+`aruba_aoss`, `opnsense`, `mikrotik_routeros`, `fortigate_cli`,
+`arista_eos`, `juniper_junos`).  The Tier 2 wire-throughs (SNMP
+v1/v2c + v3 USM, LAGs, local_users, DHCP, RADIUS, MTU) each landed as
+a single commit per feature with regression tests in a dedicated
+`test_<feature>_wire_through.py` file.
 
 ---
 
@@ -301,10 +307,13 @@ the policy locally:
   — synthesises `CanonicalVlan` records from L3 SVI interfaces
   (`Vlan100`, `irb.100`, etc.) when the source-side parser
   populates the iface but not the corresponding VLAN.  Added in
-  Wave 7c (commit `ce9725d`) as a shared helper after both
-  arista_eos and cisco_iosxe (NETCONF) parsers grew the same
-  pattern independently; consolidated to keep the SVI-fold
-  semantics consistent across codecs.
+  Wave 7c (commit `ce9725d`) as a shared helper after the same
+  pattern emerged independently in multiple CLI codecs; currently
+  called by `arista_eos` (and propagation to other CLI codecs is
+  ongoing).  The `cisco_iosxe` NETCONF codec retains its own
+  private SVI-absorption helper because its XML-shaped traversal
+  doesn't match the shared CLI-oriented signature; aligning the
+  two is a separate follow-up.
 
 * **`netconfig/migration/canonical/transforms.py::_natural_port_sort_key`**
   — natural-sort key for port-name strings (`1/1, 1/2, 1/10` rather
@@ -313,6 +322,18 @@ the policy locally:
   cross-vendor list-order parity in `vlan.tagged_ports` /
   `vlan.untagged_ports`.  Wave 7c (commit `87b2248`) added this as
   the systemic fix for cross-vendor lexical-order drift.
+
+* **LAG-name canonicalisation helpers** — `_canonical_lag_name`
+  (Wave 10γ-3) and `_normalise_lag_name_to_arista` (Wave 7c) live
+  in `netconfig/migration/canonical/transforms.py` (or the
+  per-codec port-name modules that re-export them) and normalise
+  vendor LAG forms (`Port-Channel1`, `Bundle-Ether10`, `ae0`,
+  `lag1`, `Trk1`) onto a single canonical handle so cross-codec
+  renders find each other through the rename mesh.  When adding a
+  new codec that emits a LAG container, route through these helpers
+  rather than coining a private normaliser — the cross-mesh tests
+  in `tests/unit/migration/test_cross_codec_matrix.py` rely on the
+  shared canonical form.
 
 When you find yourself wanting per-codec versions of "is this hash
 re-emittable?", "is this name CLI-safe?", or "what does VLAN N's

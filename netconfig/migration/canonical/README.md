@@ -49,7 +49,7 @@ lives entirely in `../codecs/`.
 
 | File | Role |
 |---|---|
-| `transforms.py` | `project_switchport_to_vlan` (port-centric → VLAN-centric mirror, used by Cisco-family codecs at the end of `parse()`), `project_vlan_to_switchport` (the reverse, with `synthesise_missing` to build interface stanzas when a VLAN-centric source renders into a port-centric target), and `_natural_port_sort_key` (deterministic operator-natural ordering for synthesis output). |
+| `transforms.py` | `project_switchport_to_vlan` (port-centric → VLAN-centric mirror, used by Cisco-family codecs at the end of `parse()`), `project_vlan_to_switchport` (the reverse, with `synthesise_missing` to build interface stanzas when a VLAN-centric source renders into a port-centric target), `project_svi_to_vlan` (synthesises `CanonicalVlan` records from L3 SVI interfaces — `Vlan100`, `irb.100` — when a source-side parser populates the iface but not the corresponding VLAN; added Wave 7c so `arista_eos` and other CLI codecs share the same SVI-fold semantics), and `_natural_port_sort_key` (deterministic operator-natural ordering for synthesis output). |
 
 **Rename orchestrators**
 
