@@ -452,3 +452,213 @@ def test_mixed_drift_example() -> None:
     assert out["static_routes"]["preserved"] is False
     assert out["dhcp_servers"]["preserved"] is False
     assert out["dhcp_servers"]["target_count"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Wave 10γ — sub-field cascade for trivially-empty sub-fields
+#
+# Gap reported by Wave 10β-A / 10β-C: TRIVIAL_EMPTY fires at parent-list
+# level only.  When the parent list HAS rows but every row's sub-field is
+# empty on both sides (e.g. ``interfaces`` populated but every interface
+# has ``switchport_mode=None``), Phase 4 currently cascades sub-field as
+# ``preserved``, generating false METHODOLOGY_under signals on
+# ``interfaces[].switchport_mode``, ``interfaces[].vrf``,
+# ``interfaces[].voice_vlan`` etc.  Phase 1 must record per-list
+# ``subfields_with_data`` so Phase 4 can detect the trivial case.
+# ---------------------------------------------------------------------------
+
+
+def test_subfields_with_data_lists_only_populated_subfields() -> None:
+    """When ``interfaces`` has 3 rows on both sides and only ``name`` +
+    ``mtu`` carry data (every other sub-field is the model default), the
+    parent record's ``subfields_with_data`` must contain ``name`` + ``mtu``
+    and exclude ``switchport_mode`` / ``voice_vlan`` / ``vrf`` etc."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(name="eth0", mtu=1500),
+            CanonicalInterface(name="eth1", mtu=9000),
+            CanonicalInterface(name="eth2", mtu=1500),
+        ]
+    )
+    out = compute_field_disposition(intent, intent)
+    rec = out["interfaces"]
+    assert rec["preserved"] is True
+    swd = rec.get("subfields_with_data")
+    assert swd is not None, (
+        "interfaces parent record must carry subfields_with_data so the "
+        "Phase 4 sub-field cascade can detect trivially-empty sub-fields"
+    )
+    assert "name" in swd
+    assert "mtu" in swd
+    # Sub-fields with default / empty values across every record must NOT
+    # appear — those are trivially-empty and Phase 4 cascades to
+    # TRIVIAL_EMPTY for them.
+    assert "switchport_mode" not in swd
+    assert "voice_vlan" not in swd
+    assert "vrf" not in swd
+    assert "trunk_native_vlan" not in swd
+
+
+def test_subfields_with_data_includes_subfield_if_any_record_has_data() -> None:
+    """If even ONE record has a populated sub-field, that sub-field counts
+    as having data — the cascade should NOT mark it trivially-empty."""
+    intent = CanonicalIntent(
+        interfaces=[
+            CanonicalInterface(name="eth0"),
+            CanonicalInterface(name="eth1", switchport_mode="access"),
+            CanonicalInterface(name="eth2"),
+        ]
+    )
+    out = compute_field_disposition(intent, intent)
+    swd = out["interfaces"]["subfields_with_data"]
+    assert "switchport_mode" in swd
+
+
+def test_subfields_with_data_absent_when_list_is_empty() -> None:
+    """An empty parent list trivially has no sub-fields; we don't bother
+    emitting an empty list — the parent's ``trivially_preserved=True``
+    already drives the cascade.  Either absent or empty is acceptable."""
+    intent = CanonicalIntent()
+    out = compute_field_disposition(intent, intent)
+    rec = out["interfaces"]
+    assert rec["preserved"] is True
+    assert rec.get("trivially_preserved") is True
+    swd = rec.get("subfields_with_data")
+    # Tolerate either absent or empty list — the cascade reads the parent
+    # ``trivially_preserved`` flag first.
+    assert swd is None or swd == []
+
+
+def test_subfields_with_data_unions_source_and_target_records() -> None:
+    """The union must look across both source AND target sides — if the
+    source has zero rows but the target acquired rows with sub-fields
+    populated, the parent drifted (different counts) but the trivial-empty
+    cascade should still see the target's populated sub-fields."""
+    src = CanonicalIntent(
+        vlans=[CanonicalVlan(id=10, name="USERS")],
+    )
+    tgt = CanonicalIntent(
+        vlans=[CanonicalVlan(id=10, name="USERS", description="primary")],
+    )
+    out = compute_field_disposition(src, tgt)
+    swd = out["vlans"]["subfields_with_data"]
+    # ``description`` populated on target side only — still counts.
+    assert "id" in swd
+    assert "name" in swd
+    assert "description" in swd
+
+
+# ---------------------------------------------------------------------------
+# Wave 10γ — drift-summary cap-of-5 truncation
+#
+# Gap reported by Wave 10β-A: ``_list_drift_summary`` capped per-record
+# drift output at 5 records.  When 6+ records drift, records 6+ became
+# invisible to Phase 4's per-record drill-down — their sub-fields appear
+# preserved when they're actually drifted.  Example: leaf2a fixture
+# where 5 LAG drifts saturated the cap, hiding switchport_mode drifts on
+# records 6+.  Fix: remove the cap entirely; per-record diff dicts are
+# small and the .md output already truncates at display time.
+# ---------------------------------------------------------------------------
+
+
+def test_drift_summary_does_not_cap_per_record_drilldown() -> None:
+    """6+ differing records must all surface in the drift drill-down so
+    Phase 4 can detect per-record sub-field drift on records 5+."""
+    # Use ``vlans`` because it carries a ``description`` sub-field.
+    src_vlans = [
+        CanonicalVlan(id=10 + i, name=f"V{i}", description=f"src-{i}")
+        for i in range(8)
+    ]
+    tgt_vlans = [
+        CanonicalVlan(id=10 + i, name=f"V{i}", description=f"tgt-{i}")
+        for i in range(8)
+    ]
+    src = CanonicalIntent(vlans=src_vlans)
+    tgt = CanonicalIntent(vlans=tgt_vlans)
+    out = compute_field_disposition(src, tgt)
+    rec = out["vlans"]
+    assert rec["preserved"] is False
+    drift = rec["drift"]
+    assert isinstance(drift, dict)
+    # Pre-fix: ``...`` sentinel + only 5 records visible.  Post-fix:
+    # every differing record is in the dict, no truncation sentinel.
+    assert "..." not in drift, (
+        "_list_drift_summary should not cap per-record drift drill-down — "
+        f"records 6+ become invisible to Phase 4.  Got truncation: {drift!r}"
+    )
+    real_record_keys = [k for k in drift if k != "..."]
+    assert len(real_record_keys) == 8
+
+
+def test_drift_summary_uncap_surfaces_late_record_subfield_drift() -> None:
+    """Specifically: record at index 5 (beyond pre-fix cap of 5) must
+    appear in the drift dict so the Phase 4 per-record drill-down can
+    detect its sub-field drift.  Models the leaf2a fixture scenario
+    Wave 10β-A reported.
+
+    8 LAGs on each side: records 0-4 drift on ``mode``, record 5 drifts
+    on a DIFFERENT sub-field (``members``) so that, pre-fix, record 5's
+    sub-field signal would be hidden by the cap.  Post-fix, both
+    drift signals surface.
+    """
+    src_lags = [
+        CanonicalLAG(name=f"Po{i}", mode="active") for i in range(5)
+    ]
+    src_lags.append(
+        CanonicalLAG(name="Po5", members=["eth0", "eth1"], mode="active"),
+    )
+    src_lags.extend([
+        CanonicalLAG(name=f"Po{i}", mode="active") for i in range(6, 8)
+    ])
+    tgt_lags = [
+        CanonicalLAG(name=f"Po{i}", mode="passive") for i in range(5)
+    ]
+    tgt_lags.append(
+        CanonicalLAG(
+            name="Po5", members=["eth2", "eth3"], mode="active",
+        ),
+    )
+    tgt_lags.extend([
+        CanonicalLAG(name=f"Po{i}", mode="active") for i in range(6, 8)
+    ])
+    src = CanonicalIntent(lags=src_lags)
+    tgt = CanonicalIntent(lags=tgt_lags)
+    out = compute_field_disposition(src, tgt)
+    drift = out["lags"]["drift"]
+    assert isinstance(drift, dict)
+    # Record 5 must be present in the drift dict, not hidden behind a
+    # truncation sentinel.  Identify the entry whose key references Po5.
+    po5_diff = next(
+        (v for k, v in drift.items() if "Po5" in k),
+        None,
+    )
+    assert po5_diff is not None, (
+        f"record 5 (Po5) drift must surface in the drift dict; "
+        f"got keys: {list(drift)}"
+    )
+    assert "members" in po5_diff
+
+
+def test_drift_summary_with_only_a_few_drifts_still_works() -> None:
+    """Regression guard: removing the cap must not change behaviour for
+    the small-drift case — fewer than 5 differing records still produces
+    a well-formed drift dict with no spurious truncation sentinel."""
+    src = CanonicalIntent(
+        vlans=[
+            CanonicalVlan(id=10, name="USERS", description="primary"),
+            CanonicalVlan(id=20, name="VOICE"),
+        ]
+    )
+    tgt = CanonicalIntent(
+        vlans=[
+            CanonicalVlan(id=10, name="USERS", description=""),
+            CanonicalVlan(id=20, name="VOICE"),
+        ]
+    )
+    out = compute_field_disposition(src, tgt)
+    drift = out["vlans"]["drift"]
+    assert isinstance(drift, dict)
+    assert "..." not in drift
+    # Only one record differs; only one entry expected.
+    real_keys = [k for k in drift if k != "..."]
+    assert len(real_keys) == 1

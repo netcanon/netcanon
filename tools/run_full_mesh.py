@@ -296,6 +296,19 @@ def compute_field_disposition(
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
+            # Wave 10γ: list parent-records carry the union of sub-field
+            # names that have non-empty data on at least one record across
+            # BOTH sides.  Phase 4's sub-field cascade consults this set
+            # so a list with rows but no data on a particular sub-field
+            # (e.g. ``interfaces`` populated but every row's
+            # ``switchport_mode`` is None) routes to TRIVIAL_EMPTY rather
+            # than ALIGNED / METHODOLOGY_under.  Empty lists skip the
+            # field — the parent's ``trivially_preserved`` flag already
+            # drives the cascade.
+            if src_val or tgt_val:
+                record["subfields_with_data"] = _subfields_with_data(
+                    src_val, tgt_val,
+                )
             if preserved and not src_val and not tgt_val:
                 # Both lists empty — preservation is trivial; the YAML's
                 # disposition claim couldn't be tested against any data.
@@ -354,6 +367,33 @@ def compute_field_disposition(
         out[field] = record
 
     return out
+
+
+def _subfields_with_data(
+    src: list[Any], tgt: list[Any],
+) -> list[str]:
+    """Return a sorted list of sub-field names that have non-empty data
+    on at least one record across the union of ``src`` and ``tgt``.
+
+    Used by :func:`compute_field_disposition` to populate the
+    ``subfields_with_data`` field on list parent-records (Wave 10γ).
+    Phase 4's sub-field cascade reads this set to detect the case where
+    a parent list has rows but a particular sub-field is empty on every
+    row — those sub-fields cascade to TRIVIAL_EMPTY rather than
+    masquerading as METHODOLOGY_under.
+
+    Non-dict records (e.g. ``dns_servers`` is a list of strings) carry
+    no addressable sub-fields; this returns ``[]`` in that case so the
+    cascade falls back to plain ``preserved``.
+    """
+    out: set[str] = set()
+    for rec in (*src, *tgt):
+        if not isinstance(rec, dict):
+            continue
+        for k, v in rec.items():
+            if not _is_empty_zero_state(v):
+                out.add(k)
+    return sorted(out)
 
 
 def _is_empty_zero_state(value: Any) -> bool:
@@ -433,14 +473,14 @@ def _list_drift_summary(
                 # Identify which record this is by its id keys.
                 ident = {k: s.get(k) for k in id_keys}
                 per_record[f"{field}[{i}] {ident}"] = diffs
-                # Cap drill-down at 5 differing records — the operator
-                # gets the gist; full state is in the source fixture.
-                if len(per_record) >= 5:
-                    per_record["..."] = (
-                        f"and {sum(1 for x, y in zip(norm_src, norm_tgt) if x != y) - 5} "
-                        f"more differing records"
-                    )
-                    break
+        # No cap on the drill-down — Phase 4's per-record drilldown
+        # consumes this dict and earlier capping at 5 records hid
+        # genuine sub-field drift on records 6+ (Wave 10β-A reported
+        # the leaf2a fixture saturating the cap with 5 LAG drifts and
+        # masking switchport_mode drifts on later records).
+        # The matrix .md output's display-side truncation
+        # (``_md_inline``) handles legibility — data capture must stay
+        # lossless so Phase 4 sees every drift signal.
         return per_record
     return "list contents differ"
 

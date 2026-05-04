@@ -835,3 +835,174 @@ def test_structural_only_does_not_count_as_high_severity() -> None:
     # Post-fix: 1 high, 3 low.
     assert result["summary"]["severity_high"] == 1
     assert result["summary"]["severity_low"] == 3
+
+
+# ---------------------------------------------------------------------------
+# Wave 10γ — sub-field cascade for trivially-empty sub-fields
+#
+# Gap: TRIVIAL_EMPTY currently fires at parent-list level only.  When the
+# parent list HAS rows but every row's sub-field is empty / zero on both
+# sides, the sub-field cascade returns ``preserved`` instead of
+# ``trivially_preserved`` — generating false METHODOLOGY_under signals on
+# sub-fields like ``interfaces[].switchport_mode``,
+# ``interfaces[].voice_vlan``, ``interfaces[].vrf`` whenever the fixture
+# has interfaces but doesn't populate those particular sub-surfaces.
+#
+# Fix: Phase 1 records ``subfields_with_data`` on each list-parent
+# record; Phase 4 cascades to ``trivially_preserved`` when the sub-field
+# is preserved AND the parent's ``subfields_with_data`` does NOT include
+# the sub-field.
+# ---------------------------------------------------------------------------
+
+
+def test_actual_disposition_cascades_trivially_empty_when_subfield_has_no_data() -> None:
+    """Parent ``interfaces`` list HAS 3 rows on both sides and is fully
+    preserved; ``switchport_mode`` is None on every row.  The parent's
+    ``subfields_with_data`` excludes ``switchport_mode`` — the cascade
+    must return ``trivially_preserved`` so Phase 4 routes the cell to
+    TRIVIAL_EMPTY rather than ALIGNED / METHODOLOGY_under."""
+    fd = {
+        "interfaces": {
+            "preserved": True,
+            "source_count": 3,
+            "target_count": 3,
+            "subfields_with_data": ["name", "mtu"],
+        },
+    }
+    actual, detail = actual_disposition(
+        fd, "interfaces[].switchport_mode",
+    )
+    assert actual == "trivially_preserved"
+    assert detail is None
+
+
+def test_actual_disposition_does_not_cascade_when_subfield_has_data() -> None:
+    """Companion regression guard: a sub-field WITH data on at least one
+    record cascades as plain ``preserved`` (not ``trivially_preserved``)
+    — real preservation of populated data is ALIGNED, not TRIVIAL_EMPTY."""
+    fd = {
+        "interfaces": {
+            "preserved": True,
+            "source_count": 3,
+            "target_count": 3,
+            "subfields_with_data": ["name", "mtu", "switchport_mode"],
+        },
+    }
+    actual, detail = actual_disposition(
+        fd, "interfaces[].switchport_mode",
+    )
+    assert actual == "preserved"
+    assert detail is None
+
+
+def test_actual_disposition_cascades_trivially_empty_when_parent_drifted_but_subfield_empty() -> None:
+    """Even when the parent list drifted (e.g. on ``description``), if the
+    requested sub-field has no data on either side the cascade still
+    returns ``trivially_preserved`` for it.  Otherwise we'd rate it
+    ``preserved`` and inflate METHODOLOGY_under against ``lossy``
+    YAML claims."""
+    fd = {
+        "interfaces": {
+            "preserved": False,
+            "source_count": 3,
+            "target_count": 3,
+            "subfields_with_data": ["name", "description"],
+            "drift": {
+                "interfaces[0] {'name': 'eth0'}": {
+                    "description": {"source": "x", "target": "y"},
+                },
+            },
+        },
+    }
+    actual, _ = actual_disposition(fd, "interfaces[].switchport_mode")
+    assert actual == "trivially_preserved"
+
+
+def test_actual_disposition_falls_back_to_preserved_when_subfields_with_data_missing() -> None:
+    """Backwards compatibility: if Phase 1 doesn't carry the field (older
+    JSON, or the parent isn't a list-of-records), the cascade falls back
+    to plain ``preserved`` — pre-Wave-10γ behaviour."""
+    fd = {
+        "interfaces": {
+            "preserved": True,
+            "source_count": 3,
+            "target_count": 3,
+            # subfields_with_data deliberately absent
+        },
+    }
+    actual, _ = actual_disposition(fd, "interfaces[].switchport_mode")
+    assert actual == "preserved"
+
+
+def test_reconcile_cell_subfield_cascade_lands_in_trivial_empty() -> None:
+    """End-to-end: parent ``interfaces`` populated but ``switchport_mode``
+    empty across every row → TRIVIAL_EMPTY, not METHODOLOGY_under.  This
+    is the headline cell-shift Wave 10γ targets."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "cisco_iosxe_cli",
+        "target_codec": "arista_eos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": True,
+                "source_count": 3,
+                "target_count": 3,
+                "subfields_with_data": ["name", "mtu"],
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].switchport_mode": {"disposition": "lossy"},
+            "interfaces[].voice_vlan": {"disposition": "lossy"},
+            "interfaces[].vrf": {"disposition": "lossy"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    for key in (
+        "interfaces[].switchport_mode",
+        "interfaces[].voice_vlan",
+        "interfaces[].vrf",
+    ):
+        assert fv[key]["variance"] == recon.VAR_TRIVIAL_EMPTY, (
+            f"{key} should be TRIVIAL_EMPTY (parent has rows but sub-field "
+            f"has no data on either side); got {fv[key]['variance']}"
+        )
+    assert result["summary"][recon.VAR_TRIVIAL_EMPTY] == 3
+    assert result["summary"][recon.VAR_METHODOLOGY_UNDER] == 0
+
+
+def test_reconcile_cell_subfield_with_data_still_methodology_under() -> None:
+    """Companion: when sub-field DOES have data and is preserved against
+    a ``lossy`` YAML expectation, METHODOLOGY_under still fires — Wave
+    10γ's cascade must not swallow real over-claim signal."""
+    cell = {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "cisco_iosxe_cli",
+        "target_codec": "arista_eos",
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": True,
+                "source_count": 3,
+                "target_count": 3,
+                "subfields_with_data": ["name", "mtu", "switchport_mode"],
+            },
+        },
+    }
+    expectation = {
+        "per_field_expectation": {
+            "interfaces[].switchport_mode": {"disposition": "lossy"},
+        },
+    }
+    result = reconcile_cell(cell, expectation)
+    fv = result["field_variances"]
+    assert fv["interfaces[].switchport_mode"]["variance"] == (
+        recon.VAR_METHODOLOGY_UNDER
+    )

@@ -468,6 +468,23 @@ def actual_disposition(
         # in either intent).
         if parent.get("trivially_preserved"):
             return "trivially_preserved", None
+        # Wave 10γ — sub-field cascade for trivially-empty sub-fields.
+        # Parent list HAS rows on both sides but the sub-field has no
+        # data on any record (e.g. ``interfaces`` populated but every
+        # row's ``switchport_mode`` is None / "").  Phase 1 records the
+        # set of sub-fields with data on the parent record as
+        # ``subfields_with_data``; if the requested sub-field isn't in
+        # it, the cell aligns by absence-of-data on this sub-field —
+        # route to TRIVIAL_EMPTY rather than ALIGNED / METHODOLOGY_under.
+        # When ``subfields_with_data`` is missing (older JSON, or a
+        # non-dict-record list field), we fall through to plain
+        # ``preserved`` — pre-Wave-10γ behaviour.
+        subfields_with_data = parent.get("subfields_with_data")
+        if (
+            subfields_with_data is not None
+            and subfield not in subfields_with_data
+        ):
+            return "trivially_preserved", None
         return "preserved", None
 
     # Form: "snmp.community" — dict sub-field.

@@ -758,9 +758,18 @@ field)` cell into one of eight variance classes:
   where YAML claimed lossy — actionable over-claim signal).
   Added Wave 10α to peel ~4169-of-7382 noise cells out of the
   methodology-issue bucket so the remaining signal is actionable.
-  Severity `ok`.  Phase 1's `compute_field_disposition` flags the
-  upstream `trivially_preserved` boolean; the reconciler routes it
-  here regardless of the YAML's expectation.
+  Wave 10γ extended the classification to list-sub-fields: when a
+  parent list HAS rows on both sides but a particular sub-field is
+  empty on every record (e.g. `interfaces` populated but every
+  row's `switchport_mode` / `voice_vlan` / `vrf` is None), the
+  sub-field also routes here rather than masquerading as
+  METHODOLOGY_under.  Phase 1 records the union of sub-fields with
+  data per parent list (`subfields_with_data`) so the cascade can
+  distinguish the trivial case from real preservation.  Severity
+  `ok`.  Phase 1's `compute_field_disposition` flags the upstream
+  `trivially_preserved` boolean for parent lists; the reconciler
+  routes both parent and sub-field cases here regardless of the
+  YAML's expectation.
 
 **Vendor-correct rename equivalences.** Some canonical-field values
 legitimately differ in spelling across vendors without representing
