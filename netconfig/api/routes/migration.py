@@ -189,8 +189,14 @@ def plan_migration(
     """Run the translator pipeline for *body* and return the job.
 
     Stages executed: class-guard → parse → (transforms) → validate →
-    render.  Transforms are not yet configurable via this endpoint
-    (Phase 2 will wire them in).
+    render.  Per-pane override transforms (port / VLAN / local_user /
+    SNMP community / SNMPv3 user) are dispatched via
+    :func:`run_plan_with_overrides` whenever the request body carries
+    ANY override map or a ``target_profile`` selection; legacy callers
+    that supply none of those continue through :func:`run_plan`
+    unchanged.  Free-form caller-supplied transform lists are not
+    accepted on this endpoint — per-pane categories cover the shipped
+    rewrite surface.
 
     The endpoint ALWAYS returns the ``MigrationJob`` — callers should
     inspect ``job.status``:

@@ -36,6 +36,20 @@ on first instantiation.
 **Collision safety**: if two backups of the same device complete within the same
 second a numeric suffix is appended (``…_1.cfg``, ``…_2.cfg``, …) so no file
 is ever silently overwritten.
+
+**Sidecar metadata**: when the saving call provides a
+``device_profile_id``, the store writes a ``<...>.meta.json`` sidecar
+alongside the config file, recording the profile linkage and any
+fields not recoverable from the filename grammar (provenance hints
+such as the resolved definition + detected facts at capture time).
+The sidecar is optional from the read path's perspective: if it's
+missing or unreadable, :meth:`list_configs` falls back to
+filename-derived fields and logs a warning.  Sidecar files are
+listed alongside their primary config and deleted in lockstep by
+:meth:`delete` — never leave one without the other.  The sidecar's
+``.meta.json`` extension is also why the listing logic explicitly
+skips files matching ``*.meta.json`` so they aren't enumerated as
+configs in their own right.
 """
 
 import json

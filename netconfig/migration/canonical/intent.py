@@ -30,11 +30,12 @@ Design principles (from vendor-config-research.txt):
 
 Scope (Tier 1 — auto-translatable):
     hostname, domain, dns_servers, ntp_servers, timezone, syslog_servers,
-    interfaces (name, description, enabled, ipv4), vlans (id, name,
-    port membership), static_routes.
+    interfaces (name, description, enabled, ipv4 + ipv6 addresses, vrf
+    binding), vlans (id, name, port membership), static_routes.
 
 Scope (Tier 2 — auto-translate with review banner):
-    dhcp_servers, snmp, lags, local_users, radius_servers.
+    dhcp_servers, snmp, lags, local_users, radius_servers, vxlan_vnis,
+    evpn_type5_routes, routing_instances.
 
 Scope (Tier 3 — parse for display, never auto-render):
     firewall_rules, nat_rules, vpn, routing_protocols (informational).

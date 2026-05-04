@@ -1,10 +1,15 @@
 """
 In-memory adapter registry.
 
-Phase 0 uses a trivial module-level dict populated by the ``@register``
-decorator at adapter-module import time.  Phase 3 will switch to
-entry-point discovery so third-party adapters can plug in via
-``pyproject.toml`` without editing the registry.
+Adapters register themselves at import time via the ``@register`` class
+decorator — each codec module imports this module and decorates its
+``CodecBase`` subclass on definition.  The set of in-tree adapters
+loaded at startup is driven by which codec packages
+``netconfig.migration.codecs.__init__`` imports; third-party packages
+that ship their own codec module can call ``register`` from anywhere
+to extend the set without forking the in-tree code.  Future entry-
+point-based discovery (a ``pyproject.toml``-declared ``entry_points``
+group) would slot in alongside this mechanism rather than replace it.
 
 Thread-safety: registration happens at import time, before any request
 handling, so the dict is effectively read-only at runtime.  If that

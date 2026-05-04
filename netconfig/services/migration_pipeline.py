@@ -110,9 +110,10 @@ logger = logging.getLogger(__name__)
 
 
 #: A transform is any callable that accepts a tree and returns a new
-#: tree.  Phase 0 does not resolve ``TransformSpec.name`` against a
-#: registry — callers pass already-bound callables directly.  Phase 2
-#: will add a resolver keyed on ``TransformSpec.name``.
+#: tree.  Callers pass already-bound callables directly; ``TransformSpec``
+#: records what was applied for round-trip / replay purposes but is not
+#: resolved against a registry by this module — the API and UI layers
+#: own their own transform-name resolution.
 TransformCallable = Callable[[Any], Any]
 
 
@@ -249,10 +250,10 @@ def run_plan(
             job.id[:8], failing_stage, source.name, target.name,
         )
     else:
-        # Terminal success: mirror the BackupJob three-way convention.
-        # Phase 0 has no partial condition — validate.severity == "block"
-        # without force is treated by upstream callers (not the pipeline
-        # itself) — so success means "all stages ran".
+        # Terminal success: three-way outcome — completed when the
+        # render is safe to deploy, partial when the target adapter
+        # reports a block-level lossy / unsupported path that survived
+        # the run.
         if job.validation and job.validation.severity == "block":
             # Tree was rendered but the target can't faithfully consume
             # it.  Still a terminal state, but clearly flagged.
@@ -293,14 +294,11 @@ def run_plan_with_overrides(
     """Extended pipeline with user-override support for multiple
     canonical categories.
 
-    Shared engine for every per-pane override surface (ports today;
-    VLANs / local_users / SNMP / RADIUS in subsequent commits).  Each
+    Shared engine for every per-pane override surface (ports, VLANs,
+    local_users, snmp_community, snmpv3_user — all shipped).  Each
     per-pane API endpoint in :mod:`netconfig.api.routes.migration`
     calls this function with only its category's override map
     populated; the other categories' params default to None (no-op).
-    When multiple panes' overrides need to land together, the caller
-    populates multiple maps in one call — future extension, not
-    currently exercised by any shipped endpoint.
 
     Current category support:
       * ``port_rename_map`` — see

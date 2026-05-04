@@ -46,6 +46,17 @@ Architecture
   ``CapabilityMatrix.unsupported`` declaration (vxlan_vnis declared
   unsupported on aruba_aoss → drift on that field is expected, not a
   codec bug).
+* ``trivially_preserved`` flags — Wave 10α.  Per-field bool flagging
+  cells where both source and target sides are in zero-state (empty
+  list, empty dict, None / "" / 0 scalar).  Phase 4's reconciler routes
+  these to ``TRIVIAL_EMPTY`` so they don't masquerade as
+  ``METHODOLOGY_ISSUE_under``.
+* ``subfields_with_data`` — Wave 10γ.  On list-parent records, the
+  union of sub-field names that have non-empty data on at least one
+  record across both sides.  Phase 4's sub-field cascade reads this
+  set so a list with rows but no data on a given sub-field
+  (e.g. ``interfaces`` populated but every row's ``switchport_mode``
+  is None) routes to ``TRIVIAL_EMPTY``.
 
 Constraints honoured
 --------------------

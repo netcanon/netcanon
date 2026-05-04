@@ -1,10 +1,29 @@
 """
 ``/api/v1/configs`` routes.
 
-Provides read, delete, and (when enabled) open-in-editor access to
-configuration files stored by the backup engine.  Files are served as plain
-text so clients can diff, display, or parse them without an extra encoding
-step.
+Endpoints:
+
+    GET    /api/v1/configs/
+        → List every stored configuration file as
+          :class:`ConfigRecord` metadata, newest first.
+    GET    /api/v1/configs/{filename}
+        → Return the raw text of a stored config (``text/plain``).
+    DELETE /api/v1/configs/{filename}
+        → Remove a stored config from the storage backend.
+    POST   /api/v1/configs/diff
+        → Diff two stored configs by filename and return a
+          :class:`DiffReport`.  Used by the UI's compare view.
+    POST   /api/v1/configs/{filename}/open
+        → Desktop-only: open a stored config in the OS default text
+          editor via :func:`os.startfile`.  Gated behind
+          ``Settings.open_in_editor`` and the
+          :data:`_OPEN_ALLOWED_EXTENSIONS` allowlist.  No-op /
+          unavailable on the web platform.
+
+Provides read, delete, diff, and (when enabled) open-in-editor access
+to configuration files stored by the backup engine.  Files are served
+as plain text so clients can diff, display, or parse them without an
+extra encoding step.
 """
 
 from __future__ import annotations

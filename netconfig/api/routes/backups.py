@@ -1,13 +1,40 @@
 """
 ``/api/v1/backups`` routes.
 
+Endpoints:
+
+    POST /api/v1/backups/
+        → Create a backup job.  Validates every device's ``type_key``
+          against loaded definitions, creates the :class:`BackupJob`
+          synchronously in ``pending`` state, then enqueues the actual
+          SSH / NETCONF / REST collection as a FastAPI
+          ``BackgroundTask``.  Returns the freshly-created job (always
+          ``pending`` at this point — see test-mocking note below).
+
+    GET  /api/v1/backups/
+        → List every :class:`BackupJob` in memory, newest first.
+
+    GET  /api/v1/backups/{job_id}
+        → Fetch one job's current state.  Callers poll this endpoint
+          to observe progression through ``running`` → ``completed`` /
+          ``partial`` / ``failed``.
+
 Backup jobs are created immediately (synchronously) and then run in a
 FastAPI ``BackgroundTask``.  Callers receive a job ID and poll
 ``GET /api/v1/backups/{job_id}`` for status.
 
 During testing, FastAPI's ``TestClient`` executes background tasks
 synchronously before returning the response, so integration tests see
-a completed job immediately after ``POST /api/v1/backups``.
+a completed job immediately after ``POST /api/v1/backups`` — but the
+POST response body itself is always serialised in ``pending`` state
+(it's built before the background task runs).  Tests that need the
+final job state must always GET the job by ID after POSTing — never
+assert on the POST response body.  See CLAUDE.md "Hard Rules".
+
+Mocking convention: tests mock collection by patching
+``netconfig.api.routes.backups.get_collector`` — the single factory
+this route delegates to.  Never patch ``ConnectHandler`` or
+``paramiko.SSHClient`` directly.
 """
 
 from __future__ import annotations

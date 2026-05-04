@@ -1,9 +1,18 @@
 """
-``CiscoIOSXECodec`` — first real adapter.
+``CiscoIOSXECodec`` — first real adapter (NETCONF / OpenConfig wire format).
 
-Tree shape
-----------
-Nested dict mirroring OpenConfig interface structure, namespace-
+Public tree shape
+-----------------
+``parse()`` returns a :class:`CanonicalIntent` — the same cross-vendor
+canonical model every other codec in the registry produces.  Callers
+(the migration pipeline, validators, per-pane override transforms)
+work exclusively against the canonical tree and never see the
+NETCONF-specific intermediate.
+
+Internal parse representation
+-----------------------------
+Inside ``parse()``, the XML is first walked into a transient nested
+dict that mirrors the OpenConfig interface structure, namespace-
 stripped for readability::
 
     {
@@ -42,20 +51,34 @@ stripped for readability::
         }
     }
 
+This nested form is then projected onto a :class:`CanonicalIntent`
+via ``_iface_dict_to_canonical`` before ``parse()`` returns.
+
 Why nested rather than flat xpaths?
     Round-trip correctness: element order in lists matters for
     downstream textual diffs, and XML is fundamentally hierarchical.
-    A flat xpath map loses the hierarchy.
+    A flat xpath map loses the hierarchy during the parse walk.
 
 Why namespace-stripped?
     The parser normalises by stripping Clark-notation prefixes; the
     renderer attaches the canonical OpenConfig namespaces back on
-    output.  This keeps the internal tree the same regardless of which
+    output.  This keeps the internal walk insensitive to whichever
     prefix a given device's response happens to use.
 
+Render coverage (Phase 0.5 stub)
+--------------------------------
+``render()`` accepts both :class:`CanonicalIntent` (the canonical
+shape ``parse()`` emits) and the legacy nested-dict shape, then emits
+a bare ``<interfaces>`` OpenConfig fragment with the canonical
+namespace declared.  Output is deterministic — child ordering is
+stable so downstream textual diff stages produce reproducible
+results.  Coverage is intentionally narrow (interface + ipv4); the
+full edit-config envelope and remaining OpenConfig modules grow in
+later phases.
+
 Round-trip invariant (proven in unit tests):
-    ``adapter.parse(adapter.render(tree)) == tree``
-for every tree in the adapter's supported subset.
+    The intent returned by ``parse(render(intent))`` reproduces the
+    supported subset of the original intent.
 """
 
 from __future__ import annotations

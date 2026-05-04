@@ -7,8 +7,8 @@ Joins Phase 1's mechanical drift JSON
 Phase 3 vendor-doc-grounded expectation YAMLs
 (``tests/fixtures/cross_vendor_expectations/<src>__<tgt>.yaml``) to
 produce a per-cell variance classification: did each canonical field's
-ACTUAL disposition (preserved vs drifted) match the EXPECTED disposition
-(good / lossy / unsupported / not_applicable)?
+ACTUAL disposition (preserved / drifted / trivially_preserved) match the
+EXPECTED disposition (good / lossy / unsupported / not_applicable)?
 
 What this is
 ------------
@@ -47,6 +47,18 @@ classifies the (actual, expected) tuple into one of:
                               per-field drift on surviving rows (carried
                               via ``per_record`` slices in drift_detail)
                               is NEVER collapsed.
+* ``TRIVIAL_EMPTY``         — both source and target sides have NO data
+                              on the field (both empty lists / dicts, or
+                              both scalars in their zero state).  The
+                              cell aligns benignly by absence of data;
+                              the YAML's lossy / unsupported / good claim
+                              couldn't be tested against any real round-
+                              trip.  Distinct from ALIGNED (real
+                              preservation of populated data) and from
+                              METHODOLOGY_ISSUE_under (real preservation
+                              where YAML claimed lossy — actionable
+                              over-claim signal).  Severity ``ok``.
+                              Wave 10α (commit `35c7bf0`).
 
 The variance class drives downstream Phase 4b investigation: agents
 only need to look at the CODEC_BUG buckets per source vendor; the

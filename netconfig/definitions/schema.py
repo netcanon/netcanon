@@ -8,6 +8,17 @@ the server.
 
 Field-level documentation here also serves as the authoritative reference
 for definition authors — keep it in sync with ``definitions/README.md``.
+
+Hard load-time invariant: ``DeviceDefinition.type_key`` MUST NOT
+contain ``_`` or ``.``.  The file-store filename grammar
+(``{type_key}_{safe_host}_{timestamp}.{ext}``) uses ``_`` as the
+field separator and ``.`` as the extension boundary — an underscore
+or dot inside ``type_key`` makes the parsed-back boundary
+mathematically ambiguous and silently corrupts directory layout.
+The constraint is enforced by ``DeviceDefinition.type_key_filename_safe``
+at definition-load time, and by ``FileConfigStore`` at write time as
+defence-in-depth.  Single-token CamelCase keys (``Cisco``, ``Aruba``,
+``Juniper`` ...) are the established convention.
 """
 
 from pathlib import Path
@@ -162,7 +173,14 @@ class DeviceDefinition(BaseModel):
         type_key: Primary lookup key.  Must be unique across all loaded
             definitions (higher-priority files win on collision within
             the family-base set).  This is the value users pass as
-            ``type_key`` in device lists.
+            ``type_key`` in device lists.  MUST NOT contain ``_`` or
+            ``.``: the file-store filename grammar uses ``_`` as the
+            field separator and ``.`` as the extension boundary, so an
+            underscore or dot inside ``type_key`` makes the parsed-back
+            boundary ambiguous.  Enforced by the
+            ``type_key_filename_safe`` validator below at load time.
+            Single-token CamelCase keys (``Cisco``, ``Aruba``,
+            ``Juniper`` ...) are the convention.
         priority: Load order for conflict resolution among family-base
             entries (those with ``os_version`` and ``model`` both unset).
             Higher numbers are loaded later and override lower-priority

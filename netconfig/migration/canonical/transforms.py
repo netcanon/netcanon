@@ -23,6 +23,30 @@ and writes into ``Y``.  All transforms are:
 
 The mirror functions are deliberately kept simple and free of codec-
 specific heuristics.  Anything more subtle belongs in the codec itself.
+
+Public surface:
+
+* :func:`project_switchport_to_vlan` — read per-interface
+  ``switchport_mode`` / ``access_vlan`` / ``trunk_allowed_vlans``
+  fields and back-fill the corresponding VLAN-centric port-membership
+  lists on each :class:`CanonicalVlan`.  Called by Cisco-style codecs
+  whose native config is per-port.
+* :func:`project_vlan_to_switchport` — the inverse: read VLAN-centric
+  ``tagged_ports`` / ``untagged_ports`` / ``forbidden_ports`` lists
+  and synthesise ``switchport_mode`` + ``access_vlan`` +
+  ``trunk_allowed_vlans`` on each :class:`CanonicalInterface`.
+  Called by VLAN-centric codecs (Aruba AOS-S, OPNsense, MikroTik)
+  before handing the tree to a per-port-shape target renderer.
+* :func:`project_svi_to_vlan` — synthesise a :class:`CanonicalVlan`
+  record for every ``Vlan<N>`` SVI interface that lacks one,
+  bridging the gap between OpenConfig's "SVI is just an interface"
+  model and the canonical's explicit VLAN list.
+
+Internal helper:
+
+* ``_natural_port_sort_key`` — natural-sort key function used by
+  :func:`project_vlan_to_switchport` to keep synthesised port-name
+  ordering deterministic and operator-natural across vendors.
 """
 
 from __future__ import annotations

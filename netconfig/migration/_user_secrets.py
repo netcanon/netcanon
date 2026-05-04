@@ -23,6 +23,26 @@ fall back to plaintext (would leak the hash literal as the password).
 See also:
 - netconfig/migration/codecs/aruba_aoss/render.py — original implementation
 - tests/fixtures/real/user_smoke_findings.md issue #1 — bug report
+
+Public surface:
+
+* :func:`classify_hash` — split a vendor-tagged
+  ``CanonicalLocalUser.hashed_password`` value into
+  ``(algorithm, payload)`` per the four shapes documented above.
+* :func:`is_migratable` — predicate: can *this* algorithm be re-emitted
+  on *that* target vendor?  Codecs call this before deciding whether to
+  emit a ``password`` line or a review-comment line.
+* :func:`format_review_comment` — vendor-correct comment-syntax
+  formatter for the review line emitted when a hash can't be migrated.
+
+Configuration surface:
+
+* ``_UNIVERSALLY_UNMIGRATABLE`` — algorithms no target codec accepts;
+  drives :func:`is_migratable` short-circuit refusals.
+* ``_TARGET_ACCEPTS`` — per-target accepted-algorithm sets; the
+  positive list backing :func:`is_migratable`.
+* ``_COMMENT_PREFIXES`` — per-target ``(open, close)`` comment-syntax
+  tuples used by :func:`format_review_comment`.
 """
 
 from __future__ import annotations
