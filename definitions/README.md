@@ -178,6 +178,21 @@ only via `resolve()`.
   lines are uniform across SRX / EX / QFX / MX chassis families; regexes
   capture `major.minor` from the Junos line for overlay-pin matching.
 
+### Arista EOS 4.32
+- `collector.netmiko_device_type: arista_eos` — Netmiko's native EOS driver
+  handles enable mode and `--More--` paging transparently.
+- `connection.needs_enable: true` — SSH commonly lands at user-exec ``>``.
+- `connection.cisco_more_paging: true` — same rationale as Cisco IOS-XE
+  (`terminal length 0` deliberately avoided; space-injection is reliable
+  across EOS releases).  CLAUDE.md hard rule.
+- `probe.command: show version` — captures major.minor from
+  `Software image version: 4.32.0F` (so overlays declared with
+  `os_version: "4.32"` resolve), and the chassis model from the leading
+  `Arista DCS-…` / `Arista CCS-…` / `Arista vEOS-…` line.
+- Pairs with the Arista EOS migration codec at
+  `netconfig/migration/codecs/arista_eos` for round-tripping
+  ``show running-config``.
+
 ---
 
 ## See also

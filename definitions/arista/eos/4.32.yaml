@@ -1,0 +1,66 @@
+# Arista EOS 4.32.x — current GA train as of 2026.
+#
+# Pairs with the Arista EOS migration codec at
+# ``netconfig/migration/codecs/arista_eos`` so devices backed up via
+# this definition produce the exact ``show running-config`` text the
+# codec parses.  Arista EOS is a deliberate Cisco IOS dialect — the
+# session behaviour mirrors the Cisco IOS-XE definition (enable mode +
+# space-injection paging) and Netmiko's ``arista_eos`` device-type
+# handles both quirks transparently.
+
+vendor: Arista
+os: EOS
+version_match: "^4\\."        # matches any 4.x EOS release
+type_key: Arista              # primary lookup key (unique across vendors);
+                              # matches the simple-word convention shipped
+                              # for Cisco / Fortigate.  Per-version specifics
+                              # are layered as overlays via os_version pins.
+priority: 10                  # higher than family-base 0; family-base 4.32 file
+
+file_extension: cfg
+
+connection:
+  needs_enable: true          # SSH commonly lands at user-exec ``>`` prompt
+  cisco_more_paging: true     # space-inject to dismiss '--More--' prompts;
+                              # NEVER use 'terminal length 0' (per CLAUDE.md
+                              # hard rule — unreliable across versions)
+  opnsense_shell_menu: false
+
+commands:
+  pre: []                     # netmiko handles paging via space-injection
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+[#>]\s*$'          # hostname# or hostname>
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: arista_eos
+
+probe:
+  # Pre-backup ``show version`` probe.  Populates DeviceProfile.detected_facts
+  # so operators see what EOS actually reports, and feeds
+  # DefinitionLoader.resolve() so a future 4.33 / 4.34 overlay would be
+  # picked when the device runs that release.  Probe failure is non-fatal —
+  # the backup falls back to this family-base definition.
+  command: "show version"
+  patterns:
+    # Capture major.minor only ("4.32") to match overlay os_version pins
+    # rather than full "4.32.0F" / "4.32.1F-EFT1" patch strings.
+    detected_os_version: "Software image version:\\s+(\\d+\\.\\d+)"
+    # Hardware model from the leading line, e.g.
+    # "Arista DCS-7050SX-64-F" -> "DCS-7050SX-64-F".  Covers DCS / CCS /
+    # vEOS variants; leading whitespace tolerated for outputs that prefix
+    # with banners.
+    detected_model: "^\\s*Arista\\s+(\\S+)"
+    # Chassis serial — useful for asset audits.  Arista's label is
+    # "Serial number:" (lowercase 'n', no hyphen).
+    detected_serial: "Serial number:\\s+(\\S+)"
+
+notes: >
+  Arista EOS 4.32.x.  Requires enable mode.  Uses space-injection for
+  --More-- paging; ``terminal length 0`` is deliberately avoided per the
+  same rationale as Cisco IOS-XE.  Pairs with the arista_eos migration
+  codec for round-tripping ``show running-config``.
