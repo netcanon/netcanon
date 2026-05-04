@@ -1,0 +1,62 @@
+# Aruba AOS-S 16.x  (formerly HP ProCurve)
+#
+# Pairs with the migration codec at netconfig/migration/codecs/aruba_aoss
+# which round-trips AOS-S native config to/from CanonicalIntent.  This file
+# is what the backup pipeline uses to *fetch* the running-config from a
+# real Aruba 25xx / 29xx / 5400R-series switch.
+#
+# Driver choice — aruba_osswitch is the modern Netmiko driver that ships
+# with AOS-S 16.x switches; legacy firmware (15.x and earlier) may need
+# the alternate hp_procurve driver.  16.x is the long-running stable
+# train and the right default.
+#
+# Paging — AOS-S responds to space-injection at the `-- MORE --` prompt;
+# Netmiko's aruba_osswitch driver handles this internally when
+# cisco_more_paging is set.  CLAUDE.md hard rule: never `terminal length 0`.
+
+vendor: Aruba
+os: AOS-S
+version_match: "^16\\."
+type_key: aruba_aoss_16.x
+priority: 10
+
+file_extension: cfg
+
+connection:
+  needs_enable: false        # manager-mode escalation handled by netmiko via the `secret` credential
+  cisco_more_paging: true    # space-inject to dismiss `-- MORE --` mid-stream (AOS-S equivalent)
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+#\s*$'            # SwitchA#  (manager mode)
+    - '^\S+>\s*$'            # SwitchA>  (operator mode — pre-escalation)
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: aruba_osswitch  # alternate for very old firmware: hp_procurve
+
+probe:
+  # `show system` is the AOS-S equivalent of Cisco's `show version` — it
+  # reports the running software revision (e.g. WC.16.10.0023), the
+  # chassis SKU + product name on a single Hardware line, and the unit
+  # serial number.  Output is colon-aligned key/value with leading
+  # spaces; patterns anchor per-line via re.MULTILINE in the parser.
+  command: "show system"
+  patterns:
+    detected_os_version: '^\s*Software revision\s*:\s+(\S+)'
+    detected_model: '^\s*Hardware\s*:\s+(.+?)\s*$'
+    detected_serial: '^\s*Serial Number\s*:\s+(\S+)'
+
+notes: >
+  Aruba AOS-S 16.x (formerly HP ProCurve).  Netmiko `aruba_osswitch` driver
+  handles SSH banner-Enter, manager-mode escalation (via the secret
+  credential), and `-- MORE --` space-injection paging internally.  Switch
+  to `hp_procurve` for legacy 15.x firmware.  Probe uses `show system`
+  which exposes Software revision / Hardware / Serial Number on
+  colon-aligned rows.

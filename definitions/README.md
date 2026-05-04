@@ -149,6 +149,19 @@ only via `resolve()`.
 - `/export verbose` includes all defaults, which is preferable for a full
   backup and future diff/translation work.
 
+### Aruba AOS-S 16.x (formerly HP ProCurve)
+- `collector.netmiko_device_type: aruba_osswitch` — modern AOS-S 16.x driver;
+  switch to `hp_procurve` for legacy 15.x firmware.
+- `connection.cisco_more_paging: true` — Aruba's `-- MORE --` pager responds
+  to space-injection (the same mechanism Cisco uses); netmiko handles it
+  internally for the `aruba_osswitch` driver.  CLAUDE.md hard rule: never
+  `terminal length 0`.
+- Manager-mode escalation handled by netmiko via the `secret` credential —
+  the definition does NOT need `needs_enable: true`.
+- `probe.command: show system` — colon-aligned key/value rows expose
+  Software revision (e.g. `WC.16.10.0023`), Hardware (chassis SKU + name)
+  and Serial Number; patterns anchor per-line via re.MULTILINE.
+
 ---
 
 ## See also
