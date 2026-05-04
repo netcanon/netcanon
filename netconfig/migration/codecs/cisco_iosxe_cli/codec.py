@@ -197,6 +197,53 @@ class CiscoIOSXECLICodec(CodecBase):
                     "wire-up deferred."
                 ),
             ),
+            # ── ACL / firewall / NAT (Tier 3 — not auto-translatable) ──
+            UnsupportedPath(
+                path="/access-list/extended",
+                reason=(
+                    "Cisco IOS-XE extended ACLs "
+                    "(`ip access-list extended <name>` or numbered "
+                    "100-199 / 2000-2699) are Tier 3 — auto-"
+                    "translating ACL semantics across vendors risks "
+                    "shipping subtly-permissive rules.  Operator must "
+                    "author firewall policy manually."
+                ),
+            ),
+            UnsupportedPath(
+                path="/access-list/standard",
+                reason=(
+                    "Standard ACLs (numbered 1-99 / 1300-1999, or "
+                    "named) are Tier 3 — see `/access-list/extended`."
+                ),
+            ),
+            UnsupportedPath(
+                path="/access-list/ipv6",
+                reason=(
+                    "IPv6 access-lists (`ipv6 access-list <name>`) "
+                    "are Tier 3 — see `/access-list/extended`."
+                ),
+            ),
+            UnsupportedPath(
+                path="/firewall",
+                reason=(
+                    "Zone-based firewall (`zone-pair security` / "
+                    "`policy-map type inspect`) is Tier 3 — stateful "
+                    "zone-pair semantics don't translate cleanly "
+                    "across vendors.  Operator must author firewall "
+                    "policy manually."
+                ),
+            ),
+            UnsupportedPath(
+                path="/nat",
+                reason=(
+                    "NAT configuration (`ip nat inside source` / "
+                    "`ip nat outside source` / `ip nat pool`) is "
+                    "Tier 3 — NAT semantics are tightly coupled to "
+                    "interface zone designations and don't translate "
+                    "cleanly cross-vendor.  Operator must author NAT "
+                    "policy manually."
+                ),
+            ),
         ],
     )
 

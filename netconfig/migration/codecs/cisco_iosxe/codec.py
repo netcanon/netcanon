@@ -439,6 +439,27 @@ class CiscoIOSXECodec(CodecBase):
                 path="/evpn_type5_routes",
                 reason="Top-level field marker — see /evpn-type5/route.",
             ),
+            # ── ACL / firewall (Tier 3 — not auto-translatable) ──
+            UnsupportedPath(
+                path="/access-list",
+                reason=(
+                    "OpenConfig `acl` / IETF `ietf-access-control-list` "
+                    "subtrees are Tier 3 — auto-translating ACL "
+                    "semantics across vendors risks shipping subtly-"
+                    "permissive rules.  Operator must author firewall "
+                    "policy manually."
+                ),
+            ),
+            UnsupportedPath(
+                path="/firewall",
+                reason=(
+                    "Zone-based firewall configuration (CBAC / ZBF) is "
+                    "Tier 3 — stateful zone-pair semantics don't "
+                    "translate cleanly to interface-attached stateless "
+                    "ACL targets.  Operator must author firewall "
+                    "policy manually."
+                ),
+            ),
         ],
     )
 

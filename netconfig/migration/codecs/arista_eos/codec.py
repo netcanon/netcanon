@@ -181,6 +181,31 @@ class AristaEOSCodec(CodecBase):
                     "cost tuning parse-and-ignore in v1."
                 ),
             ),
+            UnsupportedPath(
+                path="/access-list/extended",
+                reason=(
+                    "Arista EOS extended ACLs (`ip access-list <name>` "
+                    "with `permit/deny tcp/udp/ip ...` ACEs) are Tier 3 "
+                    "— auto-translation across vendors risks shipping "
+                    "subtly-permissive rules.  Operator must author "
+                    "firewall policy manually."
+                ),
+            ),
+            UnsupportedPath(
+                path="/access-list/standard",
+                reason=(
+                    "Standard ACLs (numbered 1-99 / 1300-1999, or "
+                    "named `ip access-list standard <name>`) are "
+                    "Tier 3 — see `/access-list/extended`."
+                ),
+            ),
+            UnsupportedPath(
+                path="/access-list/ipv6",
+                reason=(
+                    "IPv6 access-lists (`ipv6 access-list <name>`) "
+                    "are Tier 3 — see `/access-list/extended`."
+                ),
+            ),
         ],
     )
 
