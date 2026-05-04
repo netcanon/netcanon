@@ -244,6 +244,18 @@ def test_populates_every_expected_canonical_field():
     assert ro_v3.priv_protocol == "aes256"
     assert ro_v3.group == "readonly"
 
+    # --- DHCP server pool (Cluster E.1-B) ---
+    assert len(intent.dhcp_servers) == 1
+    pool = intent.dhcp_servers[0]
+    assert pool.network == "192.168.10.0/24"
+    assert pool.start_ip == "192.168.10.100"
+    assert pool.end_ip == "192.168.10.200"
+    assert pool.gateway == "192.168.10.1"
+    assert pool.dns_servers == ["8.8.8.8", "1.1.1.1"]
+    assert pool.lease_time == 86400
+    assert pool.domain_name == "lab.example.net"
+    assert pool.interface == "ge-0/0/1.0"
+
     # --- apply-groups (Junos-specific two-pass parse + group-content) ---
     assert intent.apply_groups == ["GLOBAL-SETTINGS"]
     assert "GLOBAL-SETTINGS" in intent.group_content

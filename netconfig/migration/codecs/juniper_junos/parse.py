@@ -43,6 +43,7 @@ import shlex
 from typing import Any
 
 from ...canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
     CanonicalIntent,
@@ -120,6 +121,31 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # Phase 4 rank-4: IRB SVI accumulator.  Keyed by vid (the irb
     # unit number); each entry holds the per-vid IPv4 list.
     irb_state: dict[int, dict[str, Any]] = {}
+    # Cluster E.1-B: DHCP-server accumulator.  Junos has two grammars:
+    #
+    #  * Modern form -- ``set access address-assignment pool <P>
+    #    family inet ...`` plus ``set system services dhcp-local-
+    #    server group <G> interface <iface>``.  Pools and groups are
+    #    structurally independent on Junos; we link them by name on
+    #    canonicalisation (the renderer emits matching ``pool <X>`` /
+    #    ``group <X>`` names so a same-vendor round-trip recovers the
+    #    interface field).  When the operator authored mismatched
+    #    names, the ``interface`` field stays empty (the pool is
+    #    still preserved with its other fields).
+    #
+    #  * Legacy form -- ``set system services dhcp pool <network>
+    #    ...`` (deprecated on M / MX / SRX from 2010-ish; still works
+    #    on EX 4.x trains).  Parser accepts it for fixture
+    #    compatibility -- render always emits the modern form.
+    #
+    # Each entry shape:
+    #   {"network": "...", "start_ip": "...", "end_ip": "...",
+    #    "gateway": "...", "dns_servers": [...], "lease_time": int|None,
+    #    "domain_name": "..."}
+    dhcp_pool_state: dict[str, dict[str, Any]] = {}
+    # group -> interface mapping (modern form: ``set system services
+    # dhcp-local-server group <G> interface <iface>``).
+    dhcp_group_iface: dict[str, str] = {}
     # Structural-collapse accumulator: Junos's ``set interfaces
     # interface-range <name>`` grammar declares shared config
     # across multiple physical interfaces.  We collect members
@@ -189,7 +215,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         for tokens in group_lines.get(gname, []):
             _dispatch_set(
                 tokens, intent, iface_state, range_state,
-                lag_state, irb_state,
+                lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
             )
     # Pass 2b: apply top-level content.  Scalars set by group
     # content get overwritten; list-shaped fields accumulate
@@ -197,7 +223,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     for tokens in top_level_lines:
         _dispatch_set(
             tokens, intent, iface_state, range_state,
-            lag_state, irb_state,
+            lag_state, irb_state, dhcp_pool_state, dhcp_group_iface,
         )
 
     # GAP 9b: preserve both the apply-groups STATEMENT and the
@@ -627,6 +653,71 @@ def parse_intent(raw: str) -> CanonicalIntent:
     project_switchport_to_vlan(intent)
     intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
 
+    # Cluster E.1-B: materialise CanonicalDHCPPool records from the
+    # DHCP accumulator.  Pool-to-interface linkage on Junos:
+    #
+    #  * Modern form: ``set access address-assignment pool <P>`` and
+    #    ``set system services dhcp-local-server group <G> interface
+    #    <iface>`` are independent statements.  Junos itself doesn't
+    #    require name-equality between <P> and <G> -- the runtime
+    #    pool selection is by network match against the request's
+    #    source subnet.  Our render emits ``pool <X>`` AND ``group
+    #    <X>`` with identical names so a same-vendor round-trip can
+    #    recover the iface field.  When the operator hand-authored
+    #    mismatched names, we still preserve the pool body but leave
+    #    ``CanonicalDHCPPool.interface`` empty (lossy on this single
+    #    field is the right tradeoff vs. dropping the whole pool).
+    #
+    #  * Legacy form: pools have no explicit name (we keyed them by
+    #    ``_legacy:<network>``); there's no group binding to resolve.
+    # Pre-compute the modern-form pool list (excluding legacy keys)
+    # so we can apply a 1-to-1 fallback when the operator authored
+    # ONE pool + ONE dhcp-local-server group with mismatched names.
+    _modern_pool_keys = [
+        k for k in dhcp_pool_state.keys() if not k.startswith("_legacy:")
+    ]
+    _single_group_iface = (
+        next(iter(dhcp_group_iface.values()))
+        if len(dhcp_group_iface) == 1
+        else ""
+    )
+    _single_pool_fallback = (
+        _single_group_iface
+        if (len(_modern_pool_keys) == 1 and _single_group_iface)
+        else ""
+    )
+    for pool_key, entry in dhcp_pool_state.items():
+        # Skip empty entries (unusual but defensive against stray
+        # ``set access address-assignment pool <P>`` lines without
+        # any inet body).
+        if not (entry.get("network") or entry.get("start_ip")):
+            continue
+        iface_val = ""
+        if not pool_key.startswith("_legacy:"):
+            iface_val = dhcp_group_iface.get(pool_key, "")
+            # 1-to-1 fallback: a single pool + single group with
+            # different names is the common operator pattern (Junos
+            # doesn't link pools to groups by name natively, so
+            # operators author whatever names read well).  Carry the
+            # iface across so cross-vendor renders preserve the
+            # binding.
+            if not iface_val and _single_pool_fallback:
+                iface_val = _single_pool_fallback
+        pool = CanonicalDHCPPool(
+            network=entry.get("network", ""),
+            start_ip=entry.get("start_ip", ""),
+            end_ip=entry.get("end_ip", ""),
+            gateway=entry.get("gateway", ""),
+            dns_servers=list(entry.get("dns_servers", [])),
+            domain_name=entry.get("domain_name", ""),
+            interface=iface_val,
+        )
+        # Preserve the model's lease_time default (86400) when the
+        # source didn't declare one explicitly.
+        if "lease_time" in entry:
+            pool.lease_time = entry["lease_time"]
+        intent.dhcp_servers.append(pool)
+
     logger.debug(
         "juniper_junos parsed: hostname=%r ifaces=%d vlans=%d "
         "vxlan_vnis=%d vrfs=%d routes=%d users=%d snmp=%s "
@@ -855,6 +946,8 @@ def _dispatch_set(
     range_state: dict[str, dict[str, Any]] | None = None,
     lag_state: dict[str, dict[str, Any]] | None = None,
     irb_state: dict[int, dict[str, Any]] | None = None,
+    dhcp_pool_state: dict[str, dict[str, Any]] | None = None,
+    dhcp_group_iface: dict[str, str] | None = None,
 ) -> None:
     """Apply one set-line's token list to *intent*.
 
@@ -870,12 +963,20 @@ def _dispatch_set(
     callers in isolated tests may omit it).  ``lag_state`` /
     ``irb_state`` cover the Phase 4 rank-4 surfaces (LAG ae<N> +
     IRB SVI L3); also optional for legacy callers.
+
+    ``dhcp_pool_state`` / ``dhcp_group_iface`` cover the Cluster
+    E.1-B DHCP-server surfaces (modern + legacy grammars).  Both
+    optional for legacy callers.
     """
     if not tokens:
         return
     head = tokens[0]
     if head == "system":
-        _apply_system(tokens[1:], intent)
+        _apply_system(tokens[1:], intent, dhcp_pool_state, dhcp_group_iface)
+    elif head == "access":
+        # Cluster E.1-B: ``set access address-assignment pool <P>
+        # family inet ...`` (modern form DHCP server pool grammar).
+        _apply_access(tokens[1:], dhcp_pool_state)
     elif head == "interfaces":
         _apply_interfaces(
             tokens[1:], iface_state, range_state, lag_state, irb_state,
@@ -904,11 +1005,28 @@ def _dispatch_set(
     # and-ignore.
 
 
-def _apply_system(tokens: list[str], intent: CanonicalIntent) -> None:
+def _apply_system(
+    tokens: list[str],
+    intent: CanonicalIntent,
+    dhcp_pool_state: dict[str, dict[str, Any]] | None = None,
+    dhcp_group_iface: dict[str, str] | None = None,
+) -> None:
     if not tokens:
         return
     if tokens[0] == "host-name" and len(tokens) >= 2:
         intent.hostname = tokens[1]
+        return
+    # Cluster E.1-B: ``set system services dhcp-local-server group <G>
+    # interface <iface>`` (modern grammar — group binding) and the
+    # legacy ``set system services dhcp pool <network> ...`` form.
+    if (
+        tokens[0] == "services"
+        and len(tokens) >= 2
+        and tokens[1] in ("dhcp-local-server", "dhcp")
+    ):
+        _apply_system_services_dhcp(
+            tokens[1:], dhcp_pool_state, dhcp_group_iface,
+        )
         return
     # GAP 8: richer system-scalar inheritance exercised primarily via
     # apply-groups on the ksator fixtures.  These stanzas also appear
@@ -1430,6 +1548,160 @@ def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
         setattr(intent, "_pending_vxlan_udp_port", port)
         return
     # Other switch-options paths — parse-and-ignore.
+
+
+# ---------------------------------------------------------------------------
+# Cluster E.1-B: DHCP-server appliers (modern + legacy grammars)
+# ---------------------------------------------------------------------------
+
+
+def _apply_access(
+    tokens: list[str],
+    dhcp_pool_state: dict[str, dict[str, Any]] | None,
+) -> None:
+    """Modern Junos DHCP grammar: ``set access address-assignment
+    pool <P> family inet ...``.
+
+    Junos doc reference: "Configuring Address-Assignment Pools"
+    (Junos OS Network Management Library — address-assignment-pool
+    sub-stanza of the access hierarchy).
+
+    Sub-paths recognised on ``family inet``:
+
+    * ``network <CIDR>`` - pool network.
+    * ``range <RNAME> low <ip>`` / ``range <RNAME> high <ip>`` -
+      start / end IPs (only one range is materialised into the
+      single ``CanonicalDHCPPool.start_ip`` / ``end_ip`` slot;
+      additional ranges parse-and-ignore — see Cluster E scope note).
+    * ``dhcp-attributes router <ip>`` - default gateway.
+    * ``dhcp-attributes name-server <ip>`` - DNS server (additive).
+    * ``dhcp-attributes maximum-lease-time <sec>`` - lease seconds.
+    * ``dhcp-attributes domain-name <name>`` - DNS suffix.
+
+    Other ``family inet6`` / non-DHCP ``access`` sub-paths (profile,
+    radius-server) parse-and-ignore — out of Cluster E DHCP scope.
+    """
+    if dhcp_pool_state is None:
+        return
+    # ``address-assignment pool <P> family inet ...``
+    if (
+        len(tokens) < 5
+        or tokens[0] != "address-assignment"
+        or tokens[1] != "pool"
+    ):
+        return
+    pool_name = tokens[2]
+    rest = tokens[3:]
+    # Only the inet family is wired (Cluster E DHCP-only scope; v6
+    # DHCP defers to Tier 3).
+    if rest[0] != "family" or rest[1] != "inet":
+        return
+    sub = rest[2:]
+    if not sub:
+        return
+    entry = dhcp_pool_state.setdefault(pool_name, {})
+    head = sub[0]
+    if head == "network" and len(sub) >= 2:
+        entry["network"] = sub[1]
+        return
+    if head == "range" and len(sub) >= 4:
+        bound = sub[2]
+        ip_val = sub[3]
+        if bound == "low":
+            # First range wins for canonical start_ip.
+            entry.setdefault("start_ip", ip_val)
+        elif bound == "high":
+            entry.setdefault("end_ip", ip_val)
+        return
+    if head == "dhcp-attributes" and len(sub) >= 3:
+        attr = sub[1]
+        val = sub[2]
+        if attr == "router":
+            entry["gateway"] = val
+            return
+        if attr == "name-server":
+            servers = entry.setdefault("dns_servers", [])
+            if val not in servers:
+                servers.append(val)
+            return
+        if attr == "maximum-lease-time":
+            try:
+                entry["lease_time"] = int(val)
+            except ValueError:
+                pass
+            return
+        if attr == "domain-name":
+            entry["domain_name"] = val
+            return
+    # Other sub-paths (boot-server, propagate-settings, exclude-
+    # range, etc.) parse-and-ignore -- Tier 3.
+
+
+def _apply_system_services_dhcp(
+    tokens: list[str],
+    dhcp_pool_state: dict[str, dict[str, Any]] | None,
+    dhcp_group_iface: dict[str, str] | None,
+) -> None:
+    """Two grammars share this entry point:
+
+    * ``services dhcp-local-server group <G> interface <iface>`` --
+      modern form group-to-interface binding.  Recorded in
+      *dhcp_group_iface*; resolved into the matching pool's
+      ``interface`` field by the post-pass after parse() finishes.
+
+    * ``services dhcp pool <network> ...`` -- legacy EX 4.x form.
+      Each ``set system services dhcp pool <CIDR> ...`` line is a
+      flat sub-path that we map onto the same accumulator the
+      modern form uses (keyed by the network CIDR).
+    """
+    if not tokens:
+        return
+    if tokens[0] == "dhcp-local-server" and dhcp_group_iface is not None:
+        # ``dhcp-local-server group <G> interface <iface>``
+        if (
+            len(tokens) >= 5
+            and tokens[1] == "group"
+            and tokens[3] == "interface"
+        ):
+            dhcp_group_iface[tokens[2]] = tokens[4]
+        return
+    if tokens[0] == "dhcp" and dhcp_pool_state is not None:
+        # Legacy ``services dhcp pool <CIDR> ...`` form.
+        if len(tokens) < 4 or tokens[1] != "pool":
+            return
+        network = tokens[2]
+        sub = tokens[3:]
+        # Use the network CIDR as the pool key (legacy form has no
+        # explicit pool name).  This avoids colliding with modern-form
+        # pool names while keeping the same accumulator shape.
+        entry = dhcp_pool_state.setdefault(f"_legacy:{network}", {})
+        entry.setdefault("network", network)
+        head = sub[0]
+        if head == "address-range" and len(sub) >= 3:
+            bound = sub[1]
+            ip_val = sub[2]
+            if bound == "low":
+                entry.setdefault("start_ip", ip_val)
+            elif bound == "high":
+                entry.setdefault("end_ip", ip_val)
+            return
+        if head == "router" and len(sub) >= 2:
+            entry["gateway"] = sub[1]
+            return
+        if head == "name-server" and len(sub) >= 2:
+            servers = entry.setdefault("dns_servers", [])
+            if sub[1] not in servers:
+                servers.append(sub[1])
+            return
+        if head == "maximum-lease-time" and len(sub) >= 2:
+            try:
+                entry["lease_time"] = int(sub[1])
+            except ValueError:
+                pass
+            return
+        if head == "domain-name" and len(sub) >= 2:
+            entry["domain_name"] = sub[1]
+            return
 
 
 def _apply_routing_instances(

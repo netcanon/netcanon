@@ -192,6 +192,22 @@ set snmp v3 usm local-engine user readonly_v3 authentication-sha256 authenticati
 set snmp v3 usm local-engine user readonly_v3 privacy-aes256 privacy-key "$9$fakeAes256PrivKey$2"
 set snmp v3 vacm security-to-group security-model usm security-name readonly_v3 group readonly
 #
+# --- DHCP server pool (Cluster E.1-B — modern address-assignment form) ---
+# The pool serves clients on ge-0/0/1.0 (a sub-interface declared above).
+# Name 'pool_ge_0_0_1_0' matches the renderer's stable derivation from
+# the interface name so a same-vendor round-trip recovers the iface
+# binding deterministically.
+#
+set access address-assignment pool pool_ge_0_0_1_0 family inet network 192.168.10.0/24
+set access address-assignment pool pool_ge_0_0_1_0 family inet range r1 low 192.168.10.100
+set access address-assignment pool pool_ge_0_0_1_0 family inet range r1 high 192.168.10.200
+set access address-assignment pool pool_ge_0_0_1_0 family inet dhcp-attributes router 192.168.10.1
+set access address-assignment pool pool_ge_0_0_1_0 family inet dhcp-attributes name-server 8.8.8.8
+set access address-assignment pool pool_ge_0_0_1_0 family inet dhcp-attributes name-server 1.1.1.1
+set access address-assignment pool pool_ge_0_0_1_0 family inet dhcp-attributes maximum-lease-time 86400
+set access address-assignment pool pool_ge_0_0_1_0 family inet dhcp-attributes domain-name "lab.example.net"
+set system services dhcp-local-server group pool_ge_0_0_1_0 interface ge-0/0/1.0
+#
 # --- protocols (Tier-3 parse-and-ignore, included for realism) ---
 #
 set protocols lldp interface all

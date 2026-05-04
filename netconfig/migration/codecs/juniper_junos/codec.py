@@ -141,6 +141,7 @@ class JunosCodec(CodecBase):
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6
+            "/dhcp-servers/pool",                # Cluster E.1-B
         ],
         lossy=[
             LossyPath(
