@@ -13,6 +13,14 @@ per-stanza inner parsers (``_parse_vlan_stanza`` /
 ``_parse_interface_stanza``) for indented bodies that terminate at
 ``exit`` or the next un-indented line.
 
+Wire-format surfaces handled (mirrors the codec's CapabilityMatrix
+``supported`` list): hostname, DNS, NTP, syslog, SNMP (community /
+location / contact / trap-host / v3 USM users with separate
+``snmpv3 user`` and ``snmpv3 group`` lines), local users, RADIUS
+servers, VLANs (with absorbed SVI L3), physical interfaces
+(IPv4 + IPv6 with global / link-local scope discriminator), LAG
+trunk membership, and static routes / default-gateway.
+
 Internal helpers re-exported from ``codec.py`` for tests that pin the
 parser's structural contract (``_parse_port_list``,
 ``_format_port_list`` is in :mod:`.render`):

@@ -7,7 +7,11 @@ Public function: :func:`parse_intent` — raw text in,
 Handles standard interfaces, VLANs, VRFs (``vrf instance`` form),
 EVPN MAC-VRFs (``router bgp / vlan N`` form), VXLAN (interface
 ``Vxlan1`` with ``source-interface`` + ``udp-port`` + vlan/vrf VNIs),
-IPv6 addresses, and the static-route + SNMP/local-user surfaces.
+IPv4 + IPv6 addresses (with global / link-local scope classification),
+DHCP server pools (``ip dhcp pool`` family), RADIUS servers
+(``radius-server host`` one-liner with ``auth-port`` / ``acct-port`` /
+``key`` modifiers), SNMP (community / location / contact / trap-host /
+v3 USM users), local users, and static routes.
 
 Extracted verbatim from ``codec.py`` during the parse/render split;
 behaviour is identical to the prior in-class implementation.  The

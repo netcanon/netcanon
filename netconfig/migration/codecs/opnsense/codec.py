@@ -33,6 +33,10 @@ interfaces are flattened into a list of :class:`CanonicalInterface`
 records on parse and reconstituted as zone elements on render.
 Round-trip invariant: ``parse(render(intent))`` reproduces the
 canonical fields the codec wires through.
+
+DHCP server zones (``<dhcpd>/<wan>``, ``<dhcpd>/<lan>``, ``<dhcpd>/<optN>``)
+parse to :class:`CanonicalDHCPPool` records; the canonical surface is the
+same list-of-pools shape every other codec uses.
 """
 
 from __future__ import annotations

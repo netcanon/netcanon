@@ -37,7 +37,7 @@ and Aruba's reconciliation involves three separate code paths in
    declares ``ip address``, it synthesises a ``Vlan<N>``
    :class:`CanonicalInterface` alongside the :class:`CanonicalVlan`
    so downstream consumers see the L3 record at the canonical
-   location.  (``codec.py`` — see the ``vlan.ipv4_addresses``
+   location.  (``parse.py`` — see the ``vlan.ipv4_addresses``
    branch inside the top-level parse loop.)
 
 2. **Render** — when the renderer emits a ``vlan`` stanza, it
@@ -45,7 +45,7 @@ and Aruba's reconciliation involves three separate code paths in
    *and* any sibling ``Vlan<N>`` :class:`CanonicalInterface`,
    honouring whichever has data.  The standalone ``Vlan<N>``
    interface is then skipped by the interface-emission pass (it's
-   already been absorbed).  (``codec.py`` — see the ``addrs``
+   already been absorbed).  (``render.py`` — see the ``addrs``
    reconciliation inside the VLAN emission loop, plus the
    ``startswith("vlan")`` skip further down.)
 

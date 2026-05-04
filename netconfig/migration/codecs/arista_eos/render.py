@@ -4,14 +4,16 @@ Render path for Arista EOS CLI (``show running-config`` form).
 Public function: :func:`render_intent` — :class:`CanonicalIntent`
 in, EOS CLI text out.
 
-Emits the same surfaces the parse path consumes: hostname, DNS,
-NTP, SNMP (community / location / contact / trap-host / v3 user),
-local users, VRF instances, VLANs, interfaces (with IPv4/IPv6,
-VRF binding, switchport mode, LAG membership, MTU, shutdown),
-LAG stub stanzas, ``interface Vxlan1`` (with ``vxlan source-
-interface`` + ``vxlan udp-port`` + per-VNI mappings + L3-VNI
-mappings for VRF Type-5), ``router bgp <asn>`` blocks (for L3
-VRF RD/RT and EVPN MAC-VRF per-VLAN bindings), and static routes.
+Emits the same surfaces the parse path consumes: hostname, DNS, NTP,
+SNMP (community / location / contact / trap-host / v3 user), local
+users, RADIUS servers, VRF instances, VLANs, interfaces (with
+IPv4/IPv6 incl. link-local scope, VRF binding, switchport mode, LAG
+membership, MTU, shutdown), LAG stub stanzas, DHCP server pools
+(``ip dhcp pool`` family — Cluster E.1-A), ``interface Vxlan1``
+(with ``vxlan source-interface`` + ``vxlan udp-port`` + per-VNI
+mappings + L3-VNI mappings for VRF Type-5), ``router bgp <asn>``
+blocks (for L3 VRF RD/RT and EVPN MAC-VRF per-VLAN bindings), and
+static routes.
 
 Extracted verbatim from ``codec.py`` during the parse/render
 split; behaviour is identical to the prior in-class
