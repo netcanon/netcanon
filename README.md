@@ -43,10 +43,10 @@ pytest                       # unit + integration + desktop (fast)
 pytest -m e2e                # Playwright browser tests (slower)
 ```
 
-Tests run across five layers: unit (pure functions, no I/O),
-integration (TestClient + mocked SSH), e2e (Playwright against a live
-Uvicorn), desktop (PySide6 + pystray mocked), and real-capture
-validation (codec fixtures under `tests/fixtures/real/`).  CI output
+Tests run across four layers: unit (pure functions, no I/O — the
+real-capture validation harness lives here as a unit subset),
+integration (TestClient + mocked SSH), e2e (Playwright against a
+live Uvicorn), and desktop (PySide6 + pystray mocked).  CI output
 is the source of truth for pass counts.
 
 ---
@@ -65,11 +65,12 @@ is the source of truth for pass counts.
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — MTU as a worked example |
 | Add a new target-profile YAML | [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — flat-port + module-variant shapes, fit-check propagation |
 | Ship a feature across web + desktop | [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — SNMPv3 USM rename as a worked example |
-| Read the roadmap / current blockers | [`translator-plans.txt`](translator-plans.txt) — dense, grep-friendly, opens with a TL;DR |
-| See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |
+| See what's shipped recently / current state | [`CHANGELOG.md`](CHANGELOG.md) — authoritative per-wave shipping log |
+| Read the slower-changing architectural sketch | [`translator-plans.txt`](translator-plans.txt) — dense, grep-friendly long-term roadmap; most R / GAP / Phase items now `[SHIPPED]` |
 | Check codec certification tiers | [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) |
 | Manually exercise recent changes | [`HUMAN_TESTING.md`](HUMAN_TESTING.md) |
 | Write tests | [`tests/README.md`](tests/README.md) |
+| Review the security model | [`SECURITY.md`](SECURITY.md) — threat model, controls, known limitations |
 
 ---
 
@@ -103,23 +104,11 @@ scripts/                One-off utilities (Aruba template renderer, …)
 
 ## Certification status
 
-Per-codec certainty (read from `CanonicalCodec.certainty` at module
-load, surfaced via `GET /api/v1/migration/adapters`):
-
-| Codec | Certainty |
-|---|---|
-| mikrotik_routeros | **certified** ✅ |
-| aruba_aoss | **certified** ✅ |
-| cisco_iosxe_cli | **certified** ✅ |
-| opnsense | **certified** ✅ |
-| fortigate_cli | **certified** ✅ |
-| cisco_iosxe (NETCONF) | best_effort |
-
-See [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md)
-for the full matrix — per-fixture coverage, OS-version distribution,
-bugs surfaced, and per-codec "what blocks promotion" notes.  That
-file is the source of truth; counts here are intentionally omitted
-to avoid drift.
+Per-codec certainty (read from `CanonicalCodec.certainty` at module load,
+surfaced via `GET /api/v1/migration/adapters`).  See
+[`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) for
+the live per-codec status — RESULTS.md is the source of truth and this
+README intentionally omits per-codec counts to avoid drift.
 
 ---
 

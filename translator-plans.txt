@@ -1,7 +1,12 @@
 # NETCONFIG — YANG + TEMPLATE MIGRATION SYSTEM — PLAN
 # Format: dense, grep-friendly, code-first. Written for Claude, not humans.
 # Generated: 2026-04-16
-# Last revised: 2026-04-16
+# Last revised: 2026-05-04
+#
+# Status: this file mixes a long-term architectural sketch (most R / GAP /
+# Phase items now [SHIPPED]) with active deferred-roadmap items at the
+# bottom.  Active per-wave shipping notes live in CHANGELOG.md; this file
+# is the slower-changing companion.
 
 =====================================================================
 ## LONG-TERM ARCHITECTURE  (read first — supersedes the Phase 0-era shape)
@@ -2220,10 +2225,10 @@ PHASE 3 — SCALE OUT
   new_deps:  none mandatory
 
 =====================================================================
-## 13. QUICK-REFERENCE CHECKLIST WHEN ADDING A NEW ADAPTER
+## 13. QUICK-REFERENCE CHECKLIST WHEN ADDING A NEW CODEC
 =====================================================================
 
-[ ] netconfig/migration/adapters/<vendor>/ directory with:
+[ ] netconfig/migration/codecs/<vendor>/ directory with:
     __init__.py, parser.py, renderer.py, capabilities.yaml,
     templates/ (if CLI/XML target)
 [ ] Entry point registered in pyproject.toml

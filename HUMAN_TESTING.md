@@ -10,6 +10,50 @@ list, don't delete).
 
 ---
 
+## Backup — BD-Arista / BD-Aruba / BD-Junos backup smoke flow (ship-fresh)
+
+- [ ] **BD-Arista smoke**: configure a device with `type_key: Arista`
+      pointing at a real EOS box (`definitions/arista/eos/4.x.yaml`).
+      Trigger a backup from the Devices page.  Job reaches `completed`
+      and `configs/<host>.cfg` lands on disk containing `! Command:
+      show running-config` and the device's hostname.  `GET
+      /api/v1/configs/<file>` returns the contents verbatim.
+- [ ] **BD-Aruba smoke**: same flow with `type_key: Aruba` pointing
+      at an AOS-S 16.x switch (`definitions/aruba/aos-s/16.x.yaml`).
+      Backup writes `configs/<host>.cfg` opening with
+      `Running configuration:` and round-trips through the
+      `aruba_aoss` codec on the Migrate page without parse errors.
+- [ ] **BD-Junos smoke**: same flow with `type_key: Juniper` against
+      a Junos box (`definitions/juniper/junos/<ver>.yaml`).  File
+      lands as `configs/<host>.conf` with `set` lines (or
+      `display set | no-more`-equivalent depending on definition).
+      Migrate page renders it under `juniper_junos` source codec.
+
+## Migration — Cluster E.1 DHCP cross-vendor preview (ship-fresh)
+
+- [ ] **Arista source `ip dhcp pool` → Junos render**: paste an
+      Arista EOS config containing
+      `ip dhcp pool LAB / network 10.0.0.0/24 / default-gateway
+      10.0.0.1 / dns-server 10.0.0.2`.  Source codec `arista_eos`,
+      target `juniper_junos`.  Rendered output should emit
+      `set access address-assignment pool LAB family inet
+      network 10.0.0.0/24` plus `router 10.0.0.1` and the DNS
+      attribute lines, with the pool name preserved verbatim.
+      Confirms cluster E.1 DHCP wire-through is working end-to-end.
+
+## Migration — OPNsense paramiko-shell rescue (ship-fresh)
+
+- [ ] **OPNsense paramiko fallback**: configure an OPNsense device
+      where the netmiko-style transport fails (e.g. an OPNsense box
+      whose interactive shell drops netmiko's prompt regex).  The
+      collector should fall back to the paramiko-shell rescue path
+      and still write `configs/<host>.xml` containing the
+      `<opnsense>` root element.  Server log shows a warning about
+      netmiko prompt mismatch but the backup job reaches
+      `completed`.  Skip if your OPNsense fixtures all behave
+      cleanly — this is a regression check for the rescue, not a
+      mandatory check.
+
 ## Migration — New target profiles (Netgate ARM + DEC600, ship-fresh)
 
 - [ ] **Netgate SG-1100 profile picker**: translate any Cisco/Aruba

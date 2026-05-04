@@ -545,16 +545,16 @@ NetConfig knows about — four sections in one page:
    its `_variants` registry but filters out of `load_all()`.
    Explains "loaded N but showed N-M" on the startup log.
 3. **Migration target profiles** (`section-target-profiles`):
-   the 50+ hardware models with per-model port layouts, module
+   dozens of hardware models with per-model port layouts, module
    variants (NM-8X, NM-2Q, JL084A, …), stacking caps, VLAN/user
    limits.  Previously only reachable through the Tier-3
    rename-modal dropdown — now browsable with vendor grouping +
    live filter.
 4. **Migration vendors + codec capabilities** (`section-vendors`):
-   each of the 8 vendors with its registered codecs, direction
-   (`parse_only` / `bidirectional`), certainty tier (`certified`
-   / `best_effort` / `experimental`), and per-codec capability-
-   matrix counts (supported / lossy / unsupported xpaths).
+   every shipped migration vendor with its registered codecs,
+   direction (`parse_only` / `bidirectional`), certainty tier
+   (`certified` / `best_effort` / `experimental`), and per-codec
+   capability-matrix counts (supported / lossy / unsupported xpaths).
 
 Template: [`netconfig/templates/definitions.html`](netconfig/templates/definitions.html).
 Route: [`netconfig/api/routes/ui.py::definitions_page`](netconfig/api/routes/ui.py).
@@ -705,9 +705,9 @@ It auto-discovers fixtures under `tests/fixtures/real/<vendor>/`,
 runs parse + round-trip + determinism assertions, and prints
 per-fixture coverage metrics.  The harness is what gated codec
 promotion to `certified` during the real-capture-pass sessions —
-all five shipped codecs are now at `certified` (see
-`tests/fixtures/real/RESULTS.md` for the per-vendor matrix and
-cert decisions).  The harness now drives *hardening* rather than
+all shipped codecs except the NETCONF/OpenConfig stub have promoted
+to `certified` (see `tests/fixtures/real/RESULTS.md` for the per-vendor
+matrix and cert decisions).  The harness now drives *hardening* rather than
 promotion: new fixtures surface latent bugs and cover grammar
 surfaces the current corpus doesn't touch.
 
@@ -782,9 +782,11 @@ today it plugs in `_lag_name_equivalence` for the field-keys in
 Names not matching a documented LAG shape (loopback / VLAN /
 physical-port / free-form interface names) fall through to raw
 equality, so non-LAG drift on the same fields still surfaces
-normally.  Added in commit `faf925f` (Wave 9β); the seven variance
-classes remain unchanged — this just shifts where individual cells
-land between ALIGNED and CODEC_BUG.
+normally.  Added in commit `faf925f` (Wave 9β); the variance-class
+set was 7 at that time — TRIVIAL_EMPTY landed later in Wave 10α
+(commit `35c7bf0`).  The LAG equivalence callable just shifts where
+individual cells land between ALIGNED and CODEC_BUG; it doesn't add
+or remove a class.
 
 Per-source-vendor investigation reports under
 `tests/fixtures/real/phase4_findings_<vendor>.md` carry per-cell
@@ -804,10 +806,14 @@ that have shipped:
 
 - **Phase 0** — codec scaffold + mock adapter (`run_plan`, capability matrix)
 - **Phase 0.5** — canonical intent model + pluggable CIMs
-- **Phase 1** — 7 real codecs (Cisco NETCONF + CLI, Aruba AOS-S, OPNsense, MikroTik, FortiGate, Arista EOS, Juniper Junos parse-only)
+- **Phase 1** — real bidirectional codecs across the major switching/firewall
+  vendors (Cisco IOS-XE CLI + NETCONF, Aruba AOS-S, OPNsense, MikroTik
+  RouterOS, FortiGate CLI, Arista EOS, Juniper Junos).  See
+  `netconfig/migration/codecs/` for the live registry.
 - **R5** — auto-detection probe
 - **R6/7** — real-capture validation harness + fixture corpus
-- **Tier 2 wire-throughs** — SNMP, LAGs, local_users, DHCP pools, RADIUS, MTU
+- **Tier 2 wire-throughs** — SNMP + SNMPv3, LAGs, local_users, DHCP pools,
+  RADIUS, MTU, IPv6 addresses, VRFs, VXLAN/EVPN
 
 What's queued:
 - Opportunistic grammar-diversity fixtures (FortiGate multi-VDOM,

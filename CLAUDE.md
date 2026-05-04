@@ -6,8 +6,10 @@ every session without being asked.
 **Project orientation:** if this is your first read, also skim
 [`README.md`](README.md) for the quickstart and
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the 4-layer design.
-[`translator-plans.txt`](translator-plans.txt) carries the active
-roadmap; [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md)
+[`CHANGELOG.md`](CHANGELOG.md) is the authoritative current-state
+shipping log; [`translator-plans.txt`](translator-plans.txt) is the
+slower-changing architectural sketch (most R / GAP / Phase items
+now `[SHIPPED]`).  [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md)
 tracks per-codec certification state.
 
 ---
@@ -126,6 +128,10 @@ mapping below is concrete; audit every applicable row before you run
 | The module-variant schema gets a new field on `TargetProfile` / `TargetModule` | The class docstring in `netconfig/migration/target_profiles.py` — it includes a worked YAML example that must stay accurate |
 | In-file references like "see commit abc1234" in a partial or module comment | Fine to include for load-bearing rationale; don't rely on them for discoverability — put the same info in a nearby README if other contributors need it |
 | A new CSS colour added to `base.html` (or any template's `<style>` block) | Use `var(--token)` referencing the theme-token set at the top of `base.html`'s `<style>` block.  Add a new token to BOTH the `:root` (light) and `[data-theme="dark"]` (dark) blocks if no existing token fits — a new raw hex that only works in light mode WILL look wrong in dark mode.  See ARCHITECTURE.md "Theming (dark mode)" for the three load-bearing rules |
+| A capability-matrix change on a codec (xpath flips between supported / lossy / unsupported) | The matching expectation YAML under `tests/fixtures/cross_vendor_expectations/` for every pair the codec participates in, AND a regen commit for `CROSS_MESH_RESULTS.md` + `PHASE4_RECONCILIATION.md` (run `python tools/run_full_mesh.py --matrix` followed by `python tools/run_phase4_reconciliation.py`) |
+| A new variance class added to `tools/run_phase4_reconciliation.py` | `ARCHITECTURE.md` "Cross-mesh fidelity audit harness" subsection — the bullet list of variance classes is exhaustive, not illustrative; missing entries become drift |
+| A new backup-side device definition under `definitions/<vendor>/<os>/<ver>.yaml` | Per-vendor unit definition test under `tests/unit/definitions/`, per-vendor integration test, per-vendor desktop test (each pinning schema, probe regexes, codec round-trip).  See BD-Aruba (`de8e0f3`) / BD-Junos (`01f394c`) / BD-Arista (`8c9e9d4`) for the established three-test recipe |
+| Render-side codec changes touching field xpaths the matrix declares as `supported` | After landing the code change, regen the cross-mesh artefacts (`CROSS_MESH_RESULTS.md` + `PHASE4_RECONCILIATION.md`) in a separate commit so the diff narrates "codec change" → "matrix delta" cleanly |
 
 Rule of thumb: if a future contributor could plausibly search for the
 thing you just added and not find its rationale, there's a doc gap
@@ -142,7 +148,9 @@ peers.  Concretely:
 * `tests/README.md` → `testid_reference.md`, `fixtures/real/RESULTS.md`,
   `fixtures/real/NOTICE.md`
 * `ARCHITECTURE.md` → `definitions/README.md`,
-  `netconfig/migration/codecs/README.md`, `translator-plans.txt`
+  `netconfig/migration/codecs/README.md`,
+  `netconfig/migration/canonical/README.md`,
+  `tests/fixtures/real/RESULTS.md`
 * `README.md` → `ARCHITECTURE.md`, `CLAUDE.md`, `tests/README.md`
 
 A contributor who lands on one doc should be one hop from the others.
@@ -154,15 +162,13 @@ faster than numbers do.
 
 ## Code Organisation
 
-```
-netconfig/              FastAPI application (shared by both platforms)
-netconfig_desktop/      Windows desktop shell (tray, webview, server lifecycle)
-definitions/            Device definition YAML files (shared by both)
-tests/unit/             Pure-function tests, no I/O, platform-agnostic
-tests/integration/      API tests via TestClient, platform-agnostic
-tests/e2e/              Playwright E2E tests (web platform)
-tests/desktop/          Desktop-specific tests (mocked tray/webview)
-```
+See [`tests/README.md`](tests/README.md) for the full test-tier
+layout (sub-trees under `tests/unit/` for `audit/`, `api/`,
+`definitions/`, `migration/`, `tools/`, plus the integration / e2e /
+desktop tiers) and the top-level repo tree
+(`netconfig/`, `netconfig_desktop/`, `definitions/target_profiles/`,
+`tools/`).  Top-level orientation lives in
+[`README.md`](README.md)'s "Layout" section.
 
 ---
 
