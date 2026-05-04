@@ -11,6 +11,57 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (Wave 11 — operator-visible notification when Tier-3 sections are dropped)
+
+The canonical model classifies firewall_rules / nat_rules / vpn /
+routing_protocols as **Tier 3 — "parse for display, never auto-render"**
+(see `netconfig/migration/canonical/intent.py:39-41`).  Codec parsers
+silently skipped these stanzas because there's no canonical surface
+to populate.  Operators pasting a Cisco config containing
+`ip access-list extended OUTSIDE_IN ... ip access-group OUTSIDE_IN in`
+into the migrate page got a "successful migration" with zero
+notification that ACL blocks had been dropped — exactly the silent
+drop the project's matrix-honesty discipline calls out as drift.
+
+This wave closes the notification gap from two angles:
+
+* **W11-A — capability-matrix coverage** (commit `21a0f38`).  Three
+  ACL-capable codecs that didn't declare ACL/firewall xpaths as
+  unsupported now do:
+  * `arista_eos`: `/access-list/extended`, `/access-list/standard`,
+    `/access-list/ipv6`
+  * `cisco_iosxe` (NETCONF): `/access-list`, `/firewall`
+  * `cisco_iosxe_cli`: `/access-list/extended`, `/access-list/standard`,
+    `/access-list/ipv6`, `/firewall`, `/nat`
+  This makes the existing UI "Unsupported paths" panel surface the
+  ACL/firewall/NAT gap on those codecs.  Parallel coverage with the
+  5 codecs that already declared (`aruba_aoss`, `fortigate_cli`,
+  `mikrotik_routeros`, `opnsense`, `juniper_junos`).  20 new
+  capability-matrix regression-guard tests.
+
+* **W11-B — parser-level Tier-3 stanza detection** (commit `c632bdc`).
+  New shared helper `netconfig/migration/_tier3_detection.py` with
+  per-vendor pattern sets (`_iosxe_cli`, `_fortios`, `_junos`,
+  `_routeros`, `_opnsense`, plus a `_iosxe_xml` no-op stub for the
+  NETCONF codec).  New `CanonicalIntent.dropped_tier3_sections:
+  list[str]` field populated by every parser at entry.  Operator-
+  visible UI banner in `migrate.html` ("⚠ Tier-3 sections detected
+  in source") with `migrate-tier3-banner` testid.  Critical scope
+  property: **the new field is OUTPUT-ONLY** — no render code path
+  consumes it.  This is notification, not translation.  Firewall /
+  NAT auto-translation remains explicitly out of scope (see the
+  Cluster E.X / firewall-translation architectural decision in the
+  Wave 9 / Cluster E.1 entries).  37 new tests.
+
+Cumulative Wave 11 matrix delta: **zero**.  Notification-only
+changes; no migration semantics altered.  Suite: 3186 → 3223 passed
+(+37 tests across both sub-waves), 57 skipped, 0 failed.
+
+Honest behaviour delta: operators pasting a Cisco/Arista config
+with ACL blocks now see the dropped sections enumerated in the
+migrate page UI.  Previous behavior silently dropped them with no
+operator-visible signal.
+
 ### Fixed (Wave 10γ — three methodology gaps closed; matrix integrity at 91% noise reduction)
 
 Wave 10β agents flagged three methodology gaps during their
