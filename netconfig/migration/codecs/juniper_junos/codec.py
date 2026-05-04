@@ -226,7 +226,14 @@ class JunosCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_junos
+
+        intent = parse_intent(raw)
+        # Surface Tier-3 `set` lines the parser drops (`set firewall`,
+        # `set security policies`, `set policy-options`, `set
+        # class-of-service`).  Notification-only.
+        intent.dropped_tier3_sections = detect_tier3_sections_junos(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)

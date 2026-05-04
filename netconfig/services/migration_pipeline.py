@@ -202,6 +202,14 @@ def run_plan(
         job.status = MigrationJobStatus.parsing
         logger.debug("run_plan %s: stage=parse", job.id[:8])
         tree = source.parse(raw_text)
+        # Surface parser-detected Tier-3 stanza headers onto the job so
+        # the migrate page's "Detected in source but not translated"
+        # banner can render.  Notification-only — never read by render
+        # or transforms (the field is a list[str] of human-readable
+        # labels, not canonical config data).
+        job.dropped_tier3_sections = list(
+            getattr(tree, "dropped_tier3_sections", []) or []
+        )
 
         # Stage 3 — transforms
         job.status = MigrationJobStatus.transforming

@@ -342,6 +342,13 @@ def test_real_capture_round_trips_stable(
         d.pop("source_vendor", None)
         d.pop("source_format", None)
         d.pop("source_version", None)
+        # Notification surface populated only on the SOURCE-side parse;
+        # render() doesn't re-emit Tier-3 stanzas, so the second parse
+        # naturally produces an empty list.  Excluding it from round-
+        # trip comparison aligns with how source_vendor / format /
+        # version are excluded — both are metadata about the input,
+        # not canonical config data.
+        d.pop("dropped_tier3_sections", None)
         # Sort collections by natural identity key.
         for key, id_key in [
             ("interfaces", "name"),

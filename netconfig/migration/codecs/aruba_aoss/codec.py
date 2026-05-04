@@ -174,7 +174,13 @@ class ArubaAOSSCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_iosxe_cli
+
+        intent = parse_intent(raw)
+        # Aruba AOS-S uses Cisco-derived ACL grammar (`access-list extended`,
+        # `policy-map`, etc.); reuse the IOS-XE CLI detector.  Notification-only.
+        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)

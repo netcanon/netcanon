@@ -413,6 +413,16 @@
     <div id="mig-banner" data-testid="migrate-compatibility-banner"
          class="mig-banner mig-banner-info" style="display:none"></div>
 
+    <!-- Tier-3 detection banner — fires when the source-side parser
+         saw stanza headers it deliberately drops (firewall rules, NAT,
+         QoS, route-maps, IPsec, etc.).  Notification only: the
+         migration tool does NOT translate these; operators must apply
+         them manually on the target device.  Populated by JS from
+         job.dropped_tier3_sections; rendered via renderTier3Banner(). -->
+    <div id="mig-tier3-banner" data-testid="migrate-tier3-banner"
+         class="mig-banner mig-banner-warn"
+         style="display:none; margin-top:.5rem"></div>
+
     <div id="mig-stats" class="mig-stats"
          data-testid="migrate-stats" style="margin-top:.5rem"></div>
   </div>
@@ -791,6 +801,7 @@
   var result     = document.getElementById('mig-result');
   var summary    = document.getElementById('mig-status-summary');
   var banner     = document.getElementById('mig-banner');
+  var tier3Banner = document.getElementById('mig-tier3-banner');
   var stats      = document.getElementById('mig-stats');
   var outputSec  = document.getElementById('mig-output-section');
   var output     = document.getElementById('mig-output');
@@ -1226,6 +1237,14 @@
     banner.style.display = '';
     banner.innerHTML = renderBannerContents(job);
 
+    // Tier-3 detection banner.  Notification surface — fires when the
+    // source-side parser detected stanza headers it deliberately drops
+    // (firewall, NAT, QoS, route-maps, IPsec).  Operators apply these
+    // manually on the target device; the migration tool does NOT
+    // translate them.  See ARCHITECTURE.md "Cross-cutting render-time
+    // policies" for the Tier-3 boundary rationale.
+    renderTier3Banner(job);
+
     // Counts strip.
     if (job.validation) {
       var v = job.validation;
@@ -1306,6 +1325,41 @@
     return '<div style="flex:1"><strong>'
          + (v.severity === 'block' ? '&#10007; Blocked' : '&#9888; Warning')
          + '</strong><ul>' + lines + '</ul></div>';
+  }
+
+  /** Render the Tier-3 detection banner.
+   *
+   * Reads job.dropped_tier3_sections (populated by the source codec's
+   * parse() via netconfig/migration/_tier3_detection.py).  When the
+   * list is non-empty, builds a warning banner enumerating every
+   * detected stanza header with one entry per row carrying
+   * data-testid="migrate-tier3-section-N".  When empty, the banner is
+   * hidden.  Notification only — these stanzas are NOT translated.
+   */
+  function renderTier3Banner(job) {
+    if (!tier3Banner) return;
+    var sections = (job && job.dropped_tier3_sections) || [];
+    if (!sections.length) {
+      tier3Banner.style.display = 'none';
+      tier3Banner.innerHTML = '';
+      return;
+    }
+    var rows = sections.map(function(label, idx) {
+      return '<li data-testid="migrate-tier3-section-' + idx + '">'
+           + '<code>' + escapeHtml(label) + '</code></li>';
+    }).join('');
+    tier3Banner.style.display = '';
+    tier3Banner.innerHTML =
+      '<div><strong>&#9888; Tier-3 sections detected in source</strong></div>'
+      + '<div style="margin-top:.25rem;font-size:.82rem">'
+      + 'The source config contains '
+      + '<strong data-testid="migrate-tier3-count">' + sections.length + '</strong>'
+      + ' section(s) this tool does not translate '
+      + '(firewall rules, NAT, QoS, route-maps, IPsec, etc.).  '
+      + 'These will NOT appear in the rendered output.  '
+      + 'Operator must apply them manually on the target device.'
+      + '</div>'
+      + '<ul style="margin-top:.4rem">' + rows + '</ul>';
   }
 
   /** Render a bucket of validation findings.

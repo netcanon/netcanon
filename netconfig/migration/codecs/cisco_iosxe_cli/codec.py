@@ -256,7 +256,14 @@ class CiscoIOSXECLICodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_iosxe_cli
+
+        intent = parse_intent(raw)
+        # Surface Tier-3 stanza headers the parser deliberately drops
+        # (ACLs, NAT, QoS, route-maps, crypto).  Notification-only —
+        # never read by any render-side code.
+        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_cli(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)

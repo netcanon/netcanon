@@ -276,6 +276,21 @@ the policy locally:
   Per-target accepted-algorithm sets live in
   `_TARGET_ACCEPTS[<vendor>]`.
 
+* **`netconfig/migration/_tier3_detection.py`** — Tier-3 stanza-header
+  detection.  Public API: `detect_tier3_sections_iosxe_cli(raw)`,
+  `detect_tier3_sections_fortios(raw)`, `detect_tier3_sections_junos(raw)`,
+  `detect_tier3_sections_routeros(raw)`,
+  `detect_tier3_sections_opnsense(raw)`,
+  `detect_tier3_sections_iosxe_xml(raw)` (currently no-op).  Each codec's
+  `parse()` calls the matching detector and stamps the result onto
+  `CanonicalIntent.dropped_tier3_sections` so the migrate page can
+  surface the silent-drop in a "Detected in source but not translated"
+  banner.  Output is NOTIFICATION-ONLY — never read by render or any
+  transform.  Patterns target stanzas the canonical schema doesn't
+  model (firewall, NAT, QoS, route-maps, crypto/IPsec, OPNsense filter
+  / NAT / VPN XML); supported stanzas are deliberately excluded so the
+  banner doesn't lie about what was dropped.
+
 * **`netconfig/migration/_naming.py`** — naming-value sanitisation.
   Public API: `sanitise_hostname(name, separator="_")`.  Some target
   CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace in

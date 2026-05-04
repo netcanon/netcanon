@@ -492,6 +492,9 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-result`                      | `<div>`    | Hidden container for everything below; revealed after first result |
 | `migrate-status-summary`              | `<div>`    | "Job {id}… — status: completed/partial/failed" |
 | `migrate-compatibility-banner`        | `<div>`    | Severity-coloured banner mirroring `ValidationReport.severity` |
+| `migrate-tier3-banner`                | `<div>`    | Notification banner — visible iff `MigrationJob.dropped_tier3_sections` is non-empty.  Surfaces source-side stanza headers the parser deliberately drops (ACLs, NAT, QoS, route-maps, IPsec, etc).  See `netconfig/migration/_tier3_detection.py` |
+| `migrate-tier3-count`                 | `<strong>` | Detected-section count rendered inside the Tier-3 banner |
+| `migrate-tier3-section-N`             | `<li>`     | One row per detected stanza header, indexed `N=0..len-1`.  Children are `<code>` elements with the literal label |
 | `migrate-stats`                       | `<div>`    | Supported/lossy/unsupported path counts |
 | `migrate-stat-supported`              | `<strong>` | Count number |
 | `migrate-stat-lossy`                  | `<strong>` | Count number |

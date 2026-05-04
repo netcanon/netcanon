@@ -39,6 +39,13 @@ Scope (Tier 2 — auto-translate with review banner):
 
 Scope (Tier 3 — parse for display, never auto-render):
     firewall_rules, nat_rules, vpn, routing_protocols (informational).
+    Per-codec parsers ALSO surface a ``dropped_tier3_sections`` list on
+    :class:`CanonicalIntent` — best-effort heuristic detection of
+    Tier-3 stanza headers in the source bytes (see
+    :mod:`netconfig.migration._tier3_detection`).  This is a notification
+    surface only: the migrate page renders it as a "detected but not
+    translated" banner so operators see what was silently dropped.  It
+    is NEVER read by render-side code or any transform.
 
 Schema extensions (ship-before-wire):
     ``vxlan_vnis`` and ``evpn_type5_routes`` are top-level Tier 2 lists
@@ -540,6 +547,16 @@ class CanonicalIntent(BaseModel):
 
     # ── Tier 3 — informational only (never auto-rendered) ──
     raw_sections: dict[str, str] = Field(default_factory=dict)
+
+    # Tier-3 stanza HEADERS detected in source but not modelled by the
+    # canonical schema.  Populated by every codec's ``parse()`` via the
+    # per-vendor detector in
+    # :mod:`netconfig.migration._tier3_detection`.  Surfaced to the
+    # operator via the migrate page's "Detected in source but not
+    # translated" banner so the silent-drop is visible.  Empty list
+    # means the parser saw nothing Tier-3 in the input.  This is a
+    # NOTIFICATION-ONLY surface — render-side code MUST NOT read it.
+    dropped_tier3_sections: list[str] = Field(default_factory=list)
 
     # ── Metadata ──
     source_vendor: str = ""         # vendor_id of the codec that produced this

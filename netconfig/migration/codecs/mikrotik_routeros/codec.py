@@ -205,7 +205,14 @@ class MikroTikRouterOSCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_routeros
+
+        intent = parse_intent(raw)
+        # Surface Tier-3 `/path` blocks the parser drops (`/ip firewall`,
+        # `/queue`, `/ip ipsec`, `/routing bgp/ospf/filter`).
+        # Notification-only.
+        intent.dropped_tier3_sections = detect_tier3_sections_routeros(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)

@@ -299,6 +299,11 @@ def test_audited_fields_cover_every_canonical_top_level() -> None:
     canonical_fields = set(CanonicalIntent.model_fields.keys())
     metadata_fields = {
         "source_vendor", "source_format", "source_version",
+        # Notification-only surface populated by the source-side parser
+        # via netconfig/migration/_tier3_detection.py.  Never read by
+        # render, so cross-codec audit cells would always show
+        # "unsupported in target" for it — exclude rather than pollute.
+        "dropped_tier3_sections",
     }
     expected = canonical_fields - metadata_fields
     audited = set(run_full_mesh._AUDITED_FIELDS)

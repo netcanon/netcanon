@@ -1673,3 +1673,81 @@ class TestDetectEndpoint:
         assert len(body) >= 1
         # The FakeCollector's OPNsense fixture is valid config.xml.
         assert body[0]["codec"] == "opnsense"
+
+
+class TestDroppedTier3SectionsWireThrough:
+    """Verify the migration response surfaces the parser-detected
+    Tier-3 stanza headers via :attr:`MigrationJob.dropped_tier3_sections`.
+
+    Notification surface — no transform / render side-effect should
+    react to this field.  Tests pin both the populated case (input
+    contains an ACL) and the empty case (clean Tier-1 input).
+    """
+
+    _IOSXE_WITH_ACL = (
+        "hostname r1\n"
+        "ip access-list extended OUTSIDE_IN\n"
+        " permit tcp any any eq 22\n"
+        "interface GigabitEthernet0/0\n"
+        " ip address 10.0.0.1 255.255.255.0\n"
+        "!\n"
+    )
+
+    _IOSXE_CLEAN = (
+        "hostname r1\n"
+        "interface GigabitEthernet0/0\n"
+        " ip address 10.0.0.1 255.255.255.0\n"
+        "!\n"
+    )
+
+    def test_acl_in_source_surfaces_in_response(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_WITH_ACL,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "dropped_tier3_sections" in body
+        sections = body["dropped_tier3_sections"]
+        assert any(
+            s.startswith("ip access-list extended OUTSIDE_IN")
+            for s in sections
+        ), f"expected ACL header in {sections}"
+
+    def test_clean_source_yields_empty_list(self, client):
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_CLEAN,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        # Field is always present (default_factory=list); never null.
+        assert body["dropped_tier3_sections"] == []
+
+    def test_field_does_not_alter_render(self, client):
+        """Pin that the field is notification-only — render output
+        for the Tier-3-laden source should be the same as a clean
+        run plus whatever Tier-1 content exists.  In other words,
+        no ACL bytes leak into job.rendered."""
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "cisco_iosxe_cli",
+                "raw_text": self._IOSXE_WITH_ACL,
+            },
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        rendered = body.get("rendered") or ""
+        # ACL header is in dropped_tier3_sections (notification),
+        # NOT in rendered (would mean we accidentally translated it).
+        assert "access-list extended OUTSIDE_IN" not in rendered

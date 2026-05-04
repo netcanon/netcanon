@@ -472,6 +472,17 @@ class MigrationJob(BaseModel):
     #: transform.  Empty list when source config had v1/v2c only.
     source_snmpv3_users: list[str] = Field(default_factory=list)
 
+    #: Tier-3 stanza headers detected in the source bytes that the
+    #: codec parser deliberately drops (firewall rules, NAT, QoS,
+    #: route-maps, IPsec, etc.).  Surfaced from
+    #: :attr:`CanonicalIntent.dropped_tier3_sections` post-parse so the
+    #: migrate page can render a "Detected in source but not
+    #: translated" banner.  Notification surface only — never read by
+    #: any render-side code or transform.  Populated by every codec's
+    #: ``parse()``; see :mod:`netconfig.migration._tier3_detection` for
+    #: the per-vendor detectors.
+    dropped_tier3_sections: list[str] = Field(default_factory=list)
+
 
 # ---------------------------------------------------------------------------
 # Adapter info (for list/GET endpoints)

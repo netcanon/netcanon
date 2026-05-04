@@ -531,6 +531,14 @@ class CiscoIOSXECodec(CodecBase):
         # so behaviour stays consistent regardless of which wire-format
         # the operator captured from.
         _synthesize_vlans_from_svis(intent)
+        # Surface Tier-3 sections detected in the NETCONF input.
+        # Currently a no-op — NETCONF input is the OpenConfig
+        # ``<interfaces>`` subtree this codec is wired to consume, not
+        # a vehicle for firewall / QoS / NAT XML.  Hook is wired for
+        # parity with the CLI codecs so future XML extensions get the
+        # banner for free without changing the call site.
+        from ..._tier3_detection import detect_tier3_sections_iosxe_xml
+        intent.dropped_tier3_sections = detect_tier3_sections_iosxe_xml(raw)
         logger.debug(
             "cisco_iosxe parsed: hostname=%r ifaces=%d vlans=%d "
             "routes=%d lags=%d users=%d snmp=%s (input=%d chars)",

@@ -218,7 +218,14 @@ class OPNsenseCodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_opnsense
+
+        intent = parse_intent(raw)
+        # Surface Tier-3 XML elements the parser drops (`<filter>`,
+        # `<nat>`, `<ipsec>`, `<openvpn>`, `<wireguard>`, captive
+        # portal, traffic shaper, load balancer).  Notification-only.
+        intent.dropped_tier3_sections = detect_tier3_sections_opnsense(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)

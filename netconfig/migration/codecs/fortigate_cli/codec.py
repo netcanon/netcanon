@@ -198,7 +198,14 @@ class FortiGateCLICodec(CodecBase):
     # -----------------------------------------------------------------
 
     def parse(self, raw: str) -> CanonicalIntent:
-        return parse_intent(raw)
+        from ..._tier3_detection import detect_tier3_sections_fortios
+
+        intent = parse_intent(raw)
+        # Surface Tier-3 `config` blocks the parser drops (firewall
+        # policies, VIPs, VPN, UTM profiles, router policy/route-maps).
+        # Notification-only.
+        intent.dropped_tier3_sections = detect_tier3_sections_fortios(raw)
+        return intent
 
     def render(self, tree: Any) -> str:
         return render_intent(tree)
