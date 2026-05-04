@@ -283,8 +283,25 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # ranges, e.g. ``1/1..1/24``).  Reuses the shared
     # ``_natural_port_sort_key`` from canonical/transforms.
     from ...canonical.transforms import _natural_port_sort_key
+    # Wave 7c-E: suppress phantom CanonicalInterface materialisation for
+    # ``ae<N>`` names that exist in iface_state ONLY because of the
+    # ``set interfaces ae<N> aggregated-ether-options lacp <mode>`` LAG
+    # stanza — that line creates an empty iface_state entry as a side
+    # effect of ``_apply_interfaces``'s unconditional
+    # ``setdefault(name, {})``.  Without this guard, every rendered
+    # LAG produces a phantom interface in the round-trip, shifting
+    # the alphabetically-sorted iface list and surfacing as CODEC_BUG
+    # drift on iface fields (description / enabled / ipv4) in cross-
+    # vendor cells like fortigate_cli -> juniper_junos.  When the
+    # operator IS configuring per-iface attrs under ae<N>, the
+    # iface_state entry is non-empty and we materialise normally.
     for name in sorted(iface_state.keys(), key=_natural_port_sort_key):
         state = iface_state[name]
+        if name in lag_state and not state:
+            # Phantom LAG-name iface — only the aggregated-ether-options
+            # line touched this name.  The CanonicalLAG record carries
+            # the LAG identity; the iface list shouldn't double-count.
+            continue
         iface = CanonicalInterface(
             name=name,
             enabled=state.get("enabled", True),
