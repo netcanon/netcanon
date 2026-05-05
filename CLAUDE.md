@@ -241,4 +241,6 @@ tests use these exclusively — never CSS classes or element structure.  See
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer design and migration pipeline
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing capabilities + known limitations (cross-referenced against in-app limitation messages)
 - [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — forward-looking plan for taking the project public (not yet started; documents the strategic plan so it survives compaction and is discoverable cold)
+- [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — distilled matrix-honesty discipline (the patterns this project operates under, with worked-example citations into the live tree); portable to other projects
+- [`docs/templates/`](docs/templates/) — starter scaffolding (CLAUDE.md / ARCHITECTURE.md / CHANGELOG.md / CAPABILITIES.md / RELEASE_PLAN.md / SECURITY.md / CONTRIBUTING.md + GitHub issue forms) for cloning the methodology into a new project; future-extractable to a standalone repo
 - [`tests/README.md`](tests/README.md) — test-suite layout and mocking strategy
