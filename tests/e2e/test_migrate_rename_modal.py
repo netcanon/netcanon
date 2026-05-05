@@ -99,6 +99,21 @@ class TestRenameModalContent:
         # Row contains the auto-target cell showing "1/1".
         expect(gi1_row).to_contain_text("1/1")
 
+    @pytest.mark.skip(
+        reason=(
+            "Stale premise: this test was written when Aruba AOS-S could not "
+            "render Cisco Loopback0 (so the row carried a warning + the "
+            "section auto-opened).  Commit 5f4855a (May 2026) added Aruba "
+            "loopback support — Loopback0 now translates cleanly to "
+            "loopback1, no warning is emitted, and the loopback `<details>` "
+            "section is rendered collapsed by default (so the row inside is "
+            "hidden).  Reported by Wave 11-A and Wave 7c-G as a pre-existing "
+            "deterministic failure.  Wave-12 task: re-author this test "
+            "around a target codec that genuinely cannot render loopbacks "
+            "(or delete it; the no-warning branch is already covered by "
+            "test_table_shows_physical_section_with_renamed_ports)."
+        )
+    )
     def test_loopback_appears_as_warning_row(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
