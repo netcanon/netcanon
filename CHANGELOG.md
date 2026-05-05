@@ -11,6 +11,73 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Validation cleanup wave (post-`170a2c2` audit follow-ups)
+
+After the comprehensive validation pass (commit `170a2c2`), the
+matrix-honesty discipline applied to the validation findings
+themselves surfaced a 21-item open-work inventory.  This batch
+addresses the actionable subset:
+
+* **Commit `07086b1`** — `cisco_iosxe_cli` `/routing-instances/instance`
+  declaration moved from `UnsupportedPath` to `LossyPath`.  Old
+  declaration claimed "wire-up deferred" but parse + render had been
+  shipping; Wave 10β-B (commit `40de39c`) re-flipped the per-pair
+  YAML disposition months prior.  Codec capability matrix was
+  contradicting both the codec's own code AND the cross-vendor
+  expectation YAML.  6 regression-guard tests pin the corrected
+  declaration shape.
+* **Commit `e7c5378`** — `docs/CAPABILITIES.md` table row for the
+  same field aligned with the corrected matrix.
+* **Commit `298e1ca`** — Four historical `*.txt` files (12-lens
+  architectural analysis, companion review report, auto-actionable
+  triage, vendor-config research notes) moved from top-level to
+  `docs/archive/` with a `README.md` explaining provenance and the
+  current-state authoritative-source pointers.
+* **Commit `7ffa1c5`** + this commit — Two E2E tests (originally
+  reported as "pre-existing flakes" by Wave 11-A and Wave 7c-G)
+  diagnosed as deterministic dead-premise failures: both depend on
+  Cisco `Loopback0` flowing through Aruba's auto-drop path, but
+  commit `5f4855a` (May 2026) added Aruba loopback support so
+  `Loopback0 → loopback1` translates cleanly with no warning and no
+  auto-drop.  Skip-marked with rationale; Wave-12 follow-up to
+  re-author against a target codec that genuinely cannot render
+  loopbacks (or delete; the equivalent UI surfaces are exercised by
+  sibling tests).
+* **Commit `30beb92`** — Two new canonical `CanonicalInterface`
+  fields (`dhcp_client_v6` for IPv6 DHCPv6 / SLAAC mode, and
+  `tunnel_type` for GRE / EoIP / IPIP / IPSEC / VXLAN encap
+  discriminator) closing two long-standing schema gaps.  Wired
+  across 5 codecs each (parse + render) with `LossyPath`
+  declarations on codecs without native grammar.  Junos
+  switch-options sub-paths reframed from "deferred" to "documented
+  architectural deferral" — same Tier-3-shape rationale (EVPN-VXLAN
+  underlay primitives require deployment-topology context the
+  canonical model deliberately doesn't carry).  46 new tests.
+
+Cumulative validation cleanup: matrix integrity + capability-honesty
+contracts now align across codec.py declarations, parse/render code,
+cross-vendor expectation YAMLs, CAPABILITIES.md table rows, and
+regression-guard tests.
+
+Suite: 3229 → 3275 passed (+46 tests across the wave), 57 skipped
+(2 newly skip-marked; pre-existing E2E that no longer have a real
+target configuration), 0 failed.  Matrix delta: CODEC_BUG holds at
+0; minor TRIVIAL_EMPTY shift (+41) and STRUCTURAL_ONLY shift (-56)
+from the new fields routing through the trivial-empty classification
+correctly on fixtures that don't exercise IPv6-DHCP or non-GRE
+tunnels.
+
+### Documented (forward-looking)
+
+* **Commit `1fe1cfd`** — `docs/RELEASE_PLAN.md` captures the
+  strategic plan for taking the project public.  Pre-flight
+  checklist, maximum-bug-report-surface-area framing for the network-
+  engineer audience, packaging tier strategy (Docker primary, PyPI
+  secondary, MSI tertiary), concrete release sequence, what-not-to-do
+  guidance, when-to-start triggers.  Forward-looking; not yet
+  started.  Linked from `CLAUDE.md` "See also" so post-compaction
+  contexts find it cold.
+
 ### Added (Wave 11 — operator-visible notification when Tier-3 sections are dropped)
 
 The canonical model classifies firewall_rules / nat_rules / vpn /

@@ -204,6 +204,23 @@ class TestRenameModalDrop:
         # contains "1/1" as part of trunk port lists — so just assert
         # the Gi1/0/1 interface STANZA doesn't appear.
 
+    @pytest.mark.skip(
+        reason=(
+            "Same dead premise as test_loopback_appears_as_warning_row "
+            "(skip-marked above).  Test was authored when Aruba had no "
+            "loopback support, so Cisco Loopback0 was auto-dropped on "
+            "the cisco→aruba target — the drop link rendered as 'keep "
+            "verbatim'.  Commit 5f4855a (May 2026) added Aruba "
+            "loopback support; Loopback0 now translates cleanly to "
+            "loopback1, no auto-drop happens, no 'keep verbatim' link "
+            "appears, locator resolves empty.  Flagged by CLEANUP-B "
+            "(commit 7ffa1c5) as sharing the dead-premise failure mode "
+            "with the loopback-warning-row sibling.  Wave-12 task: "
+            "re-author against a target codec that genuinely cannot "
+            "render loopbacks (or delete; the auto-drop UI surface is "
+            "exercised by other tests in this module)."
+        )
+    )
     def test_keep_verbatim_re_includes_auto_dropped_row(
         self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
     ):
