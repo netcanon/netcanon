@@ -134,7 +134,7 @@ enumerates every `UnsupportedPath` and `LossyPath` declared today.
 | `/evpn-type5-routes/route` | Lossy | Per-prefix EVPN Type-5 records are a VRF property; no codec populates them today (lossy-by-default extension point). |
 | `/interfaces/interface/subinterfaces/subinterface/ipv6` | Unsupported | Phase 0.5 scope — IPv4 only. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | IOS-XE VXLAN (`interface nve1 / member vni …`) parse-and-ignore in v1; wire-up deferred until Catalyst-to-Arista migration demand arrives. |
-| `/routing-instances/instance` | Unsupported | VRF declarations and `vrf forwarding <name>` parse-and-ignore in v1; canonical schema exists; IOS-XE wire-up deferred. |
+| `/routing-instances/instance` | Lossy | VRF declarations parse and render bidirectionally (`parse._parse_routing_instances` → `vrf definition` emit loop; cross-vendor confirmed via Wave 10β-B / commit `40de39c`).  Lossy because per-VRF static routes carry no `vrf` discriminator on `CanonicalStaticRoute` (route-table membership drops on round-trip), and `address-family ipv6` / EVPN `l2vpn evpn` sub-stanzas inside `vrf definition` are parse-and-ignore in v1. |
 | `/access-list/{extended,standard,ipv6}` | Unsupported | Tier 3 — auto-translating ACL semantics across vendors risks shipping subtly-permissive rules. |
 | `/firewall` | Unsupported | Zone-based firewall (zone-pair / policy-map type inspect) is Tier 3. |
 | `/nat` | Unsupported | NAT is Tier 3 — semantics are tightly coupled to interface zone designations. |
