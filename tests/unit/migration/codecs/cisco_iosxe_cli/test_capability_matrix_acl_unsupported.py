@@ -94,6 +94,16 @@ class TestExistingDeclarationsPreserved:
     must NOT drop any pre-existing ``unsupported`` xpaths."""
 
     def test_existing_unsupported_paths_preserved(self) -> None:
+        # NOTE: ``/routing-instances/instance`` was historically in
+        # this list with reason "wire-up deferred" but the declaration
+        # was always stale — parse._parse_routing_instances + render
+        # VRF emission have shipped since the early codec.  Wave 10β-B
+        # (commit `40de39c`) re-flipped the per-pair YAML disposition.
+        # The post-validation cleanup (commit following `170a2c2`)
+        # moved the declaration from ``unsupported`` to ``lossy`` to
+        # match reality.  See
+        # ``test_capability_matrix_vrf_lossy.py`` for the corrected
+        # invariant.
         caps = CiscoIOSXECLICodec().capabilities
         unsupported_paths = {up.path for up in caps.unsupported}
         for required in (
@@ -101,7 +111,6 @@ class TestExistingDeclarationsPreserved:
             "/vxlan-vnis/vni",
             "/vxlan-vnis/source-interface",
             "/vxlan-vnis/udp-port",
-            "/routing-instances/instance",
         ):
             assert required in unsupported_paths, (
                 f"existing UnsupportedPath {required!r} dropped — "

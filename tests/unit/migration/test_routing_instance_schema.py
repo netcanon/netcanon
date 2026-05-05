@@ -169,40 +169,6 @@ class TestCanonicalIntentRoutingInstances:
 # ---------------------------------------------------------------------------
 
 
-class TestDCCodecsDeclareRoutingInstancesUnsupported:
-    """Ship-before-wire contract — every DC-class codec declares
-    /routing-instances/instance under Unsupported so the UI banner
-    surfaces the gap."""
-
-    # After GAP 6, Arista + Junos both PARSE + RENDER VRF declarations;
-    # only Cisco IOS-XE CLI remains Unsupported (no wire-up planned
-    # near-term — not a DC-fabric codec in most deployments).
-    _DC_CODECS = [
-        (CiscoIOSXECLICodec, "cisco_iosxe_cli"),
-    ]
-
-    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_declares_routing_instances_unsupported(self, codec_cls, name):
-        caps = codec_cls().capabilities
-        paths = {u.path for u in caps.unsupported}
-        assert "/routing-instances/instance" in paths, (
-            f"{name} missing unsupported declaration for "
-            "/routing-instances/instance — ship-before-wire contract "
-            "requires DC codecs to report the gap"
-        )
-
-    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_classify_returns_unsupported(self, codec_cls, name):
-        caps = codec_cls().capabilities
-        assert caps.classify("/routing-instances/instance") == "unsupported"
-
-    @pytest.mark.parametrize("codec_cls,name", _DC_CODECS)
-    def test_unsupported_reason_non_empty(self, codec_cls, name):
-        caps = codec_cls().capabilities
-        by_path = {u.path: u for u in caps.unsupported}
-        assert by_path["/routing-instances/instance"].reason.strip() != ""
-
-
 class TestWiredCodecsClassifySupported:
     """GAP 6: arista_eos + juniper_junos PARSE + RENDER
     ``/routing-instances/instance`` now.  Verify the matrix
@@ -219,3 +185,50 @@ class TestWiredCodecsClassifySupported:
     def test_routing_instances_supported(self, codec_cls, name):
         caps = codec_cls().capabilities
         assert caps.classify("/routing-instances/instance") == "supported"
+
+
+class TestLossyCodecsClassifyLossy:
+    """The cisco_iosxe_cli codec wires both parse
+    (``_parse_routing_instances``) and render (the VRF emission
+    loop) for ``/routing-instances/instance``, but the round-trip
+    is documented-lossy because per-VRF static routes carry no
+    ``vrf`` discriminator on ``CanonicalStaticRoute`` (route table
+    membership drops on round-trip) and ``address-family ipv6`` /
+    EVPN ``l2vpn evpn`` sub-stanzas inside ``vrf definition`` are
+    parse-and-ignore in v1.
+
+    The original ``unsupported`` declaration on cisco_iosxe_cli was
+    stale (claimed "wire-up deferred" while parse and render were
+    actively shipping); Wave 10β-B (commit `40de39c`) confirmed
+    bidirectional support via the per-pair YAML re-flip, and the
+    post-validation cleanup (commit following `170a2c2`) corrected
+    the matrix declaration to ``LossyPath``.  Pin the
+    classification here so the contradiction doesn't reappear."""
+
+    _LOSSY_CODECS = [
+        (CiscoIOSXECLICodec, "cisco_iosxe_cli"),
+    ]
+
+    @pytest.mark.parametrize("codec_cls,name", _LOSSY_CODECS)
+    def test_routing_instances_classified_lossy(self, codec_cls, name):
+        caps = codec_cls().capabilities
+        assert caps.classify("/routing-instances/instance") == "lossy", (
+            f"{name} should classify /routing-instances/instance as "
+            f"'lossy' (parse + render shipped; sub-field drift on "
+            f"per-VRF static routes / IPv6 / EVPN sub-stanzas)."
+        )
+
+    @pytest.mark.parametrize("codec_cls,name", _LOSSY_CODECS)
+    def test_routing_instances_not_unsupported(self, codec_cls, name):
+        """Regression guard: the stale ``unsupported`` declaration
+        must not reappear."""
+        caps = codec_cls().capabilities
+        paths = {u.path for u in caps.unsupported}
+        assert "/routing-instances/instance" not in paths
+
+    @pytest.mark.parametrize("codec_cls,name", _LOSSY_CODECS)
+    def test_routing_instances_lossy_reason_non_empty(self, codec_cls, name):
+        caps = codec_cls().capabilities
+        by_path = {l.path: l for l in caps.lossy}
+        assert "/routing-instances/instance" in by_path
+        assert by_path["/routing-instances/instance"].reason.strip() != ""

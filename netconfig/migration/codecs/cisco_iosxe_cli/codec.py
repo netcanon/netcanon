@@ -152,6 +152,32 @@ class CiscoIOSXECLICodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/routing-instances/instance",
+                reason=(
+                    "VRF declarations (``vrf definition <name>`` "
+                    "with ``rd`` + ``address-family ipv4`` + "
+                    "``route-target import/export``) and per-"
+                    "interface ``vrf forwarding <name>`` are parsed "
+                    "into ``CanonicalIntent.routing_instances`` "
+                    "(see ``parse._parse_routing_instances``) and "
+                    "rendered back to ``vrf definition`` blocks "
+                    "(see ``render`` VRF emission loop).  Cross-"
+                    "vendor render to Junos ``set routing-instances "
+                    "<name> instance-type vrf`` confirmed bidir-"
+                    "ectional via Wave 10β-B (commit `40de39c`).  "
+                    "Lossy rather than supported because per-VRF "
+                    "static routes carry no ``vrf`` discriminator "
+                    "on ``CanonicalStaticRoute`` (route table "
+                    "membership drops on round-trip), and "
+                    "``address-family ipv6`` / EVPN ``l2vpn evpn`` "
+                    "sub-stanzas inside ``vrf definition`` are "
+                    "parse-and-ignore in v1.  Basic VRF + "
+                    "RD + RT_imports/exports + description "
+                    "round-trip cleanly."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -183,18 +209,6 @@ class CiscoIOSXECLICodec(CodecBase):
                     "IOS-XE VXLAN UDP port (`interface nve1 / vxlan "
                     "udp-port <N>`) parse-and-ignore in v1.  Same "
                     "scope as /vxlan-vnis/vni."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing-instances/instance",
-                reason=(
-                    "VRF declarations (`vrf definition <name>` with "
-                    "`rd` + `address-family ipv4` + "
-                    "`route-target import/export`) and per-interface "
-                    "`vrf forwarding <name>` parse-and-ignore in "
-                    "v1.  CanonicalRoutingInstance + "
-                    "CanonicalInterface.vrf schema exists; IOS-XE "
-                    "wire-up deferred."
                 ),
             ),
             # ── ACL / firewall / NAT (Tier 3 — not auto-translatable) ──
