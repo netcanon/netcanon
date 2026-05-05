@@ -398,6 +398,169 @@ surfaced as "here's what this looks like."
 
 ---
 
+## Sanitization tooling
+
+The bug-report-surface-area strategy assumes operators can sanitize
+configs before submitting.  Without a sanitization helper, operators
+either submit raw (security risk for them, leak risk for the project)
+or skip submitting (signal loss for the project).  Build the helper
+as a release-blocker (MUST tier).
+
+**Status as of 2026-05-05:** The helper does NOT yet exist.  No
+``tools/sanitize_config.py`` in the repo; no API endpoint; no UI
+surface.  The existing ``netconfig.migration._naming.sanitise_hostname``
+helper is for cross-vendor render-time normalisation (whitespace
+collapse), NOT for redacting sensitive data.
+
+### Architectural decision: integrated, multi-invocation, single source of truth
+
+Build the helper as a **shared library accessible via three invocation
+paths**, NOT three separate implementations.  This avoids the version-
+skew + maintenance-fragmentation tax of an ad-hoc script that lives
+alongside but evolves independently of the main app:
+
+1. **`netconfig.tools.sanitize` Python module** — the actual
+   sanitisation logic.  Vendor-aware via the existing codec parsers;
+   operates on the canonical model rather than raw text.  Single
+   source of truth.
+
+2. **CLI subcommand `netconfig sanitize`** — exposed via the PyPI
+   package's console-scripts entry point.  For operators NOT running
+   the FastAPI server (one-shot pip install, CI / scripting).
+
+3. **HTTP API endpoint `POST /api/v1/sanitize`** — exposed via the
+   running FastAPI server.  For operators running Docker (or any
+   deployed instance).
+
+A fourth invocation path — a web UI page at `/sanitize` — is **deferred
+to v0.2.0** contingent on operator-feedback signals showing the
+friction is real.  Same shared library; thin presentation layer if
+added.
+
+### Why integrated, not ad-hoc
+
+A separate ad-hoc script downloaded from the repo has version-skew
+risk and gets stale relative to codec changes.  The shared-library
+approach means:
+
+* Sanitisation rules track codec evolution automatically — when a
+  codec gains a new field, sanitisation rules for that field fall
+  out of the canonical model walk.
+* Single source of truth for "what gets redacted" — no parallel
+  implementations to drift apart.
+* Test surface shared with codec parsers — every fixture exercises
+  both directions.
+* Cross-vendor consistency: a Cisco config and a Junos config of the
+  same network sanitise to byte-similar shapes because they pass
+  through the same canonical model.
+
+### Docker UX (the friction concern resolved)
+
+The Docker user has the FastAPI server running already — that's the
+point of the container.  They should NOT need to learn `docker exec`.
+The HTTP API IS the answer for Docker users:
+
+```
+# Operator with NetConfig running on localhost:8765
+curl -X POST http://localhost:8765/api/v1/sanitize \
+  -F "source_vendor=cisco_iosxe_cli" \
+  -F "config=@my-config.txt" \
+  -o sanitized.txt
+```
+
+Two lines.  No `docker exec` gymnastics.  No mounting volumes for a
+one-shot operation.  `curl` against the running container is
+idiomatic for any server-in-container pattern operators are already
+familiar with.
+
+For PyPI / native users not running the server:
+
+```
+pip install netconfig
+netconfig sanitize -i my-config.txt -o sanitized.txt \
+  --source-vendor cisco_iosxe_cli
+```
+
+For Windows MSI users: the MSI ships the same Python entry point
+under `<install>\netconfig.exe sanitize ...` — OR (better) they hit
+the local FastAPI server's HTTP endpoint same as Docker users (the
+MSI starts the server on `127.0.0.1:<port>` already).
+
+### What gets sanitised (vendor-aware via canonical model)
+
+Operating on the canonical model, the rules are field-typed.  This
+gets you AST-level precision without the per-vendor regex
+fragility:
+
+| Canonical field | Replacement |
+|---|---|
+| `CanonicalIntent.hostname` | `device-N` (counter per session — same value always maps to same replacement so cross-references survive) |
+| Public IPs in any field | RFC 5737 docs ranges (`192.0.2.x`, `198.51.100.x`, `203.0.113.x`) |
+| Private IPs (RFC 1918, ULA, link-local) | Preserve — operators can keep these; not PII |
+| `CanonicalLocalUser.hashed_password` | Obvious-fake hashes (`$5$REDACTED$REDACTED01`, `ENC fakeEncodedHash01==`, etc. matching the source format) |
+| `CanonicalSNMP.community` | `public_redacted_N` |
+| `CanonicalSNMPv3User.auth_passphrase` / `priv_passphrase` | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
+| `CanonicalRADIUSServer.shared_secret` | `REDACTED-SECRET-N` |
+| `CanonicalInterface.description` | `description redacted` (preserve presence; redact content) |
+| `CanonicalDHCPPool.dns_servers` (if public) | RFC 5737 docs ranges; preserve private resolvers |
+| `CanonicalIntent.dropped_tier3_sections` | Strip entirely (Tier-3 carry-through may contain anything) |
+| Comments / banners | Strip entirely |
+
+Counter-per-session means the same value gets the same replacement
+across the whole config — so operators can verify the sanitised
+output's structure matches their original mental model without their
+real device names appearing.
+
+### `--dry-run` mode (critical for trust)
+
+```
+netconfig sanitize --dry-run -i my-config.txt --source-vendor cisco_iosxe_cli
+```
+
+Prints the substitution table:
+```
+hostname production-edge-01      → hostname device-1
+ip address 198.51.100.5/24       → ip address 198.51.100.5/24  (already in docs range)
+ip address 4.4.4.4               → ip address 192.0.2.42       (public→docs)
+snmp-server community SuperSecret → snmp-server community public_redacted_1
+description Uplink to ISP-PRD     → description redacted
+... (full table) ...
+```
+
+Operator reviews before committing.  The framing matters:
+**"Don't trust me; here's exactly what I'll change. Now run it for
+real."**  Critical for the audience's skepticism.
+
+### Testing surface
+
+For each codec, every existing real-capture fixture round-trips
+through sanitisation as a regression-guard:
+
+```
+parse → sanitise → render → parse → assert(no real-IPs / hashes / secrets remain)
+```
+
+This pattern means sanitisation rules can't silently leak through —
+the same property the codec round-trip discipline already enforces
+extends to the sanitiser.
+
+### What this enables
+
+Once the sanitiser ships, `BUG_REPORTING.md` documents a concrete
+fixture-submission path:
+
+```
+1. Sanitise:  curl -X POST http://localhost:8765/api/v1/sanitize ...
+2. Verify:    diff <original> <sanitised>  (or use --dry-run first)
+3. Submit:    attach sanitised file to issue using fixture_submission.yml template
+```
+
+Without the helper, that workflow has implicit "operator
+hand-redacts everything" friction that most operators won't do.
+With it, the bug-report path is a 30-second loop.
+
+---
+
 ## Packaging — tiered to match the tiered audience
 
 The MSI installer isn't clunky in absolute terms — it's clunky **for
@@ -495,9 +658,10 @@ When this wave actually starts, work this order:
 | **1 — Pre-flight** | 1-2 sessions | LICENSE, SECURITY (substantive content per "Operator-trust building"), CONTRIBUTING, CODE_OF_CONDUCT, issue templates, real-IP audit, semver tag, name-conflict check |
 | **2 — Project identity foundation** | 1 session | Logo, GitHub Topics, project description, tagline.  Comparison table vs adjacent tools |
 | **3 — Pre-launch quality hardening** | 2-3 sessions | Failure-mode tour (every error path produces actionable message); browser-compat sweep; empty-state + loading-state pass; copy-quality pass; tooltip layer |
-| **4 — Demo + sample artifacts** | 1 session | `tools/demo.py`; `tools/sanitize_config.py`; per-scenario walkthroughs under `docs/walkthroughs/` |
-| **5 — Operator-facing docs** | 2 sessions | Per-vendor "what works for me?" pages; "How we test" page narrating the cross-mesh audit; "What we won't do" Tier-3 page; troubleshooting page; failure-mode showcase |
-| **6 — Packaging foundation** | 1 session | Dockerfile (multi-stage, distroless, non-root, reproducible), GHCR publish workflow, PyPI publish workflow with Trusted Publishing |
+| **4 — Demo + sample artifacts** | 1 session | `tools/demo.py`; per-scenario walkthroughs under `docs/walkthroughs/` |
+| **4.5 — Sanitization tooling** | 1-2 sessions | `netconfig.tools.sanitize` shared library + CLI subcommand `netconfig sanitize` + HTTP API endpoint `POST /api/v1/sanitize`.  Vendor-aware via canonical-model walk; `--dry-run` mode; round-trip regression-guards on every real-capture fixture.  Three invocation paths, single source of truth.  Blocks Phase 5 because `BUG_REPORTING.md` documents this as the canonical fixture-submission path |
+| **5 — Operator-facing docs** | 2 sessions | Per-vendor "what works for me?" pages; "How we test" page narrating the cross-mesh audit; "What we won't do" Tier-3 page; troubleshooting page; failure-mode showcase; `BUG_REPORTING.md` referencing the Phase 4.5 sanitiser invocation paths |
+| **6 — Packaging foundation** | 1 session | Dockerfile (multi-stage, distroless, non-root, reproducible), GHCR publish workflow, PyPI publish workflow with Trusted Publishing.  Verifies the sanitiser's three invocation paths all land in their respective artefacts |
 | **7 — README rewrite** | 1 session | Lead with tagline + asciinema + before/after example + matrix-honesty trust signal |
 | **8 — Private beta** | 3 weeks (calendar) | Five trusted network engineers, each in a different vendor environment, given the Docker image with "find me bugs" mandate.  Saves the embarrassing-on-HN fire drill of "everyone hits the same bug in week one."  Cheap to set up; high return |
 | **9 — Tag v0.1.0, soft launch** | Same day | Push to GitHub public, push Docker image, publish PyPI |
@@ -507,8 +671,8 @@ When this wave actually starts, work this order:
 The matrix-honesty discipline + `CAPABILITIES.md` + the cross-mesh
 audit harness are the **distinctive features** of this tool.  Other
 config-translator tools claim accuracy; this one can prove it.  That's
-the lede; everything in phases 1-7 is the work of communicating that
-lede to a skeptical audience.
+the lede; everything in phases 1-7 (incl. 4.5) is the work of
+communicating that lede to a skeptical audience.
 
 ---
 
@@ -550,8 +714,8 @@ If forced to rank for a v0.1.0 release:
 
 | Tier | Items | Why |
 |---|---|---|
-| **MUST (release-blocker quality)** | Pre-flight checklist (LICENSE, SECURITY substantive, CONTRIBUTING, issue templates), 1-line tagline + 30s asciinema + before/after example, substantive `SECURITY.md`, "How we test" page, per-vendor "what works for me?" pages, failure-mode actionable error messages, name-conflict check | The trust-signal substrate.  If these are weak, the matrix-honesty discipline doesn't get communicated and the tool gets dismissed alongside the over-claiming alternatives. |
-| **SHOULD (quality differentiator)** | `tools/demo.py` + walkthroughs, GitHub Topics + comparison table, browser compat + empty states + loading states, operator-facing copy pass, private beta phase, sanitization helper script | Substantially raises the quality bar; operators who would have given the tool a shrug will give it a bookmark. |
+| **MUST (release-blocker quality)** | Pre-flight checklist (LICENSE, SECURITY substantive, CONTRIBUTING, issue templates), 1-line tagline + 30s asciinema + before/after example, substantive `SECURITY.md`, "How we test" page, per-vendor "what works for me?" pages, failure-mode actionable error messages, name-conflict check, **sanitization helper (CLI + HTTP API + shared library — Phase 4.5)** | The trust-signal substrate.  If these are weak, the matrix-honesty discipline doesn't get communicated and the tool gets dismissed alongside the over-claiming alternatives.  The sanitiser specifically is MUST-tier because BUG_REPORTING.md is meaningless without a concrete invocation path. |
+| **SHOULD (quality differentiator)** | `tools/demo.py` + walkthroughs, GitHub Topics + comparison table, browser compat + empty states + loading states, operator-facing copy pass, private beta phase, in-app sanitiser web UI wrapper (defer to v0.2.0 contingent on demand) | Substantially raises the quality bar; operators who would have given the tool a shrug will give it a bookmark. |
 | **NICE (post-1.0)** | Mobile / tablet view, multi-language docs, conference talk submissions, public landing page (separate from GitHub), Tier-4 native packages | Real value but lower per-hour return at v0.1.0.  Defer. |
 
 The matrix-honesty discipline is the differentiator.  Everything in
