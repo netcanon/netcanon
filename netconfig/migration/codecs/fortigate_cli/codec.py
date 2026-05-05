@@ -122,6 +122,7 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            "/interfaces/interface/dhcp-client-v6",          # set ip6-mode dhcp
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -154,6 +155,17 @@ class FortiGateCLICodec(CodecBase):
                 reason=(
                     "FortiOS has no IANA ifType; inferred from 'type vlan' "
                     "sub-setting or name shape."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "FortiOS expresses tunnels in separate top-level "
+                    "sections (config system gre-tunnel, config vpn ipsec "
+                    "phase1-interface) rather than as encap discriminator "
+                    "on a tunnel interface — tunnel_type does not survive "
+                    "render-into-FortiGate."
                 ),
                 severity="warn",
             ),

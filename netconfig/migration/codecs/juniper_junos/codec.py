@@ -126,6 +126,8 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            "/interfaces/interface/dhcp-client-v6",          # IPv6 dhcpv6-client (no SLAAC keyword on Junos)
+            "/interfaces/interface/tunnel-type",             # gr- / ip- / st0 prefix discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
             "/vlans/vlan/id",
             "/vlans/vlan/name",

@@ -351,6 +351,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
             # ``iface.dhcp_client=True``.  Parser symmetry: recognise
             # the same token shape and round-trip the flag.
             dhcp_client=state.get("dhcp_client", False),
+            dhcp_client_v6=state.get("dhcp_client_v6", ""),
+            # tunnel_type inferred from the Junos interface-name prefix
+            # (``gr-`` → gre, ``ip-`` → ipip, ``st0`` → ipsec).  Any
+            # explicit override stashed by the parser walk wins.
+            tunnel_type=state.get("tunnel_type") or _infer_tunnel_type(name),
         )
         for ip, prefix in state.get("ipv4", []):
             iface.ipv4_addresses.append(
@@ -1283,6 +1288,19 @@ def _apply_interfaces(
             and tokens[5] == "dhcp"
         ):
             target_state["dhcp_client"] = True
+        # IPv6 DHCPv6 client — ``unit <N> family inet6 dhcpv6-client
+        # ...`` (or just ``family inet6 dhcpv6-client``).  Populates
+        # the canonical ``dhcp_client_v6`` field.  Junos doesn't have
+        # a dedicated SLAAC-only keyword (autoconfig is the kernel
+        # default when no static address is configured) so we only
+        # detect the explicit dhcpv6-client form here.
+        if (
+            len(tokens) >= 6
+            and tokens[3] == "family"
+            and tokens[4] == "inet6"
+            and tokens[5] == "dhcpv6-client"
+        ):
+            target_state["dhcp_client_v6"] = "dhcp6"
         # GAP-EVPN-3: ``unit <N> family inet6 address <ipv6>/<prefix>``.
         # Junos treats global / link-local uniformly here (unlike
         # Cisco / Arista which keyword-tag link-local); we infer the
@@ -1528,10 +1546,30 @@ def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
     ``set switch-options vtep-source-interface <iface>`` line.
 
     Other sub-paths under ``switch-options`` (route-distinguisher,
-    vrf-target, vtep-remote-vtep) parse-and-ignore today.  Their
-    EVPN semantics overlap with CanonicalRoutingInstance fields but
-    on a switch-options scope rather than a routing-instances scope,
-    and the cross-vendor mapping is non-trivial enough to defer.
+    vrf-target, vtep-remote-vtep) are intentionally out of scope for
+    cross-vendor translation and parse-and-ignore here.  These are
+    EVPN-VXLAN underlay / overlay primitives that Junos QFX expresses
+    on a switch-options scope rather than a routing-instances scope —
+    semantically related to ``CanonicalRoutingInstance.route_distinguisher``
+    / ``rt_imports`` / ``rt_exports`` but bound to the switch-global
+    L2 domain rather than to a named L3 VRF.  Cross-vendor targets
+    (Arista EOS, Cisco NX-OS) model the same intent under different
+    scopes (per-VLAN ``vxlan vrf`` on Arista, per-VRF
+    ``address-family ipv4 unicast`` RT-EVPN on NX-OS) and the
+    mapping requires deployment-topology context (which switch is
+    a leaf, which is a spine, what the VTEP source-loopback should
+    be on the target chassis) that the canonical model deliberately
+    does not carry.
+
+    This is a documented architectural boundary, not a defect: EVPN
+    underlay configuration is platform-deployment data that operators
+    re-author on the target chassis after migration — the same way
+    Tier-3 firewall / NAT / VPN sections are surfaced as "detected
+    but not translated" rather than auto-rendered.  Operators who
+    need the values preserved verbatim can capture them in the
+    Tier-3 ``raw_sections`` carry-through; that's still wired
+    end-to-end via the ``dropped_tier3_sections`` notification
+    surface.
     """
     if len(tokens) < 2:
         return
@@ -2027,4 +2065,31 @@ def _infer_iface_type(name: str) -> str:
         return "ianaift:ieee8023adLag"
     if lower.startswith("irb") or lower.startswith("vlan."):
         return "ianaift:l3ipvlan"
+    if lower.startswith(("gr-", "ip-", "st0")):
+        return "ianaift:tunnel"
+    return ""
+
+
+def _infer_tunnel_type(name: str) -> str:
+    """Infer ``CanonicalInterface.tunnel_type`` from a Junos interface
+    name.  Junos encodes the tunnel encapsulation in the name prefix:
+
+    * ``gr-<fpc>/<pic>/<port>``  — GRE tunnel ``ianaift:tunnel`` /
+      ``tunnel_type="gre"``
+    * ``ip-<fpc>/<pic>/<port>``  — IP-in-IP / IP6-in-IP tunnel
+      (``tunnel_type="ipip"``)
+    * ``st0[.<unit>]``           — IPsec secure-tunnel logical
+      interface (``tunnel_type="ipsec"``)
+
+    Other tunnel-like names (``vt-``, ``mt-``, ``lt-``) fall through
+    to empty — those are virtual loopback / multilink / logical
+    tunnels with no clean cross-vendor mapping.
+    """
+    lower = name.lower()
+    if lower.startswith("gr-"):
+        return "gre"
+    if lower.startswith("ip-"):
+        return "ipip"
+    if lower.startswith("st0"):
+        return "ipsec"
     return ""

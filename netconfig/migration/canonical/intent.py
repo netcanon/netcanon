@@ -145,6 +145,70 @@ class CanonicalInterface(BaseModel):
     voice_vlan: int | None = None
     lag_member_of: str | None = None            # LAG/port-channel name if bundled
     dhcp_client: bool = False
+    dhcp_client_v6: str = ""                    # IPv6 dynamic-address mode.
+                                                # "" = static / unset; otherwise
+                                                # one of:
+                                                #   "dhcp6"   (stateful DHCPv6)
+                                                #   "slaac"   (router-advert
+                                                #              autoconfiguration)
+                                                #   "track6"  (OPNsense
+                                                #              "track interface")
+                                                #   "6rd"     (RFC 5969 6rd
+                                                #              tunnel)
+                                                #   "6to4"    (RFC 3056 6to4
+                                                #              tunnel)
+                                                # OPNsense surfaces every
+                                                # value via ``<ipaddrv6>``;
+                                                # Cisco IOS-XE / Arista EOS
+                                                # populate "dhcp6" from
+                                                # ``ipv6 address dhcp`` and
+                                                # "slaac" from ``ipv6 address
+                                                # autoconfig``; Junos
+                                                # populates "dhcp6" from
+                                                # ``family inet6 dhcpv6-
+                                                # client``; FortiGate
+                                                # populates from
+                                                # ``set ip6-mode``;
+                                                # MikroTik RouterOS
+                                                # populates from
+                                                # ``/ipv6 dhcp-client``.
+                                                # String literal (not enum)
+                                                # to keep the schema simple
+                                                # and round-trip-safe; valid
+                                                # values are documented here.
+    tunnel_type: str = ""                       # Tunnel encapsulation
+                                                # discriminator for vendor-
+                                                # specific tunnel sub-types.
+                                                # "" = unset (renderers fall
+                                                # back to a sensible default,
+                                                # typically GRE); otherwise
+                                                # one of:
+                                                #   "gre"     (RFC 2784 GRE)
+                                                #   "eoip"    (MikroTik
+                                                #              Ethernet-over-IP)
+                                                #   "ipip"    (RFC 2003 IP-in-
+                                                #              IP)
+                                                #   "ipsec"   (transport-mode
+                                                #              IPsec tunnel)
+                                                #   "vxlan"   (RFC 7348)
+                                                # Disambiguates which
+                                                # RouterOS section the
+                                                # MikroTik render emits
+                                                # (``/interface gre`` vs
+                                                # ``/interface eoip`` vs
+                                                # ``/interface ipip``);
+                                                # Cisco IOS-XE / Arista
+                                                # populate from
+                                                # ``tunnel mode {gre ip|
+                                                # ipip|ipsec|vxlan}``;
+                                                # Junos populates from
+                                                # interface-name prefix
+                                                # (``gr-`` → gre,
+                                                # ``ip-`` → ipip,
+                                                # ``st0`` → ipsec).
+                                                # Only meaningful when
+                                                # ``interface_type ==
+                                                # 'ianaift:tunnel'``.
     vrf: str = ""                               # VRF / routing-instance membership;
                                                 # empty = global / default VRF.
                                                 # Matches a

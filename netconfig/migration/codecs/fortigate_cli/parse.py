@@ -331,6 +331,20 @@ def _apply_system_interface(
                 prefix_length=_mask_to_prefix(mask),
             ))
 
+        # IPv6 dynamic-address mode: ``set ip6-mode {static|dhcp|
+        # delegated|pppoe}`` on FortiOS.  The ``dhcp`` value populates
+        # the canonical ``dhcp_client_v6`` field.  Other modes
+        # (``delegated`` is RFC 3633 prefix delegation, ``pppoe`` is
+        # the LAC client) don't have a clean cross-vendor mapping and
+        # are intentionally not surfaced here.  ``static`` is the
+        # FortiOS default and means "no DHCPv6"; we don't populate
+        # the field.
+        ip6_mode_tokens = edit.settings.get("ip6-mode")
+        if ip6_mode_tokens and ip6_mode_tokens[0]:
+            mode_value = ip6_mode_tokens[0].lower().strip('"')
+            if mode_value == "dhcp":
+                iface.dhcp_client_v6 = "dhcp6"
+
         # GAP-EVPN-3: ``set ip6-address <addr>/<prefix>`` (CIDR form,
         # FortiOS native).  ``set ip6-address ::/0`` is "no IPv6
         # address" — drop the all-zero placeholder rather than emit

@@ -141,6 +141,7 @@ class OPNsenseCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            "/interfaces/interface/dhcp-client-v6",          # OPNsense <ipaddrv6>{dhcp6|slaac|track6|6rd|6to4}</ipaddrv6>
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             # Tier 2 — SNMP (OPNsense snmpd plugin)
@@ -164,6 +165,16 @@ class OPNsenseCodec(CodecBase):
                     "OPNsense imposes no length limit on description text; "
                     "other vendors (Cisco 240 chars, Juniper 900) may "
                     "truncate on render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "OPNsense's <interfaces> block does not encode tunnel "
+                    "encapsulation — tunnel_type is not surfaced on parse "
+                    "or render.  Tunnel interfaces (GRE, IPIP, IPSEC) live "
+                    "under separate Tier-3 OPNsense sections."
                 ),
                 severity="warn",
             ),

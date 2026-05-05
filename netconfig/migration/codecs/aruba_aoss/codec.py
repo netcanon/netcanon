@@ -141,6 +141,24 @@ class ArubaAOSSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/interfaces/interface/dhcp-client-v6",
+                reason=(
+                    "AOS-S has no native IPv6 DHCPv6 / SLAAC client "
+                    "configuration on routed interfaces — the canonical "
+                    "dhcp_client_v6 field drops on render to AOS-S."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "AOS-S is a campus L2/L3 codec with no GRE / IPIP "
+                    "tunnel grammar; tunnel_type is not surfaced on "
+                    "render."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(

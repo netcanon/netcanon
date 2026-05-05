@@ -122,12 +122,12 @@ def test_opnsense_parse_dhcp_uppercase_handled() -> None:
     assert iface.ipv4_addresses == []
 
 
-def test_opnsense_parse_dhcp6_v6_ignored_with_log(caplog) -> None:
-    """``<ipaddrv6>dhcp6</ipaddrv6>`` (or ``slaac``) currently has
-    no canonical wire-through (no ``dhcp_client_v6`` field on
-    CanonicalInterface).  Parser must NOT raise and must NOT
-    synthesise a bogus static IPv6 record.  Logged at INFO so the
-    gap is observable."""
+def test_opnsense_parse_dhcp6_v6_populates_canonical_field() -> None:
+    """``<ipaddrv6>dhcp6</ipaddrv6>`` (or ``slaac`` / ``track6`` /
+    ``6rd`` / ``6to4``) now wire-throughs to
+    :attr:`CanonicalInterface.dhcp_client_v6` — see the validation
+    cleanup wave that added the schema field.  Parser must NOT raise
+    and must NOT synthesise a bogus static IPv6 record."""
     raw = """<?xml version="1.0"?>
 <opnsense>
   <interfaces>
@@ -138,18 +138,31 @@ def test_opnsense_parse_dhcp6_v6_ignored_with_log(caplog) -> None:
   </interfaces>
 </opnsense>
 """
-    import logging
-    with caplog.at_level(logging.INFO,
-                         logger="netconfig.migration.codecs.opnsense.parse"):
-        intent = parse_intent(raw)
+    intent = parse_intent(raw)
     iface = intent.interfaces[0]
     assert iface.ipv6_addresses == []
-    # No spurious dhcp_client (that's the v4 flag); v6 has no
-    # canonical primitive yet.
+    # No spurious dhcp_client (that's the v4 flag).
     assert iface.dhcp_client is False
-    # A log line surfaces the gap for operators investigating
-    # missing-translation reports.
-    assert any("dhcp6" in rec.getMessage() for rec in caplog.records)
+    # NEW: dhcp_client_v6 surfaces the v6 mode for cross-vendor render.
+    assert iface.dhcp_client_v6 == "dhcp6"
+
+
+def test_opnsense_parse_slaac_v6_populates_canonical_field() -> None:
+    """SLAAC variant of the dhcp_client_v6 wire-through."""
+    raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces>
+    <wan>
+      <if>igc0</if>
+      <ipaddrv6>slaac</ipaddrv6>
+    </wan>
+  </interfaces>
+</opnsense>
+"""
+    intent = parse_intent(raw)
+    iface = intent.interfaces[0]
+    assert iface.ipv6_addresses == []
+    assert iface.dhcp_client_v6 == "slaac"
 
 
 # ---------------------------------------------------------------------------

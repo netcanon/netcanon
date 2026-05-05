@@ -117,6 +117,8 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
+            "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -467,6 +469,10 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         for _ in iface.ipv6_addresses:                # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
+        if iface.dhcp_client_v6:
+            yield "/interfaces/interface/dhcp-client-v6"
+        if iface.tunnel_type:
+            yield "/interfaces/interface/tunnel-type"
     for _ in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"

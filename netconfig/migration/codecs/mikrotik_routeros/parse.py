@@ -116,6 +116,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
             _parse_interface_bridge(lines, iface_by_name)
         elif section == "/interface bonding":
             _parse_interface_bonding(lines, iface_by_name, intent)
+        elif section == "/interface gre":
+            _parse_interface_tunnel(lines, iface_by_name, "gre")
+        elif section == "/interface eoip":
+            _parse_interface_tunnel(lines, iface_by_name, "eoip")
+        elif section == "/interface ipip":
+            _parse_interface_tunnel(lines, iface_by_name, "ipip")
         elif section == "/ip address":
             _parse_ip_address(lines, iface_by_name)
         elif section == "/ipv6 address":              # GAP-EVPN-3
@@ -494,6 +500,51 @@ _ROUTEROS_BONDING_MODE_TO_CANONICAL = {
     "balance-alb": "static",
     "broadcast": "static",
 }
+
+
+def _parse_interface_tunnel(
+    lines: list[str],
+    iface_by_name: dict[str, CanonicalInterface],
+    tunnel_kind: str,
+) -> None:
+    """Parse ``/interface gre`` / ``/interface eoip`` / ``/interface ipip``
+    sections into :class:`CanonicalInterface` records carrying the
+    canonical ``tunnel_type`` discriminator.
+
+    Expected shape (RouterOS)::
+
+        /interface gre
+        add name=gre-tun1 remote-address=1.2.3.4 local-address=5.6.7.8
+
+    Populates ``iface.interface_type='ianaift:tunnel'`` plus
+    ``iface.tunnel_type=<tunnel_kind>`` so the cross-vendor render
+    path can pick the matching emit form.  Endpoint addresses are NOT
+    canonicalised in v1 (the schema has no local/remote pair); the
+    name + tunnel_type round-trip is what the renderer needs to emit
+    the right ``/interface <encap>`` section.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        name = kv.get("name")
+        if not name:
+            continue
+        iface = iface_by_name.setdefault(
+            name,
+            CanonicalInterface(
+                name=name,
+                interface_type="ianaift:tunnel",
+            ),
+        )
+        # Force the canonical type even if a prior section seeded the
+        # iface with a different / empty type.
+        iface.interface_type = "ianaift:tunnel"
+        iface.tunnel_type = tunnel_kind
+        if "comment" in kv:
+            iface.description = kv["comment"]
+        if "disabled" in kv:
+            iface.enabled = kv["disabled"].lower() == "no"
 
 
 def _parse_ip_address(

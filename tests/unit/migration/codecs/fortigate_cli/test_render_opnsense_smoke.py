@@ -466,7 +466,11 @@ class TestOpnsenseSupergateEndToEnd:
         assert 'edit "igc0"' in out
         block = _slice_block(out, 'edit "igc0"')
         # Sanity: the block doesn't accidentally inject a static IP.
-        assert "set ip" not in block
+        # Use the trailing-space form so we don't false-trigger on
+        # ``set ip6-mode dhcp`` (the IPv6 DHCPv6-client wire-through
+        # added in the dhcp_client_v6 schema cleanup).
+        assert "set ip " not in block
+        assert "set ip6-address" not in block
         # Finding 20: DHCP-client mode is now emitted for foreign
         # DHCP-client interfaces.
         assert "set mode dhcp" in block

@@ -323,7 +323,7 @@ def render_intent(tree: Any) -> str:
             lines.append(" ".join(parts))
         lines.append("")
 
-    # ----- /interface gre (tunnel emission) -----
+    # ----- /interface <encap> (tunnel emission) -----
     # Cross-vendor sources (Cisco ``interface Tunnel0``, Junos
     # ``gr-0/0/0``, FortiGate ``gre1``) populate
     # ``interface_type='ianaift:tunnel'`` for tunnel interfaces.
@@ -342,40 +342,59 @@ def render_intent(tree: Any) -> str:
     # ``remote_address`` fields in v1).  We therefore emit the
     # declaration with a placeholder ``remote-address=0.0.0.0``
     # and a review comment so the operator knows to populate the
-    # real endpoint pair before deployment.  EoIP / IPIP / IPSEC
-    # tunnel sub-types are deferred: the canonical model has no
-    # discriminator to choose between the RouterOS
+    # real endpoint pair before deployment.
+    #
+    # The canonical ``tunnel_type`` discriminator (added in the
+    # validation cleanup wave) selects between
     # ``/interface gre`` / ``/interface eoip`` / ``/interface
-    # ipip`` shapes, so we pick GRE as the most common cross-
-    # vendor case (matches Cisco ``Tunnel0`` default mode, Junos
-    # ``gr-`` / ``ip-`` interfaces, FortiGate ``gre<N>``).
-    # Operators migrating EoIP-specific configs will need to
-    # rewrite the section by hand.  Phase 4b cisco_iosxe
-    # (NETCONF) cross-vendor finding.
+    # ipip``.  Empty / unrecognised values fall back to GRE
+    # (the most common cross-vendor case — matches Cisco
+    # ``Tunnel0`` default mode, Junos ``gr-`` / ``ip-`` interfaces,
+    # FortiGate ``gre<N>``).  IPSEC / VXLAN values fall back to
+    # GRE too because RouterOS exposes IPSEC and VXLAN through
+    # different sections (``/ip ipsec policy``, ``/interface
+    # vxlan``) that need the full canonical surface to be wired
+    # — the GRE fallback at least preserves the iface name so
+    # downstream ``/ip address`` bindings find a target.  Phase
+    # 4b cisco_iosxe (NETCONF) cross-vendor finding.
     tunnel_ifaces = [
         i for i in tree.interfaces
         if _is_tunnel_type(i)
     ]
     if tunnel_ifaces:
-        lines.append("/interface gre")
+        # Group by tunnel_type so each RouterOS section is emitted
+        # exactly once.  The grouping order matches the canonical
+        # interface order (stable per source codec).
+        seen_kinds: list[str] = []
+        ifaces_by_kind: dict[str, list[Any]] = {}
         for iface in tunnel_ifaces:
-            parts = ["add"]
-            # Carry source description; otherwise emit a default
-            # review note so operators see the placeholder warning.
-            if iface.description:
-                parts.append(f'comment="{_escape(iface.description)}"')
-            else:
-                parts.append(
-                    'comment="review: tunnel endpoint placeholder -- set local-address/remote-address"'
-                )
-            parts.append(f"name={_quote_if_needed(iface.name)}")
-            # Placeholder endpoint -- canonical model in v1 carries
-            # no tunnel local/remote address pair.  Without
-            # ``remote-address`` RouterOS rejects the add line; we
-            # pick 0.0.0.0 as an obvious sentinel.
-            parts.append("remote-address=0.0.0.0")
-            lines.append(" ".join(parts))
-        lines.append("")
+            kind = (iface.tunnel_type or "").lower()
+            if kind not in ("gre", "eoip", "ipip"):
+                kind = "gre"  # Fallback for "" / "ipsec" / "vxlan".
+            if kind not in ifaces_by_kind:
+                ifaces_by_kind[kind] = []
+                seen_kinds.append(kind)
+            ifaces_by_kind[kind].append(iface)
+        for kind in seen_kinds:
+            lines.append(f"/interface {kind}")
+            for iface in ifaces_by_kind[kind]:
+                parts = ["add"]
+                # Carry source description; otherwise emit a default
+                # review note so operators see the placeholder warning.
+                if iface.description:
+                    parts.append(f'comment="{_escape(iface.description)}"')
+                else:
+                    parts.append(
+                        'comment="review: tunnel endpoint placeholder -- set local-address/remote-address"'
+                    )
+                parts.append(f"name={_quote_if_needed(iface.name)}")
+                # Placeholder endpoint -- canonical model in v1 carries
+                # no tunnel local/remote address pair.  Without
+                # ``remote-address`` RouterOS rejects the add line; we
+                # pick 0.0.0.0 as an obvious sentinel.
+                parts.append("remote-address=0.0.0.0")
+                lines.append(" ".join(parts))
+            lines.append("")
 
     # ----- /interface vlan -----
     # Filter by interface_type, not by name pattern.  Real configs

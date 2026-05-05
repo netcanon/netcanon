@@ -77,6 +77,31 @@ _IPV6_RE = re.compile(
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+# IPv6 dynamic-address keywords.  IOS-XE accepts:
+#   ``ipv6 address dhcp``      — stateful DHCPv6 client
+#   ``ipv6 address autoconfig``— RFC 4862 SLAAC
+# Populates ``CanonicalInterface.dhcp_client_v6`` rather than
+# ``ipv6_addresses`` (no static IP).  See
+# https://www.cisco.com/c/en/us/td/docs/ios-xml/ios/ipv6/configuration/
+# 17-15/ipv6-17-15-book/ip6-stateful-dhcpv6-client.html
+_IPV6_ADDRESS_DHCP_RE = re.compile(
+    r"^\s+ipv6\s+address\s+dhcp\s*$", re.IGNORECASE,
+)
+_IPV6_ADDRESS_AUTOCONFIG_RE = re.compile(
+    r"^\s+ipv6\s+address\s+autoconfig\s*$", re.IGNORECASE,
+)
+# Tunnel mode discriminator.  IOS-XE syntax:
+#   ``tunnel mode gre ip``
+#   ``tunnel mode ipip``  (not directly supported on every platform;
+#                          some use ``tunnel mode ipv6ip`` for v6-in-v4)
+#   ``tunnel mode ipsec ipv4`` / ``tunnel mode ipsec ipv6``
+#   ``tunnel mode vxlan``
+# Populates ``CanonicalInterface.tunnel_type``.  Only meaningful inside
+# an ``interface Tunnel<N>`` stanza.
+_TUNNEL_MODE_RE = re.compile(
+    r"^\s+tunnel\s+mode\s+(gre|ipip|ipsec|vxlan|ipv6ip)\b",
+    re.IGNORECASE,
+)
 
 #: Interface-name prefix → IANA ifType hint.
 _TYPE_HINTS: dict[str, str] = {
@@ -577,6 +602,8 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "ipv6": [],
                 "vrf": "",
                 "kind": "",
+                "dhcp_client_v6": "",
+                "tunnel_type": "",
             }
             continue
 
@@ -644,6 +671,30 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # writes ``ipv6 address FE80::.../126`` without the keyword)
         # as ``global``, causing CODEC_BUG drift against juniper_junos
         # which infers scope from the prefix.  See Wave 10 γ-3.
+        # IPv6 dynamic-address keywords MUST come before _IPV6_RE,
+        # since the address regex would greedily match the trailing
+        # ``dhcp`` / ``autoconfig`` token as if it were an address
+        # literal.
+        if _IPV6_ADDRESS_DHCP_RE.match(line):
+            current["dhcp_client_v6"] = "dhcp6"
+            continue
+        if _IPV6_ADDRESS_AUTOCONFIG_RE.match(line):
+            current["dhcp_client_v6"] = "slaac"
+            continue
+
+        # Tunnel-mode discriminator.  ``tunnel mode <encap>`` only
+        # appears inside an ``interface Tunnel<N>`` stanza; the
+        # canonical field is ignored on non-tunnel interfaces.
+        tmm = _TUNNEL_MODE_RE.match(line)
+        if tmm:
+            mode = tmm.group(1).lower()
+            # Map IOS-XE keywords to canonical tunnel_type values.
+            # ``ipv6ip`` (IPv6-over-IPv4) collapses to "ipip" — the
+            # canonical model doesn't separately track address-family
+            # for tunnel encap.
+            current["tunnel_type"] = "ipip" if mode == "ipv6ip" else mode
+            continue
+
         v6m = _IPV6_RE.match(line)
         if v6m:
             addr = v6m.group(1)
@@ -762,6 +813,8 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         mtu=raw.get("mtu"),
         vrf=raw.get("vrf", ""),
         kind=raw.get("kind", ""),
+        dhcp_client_v6=raw.get("dhcp_client_v6", ""),
+        tunnel_type=raw.get("tunnel_type", ""),
     )
 
 

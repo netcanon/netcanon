@@ -609,6 +609,20 @@ def render_intent(tree: Any) -> str:
                 out.append(
                     f"        set ip6-address {v6.ip}/{v6.prefix_length}"
                 )
+            # IPv6 dynamic-address mode.  FortiOS accepts ``set
+            # ip6-mode {static|dhcp|delegated|pppoe}``; only the
+            # ``dhcp`` form maps cleanly from the canonical
+            # ``dhcp_client_v6 == "dhcp6"`` value.  SLAAC has no
+            # explicit FortiOS keyword (the autoconfig is the
+            # kernel default when no static address is present);
+            # other values drop to a comment.
+            if iface.dhcp_client_v6 == "dhcp6":
+                out.append("        set ip6-mode dhcp")
+            elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
+                out.append(
+                    f"        ! review: dhcp_client_v6="
+                    f"{iface.dhcp_client_v6} has no FortiOS equivalent"
+                )
             if iface.mtu is not None:
                 # FortiOS requires mtu-override enable before
                 # set mtu has effect on physical ports.  Emit

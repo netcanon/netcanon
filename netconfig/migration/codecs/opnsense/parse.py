@@ -470,32 +470,18 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
     # GAP-EVPN-3: ``<ipaddrv6>X</ipaddrv6>`` + ``<subnetv6>N</subnetv6>``.
     # OPNsense uses the same shape as IPv4 but with the v6 suffix.
     # Non-static keywords (``dhcp6``, ``track6``, ``slaac``, ``6rd``,
-    # ``6to4``) are NOT static addresses and don't fit the canonical
-    # CanonicalIPv6Address record — parse-and-ignore those (the
-    # downstream codec doesn't have a way to render them anyway).
-    #
-    # Sub-finding 9a (IPv6 leg): canonical schema currently lacks a
-    # ``dhcp_client_v6`` field on CanonicalInterface — the v4
-    # ``dhcp_client`` flag is the only DHCP-client primitive.  When
-    # an OPNsense interface declares ``<ipaddrv6>dhcp6</ipaddrv6>``
-    # or ``<ipaddrv6>slaac</ipaddrv6>`` we log at INFO so the gap is
-    # observable (operators investigating "why didn't my v6 DHCP
-    # config translate?" can grep the logs) and skip — adding the
-    # canonical field is out of scope for this fix per the
-    # "don't expand into the canonical layer" directive.  See
+    # ``6to4``) are NOT static addresses; they populate
+    # ``CanonicalInterface.dhcp_client_v6`` instead of
+    # ``ipv6_addresses``.  See the field's docstring for the keyword
+    # set and cross-vendor mapping.  OPNsense doc reference:
     # https://docs.opnsense.org/manual/interfaces.html
-    # (Configure - IPv6 Configuration Type) for the keyword set.
+    # (Configure - IPv6 Configuration Type).
     ipaddrv6_el = el.find("ipaddrv6")
     subnetv6_el = el.find("subnetv6")
     if ipaddrv6_el is not None and ipaddrv6_el.text:
         v6_text = ipaddrv6_el.text.strip().lower()
         if v6_text in ("dhcp6", "slaac", "track6", "6rd", "6to4"):
-            logger.info(
-                "opnsense: <ipaddrv6>%s</ipaddrv6> on zone <%s> "
-                "not wired to canonical (no dhcp_client_v6 / slaac "
-                "field on CanonicalInterface yet); skipping",
-                v6_text, el.tag,
-            )
+            iface.dhcp_client_v6 = v6_text
     if (
         ipaddrv6_el is not None
         and ipaddrv6_el.text

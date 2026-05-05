@@ -279,6 +279,42 @@ def render_intent(tree: Any) -> str:
                 body.append(
                     f" ipv6 address {v6.ip}/{v6.prefix_length}"
                 )
+        # IPv6 dynamic-address mode.  IOS-XE supports the stateful
+        # client (``dhcp``) and SLAAC (``autoconfig``).  Other
+        # dhcp_client_v6 values that arrive from cross-vendor sources
+        # (track6, 6rd, 6to4 — OPNsense-specific) drop to a review
+        # comment because IOS-XE has no equivalent native form.
+        if iface.dhcp_client_v6 == "dhcp6":
+            body.append(" ipv6 address dhcp")
+        elif iface.dhcp_client_v6 == "slaac":
+            body.append(" ipv6 address autoconfig")
+        elif iface.dhcp_client_v6:
+            body.append(
+                f" ! review: dhcp_client_v6={iface.dhcp_client_v6} "
+                f"has no IOS-XE equivalent"
+            )
+        # Tunnel-mode discriminator on Tunnel<N> stanzas.  The
+        # canonical ``tunnel_type`` field disambiguates between GRE
+        # (the IOS-XE default), IPIP, IPSEC, and VXLAN encap.  Empty
+        # string falls through to the IOS-XE platform default (GRE)
+        # so we don't emit a redundant ``tunnel mode gre ip`` line.
+        if iface.tunnel_type and iface.interface_type == "ianaift:tunnel":
+            tt = iface.tunnel_type.lower()
+            if tt == "gre":
+                body.append(" tunnel mode gre ip")
+            elif tt == "ipip":
+                body.append(" tunnel mode ipip")
+            elif tt == "ipsec":
+                body.append(" tunnel mode ipsec ipv4")
+            elif tt == "vxlan":
+                body.append(" tunnel mode vxlan")
+            elif tt == "eoip":
+                # MikroTik-specific Ethernet-over-IP — no IOS-XE
+                # equivalent; surface as a review comment.
+                body.append(
+                    " ! review: tunnel_type=eoip has no IOS-XE "
+                    "equivalent (MikroTik-only)"
+                )
         # Switchport — emit the mode FIRST (operator-natural
         # ordering), then EVERY captured switchport sub-attribute
         # regardless of mode.  Cisco IOS-XE tolerates declaring

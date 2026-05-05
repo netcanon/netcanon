@@ -56,7 +56,9 @@ Fully modelled; every shipped bidirectional codec parses and renders:
 * `hostname`, `domain`
 * `interfaces` — `name`, `description`, `enabled`, IPv4 + IPv6
   addresses, `vrf` binding, `kind` (physical / mgmt / loopback /
-  uplink), `mtu`, `lag_member_of`
+  uplink), `mtu`, `lag_member_of`, `dhcp_client_v6` (IPv6 DHCPv6 /
+  SLAAC mode discriminator), `tunnel_type` (GRE / EoIP / IPIP /
+  IPSEC / VXLAN encap discriminator)
 * `vlans` — `id`, `name`, `tagged_ports`, `untagged_ports`, SVI L3
   (via VLAN-centric projection)
 * `static_routes`

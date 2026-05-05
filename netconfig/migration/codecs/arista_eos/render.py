@@ -480,6 +480,8 @@ def render_intent(tree: Any) -> str:
             bool(iface.description)
             or bool(iface.ipv4_addresses)
             or bool(iface.ipv6_addresses)
+            or bool(iface.dhcp_client_v6)
+            or bool(iface.tunnel_type)
             or iface.mtu is not None
             or not iface.enabled
             or iface.switchport_mode is not None
@@ -559,6 +561,38 @@ def render_intent(tree: Any) -> str:
             else:
                 out.append(
                     f"   ipv6 address {v6.ip}/{v6.prefix_length}"
+                )
+        # IPv6 dynamic-address mode.  Arista EOS mirrors IOS-XE:
+        # ``ipv6 address dhcp`` (stateful client) and ``ipv6
+        # address autoconfig`` (SLAAC).  Other dhcp_client_v6 values
+        # (track6 / 6rd / 6to4 — OPNsense-specific) drop to a review
+        # comment.
+        if iface.dhcp_client_v6 == "dhcp6":
+            out.append("   ipv6 address dhcp")
+        elif iface.dhcp_client_v6 == "slaac":
+            out.append("   ipv6 address autoconfig")
+        elif iface.dhcp_client_v6:
+            out.append(
+                f"   ! review: dhcp_client_v6={iface.dhcp_client_v6} "
+                f"has no Arista EOS equivalent"
+            )
+        # Tunnel-mode discriminator on ``Tunnel<N>`` stanzas.  Empty
+        # tunnel_type falls through to the EOS platform default
+        # (GRE), so we suppress the redundant ``tunnel mode gre ip``.
+        if iface.tunnel_type and iface.interface_type == "ianaift:tunnel":
+            tt = iface.tunnel_type.lower()
+            if tt == "gre":
+                out.append("   tunnel mode gre")
+            elif tt == "ipip":
+                out.append("   tunnel mode ipip")
+            elif tt == "ipsec":
+                out.append("   tunnel mode ipsec")
+            elif tt == "vxlan":
+                out.append("   tunnel mode vxlan")
+            elif tt == "eoip":
+                out.append(
+                    "   ! review: tunnel_type=eoip has no Arista EOS "
+                    "equivalent (MikroTik-only)"
                 )
         # LAG membership: ``channel-group N mode <mode>`` on member
         # Ethernet interfaces.  Arista (like Cisco IOS) puts this

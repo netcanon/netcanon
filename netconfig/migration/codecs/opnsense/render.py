@@ -266,9 +266,16 @@ def render_canonical(intent: CanonicalIntent) -> str:
                 ET.SubElement(zone_el, "ipaddr").text = "dhcp"
             # GAP-EVPN-3: IPv6 emits to ``<ipaddrv6>`` + ``<subnetv6>``.
             # Only one v6 address fits the OPNsense schema.
+            #
+            # ``dhcp_client_v6`` (dhcp6 / slaac / track6 / 6rd / 6to4)
+            # is the keyword form on ``<ipaddrv6>`` — no ``<subnetv6>``
+            # accompanies it.  Static address takes precedence (OPNsense
+            # doesn't accept both); the parser's IF/ELIF order matches.
             if iface.ipv6_addresses:
                 ET.SubElement(zone_el, "ipaddrv6").text = iface.ipv6_addresses[0].ip
                 ET.SubElement(zone_el, "subnetv6").text = str(iface.ipv6_addresses[0].prefix_length)
+            elif iface.dhcp_client_v6:
+                ET.SubElement(zone_el, "ipaddrv6").text = iface.dhcp_client_v6
 
     # VLANs — emit <vlans><vlan> per CanonicalVlan.  Real OPNsense
     # <vlan> elements REQUIRE a <if> child naming the parent

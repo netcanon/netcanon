@@ -900,6 +900,16 @@ def _apply_iface_subcommand(
         tokens = tail.split()
         if not tokens:
             return
+        # IPv6 dynamic-address keywords are detected first; ``ipv6
+        # address dhcp`` and ``ipv6 address autoconfig`` populate
+        # ``dhcp_client_v6`` rather than ``ipv6_addresses``.
+        head = tokens[0].lower()
+        if head == "dhcp":
+            iface.dhcp_client_v6 = "dhcp6"
+            return
+        if head == "autoconfig":
+            iface.dhcp_client_v6 = "slaac"
+            return
         addr = tokens[0]
         scope = "global"
         if len(tokens) >= 2 and tokens[1].lower() == "link-local":
@@ -933,6 +943,20 @@ def _apply_iface_subcommand(
             iface.mtu = int(line.split()[1])
         except (ValueError, IndexError):
             pass
+        return
+    # Tunnel-mode discriminator on ``Tunnel<N>`` stanzas.  Arista EOS
+    # accepts ``tunnel mode {gre|ipsec|vxlan|...}`` mirroring Cisco
+    # IOS-XE.  Populates the canonical ``tunnel_type`` field so the
+    # MikroTik renderer can pick the right ``/interface <encap>``
+    # section instead of always defaulting to GRE.
+    if line.startswith("tunnel mode "):
+        parts = line.split()
+        if len(parts) >= 3:
+            mode = parts[2].lower()
+            if mode in ("gre", "ipip", "ipsec", "vxlan"):
+                iface.tunnel_type = mode
+            elif mode == "ipv6ip":
+                iface.tunnel_type = "ipip"
         return
     if line.startswith("channel-group "):
         # ``channel-group 1 mode active`` — LAG membership.

@@ -452,6 +452,22 @@ def render_intent(tree: Any) -> str:
                     f"family inet6 address "
                     f"{v6.ip}/{v6.prefix_length}"
                 )
+            # IPv6 dhcp-client (``dhcp_client_v6 == "dhcp6"``) on
+            # sub-interfaces.  Junos has no SLAAC keyword (the
+            # kernel default when no static address is set), so
+            # ``slaac`` falls through silently.  Other values
+            # (track6 / 6rd / 6to4 — OPNsense-specific) drop to a
+            # review comment.
+            if iface.dhcp_client_v6 == "dhcp6" and not iface.ipv6_addresses:
+                out.append(
+                    f"set interfaces {parent} unit {unit_num} "
+                    f"family inet6 dhcpv6-client"
+                )
+            elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
+                out.append(
+                    f"# review: dhcp_client_v6={iface.dhcp_client_v6} "
+                    f"has no Junos equivalent on {parent}.{unit_num}"
+                )
             if not sub_has_renderable:
                 out.append(
                     f"set interfaces {parent} unit {unit_num}"
@@ -490,6 +506,18 @@ def render_intent(tree: Any) -> str:
             out.append(
                 f"set interfaces {name} unit 0 family inet6 "
                 f"address {v6.ip}/{v6.prefix_length}"
+            )
+        # IPv6 dhcp-client mode.  Junos accepts only the explicit
+        # dhcp6 form (no separate SLAAC keyword); slaac falls
+        # through silently because it's the kernel default.
+        if iface.dhcp_client_v6 == "dhcp6" and not iface.ipv6_addresses:
+            out.append(
+                f"set interfaces {name} unit 0 family inet6 dhcpv6-client"
+            )
+        elif iface.dhcp_client_v6 not in ("", "dhcp6", "slaac"):
+            out.append(
+                f"# review: dhcp_client_v6={iface.dhcp_client_v6} "
+                f"has no Junos equivalent on {name}"
             )
 
         # --- L2 switchport emission (Phase 4 rank-4) ---

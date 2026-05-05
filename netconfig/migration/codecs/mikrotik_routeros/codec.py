@@ -135,6 +135,7 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            "/interfaces/interface/tunnel-type",             # /interface gre vs eoip vs ipip discriminator
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -162,6 +163,16 @@ class MikroTikRouterOSCodec(CodecBase):
                     "name (e.g. vlan10), NOT a separate descriptive "
                     "name field.  Cross-vendor rendering may conflate "
                     "the two."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/dhcp-client-v6",
+                reason=(
+                    "RouterOS exposes IPv6 DHCPv6 client config under "
+                    "the separate /ipv6 dhcp-client section rather than "
+                    "an interface-attribute, so dhcp_client_v6 does not "
+                    "round-trip through MikroTik's interface stanzas."
                 ),
                 severity="warn",
             ),
