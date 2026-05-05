@@ -1,0 +1,372 @@
+# Contributing to `<PROJECT_NAME>`
+
+Thank you for considering contributing to `<PROJECT_NAME>`.  This
+document walks the most common contribution shapes; for the
+operational rulebook used during development see
+[`CLAUDE.md`](CLAUDE.md).
+
+<!-- ============================================================
+TEMPLATE NOTES (delete after adapting):
+
+CONTRIBUTING.md is operator / external-contributor-facing.  It must
+be more welcoming and lower-context than CLAUDE.md (which assumes a
+contributor already familiar with the project).
+
+The discipline:
+- Each common contribution shape gets a step-by-step walkthrough
+  with concrete file paths
+- The matrix-honesty discipline is communicated through the steps,
+  not as a separate lecture (the test that pins the new shape is
+  step N; the doc-sync update is step N+1)
+- Bug reports and fixture submissions get specific paths
+
+Aim for ~1500-2000 words.
+============================================================ -->
+
+---
+
+## What we accept
+
+`<PROJECT_NAME>` accepts:
+
+* **Bug reports** with reproducible inputs (sanitised — see
+  `BUG_REPORTING.md` if your project has one).
+* **Fixture submissions** — real-world inputs that surface gaps in
+  test coverage.
+* **New `<COMPONENT>s`** — implementations of `<COMPONENT>` for
+  additional `<external entities>`.
+* **New `<CORE_ABSTRACTION>` fields** — extending the central data
+  model when there's cross-`<COMPONENT>` value.
+* **Documentation improvements** — especially walkthroughs for
+  workflows the existing docs don't cover.
+* **Test coverage** — particularly for edge cases the audit matrix
+  doesn't currently exercise.
+
+What we are unlikely to accept:
+
+* **`<Tier-3>` `<COMPONENT>` features** — see
+  [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the deliberate-
+  deferral boundary.
+* **Cosmetic refactors without behaviour change** — increases review
+  cost without proportional benefit.
+* **New dependencies without strong rationale** — every dep is a
+  supply-chain liability; we maintain a deliberately small surface.
+
+If you're unsure whether a contribution fits, open a discussion
+issue first.  We respond within `<48 hours>` typically.
+
+---
+
+## Before you start
+
+1. **Read the orientation docs** — at minimum
+   [`README.md`](README.md) and
+   [`ARCHITECTURE.md`](ARCHITECTURE.md).  For larger contributions
+   also skim [`CLAUDE.md`](CLAUDE.md).
+2. **Check the issue tracker** — your idea may already be in
+   progress.  We tag good first issues with `good-first-issue`.
+3. **Set up the dev environment** — see the README's "Development"
+   section.
+4. **Run the existing test suite** — confirm green before changing
+   anything.
+
+---
+
+## How to add a fixture
+
+<!-- PROJECT: Fixtures are the matrix-honesty discipline's
+fuel.  Real-world inputs from external contributors surface cells
+the internal audit can't see (no fixture exercises them).  Make
+this path low-friction. -->
+
+Real-world `<input>` fixtures are how we discover the cells the
+internal audit hasn't surfaced.  Submitting one is the highest-
+leverage contribution shape.
+
+### Step 1 — sanitise
+
+Use the project's sanitisation helper.  `<If you have one, point
+at it: e.g. `<package> sanitize -i my-input.txt -o sanitised.txt
+--source-component <COMPONENT>`>`
+
+The helper preserves structure (so the fixture exercises the same
+parser paths your real input did) but redacts:
+* `<sensitive identifier 1>`
+* `<sensitive identifier 2>`
+* `<...>`
+
+Always run with `--dry-run` first to review the substitution table.
+
+### Step 2 — verify the sanitised output round-trips
+
+```sh
+<package> verify -i sanitised.txt --component <COMPONENT>
+```
+
+If round-trip fails, the fixture has surfaced a real bug — file
+that as a bug report (next section).
+
+### Step 3 — submit
+
+Open a fixture-submission issue using the
+`fixture_submission.yml` template.  Attach the sanitised file
+along with:
+* Source `<COMPONENT>` + version
+* Brief description of what makes this input interesting (specific
+  grammar feature exercised, edge case, real production scenario)
+* The substitution table from the `--dry-run` (if you're comfortable
+  sharing it)
+
+We will:
+* Place the fixture under `tests/fixtures/<category>/<COMPONENT>/`
+* Add a row to `tests/fixtures/<category>/RESULTS.md` with provenance
+* Run it through the audit harness and triage any new variance cells
+
+---
+
+## How to report a bug
+
+`<If you have a BUG_REPORTING.md, point at it.  Otherwise lift the
+key elements inline: source <COMPONENT>, target <COMPONENT>,
+shortest reproducing snippet, expected vs. actual, any banner /
+review-comment / validation messages the UI showed.>`
+
+Use the `bug_report.yml` issue template.  Include:
+
+1. **Source `<COMPONENT>` + version** (e.g. `<EXAMPLE: cisco_iosxe
+   IOS-XE 17.3.4>`)
+2. **Target `<COMPONENT>` + version** (if applicable)
+3. **Shortest reproducing input** — sanitised
+4. **Expected output** — what you thought should happen
+5. **Actual output** — what you got, including any banners / review
+   comments
+6. **Tool version** — `<package> --version` output
+
+---
+
+## How to add a new `<COMPONENT>`
+
+<!-- PROJECT: This is the heaviest contribution shape.  Walk the
+contributor through it concretely.  In NetConfig adding a new codec
+is a multi-week task; the walkthrough should be honest about the
+scope. -->
+
+Adding a `<COMPONENT>` means implementing the project's
+`<COMPONENT> interface>` for an additional `<external entity>`.
+Scope: `<typically N-M weeks of focused work for a thoughtful
+implementation>`.
+
+Read the authoring guide first:
+[`<core>/<COMPONENT>s/README.md`](<core>/<COMPONENT>s/README.md).
+That guide is the source of truth; this section is a roadmap.
+
+### Step 1 — declare the `<COMPONENT>`
+
+`<EXAMPLE: Drop a subpackage under <core>/<COMPONENT>s/<name>/.
+Decorate the class with @register.  Auto-discovery picks it up at
+startup.>`
+
+### Step 2 — implement parse → `<CORE_ABSTRACTION>`
+
+Walk the `<input format>` and populate `<CORE_ABSTRACTION>` fields.
+Tier 1 first (the cross-`<COMPONENT>`-stable surface); leave Tier
+2 / Tier 3 for follow-up commits.
+
+### Step 3 — implement `<CORE_ABSTRACTION>` → render
+
+The reverse direction.  Honest declaration: if a Tier-1 field
+doesn't have an obvious render in this `<COMPONENT>`, declare it
+`<unsupported>` in the capability matrix rather than silently
+dropping.
+
+### Step 4 — declare the capability matrix
+
+Every xpath in `<CORE_ABSTRACTION>` gets a classification:
+`Supported`, `Lossy`, or `Unsupported`.  This is the matrix-honesty
+contract — be honest now, fix later.
+
+### Step 5 — synthetic fixture
+
+Hand-craft a minimal fixture under
+`tests/fixtures/synthetic/<COMPONENT>/` exercising every parser
+branch.  Round-trip stable.
+
+### Step 6 — real fixture (if available)
+
+Add at least one real-world fixture under
+`tests/fixtures/real/<COMPONENT>/` (sanitised — see "How to add a
+fixture" above).  This is the gate from `experimental` to
+`best_effort`.
+
+### Step 7 — wire into the audit harness
+
+The cross-`<COMPONENT>` audit picks up the new `<COMPONENT>`
+automatically; you'll need to add per-pair expectation YAMLs under
+`tests/fixtures/<expectations>/` for each `(source, target)` pair
+the new `<COMPONENT>` participates in.
+
+### Step 8 — doc updates
+
+Per the doc-sync checklist in `CLAUDE.md`:
+* `<core>/<COMPONENT>s/README.md` — update the `<COMPONENT>` list
+* `ARCHITECTURE.md` — if the `<COMPONENT>` introduces a new
+  `<wire format / paradigm>`
+* `docs/CAPABILITIES.md` — add the row + the per-`<COMPONENT>`
+  capability table
+* `CHANGELOG.md` — entry in `[Unreleased]`
+
+---
+
+## How to add a `<CORE_ABSTRACTION>` field
+
+<!-- PROJECT: If your project has a single central data model that
+all the layers project into, walk the contributor through extending
+it.  In NetConfig this is `docs/adding-a-canonical-field.md` — point
+external contributors at the worked-example doc rather than
+duplicating it. -->
+
+The walkthrough for adding a field to `<CORE_ABSTRACTION>` lives at
+[`<docs/adding-a-canonical-field.md>`](<docs/adding-a-canonical-field.md>).
+The shape: schema declaration + every `<COMPONENT>`'s parse + every
+`<COMPONENT>`'s render + tests, all in one commit.  Budget: `<30-60
+minutes for a simple scalar field; 2-3 hours for cross-field
+semantics>`.
+
+Two flavours:
+1. **Wire-through** — schema + every parse/render in one commit.
+   Best when you know exactly how each `<COMPONENT>` emits it.
+2. **Ship-before-wire** — schema + `Unsupported` entries on the
+   capability matrices of every `<COMPONENT>`, no parse/render yet.
+   Best when the feature is niche and `<COMPONENT>` wire-up will
+   land incrementally.
+
+---
+
+## Doc-sync discipline
+
+`<PROJECT_NAME>` treats stale docs as bugs.  Before you submit a PR,
+walk the doc-sync checklist in [`CLAUDE.md`](CLAUDE.md).  Common
+hits:
+
+* New `<COMPONENT>` → `<core>/<COMPONENT>s/README.md`,
+  `ARCHITECTURE.md`, `docs/CAPABILITIES.md`
+* New public function → its docstring (Google-style Args / Returns /
+  Raises)
+* New parameter or return shape → docstring update
+* New test marker → `tests/README.md`
+* New hard rule (surfaced by a bug) → `CLAUDE.md` Hard Rules section
+* New file-tree listing or "contents map" → update or convert to
+  pointer
+
+The PR template (`.github/PULL_REQUEST_TEMPLATE.md`) has a checklist;
+walk it before submitting.
+
+---
+
+## Test markers + tier discipline
+
+Tests are organised into tiers with specific isolation guarantees.
+See [`tests/README.md`](tests/README.md) for the full taxonomy.
+Quick reference:
+
+* **Unit** (`tests/unit/`) — pure functions, no I/O.  `<1s per file.
+* **Integration** (`tests/integration/`) — API-level via TestClient
+  with a single mocking entry point.  `<1s per file.
+* **E2E** (`tests/e2e/`) — full browser via Playwright.  `~Ns full
+  sweep.
+* **`<EXAMPLE: Desktop>`** (`tests/<EXAMPLE: desktop>/`) — `<EXAMPLE:
+  PySide6 / pystray fully mocked>`.
+
+When adding a test, decide which tier fits.  When in doubt, prefer
+unit over integration over e2e — faster feedback, narrower failure
+modes.
+
+---
+
+## Commit-message convention
+
+Commits follow a rationale-first convention.  See
+[`CHANGELOG.md`](CHANGELOG.md) for the worked examples.
+
+The shape:
+
+```
+<short imperative title — 50 chars or under>
+
+<2-4 sentences of rationale: WHY this change, what user-visible
+problem it solves, what alternatives were considered.  The diff
+already shows what changed; the message is where the reader learns
+whether the change matters to them.>
+
+<bullet list of concrete deltas if helpful: file paths, key
+function names, test count delta, matrix-class delta>
+
+<co-author trailer if AI agents helped>
+```
+
+Example:
+
+```
+Fix cisco_iosxe_cli routing-instances declared unsupported
+
+The capability matrix declared /routing-instances/instance as
+Unsupported with a "wire-up deferred" reason, but parse + render
+had been shipping for months.  The cross-vendor expectation YAML
+disposition was already correct; the codec's own declaration was
+the lie.  6 regression-guard tests pin the corrected declaration
+shape.
+
+* netconfig/migration/codecs/cisco_iosxe_cli/codec.py — flip
+  declaration from UnsupportedPath to LossyPath
+* docs/CAPABILITIES.md — table row aligned with the corrected
+  matrix
+* tests/unit/migration/codecs/cisco_iosxe_cli/test_capability.py
+  — 6 new regression-guard tests
+
+Suite: 3229 → 3235 passed (+6 tests).  Matrix delta: CODEC_BUG
+holds at 0.
+
+Co-Authored-By: <agent attribution if applicable>
+```
+
+Bad commit message: `Fix bug`.
+
+---
+
+## Pull request workflow
+
+1. Fork the repo, create a feature branch (`fix/<short-slug>` or
+   `feat/<short-slug>`).
+2. Make your changes, following the doc-sync discipline above.
+3. Run the test suite locally — green required.
+4. Push to your fork; open a PR against `main`.
+5. The PR template walks you through the doc-sync checklist;
+   complete it.
+6. CI runs the suite + pre-commit hooks; fix any failures.
+7. A maintainer reviews within `<48 hours>`.
+8. Address review feedback in additional commits (don't force-push
+   over earlier review state — preserves the conversation).
+9. On approval, a maintainer merges (squash or merge-commit per
+   project convention).
+
+---
+
+## Code of conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md).
+TL;DR: be kind, assume good faith, focus on the work.
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation and quickstart
+- [`CLAUDE.md`](CLAUDE.md) — contributor directives (the doc-sync
+  checklist that this guide depends on)
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — design overview
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — capabilities +
+  known limitations
+- [`CHANGELOG.md`](CHANGELOG.md) — rationale-first entry examples
+- [`SECURITY.md`](SECURITY.md) — vulnerability disclosure path
+- [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
+  the matrix-honesty discipline behind this guide

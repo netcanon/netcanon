@@ -1,0 +1,298 @@
+# `<PROJECT_NAME>` Capabilities + Known Limitations
+
+`<PROJECT_NAME>` is `<one-line description of what the tool does>`.
+
+This document is the operator-facing source of truth for **what the
+program does and does not do**.  Internal architecture lives in
+[`../ARCHITECTURE.md`](../ARCHITECTURE.md); contributor rules live in
+[`../CLAUDE.md`](../CLAUDE.md).  Per-`<COMPONENT>` live status lives
+in `<live results doc>`.
+
+<!-- ============================================================
+TEMPLATE NOTES (delete after adapting):
+
+CAPABILITIES.md is the public-facing output of the matrix-honesty
+discipline.  It tells an operator / user / downstream consumer
+exactly what the tool will and won't do.  It is referenced from
+in-app limitation messages, error banners, and bug-report templates.
+
+The discipline:
+- Every capability has a tier (1 / 2 / 3 — adapt to your domain).
+- Every limitation has a rationale (not just "unsupported", but
+  WHY).
+- Every notification mechanism the user might see is named so they
+  can grep / screenshot / cite it.
+- A "What we won't do" section names deliberate deferrals (not
+  "we'll get to it" — actually "we have decided this is out of
+  scope").
+
+Aim for ~1500-2000 words.  Cross-reference the live results doc as
+the authoritative source of truth — this doc summarises but does
+not gate.
+============================================================ -->
+
+---
+
+## Supported `<COMPONENT>s`
+
+<!-- PROJECT: List your project's primary unit of capability — codecs,
+plugins, integrations, supported languages, supported platforms,
+whatever.  The table below is a starter; copy/expand the column set to
+match your domain. -->
+
+| `<COMPONENT>` | `<external entity>` | `<wire format / protocol>` | `<direction / mode>` | `<maturity tier>` |
+|---|---|---|---|---|
+| `<EXAMPLE: cisco_iosxe_cli>` | `<EXAMPLE: Cisco IOS-XE>` | `<EXAMPLE: CLI text>` | `<EXAMPLE: bidirectional>` | `<EXAMPLE: certified>` |
+| `<...>` | `<...>` | `<...>` | `<...>` | `<...>` |
+
+`<live results doc>` is the source of truth for current maturity —
+this table summarises but does not gate.
+
+---
+
+## Translation / processing tiers
+
+<!-- PROJECT: If your project has a tier scheme (cross-vendor stable
+vs. lossy vs. opaque carry-through, like NetConfig), document it
+here.  Adapt to your domain — a database migration tool might tier
+by "schema-stable / lossy-cast / preserved-blob"; an ML pipeline
+might tier by "first-class metric / derived metric / opaque
+artifact".  The point is: be explicit about which inputs map cleanly
+and which don't. -->
+
+The `<CORE_ABSTRACTION>` classifies every field by `<stability /
+fidelity>` across `<COMPONENT>s`.  This drives both the validation
+report and the UI's notification banners.
+
+### Tier 1 — `<auto-translatable / first-class / stable>`
+
+Fully modelled; every shipped `<bidirectional COMPONENT>` parses and
+renders:
+
+* `<top-level field>`
+* `<top-level field>`
+* `<...>`
+
+### Tier 2 — `<translatable with caveats / second-class / lossy>`
+
+Modelled and wired across most `<COMPONENT>s`; cross-`<COMPONENT>`
+mappings can be lossy where implementations disagree on representation.
+
+* `<field>` — `<one-line lossiness summary>`
+* `<...>`
+
+### Tier 3 — `<opaque carry / not auto-rendered>`
+
+These are present in source `<inputs>` but **never auto-translated**.
+The `<COMPONENT>` parsers deliberately drop them; the
+`<heuristic detector path>` surfaces what was dropped via the
+`<UI surface name>` so operators see the gap.
+
+* `<category>` — `<rationale for deferring>`
+* `<...>`
+
+This is an architectural decision, not a backlog item.  See the
+`<deferral rationale entry in CHANGELOG>` for the full reasoning.
+
+---
+
+## Per-`<COMPONENT>` capability matrix
+
+<!-- PROJECT: This is the heart of the doc — every `<COMPONENT>`
+declares what it can and can't do, with reasons.  In NetConfig each
+codec gets its own subsection with a 3-column table:
+field-path | classification (Supported / Lossy / Unsupported) |
+rationale.  Adapt the column set to your project's grammar. -->
+
+The migrate / process page renders three lists under **Validation
+details**: Supported / Lossy / Unsupported.  Each `<COMPONENT>`
+declares its own matrix in `<source path>`.  The tables below
+enumerate every `<UnsupportedPath>` and `<LossyPath>` declared today.
+
+### `<COMPONENT_A>`
+
+| Path | Class | Reason summary |
+|---|---|---|
+| `<EXAMPLE: /interfaces/interface/config/type>` | `<EXAMPLE: Lossy>` | `<EXAMPLE: parser infers from name prefix; cannot detect all types>` |
+| `<...>` | `<...>` | `<...>` |
+
+### `<COMPONENT_B>`
+
+`<repeat>`
+
+---
+
+## Notification mechanisms operators see
+
+<!-- PROJECT: Name each user-visible surface where the tool reports
+its limitations.  Operators need to be able to grep / screenshot /
+cite these.  Every banner / panel / comment should be reachable from
+this section. -->
+
+The UI surfaces every place the `<tool>` can't faithfully `<perform
+the operation>`.  Each surface is named so operators can grep the
+rendered output or screen-grab the panel.
+
+### A. Capability matrix "Unsupported" / "Lossy" panels
+
+The `<process / migrate>` page renders three lists: Supported / Lossy
+/ Unsupported.  See per-`<COMPONENT>` tables above.
+
+### B. `<Tier-3 / opaque section detection>` banner
+
+When a source `<COMPONENT>` parses an input that contains stanzas it
+deliberately drops, the parser's per-`<COMPONENT>` heuristic detector
+populates `<CORE_ABSTRACTION>.dropped_<tier3>_sections` with the
+matching headers.  The `<UI page>` renders these as a warning banner:
+
+> ⚠ `<Tier-3 / opaque>` sections detected in source — The source
+> contains N section(s) this tool does not translate (`<example
+> categories>`).  These will NOT appear in the rendered output.
+> Operator must apply them manually on the target.
+
+### C. Render-time review comments
+
+When a render path can't faithfully emit a piece of `<CORE_ABSTRACTION>`
+state, it emits a comment in the target's native syntax instead of
+guessing or silently dropping.  Operators searching for `review:` in
+rendered output find every such site.
+
+* **`<EXAMPLE: Hash-portability policy>`** — when a `<sensitive
+  field>` cannot be re-used on the target, emits a vendor-correct
+  comment instead of leaking the literal value.
+* `<...>`
+
+### D. Validation severity (`ok` / `warn` / `block`)
+
+Every `<job>` carries a validation severity computed from the target's
+capability matrix vs. the populated `<CORE_ABSTRACTION>` fields:
+
+* `ok` — every populated field maps to a `supported` xpath on the
+  target.
+* `warn` — at least one field hits a `lossy` xpath; render proceeds.
+* `block` — at least one field hits an `unsupported` xpath; the
+  job's status flips to `partial` (rendered output exists but should
+  be reviewed before deploy).
+
+`<job>` status reaches `failed` only when a stage actually raises;
+validation alone never fails the job.
+
+### E. `<Compatibility-banner per UI pane>`
+
+<!-- PROJECT: List any per-UI-surface compatibility banners.  Skip
+if your project doesn't have UI panes that surface partial
+support. -->
+
+`<EXAMPLE: The rename modal shows an amber banner on a pane when the
+active target codec declares that pane's category in
+unsupported_rename_categories.>`
+
+---
+
+## `<Input-side / source-side>` limitations
+
+<!-- PROJECT: If your project has multiple concerns (e.g. NetConfig's
+backup vs. migration), document non-`<CONCERN_B>` limitations here. -->
+
+* **`<EXAMPLE: 422 Unknown type_key>`** — `<one-line description of
+  the error>`.
+* **`<EXAMPLE: Connection failures>`** — `<surfaced where, how>`.
+* `<...>`
+
+---
+
+## Round-trip vs. cross-`<COMPONENT>`
+
+<!-- PROJECT: Two distinct fidelity surfaces, often confused.
+Worth naming explicitly so users understand what the matrix-honesty
+audit covers. -->
+
+Two distinct fidelity surfaces, often confused:
+
+* **Round-trip** — `parse(render(parse(raw))) == parse(raw)` for the
+  **same** `<COMPONENT>`.  The cert harness's primary invariant.
+  Per-`<COMPONENT>` status in `<live round-trip results doc>`.
+* **Cross-`<COMPONENT>`** — every-`<source>` by every-`<target>` pass
+  through the `<CORE_ABSTRACTION>` bridge.  The audit matrix lives at
+  `<live cross-mesh results doc>`.
+
+A `<COMPONENT>` can be round-trip clean and still drop fields
+cross-`<COMPONENT>`.  Both numbers matter; the matrix is honest about
+both.
+
+---
+
+## What we won't do
+
+<!-- PROJECT: This section is the trust-building differentiator.
+Operators / users in domains where over-claiming is common (network
+automation, ML pipelines, AST transformers) reward explicit
+declarations of scope.  Each item should:
+- Name the boundary
+- Explain why it's deliberate (not "we'll get to it")
+- Link to the rationale entry in CHANGELOG or a dedicated doc -->
+
+The following are **out of scope by design**, not on a backlog:
+
+* **`<EXAMPLE: Auto-translation of firewall rules>`** — `<rationale:
+  cross-vendor semantics don't translate cleanly; subtle permissive
+  rules are a worse outcome than a manual review step>`.
+* **`<EXAMPLE: Public-hosted demo instance>`** — `<rationale:
+  credential-exposure incentives that don't fit our threat model>`.
+* `<...>`
+
+If you need one of these, this is not the right tool.  See `<adjacent
+tools comparison>` for alternatives.
+
+---
+
+## What is auto-tested
+
+The cross-`<COMPONENT>` fidelity audit harness (`<tools/audit
+path>`) runs every `(<source>, <target>, fixture)` triple and
+classifies per-field drift.  Outputs commit as
+`<results path>`.  Per-`<COMPONENT>` investigation reports
+(`<findings path>`) carry the triage decisions.
+
+For the live numbers on either matrix, consult the markdown files
+named above.  This document deliberately omits hard-coded counts
+(per CLAUDE.md hard rule on prose-rot).
+
+---
+
+## What this document is NOT
+
+* It is **not** a roadmap.  See `<roadmap doc>`.
+* It is **not** a contributor guide.  See [`../CLAUDE.md`](../CLAUDE.md)
+  and [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
+* It is **not** a security model.  See [`../SECURITY.md`](../SECURITY.md).
+* It is **not** a per-fixture certification matrix.  See `<live
+  results doc>`.
+
+---
+
+## Reporting issues / feature requests
+
+Bugs and feature requests welcome via the project's issue tracker.
+
+When reporting a `<translation / processing>` bug, include:
+
+1. Source `<COMPONENT>` + target `<COMPONENT>`.
+2. The shortest source snippet that reproduces.
+3. Expected vs. actual rendered output.
+4. Any review comments / `<Tier-3>` banner contents the UI showed.
+
+`<If you have a sanitisation helper, point at it here.>`
+
+---
+
+## See also
+
+- [`../README.md`](../README.md) — quickstart
+- [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — internal design
+- [`../CLAUDE.md`](../CLAUDE.md) — contributor directives
+- [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
+  the matrix-honesty discipline behind this document's shape
+- `<live results doc>` — per-`<COMPONENT>` certification state (live)
+- `<live cross-mesh audit doc>` — cross-`<COMPONENT>` audit matrix
+  (live)

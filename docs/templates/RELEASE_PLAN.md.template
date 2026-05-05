@@ -1,0 +1,533 @@
+# Public Release Plan
+
+**Status:** `<Future wave / In progress / Pre-flight>`.  `<Captured
+here so a post-compaction context (or a contributor walking the docs
+cold) has the strategic plan available without re-deriving it.>`
+
+This is a forward-looking working document — when the release actually
+happens, prune the "plan" sections and convert this file into a
+`docs/RELEASE_NOTES.md` that records what was actually done.  Until
+then, it's the design + rationale for taking the project public.
+
+<!-- ============================================================
+TEMPLATE NOTES (delete after adapting):
+
+This template is for projects sitting in private development that
+will eventually become public.  The matrix-honesty discipline is
+necessary but not sufficient for a successful public launch — the
+discipline has to be COMMUNICATED to a skeptical audience.
+
+The structure separates:
+- STRUCTURAL release work (license, CI, packaging — required to ship)
+- QUALITATIVE release work (trust signals, identity, polish —
+  required to land well)
+
+Both classes matter.  Don't skip the qualitative items in the rush
+to ship the structural ones.
+
+Aim for ~3000-4000 words.  This is one of the longer templates
+because public release is genuinely complex and the cost of getting
+it wrong is high.
+============================================================ -->
+
+---
+
+## Why this document exists
+
+The project currently sits in private development with strong matrix-
+honesty discipline (`<your audit-matrix invariant — e.g. "CODEC_BUG=0
+across N field-cells">`; `<your verification harness>`; explicit
+`<deliberate-deferral tier>`; honest capability declarations).  At
+some point that discipline pays off only if the tool gets in front of
+`<users / operators>` and starts catching the cells the internal
+audit can't surface (the ones no fixture exercises).  This document
+is the plan for crossing that boundary deliberately.
+
+The plan is opinionated — it's not "here's an exhaustive menu" but
+"here's the recommended path with rationale."  Adjust per-decision
+when you start the wave.
+
+---
+
+## Pre-flight checklist (1-2 sessions of work)
+
+The boring but essential structural part.  Most items have raw
+material in the repo already; some are missing entirely.
+
+| Item | Status | Notes |
+|---|---|---|
+| `LICENSE` | `<Verify present>` | If absent → MIT or Apache-2.0; pick one matching the convention in your domain |
+| `SECURITY.md` | `<Status>` | Substantive content per the threat-model template, not just "report bugs to email" |
+| `CONTRIBUTING.md` | `<Status>` | Walks: how to add a fixture, how to add a `<COMPONENT>`, how to add to `<CORE_ABSTRACTION>` |
+| `CODE_OF_CONDUCT.md` | `<Probably missing>` | Adopt Contributor Covenant; copy-paste is fine |
+| `.github/ISSUE_TEMPLATE/` | `<Missing>` | Critical for bug-report surface |
+| `.github/PULL_REQUEST_TEMPLATE.md` | `<Missing>` | References the doc-sync checklist from `CLAUDE.md` |
+| Public CI (GitHub Actions) | `<Verify>` | Pre-commit hooks + suite need to run on PRs from external contributors |
+| Real-data / secret scrub audit | `<Verify>` | Run a final `git log --all -p \| grep` for `<sensitive identifiers>` before going public |
+| Semver versioning + tag | `<Need to decide>` | Recommended: `v0.1.0` to signal pre-1.0 — sets honest expectations |
+| Public-facing repo URL | `<Need to decide>` | GitHub is the obvious primary for most open-source audiences |
+| Project name conflict check | `<Not yet done>` | Verify the name is available on `<package registry>`, GitHub, `<other registries>`.  See "Project identity & discoverability" below |
+
+---
+
+## Project identity & discoverability
+
+A tool without a clear public identity gets confused with adjacent
+tools and skipped over in search results.  Items that need deliberate
+work:
+
+* **Name conflict check.**  `<your project name>` may be taken on the
+  package registry (`<EXAMPLE: PyPI / npm / crates.io>`).  Same on
+  GitHub.  Same on `<image registry — Docker Hub / GHCR>`.  Verify
+  before committing to a name — a mid-launch rename is significantly
+  painful.
+* **Logo or identity mark.**  Even a simple one.  Users recognise
+  tools by their badges in repos and conference slides; a project
+  without a mark looks unfinished.  No need for a professional
+  designer; a clean SVG mark is sufficient.
+* **GitHub Topics.**  Add `<EXAMPLE: domain-specific topics for your
+  audience>`.  Each topic increases the surface where users stumble
+  across the project organically.
+* **A 1-2 sentence project description on GitHub** that's distinct
+  from the README.  The description shows up in search results and
+  GitHub's project lists; it deserves separate copy.
+* **A 1-line tagline.**  Generic descriptors get glossed over;
+  something like `<EXAMPLE: "Translate live <inputs> across N
+  <COMPONENT> families with verifiable <fidelity>.">`.  The
+  "verifiable" word matters; it's the differentiator.
+* **An honest comparison table** vs adjacent tools — not aggressive,
+  just clarifying.  Users arriving from "I'm looking for an
+  alternative to `<TOOL_X>`" need to know whether you're competing
+  or complementary.
+
+---
+
+## Pre-launch quality hardening
+
+Items in this section don't ship features; they ship POLISH.  A user's
+first 5 minutes after install determines whether they bookmark the
+project or drift away.
+
+### Failure-mode quality
+
+The tool has good code quality, but qualitative trust often hinges on
+failure modes.  Worth a deliberate audit:
+
+* **What happens with an outsized input?**  Is there a documented
+  limit?  What does the error look like — stack trace or graceful
+  message?
+* **What happens if a critical dependency / network hop fails
+  mid-operation?**  Is partial state persisted?  Cleaned up?  Is the
+  user told?
+* **What happens if input doesn't match the expected shape?**  Useful
+  error or cryptic exception?
+* **Memory / latency under load.**  Does the tool sit at reasonable
+  RSS or balloon?
+
+These are the things that will surface in early bug reports.  A
+pre-release "failure mode tour" pass to make every error path produce
+an actionable message (not a stack trace) pays for itself in reduced
+GitHub-issue noise.
+
+### Browser / desktop / native polish
+
+<!-- PROJECT: Adapt to your project's surface.  Web app needs browser
+compat; CLI needs `--help` quality and shell-completion stories;
+library needs API documentation.  Whatever your primary surface is,
+audit it for first-five-minutes friction. -->
+
+* `<EXAMPLE: Browser compat — latest Chrome / Firefox / Safari / Edge>`
+* `<EXAMPLE: Empty states — what does the UI look like before any
+  data is added?>`
+* `<EXAMPLE: Loading states — long-running operations need clear
+  "working..." feedback>`
+* `<EXAMPLE: Keyboard navigation / accessibility>`
+
+### User-facing copy quality
+
+The text on every page / output / message is user-facing copy.  The
+tone of that copy signals what kind of project this is.
+
+* **Error messages** — tell the user WHAT failed and HOW to fix it.
+* **Tooltips / help text** — concrete examples beat abstract
+  descriptions.
+* **Form-field labels** — pick one term per concept and use it
+  consistently.
+
+---
+
+## Maximum bug-report surface area — the strategic question
+
+`<Your audience>` is a specific group with specific habits.  The
+launch strategy has to match.
+
+### What this audience is like
+
+<!-- PROJECT: Write 2-4 paragraphs characterising your specific
+audience.  Network engineers (the NetConfig audience) are different
+from data scientists, who are different from devops engineers, who
+are different from end-users of a calculator app.  Be specific about:
+- What kind of data they work with that they CAN'T share publicly
+- What their skepticism axis is (they've seen too many X)
+- Where they cluster online (specific subreddits, mailing lists,
+  Discord servers, conferences) -->
+
+`<2-4 paragraphs of audience characterisation.  Examples:
+- "They work with real production data they can't share publicly.
+  The bug-report friction has to match: users need a low-effort
+  path to sanitise and submit."
+- "They're skeptical of automation that touches X.  They've seen
+  too many auto-config tools produce garbage; they will assume your
+  tool is wrong until proven otherwise."
+- "They cluster on specific platforms: <list of platforms relevant
+  to your audience — subreddits, mailing lists, Discord communities,
+  conferences>.">`
+
+### First-impression UX
+
+The README is what 95% of visitors see.  A README that reads like
+internal documentation will lose them in the first 30 seconds.
+
+Things to grab the audience in the first 30 seconds:
+
+* **A 1-line tagline** above the fold.
+* **A demo gif or asciinema recording** showing the tool in action.
+  30 seconds, no audio, autoplay.  Most users won't read 2000 words;
+  they'll watch a 30-second clip.
+* **A "before/after" example** above the fold.  Concrete > abstract.
+* **The matrix-honesty achievement, but as a trust signal.**  `<Your
+  audit metric>` is meaningless without context.  Frame it as: "We
+  test every `<class of operation>` across `<N pair / surface
+  count>` against `<grounded expectations>`, and as of this commit
+  none of them silently `<failure mode>`.  Here's the live audit
+  matrix" — that's a trust signal a skeptical user will read twice.
+
+The tool already DOES this — it just doesn't tell its own story.
+
+### Specific framing that works for matrix-honesty tools
+
+The matrix-honesty discipline is **rare** in most spaces.  Most tools
+in any given category have one of two failure modes: either they
+over-claim accuracy and silently `<fail>`, or they under-claim and
+over-warn until users tune them out.  This project explicitly avoids
+both via `CAPABILITIES.md` + the `<Tier-3 banner>` + the cross-audit
+harness.
+
+Lead with that.  Quantify what you DO claim.  Name the limitation
+honestly.  Ask for a specific kind of help (real-world fixtures /
+edge-case inputs).  Show you have a way to consume the help (the
+sanitisation helper, the fixture-add workflow).
+
+### Operator / user trust building
+
+Skeptical users won't trust a tool that touches their `<systems /
+data>` without doing diligence.  The matrix-honesty discipline gives
+you the substrate for this trust, but it has to be *visible*.
+
+* **Reproducible builds.**  The release artefact should be reproducible
+  — same source → same digest.
+* **Signed releases.**  Cosign + Sigstore for container images, or
+  the equivalent for your packaging tier.
+* **A substantive `SECURITY.md`** — not a 5-line "report bugs to
+  email."  See `SECURITY.md.template` in this directory.
+* **A "How we test" page** narrating the audit harness.  Take a
+  screenshot of `<your audit results doc>`.  Explain it.  Show the
+  variance classes.  Users will read this if framed as "here's how
+  we know we don't silently `<fail>`."
+* **A "What we won't do" page** lifted from `CAPABILITIES.md`'s
+  `<Tier-3>` section but with user-facing rationale.  Honesty about
+  scope is rare; users reward it.
+
+### Repo-level "asking for help"
+
+Three core docs to write:
+
+1. **`BUG_REPORTING.md`** — concrete walkthrough:
+   * `<EXAMPLE: "Sanitise your input">` — point at a sanitisation
+     tool (write this if it doesn't exist).
+   * "What fields to include in the issue" — `<source environment>`,
+     `<target environment>`, sanitised snippet, expected vs. actual.
+   * "What we'll do with it" — turn into a fixture, add expectation
+     row, run the matrix.
+   * SLA: "we triage within `<N>` hours; we respond honestly even if
+     the answer is 'this is `<Tier-3>` by design'."
+
+2. **`CONTRIBUTING.md`** — walks the most common contribution shapes.
+   See `CONTRIBUTING.md.template` in this directory.
+
+3. **`.github/ISSUE_TEMPLATE/`** — at least three templates:
+   * `bug_report.yml` — pre-filled fields per `BUG_REPORTING.md`
+   * `feature_request.yml` — guides users away from out-of-scope
+     and toward in-scope
+   * `fixture_submission.yml` — explicit "I have an input that
+     breaks this; here's the sanitised version"
+
+The SECURITY-disclosure path needs its own contact —  `SECURITY.md`
+should specify where to send a vulnerability report (private email,
+encrypted if available; never as a public issue).
+
+### Documentation that users can actually use
+
+`CAPABILITIES.md` is a reference document — it tells you what's true.
+Users need walkthroughs that show them how to USE what's true.
+
+* **Per-`<COMPONENT>` "What works for me?" pages** under
+  `docs/<COMPONENTs>/`.  A user visiting the repo wants to know "for
+  my specific environment, what's my story?"
+* **A `<workflow>` walkthrough** under `docs/walkthroughs/` —
+  realistic friction points called out.
+* **A "I have an input that doesn't process cleanly" troubleshooting
+  page** — diagnose: is it `<Tier-3>` (expected)?  is it Lossy
+  (expected within bounds)?  is it a real bug (file an issue)?
+* **A "Inputs we deliberately can't process, and why" failure-mode
+  showcase** — concrete examples showing the tool's banner / dropped-
+  section list / review comments.  Users seeing HONESTY where they
+  expected OVER-CLAIMS get a meaningful trust differential.
+
+---
+
+## Demo & sample artifacts
+
+The biggest gap to "show me what this does in 30 seconds" is that
+there's no canonical low-friction path that doesn't involve setting
+up the user's environment first.
+
+Worth investing in:
+
+* **A `tools/demo.<ext>` script** that loads pre-baked sample inputs
+  (synthetic, public-research-derived), runs the full pipeline, and
+  prints the output.  One command, no UI, no environment required.
+* **A "kitchen sink" tour** under `docs/walkthroughs/` showing 3-5
+  canonical scenarios.
+* **A public-hosted "try it" instance** is what users will WANT but
+  you should NOT build if your tool touches sensitive data — too much
+  exposure risk.  The right answer is "run it locally; here's a 30-
+  second loop."
+
+---
+
+## Sanitization tooling
+
+<!-- PROJECT: This entire section is only relevant if your tool
+processes user-supplied data that may contain secrets / PII /
+proprietary content.  If your tool processes only synthetic /
+public input, delete this section.  Keep the broader pattern:
+make it easy for users to submit reproductions safely. -->
+
+The bug-report-surface-area strategy assumes users can sanitise inputs
+before submitting.  Without a sanitisation helper, users either submit
+raw (security risk for them, leak risk for the project) or skip
+submitting (signal loss for the project).  Build the helper as a
+release-blocker (MUST tier).
+
+### Architectural decision: integrated, multi-invocation, single source of truth
+
+Build the helper as a **shared library accessible via multiple
+invocation paths**, NOT separate implementations.  This avoids the
+version-skew + maintenance-fragmentation tax of an ad-hoc script:
+
+1. **`<package>.tools.sanitize` library module** — the actual
+   sanitisation logic.  Domain-aware via the existing parsers;
+   operates on `<CORE_ABSTRACTION>` rather than raw text.  Single
+   source of truth.
+2. **CLI subcommand `<package> sanitize`** — for users not running a
+   server.
+3. **HTTP API endpoint `POST /api/v1/sanitize`** — for users running
+   the server (Docker, deployed instance).
+
+A web UI page is **deferred to v0.2.0** contingent on user-feedback
+signals showing the friction is real.
+
+### What gets sanitised
+
+Operating on `<CORE_ABSTRACTION>`, the rules are field-typed:
+
+| Field | Replacement |
+|---|---|
+| `<EXAMPLE: hostnames>` | Counter-per-session: same value → same replacement so cross-references survive |
+| `<EXAMPLE: public IPs>` | Documentation ranges (RFC 5737 `192.0.2.x`, `198.51.100.x`, `203.0.113.x`) |
+| `<EXAMPLE: secrets / hashes>` | Obvious-fake replacements matching the source format |
+| `<...>` | `<...>` |
+
+### `--dry-run` mode (critical for trust)
+
+Print the substitution table before any file gets written.  Framing:
+**"Don't trust me; here's exactly what I'll change. Now run it for
+real."**  Critical for skeptical audiences.
+
+### Testing surface
+
+For each `<COMPONENT>`, every existing real-fixture round-trips
+through sanitisation as a regression-guard.  The same property the
+round-trip discipline already enforces extends to the sanitiser.
+
+---
+
+## Packaging — tiered to match the audience
+
+### Tier 1: `<primary distribution path>` — the headline
+
+<!-- PROJECT: For a Python tool serving devops / network / data
+audiences, the primary tier is overwhelmingly Docker.  For a Rust
+CLI it might be a static binary published to GitHub Releases.  For
+a Python library it might be PyPI.  Pick the tier that matches
+where your audience actually installs tools. -->
+
+`<EXAMPLE: Docker — multi-stage build, distroless / slim base, non-
+root user, pinned interpreter, signed images via cosign + Sigstore,
+SBOM via syft, reproducible builds, volume-mounted state, /health
+check, versioned tags, hosted on GHCR>`
+
+This becomes the README's quickstart.  One command, no
+`<environment setup>`.
+
+### Tier 2: `<package-registry tier>` — for technical users
+
+`<EXAMPLE: pip install <package>>` (or whatever name's available;
+check the registry now — see "Project identity & discoverability"
+above for the collision-check discipline).  Useful for:
+
+* Users integrating into existing pipelines
+* Power users running the tool inside their existing infrastructure
+* Contributors developing locally
+
+Setup: `pyproject.toml` already exists; add `[project]` metadata for
+PyPI publication.  Use Trusted Publishing (no API token in repo) — a
+small but meaningful security improvement.
+
+### Tier 3: `<native-installer tier>` — for point-and-click users
+
+`<EXAMPLE: Windows MSI / macOS DMG / Linux AppImage>`.  Right for
+smaller-shop users where the Tier 1 path is policy-blocked or simply
+unfamiliar.  Move to Tier 3 in the README; users who would have been
+confused by Tier 1 will see "click here for the `<native installer>`."
+
+### Tier 4 (optional): Native packages
+
+| Package | Effort | Audience |
+|---|---|---|
+| Homebrew formula | Medium | macOS users |
+| `.deb` / `.rpm` | Medium | Linux ops who avoid containers for policy reasons |
+| Nix flake | Low (if you're into Nix) | Nix users; small but vocal |
+| AUR | Low | Arch users |
+
+Skip these for v0.1.0; add based on demand.  Tier 1 + 2 cover 95% of
+installs.
+
+---
+
+## Concrete release sequence
+
+When this wave actually starts, work this order:
+
+| Phase | Effort | Outcome |
+|---|---|---|
+| **1 — Pre-flight** | 1-2 sessions | LICENSE, SECURITY (substantive), CONTRIBUTING, CODE_OF_CONDUCT, issue templates, real-data audit, semver tag, name-conflict check |
+| **2 — Project identity foundation** | 1 session | Logo, GitHub Topics, project description, tagline.  Comparison table vs adjacent tools |
+| **3 — Pre-launch quality hardening** | 2-3 sessions | Failure-mode tour; surface-compat sweep; empty-state + loading-state pass; copy-quality pass |
+| **4 — Demo + sample artifacts** | 1 session | `tools/demo.<ext>`; per-scenario walkthroughs |
+| **4.5 — Sanitisation tooling** | 1-2 sessions | Shared library + CLI subcommand + HTTP API endpoint.  Domain-aware via `<CORE_ABSTRACTION>` walk; `--dry-run` mode; round-trip regression-guards.  Blocks Phase 5 because `BUG_REPORTING.md` documents this as the canonical fixture-submission path |
+| **5 — User-facing docs** | 2 sessions | Per-`<COMPONENT>` "what works for me?" pages; "How we test" page; "What we won't do" page; troubleshooting page; failure-mode showcase; `BUG_REPORTING.md` |
+| **6 — Packaging foundation** | 1 session | Tier 1 build (Dockerfile etc.), publish workflow, Trusted Publishing for Tier 2 |
+| **7 — README rewrite** | 1 session | Lead with tagline + asciinema + before/after example + matrix-honesty trust signal |
+| **8 — Private beta** | `<3 weeks>` calendar | `<5 trusted users>` with the artefact and "find me bugs" mandate.  Saves the embarrassing-on-launch fire drill of "everyone hits the same bug in week one."  Cheap to set up; high return |
+| **9 — Tag v0.1.0, soft launch** | Same day | Push to GitHub public, push artefact to registry |
+| **10 — Hard launch** | Spread over a week | `<Show HN → primary audience platform → secondary audience platforms → blog post → conference proposals>` |
+| **11 — Triage cadence** | Ongoing | `<48-hour SLA>` on bug reports; weekly fixture-import wave; quarterly versioned release |
+
+The matrix-honesty discipline is the **distinctive feature** of this
+tool.  Other tools claim accuracy; this one can prove it.  That's the
+lede; everything in phases 1-7 (incl. 4.5) is the work of
+communicating that lede to a skeptical audience.
+
+---
+
+## What to NOT do
+
+* **Don't do a "v1.0" release.**  The codebase may be mature in scope
+  but hasn't been beaten on by external users.  v0.1.0 → v0.2.0 → ...
+  → v1.0.0 after sustained external use.  Pre-1.0 sets honest
+  expectations.
+* **Don't ship with a public-facing demo instance** if your tool
+  touches sensitive data.  Either the tool runs on the user's machine
+  or in their network — public hosted instances create exposure
+  incentives you don't want.
+* **Don't accept binary `<sensitive-data>` submissions in issues.**
+  Force the sanitisation step.  A leaked `<production input>` in a
+  public issue is a much worse outcome than slightly-higher-friction
+  bug reporting.
+* **Don't promise auto-`<processing>` of `<Tier-3>` categories.**  The
+  deferral is the right call; advertise it as a deliberate design
+  choice, not a "we haven't gotten to it."
+* **Don't open Discussions until you have triage capacity.**  GitHub
+  Discussions creates an expectation of response.  Better to ship
+  with Issues only and add Discussions when you can sustain the
+  cadence.
+* **Don't skip the private beta phase.**  `<N weeks>` of trusted-user
+  testing before the public launch is the difference between
+  "everyone hits the same bug in week one" and "the tool already had
+  three rounds of feedback baked in."
+
+---
+
+## Priority ranking
+
+If forced to rank for a v0.1.0 release:
+
+| Tier | Items | Why |
+|---|---|---|
+| **MUST (release-blocker quality)** | Pre-flight checklist (LICENSE, SECURITY substantive, CONTRIBUTING, issue templates), 1-line tagline + 30s asciinema + before/after example, substantive `SECURITY.md`, "How we test" page, per-`<COMPONENT>` "what works for me?" pages, failure-mode actionable error messages, name-conflict check, **sanitisation helper (Phase 4.5)** | The trust-signal substrate.  If these are weak, the matrix-honesty discipline doesn't get communicated and the tool gets dismissed alongside over-claiming alternatives. |
+| **SHOULD (quality differentiator)** | `tools/demo`, walkthroughs, GitHub Topics + comparison table, surface compat + empty states + loading states, copy pass, private beta phase, in-app sanitiser web UI (defer to v0.2.0 contingent on demand) | Substantially raises the quality bar. |
+| **NICE (post-1.0)** | Mobile / tablet view, multi-language docs, conference talk submissions, public landing page (separate from GitHub), Tier-4 native packages | Real value but lower per-hour return at v0.1.0.  Defer. |
+
+The matrix-honesty discipline is the differentiator.  Everything in
+tier MUST is communication of that discipline to a skeptical
+audience.  The structural items in the pre-flight checklist are
+necessary; the qualitative items above are what determines whether
+the release lands well.
+
+---
+
+## When to start
+
+Triggers that suggest "now" rather than "later":
+
+* `CAPABILITIES.md` matches the implemented `<COMPONENTs>` without any
+  active lies.
+* `<your audit-matrix invariant>` holds through 1-2 fresh waves of
+  unrelated work (signal that the audit has stable surface area).
+* Pre-flight checklist items are addressed.
+* You have `<48-hour-SLA>` capacity for the first 2-4 weeks post-
+  launch (the highest-velocity bug-report period).
+* You have private-beta capacity (`<5 testers × 3 weeks = ~15
+  person-weeks>` of feedback).
+
+Triggers that suggest "wait":
+
+* In-flight architectural change that may invalidate parts of
+  `CAPABILITIES.md`.
+* Active wave that hasn't settled (matrix integrity in flux).
+* Pre-flight items not yet shipped.
+* No bandwidth for the SLA discipline post-launch.
+
+---
+
+## See also
+
+- [`README.md`](../README.md) — current quickstart (will be rewritten
+  during Phase 7 of this plan)
+- [`ARCHITECTURE.md`](../ARCHITECTURE.md) — internal design (the
+  audience for the public release plan is `<users>`, not architects;
+  this doc is internal)
+- [`CAPABILITIES.md`](CAPABILITIES.md) — the user-facing source of
+  truth this release plan promotes
+- [`CLAUDE.md`](../CLAUDE.md) — contributor directives; the
+  CONTRIBUTING.md authored during Phase 1 of this plan should lift
+  much of the matrix-honesty discipline from CLAUDE.md
+- [`CHANGELOG.md`](../CHANGELOG.md) — chronological shipped work;
+  this plan is forward-looking, NOT shipped, hence not in CHANGELOG
+- [`docs/templates/METHODOLOGY.md`](templates/METHODOLOGY.md) — the
+  matrix-honesty discipline behind the trust-signal framing
+- `<your live results doc>` — live per-`<COMPONENT>` certification
+  matrix
+- `<your live audit doc>` — live cross-`<COMPONENT>` audit

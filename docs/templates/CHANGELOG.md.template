@@ -1,0 +1,159 @@
+# Changelog
+
+All notable changes to `<PROJECT_NAME>` are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+See also: [`README.md`](README.md) for project orientation;
+[`ARCHITECTURE.md`](ARCHITECTURE.md) for the design that much of the
+work below evolves; [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for
+the operator-facing capabilities + known limitations.
+
+<!-- ============================================================
+TEMPLATE NOTES (delete after adapting):
+
+1. RATIONALE-FIRST entries.  Every entry leads with WHY, not WHAT.
+   The diff already shows what changed; the changelog is where the
+   reader learns whether the change matters to them.
+
+2. MATRIX DELTA where applicable.  When a change moves the audit
+   matrix (cells flipping classification, fixtures added, regressions
+   resolved), include the before/after numbers as an archival
+   timestamp.  These numbers are exempt from the "no hard-coded
+   prose counts" hard rule because they describe a moment in time,
+   not current state.
+
+3. COMMIT CITATIONS.  Cite the SHA(s) implementing each entry.
+   Future contributors searching for a behaviour change land on the
+   commit that introduced it without re-deriving git archaeology.
+
+4. CO-AUTHOR TRAILER.  If AI agents helped with the work, attribute
+   them in the commit message — not in the prose entry.  Prose
+   entries describe the *change*, not who wrote it.
+
+5. KEEP A CHANGELOG SECTION HEADERS.  Stick to the canonical set:
+   Added, Changed, Deprecated, Removed, Fixed, Security.  Custom
+   wave / project-phase headers are fine inside `[Unreleased]`
+   while work is in flight, but normalise to the canonical headers
+   when cutting a release.
+
+6. ENTRIES UNDER `[Unreleased]` until tagged.  Move to a versioned
+   section (`[0.2.0] - 2026-XX-XX`) on release with the date
+   alongside the version.
+
+============================================================ -->
+
+---
+
+## [Unreleased]
+
+### Added (`<EXAMPLE: per-pane override engine for VLAN renaming>`)
+
+`<RATIONALE — 2-4 sentences explaining what user-visible problem this
+solves and why this approach over alternatives.  In NetConfig style:
+"The Tier-3 rename modal lets operators override the auto-heuristic
+for individual canonical categories without leaving the translate
+workflow.  Previously each rename pass overwrote earlier ones; this
+commit adds an orchestrator that keeps per-category overrides
+isolated and merges them in a stable order.">`
+
+* **Commit `<SHA>`** — `<implementation summary>`.  `<key file
+  paths>`.  `<which tests guard the new surface>`.
+* **Commit `<SHA>`** — `<follow-up commit if the feature shipped in
+  pieces>`.
+
+`<MATRIX DELTA, if applicable.  Example:
+"Suite: <N> → <M> passed (+<delta> tests).  Matrix delta: CODEC_BUG
+holds at 0; +<X> ALIGNED cells from <category> now exercising the
+override path.">`
+
+### Fixed (`<EXAMPLE: capability matrix declared X unsupported but the codec actually rendered it>`)
+
+`<RATIONALE — describe the failure mode the user / operator was
+seeing and why the fix matters.  Honest framing: don't oversell the
+fix; acknowledge if the bug had been latent for N weeks.>`
+
+* **Commit `<SHA>`** — `<the root cause + the fix>`.  `<reference to
+  the test that pins the corrected behaviour>`.
+* **Commit `<SHA>`** — `<companion doc-sync update if applicable —
+  CAPABILITIES.md, ARCHITECTURE.md, etc.>`.
+
+`<TEST IMPACT — how many regression-guard tests were added>`.
+
+<!-- ============================================================
+WORKED EXAMPLES (delete after copying the shape):
+
+These are sample entries showing the rationale-first / matrix-delta /
+commit-citation conventions.  They are ILLUSTRATIVE — your real
+entries will be specific to your project.
+
+============================================================ -->
+
+### Documented (forward-looking)
+
+* **Commit `<SHA>`** — `<doc-only commit that captures a forward-
+  looking plan>`.  Linked from `CLAUDE.md` "See also" so post-
+  compaction contexts find it cold.
+
+### Changed (`<EXAMPLE: pipeline-stage signature for run_plan>`)
+
+<!-- PROJECT: Signature changes are a hard call — the safer path is
+to add a NEW function (e.g. `run_plan_v2`) and deprecate the old
+one.  If you DO change a signature, document why callers won't
+break in the entry below.  In NetConfig the pipeline-stage
+signatures are explicitly frozen; this section header is here as a
+placeholder for projects that genuinely do version their public
+surface in-place. -->
+
+`<RATIONALE for the change, including why a new function was not the
+right call>`.
+
+`<MIGRATION GUIDE for callers, if applicable>`.
+
+---
+
+## [0.1.0] - YYYY-MM-DD
+
+`<First public release.  See docs/RELEASE_PLAN.md.template for the
+checklist that gates this version.>`
+
+### Added
+
+- `<top-level public-surface item — typically the first version of
+  the core abstraction, the first integration, the first CLI
+  command>`
+- `<...>`
+
+### Security
+
+- `<initial security posture — typically: secrets storage policy,
+  authn/authz model, input validation surface, supply-chain
+  hardening (signed artefacts, SBOM)>`
+
+---
+
+<!-- ============================================================
+ARCHIVAL CONVENTIONS (delete after adapting):
+
+Once an entry is in a tagged version, treat it as immutable.  If you
+discover an inaccuracy after release:
+- Add a NEW entry in `[Unreleased]` correcting the historical record
+  (e.g. "Documented: <feature> shipped in <prior version> was actually
+  Y, not X as the entry claimed.")
+- Do NOT silently edit the historical entry.  Operators reading old
+  changelogs in the wild will see the original prose; rewriting
+  history hides the correction.
+
+============================================================ -->
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation
+- [`ARCHITECTURE.md`](ARCHITECTURE.md) — design overview
+- [`CLAUDE.md`](CLAUDE.md) — contributor directives (the doc-sync
+  checklist that produces these entries)
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing
+  capabilities + known limitations
+- [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
+  the matrix-honesty discipline behind the changelog conventions

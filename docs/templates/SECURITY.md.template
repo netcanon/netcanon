@@ -1,0 +1,218 @@
+# `<PROJECT_NAME>` — Security Architecture
+
+This document describes the security model, threat assumptions,
+implemented controls, and known limitations of `<PROJECT_NAME>`.  It
+must be updated whenever a security-relevant change is made to the
+codebase.
+
+<!-- ============================================================
+TEMPLATE NOTES (delete after adapting):
+
+A 5-line "report bugs to email" SECURITY.md is a sign that the
+project hasn't thought about its own threat model.  Skeptical users
+in regulated environments (anyone touching production systems,
+sensitive data, cryptographic material) will read this file
+carefully.  Make it substantive.
+
+The discipline:
+- State the threat model explicitly (what trust assumptions does
+  the design rely on?)
+- Document credential / secret handling
+- Document supply-chain integrity story
+- Document incident-response expectations
+- Provide a private vulnerability-disclosure path
+
+Aim for ~600-1000 words.
+============================================================ -->
+
+---
+
+## Threat Model
+
+`<PROJECT_NAME>` is designed as a `<deployment shape — "local desktop
+application", "single-tenant server inside a private network",
+"library running in the user's process", "managed multi-tenant
+service">`.  All security controls are designed with the trust
+assumptions below.
+
+| Actor | Trust level |
+|---|---|
+| `<EXAMPLE: Local user running the app>` | Fully trusted |
+| `<EXAMPLE: Other processes on the same machine>` | Untrusted |
+| `<EXAMPLE: Network peers>` | Out of scope — `<binding strategy>` |
+| `<EXAMPLE: External SaaS dependencies>` | `<trust assumption>` |
+
+### What this tool can do to your `<systems / data>`
+
+<!-- PROJECT: Be explicit.  Skeptical users want to know the worst-
+case actions a compromised installation could take.  Examples:
+- Pulls configs from network devices over SSH
+- Deploys translated configs back to network devices
+- Reads files from disk via path traversal-protected helper
+- Calls external APIs with stored credentials
+- Writes data to disk in user-controlled paths -->
+
+* `<EXAMPLE: Pulls configs from network devices over SSH (with stored
+  credentials)>`
+* `<EXAMPLE: Optionally deploys translated configs back to devices —
+  disabled by default; explicit operator action required>`
+* `<...>`
+
+---
+
+## Credential / secret storage
+
+<!-- PROJECT: Document where credentials live during a session and at
+rest.  This is one of the highest-leverage trust signals.  Be
+specific about:
+- What format (plaintext / encrypted / hashed / OS keystore)
+- What backend (filesystem / Keychain / DPAPI / SecretService /
+  cloud secret manager)
+- What the migration story is for users upgrading from earlier
+  unencrypted versions
+- What the in-memory model is (plaintext-during-use is normal but
+  worth saying so users don't make false assumptions) -->
+
+`<Module / library that owns secret handling: path>`
+
+`<Description of encryption-at-rest, OS keystore integration, key
+rotation, migration from prior versions>`
+
+### Where credentials live during a session
+
+`<EXAMPLE: In-memory plaintext only; never logged; never written to
+disk in plaintext.  Verified by tests/unit/test_logging_config.py
+which asserts no credential field appears in any log record.>`
+
+---
+
+## What gets logged
+
+<!-- PROJECT: Inventory the log surface.  Skeptical users in
+regulated environments will audit this.  Be specific about:
+- What fields are redacted (passwords, secrets, tokens)
+- What fields are NOT redacted (hostnames, IPs — call this out if
+  it's an issue for your audience)
+- Whether log files are rotated / retention
+- Whether logs leave the machine -->
+
+`<EXAMPLE: All credential fields are redacted at the logging layer
+via a custom filter (path).  Hostnames and IPs are NOT redacted —
+operators in regulated environments should configure log rotation
++ access controls on the log directory.>`
+
+---
+
+## Input validation
+
+<!-- PROJECT: Briefly inventory the input-validation surface — what
+fields accept user input, what regex / type / range checks they
+pass through.  Path traversal protection deserves its own paragraph
+if your tool reads / writes files based on user input. -->
+
+`<EXAMPLE: All file access is gated through resolve_path() which
+requires the filename to match a strict regex and rejects any
+filename containing path separators or traversal sequences.>`
+
+`<EXAMPLE: Host fields validated as IPv4 / IPv6 / RFC-1123 hostname
+via _validate_host(); shell metacharacters rejected with HTTP 422.>`
+
+---
+
+## Supply-chain integrity
+
+<!-- PROJECT: This section is critical for users in regulated
+environments.  Even if you don't have all of these yet, document
+the gap and the plan. -->
+
+* **Reproducible builds** — `<status: same source → same digest;
+  verifiable via cosign verify-blob>`.
+* **Signed releases** — `<status: container images signed via cosign
+  + Sigstore; binary artefacts signed via SLSA provenance>`.
+* **SBOM published** — `<status: alongside each release via syft;
+  reachable at <URL>>`.
+* **Trusted Publishing** — `<status: PyPI / npm / crates.io
+  publication uses Trusted Publishing; no API tokens stored in
+  repo>`.
+* **Dependency pinning** — `<status: lockfile committed; periodic
+  audit via pip-audit / safety / cargo-audit>`.
+
+Key dependencies and their security relevance:
+
+| Package | Role | Notes |
+|---|---|---|
+| `<EXAMPLE: cryptography>` | `<EXAMPLE: encryption primitives>` | `<EXAMPLE: well-maintained; used by many other libs>` |
+| `<...>` | `<...>` | `<...>` |
+
+---
+
+## Worst-case incident response
+
+<!-- PROJECT: Walk through a realistic compromise scenario and what
+the impact / response would look like.  Skeptical users want to know
+you've thought about this.  Examples:
+- "If the running container is compromised: in-memory credentials are
+  exposed; on-disk encrypted credentials are decryptable only with
+  the OS keystore key; the attacker cannot reach <network segment>
+  because <binding constraint>"
+- "If a release artefact is tampered: cosign verify-blob fails;
+  users following the published verification steps catch it before
+  install" -->
+
+`<2-4 paragraphs walking a realistic compromise scenario and the
+mitigations that constrain the blast radius.>`
+
+---
+
+## Known Limitations / Accepted Risks
+
+| Item | Risk | Accepted? | Rationale |
+|---|---|---|---|
+| `<EXAMPLE: No API authentication>` | `<Any local process can call the API>` | Yes | `<Local app; single-user machine assumed>` |
+| `<EXAMPLE: Credentials over localhost HTTP>` | `<Plaintext in transit on loopback>` | Yes | `<Loopback is not a network interface>` |
+| `<EXAMPLE: OS keyring unavailable on some Linux>` | `<Key falls back to less-secure storage>` | Partial | `<Primary target is desktop platforms with keyrings>` |
+| `<...>` | `<...>` | `<...>` | `<...>` |
+
+---
+
+## Reporting a vulnerability
+
+**Please do not report security vulnerabilities through public
+GitHub issues.**
+
+Instead, send an email to `<security@your-domain.example>` (or use
+GitHub's private vulnerability reporting feature if enabled on the
+repo).  Include:
+
+* A description of the vulnerability
+* Steps to reproduce
+* Affected versions
+* Any proof-of-concept code (sanitised)
+
+We aim to acknowledge reports within `<48 hours>` and provide a
+remediation timeline within `<7 days>`.
+
+`<If you accept GPG-encrypted reports, publish your public key
+fingerprint here.>`
+
+---
+
+## Updating this document
+
+This file must be updated when any of the following change:
+
+* A new credential field is added to any persisted model
+* A new file-access endpoint is added
+* A new input field is accepted from untrusted sources
+* A dependency with security relevance is added or removed
+* The threat model assumption (`<your binding constraint>`) changes
+
+---
+
+## See also
+
+- [`README.md`](README.md) — project orientation and quickstart
+- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the
+  "never commit real credentials" hard rule
+- [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
+  the matrix-honesty discipline behind this document's shape

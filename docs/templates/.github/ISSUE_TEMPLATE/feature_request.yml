@@ -1,0 +1,93 @@
+# GitHub Issue Form — Feature Request
+#
+# Place at .github/ISSUE_TEMPLATE/feature_request.yml in your project.
+# Replace <PROJECT_NAME>, <COMPONENT>, and other placeholders with
+# project-specific values before going public.
+
+name: Feature Request
+description: Propose a new feature or capability
+title: "[feat] <short description>"
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing a feature.  Before filing:
+
+        - Check [CAPABILITIES.md "What we won't do"](../docs/CAPABILITIES.md#what-we-wont-do) —
+          some features are deliberately out of scope.  Re-proposing them generally won't
+          succeed without strong new arguments.
+        - Check existing issues — your idea may already be in flight.
+        - Bug reports go on the bug-report template, not here.  Fixture submissions go on
+          the fixture-submission template.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: |
+        Describe the user-visible problem.  What are you trying to do that the tool currently
+        doesn't support?  Concrete > abstract.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: |
+        What change to the tool would solve the problem above?  If you have multiple ideas,
+        list them.  It's fine to leave the implementation unspecified — we'll figure that out
+        in review.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope check
+      description: |
+        Which scope category does this fall into?  (Best guess — we'll re-classify if needed.)
+      options:
+        - "New <COMPONENT> (e.g. support a new <external entity>)"
+        - "New <CORE_ABSTRACTION> field (cross-<COMPONENT> data we don't currently model)"
+        - "New UI / output surface"
+        - "New CLI / API command"
+        - "Improvement to existing capability"
+        - "Documentation / walkthrough"
+        - "Other"
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: |
+        What workarounds have you tried?  What other tools have you used for this?  Knowing the
+        alternative shapes helps us decide whether this is in-scope or whether you'd be better
+        served by an adjacent tool.
+    validations:
+      required: false
+
+  - type: textarea
+    id: tier-3-check
+    attributes:
+      label: Is this a <Tier-3> category?
+      description: |
+        `<PROJECT_NAME>` deliberately defers `<EXAMPLE: firewall rules, NAT, VPN, routing
+        protocols, QoS, PKI>` as Tier 3 — see CAPABILITIES.md.  If your request touches one of
+        these areas, explain why this case differs from the deferral rationale.  (Most Tier-3
+        requests get declined — that's the design.)
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have read [CAPABILITIES.md](../docs/CAPABILITIES.md) and this isn't a deliberate Tier-3 deferral.
+          required: true
+        - label: I have searched existing issues for similar requests.
+          required: true

@@ -1,0 +1,326 @@
+# `<PROJECT_NAME>` — Architecture
+
+This is the conceptual map.  For day-to-day contributor rules see
+[`CLAUDE.md`](CLAUDE.md); for the active roadmap and backlog see
+[`<your roadmap doc>`](<path>).
+
+<!-- PROJECT: This document answers "what shape is this codebase, and
+what invariants does the shape enforce?"  It is NOT a tour of every
+file — exhaustive inventories rot.  Instead: layers, boundaries,
+cross-cutting policies, and the rationale for the design choices.
+Aim for ~1500-2000 words.  When the architecture stabilises, this doc
+should rarely change; when contributors keep getting confused about
+the same thing, that confusion belongs here. -->
+
+---
+
+## What this document is
+
+A conceptual map for new contributors and a stable reference for
+existing ones.  When in doubt about *where code belongs*, this is the
+first doc to consult.  Implementation details live in module-level
+docstrings; this is the layer above.
+
+---
+
+## Top-level concerns
+
+<!-- PROJECT: Replicate the "Two concerns" framing from your
+CLAUDE.md.  If you have N concerns, name all N.  Use a simple ASCII
+diagram if it helps — the goal is a 30-second mental model. -->
+
+`<PROJECT_NAME>` is a `<short technical descriptor — e.g. "FastAPI
+application", "Python library", "Rust CLI tool", "Electron app">` that
+co-hosts `<N>` independent concerns:
+
+```
+            ┌────────────────────────────────────────────────────┐
+            │                <PROJECT_NAME>                       │
+            └──────────────┬─────────────────────────┬────────────┘
+                           │                         │
+                  ┌────────▼────────┐       ┌────────▼────────┐
+                  │   <CONCERN_A>    │       │   <CONCERN_B>    │
+                  │                 │       │                 │
+                  │  <one-line>     │       │  <one-line>     │
+                  └─────────────────┘       └─────────────────┘
+```
+
+**`<CONCERN_A>`** (`<package_path>`): `<2-3 sentences explaining what
+this concern owns and how tests mock it>`.
+
+**`<CONCERN_B>`** (`<package_path>`): `<the subject of most of this
+document — the more architecturally interesting concern>`.
+
+The rest of this document is about `<CONCERN_B>`.  `<CONCERN_A>` is
+architecturally simpler — see `<pointer at its sub-README>`.
+
+---
+
+## Layer model
+
+<!-- PROJECT: Decompose your project into layers.  Network config
+translation is naturally 4-layer (Vendor → Codec → Canonical → Transport),
+but a different domain may have 2 layers, 5 layers, or a graph rather
+than a stack.  The goal is to give a contributor a stable vocabulary
+for discussing where code goes.  Each layer should answer:
+- WHERE: what package / module path
+- WHAT: one-sentence purpose
+- DESIGN CHOICES: 1-3 bullets explaining decisions that surprised
+  contributors and the rationale -->
+
+The `<CONCERN_B>` pipeline decouples `<N>` concerns that tend to get
+conflated:
+
+```
+┌─────────────────────────┐  ┌──────────────────────────┐
+│   Layer 1: <NAME>        │  │   Layer 2: <NAME>          │
+│   (<purpose>)            │  │   (<purpose>)              │
+└──────────┬──────────────┘  └─────────────┬────────────┘
+           │                                │
+           ▼                                ▼
+┌─────────────────────────┐  ┌──────────────────────────┐
+│   Layer 3: <NAME>        │  │   Layer 4: <NAME>          │
+│   (<purpose>)            │  │   (<purpose>)              │
+└─────────────────────────┘  └──────────────────────────┘
+```
+
+### Layer 1 — `<NAME>`
+
+**Where:** `<package_path>`
+**What:** `<1-2 sentence description of what this layer owns>`.
+
+**Purpose:**
+- `<bullet>`
+- `<bullet>`
+
+**Key design choices:**
+
+- `<Surprising-but-right decision and 1-line rationale>`
+- `<Decision contributors keep questioning, plus why it stays this way>`
+
+### Layer 2 — `<NAME>`
+
+`<repeat>`
+
+### Layer 3 — `<CORE_ABSTRACTION>`
+
+<!-- PROJECT: Most projects have a central data model that the layers
+above and below project into.  In NetConfig this is the
+"Canonical Intent Model" — the shared tree shape that codecs parse
+into and render out of.  In your project it might be an AST, a
+domain model, an event schema, an API contract.  Name it explicitly
+and document its tier semantics if it has any. -->
+
+**Where:** `<path>`
+**What:** the shared structure that `<other layers>` project into.
+
+If your `<CORE_ABSTRACTION>` has tiered semantics (cross-vendor stable
+vs. lossy vs. opaque carry-through), document the tiers here:
+
+| Tier | Meaning | Examples |
+|---|---|---|
+| **Tier 1** | `<every implementation models it; cross-implementation stable>` | `<EXAMPLE>` |
+| **Tier 2** | `<common enough to model; mappings are lossy>` | `<EXAMPLE>` |
+| **Tier 3** | `<opaque carry-through; never auto-rendered>` | `<EXAMPLE>` |
+
+**The design bet:** `<which tier holds most of the value, and why
+the other tiers are worth their cost / kept on>`.
+
+### Layer 4 — `<NAME>`
+
+`<repeat>`
+
+---
+
+## Certification / certainty model
+
+<!-- PROJECT: If your project's components have varying levels of
+maturity / confidence, document the tiering scheme here.  In NetConfig
+codecs are tagged `experimental` / `best_effort` / `certified` based
+on real-fixture coverage.  Other domains: alpha/beta/stable, draft/
+review/ratified, prototype/staging/production.  Each level has an
+explicit promotion criterion. -->
+
+Every `<COMPONENT>` declares `<a maturity tag>` — a promise about how
+battle-tested it is:
+
+| Level | Criterion | Production-ready? |
+|---|---|---|
+| `<EXAMPLE: experimental>` | `<EXAMPLE: synthetic test coverage only>` | No — UI shows red banner |
+| `<EXAMPLE: best_effort>` | `<EXAMPLE: ≥1 real-world fixture>` | Staging only — UI shows yellow banner |
+| `<EXAMPLE: certified>` | `<EXAMPLE: ≥3 real-world fixtures from ≥2 environments>` | Yes — UI shows green chip |
+
+The bar is intentionally strict.  Per-`<COMPONENT>` status is tracked
+in `<live results doc>` — consult it as the source of truth, not this
+doc (which goes stale as `<COMPONENTs>` promote).
+
+---
+
+## Pipeline orchestration
+
+<!-- PROJECT: If your project has a central pipeline that calls the
+layers in order, document its public surface and which functions are
+frozen.  Skip this section if your project is more event-driven than
+pipeline-shaped. -->
+
+**Where:** `<core pipeline module path>`
+**What:** A single public function (`<run_pipeline>` or whatever you
+call it) that drives:
+
+```
+input
+  → <Layer 1>.parse(input)             # returns <CORE_ABSTRACTION>
+  → apply transforms (zero or more)
+  → validate against schema + capability matrix
+  → <Layer N>.render(<CORE_ABSTRACTION>) # returns output
+```
+
+**Critical invariant:** the signatures of pipeline-stage functions in
+`<core pipeline module>` **must never change**.  External callers and
+tests depend on the exact shape.  Later phases add NEW public
+functions (e.g. `<plan_with_deploy>`); existing stages stay frozen.
+
+---
+
+## Cross-cutting policies
+
+<!-- PROJECT: Some concerns can't be cleanly assigned to a layer
+because they cut across multiple layers.  Document each policy here:
+where it lives, what calls it, what it enforces.  Skip layers that
+don't apply. -->
+
+Some concerns are vendor / integration / consumer-agnostic and live in
+shared sibling modules at the package root rather than per-layer-1
+implementation.  Each policy is called by multiple `<COMPONENTs>` to
+keep cross-`<COMPONENT>` behaviour consistent:
+
+**`<EXAMPLE: Hash-portability policy>`** (`<path>`).  When a render
+path consumes `<sensitive field>`, it calls `<helper>` to decide
+whether the target accepts that form.  Mismatches emit a comment in
+the target's native syntax instead of leaking the value as plaintext.
+
+**`<EXAMPLE: Naming-value sanitisation>`** (`<path>`).  Some target
+parsers reject whitespace / unicode / shell metacharacters in
+identifier tokens; renderers call `<sanitise_helper>` so the wire form
+round-trips through the target's own parser.  Source state preserved
+on `<CORE_ABSTRACTION>`, sanitised only at the wire boundary.
+
+When adding a new `<COMPONENT>`, audit each policy and decide whether
+to opt in.  Most cases: opt in.  Re-implementing the policy locally
+is the wrong call.
+
+---
+
+## Audit / verification harness
+
+<!-- PROJECT: This section is THE distinguishing feature of the
+matrix-honesty discipline.  If your project verifies its own claims
+against an explicit expectation matrix (cross-vendor drift, schema
+compliance, fuzzed property checks, golden-file regression), document
+the harness here.  Skip if you don't have one yet — but consider
+adding one; the discipline pays off. -->
+
+Beyond the standard test layers (unit / integration / e2e), a
+separate audit harness lives at `<tools/audit_path>`.  It runs every
+`(<input dimension>, <output dimension>, fixture)` triple through the
+full pipeline and classifies per-`<CORE_ABSTRACTION>`-field drift
+into one of N variance classes:
+
+* **`ALIGNED`** — drift matches expectation; no action.
+* **`<COMPONENT>_BUG`** — drifted where expectation says "should
+  succeed".  This is the high-severity signal — real drift the
+  `<COMPONENT>` author should fix.
+* **`EXPECTED_LOSSY`** — drifted, expectation says
+  `disposition: lossy` (acknowledged loss).
+* **`EXPECTED_UNSUPPORTED`** — drifted, expectation says
+  `disposition: unsupported` (target has no equivalent).
+* **`METHODOLOGY_ISSUE_under`** — expectation says lossy/unsupported
+  but the cell actually aligns (over-claiming loss).
+* **`METHODOLOGY_ISSUE_over`** — expectation says good but cell is
+  not_applicable (over-claiming applicability).
+* **`STRUCTURAL_ONLY`** — list-row count drift collapsed to a single
+  signal per cell-parent rather than amplified across N per-field
+  keys.
+* **`TRIVIAL_EMPTY`** — both sides empty/zero on this field; the cell
+  trivially aligns by absence of data.
+
+<!-- PROJECT: The variance class set is exhaustive, not illustrative.
+A new class is a real architectural commitment because every cell
+must classify into exactly one.  Add a class only when you have
+real-world cells that don't fit any existing class. -->
+
+Output committed as `<results path>` so the matrix is reviewable in
+git history — not just at run time.  Per-`<COMPONENT>` investigation
+reports live alongside.  This audit gates "is the cross-`<COMPONENT>`
+behaviour honest?" — failing `<COMPONENT>_BUG` cells become backlog
+items; failing `METHODOLOGY` cells flag expectation drift.
+
+See [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md)
+for the rationale behind the variance-class set and why `TRIVIAL_EMPTY`
+matters for keeping the signal-to-noise ratio actionable.
+
+---
+
+## Test architecture
+
+`<N>` layers, each with specific isolation guarantees:
+
+| Layer | Path | Mocking | Runtime |
+|---|---|---|---|
+| Unit | `tests/unit/` | None — pure functions | <1s per file |
+| Integration | `tests/integration/` | `<single mocking entry point>` patched | <1s per file |
+| E2E | `tests/e2e/` | `<entry point>` patched for live server | ~`<N>`s full sweep |
+| `<EXAMPLE: Desktop>` | `tests/<EXAMPLE: desktop>/` | `<EXAMPLE: PySide6 fully mocked via sys.modules>` | <1s per file |
+
+**Real-world fixture validation** lives at `<path>`.  It auto-discovers
+fixtures under `tests/fixtures/<category>/<integration>/`, runs
+parse + round-trip + determinism assertions, and prints per-fixture
+coverage metrics.
+
+Mocking single entry point: `<external service>` is mocked at
+`<single factory>`, never at the SDK client level (see CLAUDE.md
+hard rule).
+
+---
+
+## Theming / accessibility
+
+<!-- PROJECT: Skip if your project has no UI.  If it does, document
+the accessibility / theming invariants — these are the rules that get
+silently broken without the discipline. -->
+
+`<EXAMPLE: The app supports light + dark modes via CSS custom
+properties toggled on `<html data-theme>`.  One source of truth: the
+`:root` block in `base.html` defines light-mode tokens; the
+`[data-theme="dark"]` selector overrides the same names.  All themed
+declarations use `var(--token)` — never raw hex.>`
+
+Three rules keep the pattern robust:
+
+1. **Inline boot script, blocking, in `<head>`** — prevents FOUC.
+2. **JS-driven theme apply, not CSS `@media (prefers-color-scheme)`** —
+   one selector is the sole gate.
+3. **Theme-aware classes via CSS, never inline `style`** — semantic
+   colour pairs inherit via the `[data-theme]` attribute.
+
+---
+
+## Evolution roadmap
+
+For the active backlog see `<your roadmap / plans doc>`.  Big
+structural pieces that have shipped are covered in
+[`CHANGELOG.md`](CHANGELOG.md); this document deliberately tracks
+shape rather than chronology.
+
+---
+
+## See also
+
+- `<EXAMPLE: definitions/README.md — schema authoring guide>`
+- `<EXAMPLE: <core>/codecs/README.md — component authoring guide>`
+- `<EXAMPLE: <core>/canonical/README.md — central data model + tier
+  promotion rules>`
+- `<EXAMPLE: docs/glossary.md — project-jargon reference>`
+- [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
+  the discipline behind this document's shape
+- `<your live results doc>` — per-`<COMPONENT>` certification state

@@ -1,0 +1,111 @@
+# GitHub Issue Form — Fixture Submission
+#
+# Place at .github/ISSUE_TEMPLATE/fixture_submission.yml in your project.
+# Replace <PROJECT_NAME>, <COMPONENT>, and other placeholders.
+#
+# This template is OPTIONAL — only relevant if your project has a real-fixture
+# corpus that external contributors are encouraged to extend.  If your project
+# has no external test-fixture concept, delete this file.
+
+name: Fixture Submission
+description: Donate a real-world input that surfaces a gap in test coverage
+title: "[fixture] <COMPONENT> + <short description>"
+labels: ["fixture", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for donating a fixture.  Real-world inputs from external contributors are how
+        we discover the cells the internal audit can't surface (the ones no fixture exercises).
+
+        **Before you start:**
+        - **Sanitise the fixture.**  Strip `<EXAMPLE: hostnames, public IPs, secrets,
+          customer-identifying tokens>`.  Use the project's sanitisation tool — see
+          [BUG_REPORTING.md](../BUG_REPORTING.md) — and run it with `--dry-run` first to review
+          the substitution table.
+        - **Verify round-trip on the sanitised version.**  If the sanitised input fails round-
+          trip, file a bug report instead of a fixture submission.
+        - **Confirm the licence.**  By submitting, you confirm the sanitised fixture is yours
+          to share or has been derived from public-research material.  See
+          [`tests/fixtures/.../NOTICE.md`](../tests/fixtures/) for provenance conventions.
+
+  - type: dropdown
+    id: source-component
+    attributes:
+      label: Source <COMPONENT>
+      description: Which <COMPONENT> does this fixture exercise?
+      options:
+        - <EXAMPLE: cisco_iosxe_cli>
+        - <EXAMPLE: arista_eos>
+        - <EXAMPLE: aruba_aoss>
+        - <other — please specify>
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: <COMPONENT> version
+      description: What version of the source <COMPONENT> generated this input?  (If known.)
+      placeholder: "e.g. IOS-XE 17.3.4, FortiOS 7.4, RouterOS 7.19"
+    validations:
+      required: false
+
+  - type: textarea
+    id: what-makes-this-interesting
+    attributes:
+      label: What makes this fixture interesting?
+      description: |
+        Why is this fixture worth adding?  Specific grammar feature exercised?  Edge case that
+        broke another tool?  Real production scenario the synthetic fixtures don't touch?  Be
+        specific — "real config" alone isn't enough; the corpus is curated.
+    validations:
+      required: true
+
+  - type: textarea
+    id: substitution-table
+    attributes:
+      label: Sanitisation substitution table (from --dry-run)
+      description: |
+        Optional but appreciated.  Pasting the `--dry-run` substitution table lets us verify
+        the sanitiser correctly handled your input's identifiers.  Strip any rows you don't
+        want public; everything you paste here will appear in the issue.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: fixture-content
+    attributes:
+      label: Fixture content (or attachment)
+      description: |
+        Paste the sanitised fixture inline as a fenced code block, OR attach as a file (drag
+        and drop into this field).  If the fixture is large, an attachment is preferred.
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provenance
+    attributes:
+      label: Provenance
+      description: Where did this input originate?
+      options:
+        - "Originally my own / my organisation's"
+        - "Public research material (e.g. published vendor docs, conference workshop)"
+        - "Third-party real-capture corpus already public"
+        - "Other (please specify in description)"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have sanitised this fixture (no real hostnames, public IPs, secrets, or customer-identifying tokens).
+          required: true
+        - label: I have verified the sanitised version round-trips through the source <COMPONENT> cleanly.
+          required: true
+        - label: I confirm I have the right to share this material under the project's fixture licence terms.
+          required: true

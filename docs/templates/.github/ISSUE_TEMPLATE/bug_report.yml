@@ -1,0 +1,120 @@
+# GitHub Issue Form — Bug Report
+#
+# Place at .github/ISSUE_TEMPLATE/bug_report.yml in your project.
+# Replace <PROJECT_NAME>, <COMPONENT>, and other placeholders with
+# project-specific values before going public.
+
+name: Bug Report
+description: Report a bug — something the tool does wrong, or fails to do at all
+title: "[bug] <short description>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.  Please fill in the fields
+        below so we can reproduce it without back-and-forth.
+
+        **Before you start:**
+        - Check the [CAPABILITIES doc](../docs/CAPABILITIES.md) — your input may hit a
+          deliberate Tier-3 / unsupported boundary.  That's not a bug; it's documented.
+        - **Sanitise any sensitive data** (`<EXAMPLE: hostnames, IPs, secrets>`).
+          See [BUG_REPORTING.md](../BUG_REPORTING.md) for the sanitisation tool.
+          Issues containing un-sanitised production data will be deleted.
+
+  - type: input
+    id: project-version
+    attributes:
+      label: <PROJECT_NAME> version
+      description: Output of `<package> --version` or the git SHA you're running.
+      placeholder: "v0.1.0 (or 1234abc)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: source-component
+    attributes:
+      label: Source <COMPONENT>
+      description: Which <COMPONENT> are you using as input?
+      options:
+        - <EXAMPLE: cisco_iosxe_cli>
+        - <EXAMPLE: arista_eos>
+        - <EXAMPLE: aruba_aoss>
+        - <other — please specify in description>
+    validations:
+      required: true
+
+  - type: dropdown
+    id: target-component
+    attributes:
+      label: Target <COMPONENT>
+      description: Which <COMPONENT> are you rendering to?  (Leave blank for parse-only / single-direction bugs.)
+      options:
+        - "(parse-only / N/A)"
+        - <EXAMPLE: cisco_iosxe_cli>
+        - <EXAMPLE: arista_eos>
+        - <EXAMPLE: aruba_aoss>
+        - <other — please specify in description>
+
+  - type: textarea
+    id: source-input
+    attributes:
+      label: Sanitised source input (shortest reproducer)
+      description: |
+        The smallest input snippet that reproduces the bug.  Real production data must be
+        sanitised first — strip hostnames, public IPs, secrets, and customer-identifying tokens.
+        Use a fenced code block.
+      render: text
+      placeholder: |
+        ```
+        hostname device-1
+        interface GigabitEthernet1/0/1
+          description redacted
+          switchport mode access
+          switchport access vlan 10
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output / behaviour
+      description: What did you think the tool would do with this input?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output / behaviour
+      description: |
+        What did the tool actually do?  Include any error messages, validation banners,
+        review comments, or `<Tier-3>` detection banners the UI showed.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        OS, Python version (if applicable), how you installed the tool (Docker / PyPI / native installer).
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Python: 3.14
+        - Install: docker run ghcr.io/<owner>/<package>:0.1.0
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: sanitisation
+    attributes:
+      label: Sanitisation confirmation
+      description: Required acknowledgement before submission.
+      options:
+        - label: I have sanitised any production data in the source input above.
+          required: true
+        - label: I have read CAPABILITIES.md and confirmed this is not a documented Tier-3 / unsupported case.
+          required: true
