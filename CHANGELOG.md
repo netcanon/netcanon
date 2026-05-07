@@ -11,6 +11,68 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Added (Desktop Preferences mini-wave)
+
+The desktop-parity audit identified 7 actionable items in the
+"necessary differences" category — desktop-platform-specific surfaces
+the web platform doesn't need.  This wave addresses them as a coherent
+feature so operator workflow on the desktop matches the configurable
+surface that the web platform exposes via `NETCONFIG_*` env vars.
+
+* **Item 1 — `DesktopPreferences` model** (`netconfig_desktop/preferences.py`):
+  Pydantic model with optional path overrides (`configs_dir`,
+  `definitions_dir`, `data_dir`), `port` (1024–65535 spinbox range),
+  `open_in_editor` toggle, and a forward-compatible
+  `open_browser_on_start` field.  `load()` is corruption-tolerant —
+  malformed JSON returns factory defaults so the desktop never refuses
+  to start because of a botched preferences file.
+* **Item 2 — Preferences dialog UI** (`netconfig_desktop/preferences_dialog.py`):
+  PySide6 `QDialog` with browse buttons, port spinner, toggles, and an
+  "Open Configs Folder" convenience button.  Each interactive widget
+  carries `setObjectName()` per the `pref-dialog-<field>-<action>`
+  convention (the desktop equivalent of `data-testid`).
+* **Item 3 — `Settings.data_dir` field + `effective_data_dir` property**
+  (`netconfig/config.py`): backward-compatible explicit override for
+  the data-root directory holding `jobs/`, `schedules/`, `devices/`.
+  When `None`, falls back to the historical `configs_dir.parent`
+  derivation.  `netconfig/main.py` reads through `effective_data_dir`
+  at all four lifespan call sites; an `inspect.getsource` regression
+  guard catches future copy-pastes of the old derivation.
+* **Item 4 — Tray menu surface** (`netconfig_desktop/tray.py` +
+  `app.py`): four-item menu (Show / Preferences… / Open configs folder /
+  Quit).  The two new callbacks are optional kwargs so existing tray
+  construction stays backward-compatible.
+* **Item 5 — Single-instance enforcement** (`netconfig_desktop/single_instance.py`):
+  Windows named-mutex guard (`Global\NetConfigSingleInstance_v1`)
+  prevents a second `netconfig_desktop` from launching and silently
+  failing on the port-bind.  No-op on non-Windows so test suite runs
+  on Linux / macOS.
+* **Item 6 — Documentation** (`netconfig_desktop/README.md`): module
+  layout updated to list all five new files; settings table extended
+  with the data-root row; new Preferences and Uninstall behaviour
+  sections.
+* **Item 7 — Cross-cutting docs** (`CLAUDE.md`): Platform-Specific
+  Exceptions section gains the Preferences dialog + single-instance
+  entries; new "Deliberately omitted (preventive)" subsection
+  documents telemetry / auto-update / file associations / crash
+  reporting as explicit OUT OF SCOPE so future contributors don't add
+  them speculatively.
+
+The audit found zero parity violations — these are necessary
+desktop-only surfaces (the web platform's equivalents are the
+`NETCONFIG_*` env vars and the inability to launch two web servers
+without picking a different port).  The wave preserves that parity by
+giving desktop operators an equivalent configuration surface to what
+web operators already have.
+
+New tests added: 47 in 4 new modules (`test_preferences.py` 16,
+`test_preferences_dialog.py` 16, `test_single_instance.py` 9,
+`test_data_dir_resolution.py` 6) plus 14 in 3 extended modules
+(`test_settings.py` +5, `test_tray.py` +4, `test_app.py` +5).  Suite
+state for the unit + integration + desktop tiers post-wave: 3403
+passed, 57 skipped, 0 failed.  No matrix regen.  No codec touch.
+Pipeline-stage signatures unchanged.
+
 ### Validation cleanup wave (post-`170a2c2` audit follow-ups)
 
 After the comprehensive validation pass (commit `170a2c2`), the

@@ -31,12 +31,13 @@ Shutdown sequence (window ✕ button)::
 from __future__ import annotations
 
 import logging
+import os
 
 from netconfig.main import create_app
 
 logger = logging.getLogger(__name__)
 from netconfig_desktop.server import ServerThread
-from netconfig_desktop.settings import desktop_settings
+from netconfig_desktop.settings import _preferences_path, desktop_settings
 from netconfig_desktop.tray import TrayIcon
 from netconfig_desktop.window import WebViewWindow
 
@@ -52,6 +53,7 @@ class DesktopApp:
 
     def __init__(self) -> None:
         settings = desktop_settings()
+        self._settings = settings
 
         asgi_app = create_app(settings)
 
@@ -69,6 +71,8 @@ class DesktopApp:
         self._tray = TrayIcon(
             on_show=self._window.show,
             on_quit=self._quit,
+            on_preferences=self._show_preferences,
+            on_open_configs=self._open_configs_folder,
         )
 
     # ------------------------------------------------------------------
@@ -123,3 +127,35 @@ class DesktopApp:
         logger.info("Window closed — stopping tray and server")
         self._tray.stop()
         self._server.stop()
+
+    def _show_preferences(self) -> None:
+        """Open the Preferences dialog (modal, blocks until closed).
+
+        Imports PySide6 and the dialog lazily so this method is safe to
+        call from the pystray background thread on Windows even though
+        the dialog itself must be constructed on the main Qt thread —
+        Qt's invokeMethod machinery handles the marshalling.
+        """
+        from netconfig_desktop.preferences import DesktopPreferences
+        from netconfig_desktop.preferences_dialog import PreferencesDialog
+
+        prefs_path = _preferences_path()
+        prefs = DesktopPreferences.load(prefs_path)
+        dialog = PreferencesDialog(
+            prefs=prefs,
+            prefs_path=prefs_path,
+            configs_dir_default=self._settings.configs_dir,
+        )
+        dialog.create()
+        dialog.exec()
+
+    def _open_configs_folder(self) -> None:
+        """Open the configs directory in the OS file explorer."""
+        try:
+            os.startfile(str(self._settings.configs_dir))  # type: ignore[attr-defined]
+        except Exception:  # noqa: BLE001
+            logger.debug(
+                "os.startfile failed for configs_dir=%s",
+                self._settings.configs_dir,
+                exc_info=True,
+            )

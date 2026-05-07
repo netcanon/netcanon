@@ -16,6 +16,17 @@ def main() -> None:
     """Bootstrap the NetConfig desktop application."""
     _configure_logging()
     logger = logging.getLogger(__name__)
+
+    # Refuse to start a second instance — a duplicate would fail to
+    # bind the embedded server's port and surface as a confusing
+    # fatal-error MessageBox.  Show a friendly hint instead and exit.
+    from netconfig_desktop.single_instance import acquire_singleton
+
+    if not acquire_singleton():
+        logger.info("Another NetConfig instance is already running — exiting")
+        _already_running()
+        sys.exit(0)
+
     try:
         from netconfig_desktop.app import DesktopApp
 
@@ -62,6 +73,27 @@ def _fatal(message: str) -> None:
     except Exception:  # noqa: BLE001
         print(f"FATAL: {message}", file=sys.stderr)
     sys.exit(1)
+
+
+def _already_running() -> None:
+    """Show a friendly "already running" hint via MessageBoxW.
+
+    Quiet on non-Windows / when ctypes.windll is unavailable so the
+    function is safe to call from test runs on Linux / macOS.
+    """
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "NetConfig is already running.\n\n"
+            "Check your system tray for the NetConfig icon.",
+            "NetConfig",
+            0x40,  # MB_ICONINFORMATION
+        )
+    except Exception:  # noqa: BLE001
+        # Non-Windows or no display — log-only behaviour is fine.
+        pass
 
 
 if __name__ == "__main__":

@@ -112,7 +112,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
 
         # Verify storage directories are writable before proceeding.
-        data_root = settings.configs_dir.parent
+        # ``effective_data_dir`` honours an explicit Settings.data_dir
+        # override (used by desktop preferences) and otherwise falls back
+        # to the historical ``configs_dir.parent`` derivation.
+        data_root = settings.effective_data_dir
         for check_dir in [settings.configs_dir, data_root]:
             try:
                 check_dir.mkdir(parents=True, exist_ok=True)

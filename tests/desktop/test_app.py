@@ -46,11 +46,12 @@ def mock_window():
 
 
 @pytest.fixture()
-def mock_settings():
+def mock_settings(tmp_path):
     settings = MagicMock(name="Settings")
     settings.host = "127.0.0.1"
     settings.port = 8765
     settings.log_level = "warning"
+    settings.configs_dir = tmp_path / "configs"
     with patch("netconfig_desktop.app.desktop_settings", return_value=settings):
         yield settings
 
@@ -90,6 +91,20 @@ class TestDesktopAppConstruction:
         from netconfig_desktop.app import TrayIcon
 
         TrayIcon.assert_called_once()
+
+    def test_tray_receives_preferences_callback(self, app, mock_tray):
+        from netconfig_desktop.app import TrayIcon
+
+        _, kwargs = TrayIcon.call_args
+        assert "on_preferences" in kwargs
+        assert callable(kwargs["on_preferences"])
+
+    def test_tray_receives_open_configs_callback(self, app, mock_tray):
+        from netconfig_desktop.app import TrayIcon
+
+        _, kwargs = TrayIcon.call_args
+        assert "on_open_configs" in kwargs
+        assert callable(kwargs["on_open_configs"])
 
 
 class TestDesktopAppRun:
@@ -155,3 +170,44 @@ class TestDesktopAppOnWindowClosed:
     def test_on_window_closed_stops_server(self, app, mock_server):
         app._on_window_closed()
         mock_server.stop.assert_called_once()
+
+
+class TestDesktopAppOpenConfigsFolder:
+    def test_open_configs_folder_invokes_startfile(self, app, mock_settings):
+        with patch(
+            "netconfig_desktop.app.os.startfile",
+            create=True,
+        ) as mock_startfile:
+            app._open_configs_folder()
+        mock_startfile.assert_called_once_with(str(mock_settings.configs_dir))
+
+    def test_open_configs_folder_swallows_exceptions(
+        self, app, mock_settings
+    ):
+        with patch(
+            "netconfig_desktop.app.os.startfile",
+            create=True,
+            side_effect=OSError("non-windows"),
+        ):
+            # Must not raise
+            app._open_configs_folder()
+
+
+class TestDesktopAppShowPreferences:
+    def test_show_preferences_creates_and_execs_dialog(self, app):
+        with (
+            patch(
+                "netconfig_desktop.preferences_dialog.PreferencesDialog"
+            ) as MockDialog,
+            patch(
+                "netconfig_desktop.preferences.DesktopPreferences.load",
+                return_value=MagicMock(name="DesktopPreferences"),
+            ),
+        ):
+            instance = MagicMock(name="dialog_instance")
+            MockDialog.return_value = instance
+            app._show_preferences()
+
+        MockDialog.assert_called_once()
+        instance.create.assert_called_once()
+        instance.exec.assert_called_once()

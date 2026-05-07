@@ -64,7 +64,7 @@ The following are intentionally platform-specific and do **not** require
 cross-platform equivalents:
 
 **Desktop only**
-- System tray icon (Show / Quit menu)
+- System tray icon (Show / Preferences… / Open configs folder / Quit menu)
 - MSI installer, Start Menu shortcut, taskbar pinning
 - Embedded WebView window management (hide-to-tray on close, restore on show)
 - Native window chrome (title bar, window icon via `.ico`)
@@ -74,12 +74,45 @@ cross-platform equivalents:
   on the same machine as the user.  Enabled via `Settings.open_in_editor = True` in
   `netconfig_desktop/settings.py`.  The web platform equivalent is the existing
   **View** button (`config-view-link`) which renders the file in the browser.
+- **Preferences dialog** (`netconfig_desktop/preferences_dialog.py`) — operator-
+  configurable paths (configs / definitions / data dir), embedded-server port,
+  and toggles.  Persisted to `%APPDATA%\NetConfig\preferences.json`.  Equivalent
+  to the web platform's `NETCONFIG_*` env-var / `.env` configuration surface;
+  desktop operators have no shell-level knob, so the dialog is the equivalent
+  affordance.  PySide6 widgets carry `setObjectName()` IDs following the
+  `pref-dialog-<field>-<action>` convention (the desktop equivalent of
+  `data-testid` since Qt has no native test-id attribute).
+- **Single-instance enforcement** (`netconfig_desktop/single_instance.py`) —
+  Windows named mutex (`Global\NetConfigSingleInstance_v1`) refuses to launch a
+  second copy.  Without this guard the duplicate process fails to bind the
+  embedded server's TCP port and surfaces as a confusing fatal-error MessageBox;
+  the friendly "already running" hint is much more discoverable.  No-op on
+  non-Windows platforms.
 
 **Web only**
 - Interactive Swagger API docs at `/docs` — the web browser opens this freely;
   it is accessible from the desktop too but not surfaced in the desktop UI
 - `--host` / `--port` flags for public network binding — the desktop always
   binds on `127.0.0.1` with a fixed internal port and is never exposed on LAN
+
+**Deliberately omitted (preventive)**
+
+The following are explicitly OUT OF SCOPE for the desktop platform.  They
+are listed here so a future contributor doesn't add them speculatively
+without an explicit product decision to reverse the call:
+
+- **Telemetry / usage analytics** — no phone-home, no opt-in tracking.
+  The desktop is a single-user local utility; analytics would add no
+  product value and would surprise privacy-conscious operators.
+- **Auto-update** — updates are delivered via fresh MSI download +
+  reinstall.  Auto-update would require a code-signing infrastructure
+  and persistent background scheduler we deliberately don't ship.
+- **File associations** — no `.cfg` → NetConfig handler.  Operators
+  open files via the in-app **View** / **Open in editor** affordances
+  rather than from File Explorer.
+- **Crash reporting** — fatal errors surface via MessageBoxW and the
+  log file under `%APPDATA%\NetConfig\netconfig.log`; users can attach
+  the log to a bug report.  No automatic crash uploads.
 
 ---
 
