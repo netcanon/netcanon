@@ -75,11 +75,11 @@ desktop-build = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/OWNER/REPO"
-Repository = "https://github.com/OWNER/REPO"
-Issues = "https://github.com/OWNER/REPO/issues"
-Changelog = "https://github.com/OWNER/REPO/blob/main/CHANGELOG.md"
-Documentation = "https://github.com/OWNER/REPO/blob/main/README.md"
+Homepage = "https://github.com/netcanon/netcanon"
+Repository = "https://github.com/netcanon/netcanon"
+Issues = "https://github.com/netcanon/netcanon/issues"
+Changelog = "https://github.com/netcanon/netcanon/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/netcanon/netcanon/blob/main/README.md"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -1,11 +1,11 @@
 blank_issues_enabled: false
 contact_links:
   - name: Capabilities & Limitations
-    url: https://github.com/OWNER/REPO/blob/main/docs/CAPABILITIES.md
+    url: https://github.com/netcanon/netcanon/blob/main/docs/CAPABILITIES.md
     about: Check what's supported, lossy, or out-of-scope before filing.
   - name: Contributing guide
-    url: https://github.com/OWNER/REPO/blob/main/CONTRIBUTING.md
+    url: https://github.com/netcanon/netcanon/blob/main/CONTRIBUTING.md
     about: How to add fixtures, codecs, or canonical fields.
   - name: Security vulnerabilities
-    url: https://github.com/OWNER/REPO/security/advisories/new
+    url: https://github.com/netcanon/netcanon/security/advisories/new
     about: Report security issues privately — never open a public issue for a vulnerability.

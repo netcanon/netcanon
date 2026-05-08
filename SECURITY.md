@@ -11,7 +11,7 @@ a security-relevant change is made to the codebase.
 **Do not open public GitHub issues for security vulnerabilities.**
 
 Use GitHub's private vulnerability reporting flow:
-**https://github.com/OWNER/REPO/security/advisories/new**
+**https://github.com/netcanon/netcanon/security/advisories/new**
 
 What to include:
 
