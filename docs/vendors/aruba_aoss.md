@@ -8,9 +8,13 @@ know what Netcanon does for you, this is the page.
 - **`aruba_aoss`** — AOS-S CLI parse + render.  **Certification:
   certified.**  Bidirectional.
 
-The codec covers AOS-S WB / WC / KB / YA software branches across
-the major AOS-S generations: 2530 / 2920 / 2930F / 2930M stack /
-5400R modular chassis.
+The codec covers AOS-S WB / WC / KB software branches across the
+major AOS-S generations represented in the corpus: 2920 / 2930F /
+2930M stack / 5400R modular chassis.  The CLI grammar is stable
+across the AOS-S product line, so other generations (2530, the YA
+branch, etc.) parse and render through the same pipeline — they
+just aren't pinned by a fixture yet (operator captures welcome —
+see [`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 
 ## What translates well
 
@@ -34,8 +38,14 @@ the major AOS-S generations: 2530 / 2920 / 2930F / 2930M stack /
   + dns-server + network + range)
 - Local users — `password manager sha1` hash (and other AOS-S hash
   forms) form-preserving migration
+
+Parse-tolerant (parsed but not currently rendered cross-vendor —
+intra-AOS-S round-trip preserves them; cross-vendor render path is
+future work):
+
 - `dhcp-snooping` — `authorized-server` lists, VLAN scope, trust-port
-- `web-management ssl`, `ip authorized-managers` ACLs
+- `web-management ssl`, `ip authorized-managers` management-plane
+  ACLs
 
 ## Lossy paths
 

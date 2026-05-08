@@ -1358,7 +1358,21 @@ TIER 3 — interactive rename modal in /migrate UI.
     # supported/lossy) lands on demand — see GAP 4 roadmap entry
     # for the natural bundle with Junos routing-instances.
 
-[ ] MODULE-VARIANT TARGET PROFILES (hardware-awareness, high priority):
+[SHIPPED] MODULE-VARIANT TARGET PROFILES (hardware-awareness):
+    # SHIPPED.  Option B (declarative `modules:` block on TargetProfile YAML)
+    # was chosen and shipped; canonical schema lives in
+    # `netcanon/migration/target_profiles.py` (`TargetProfile.modules:
+    # dict[str, TargetModule]`); allowlist of module-variant profiles in
+    # `tests/fixtures/module_variants.py`; reference YAML at
+    # `definitions/target_profiles/cisco_c9300_24ux.yaml` (NM-8X / NM-2Q
+    # variants).  Architecture doc in `ARCHITECTURE.md` "Module-variant
+    # target profiles" section.  Authoring guide in
+    # `docs/adding-a-target-profile.md`.
+    #
+    # The original problem statement + design space exploration is
+    # preserved below for historical context.
+    # ---
+    # ORIGINAL PROBLEM STATEMENT (pre-ship):
     # PROBLEM
     # Target profiles currently bake ONE specific hardware config per
     # file.  All shipped Cat 9300 profiles assume the NM-8X (8× 10G

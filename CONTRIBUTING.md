@@ -26,9 +26,10 @@ that governs all of them.
 The fastest way to improve the project: hand us a real-world config that
 exercises a translation we don't currently test.
 
-1. Sanitize the config (the helper documented in `BUG_REPORTING.md`
-   ships in Phase 4.5 of [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md);
-   until then, hand-redact carefully).
+1. Sanitize the config using `netcanon sanitize` (CLI) or
+   `POST /api/v1/sanitize` (HTTP) — see
+   [`BUG_REPORTING.md`](BUG_REPORTING.md) for the workflow including
+   `--dry-run` review.
 2. Drop the sanitized capture under `tests/fixtures/real/<vendor>/`.
 3. Add provenance to `tests/fixtures/real/NOTICE.md`.
 4. Add a row to `tests/fixtures/real/RESULTS.md` describing what the
@@ -59,7 +60,8 @@ first.  The shape:
 4. Add cross-vendor expectation YAMLs for every pair the codec
    participates in (`tests/fixtures/cross_vendor_expectations/`).
 5. Update `tests/fixtures/real/RESULTS.md` with the certification
-   state (`alpha` / `beta` / `best_effort` / `certified`).
+   state (`best_effort` until parity is verified across the real-
+   capture corpus, then `certified`).
 6. Update [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) with the new
    vendor row.
 
@@ -126,9 +128,9 @@ contributors do.
 ## Reporting bugs
 
 Use the bug report issue template.  Include sanitized config snippets,
-source/target vendors, and what you expected vs got.  Once the
-sanitization helper ships (Phase 4.5), `BUG_REPORTING.md` will document
-the canonical workflow.
+source/target vendors, and what you expected vs got.
+[`BUG_REPORTING.md`](BUG_REPORTING.md) documents the canonical workflow
+including the `netcanon sanitize` step.
 
 ## Reporting security issues
 

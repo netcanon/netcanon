@@ -28,7 +28,12 @@ firewall translation is your primary need, see
 - Interfaces — physical (`port1`-`portN`, `wan1`/`wan2`,
   `internal1`-`internalN`), VLAN sub-interfaces (`VL_<id>`,
   `LAN_TRUNK`), aggregate (`fortilink`, `LAG_INTERNAL`), tunnel
-  (SSL-VPN, IPsec); descriptions, IPv4 + IPv6, MTU, VRF binding
+  (SSL-VPN, IPsec); descriptions, IPv4 + IPv6, enabled state.
+  **Note:** per-interface MTU is parsed when FortiGate is the
+  *source* (carried into the canonical model and rendered by other
+  target codecs that emit MTU) but not emitted when FortiGate is the
+  *target* — see codec capability matrix.  Per-interface VRF is
+  routing-instance-scoped, not a Tier-1 binding.
 - VLANs — VLAN sub-interface form (`config system interface` →
   `set type vlan` + `set vlanid <N>`)
 - Static routes (`config router static`)
@@ -105,11 +110,11 @@ and 100E physical hardware.
   decoded to plaintext.
 - **`set vdom`** scoping — Netcanon parses single-VDOM configs
   cleanly; multi-VDOM scoping is a known gap (deferred follow-up).
-- **The 35K-line surface** — most of a FortiGate config is Tier-3
-  (firewall, NAT, VPN, UTM); Netcanon translates the ~5-10% that's
-  cross-vendor-translatable and silently carries the rest past on
-  parse.  The migrate page's Tier-3 banner surfaces what was
-  detected-but-not-translated.
+- **Most of a FortiGate config is Tier-3** (firewall, NAT, VPN,
+  UTM); Netcanon translates the cross-vendor-translatable subset
+  (interfaces, VLANs, DHCP, RADIUS, SNMP) and silently carries the
+  rest past on parse.  The migrate page's Tier-3 banner surfaces
+  what was detected-but-not-translated.
 - **Backup-side**: requires netmiko or paramiko-shell collector
   with `cisco_more_paging: false`.
 

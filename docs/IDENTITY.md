@@ -33,7 +33,7 @@ surface.
 Multi-vendor network config translator — Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense. Cross-mesh audit catches silent translation errors before they ship.
 ```
 
-(174 chars; well under GitHub's 350-char limit.  Names the vendor
+(Fits comfortably under GitHub's 350-char limit.  Names the vendor
 families explicitly so the repo lands in vendor-specific search
 results.)
 
@@ -43,7 +43,7 @@ results.)
 
 ## GitHub Topics
 
-To set on the repo (GitHub limit: 20; we use 13):
+To set on the repo (the list below; GitHub allows up to 20):
 
 ```
 network-automation

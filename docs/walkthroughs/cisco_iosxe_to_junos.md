@@ -39,12 +39,10 @@ isn't sustainable.
 python tools/demo.py --pair cisco__junos
 ```
 
-Sample output (truncated):
+Sample output (run the demo for the full version; the snippets below
+are excerpted):
 
 ```
-SCENARIO: Cisco IOS-XE -> Juniper Junos
-========================================================================
-
 INPUT (cisco_iosxe_cli)
 ========================================================================
 hostname leaf-01
@@ -62,10 +60,10 @@ OUTPUT (juniper_junos)
 ========================================================================
 set system host-name leaf-01
 set system name-server 192.168.1.10
-set system name-server 192.168.1.11
 set system ntp server 192.168.1.20
 set interfaces GigabitEthernet0/0/0 description "Uplink to spine"
 set interfaces GigabitEthernet0/0/1 description "Server-A"
+set interfaces GigabitEthernet0/0/2 description "Phone"
 set vlans DATA vlan-id 10
 set vlans VOICE vlan-id 20
 set routing-options static route 0.0.0.0/0 next-hop 192.168.1.1
@@ -93,9 +91,11 @@ verify:
 
 - [ ] **Interface naming**: Cisco `GigabitEthernet0/0/0` becomes the
       same string in Junos because Netcanon preserves names by
-      default.  If you want `ge-0/0/0` mapping, run with
-      `--rename-interfaces` (the rename mesh handles
-      Cisco↔Junos↔Arista name translation).
+      default.  If you want `ge-0/0/0` mapping, use the migrate-page
+      rename modal (web UI) or pass `rename_overrides` in the
+      `POST /api/v1/migration/run` payload — the rename mesh handles
+      Cisco↔Junos↔Arista name translation across all renamable
+      categories.
 - [ ] **VLAN-Vlan SVI mapping**: IOS-XE's `interface Vlan<id>` SVIs
       translate to Junos's `interface irb.<id>` form.  Verify the
       irb numbering matches your VLAN IDs.
