@@ -99,6 +99,18 @@ startup.
 The published image is signed via Sigstore (`cosign verify
 ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.
 
+**Docker Hub mirror** — same image, convenience-mirrored to Docker
+Hub if your tooling defaults to `docker.io`:
+
+```bash
+docker run --rm -p 8000:8000 netcanonio/netcanon:latest
+```
+
+The Docker Hub mirror has the same image bytes but no cosign
+signature or SBOM attestation — operators in regulated environments
+should pull from GHCR for the attested provenance chain.  See
+[`SECURITY.md`](SECURITY.md) for the supply-chain story.
+
 ### Pip
 
 ```bash
