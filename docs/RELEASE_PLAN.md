@@ -1,8 +1,23 @@
 # Public Release Plan
 
-**Status:** Future wave.  Not yet started.  Captured here so a
-post-compaction context (or a contributor walking the docs cold) has
-the strategic plan available without re-deriving it.
+**Status:** In flight.  Phases shipped (see
+[`../CHANGELOG.md`](../CHANGELOG.md) `[Unreleased]` for details):
+
+* **Phase 1** — pre-flight checklist + rebrand `NetConfig` →
+  `Netcanon` + PII scrub + history rewrite via `git filter-repo`.
+* **Phase 1.5** — package directory rename + import paths +
+  env-var prefix `NETCONFIG_*` → `NETCANON_*`.
+* **Phase 2** — project identity foundation (tagline,
+  `docs/IDENTITY.md`, `docs/COMPARISON.md`).
+* **Phase 4.5** — sanitization tooling (`netcanon.tools.sanitize` +
+  CLI + HTTP endpoint; field-typed redactions on the canonical
+  model; `--dry-run` mode).
+
+Remaining MUST-tier release-blockers: Phase 3 (quality hardening),
+Phase 4 (demo + walkthroughs), Phase 5 (operator-facing docs +
+`BUG_REPORTING.md`), Phase 6 (Dockerfile + GHCR + PyPI), Phase 7
+(README rewrite).  Phases 8–11 are the launch sequence
+(private beta → soft launch → hard launch → triage cadence).
 
 This is a forward-looking working document — when the release
 actually happens, prune the "plan" sections and convert this file

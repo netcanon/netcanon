@@ -74,6 +74,9 @@ desktop-build = [
     "cx_Freeze>=7.0.0",
 ]
 
+[project.scripts]
+netcanon = "netcanon.cli:main"
+
 [project.urls]
 Homepage = "https://github.com/netcanon/netcanon"
 Repository = "https://github.com/netcanon/netcanon"

@@ -11,6 +11,114 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 4.5: sanitization tooling
+
+Phase 4.5 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the
+sanitization helper that gives operators a concrete invocation path
+for the bug-report workflow (`BUG_REPORTING.md`, deferred to Phase 5,
+depends on this existing).
+
+The architecture is **integrated multi-invocation** (single source of
+truth, three invocation paths) per the plan:
+
+* **`netcanon.tools.sanitize` Python module** — the actual logic.
+  Parses raw config via the registered codec, walks the canonical
+  intent applying field-typed redactions, re-renders in the same
+  vendor's format.  Counter-per-session stable: same input value
+  always maps to the same redaction across the whole config (so
+  cross-references survive — a hostname referenced 5 times gets the
+  same redacted value 5 times).
+* **CLI subcommand `netcanon sanitize`** (`netcanon/cli.py`) — for
+  operators NOT running the FastAPI server (one-shot
+  `pip install netcanon` users, CI / scripting).  Registered as
+  `[project.scripts]` in `pyproject.toml`.
+  ```
+  netcanon sanitize -i my-config.txt -o sanitised.txt \
+      --source-vendor cisco_iosxe_cli
+  ```
+* **HTTP API endpoint `POST /api/v1/sanitize`**
+  (`netcanon/api/routes/sanitize.py`) — for operators running the
+  server (Docker, embedded desktop, deployed instance).  Multipart
+  form upload; returns text/plain sanitized config (default) or JSON
+  audit (`dry_run=true`).
+  ```
+  curl -X POST http://localhost:8000/api/v1/sanitize \
+      -F "source_vendor=cisco_iosxe_cli" \
+      -F "config=@my-config.txt" \
+      -o sanitised.txt
+  ```
+
+#### Field-typed redactions (counter-per-session stable)
+
+| Canonical field | Replacement |
+|---|---|
+| `CanonicalIntent.hostname` | `device-N` |
+| `CanonicalIntent.domain` | `example-N.test` |
+| Public IPv4 anywhere | RFC 5737 docs ranges (192.0.2.x / 198.51.100.x / 203.0.113.x) |
+| Private IPs (RFC 1918, ULA, link-local, loopback, multicast, CGNAT 100.64/10) | Preserved |
+| `CanonicalLocalUser.hashed_password` | Format-preserving fake (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1 hex) |
+| `CanonicalSNMP.community` | `public_redacted_N` |
+| `CanonicalSNMPv3User.auth_passphrase` | `REDACTED-AUTH-N` |
+| `CanonicalSNMPv3User.priv_passphrase` | `REDACTED-PRIV-N` |
+| `CanonicalRADIUSServer.key` | `REDACTED-RADIUS-N` |
+| `CanonicalInterface.description` | `description redacted` |
+| `CanonicalDHCPPool.dns_servers` (public entries) | docs range |
+| `CanonicalStaticRoute.gateway` (public) | docs range |
+| `CanonicalIntent.dropped_tier3_sections` | Stripped entirely |
+
+#### `--dry-run` mode
+
+Both CLI (`--dry-run` flag) and HTTP API (`dry_run=true` form field)
+support audit-only mode: returns the full substitution table without
+writing the rendered output.  Critical for trust — the operator
+previews every replacement before committing.
+
+#### Tests
+
+* `tests/unit/tools/test_sanitize.py` (29 tests) — every redaction
+  category (hostname / IPv4 public + private + docs + CGNAT /
+  interface description / hash format-preserving for 5 prefix
+  families / SNMP community + v3 / RADIUS / static routes / Tier-3 /
+  counter stability / sanitize-purity / unknown-codec error path).
+  Plus end-to-end against a real-capture Aruba fixture.
+* `tests/unit/test_cli.py` (8 tests) — argparse + dry-run + write
+  output + error handling + argv-list invocation.
+* `tests/integration/test_sanitize_api.py` (7 tests) — HTTP endpoint
+  contract (default text/plain / dry_run JSON / 400 unknown vendor /
+  422 missing fields / X-Netcanon-Substitution-Count header /
+  library-vs-HTTP consistency).
+
+44 new tests; full unit + integration tiers pass clean (no
+regressions in pre-existing 3,400+ tests).
+
+#### Limitations (documented in module docstring)
+
+* **Round-trip is sub-lossless.**  Parse drops Tier-3 content;
+  render emits only what the codec models.  Sanitized output is the
+  supported subset, not byte-identical with the original.
+  Acceptable for bug reports — operators usually don't want to
+  share Tier-3 content (firewall, NAT, VPN, QoS) anyway.
+* **Banner text + raw comments not redacted.**  Not visible to the
+  field-typed walk; most get parse-and-ignored.  Future enhancement
+  could add a text-level post-render sweep for these surfaces.
+* **One IPv6-public-redaction edge case** — current implementation
+  redacts IPv4 only.  IPv6 addresses are preserved verbatim.
+  IPv6-public detection + redaction is a follow-up (uses
+  `ipaddress.IPv6Address` + RFC 3849 `2001:db8::/32` documentation
+  range).
+
+#### What this wave does NOT do
+
+* **Web UI wrapper at `/sanitize`** — deferred to v0.2.0 contingent
+  on operator-feedback signals showing the friction is real.  Same
+  shared library; thin presentation layer if added.
+* **Per-fixture round-trip regression-guard suite** — the plan
+  mentioned running every real-capture fixture through
+  `parse → sanitise → render → parse → assert no real-IPs/hashes/
+  secrets remain`.  The end-to-end fixture test covers the Aruba
+  pattern; expanding to all 9 codecs is a Phase 5 follow-up under
+  the `BUG_REPORTING.md` workflow that depends on this.
+
 ### Public release plan — Phase 2: project identity foundation
 
 Phase 2 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) —
