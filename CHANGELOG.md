@@ -11,6 +11,48 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### CLAUDE.md hard rule — review every push for PII
+
+New hard rule codifying the discipline that surfaced from the Phase
+1 PII scrub.  Applies to any push to an off-machine destination —
+GitHub / GitLab / Bitbucket / GHCR / Docker Hub / PyPI, including
+private repos that may later go public, including container images
+and PyPI distributions.
+
+The rule enumerates five review-scope categories:
+
+* Operator personal data (emails, names, geographic identifiers in
+  commit metadata + banner / comment text + operator-tied hostname
+  patterns).
+* Real-world network identifiers (public WAN IPs, real hostnames +
+  MACs + serials, internal-domain references).
+* Encrypted secrets + key material — explicitly noting these are
+  **operator-traceable even when encrypted**; the Phase 1 scrub
+  found 22 BEGIN PRIVATE KEY blocks + 14 cert chains + 48 ENC
+  blobs in the leaked configs/ files.  Encrypted ≠ safe to publish.
+* Accidentally-tracked operator backups under `configs/` /
+  `devices/` / `schedules/` / `jobs/` (gitignore is not
+  retroactive).
+* Narrative-exposure — the meta-leak Phase 1 found in NOTICE.md /
+  CHANGELOG.md prose: docs that "documented sanitisation" by
+  literally naming the value being redacted ("real WAN IP `<X>`
+  replaced with...").  The sanitisation narrative itself must not
+  leak.
+
+References the Phase 4.5 sanitiser as the canonical tool; flags
+`git filter-repo` as the recovery tool when a secret has already
+been committed (Phase 1 wave is the reference workflow).
+
+Closes a discipline gap surfaced when the rebrand wave found 4
+real backup files tracked at HEAD despite `.gitignore` covering
+the directory — the rule prevents that recurring.
+
+Includes judgment-based test-rerun guidance: sanitisation edits
+can break tests in subtle ways (renamed fields, redacted-marker
+introduction in narrative-asserting tests); the operator should
+re-run the affected tier rather than assume sanitisation is
+side-effect-free.
+
 ### Public release plan — Phase 5: operator-facing docs
 
 Phase 5 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the

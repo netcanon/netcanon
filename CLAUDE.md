@@ -276,6 +276,47 @@ tests use these exclusively — never CSS classes or element structure.  See
   "the docs lied to me" is what differentiates Netcanon's
   matrix-honesty discipline from the over-claiming alternatives in
   this space.
+- **Never** push to an online / public repository (GitHub, GitLab,
+  Bitbucket, GHCR, Docker Hub, PyPI, or any other off-machine
+  destination — including private repos that may later go public,
+  including container images and PyPI distributions) without first
+  explicitly reviewing the diff for PII and identifying network
+  information.  Scope of review:
+  * **Operator personal data** — emails, names, geographic
+    identifiers in author / committer metadata; banner / comment /
+    description text; hostname patterns tied to the operator
+    (`<operator-id>-fortigate`, `<operator-domain>.lan`).
+  * **Real-world network identifiers** — public WAN IPs, real
+    device hostnames, real MAC addresses, real serial numbers,
+    internal-domain references.
+  * **Encrypted secrets and key material** — `ENC <base64>` blobs,
+    `$9$` / `$5$` / `$6$` / `$2y$` hashes, SSH public/private keys,
+    certificate chains.  These are **operator-traceable even when
+    encrypted** — never assume "encrypted" = safe to publish.
+  * **Accidentally-tracked operator backups** under `configs/` /
+    `devices/` / `schedules/` / `jobs/` (gitignore is not
+    retroactive — files added before the ignore rule landed stay
+    tracked).
+  * **Narrative-exposure** — docs / CHANGELOG / NOTICE prose that
+    describes what was sanitised by *naming* the real value
+    (`real WAN IP <X> replaced with...`).  The sanitisation
+    narrative itself must not leak the value it claims to redact.
+
+  Sanitise via the Phase 4.5 helper (`netcanon sanitize` or
+  `POST /api/v1/sanitize`) where the operator-data shape applies;
+  hand-redact narrative / metadata refs the helper doesn't cover;
+  use `git filter-repo` to scrub history when a secret has already
+  been committed (Phase 1 wave is the reference workflow — see the
+  `[Unreleased]` CHANGELOG entry for the four-pass recipe).
+
+  After sanitisation, **judge whether a test re-run is warranted**:
+  if the changes touched code or fixtures the test suite exercises,
+  re-run the affected tier (`pytest tests/unit` for code-only
+  changes; `pytest tests/integration` if API surface is touched;
+  full suite for substantive changes).  Sanitisation edits can
+  break tests in subtle ways (renamed fields, redacted-marker
+  introduction in narrative-asserting tests).  Always verify
+  rather than assume.
 
 ---
 
