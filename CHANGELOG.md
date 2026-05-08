@@ -11,6 +11,128 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 5: operator-facing docs
+
+Phase 5 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the
+operator-facing doc surface that turns the matrix-honesty discipline
++ the Phase 4.5 sanitiser + the Tier-3 boundary into pages an
+operator can actually read on landing.
+
+#### Per-vendor "What works for me?" pages
+
+Seven new operator pages under `docs/vendors/`, plus an index:
+
+* [`docs/vendors/README.md`](docs/vendors/README.md) — index +
+  certification table + page format definition.
+* [`docs/vendors/cisco_iosxe.md`](docs/vendors/cisco_iosxe.md) —
+  IOS-XE CLI (certified) + IOS-XE NETCONF (best_effort stub).
+* [`docs/vendors/juniper_junos.md`](docs/vendors/juniper_junos.md) —
+  Junos set-form, 5 distinct majors covered.
+* [`docs/vendors/aruba_aoss.md`](docs/vendors/aruba_aoss.md) — AOS-S
+  WB / WC / KB across 2530 / 2920 / 2930F / 2930M / 5400R.
+* [`docs/vendors/arista_eos.md`](docs/vendors/arista_eos.md) — EOS
+  4.21 through 4.30+ with MLAG / VXLAN / EVPN.
+* [`docs/vendors/fortigate.md`](docs/vendors/fortigate.md) — FortiOS
+  7.2.x / 7.6.x with explicit Tier-3 boundary call-out (firewall,
+  NAT, VPN, UTM are deliberately deferred — Netcanon translates the
+  shared-network-function subset).
+* [`docs/vendors/mikrotik_routeros.md`](docs/vendors/mikrotik_routeros.md)
+  — RouterOS 6.48.x and 7.18+ with renamed-port preservation.
+* [`docs/vendors/opnsense.md`](docs/vendors/opnsense.md) — OPNsense
+  25.x with paramiko-shell capture artifact handling.
+
+Each page follows the same shape: TL;DR → translates well → lossy
+paths → won't do → real-world fixtures → common gotchas → see-also.
+LINKS rather than DUPLICATES the `CAPABILITIES.md` + `RESULTS.md`
+sources of truth.
+
+#### "How we test" page
+
+[`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md) — operator-facing
+narrative of the matrix-honesty discipline:
+
+* The 4-tier test pyramid (unit / integration / e2e / desktop)
+  + the 5th cross-mesh audit layer.
+* The 8 variance classes (ALIGNED / CODEC_BUG / EXPECTED_LOSSY /
+  EXPECTED_UNSUPPORTED / METHODOLOGY_ISSUE_under /
+  METHODOLOGY_ISSUE_over / STRUCTURAL_ONLY / TRIVIAL_EMPTY).
+* The trust claim, quantified ("zero CODEC_BUG cells across
+  ~12,000 field-cells as of this commit").
+* The honest follow-up: "the audit only covers cells we have
+  fixtures for — submit a fixture that surfaces a path we don't
+  yet test."
+
+This is the page Phase 7's README rewrite will lean on for the
+trust-signal lede.
+
+#### Troubleshooting page
+
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — diagnostic
+flowchart for "I tried to translate a config and the result isn't
+what I expected":
+
+* Step 1: Read the migrate page banners (Tier-3 / unsupported-paths /
+  lossy-paths) — most "missing content" questions answer here.
+* Step 2: Is it actually a CODEC_BUG?  Symptoms that suggest yes
+  vs no (the latter list is a feature: "this looks like a bug but
+  isn't" patterns).
+* Step 3: How to file a CODEC_BUG (delegates to BUG_REPORTING.md).
+* Common error patterns + diagnoses (VLANs disappearing,
+  hash-as-review-comment by design, LAG name reconciliation,
+  paramiko-shell capture artifact, Tier-3 surface didn't translate).
+
+#### `BUG_REPORTING.md` — the canonical fixture-submission workflow
+
+[`BUG_REPORTING.md`](BUG_REPORTING.md) — top-level operator-facing
+doc covering sanitise → verify → submit:
+
+* Sanitise via the Phase 4.5 helper (CLI or HTTP API; both shown
+  with concrete invocation snippets).
+* Field-typed redaction table.
+* Sanitiser limitations documented (sub-lossless round-trip;
+  banner / comment text not redacted; IPv6-public deferred).
+* Bug-report template requirements with sanitisation-check
+  enforced via `bug_report.yml` checkboxes.
+* Fixture-submission template requirements with provenance +
+  licence confirmation enforced via `fixture_submission.yml`.
+* SLA: 48hr triage, 7-day reproduction, fix wave, CHANGELOG
+  credit.
+
+This unblocks the bug-report friction collapse — operators go from
+"hand-redact every line" to "30-second `curl -F` workflow."
+
+#### CLAUDE.md additions (operator-facing-doc discipline)
+
+* New row in the Documentation Sync Checklist: "user-facing feature
+  ships or changes" → update the relevant operator-facing docs
+  (`docs/vendors/<vendor>.md`, `docs/CAPABILITIES.md`,
+  `BUG_REPORTING.md`, `docs/TROUBLESHOOTING.md`,
+  `docs/HOW_WE_TEST.md`).
+* New hard rule: "Never ship a user-facing feature or capability
+  change without updating the operator-facing docs that describe
+  it."  Rationale: operator-facing prose drifts faster than code;
+  "the docs lied to me" is the failure mode this rule prevents and
+  the matrix-honesty discipline depends on.
+* "See also" footer extended with the four new operator-facing
+  docs (BUG_REPORTING + HOW_WE_TEST + TROUBLESHOOTING +
+  vendors/).
+
+#### What this wave does NOT do
+
+* **Per-codec round-trip regression-guard suite for the
+  sanitiser** — the plan mentioned running every real-capture
+  fixture through `parse → sanitise → render → parse → assert no
+  real-IPs/hashes/secrets remain`.  Phase 4.5 covered the Aruba
+  pattern; expanding to all 9 codecs is a follow-up wave.
+* **Walkthroughs** — `docs/walkthroughs/` (Cisco → Aruba migration,
+  FortiGate → MikroTik, etc.) is Phase 4 / Phase 7 territory.
+  Today's per-vendor pages are reference docs, not narrative
+  walkthroughs.
+* **Failure-mode showcase** — concrete examples of Tier-3 inputs
+  with their banner output ("here's what FortiGate UTM looks like
+  when you try to translate it; the operator sees this honest
+  Tier-3 banner") is Phase 7 README content.
+
 ### Public release plan — Phase 4.5: sanitization tooling
 
 Phase 4.5 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the

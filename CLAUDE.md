@@ -162,6 +162,7 @@ mapping below is concrete; audit every applicable row before you run
 | In-file references like "see commit abc1234" in a partial or module comment | Fine to include for load-bearing rationale; don't rely on them for discoverability — put the same info in a nearby README if other contributors need it |
 | A new CSS colour added to `base.html` (or any template's `<style>` block) | Use `var(--token)` referencing the theme-token set at the top of `base.html`'s `<style>` block.  Add a new token to BOTH the `:root` (light) and `[data-theme="dark"]` (dark) blocks if no existing token fits — a new raw hex that only works in light mode WILL look wrong in dark mode.  See ARCHITECTURE.md "Theming (dark mode)" for the three load-bearing rules |
 | A capability-matrix change on a codec (xpath flips between supported / lossy / unsupported) | The matching expectation YAML under `tests/fixtures/cross_vendor_expectations/` for every pair the codec participates in, AND a regen commit for `CROSS_MESH_RESULTS.md` + `PHASE4_RECONCILIATION.md` (run `python tools/run_full_mesh.py --matrix` followed by `python tools/run_phase4_reconciliation.py`) |
+| A user-facing feature ships or changes (new codec, capability-matrix delta, sanitization rule, CLI subcommand, HTTP endpoint, supported-vendor list change, UI behaviour change) | The operator-facing docs that describe it: per-vendor page under [`docs/vendors/<vendor>.md`](docs/vendors/) (if vendor-specific), [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) (if capability-matrix delta), [`BUG_REPORTING.md`](BUG_REPORTING.md) (if the sanitiser / submission flow changes), [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) (if a new failure mode), [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md) (if a new test layer or audit category).  Operator-facing prose drifts faster than code; "the docs lied to me" is the failure mode this row prevents and the matrix-honesty discipline depends on |
 | A new variance class added to `tools/run_phase4_reconciliation.py` | `ARCHITECTURE.md` "Cross-mesh fidelity audit harness" subsection — the bullet list of variance classes is exhaustive, not illustrative; missing entries become drift |
 | A new backup-side device definition under `definitions/<vendor>/<os>/<ver>.yaml` | Per-vendor unit definition test under `tests/unit/definitions/`, per-vendor integration test, per-vendor desktop test (each pinning schema, probe regexes, codec round-trip).  See BD-Aruba (`de8e0f3`) / BD-Junos (`01f394c`) / BD-Arista (`8c9e9d4`) for the established three-test recipe |
 | Render-side codec changes touching field xpaths the matrix declares as `supported` | After landing the code change, regen the cross-mesh artefacts (`CROSS_MESH_RESULTS.md` + `PHASE4_RECONCILIATION.md`) in a separate commit so the diff narrates "codec change" → "matrix delta" cleanly |
@@ -265,6 +266,16 @@ tests use these exclusively — never CSS classes or element structure.  See
   fake (e.g. `$9$fake$hash`, `ENC fakeEncodedHash==`).  Third-party
   real captures from published repos are OK — their hashes are already
   public.  See `tests/fixtures/real/NOTICE.md` for provenance conventions.
+- **Never** ship a user-facing feature or capability change without
+  updating the operator-facing docs that describe it.  The doc-sync
+  table's "user-facing feature ships or changes" row enumerates the
+  targets: `docs/vendors/<vendor>.md`, `docs/CAPABILITIES.md`,
+  `BUG_REPORTING.md`, `docs/TROUBLESHOOTING.md`, `docs/HOW_WE_TEST.md`.
+  Touch every one that's affected in the same commit / wave as the
+  feature — operator-facing prose drifts faster than code, and
+  "the docs lied to me" is what differentiates Netcanon's
+  matrix-honesty discipline from the over-claiming alternatives in
+  this space.
 
 ---
 
@@ -278,4 +289,8 @@ tests use these exclusively — never CSS classes or element structure.  See
 - [`docs/templates/`](docs/templates/) — starter scaffolding (CLAUDE.md / ARCHITECTURE.md / CHANGELOG.md / CAPABILITIES.md / RELEASE_PLAN.md / SECURITY.md / CONTRIBUTING.md + GitHub issue forms) for cloning the methodology into a new project; future-extractable to a standalone repo
 - [`docs/IDENTITY.md`](docs/IDENTITY.md) — project identity surfaces (tagline, GitHub repo description, GitHub Topics list, logo design brief); update when any of those surfaces change
 - [`docs/COMPARISON.md`](docs/COMPARISON.md) — positioning vs adjacent tools (Batfish, Capirca/Aerleon, NAPALM, Netmiko/Nornir, NetBox/Nautobot, ciscoconfparse) — what we compete with, what we complement, what we won't do
+- [`docs/vendors/`](docs/vendors/) — per-vendor "what works for me?" pages (one per vendor family); update the relevant page when a codec's capability changes
+- [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md) — operator-facing narrative of the cross-mesh audit + 8-class variance taxonomy; update if a new test layer or audit category lands
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — diagnostic flowchart for "my translation didn't go cleanly" (Tier-3 vs Lossy vs CODEC_BUG)
+- [`BUG_REPORTING.md`](BUG_REPORTING.md) — operator-facing fixture-submission + bug-report workflow (sanitise → verify → submit); references the Phase 4.5 sanitiser
 - [`tests/README.md`](tests/README.md) — test-suite layout and mocking strategy
