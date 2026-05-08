@@ -11,6 +11,41 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### `AGENTS.md`: clarify Docker / pip / MSI as distribution variants
+
+Closes a small ambiguity in the "Parallel Platform Development"
+section.  Pre-edit, the section listed Web + Desktop as the two
+platforms requiring feature parity, but didn't say where Docker /
+pip / MSI fit.  A future contributor could reasonably wonder
+whether Docker is a third parity-requiring target (it isn't —
+`docker run ghcr.io/netcanon/netcanon` runs the same
+`uvicorn netcanon.main:app` entrypoint as host-installed web; the
+container is a packaging variant of the web platform, not a
+separate code path).
+
+Two small additions:
+
+* **Clarifying paragraph after the platforms table.**  Names
+  Docker (GHCR + Docker Hub mirror), `pip install netcanon`, and
+  the Windows MSI as distribution variants of the two platforms —
+  Docker + pip both produce a web-platform install; the MSI
+  produces a desktop-platform install.  Explicit that none of
+  them require their own parity test row.
+* **New doc-sync table row for packaging / distribution workflow
+  changes.**  Covers `Dockerfile`, `.dockerignore`, the publish
+  workflows (`docker-publish.yml` / `pypi-publish.yml`), base-
+  image bumps, action-version bumps, registry namespace changes,
+  and signing / SBOM / attestation surface changes.  Required
+  follow-ups when any of those change: `SECURITY.md` Supply-Chain
+  Integrity table, `docs/IDENTITY.md` Distribution surfaces
+  table, `README.md` Install section, and (for a new Python
+  matrix entry) the matching classifier in `pyproject.toml`.
+
+The Phase 6 (packaging foundation), Python 3.14 (CI matrix
+expansion), and Docker Hub mirror waves all hit at least one of
+these surfaces, so the row is anchored in real recent waves
+rather than speculative.
+
 ### Rename `CLAUDE.md` → `AGENTS.md` (cross-tool convention name)
 
 Renames the contributor-directives file from a vendor-named
