@@ -78,7 +78,7 @@ because the Tier-3 rename modal needs to enumerate every entity the
 operator could rewrite or drop, and localStorage persistence keys
 must stay stable across page reloads.
 
-Hard Rules (CLAUDE.md, repeated here for proximity):
+Hard Rules (AGENTS.md, repeated here for proximity):
 
   * NEVER change the signatures of :func:`run_plan`,
     :func:`run_plan_with_rename`, or :func:`run_plan_with_overrides`.
@@ -679,7 +679,7 @@ def run_plan_with_rename(
     README) keep working unchanged.  New code should prefer
     :func:`run_plan_with_overrides` directly.
 
-    Signature-frozen per CLAUDE.md: dozens of tests and the main
+    Signature-frozen per AGENTS.md: dozens of tests and the main
     migration API route depend on the exact parameter shape.  Any
     parameter additions needed for multi-category overrides go on
     :func:`run_plan_with_overrides`, not here.

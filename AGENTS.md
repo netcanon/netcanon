@@ -150,7 +150,7 @@ mapping below is concrete; audit every applicable row before you run
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
 | A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netcanon/api/routes/migration.py`, `netcanon/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
-| A new hard rule / cross-cutting invariant surfaced by a bug | This file (`CLAUDE.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
+| A new hard rule / cross-cutting invariant surfaced by a bug | This file (`AGENTS.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
 | A codec is promoted to `best_effort` or `certified` | `tests/fixtures/real/RESULTS.md` — update the coverage matrix and certification decision; ARCHITECTURE.md's cert paragraph intentionally defers to RESULTS.md as source of truth |
 | A new real-capture fixture under `tests/fixtures/real/<vendor>/` | `tests/fixtures/real/NOTICE.md` — provenance + attribution; `tests/fixtures/real/RESULTS.md` — coverage matrix row |
 | A new pytest marker in `pyproject.toml` (`[tool.pytest.ini_options] markers = [...]`) or a new conftest fixture that meaningfully changes how a whole test tier runs | `tests/README.md` — the markers table and/or the "How to run" section.  Markers without doc entries are invisible to contributors running `pytest -m <name>`. |
@@ -188,7 +188,7 @@ peers.  Concretely:
   `netcanon/migration/codecs/README.md`,
   `netcanon/migration/canonical/README.md`,
   `tests/fixtures/real/RESULTS.md`
-* `README.md` → `ARCHITECTURE.md`, `CLAUDE.md`, `tests/README.md`
+* `README.md` → `ARCHITECTURE.md`, `AGENTS.md`, `tests/README.md`
 
 A contributor who lands on one doc should be one hop from the others.
 When you add a new sibling doc, add the reciprocal link in the
@@ -330,7 +330,7 @@ tests use these exclusively — never CSS classes or element structure.  See
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing capabilities + known limitations (cross-referenced against in-app limitation messages)
 - [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — forward-looking plan for taking the project public (not yet started; documents the strategic plan so it survives compaction and is discoverable cold)
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — distilled matrix-honesty discipline (the patterns this project operates under, with worked-example citations into the live tree); portable to other projects
-- [`docs/templates/`](docs/templates/) — starter scaffolding (CLAUDE.md / ARCHITECTURE.md / CHANGELOG.md / CAPABILITIES.md / RELEASE_PLAN.md / SECURITY.md / CONTRIBUTING.md + GitHub issue forms) for cloning the methodology into a new project; future-extractable to a standalone repo
+- [`docs/templates/`](docs/templates/) — starter scaffolding (AGENTS.md / ARCHITECTURE.md / CHANGELOG.md / CAPABILITIES.md / RELEASE_PLAN.md / SECURITY.md / CONTRIBUTING.md + GitHub issue forms) for cloning the methodology into a new project; future-extractable to a standalone repo
 - [`docs/IDENTITY.md`](docs/IDENTITY.md) — project identity surfaces (tagline, GitHub repo description, GitHub Topics list, logo design brief); update when any of those surfaces change
 - [`docs/COMPARISON.md`](docs/COMPARISON.md) — positioning vs adjacent tools (Batfish, Capirca/Aerleon, NAPALM, Netmiko/Nornir, NetBox/Nautobot, ciscoconfparse) — what we compete with, what we complement, what we won't do
 - [`docs/vendors/`](docs/vendors/) — per-vendor "what works for me?" pages (one per vendor family); update the relevant page when a codec's capability changes

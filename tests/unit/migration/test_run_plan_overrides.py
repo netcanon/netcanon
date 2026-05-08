@@ -12,7 +12,7 @@ Invariants these tests lock in:
   1. Wrapper delegation — ``run_plan_with_rename`` and
      ``run_plan_with_overrides`` produce identical canonical outcomes
      when given the same port_rename_map.  Signature of the wrapper
-     is frozen per CLAUDE.md; the implementation can change as long
+     is frozen per AGENTS.md; the implementation can change as long
      as this invariant holds.
 
   2. ``port_rename_map=None`` means "don't engage the rename

@@ -3,13 +3,13 @@
 Thank you for considering contributing to `<PROJECT_NAME>`.  This
 document walks the most common contribution shapes; for the
 operational rulebook used during development see
-[`CLAUDE.md`](CLAUDE.md).
+[`AGENTS.md`](AGENTS.md).
 
 <!-- ============================================================
 TEMPLATE NOTES (delete after adapting):
 
 CONTRIBUTING.md is operator / external-contributor-facing.  It must
-be more welcoming and lower-context than CLAUDE.md (which assumes a
+be more welcoming and lower-context than AGENTS.md (which assumes a
 contributor already familiar with the project).
 
 The discipline:
@@ -62,7 +62,7 @@ issue first.  We respond within `<48 hours>` typically.
 1. **Read the orientation docs** — at minimum
    [`README.md`](README.md) and
    [`ARCHITECTURE.md`](ARCHITECTURE.md).  For larger contributions
-   also skim [`CLAUDE.md`](CLAUDE.md).
+   also skim [`AGENTS.md`](AGENTS.md).
 2. **Check the issue tracker** — your idea may already be in
    progress.  We tag good first issues with `good-first-issue`.
 3. **Set up the dev environment** — see the README's "Development"
@@ -207,7 +207,7 @@ the new `<COMPONENT>` participates in.
 
 ### Step 8 — doc updates
 
-Per the doc-sync checklist in `CLAUDE.md`:
+Per the doc-sync checklist in `AGENTS.md`:
 * `<core>/<COMPONENT>s/README.md` — update the `<COMPONENT>` list
 * `ARCHITECTURE.md` — if the `<COMPONENT>` introduces a new
   `<wire format / paradigm>`
@@ -245,7 +245,7 @@ Two flavours:
 ## Doc-sync discipline
 
 `<PROJECT_NAME>` treats stale docs as bugs.  Before you submit a PR,
-walk the doc-sync checklist in [`CLAUDE.md`](CLAUDE.md).  Common
+walk the doc-sync checklist in [`AGENTS.md`](AGENTS.md).  Common
 hits:
 
 * New `<COMPONENT>` → `<core>/<COMPONENT>s/README.md`,
@@ -254,7 +254,7 @@ hits:
   Raises)
 * New parameter or return shape → docstring update
 * New test marker → `tests/README.md`
-* New hard rule (surfaced by a bug) → `CLAUDE.md` Hard Rules section
+* New hard rule (surfaced by a bug) → `AGENTS.md` Hard Rules section
 * New file-tree listing or "contents map" → update or convert to
   pointer
 
@@ -361,7 +361,7 @@ TL;DR: be kind, assume good faith, focus on the work.
 ## See also
 
 - [`README.md`](README.md) — project orientation and quickstart
-- [`CLAUDE.md`](CLAUDE.md) — contributor directives (the doc-sync
+- [`AGENTS.md`](AGENTS.md) — contributor directives (the doc-sync
   checklist that this guide depends on)
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — design overview
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — capabilities +

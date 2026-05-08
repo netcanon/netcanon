@@ -156,7 +156,7 @@ class TestConnectionFlags:
         assert definition.connection.needs_enable is True
 
     def test_cisco_more_paging_is_true(self):
-        """Per CLAUDE.md hard rule: space-injection, NEVER terminal length 0."""
+        """Per AGENTS.md hard rule: space-injection, NEVER terminal length 0."""
         definition = _load_definition()
         assert definition.connection.cisco_more_paging is True
 

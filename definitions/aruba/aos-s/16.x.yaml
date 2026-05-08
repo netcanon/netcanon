@@ -12,7 +12,7 @@
 #
 # Paging — AOS-S responds to space-injection at the `-- MORE --` prompt;
 # Netmiko's aruba_osswitch driver handles this internally when
-# cisco_more_paging is set.  CLAUDE.md hard rule: never `terminal length 0`.
+# cisco_more_paging is set.  AGENTS.md hard rule: never `terminal length 0`.
 
 vendor: Aruba
 os: AOS-S

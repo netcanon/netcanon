@@ -1,7 +1,7 @@
 # Netcanon — Architecture
 
 This is the conceptual map.  For day-to-day contributor rules see
-[`CLAUDE.md`](CLAUDE.md); for the active roadmap and backlog see
+[`AGENTS.md`](AGENTS.md); for the active roadmap and backlog see
 [`translator-plans.txt`](translator-plans.txt).
 
 ---
@@ -644,7 +644,7 @@ no export/import plumbing, no build step.  Downside: the partials
 aren't unit-testable in isolation; e2e tests via `data-testid`
 selectors are the safety net.
 
-**Selector discipline** (CLAUDE.md hard rule): every interactive
+**Selector discipline** (AGENTS.md hard rule): every interactive
 element in every template — including content generated inside
 partials — carries a `data-testid` attribute.  The full inventory
 lives in [`tests/testid_reference.md`](tests/testid_reference.md).
@@ -713,7 +713,7 @@ surfaces the current corpus doesn't touch.
 
 Mocking single entry point: **SSH collection is mocked at
 `netcanon.api.routes.backups.get_collector`, never at `ConnectHandler`
-or `paramiko.SSHClient` directly** (see CLAUDE.md hard rule).
+or `paramiko.SSHClient` directly** (see AGENTS.md hard rule).
 
 ### Cross-mesh fidelity audit harness
 

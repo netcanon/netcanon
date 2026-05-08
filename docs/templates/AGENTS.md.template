@@ -132,7 +132,7 @@ one-way cross-references rot faster than numbers do. -->
 
 * `<EXAMPLE: tests/README.md → testid_reference.md, fixtures/README.md, integration/README.md>`
 * `<EXAMPLE: ARCHITECTURE.md → CONTRIBUTING.md, docs/CAPABILITIES.md>`
-* `<EXAMPLE: README.md → ARCHITECTURE.md, CLAUDE.md, tests/README.md>`
+* `<EXAMPLE: README.md → ARCHITECTURE.md, AGENTS.md, tests/README.md>`
 
 A contributor who lands on one doc should be one hop from the others.
 When you add a new sibling doc, add the reciprocal link in the

@@ -349,6 +349,6 @@ This file must be updated when any of the following change:
   submitting configs in public issues
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — per-codec capability
   matrix and Tier-3 boundary
-- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the
+- [`AGENTS.md`](AGENTS.md) — contributor directives, including the
   "never commit real credentials" hard rule and the
   "PII review before any push to an online repo" hard rule

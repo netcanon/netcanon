@@ -5,7 +5,7 @@
 This document is the operator-facing source of truth for **what the
 program does and does not do**.  Internal architecture lives in
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md); contributor rules live in
-[`../CLAUDE.md`](../CLAUDE.md).  Per-`<COMPONENT>` live status lives
+[`../AGENTS.md`](../AGENTS.md).  Per-`<COMPONENT>` live status lives
 in `<live results doc>`.
 
 <!-- ============================================================
@@ -256,14 +256,14 @@ classifies per-field drift.  Outputs commit as
 
 For the live numbers on either matrix, consult the markdown files
 named above.  This document deliberately omits hard-coded counts
-(per CLAUDE.md hard rule on prose-rot).
+(per AGENTS.md hard rule on prose-rot).
 
 ---
 
 ## What this document is NOT
 
 * It is **not** a roadmap.  See `<roadmap doc>`.
-* It is **not** a contributor guide.  See [`../CLAUDE.md`](../CLAUDE.md)
+* It is **not** a contributor guide.  See [`../AGENTS.md`](../AGENTS.md)
   and [`../CONTRIBUTING.md`](../CONTRIBUTING.md).
 * It is **not** a security model.  See [`../SECURITY.md`](../SECURITY.md).
 * It is **not** a per-fixture certification matrix.  See `<live
@@ -290,7 +290,7 @@ When reporting a `<translation / processing>` bug, include:
 
 - [`../README.md`](../README.md) — quickstart
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — internal design
-- [`../CLAUDE.md`](../CLAUDE.md) — contributor directives
+- [`../AGENTS.md`](../AGENTS.md) — contributor directives
 - [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
   the matrix-honesty discipline behind this document's shape
 - `<live results doc>` — per-`<COMPONENT>` certification state (live)

@@ -5,7 +5,7 @@
 ! Intentionally exercises every canonical field declared 'supported'
 ! or 'lossy' in AristaEOSCodec._CAPS, plus the LAG / local-user /
 ! VRF / EVPN-VXLAN surfaces the parser populates.  Hashes are FAKE
-! per CLAUDE.md — they look real but are not actual credentials.
+! per AGENTS.md — they look real but are not actual credentials.
 !
 transceiver qsfp default-mode 4x10G
 !

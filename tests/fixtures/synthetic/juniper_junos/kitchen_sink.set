@@ -4,7 +4,7 @@
 # Intentionally exercises every canonical field declared 'supported'
 # or 'lossy' in JunosCodec._CAPS, plus the apply-groups two-pass parse
 # (GAP 8) and group-content round-trip (GAP 9b) which is unique to
-# Junos amongst the shipped codecs.  Hashes are FAKE per CLAUDE.md —
+# Junos amongst the shipped codecs.  Hashes are FAKE per AGENTS.md —
 # they look real but are not actual credentials.  Tested across
 # Junos 15-21+ grammar (no version-locked features used).
 #

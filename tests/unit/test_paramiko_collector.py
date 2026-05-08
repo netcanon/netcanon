@@ -1,7 +1,7 @@
 """
 Unit tests for pure helpers inside ``paramiko_collector``.
 
-We do NOT mock paramiko / SSHClient here (see CLAUDE.md hard rule:
+We do NOT mock paramiko / SSHClient here (see AGENTS.md hard rule:
 integration tests patch ``netcanon.api.routes.backups.get_collector``
 instead).  This file covers the pure-function helpers that have no
 I/O dependency — currently ``_strip_command_echo``, which prevents

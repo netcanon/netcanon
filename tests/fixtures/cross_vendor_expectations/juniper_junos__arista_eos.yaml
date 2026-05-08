@@ -532,7 +532,7 @@ per_field_expectation:
 #     is lossy-by-default in the juniper_junos codec capability matrix;
 #     no codec populates per-prefix records today (would require
 #     policy-statement / route-map parsing).  Tagged `lossy` with
-#     `reason: "deferred"` per CLAUDE.md guidance for unconfident fields.
+#     `reason: "deferred"` per AGENTS.md guidance for unconfident fields.
 #
 # Other lossy items not tagged "deferred" but worth noting:
 #

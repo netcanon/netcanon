@@ -133,7 +133,7 @@ without any session mocking; see `tests/unit/test_probe_parser.py`.
 
 Integration tests mock `get_collector` via `unittest.mock.patch` so no real
 SSH connections occur.  **Do not patch `ConnectHandler` or
-`paramiko.SSHClient` directly** (per CLAUDE.md hard rule); patch
+`paramiko.SSHClient` directly** (per AGENTS.md hard rule); patch
 `netcanon.api.routes.backups.get_collector` and inject a `FakeCollector`
 that returns canned output.  The probe-parser lives in its own module and
 IS unit-testable in isolation (`tests/unit/test_probe_parser.py`) without

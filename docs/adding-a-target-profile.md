@@ -115,7 +115,7 @@ That allowlist is the single source of truth for both the unit-tier
 and integration-tier "modules-vs-no-modules" regression guards — a
 CI invariant (`test_module_variant_allowlist_shared_with_integration_tier`)
 asserts both tests import the same `frozenset` so the two layers
-can't silently disagree.  See the CLAUDE.md doc-sync table for the
+can't silently disagree.  See the AGENTS.md doc-sync table for the
 full rule.
 
 ---
@@ -342,5 +342,5 @@ for everything in that second list.
   — module-variant allowlist (single source of truth, CI-guarded)
 * [`../tests/unit/migration/test_target_profile_shipped.py`](../tests/unit/migration/test_target_profile_shipped.py)
   — port-list lock-in test pattern
-* [`../CLAUDE.md`](../CLAUDE.md) — Documentation Sync Checklist row
+* [`../AGENTS.md`](../AGENTS.md) — Documentation Sync Checklist row
   for new target profiles

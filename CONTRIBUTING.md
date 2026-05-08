@@ -16,8 +16,19 @@ drift before it ships.
 If your change preserves matrix honesty, it's likely welcome.  If it adds
 a silent loss path, an aspirational claim, or an undocumented behaviour,
 it's likely going to need rework.  This doc walks the three most common
-contribution paths and points at the rulebook ([`CLAUDE.md`](CLAUDE.md))
+contribution paths and points at the rulebook ([`AGENTS.md`](AGENTS.md))
 that governs all of them.
+
+### A note on the development workflow
+
+Netcanon is developed with extensive AI-assisted tooling — the
+matrix-honesty discipline applies to the AI workflow as much as the
+code.  Every claim in `AGENTS.md` and the doc-sync table is enforced
+the same way regardless of which kind of contributor (human, AI, or
+mixed) authored a change: the tests have to pass; the docs have to
+match the code.  We use [`AGENTS.md`](AGENTS.md) as the canonical
+contributor directives file (the cross-tool convention name) so the
+rulebook is tooling-agnostic.
 
 ## Three contribution paths
 
@@ -76,7 +87,7 @@ The MTU wire-through there is the reference pattern.
 
 ## Hard rules
 
-The full rulebook is [`CLAUDE.md`](CLAUDE.md).  The most-broken rules:
+The full rulebook is [`AGENTS.md`](AGENTS.md).  The most-broken rules:
 
 - **Never** silent-drop content.  If a codec can't translate something,
   declare it `lossy` or `unsupported`, populate
@@ -88,7 +99,7 @@ The full rulebook is [`CLAUDE.md`](CLAUDE.md).  The most-broken rules:
 - **Never** hard-code counts in prose docs without a CI/test guard.
 - **Never** author a `type_key` containing `_` or `.` in a YAML.
 - **Never** ship code without its docs.  See "Documentation Sync
-  Checklist" in `CLAUDE.md` — the rows are concrete and
+  Checklist" in `AGENTS.md` — the rows are concrete and
   rotation-resistant.
 
 ## Running tests
@@ -107,7 +118,7 @@ hooks should catch most issues before push.
 ## Doc-sync discipline
 
 If your change touches code that has documentation describing it,
-update the docs in the same commit.  `CLAUDE.md`'s doc-sync table maps
+update the docs in the same commit.  `AGENTS.md`'s doc-sync table maps
 "if you change X then touch Y" concretely; audit every applicable row
 before you commit.  Stale docs are bugs.
 
@@ -120,7 +131,7 @@ Maintainer review focuses on:
    change?
 3. **Test coverage** — unit + integration for new logic; e2e for new
    UI flows.
-4. **Hard-rule compliance** — see [`CLAUDE.md`](CLAUDE.md).
+4. **Hard-rule compliance** — see [`AGENTS.md`](AGENTS.md).
 
 Reviews are honest, not adversarial.  We point at the same rulebook
 contributors do.
@@ -142,7 +153,7 @@ flow.
 
 - [`README.md`](README.md) — quickstart
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — the four-layer design
-- [`CLAUDE.md`](CLAUDE.md) — the full contributor rulebook
+- [`AGENTS.md`](AGENTS.md) — the full contributor rulebook
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing
   capabilities
 - [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — the matrix-honesty

@@ -166,4 +166,4 @@ the pystray background thread.
 
 - [`../README.md`](../README.md) — project orientation and quickstart (web + desktop share the same FastAPI backend)
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the four-layer design that desktop wraps
-- [`../CLAUDE.md`](../CLAUDE.md) — parallel-platform contributor directives (the "feature parity" rule lives here)
+- [`../AGENTS.md`](../AGENTS.md) — parallel-platform contributor directives (the "feature parity" rule lives here)

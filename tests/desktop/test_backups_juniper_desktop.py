@@ -153,7 +153,7 @@ class TestJunosBackupViaDesktopServer:
                 ]
             },
         )
-        # CLAUDE.md hard rule: GET, don't trust POST body for final state.
+        # AGENTS.md hard rule: GET, don't trust POST body for final state.
         job_id = post.json()["id"]
         job = junos_desktop_client.get(f"/api/v1/backups/{job_id}").json()
         assert job["status"] == "completed"

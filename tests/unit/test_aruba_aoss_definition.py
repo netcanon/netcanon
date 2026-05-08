@@ -122,7 +122,7 @@ class TestArubaDefinitionShape:
         assert aruba_definition.commands.post == []
 
     def test_paging_uses_space_injection(self, aruba_definition):
-        # CLAUDE.md hard rule: never `terminal length 0`.  AOS-S also
+        # AGENTS.md hard rule: never `terminal length 0`.  AOS-S also
         # responds to space-injection; the driver does it for us when
         # this flag is set.
         assert aruba_definition.connection.cisco_more_paging is True

@@ -210,7 +210,7 @@ Test Structure
   - testid_reference.md for DOM test attribute inventory.
 
 Documentation
-  - Excellent: CLAUDE.md, SECURITY.md, CHANGELOG.md.
+  - Excellent: AGENTS.md, SECURITY.md, CHANGELOG.md.
   - Module docstrings present.
   - Google-style function docstrings.
   - Missing: CONTRIBUTING.md, architecture diagram, API docs beyond Swagger.

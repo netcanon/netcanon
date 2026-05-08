@@ -1,7 +1,7 @@
 # Glossary
 
 A central reference for project-specific jargon used across Netcanon.
-New contributors (humans and Claude agents) should skim this before
+New contributors (human or AI-assisted) should skim this before
 diving into `ARCHITECTURE.md` or codec-level READMEs. Terms are grouped
 by concern and listed alphabetically within each section.
 
@@ -129,4 +129,4 @@ by concern and listed alphabetically within each section.
 
 - [`../README.md`](../README.md) — project orientation and quickstart
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — the 4-layer design
-- [`../CLAUDE.md`](../CLAUDE.md) — contributor directives
+- [`../AGENTS.md`](../AGENTS.md) — contributor directives

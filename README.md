@@ -225,7 +225,7 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 | You want to… | Start here |
 |---|---|
 | Understand the architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer model, canonical bridge, codec types |
-| Follow the contributor rules | [`CLAUDE.md`](CLAUDE.md) — hard rules, parity checklist, gotchas |
+| Follow the contributor rules | [`AGENTS.md`](AGENTS.md) — hard rules, parity checklist, gotchas |
 | Read the slower-changing methodology | [`docs/METHODOLOGY.md`](docs/METHODOLOGY.md) — matrix-honesty discipline distilled, portable to other projects |
 | Look up project jargon | [`docs/glossary.md`](docs/glossary.md) — canonical, codec, mesh, ship-before-wire, target profile |
 | Read the canonical model overview | [`netcanon/migration/canonical/README.md`](netcanon/migration/canonical/README.md) |
@@ -270,7 +270,7 @@ netcanon/              FastAPI application (shared by both platforms)
  ├── storage/             FileConfigStore
  ├── tools/               sanitize, etc.
  └── templates/           Jinja2 templates (every interactive element
-                          carries a data-testid — see CLAUDE.md)
+                          carries a data-testid — see AGENTS.md)
 
 netcanon_desktop/      Windows tray/webview shell around the same server
 definitions/            Device definition YAMLs

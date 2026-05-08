@@ -5,7 +5,7 @@
   OPNsense parser actually populates today, plus the surrounding
   CapabilityMatrix-supported XML shapes that document the wire
   contract for future parser wire-up.  Hashes are FAKE per
-  CLAUDE.md — they look real but are not actual credentials.
+  AGENTS.md — they look real but are not actual credentials.
 
   Coverage exercised by this fixture (canonical fields the OPNsense
   parser populates on parse — see netcanon/migration/codecs/opnsense/
@@ -85,7 +85,7 @@
       <group>admins</group>
     </ssh>
     <!-- Local users — root (admin), netops (admin), readonly (user).
-         Hashes are bcrypt-shape but obviously fake per CLAUDE.md. -->
+         Hashes are bcrypt-shape but obviously fake per AGENTS.md. -->
     <group>
       <name>admins</name>
       <description>System Administrators</description>

@@ -685,5 +685,5 @@ diff page — no `migrate-diff-viewer` testid is needed.
 
 - [`README.md`](README.md) — test-suite layout, markers, mocking strategy
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — four-layer design and template organisation
-- [`../CLAUDE.md`](../CLAUDE.md) — selectors discipline (every interactive element carries a `data-testid`)
+- [`../AGENTS.md`](../AGENTS.md) — selectors discipline (every interactive element carries a `data-testid`)
 

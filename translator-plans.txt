@@ -1,5 +1,5 @@
 # NETCONFIG — YANG + TEMPLATE MIGRATION SYSTEM — PLAN
-# Format: dense, grep-friendly, code-first. Written for Claude, not humans.
+# Format: dense, grep-friendly, code-first. Written for AI-assisted contributors and grep — not narrative reading.
 # Generated: 2026-04-16
 # Last revised: 2026-05-04
 #
@@ -1578,7 +1578,7 @@ EXISTING, REUSE DIRECTLY (do not reinvent):
     idiom: new setting, capped, pool-backed, pinned to 1 in tests.
   * data-testid discipline + tests/testid_reference.md
       - Migration UI testids MUST be added to the reference on landing,
-        per CLAUDE.md rules.
+        per AGENTS.md rules.
 
 NEW INTERACTIONS (plan needs to wire these in):
   * Phase 0 now starts against a codebase where pydantic + FastAPI +
@@ -1620,7 +1620,7 @@ SCOPE (IN)
   - Per-vendor adapters with parse(raw)->YANG and render(YANG)->raw.
   - Capability matrices drive pre-flight loss reports.
   - Reuse existing collectors (SSH) for ingest.
-  - FastAPI surface + Jinja UI parity (web + desktop per CLAUDE.md).
+  - FastAPI surface + Jinja UI parity (web + desktop per AGENTS.md).
 
 SCOPE (OUT — explicitly non-goals for v1)
   - Live network-state migration (BGP sessions, IPsec SAs, ARP tables).
@@ -1629,10 +1629,10 @@ SCOPE (OUT — explicitly non-goals for v1)
   - Cross-vendor routing-protocol convergence guarantees.
 
 HARD CONSTRAINTS
-  - Desktop + web feature parity (CLAUDE.md rule).
-  - data-testid on every new interactive UI element (CLAUDE.md rule).
-  - No terminal length 0 for Cisco (CLAUDE.md rule — collector layer).
-  - Mock get_collector in tests, never ConnectHandler (CLAUDE.md rule).
+  - Desktop + web feature parity (AGENTS.md rule).
+  - data-testid on every new interactive UI element (AGENTS.md rule).
+  - No terminal length 0 for Cisco (AGENTS.md rule — collector layer).
+  - Mock get_collector in tests, never ConnectHandler (AGENTS.md rule).
   - Atomic file writes pattern already adopted; reuse for snapshots.
 
 =====================================================================

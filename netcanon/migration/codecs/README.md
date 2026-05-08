@@ -386,7 +386,7 @@ parsing, preserve vendor-specific algorithm tags (`sha1:`, `bcrypt:`,
 `fortios:ENC`, Cisco type-digit prefixes like `5 `, `7 `, `9 `) so
 renderers can route correctly.  See `test_local_users_wire_through.py`
 for the reference pattern.  **Never commit real credential hashes to
-test fixtures** (CLAUDE.md hard rule).
+test fixtures** (AGENTS.md hard rule).
 
 ### Test fixtures, not real credentials
 

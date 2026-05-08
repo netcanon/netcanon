@@ -774,7 +774,7 @@ per_field_expectation:
 #     list is lossy-by-default in the juniper_junos codec
 #     capability matrix; no codec populates it today (would
 #     require policy-statement parsing).  Tagged `lossy` with
-#     `reason: "deferred"` per CLAUDE.md guidance for unconfident
+#     `reason: "deferred"` per AGENTS.md guidance for unconfident
 #     fields.
 #
 #   * MTU / domain / syslog / timezone — aruba_aoss codec render

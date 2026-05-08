@@ -77,7 +77,7 @@ job_id = resp.json()["id"]
 final = client.get(f"/api/v1/backups/{job_id}").json()
 ```
 
-This is a **Hard Rule** in `CLAUDE.md`: never assert on the POST
+This is a **Hard Rule** in `AGENTS.md`: never assert on the POST
 response body for final job state.  Under `TestClient`, background
 tasks are executed before the response returns, so the GET reflects
 the completed state — but the POST body itself is serialised before
@@ -87,7 +87,7 @@ that runs.
 
 The single factory tests patch is
 `netcanon.api.routes.backups.get_collector`.  This is a **Hard
-Rule** in `CLAUDE.md`: never patch `ConnectHandler` or
+Rule** in `AGENTS.md`: never patch `ConnectHandler` or
 `paramiko.SSHClient` directly.  The `get_collector` indirection
 exists specifically so that one swap covers every transport
 (Netmiko, NETCONF, REST) without leaking transport details into
@@ -128,7 +128,7 @@ the Tier-3 rename modal.  Each one delegates to a single function,
 others left empty.  This keeps the routes nearly identical and the
 service-layer work in one place.
 
-**Hard Rule** (`CLAUDE.md`): never change the
+**Hard Rule** (`AGENTS.md`): never change the
 `run_plan_with_overrides` signature.  New rename categories ride on
 the existing override-dict shape — add a field, don't add a
 parameter.  The `migration.py` module docstring enumerates the
@@ -164,7 +164,7 @@ endpoints; update it in the same commit when you add a sibling.
 9. **Cross-platform check:** new pure API endpoints automatically
    work on the desktop platform (the desktop binds the same
    FastAPI app on `127.0.0.1`).  New UI surfaces still need the
-   feature-parity check from `CLAUDE.md` — confirm the desktop
+   feature-parity check from `AGENTS.md` — confirm the desktop
    shell renders the page acceptably inside the embedded WebView.
 
 ---

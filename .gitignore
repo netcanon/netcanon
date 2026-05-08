@@ -20,8 +20,10 @@ schedules/
 jobs/
 configs/
 
-# Claude Code internal
+# AI-assistant tooling — local session state, never committed
 .claude/
+.cursor/
+.aider*/
 
 # Python build artifacts
 __pycache__/

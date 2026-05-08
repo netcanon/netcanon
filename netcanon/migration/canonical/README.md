@@ -142,7 +142,7 @@ Concrete checklist:
    `build_<category>_rename_transform(rename_map) → (transform, result)`.
    Define a `<Category>RenameResult` pydantic model with at minimum
    `applied`, `warnings`, `dropped`.
-3. **Wire onto `run_plan_with_overrides`.**  Hard rule (see CLAUDE.md):
+3. **Wire onto `run_plan_with_overrides`.**  Hard rule (see AGENTS.md):
    never change the signatures of `run_plan` or `run_plan_with_rename`
    — they're frozen.  Add the new category to the override-dict
    handling inside `run_plan_with_overrides` in

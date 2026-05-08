@@ -562,7 +562,7 @@ def build_port_rename_transform(
             ``format_port_identity`` so the cross-vendor bridge can
             emit native target-vendor names.
         rename_map: Optional ``{source_name: target_name | None}``
-            override map.  Sentinel semantics (per CLAUDE.md +
+            override map.  Sentinel semantics (per AGENTS.md +
             ``run_plan_with_overrides`` docstring):
 
               * ``None`` — pane not engaged (caller should not even

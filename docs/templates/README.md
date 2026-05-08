@@ -39,7 +39,7 @@ config translator to benefit.
 
 | Template | Purpose |
 |---|---|
-| `CLAUDE.md.template` | Operational rulebook for AI / human contributors — doc-sync checklist + hard rules |
+| `AGENTS.md.template` | Operational rulebook for AI / human contributors — doc-sync checklist + hard rules |
 | `ARCHITECTURE.md.template` | Conceptual map: layers, invariants, cross-cutting policies |
 | `CHANGELOG.md.template` | Keep-a-Changelog-shaped log with rationale-first entries |
 | `CAPABILITIES.md.template` | Operator-facing capabilities + known limitations matrix |
@@ -60,7 +60,7 @@ Every template ends with a "See also" footer pointing at
 ### Step 1 — copy what you need
 
 ```sh
-cp docs/templates/CLAUDE.md.template       /path/to/your-repo/CLAUDE.md
+cp docs/templates/AGENTS.md.template       /path/to/your-repo/AGENTS.md
 cp docs/templates/ARCHITECTURE.md.template /path/to/your-repo/ARCHITECTURE.md
 cp docs/templates/CHANGELOG.md.template    /path/to/your-repo/CHANGELOG.md
 # ... etc
@@ -89,7 +89,7 @@ that still needs your attention.
 
 ### Step 3 — adapt rows to your project's surface
 
-The doc-sync checklist in `CLAUDE.md.template` lists *kinds* of changes
+The doc-sync checklist in `AGENTS.md.template` lists *kinds* of changes
 ("a new public function", "a new test marker", "a new hard rule").  The
 rows are illustrative — you'll have your own kinds.  When you add a
 new test fixture concept, a new translation tier, a new pipeline stage,
@@ -127,7 +127,7 @@ The matrix-honesty discipline pays off in three ways:
 The source project is publicly viewable; clone it and walk the live
 versions of these files to see them filled in:
 
-* `CLAUDE.md` — the actual operational rulebook
+* `AGENTS.md` — the actual operational rulebook
 * `ARCHITECTURE.md` — the actual layered design doc
 * `CHANGELOG.md` — actual rationale-first entries
 * `docs/CAPABILITIES.md` — actual matrix with per-component rows
@@ -166,7 +166,7 @@ helps decide what to keep generic vs. what to drop.
 * [`../CAPABILITIES.md`](../CAPABILITIES.md) — the live, filled-in
   capabilities document this directory's `CAPABILITIES.md.template`
   was extracted from
-* [`../../CLAUDE.md`](../../CLAUDE.md) — the live operational rulebook
-  that `CLAUDE.md.template` was extracted from
+* [`../../AGENTS.md`](../../AGENTS.md) — the live operational rulebook
+  that `AGENTS.md.template` was extracted from
 * [`../RELEASE_PLAN.md`](../RELEASE_PLAN.md) — the live release plan
   that `RELEASE_PLAN.md.template` was extracted from
