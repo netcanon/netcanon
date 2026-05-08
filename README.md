@@ -103,7 +103,7 @@ ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.
 Hub if your tooling defaults to `docker.io`:
 
 ```bash
-docker run --rm -p 8000:8000 netcanonio/netcanon:latest
+docker run --rm -p 8000:8000 netcanon/netcanon:latest
 ```
 
 The Docker Hub mirror has the same image bytes but no cosign

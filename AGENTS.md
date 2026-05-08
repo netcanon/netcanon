@@ -45,7 +45,7 @@ Netcanon ships on two platforms.  Both must always be kept at feature parity.
 | Desktop (Windows) | `netcanon_desktop/` | `python -m netcanon_desktop` |
 
 **Distribution variants — NOT separate platforms.**  Docker
-(`ghcr.io/netcanon/netcanon` GHCR primary + `docker.io/netcanonio/netcanon`
+(`ghcr.io/netcanon/netcanon` GHCR primary + `docker.io/netcanon/netcanon`
 Docker Hub mirror), `pip install netcanon`, and the Windows MSI are
 all distribution methods, not platforms.  Docker and pip both produce
 a **web-platform** install (the container's entrypoint is

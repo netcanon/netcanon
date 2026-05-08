@@ -11,6 +11,39 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Correct Docker Hub namespace: `netcanonio` → `netcanon`
+
+The `v0.1.0-rc2` Docker publish failed against `docker.io/netcanonio/netcanon`
+with `unauthorized: incorrect username or password`.  Root cause was
+not auth — it was that `netcanonio` was a wrong-turn namespace.  When
+the Docker Hub mirror PR was authored, the operator believed the
+`netcanon` namespace was already taken and picked `netcanonio` as a
+fallback.  Verifying afterwards showed `netcanon` was actually
+available and now belongs to the project's Docker Hub account.
+
+This PR corrects every `netcanonio` reference to `netcanon`:
+
+* `.github/workflows/docker-publish.yml` — `DOCKERHUB_IMAGE` env var
+* `README.md` — `docker run` example
+* `docs/IDENTITY.md` — Distribution surfaces table + drops the
+  "namespace divergence" note (no longer divergent)
+* `SECURITY.md` — Distribution channels table
+* `AGENTS.md` — distribution-variants clarifying paragraph
+* `CHANGELOG.md` — earlier `[Unreleased]` Docker Hub mirror entry
+  rewritten to reflect the corrected namespace
+
+After this PR merges, the operator should also:
+
+* Update the `DOCKERHUB_USERNAME` repo secret to `netcanon`
+* Re-run the failed `v0.1.0-rc2` Docker publish workflow from the
+  Actions tab (no need to re-tag — same trigger ref)
+* Optionally clean up the dormant `netcanonio` Docker Hub namespace
+  (if it was registered as a placeholder) so it doesn't sit empty
+
+The Docker Hub mirror has never successfully pushed any image, so
+the correction is cleanly retroactive — no operators have been
+told to pull from the wrong namespace.
+
 ### `AGENTS.md`: clarify Docker / pip / MSI as distribution variants
 
 Closes a small ambiguity in the "Parallel Platform Development"
@@ -116,7 +149,7 @@ the same `docker/build-push-action` step:
 * **GHCR — `ghcr.io/netcanon/netcanon`** — primary, signed via
   cosign keyless (Sigstore + GitHub OIDC), SBOM attached as a cosign
   attestation (SPDX JSON via syft).  The "trust chain" image.
-* **Docker Hub — `docker.io/netcanonio/netcanon`** — convenience
+* **Docker Hub — `docker.io/netcanon/netcanon`** — convenience
   mirror.  Same image bytes (single build, dual push from one
   buildx step), same tag patterns.  No cosign signature, no SBOM
   attestation — Docker Hub is treated as a discoverability /
@@ -126,22 +159,20 @@ the same `docker/build-push-action` step:
 
 Why mirror to Docker Hub: network engineers in corporate environments
 often have egress whitelists that allow `docker.io` but block GHCR;
-`docker pull netcanonio/netcanon` is also closer to muscle memory
+`docker pull netcanon/netcanon` is also closer to muscle memory
 than the GHCR equivalent, so tutorials and quick-start docs read
 cleaner.
 
-The Docker Hub namespace is `netcanonio` (the `netcanon` namespace
-on Docker Hub was already taken by an unrelated user).  All other
-distribution surfaces — GHCR, GitHub org, PyPI — share the
-`netcanon` name.
+All distribution surfaces share the `netcanon` name (GHCR org,
+Docker Hub user, GitHub org, PyPI project).
 
 #### Auth surface
 
 Two new repository secrets (configured manually in repo settings,
 not in code):
 
-* `DOCKERHUB_USERNAME` — the account username with push permission
-  to the `netcanonio` namespace
+* `DOCKERHUB_USERNAME` — the Docker Hub account username with push
+  permission to the `netcanon` namespace
 * `DOCKERHUB_TOKEN` — Docker Hub Personal Access Token with **Read
   & Write** scope (least privilege; never password)
 
@@ -161,13 +192,12 @@ Docker Hub is the unsigned mirror.
 
 #### Docs sync
 
-* `README.md` — added the `docker run netcanonio/netcanon:latest`
+* `README.md` — added the `docker run netcanon/netcanon:latest`
   example as an alternative install path under the existing
   Docker section, with a note that the mirror is unsigned.
 * `docs/IDENTITY.md` — added a "Distribution surfaces" table
   enumerating GHCR / Docker Hub / PyPI with their provenance
-  guarantees, and noted the namespace divergence (`netcanonio` vs
-  `netcanon`) so future contributors don't mistakenly assume parity.
+  guarantees per channel.
 * `SECURITY.md` — added a "Distribution channels and what each
   provides" sub-table to the Supply-Chain Integrity section,
   making the cosign / SBOM / attestation differences between the
