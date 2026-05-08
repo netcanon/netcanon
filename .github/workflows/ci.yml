@@ -9,6 +9,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
+  # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
+  # of-node-20-on-github-actions-runners/).  Surfaces any Node 24
+  # incompatibility now rather than at the cutover deadline.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
