@@ -144,12 +144,12 @@ new distribution path is added (or any of the URLs change):
 | Channel | URL / namespace | Provenance |
 |---|---|---|
 | GHCR (primary, signed) | `ghcr.io/netcanon/netcanon` | cosign keyless signature + syft SBOM attestation |
-| Docker Hub (mirror) | `docker.io/netcanonio/netcanon` | Same image bytes; no signature / attestation |
+| Docker Hub (mirror) | `docker.io/netcanon/netcanon` | Same image bytes; no signature / attestation |
 | PyPI | `pip install netcanon` | Trusted Publishing via OIDC; no long-lived API token |
 
-The Docker Hub namespace is `netcanonio` (not `netcanon` — that
-namespace was already taken on Docker Hub).  All other surfaces
-share the `netcanon` name.
+All distribution surfaces share the `netcanon` name (GHCR org,
+Docker Hub user, GitHub org, PyPI project).  Easy mnemonic for
+operators.
 
 ## See also
 

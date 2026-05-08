@@ -19,7 +19,7 @@ env:
   # Docker Hub is a convenience mirror — same image bytes, same tags,
   # no cosign signature or SBOM attestation.  Operators in regulated
   # environments should pull from GHCR (see SECURITY.md).
-  DOCKERHUB_IMAGE: docker.io/netcanonio/netcanon
+  DOCKERHUB_IMAGE: docker.io/netcanon/netcanon
   # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
   # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
   # of-node-20-on-github-actions-runners/).  Surfaces any Node 24

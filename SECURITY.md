@@ -295,7 +295,7 @@ provenance can verify each:
 | Channel | Image bytes | Cosign signature | SBOM attestation |
 |---|---|---|---|
 | GHCR — `ghcr.io/netcanon/netcanon` | ✅ canonical | ✅ keyless via Sigstore + GitHub OIDC | ✅ SPDX JSON via syft |
-| Docker Hub — `docker.io/netcanonio/netcanon` | ✅ same bytes (mirror) | ❌ unsigned | ❌ no attestation |
+| Docker Hub — `docker.io/netcanon/netcanon` | ✅ same bytes (mirror) | ❌ unsigned | ❌ no attestation |
 | PyPI — `pip install netcanon` | n/a | ✅ Trusted Publishing (OIDC) | n/a |
 
 Same image manifest is pushed to both registries from the same
