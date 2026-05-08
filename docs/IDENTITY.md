@@ -19,6 +19,7 @@ Used in:
 - [`pyproject.toml`](../pyproject.toml) `description` field (PyPI listing)
 - [`README.md`](../README.md) header (above-the-fold)
 - GitHub repo About section (extended form below)
+- Docker Hub repo description (same extended form)
 
 The tagline captures action (translate) + scope (multi-vendor) +
 differentiator (verifiable audit).  Honesty about the differentiator
@@ -135,6 +136,21 @@ A starter Midjourney prompt for Direction A:
 
 ---
 
+## Distribution surfaces
+
+The project ships through three channels.  Update this section if a
+new distribution path is added (or any of the URLs change):
+
+| Channel | URL / namespace | Provenance |
+|---|---|---|
+| GHCR (primary, signed) | `ghcr.io/netcanon/netcanon` | cosign keyless signature + syft SBOM attestation |
+| Docker Hub (mirror) | `docker.io/netcanonio/netcanon` | Same image bytes; no signature / attestation |
+| PyPI | `pip install netcanon` | Trusted Publishing via OIDC; no long-lived API token |
+
+The Docker Hub namespace is `netcanonio` (not `netcanon` — that
+namespace was already taken on Docker Hub).  All other surfaces
+share the `netcanon` name.
+
 ## See also
 
 - [`docs/COMPARISON.md`](COMPARISON.md) — positioning vs adjacent
@@ -144,3 +160,5 @@ A starter Midjourney prompt for Direction A:
 - [`docs/RELEASE_PLAN.md`](RELEASE_PLAN.md) — Phase 2 of which this
   doc is the deliverable
 - [`README.md`](../README.md) — where the tagline lands
+- [`../SECURITY.md`](../SECURITY.md) — supply-chain integrity story
+  for the GHCR-vs-Docker-Hub distinction

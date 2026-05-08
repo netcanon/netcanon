@@ -11,6 +11,71 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Distribution: mirror published images to Docker Hub
+
+`docker-publish.yml` now pushes each release to **two registries** in
+the same `docker/build-push-action` step:
+
+* **GHCR — `ghcr.io/netcanon/netcanon`** — primary, signed via
+  cosign keyless (Sigstore + GitHub OIDC), SBOM attached as a cosign
+  attestation (SPDX JSON via syft).  The "trust chain" image.
+* **Docker Hub — `docker.io/netcanonio/netcanon`** — convenience
+  mirror.  Same image bytes (single build, dual push from one
+  buildx step), same tag patterns.  No cosign signature, no SBOM
+  attestation — Docker Hub is treated as a discoverability /
+  corporate-egress-friendliness path; operators in regulated
+  environments should continue pulling from GHCR for the attested
+  provenance.
+
+Why mirror to Docker Hub: network engineers in corporate environments
+often have egress whitelists that allow `docker.io` but block GHCR;
+`docker pull netcanonio/netcanon` is also closer to muscle memory
+than the GHCR equivalent, so tutorials and quick-start docs read
+cleaner.
+
+The Docker Hub namespace is `netcanonio` (the `netcanon` namespace
+on Docker Hub was already taken by an unrelated user).  All other
+distribution surfaces — GHCR, GitHub org, PyPI — share the
+`netcanon` name.
+
+#### Auth surface
+
+Two new repository secrets (configured manually in repo settings,
+not in code):
+
+* `DOCKERHUB_USERNAME` — the account username with push permission
+  to the `netcanonio` namespace
+* `DOCKERHUB_TOKEN` — Docker Hub Personal Access Token with **Read
+  & Write** scope (least privilege; never password)
+
+The token is per-purpose ("Github Actions docker-publish" description)
+and revocable via Docker Hub Account Settings → Security → Personal
+Access Tokens if it ever leaks.
+
+#### Cosign filtering
+
+The cosign signing step now filters by registry prefix to sign only
+the GHCR tags.  Without this filter, cosign would attempt to sign
+the Docker Hub mirror too, which would either fail (if the workflow
+lacks Docker Hub keyless signing setup) or attach a Docker Hub-
+specific signature with weaker provenance.  The filter keeps the
+trust chain unambiguous: cosign-verifiable signatures live on GHCR;
+Docker Hub is the unsigned mirror.
+
+#### Docs sync
+
+* `README.md` — added the `docker run netcanonio/netcanon:latest`
+  example as an alternative install path under the existing
+  Docker section, with a note that the mirror is unsigned.
+* `docs/IDENTITY.md` — added a "Distribution surfaces" table
+  enumerating GHCR / Docker Hub / PyPI with their provenance
+  guarantees, and noted the namespace divergence (`netcanonio` vs
+  `netcanon`) so future contributors don't mistakenly assume parity.
+* `SECURITY.md` — added a "Distribution channels and what each
+  provides" sub-table to the Supply-Chain Integrity section,
+  making the cosign / SBOM / attestation differences between the
+  channels explicit.
+
 ### CI: Python 3.14 coverage + Docker build smoke test
 
 Closes the verification gap that the Dependabot Dockerfile bump
