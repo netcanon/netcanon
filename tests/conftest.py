@@ -188,3 +188,57 @@ def test_app(test_settings: Settings):
 def fake_collector() -> FakeCollector:
     """A ``FakeCollector`` returning the default Cisco canned output."""
     return FakeCollector()
+
+
+# ---------------------------------------------------------------------------
+# Keyring mock — autouse so every test gets a working keyring backend.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _mock_keyring(monkeypatch):
+    """Mock ``keyring.get_password`` / ``set_password`` for every test.
+
+    Why this fixture exists:
+
+    * On Windows (the maintainer's host) `keyring` resolves to Windows
+      Credential Manager automatically — tests pass without setup.
+    * On Ubuntu CI runners (no GUI, no SecretService daemon) `keyring`
+      falls back to the ``fail`` backend that raises
+      :class:`keyring.errors.NoKeyringError` on every call.  Tests that
+      touch credential storage (e.g. via
+      :func:`netcanon.security.credentials.encrypt`) blow up.
+
+    The fix: per-test mock with an in-memory dict.  Tests get isolation
+    (each starts with empty storage) plus deterministic cross-platform
+    behaviour (no host-keyring dependency).
+
+    Tests that explicitly want to verify keyring behaviour (e.g.
+    ``tests/unit/test_credentials.py``) supply their own per-class
+    autouse fixtures that take precedence in their narrower scope.
+
+    Also resets ``netcanon.security.credentials._fernet`` between
+    tests so a key generated in one test doesn't bleed into the next
+    via the lazy global cache.
+    """
+    import keyring
+
+    storage: dict[tuple[str, str], str | None] = {}
+
+    def _fake_get_password(service: str, username: str) -> str | None:
+        return storage.get((service, username))
+
+    def _fake_set_password(service: str, username: str, password: str) -> None:
+        storage[(service, username)] = password
+
+    monkeypatch.setattr(keyring, "get_password", _fake_get_password)
+    monkeypatch.setattr(keyring, "set_password", _fake_set_password)
+
+    # Reset the lazy ``_fernet`` cache so each test re-derives a key
+    # from the (mocked) keyring rather than carrying state across tests.
+    try:
+        from netcanon.security import credentials as _creds
+        monkeypatch.setattr(_creds, "_fernet", None)
+    except ImportError:
+        # Module not available in some test layers; skip silently.
+        pass
