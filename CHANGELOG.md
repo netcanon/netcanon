@@ -11,6 +11,58 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 2: project identity foundation
+
+Phase 2 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) —
+establish the project identity surfaces operators encounter before
+they read any code.  All in-repo deliverables; the GitHub-side
+surfaces (repo description, Topics) are documented for the operator
+to apply when the repo goes public.
+
+* **Tagline locked.**  *"Multi-vendor network config translator with
+  a verifiable cross-vendor audit."*  Captures action, scope, and
+  differentiator in 78 chars.  Applied to:
+  * `pyproject.toml` `description` field (replaces the older
+    "backup and translation engine" phrasing)
+  * `README.md` header (replaces the equivalent line + adds a
+    one-paragraph elevator pitch with the explicit vendor list,
+    Tier-3 boundary link, and `docs/COMPARISON.md` pointer)
+* **`docs/IDENTITY.md`** (new) — source-of-truth for tagline,
+  GitHub repo description (extended 174-char form for the About
+  section), GitHub Topics list (13 topics mirroring
+  `pyproject.toml` keywords), and the logo design brief.  When
+  the repo goes public, the operator copies the description +
+  Topics from this doc to GitHub Settings.
+* **`docs/COMPARISON.md`** (new) — positioning vs adjacent tools
+  (Batfish, Capirca / Aerleon, NAPALM, Netmiko / Nornir, Ansible
+  network modules, NetBox / Nautobot, ciscoconfparse).  Comparison
+  table + "where we compete vs where we're complementary vs what
+  we won't do" sections.  Surface area for operators arriving from
+  "I'm looking for a Capirca alternative" — gives the
+  matrix-honesty discipline a positioning frame.
+* **Logo brief** (in `docs/IDENTITY.md`) — three concept directions
+  (mosaic cell / N letterform / network constellation) with
+  operator-tool visual constraints (deep slate primary + amber
+  accent; geometric sans wordmark; 16×16 favicon legibility; no
+  clichés).  Recommends Direction A (mosaic cell — ties to the
+  matrix-honesty cell metaphor).  Logo not yet commissioned;
+  brief is the spec when ready.  Includes a starter Midjourney
+  prompt for AI-generated drafts.
+* **`CLAUDE.md` "See also" footer** updated with both new docs.
+
+#### What this wave does NOT do
+
+* **Set the GitHub repo description / Topics.**  Those are GitHub
+  Settings actions; documented in `docs/IDENTITY.md` for the
+  operator to apply when the repo goes public.
+* **Commission a logo.**  Brief is the spec; actual logo
+  generation is a separate workflow (designer / Midjourney /
+  in-house).
+* **Rewrite the README.**  Phase 7 of the release plan is the
+  full README rewrite (asciinema, before/after example, full
+  matrix-honesty trust signal).  This wave updates the tagline
+  + elevator pitch only.
+
 ### Public release plan — Phase 1.5: package directory + import + env-var rename
 
 The Phase 1 wave deliberately deferred the directory rename to keep

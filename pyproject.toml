@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "netcanon"
 version = "0.1.0"
-description = "Multi-vendor network configuration backup and translation engine"
+description = "Multi-vendor network config translator with a verifiable cross-vendor audit"
 readme = "README.md"
 license = "MIT"
 license-files = ["LICENSE"]

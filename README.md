@@ -1,6 +1,15 @@
 # Netcanon
 
-Multi-vendor network configuration backup and translation engine.
+**Multi-vendor network config translator with a verifiable cross-vendor audit.**
+
+Translates running-config between Cisco IOS-XE, Juniper Junos, Aruba
+AOS-S, Arista EOS, FortiGate, MikroTik RouterOS, and OPNsense.
+Per-field capability declarations and a cross-mesh audit catch silent
+translation errors before they ship.  Explicit Tier-3 boundary on
+firewall / NAT / VPN / QoS — see
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md).  See also
+[`docs/COMPARISON.md`](docs/COMPARISON.md) for positioning vs Batfish /
+Capirca / NAPALM and the rest of the network-automation landscape.
 
 Two concerns, one FastAPI application:
 
