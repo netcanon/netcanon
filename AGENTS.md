@@ -44,6 +44,19 @@ Netcanon ships on two platforms.  Both must always be kept at feature parity.
 | Web (browser) | `netcanon/` | `uvicorn netcanon.main:app` |
 | Desktop (Windows) | `netcanon_desktop/` | `python -m netcanon_desktop` |
 
+**Distribution variants — NOT separate platforms.**  Docker
+(`ghcr.io/netcanon/netcanon` GHCR primary + `docker.io/netcanonio/netcanon`
+Docker Hub mirror), `pip install netcanon`, and the Windows MSI are
+all distribution methods, not platforms.  Docker and pip both produce
+a **web-platform** install (the container's entrypoint is
+`uvicorn netcanon.main:app` — same code path as host-installed web);
+the MSI produces a **desktop-platform** install.  None of them require
+their own parity test row; a feature that lands on the web platform
+automatically reaches Docker + pip users on the next release tag.
+The doc-sync table below has a "packaging / distribution workflow
+changes" row covering edits to `Dockerfile`, the publish workflows,
+and the supply-chain attestation surfaces.
+
 **Rule:** whenever a functional feature is added or changed on one platform, the
 equivalent must be implemented on the other platform in the same commit (or the
 same branch, if it spans multiple commits).  Never leave one platform behind.
@@ -169,6 +182,7 @@ mapping below is concrete; audit every applicable row before you run
 | A codec change affects translation behaviour for a pair covered by [`tools/demo.py`](tools/demo.py) (current pairs: `cisco_iosxe_cli` ↔ `juniper_junos`, `fortigate_cli` ↔ `mikrotik_routeros`, `aruba_aoss` ↔ `arista_eos`, `opnsense` ↔ `juniper_junos`) | Re-run `python tools/demo.py --pair <affected>` to verify the embedded synthetic config still translates cleanly.  If the rendered output's *shape* changed (added / dropped / reformatted lines that operators see), update the embedded source in `tools/demo.py` to match what the codec now models, and update the paired walkthrough at [`docs/walkthroughs/<source>_to_<target>.md`](docs/walkthroughs/) — specifically the "What Netcanon does for you", "Tier-3 boundary", and "Manual review checklist" sections.  Operators reading the walkthrough should see what's new, what's gone, and what they should re-verify on devices already migrated under the previous wave's behaviour |
 | A new codec ships that opens a narratively-distinct translation pair (different paradigm, different scope, or different operator workflow vs the existing four scenarios) | Add a new scenario to `tools/demo.py` (`SCENARIOS` dict) AND a paired walkthrough at `docs/walkthroughs/<source>_to_<target>.md` in the same wave.  Update [`docs/walkthroughs/README.md`](docs/walkthroughs/README.md)'s table.  The 30-second "show me what this does" path Phase 4 established only stays valuable if the demo set keeps pace with the codec set |
 | A change to the canonical model (`netcanon/migration/canonical/intent.py`) that adds a field demos *should* exercise | Update at least one `tools/demo.py` scenario's embedded synthetic config to include the new field, so the demo output visibly shows the new translation surface.  Without this, operators running the demo see translations that look like they did before the canonical-field landed — the "show me what's new" surface goes stale |
+| A packaging / distribution workflow change (`Dockerfile`, `.dockerignore`, `.github/workflows/docker-publish.yml`, `.github/workflows/pypi-publish.yml`, base-image bump, action-version bump, registry namespace change, signing / SBOM / attestation surface change) | (1) [`SECURITY.md`](SECURITY.md) "Supply-Chain Integrity" + "Distribution channels" sub-table — every signing / attestation / lock-file change has to surface here so operators in regulated environments see accurate provenance claims.  (2) [`docs/IDENTITY.md`](docs/IDENTITY.md) "Distribution surfaces" table — every registry / namespace change has to update this canonical inventory.  (3) [`README.md`](README.md) Install section — Docker / pip / MSI examples have to match what the workflows actually publish.  (4) If the change adds a NEW Python version to the matrix in `.github/workflows/ci.yml`, also add the matching `Programming Language :: Python :: X.Y` classifier in `pyproject.toml` so package metadata is consistent with what's tested.  Distribution variants (Docker / pip / MSI) are not separate platforms (see "Parallel Platform Development" above), but their publish surface is operator-trust-load-bearing and drifts faster than the platform code itself |
 
 Rule of thumb: if a future contributor could plausibly search for the
 thing you just added and not find its rationale, there's a doc gap
