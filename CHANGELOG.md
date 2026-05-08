@@ -11,6 +11,145 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 6: packaging foundation
+
+Phase 6 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the
+Dockerfile + GHCR publish workflow + PyPI Trusted Publishing
+workflow that turn a release tag into actual published artefacts.
+
+#### Dockerfile (multi-stage, non-root, signed, healthcheck'd)
+
+* **Multi-stage build.**  Stage 1 (`builder`) compiles wheels with
+  `build-essential` + `libffi-dev` + `libssl-dev`; stage 2 installs
+  prebuilt wheels with `pip install --no-index` (no compilers in
+  runtime, no network during the runtime layer).
+* **Base image** `python:3.13-slim-bookworm` — broad wheel support
+  for paramiko / cryptography / pydantic-core; ~150MB before the
+  netcanon install.
+* **Non-root `app` user** (uid=1000, gid=1000) — file writes go
+  through the bind-mounted volumes only.
+* **Volume slots** `/app/configs` (backup output) + `/app/data`
+  (jobs / devices / schedules root, mirrors `NETCANON_DATA_DIR`
+  semantics).
+* **`/app/definitions`** baked into the image (per-vendor
+  device-definition YAMLs are tracked content, not operator state
+  — they ship with the image rather than bind-mounted).
+* **`HEALTHCHECK`** every 30s on `GET /health` via `curl -fsS`;
+  start-period 10s; 3 retries before marking unhealthy.
+* **OCI labels** for image discovery + provenance (title /
+  description / source / documentation / licenses / vendor).
+
+#### `.dockerignore`
+
+Excludes tests, configs, devices, schedules, jobs, docs, .git,
+build artefacts, .venv, the operator-local backup dir from the
+Phase 1 history rewrite.  Whitelists `README.md` (the Dockerfile
+COPYs it for `pyproject.toml`'s readme field).
+
+#### `.github/workflows/docker-publish.yml`
+
+Triggers on `v*.*.*` tag push (incl. `-rc`/`-alpha`/`-beta`
+pre-releases).  Pipeline:
+
+1. Build via buildx (cache via `type=gha`).
+2. Push to GHCR (`ghcr.io/netcanon/netcanon`) with semver tags +
+   `latest` on the default branch.
+3. Cosign keyless sign every published tag via Sigstore + GitHub
+   OIDC (no long-lived keys in the repo).
+4. Generate SBOM (SPDX JSON) via syft; upload as workflow
+   artefact.
+5. Attach SBOM as a cosign attestation on the image digest.
+6. Post-publish smoke test: `cosign verify` against the published
+   digest with the GitHub Actions OIDC issuer + repository
+   identity.
+
+#### `.github/workflows/pypi-publish.yml`
+
+Triggers on `v*.*.*` tag push.  Pipeline:
+
+1. Build sdist + wheel via `python -m build`.
+2. Validate metadata via `twine check`.
+3. Upload distribution as a workflow artefact.
+4. Publish to PyPI via Trusted Publishing (`pypa/gh-action-pypi-publish`)
+   — no API token in the repo; OIDC-bound to the `pypi`
+   environment + the repo identity declared on PyPI's side.
+
+#### `/health` endpoint
+
+[`netcanon/api/routes/health.py`](netcanon/api/routes/health.py) —
+new lightweight readiness probe at `GET /health` (no `/api/v1`
+prefix per orchestrator convention).  Returns
+`{"status": "ok", "version": "<package version>"}` from
+`importlib.metadata.version("netcanon")` with `"unknown"` fallback
+for editable / source-only installs.
+
+Tests: [`tests/integration/test_health_api.py`](tests/integration/test_health_api.py)
+— 5 tests covering 200 status / response shape / Content-Type /
+no-auth-required / version-is-string.  All pass; no regressions
+in pre-existing test tiers.
+
+#### Local build + smoke test (verified)
+
+* `docker build -t netcanon:dev .` — built clean, 373MB image.
+* `docker run -d -p 127.0.0.1:8765:8000 netcanon:dev` — startup
+  in ~5s; loads 7 device definitions + 54 target profiles.
+* `curl http://127.0.0.1:8765/health` →
+  `{"status":"ok","version":"0.1.0"}`.
+* `curl -X POST .../api/v1/sanitize -F source_vendor=aruba_aoss
+  -F config=@... -F dry_run=true` → 10 substitutions, identical
+  output to the CLI invocation (proves Phase 4.5 sanitiser
+  pipeline works inside the container).
+* `docker inspect` → `Health: healthy`, exit=0 from the probe.
+
+#### Bug caught by local verification
+
+The first build attempt crashed at startup with
+`FileNotFoundError: Definitions directory not found: /app/definitions`.
+The Dockerfile's `pip install` brings in the `netcanon` Python
+package but the per-vendor `definitions/` directory at the repo
+root isn't packaged with it (deliberately — those are
+operational-grade YAMLs, not Python source).  Fix: explicit
+`COPY definitions/ /app/definitions/` in the runtime stage.
+
+This is the kind of bug that would have shipped to GHCR if we'd
+trusted the CI build without local verification — operators
+pulling the image would have hit immediate startup crashes.
+Resolved before commit.
+
+#### What you (operator) do for the first release
+
+1. **Register PyPI Trusted Publisher** at
+   https://pypi.org/manage/account/publishing/ — workflow file
+   name `pypi-publish.yml`, environment name `pypi`.
+2. **Create the `pypi` GitHub Actions environment** in repo
+   settings (Settings → Environments → New environment → `pypi`).
+3. **Push a release tag**: `git tag v0.1.0-rc1 && git push origin
+   v0.1.0-rc1`.  Both workflows trigger automatically.
+4. **Verify after publish** (~5 min later):
+   * `docker pull ghcr.io/netcanon/netcanon:v0.1.0-rc1`
+   * `docker run -p 8000:8000 ghcr.io/netcanon/netcanon:v0.1.0-rc1`
+   * `curl http://localhost:8000/health`
+   * `cosign verify ghcr.io/netcanon/netcanon:v0.1.0-rc1
+     --certificate-identity-regexp "https://github.com/netcanon/netcanon"
+     --certificate-oidc-issuer "https://token.actions.githubusercontent.com"`
+   * `pip install netcanon==0.1.0rc1` (Trusted Publishing accepts
+     pre-release tags).
+
+#### What this wave does NOT do
+
+* **Multi-arch builds** (`linux/arm64` for Apple Silicon / Pi
+  hosts).  v0.1.0 ships `linux/amd64` only; multi-arch is a
+  Phase 7 / post-launch follow-up.
+* **Distroless base image.**  Distroless requires more careful
+  dependency surgery (paramiko / cryptography pull in
+  libffi / libssl + glibc); the size win (~50MB) isn't worth the
+  fragility at v0.1.0.
+* **Docker Hub mirror.**  GHCR only for v0.1.0; Docker Hub
+  mirror is a follow-up if discovery becomes the bottleneck.
+* **Reproducible build verification.**  The Dockerfile is
+  reproducible-in-principle (pinned base image, pinned wheels);
+  byte-identical-digest verification is a follow-up post-launch.
+
 ### CLAUDE.md hard rule — review every push for PII
 
 New hard rule codifying the discipline that surfaced from the Phase

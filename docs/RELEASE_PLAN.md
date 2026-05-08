@@ -12,12 +12,19 @@
 * **Phase 4.5** — sanitization tooling (`netcanon.tools.sanitize` +
   CLI + HTTP endpoint; field-typed redactions on the canonical
   model; `--dry-run` mode).
+* **Phase 5** — operator-facing docs (7 per-vendor pages +
+  index in `docs/vendors/`, `docs/HOW_WE_TEST.md`,
+  `docs/TROUBLESHOOTING.md`, `BUG_REPORTING.md`; CLAUDE.md
+  doc-sync row + hard rule about user-facing-doc updates).
+* **Phase 6** — packaging foundation (multi-stage Dockerfile,
+  GHCR publish workflow with cosign + SBOM, PyPI Trusted
+  Publishing workflow, `/health` endpoint).  Local verified;
+  ready for the first release tag.
 
 Remaining MUST-tier release-blockers: Phase 3 (quality hardening),
-Phase 4 (demo + walkthroughs), Phase 5 (operator-facing docs +
-`BUG_REPORTING.md`), Phase 6 (Dockerfile + GHCR + PyPI), Phase 7
-(README rewrite).  Phases 8–11 are the launch sequence
-(private beta → soft launch → hard launch → triage cadence).
+Phase 4 (demo + walkthroughs), Phase 7 (README rewrite).
+Phases 8–11 are the launch sequence (private beta → soft launch
+→ hard launch → triage cadence).
 
 This is a forward-looking working document — when the release
 actually happens, prune the "plan" sections and convert this file

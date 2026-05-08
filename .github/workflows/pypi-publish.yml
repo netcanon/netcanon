@@ -1,0 +1,68 @@
+name: PyPI — build & publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install build tooling
+        run: |
+          python -m pip install --upgrade pip
+          pip install build twine
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate distribution metadata via twine
+        run: python -m twine check dist/*
+
+      - name: Upload distribution artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI (Trusted Publishing — OIDC, no API token)
+    needs: [build]
+    runs-on: ubuntu-latest
+    # GitHub Actions environment for the OIDC binding to PyPI.  Operator
+    # creates the `pypi` environment in repo settings; PyPI's trusted
+    # publisher must reference this exact name.
+    environment:
+      name: pypi
+      url: https://pypi.org/p/netcanon
+    permissions:
+      id-token: write     # mandatory for Trusted Publishing
+
+    steps:
+      - name: Download distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        # No `with:` block needed — Trusted Publishing infers everything
+        # from the OIDC token + the environment configured on PyPI.

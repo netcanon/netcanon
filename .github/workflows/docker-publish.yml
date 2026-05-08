@@ -1,0 +1,93 @@
+name: Docker — build & publish
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'    # rc / alpha / beta pre-release tags
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write     # cosign keyless signing via Sigstore + GitHub OIDC
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-publish:
+    name: Build, push, sign, attest
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute image metadata + tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=tag
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: false   # we generate via syft below for richer SPDX output
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign published image (keyless via Sigstore + GitHub OIDC)
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          for tag in ${TAGS}; do
+            cosign sign --yes "${tag}@${DIGEST}"
+          done
+
+      - name: Generate SBOM (SPDX JSON) via syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: true
+
+      - name: Attach SBOM as a cosign attestation
+        env:
+          IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign attest --yes --predicate sbom.spdx.json --type spdxjson "${IMAGE_DIGEST}"
+
+      - name: Verify signature (post-publish smoke test)
+        env:
+          IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+        run: |
+          cosign verify "${IMAGE_DIGEST}" \
+            --certificate-identity-regexp "https://github.com/${{ github.repository }}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"

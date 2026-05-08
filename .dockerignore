@@ -1,0 +1,67 @@
+# Git metadata
+.git/
+.gitignore
+.gitattributes
+
+# CI / IDE
+.github/
+.vscode/
+.idea/
+.claude/
+
+# Python ephemera
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.tox/
+
+# Tests + fixtures (huge; not needed in runtime image)
+tests/
+
+# Docs (not needed in runtime image — except README.md, which the
+# Dockerfile COPYs explicitly because pyproject.toml's readme field
+# points at it)
+docs/
+*.md
+!README.md
+
+# Operator-local state directories — must NEVER end up baked into
+# the image.  Bind-mounted at runtime.
+configs/
+devices/
+schedules/
+jobs/
+data/
+
+# Build artefacts
+build/
+dist/
+*.whl
+*.egg
+*.tar.gz
+
+# Environment files
+.env
+.env.local
+.env.*.local
+venv/
+.venv/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Desktop installer build artefacts (not needed in container image)
+build_desktop/
+netcanon_desktop/
+setup_desktop.py
+
+# Translator-plans + other internal-only docs
+translator-plans.txt
+
+# Pre-rewrite backup directory if it exists locally
+*-backup-pre-rewrite/
