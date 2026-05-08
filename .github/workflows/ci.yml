@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
       - uses: actions/checkout@v6
@@ -68,3 +68,40 @@ jobs:
 
       - name: Validate distribution metadata
         run: python -m twine check dist/*
+
+  docker-build-smoke:
+    name: Docker build smoke test
+    runs-on: ubuntu-latest
+
+    # Builds the published Dockerfile and verifies the resulting image
+    # boots and serves /health.  Catches Dockerfile-side regressions
+    # (base image bumps, COPY mistakes, entrypoint breakage) on PRs
+    # rather than at tag-time when docker-publish.yml fires.
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build image
+        run: docker build -t netcanon-smoke:pr .
+
+      - name: Boot image and check /health
+        run: |
+          docker run -d --name smoke -p 8000:8000 netcanon-smoke:pr
+          # Poll /health for up to 60 seconds.  HEALTHCHECK in the
+          # Dockerfile has start-period 10s, so ~12s is the typical
+          # ready time; budget extra for slow CI runners.
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8000/health; then
+              echo
+              echo "Smoke test passed."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Smoke test FAILED — container never became healthy."
+          echo "--- container logs ---"
+          docker logs smoke
+          exit 1
+
+      - name: Clean up
+        if: always()
+        run: docker rm -f smoke || true
