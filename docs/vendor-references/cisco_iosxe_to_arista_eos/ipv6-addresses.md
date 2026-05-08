@@ -97,7 +97,7 @@ the Arista target.
 Long-term fix: wire the cisco_iosxe parser's link-local inference
 (check if the IP starts with `fe80:` and set scope="link-local").
 This is a small change but hasn't been prioritised — see
-`netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
+`netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
 for the relevant code.
 
 ## Disposition

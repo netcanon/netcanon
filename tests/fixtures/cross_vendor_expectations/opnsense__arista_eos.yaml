@@ -156,7 +156,7 @@ meta:
 
 # ---------------------------------------------------------------------------
 # Per-field expectations.  Walks CanonicalIntent top-down per
-# netconfig/migration/canonical/intent.py.
+# netcanon/migration/canonical/intent.py.
 # ---------------------------------------------------------------------------
 
 per_field_expectation:
@@ -506,7 +506,7 @@ per_field_expectation:
     disposition: unsupported
     reason: >
       The arista_eos codec has no RADIUS surface today —
-      ``netconfig/migration/codecs/arista_eos/parse.py`` and
+      ``netcanon/migration/codecs/arista_eos/parse.py`` and
       ``render.py`` contain zero references to ``radius`` (case-
       insensitive).  The canonical ``radius_servers`` list
       populated by the OPNsense parser (``<authserver>`` blocks

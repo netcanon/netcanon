@@ -6,7 +6,7 @@ Retrieved: 2026-05-01
 Source: [openconfig-if-ip YANG schema docs (IPv4/IPv6 augment)](https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-if-ip.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec._render_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec._render_canonical`
 (in-tree code documenting the IPv6 emit path)
 Retrieved: 2026-05-01
 

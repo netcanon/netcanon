@@ -10,7 +10,7 @@ Cisco IOS-XE has multiple firewall / NAT / VPN feature sets:
 - IPsec / GRE / DMVPN VPN constructs
 
 These are out of canonical scope on the IOS-XE codec — see the
-Limitations section of ``netconfig/migration/codecs/cisco_iosxe_cli/
+Limitations section of ``netcanon/migration/codecs/cisco_iosxe_cli/
 codec.py``: "Routing protocols (BGP/OSPF), ACLs, crypto, AAA-policy,
 QoS, and route-maps are silently skipped on parse and not emitted on
 render".  None reach the canonical surface.
@@ -28,9 +28,9 @@ OPNsense's primary role is firewalling.  Its config.xml carries:
 The OPNsense codec's capability matrix explicitly lists these as
 ``unsupported``:
 
-- ``/filter/rule`` — "Firewall rules require the netconfig-ext YANG
+- ``/filter/rule`` — "Firewall rules require the netcanon-ext YANG
   module (Phase 2) — OpenConfig has no firewall model."
-- ``/nat/outbound`` — "NAT table translation needs netconfig-ext +
+- ``/nat/outbound`` — "NAT table translation needs netcanon-ext +
   careful semantic mapping to target stateful engines."
 
 VPN constructs are not in the canonical model at all.

@@ -4,7 +4,7 @@ Layer-A unit tests for the SNMPv3 USM user-name orchestrator.
 Fifth per-pane override category after ports (``test_port_names.py``),
 VLANs (``test_vlan_names.py``), local_users (``test_local_user_names.py``),
 and snmp_community (``test_snmp_names.py``).  This file exercises
-:mod:`netconfig.migration.canonical.snmpv3_user_names` — the
+:mod:`netcanon.migration.canonical.snmpv3_user_names` — the
 orchestrator module that drives :attr:`CanonicalSNMP.v3_users` rename
 + drop + collision semantics.
 
@@ -16,12 +16,12 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
     CanonicalSNMPv3User,
 )
-from netconfig.migration.canonical.snmpv3_user_names import (
+from netcanon.migration.canonical.snmpv3_user_names import (
     build_snmpv3_user_rename_transform,
     translate_snmpv3_users,
 )

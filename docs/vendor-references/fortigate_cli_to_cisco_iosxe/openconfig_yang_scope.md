@@ -47,7 +47,7 @@ codec covers.
 ## What the cisco_iosxe target render emits
 
 Looking at the renderer entry point in
-`netconfig/migration/codecs/cisco_iosxe/codec.py:_render_canonical()`:
+`netcanon/migration/codecs/cisco_iosxe/codec.py:_render_canonical()`:
 
 ```python
 def _render_canonical(self, intent) -> str:

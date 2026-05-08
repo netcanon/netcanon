@@ -48,8 +48,8 @@ fixture.
 A new vendor codec is several waves of work; coordinate via an issue
 first.  The shape:
 
-1. Implement parse + render under `netconfig/migration/codecs/<vendor>/`.
-   Read [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
+1. Implement parse + render under `netcanon/migration/codecs/<vendor>/`.
+   Read [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md)
    first — the "Shape of a codec" section is mandatory reading.
 2. Declare the capability matrix exhaustively.  Every supported xpath,
    every lossy xpath with a cited reason, every unsupported xpath with
@@ -80,7 +80,7 @@ The full rulebook is [`CLAUDE.md`](CLAUDE.md).  The most-broken rules:
   declare it `lossy` or `unsupported`, populate
   `dropped_tier3_sections` if it's Tier 3, and surface it in the UI.
 - **Never** change the signatures of existing pipeline-stage functions
-  in `netconfig/services/migration_pipeline.py` (frozen).
+  in `netcanon/services/migration_pipeline.py` (frozen).
 - **Never** skip `data-testid` on new HTML interactive elements.
 - **Never** commit real credentials, device IPs, or hostnames.
 - **Never** hard-code counts in prose docs without a CI/test guard.

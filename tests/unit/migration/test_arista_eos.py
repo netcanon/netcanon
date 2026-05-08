@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -20,12 +20,12 @@ from netconfig.migration.canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-from netconfig.migration.codecs.arista_eos.port_names import (
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.arista_eos.port_names import (
     classify_port_name,
     format_port_identity,
 )
-from netconfig.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.base import ParseError, RenderError
 
 pytestmark = pytest.mark.unit
 
@@ -436,7 +436,7 @@ class TestRender:
         ``static`` → ``on``, ``passive`` → ``passive``,
         everything else (including ``active``) → ``active``.
         """
-        from netconfig.migration.canonical.intent import CanonicalLAG
+        from netcanon.migration.canonical.intent import CanonicalLAG
         intent = CanonicalIntent(
             hostname="sw1",
             interfaces=[
@@ -517,7 +517,7 @@ class TestVxlanSourceInterfaceUdpPort:
             assert rec.udp_port == 4789
 
     def test_render_uses_recorded_values(self):
-        from netconfig.migration.canonical.intent import CanonicalVxlan
+        from netcanon.migration.canonical.intent import CanonicalVxlan
         intent = CanonicalIntent(
             vlans=[CanonicalVlan(id=100, name="V100")],
             vxlan_vnis=[CanonicalVxlan(
@@ -533,7 +533,7 @@ class TestVxlanSourceInterfaceUdpPort:
         assert "vxlan vlan 100 vni 10100" in out
 
     def test_render_falls_back_to_defaults_when_unset(self):
-        from netconfig.migration.canonical.intent import CanonicalVxlan
+        from netcanon.migration.canonical.intent import CanonicalVxlan
         intent = CanonicalIntent(
             vlans=[CanonicalVlan(id=100, name="V100")],
             vxlan_vnis=[CanonicalVxlan(vlan_id=100, vni=10100)],
@@ -671,7 +671,7 @@ class TestBgpVlanMacVrf:
             vlans=[CanonicalVlan(id=100, name="Tenant_100")],
             routing_instances=[
                 __import__(
-                    "netconfig.migration.canonical.intent",
+                    "netcanon.migration.canonical.intent",
                     fromlist=["CanonicalRoutingInstance"],
                 ).CanonicalRoutingInstance(
                     name="Tenant_100",
@@ -695,7 +695,7 @@ class TestBgpVlanMacVrf:
         # Defensive: a MAC-VRF whose name doesn't match any vlan and
         # doesn't fit the synthetic VLAN<N> form gets skipped (no
         # garbage line emitted).
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalRoutingInstance,
         )
         intent = CanonicalIntent(
@@ -914,7 +914,7 @@ class TestPortNames:
         port becomes the flat ``Ethernet24``.  Documented
         behaviour (operator may have to disambiguate via the
         rename modal)."""
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
         )
         cisco_ident = cisco_classify("GigabitEthernet1/0/24")
@@ -1131,7 +1131,7 @@ class TestEmptyInterfaceStubElision:
         VRF-binding line in the routed-block — even though the
         port name is non-native, the canonical tree wires the VRF
         membership through it."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalRoutingInstance,
         )
         intent = CanonicalIntent(

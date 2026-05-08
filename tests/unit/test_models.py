@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.models.device`` and ``netconfig.models.backup``.
+Unit tests for ``netcanon.models.device`` and ``netcanon.models.backup``.
 
 Pure Pydantic model construction / validation — no I/O or network.
 """
@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import SecretStr, ValidationError
 
-from netconfig.models.backup import BackupJob, BackupResult, ConfigRecord, JobStatus
-from netconfig.models.device import BackupRequest, DeviceCredentials, DeviceTarget
+from netcanon.models.backup import BackupJob, BackupResult, ConfigRecord, JobStatus
+from netcanon.models.device import BackupRequest, DeviceCredentials, DeviceTarget
 
 pytestmark = pytest.mark.unit
 

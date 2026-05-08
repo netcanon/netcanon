@@ -25,7 +25,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
     CanonicalSNMPv3User,

@@ -65,7 +65,7 @@ Logical:
 - **Speed-prefix translation.** Cisco `GigabitEthernet1/0/1` and
   Junos `ge-0/0/0` carry the same speed semantic; canonical model
   preserves the source string, and the port-rename mesh
-  (`netconfig/migration/codecs/cisco_iosxe_cli/port_names.py`) is
+  (`netcanon/migration/codecs/cisco_iosxe_cli/port_names.py`) is
   the operator-facing remediation surface.
 - **Slot/PIC synthesis.** Cisco's `<slot>/<subslot>/<port>` triple
   maps to Junos's `<fpc>/<pic>/<port>` triple; the indices are

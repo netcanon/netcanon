@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.definitions.schema``.
+Unit tests for ``netcanon.definitions.schema``.
 
 These tests exercise Pydantic model construction and validation directly —
 no file I/O, no YAML parsing, no HTTP.  Each test should be milliseconds.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from netconfig.definitions.schema import (
+from netcanon.definitions.schema import (
     CollectorConfig,
     CommandConfig,
     ConnectionConfig,

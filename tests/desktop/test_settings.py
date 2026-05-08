@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.settings``.
+Unit tests for ``netcanon_desktop.settings``.
 
 Covers path resolution in both *dev* (unfrozen) and *frozen* modes,
 including the ``DesktopPreferences`` overlay applied in frozen mode.
@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from netconfig_desktop.settings import DESKTOP_PORT, desktop_settings
+from netcanon_desktop.settings import DESKTOP_PORT, desktop_settings
 
 pytestmark = pytest.mark.desktop
 
@@ -63,7 +63,7 @@ class TestDesktopSettingsFrozen:
     """When ``sys.frozen`` is ``True`` (cx_Freeze) use APPDATA-based paths."""
 
     def test_configs_dir_under_appdata(self, tmp_path):
-        fake_exe = tmp_path / "netconfig.exe"
+        fake_exe = tmp_path / "netcanon.exe"
         fake_exe.touch()
         fake_appdata = tmp_path / "AppData" / "Roaming"
         fake_appdata.mkdir(parents=True)
@@ -78,7 +78,7 @@ class TestDesktopSettingsFrozen:
         assert settings.configs_dir == fake_appdata / "Netcanon" / "configs"
 
     def test_definitions_dir_beside_exe(self, tmp_path):
-        fake_exe = tmp_path / "netconfig.exe"
+        fake_exe = tmp_path / "netcanon.exe"
         fake_exe.touch()
         fake_appdata = tmp_path / "AppData" / "Roaming"
         fake_appdata.mkdir(parents=True)
@@ -93,7 +93,7 @@ class TestDesktopSettingsFrozen:
         assert settings.definitions_dir == tmp_path / "definitions"
 
     def test_configs_dir_created_in_frozen_mode(self, tmp_path):
-        fake_exe = tmp_path / "netconfig.exe"
+        fake_exe = tmp_path / "netcanon.exe"
         fake_exe.touch()
         fake_appdata = tmp_path / "AppData" / "Roaming"
         fake_appdata.mkdir(parents=True)
@@ -113,7 +113,7 @@ class TestDesktopSettingsPreferencesOverlay:
 
     def _frozen_env(self, tmp_path):
         """Construct the standard frozen-mode patch context tuple."""
-        fake_exe = tmp_path / "netconfig.exe"
+        fake_exe = tmp_path / "netcanon.exe"
         fake_exe.touch()
         fake_appdata = tmp_path / "AppData" / "Roaming"
         fake_appdata.mkdir(parents=True)

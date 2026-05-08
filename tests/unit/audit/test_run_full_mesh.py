@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIntent,
     CanonicalInterface,
@@ -300,7 +300,7 @@ def test_audited_fields_cover_every_canonical_top_level() -> None:
     metadata_fields = {
         "source_vendor", "source_format", "source_version",
         # Notification-only surface populated by the source-side parser
-        # via netconfig/migration/_tier3_detection.py.  Never read by
+        # via netcanon/migration/_tier3_detection.py.  Never read by
         # render, so cross-codec audit cells would always show
         # "unsupported in target" for it — exclude rather than pollute.
         "dropped_tier3_sections",

@@ -35,17 +35,17 @@ https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
 """
 
 import pytest
-from netconfig.migration.canonical.port_names import PortIdentity
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.port_names import PortIdentity
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.mikrotik_routeros.port_names import (
+from netcanon.migration.codecs.mikrotik_routeros.port_names import (
     format_port_identity,
 )
-from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
+from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
 
 
 

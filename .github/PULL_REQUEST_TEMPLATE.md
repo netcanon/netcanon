@@ -4,8 +4,8 @@
 
 ## Scope
 
-- [ ] Code change touches `netconfig/`
-- [ ] Code change touches `netconfig_desktop/`
+- [ ] Code change touches `netcanon/`
+- [ ] Code change touches `netcanon_desktop/`
 - [ ] Definition / fixture change
 - [ ] Documentation only
 

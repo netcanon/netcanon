@@ -201,7 +201,7 @@ PROJECT-SPECIFIC RULES section below as failure modes surface. -->
   Multiple patch sites drift apart and create flaky tests that pass
   individually but fail in the suite.
   <!-- PROJECT: Replace with your project's actual factory point.
-  In Netcanon this is `netconfig.api.routes.backups.get_collector`. -->
+  In Netcanon this is `netcanon.api.routes.backups.get_collector`. -->
 - **Never** land a code change without updating the docs it renders
   stale.  The Documentation Sync Checklist above is concrete — if a
   row applies to your change, touch the listed doc in the same

@@ -17,8 +17,8 @@ proxy, IDS/IPS round out the security feature set.
 
 The opnsense codec capability matrix lists `/filter/rule` and
 `/nat/outbound` under `unsupported` ("Firewall rules require the
-netconfig-ext YANG module" / "NAT table translation needs
-netconfig-ext + careful semantic mapping").
+netcanon-ext YANG module" / "NAT table translation needs
+netcanon-ext + careful semantic mapping").
 
 ## Junos firewall filters / policy-statements
 

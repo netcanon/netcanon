@@ -20,8 +20,8 @@ section):
 
 See also:
 
-* :mod:`netconfig.migration._user_secrets` — shared hash-policy helper
-* :mod:`netconfig.migration.codecs.cisco_iosxe_cli.render` — the
+* :mod:`netcanon.migration._user_secrets` — shared hash-policy helper
+* :mod:`netcanon.migration.codecs.cisco_iosxe_cli.render` — the
   render path under test
 """
 
@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -37,7 +37,7 @@ from netconfig.migration.canonical.intent import (
     CanonicalRoutingInstance,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 

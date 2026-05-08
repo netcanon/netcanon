@@ -9,7 +9,7 @@ Retrieved: 2026-05-01
 Source: [openconfig-interfaces YANG schema docs](https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.parse`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.parse`
 (in-tree code; the authoritative source of "what the parser populates")
 Retrieved: 2026-05-01
 

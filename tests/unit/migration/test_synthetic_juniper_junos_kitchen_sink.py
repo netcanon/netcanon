@@ -29,7 +29,7 @@ import pathlib
 
 import pytest
 
-from netconfig.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
 
 pytestmark = pytest.mark.unit
 

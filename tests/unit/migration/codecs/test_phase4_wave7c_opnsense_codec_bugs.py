@@ -28,17 +28,17 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalRADIUSServer,
 )
-from netconfig.migration.codecs.aruba_aoss.parse import (
+from netcanon.migration.codecs.aruba_aoss.parse import (
     parse_intent as aruba_parse,
 )
-from netconfig.migration.codecs.aruba_aoss.render import (
+from netcanon.migration.codecs.aruba_aoss.render import (
     render_intent as aruba_render,
 )
-from netconfig.migration.codecs.opnsense.parse import (
+from netcanon.migration.codecs.opnsense.parse import (
     parse_intent as opnsense_parse,
 )
 

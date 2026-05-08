@@ -126,6 +126,6 @@ to ``lossy`` for opnsense + cisco_iosxe targets; carve out a
   ``…_juniper_junos.md``,
   ``…_mikrotik_routeros.md``,
   ``…_opnsense.md`` — sibling source-vendor findings (parallel agents).
-- ``netconfig/migration/canonical/transforms.py`` —
+- ``netcanon/migration/canonical/transforms.py`` —
   ``project_switchport_to_vlan`` reference (the helper the non-cisco
   parsers should be calling).

@@ -327,7 +327,7 @@ list, don't delete).
 - [ ] **Reset clears persistence**: click "Reset all" in the
       modal header.  All overrides clear AND the localStorage
       entry is removed (verify via DevTools → Application →
-      Local Storage → no `netconfig.rename-ack.v1:…` entry
+      Local Storage → no `netcanon.rename-ack.v1:…` entry
       remains for the current codec pair).
 - [ ] **Different hostname = fresh slate**: translate a Cisco
       config with `hostname A`, set an override.  Reset textarea
@@ -473,7 +473,7 @@ list, don't delete).
 
 ## Desktop platform parity
 
-- [ ] Spin up the desktop shell (`python -m netconfig_desktop`).
+- [ ] Spin up the desktop shell (`python -m netcanon_desktop`).
       Confirm migrate page works identically to web — same
       `data-testid`s, same detect banner, same fixture upload flow.
 - [ ] System tray icon shows / hides the window.  Close button

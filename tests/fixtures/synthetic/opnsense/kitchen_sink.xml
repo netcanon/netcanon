@@ -8,7 +8,7 @@
   CLAUDE.md — they look real but are not actual credentials.
 
   Coverage exercised by this fixture (canonical fields the OPNsense
-  parser populates on parse — see netconfig/migration/codecs/opnsense/
+  parser populates on parse — see netcanon/migration/codecs/opnsense/
   parse.py):
 
     * CanonicalIntent.hostname           via <system><hostname>
@@ -52,7 +52,7 @@
 
   Out of scope (declared unsupported in the capability matrix):
 
-    * /filter/rule         — firewall rules need netconfig-ext YANG
+    * /filter/rule         — firewall rules need netcanon-ext YANG
     * /nat/outbound        — NAT translation needs careful semantic
                              mapping
     * /snmp/v3-user        — OPNsense SNMPv3 lives in snmpd.conf,

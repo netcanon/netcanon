@@ -23,7 +23,7 @@ from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
 def client(test_app) -> TestClient:
     """``TestClient`` with SSH collection replaced by ``FakeCollector``.
 
-    The patch target is ``netconfig.api.routes.backups.get_collector`` — the
+    The patch target is ``netcanon.api.routes.backups.get_collector`` — the
     exact location imported and called by the backup route.  The patch returns
     a ``FakeCollector`` for every ``get_collector(definition)`` call, regardless
     of the definition's strategy or type_key.
@@ -34,7 +34,7 @@ def client(test_app) -> TestClient:
     """
     fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
     with patch(
-        "netconfig.api.routes.backups.get_collector",
+        "netcanon.api.routes.backups.get_collector",
         return_value=fake,
     ):
         with TestClient(test_app, raise_server_exceptions=True) as c:

@@ -14,15 +14,15 @@ import json
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import CodecBase
-from netconfig.models.migration import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import CodecBase
+from netcanon.models.migration import (
     CapabilityMatrix,
     DeviceClass,
     MigrationJobStatus,
 )
-from netconfig.services.migration_pipeline import run_plan
-from netconfig.services.migration_validate import check_class_compat
+from netcanon.services.migration_pipeline import run_plan
+from netcanon.services.migration_validate import check_class_compat
 
 pytestmark = pytest.mark.unit
 

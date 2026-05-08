@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical import loader
+from netcanon.migration.canonical import loader
 
 pytestmark = pytest.mark.unit
 
@@ -29,7 +29,7 @@ class TestPlannedModulesInventory:
     def test_openconfig_modules_listed(self):
         """PLANNED_MODULES is documentation-as-code for roadmap tracking."""
         assert "openconfig-interfaces" in loader.PLANNED_MODULES
-        assert "netconfig-ext" in loader.PLANNED_MODULES
+        assert "netcanon-ext" in loader.PLANNED_MODULES
 
     def test_planned_modules_is_immutable_tuple(self):
         """Guard against accidental mutation during test runs."""

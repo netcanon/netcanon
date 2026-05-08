@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 
 pytestmark = pytest.mark.unit
 

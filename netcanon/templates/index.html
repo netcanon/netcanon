@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Netcanon{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<!-- ── Backup form ──────────────────────────────────────────────── -->
+<section data-testid="backup-form-section">
+  <h2>New Backup</h2>
+  <form id="backup-form" data-testid="backup-form">
+    <div id="device-list" data-testid="device-list">
+      <!-- Device rows injected by JS; first row is the template -->
+      <div class="form-row device-entry" data-testid="device-entry">
+        <div class="form-group" style="flex:0 0 auto;min-width:160px">
+          <label>Saved Device</label>
+          <select name="device_profile_id" data-testid="device-profile-select">
+            <option value="">— new device —</option>
+            {% for profile in device_profiles %}
+            <option value="{{ profile.id }}"
+                    data-type-key="{{ profile.type_key }}"
+                    data-host="{{ profile.host }}"
+                    data-port="{{ profile.port }}"
+                    data-username="{{ profile.username }}">
+              {{ profile.name }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select name="type_key" data-testid="device-type-select">
+            {% for key, def in definitions.items() | sort %}
+            <option value="{{ key }}"
+                    data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
+              {{ def.vendor }} {{ def.os }}
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Host / IP</label>
+          <input name="host" type="text" placeholder="192.168.1.1"
+                 data-testid="device-host-input" required>
+        </div>
+        <div class="form-group">
+          <label>Username</label>
+          <input name="username" type="text" placeholder="admin"
+                 data-testid="device-username-input" required>
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input name="password" type="password"
+                 data-testid="device-password-input" required>
+        </div>
+        <!-- Enable password: shown only when the selected definition requires it -->
+        <div class="form-group enable-group">
+          <label>Enable Password</label>
+          <input name="enable_password" type="password"
+                 placeholder="optional" data-testid="device-enable-input">
+        </div>
+        <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
+        <details class="port-details" style="align-self:flex-end">
+          <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+                          user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
+          <input name="port" type="number" value="22" min="1" max="65535"
+                 style="width:72px;margin-top:.25rem" data-testid="device-port-input">
+        </details>
+        <div class="form-group profile-name-group">
+          <label>Save as Profile <span style="color:#aaa;font-weight:normal">(optional)</span></label>
+          <input name="profile_name" type="text" placeholder="e.g. Office Cisco"
+                 data-testid="device-profile-name-input">
+        </div>
+        <div class="form-group" style="justify-content:flex-end">
+          <button type="button" class="btn-danger remove-device-btn"
+                  data-testid="remove-device-btn"
+                  aria-label="Remove this device"
+                  style="display:none">&#x2715;</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row" style="margin-top:.75rem">
+      <button type="button" id="add-device-btn" class="btn-secondary"
+              data-testid="add-device-btn">+ Add Device</button>
+      <button type="submit" id="submit-btn" class="btn-primary"
+              data-testid="submit-backup-btn">Start Backup</button>
+    </div>
+  </form>
+</section>
+
+<!-- The global floating job-progress panel is defined in base.html;
+     it receives job updates via the startJobProgress() / events API. -->
+
+<!-- ── Recent jobs table ─────────────────────────────────────────── -->
+<!-- Always present in DOM so JS can inject rows without a page reload -->
+<section data-testid="recent-jobs-section">
+  <h2>Recent Jobs</h2>
+  <table data-testid="jobs-table" id="jobs-table"
+         {% if not recent_jobs %}style="display:none"{% endif %}>
+    <thead>
+      <tr>
+        <th>Job ID</th><th>Status</th><th>Success / Total</th><th>Created</th>
+      </tr>
+    </thead>
+    <tbody id="jobs-tbody">
+    {% for job in recent_jobs %}
+    <tr data-testid="job-row" data-job-id="{{ job.id }}">
+      <td data-testid="job-id-text">{{ job.id[:8] }}&hellip;</td>
+      <td><span class="badge badge-{{ job.status.value }}"
+               data-testid="job-status">{{ job.status.value }}</span></td>
+      <td data-testid="job-success-count">
+        {{ job.results | selectattr('status','eq','success') | list | length }}
+        / {{ job.total_devices }}
+      </td>
+      <td data-testid="job-created"
+          data-utc="{{ job.created_at.isoformat() }}">
+        {{ job.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% if not recent_jobs %}
+  <p class="empty-msg" data-testid="no-jobs-msg" id="no-jobs-msg">
+    No backup jobs yet. Fill in the form above and click <strong>Start Backup</strong>.
+  </p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const deviceList   = document.getElementById('device-list');
+const addBtn       = document.getElementById('add-device-btn');
+const submitBtn    = document.getElementById('submit-btn');
+const form         = document.getElementById('backup-form');
+const jobsTbody    = document.getElementById('jobs-tbody');
+const jobsTable    = document.getElementById('jobs-table');
+const noJobsMsg    = document.getElementById('no-jobs-msg');
+
+/* ── Show / hide Enable Password based on selected definition ── */
+function updateEnableGroup(row) {
+  var sel  = row.querySelector('[data-testid="device-type-select"]');
+  var opt  = sel.options[sel.selectedIndex];
+  var grp  = row.querySelector('.enable-group');
+  if (grp) grp.style.display = opt.dataset.needsEnable === 'true' ? '' : 'none';
+}
+
+/* ── Remove-button visibility ── */
+function updateRemoveButtons() {
+  var rows = deviceList.querySelectorAll('.device-entry');
+  rows.forEach(function(r) {
+    r.querySelector('[data-testid="remove-device-btn"]').style.display =
+      rows.length > 1 ? '' : 'none';
+  });
+}
+
+/* ── Wire up a single device row ── */
+function initRow(row) {
+  updateEnableGroup(row);
+  row.querySelector('[data-testid="device-type-select"]')
+     .addEventListener('change', function() { updateEnableGroup(row); });
+  row.querySelector('[data-testid="remove-device-btn"]')
+     .addEventListener('click', function(e) {
+       e.target.closest('.device-entry').remove();
+       updateRemoveButtons();
+     });
+  var profileSel = row.querySelector('[name="device_profile_id"]');
+  if (profileSel) {
+    profileSel.addEventListener('change', async function() {
+      var opt = profileSel.options[profileSel.selectedIndex];
+      if (opt.value) {
+        row.querySelector('[name="type_key"]').value   = opt.dataset.typeKey || '';
+        row.querySelector('[name="host"]').value       = opt.dataset.host || '';
+        row.querySelector('[name="port"]').value       = opt.dataset.port || '22';
+        row.querySelector('[name="username"]').value   = opt.dataset.username || '';
+        /* Clear credential fields while we fetch — never read from DOM */
+        row.querySelector('[name="password"]').value   = '';
+        var ep = row.querySelector('[name="enable_password"]');
+        if (ep) ep.value = '';
+        try {
+          var r = await fetch('/api/v1/devices/' + encodeURIComponent(opt.value));
+          if (r.ok) {
+            var p = await r.json();
+            row.querySelector('[name="password"]').value = p.password || '';
+            if (ep) ep.value = p.enable_password || '';
+          }
+        } catch (_) { /* non-fatal: user can type credentials manually */ }
+        var ng = row.querySelector('.profile-name-group');
+        if (ng) ng.style.display = 'none';
+      } else {
+        var ng = row.querySelector('.profile-name-group');
+        if (ng) ng.style.display = '';
+      }
+      updateEnableGroup(row);
+    });
+  }
+}
+
+/* ── Initialise first row ── */
+deviceList.querySelectorAll('.device-entry').forEach(initRow);
+
+/* ── Add Device ── */
+addBtn.addEventListener('click', function() {
+  var first = deviceList.querySelector('.device-entry');
+  var clone = first.cloneNode(true);
+  clone.querySelectorAll('input').forEach(function(i) {
+    i.value = i.name === 'port' ? '22' : '';
+  });
+  clone.querySelectorAll('select').forEach(function(s) { s.selectedIndex = 0; });
+  clone.querySelectorAll('details').forEach(function(d) { d.removeAttribute('open'); });
+  var ng = clone.querySelector('.profile-name-group');
+  if (ng) ng.style.display = '';
+  deviceList.appendChild(clone);
+  initRow(clone);
+  updateRemoveButtons();
+});
+
+/* ── Form submission → JSON → poll ── */
+form.addEventListener('submit', async function(e) {
+  e.preventDefault();
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Running\u2026';
+
+  var rows = deviceList.querySelectorAll('.device-entry');
+  var devices = [];
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var g = function(name) { return row.querySelector('[name="' + name + '"]').value; };
+    var ep = g('enable_password');
+    var deviceProfileId = null;
+
+    var profileSelEl = row.querySelector('[name="device_profile_id"]');
+    if (profileSelEl && profileSelEl.value) {
+      deviceProfileId = profileSelEl.value;
+    } else {
+      var profileName = row.querySelector('[name="profile_name"]');
+      if (profileName && profileName.value) {
+        var portVal = parseInt(g('port'), 10) || 22;
+        var newProfileBody = {
+          name:     profileName.value,
+          type_key: g('type_key'),
+          host:     g('host'),
+          port:     portVal,
+          username: g('username'),
+          password: g('password'),
+        };
+        if (ep) newProfileBody.enable_password = ep;
+        try {
+          var pr = await fetch('/api/v1/devices/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newProfileBody),
+          });
+          if (!pr.ok) {
+            var perr = await pr.json().catch(function() { return {}; });
+            showToast('Could not save profile \u201c' + profileName.value + '\u201d: ' + (perr.detail || pr.statusText), 'error');
+            submitBtn.disabled = false;
+            submitBtn.textContent = 'Start Backup';
+            return;
+          }
+          var newProfile = await pr.json();
+          deviceProfileId = newProfile.id;
+        } catch (err) {
+          showToast('Network error saving profile: ' + err.message, 'error');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Start Backup';
+          return;
+        }
+      }
+    }
+
+    var deviceObj = {
+      type_key: g('type_key'),
+      host:     g('host'),
+      port:     parseInt(g('port'), 10) || 22,
+      credentials: Object.assign(
+        { username: g('username'), password: g('password') },
+        ep ? { enable_password: ep } : {}
+      ),
+    };
+    if (deviceProfileId) deviceObj.device_profile_id = deviceProfileId;
+    devices.push(deviceObj);
+  }
+
+  var job = null;
+  try {
+    var res = await fetch('/api/v1/backups', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ devices: devices }),
+    });
+    if (!res.ok) {
+      var err = await res.json().catch(function() { return {}; });
+      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      return;
+    }
+    job = await res.json();
+  } catch (err) {
+    showToast('Network error: ' + err.message, 'error');
+    return;
+  } finally {
+    if (!job) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Start Backup';
+    }
+  }
+
+  // Hand off to the global progress panel; it will poll and dispatch
+  // netcanon:job-complete when the job reaches a terminal state.
+  startJobProgress(job.id);
+});
+
+/* ── Listen for terminal-state events from the global panel ──
+ * Fires exactly once per job (the panel guards this internally), so we
+ * can safely re-enable the submit button and inject the new row without
+ * worrying about duplicates.
+ */
+document.addEventListener('netcanon:job-complete', function(e) {
+  injectJobRow(e.detail.job);
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Start Backup';
+});
+
+/* When the user dismisses a stale panel after reload, make sure the
+ * submit button is unlocked (edge case: reload happened mid-job, submit
+ * button was never restored by netcanon:job-complete). */
+document.addEventListener('netcanon:job-dismissed', function() {
+  submitBtn.disabled = false;
+  submitBtn.textContent = 'Start Backup';
+});
+
+/* ── Inject a new row into the jobs table without a page reload ── */
+function injectJobRow(j) {
+  var ok  = j.results.filter(function(r) { return r.status === 'success'; }).length;
+  var ts  = new Date(j.created_at).toLocaleString();
+  var tr  = document.createElement('tr');
+  tr.setAttribute('data-testid', 'job-row');
+  tr.setAttribute('data-job-id', j.id);
+  tr.innerHTML =
+    '<td data-testid="job-id-text">' + j.id.substring(0, 8) + '\u2026</td>'
+    + '<td><span class="badge badge-' + j.status + '" data-testid="job-status">' + j.status + '</span></td>'
+    + '<td data-testid="job-success-count">' + ok + ' / ' + j.total_devices + '</td>'
+    + '<td data-testid="job-created">' + ts + '</td>';
+  jobsTbody.insertBefore(tr, jobsTbody.firstChild);
+  jobsTable.style.removeProperty('display');
+  if (noJobsMsg) noJobsMsg.style.display = 'none';
+}
+</script>
+{% endblock %}

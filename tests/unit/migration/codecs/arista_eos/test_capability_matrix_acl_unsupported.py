@@ -15,7 +15,7 @@ status — ACL grammar is rich, vendor-specific, and auto-translation
 risks shipping subtly-permissive rules.
 
 See also:
-- netconfig/migration/codecs/arista_eos/codec.py — where the
+- netcanon/migration/codecs/arista_eos/codec.py — where the
   declarations live
 - tests/unit/migration/codecs/cisco_iosxe/test_capability_matrix_honesty.py
   — the canonical pattern for codec-honesty regression guards
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 
 pytestmark = pytest.mark.unit
 

@@ -23,8 +23,8 @@ the user smoke wave:
 
 See also:
 - ``tests/fixtures/real/user_smoke_findings.md`` — sub-findings 9a + 19
-- ``netconfig/migration/codecs/opnsense/parse.py`` — fix locations
-- ``netconfig/migration/codecs/opnsense/render.py`` — symmetric
+- ``netcanon/migration/codecs/opnsense/parse.py`` — fix locations
+- ``netcanon/migration/codecs/opnsense/render.py`` — symmetric
   privilege-15 emission for round-trip stability
 - OPNsense docs: https://docs.opnsense.org/manual/interfaces.html
   (DHCP client) and https://docs.opnsense.org/manual/firewall_users.html
@@ -35,14 +35,14 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalLocalUser,
 )
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.codecs.opnsense.parse import parse_intent
-from netconfig.migration.codecs.opnsense.render import render_intent
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense.parse import parse_intent
+from netcanon.migration.codecs.opnsense.render import render_intent
 
 pytestmark = pytest.mark.unit
 

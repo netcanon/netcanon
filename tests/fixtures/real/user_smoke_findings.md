@@ -239,11 +239,11 @@ empty-stub elision (correctly) suppresses an interface with no
 static IP / no description / no MTU / no L2.
 
 Investigation: `CanonicalInterface.dhcp_client: bool` exists on
-the schema (`netconfig/migration/canonical/intent.py` line 139)
+the schema (`netcanon/migration/canonical/intent.py` line 139)
 and IS consumed by both Cisco IOS-XE and MikroTik render paths
 (`if iface.dhcp_client: out.append(" ip address dhcp")` /
 equivalent).  But the OPNsense parser
-(`netconfig/migration/codecs/opnsense/parse.py
+(`netcanon/migration/codecs/opnsense/parse.py
 _parse_interface_zone_canonical`) only handles static
 `<ipaddr>X.X.X.X</ipaddr>` + `<subnet>N</subnet>`; the
 `<ipaddr>dhcp</ipaddr>` keyword path is dropped on the floor.
@@ -408,7 +408,7 @@ this one.
 
 | # | Issue | Fix commit | Approach |
 |---|---|---|---|
-| 1 | Cisco type-9 hash leak (4 targets) | `da8883f` (helper), `b2036aa` (fortigate), `7fbd44d` + `0fdf7e9` (junos), `10d8195` (opnsense) | Shared `netconfig/migration/_user_secrets.py` helper with `is_migratable(hashed, target_vendor)`.  Each codec gates the password emit; unmigratable hashes become review-comment lines (no payload leak) |
+| 1 | Cisco type-9 hash leak (4 targets) | `da8883f` (helper), `b2036aa` (fortigate), `7fbd44d` + `0fdf7e9` (junos), `10d8195` (opnsense) | Shared `netcanon/migration/_user_secrets.py` helper with `is_migratable(hashed, target_vendor)`.  Each codec gates the password emit; unmigratable hashes become review-comment lines (no payload leak) |
 | 2 | FortiGate duplicate `edit "portN"` | `b2036aa` | Multi-axis disambiguation in `format_port_identity` (`port-<stack>-<module>-<port>` for non-default coords) + render-time dedup belt-and-braces |
 | 3 | Aruba `interface 1/1` collision | `7d93085` | Render-time collision detection keyed on `iface.name`; emits one review-comment block naming each collider's `description`, then emits the first interface only |
 | 4 | MikroTik missing `bridge1` declaration + `bridge.11` typo | `3f528b7` | Synthesise `/interface bridge add name=bridge1` once when canonical has VLANs but no real bridges; SVI fallback name `bridge.N` → `vlanN` |
@@ -420,7 +420,7 @@ this one.
 
 ### New shared scaffolding
 
-- `netconfig/migration/_user_secrets.py` — cross-codec hash-policy helper with `classify_hash`, `is_migratable`, `format_review_comment`.  Public API stable; consumed by fortigate / junos / opnsense.  Aruba retains its own inline logic (older, equivalent, deferred refactor).
+- `netcanon/migration/_user_secrets.py` — cross-codec hash-policy helper with `classify_hash`, `is_migratable`, `format_review_comment`.  Public API stable; consumed by fortigate / junos / opnsense.  Aruba retains its own inline logic (older, equivalent, deferred refactor).
 - `CanonicalInterface.kind` — now respected by `translate_port_names` so source-side kind promotions (e.g. cisco Mgmt-vrf → kind=mgmt) propagate through port-rename to target codecs' kind=mgmt handlers.
 
 ### Follow-ups — RESOLVED in subsequent waves

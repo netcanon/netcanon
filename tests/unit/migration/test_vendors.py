@@ -1,5 +1,5 @@
 """
-Unit tests for vendor YAML loading (``netconfig.migration.vendors``).
+Unit tests for vendor YAML loading (``netcanon.migration.vendors``).
 
 Covers:
     * Built-in vendors load cleanly from the package directory.
@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.vendors import load_vendors
-from netconfig.models.migration import DeviceClass, VendorInfo
+from netcanon.migration.vendors import load_vendors
+from netcanon.models.migration import DeviceClass, VendorInfo
 
 pytestmark = pytest.mark.unit
 
@@ -162,8 +162,8 @@ class TestCodecVendorLinkage:
         """Each shipped codec's ``vendor_id`` must resolve to a loaded
         vendor — otherwise the API returns an empty display_name and
         the UI shows a blank."""
-        import netconfig.migration  # side-effect: register codecs
-        from netconfig.migration.codecs.registry import get_codec, list_codecs
+        import netcanon.migration  # side-effect: register codecs
+        from netcanon.migration.codecs.registry import get_codec, list_codecs
 
         vendors = load_vendors()
         for name in list_codecs():

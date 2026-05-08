@@ -49,13 +49,13 @@ RouterOS doc references (cited in render.py comments):
 """
 
 import pytest
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalStaticRoute,
 )
-from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
+from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
 
 
 

@@ -91,7 +91,7 @@ Notable FortiOS specifics:
 ## Cross-vendor mapping
 
 The canonical schema **does not model** firewall policies.  See
-`CanonicalIntent` in `netconfig/migration/canonical/intent.py` —
+`CanonicalIntent` in `netcanon/migration/canonical/intent.py` —
 the field set is hostname / domain / DNS / NTP / interfaces / VLANs
 / static-routes / DHCP / SNMP / LAGs / local-users / RADIUS plus
 the Tier-2 EVPN-VXLAN extensions.  No `firewall_policies` /

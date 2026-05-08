@@ -16,7 +16,7 @@ hence it gets ACL (extended / standard / ipv6) plus zone-based
 firewall plus NAT declarations.
 
 See also:
-- netconfig/migration/codecs/cisco_iosxe_cli/codec.py — declaration
+- netcanon/migration/codecs/cisco_iosxe_cli/codec.py — declaration
   site
 """
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 

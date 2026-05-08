@@ -1,7 +1,7 @@
 # Arista EOS 4.32.x — current GA train as of 2026.
 #
 # Pairs with the Arista EOS migration codec at
-# ``netconfig/migration/codecs/arista_eos`` so devices backed up via
+# ``netcanon/migration/codecs/arista_eos`` so devices backed up via
 # this definition produce the exact ``show running-config`` text the
 # codec parses.  Arista EOS is a deliberate Cisco IOS dialect — the
 # session behaviour mirrors the Cisco IOS-XE definition (enable mode +

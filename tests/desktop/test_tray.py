@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.tray``.
+Unit tests for ``netcanon_desktop.tray``.
 
 pystray and Pillow are mocked so these run without a display or OS tray service.
 """
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from netconfig_desktop.tray import TrayIcon
+from netcanon_desktop.tray import TrayIcon
 
 pytestmark = pytest.mark.desktop
 

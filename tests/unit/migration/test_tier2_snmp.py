@@ -15,14 +15,14 @@ from __future__ import annotations
 
 import pytest
 
-import netconfig.migration  # noqa: F401
+import netcanon.migration  # noqa: F401
 
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
 )

@@ -32,8 +32,8 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 
 pytestmark = pytest.mark.unit
 

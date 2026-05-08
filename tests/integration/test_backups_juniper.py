@@ -1,7 +1,7 @@
 """
 End-to-end backup tests for the Juniper Junos definition.
 
-Patches ``netconfig.api.routes.backups.get_collector`` (the single
+Patches ``netcanon.api.routes.backups.get_collector`` (the single
 factory the backup route imports) with a fake that returns a
 representative ``show configuration | display set | no-more`` capture,
 then drives the full POST/GET round-trip via TestClient.  Confirms:
@@ -32,10 +32,10 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from netconfig.collectors.base import BaseCollector
-from netconfig.config import Settings
-from netconfig.definitions.schema import DeviceDefinition
-from netconfig.main import create_app
+from netcanon.collectors.base import BaseCollector
+from netcanon.config import Settings
+from netcanon.definitions.schema import DeviceDefinition
+from netcanon.main import create_app
 
 pytestmark = pytest.mark.integration
 
@@ -117,7 +117,7 @@ def junos_app(junos_settings):
 def junos_client(junos_app):
     """TestClient with the canonical ``get_collector`` patch in place."""
     with patch(
-        "netconfig.api.routes.backups.get_collector",
+        "netcanon.api.routes.backups.get_collector",
         return_value=JunosFakeCollector(),
     ):
         with TestClient(junos_app, raise_server_exceptions=True) as c:
@@ -220,7 +220,7 @@ class TestJunosCapturedOutputCodecRoundTrip:
         captured = matches[0].read_text(encoding="utf-8")
 
         # 2. Feed the captured text directly through the migration codec.
-        from netconfig.migration.codecs.juniper_junos import JunosCodec
+        from netcanon.migration.codecs.juniper_junos import JunosCodec
 
         codec = JunosCodec()
         intent = codec.parse(captured)

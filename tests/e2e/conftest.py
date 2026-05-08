@@ -125,8 +125,8 @@ def live_server_url(_e2e_definitions_dir: Path, _e2e_configs_dir: Path) -> str:
     """
     import uvicorn
 
-    from netconfig.config import Settings
-    from netconfig.main import create_app
+    from netcanon.config import Settings
+    from netcanon.main import create_app
 
     settings = Settings(
         definitions_dir=_e2e_definitions_dir,
@@ -137,7 +137,7 @@ def live_server_url(_e2e_definitions_dir: Path, _e2e_configs_dir: Path) -> str:
 
     fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
     with patch(
-        "netconfig.api.routes.backups.get_collector",
+        "netcanon.api.routes.backups.get_collector",
         return_value=fake,
     ):
         app = create_app(settings)

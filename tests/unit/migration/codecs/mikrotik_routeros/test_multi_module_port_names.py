@@ -35,22 +35,22 @@ that ships SFP28 (CCR2004-1G-12S+2XS).
 """
 
 import pytest
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
 )
-from netconfig.migration.canonical.port_names import (
+from netcanon.migration.canonical.port_names import (
     PortIdentity,
     translate_port_names,
 )
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.mikrotik_routeros import (
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.mikrotik_routeros import (
     MikroTikRouterOSCodec,
 )
-from netconfig.migration.codecs.mikrotik_routeros.port_names import (
+from netcanon.migration.codecs.mikrotik_routeros.port_names import (
     format_port_identity,
 )
-from netconfig.migration.codecs.mikrotik_routeros.render import (
+from netcanon.migration.codecs.mikrotik_routeros.render import (
     render_intent,
 )
 

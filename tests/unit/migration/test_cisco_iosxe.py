@@ -17,12 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
-from netconfig.services.migration_validate import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
+from netcanon.services.migration_validate import (
     classify_tree,
     validate_against,
 )
@@ -454,7 +454,7 @@ class TestPipelineIntegration:
         that mock intersects iosxe, here we just prove the guard is
         wired in by checking the job reached a terminal success state
         when classes DO intersect."""
-        from netconfig.migration.codecs._mock import MockCodec
+        from netcanon.migration.codecs._mock import MockCodec
         src = CiscoIOSXECodec()
         tgt = MockCodec()
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
@@ -507,11 +507,11 @@ class TestPipelineIntegration:
 
 class TestRegistry:
     def test_cisco_iosxe_in_registry(self):
-        import netconfig.migration  # side-effect import
-        from netconfig.migration.codecs.registry import list_codecs
+        import netcanon.migration  # side-effect import
+        from netcanon.migration.codecs.registry import list_codecs
         assert "cisco_iosxe" in list_codecs()
 
     def test_get_codec_returns_instance(self):
-        from netconfig.migration.codecs.registry import get_codec
+        from netcanon.migration.codecs.registry import get_codec
         a = get_codec("cisco_iosxe")
         assert isinstance(a, CiscoIOSXECodec)

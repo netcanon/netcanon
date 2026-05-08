@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -25,8 +25,8 @@ from netconfig.migration.canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-from netconfig.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
 
 pytestmark = pytest.mark.unit
 

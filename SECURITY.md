@@ -40,7 +40,7 @@ the threat model below.
 ## Threat Model
 
 Netcanon is designed as a **local desktop application**.  The server
-component (`netconfig/`) binds exclusively to `127.0.0.1` and is not
+component (`netcanon/`) binds exclusively to `127.0.0.1` and is not
 intended to be exposed to a network.  All security controls are designed
 with this assumption.
 
@@ -54,8 +54,8 @@ with this assumption.
 
 ## Credential Storage (Encryption at Rest)
 
-**Module:** `netconfig/security/credentials.py`  
-**Stores:** `netconfig/storage/device_profile_store.py`, `netconfig/storage/schedule_store.py`
+**Module:** `netcanon/security/credentials.py`  
+**Stores:** `netcanon/storage/device_profile_store.py`, `netcanon/storage/schedule_store.py`
 
 Device passwords and enable passwords are **never written to disk in
 plaintext**.  The storage layer encrypts all credential fields with
@@ -112,7 +112,7 @@ Credentials are **not embedded in HTML**.
 
 ## Path Traversal Protection
 
-**File:** `netconfig/storage/file_store.py` → `FileConfigStore.resolve_path()`
+**File:** `netcanon/storage/file_store.py` → `FileConfigStore.resolve_path()`
 
 All config file access is gated through `resolve_path()`, which:
 
@@ -133,7 +133,7 @@ Covered by `tests/unit/test_storage.py` → `TestResolvePathSecurity` and
 
 ## Open-in-Editor Endpoint
 
-**File:** `netconfig/api/routes/configs.py` → `open_config()`
+**File:** `netcanon/api/routes/configs.py` → `open_config()`
 
 `POST /api/v1/configs/{filename}/open` is **only enabled on the desktop
 build** (`Settings.open_in_editor = True`).  It is disabled (403) on all
@@ -153,7 +153,7 @@ Covered by `tests/integration/test_configs_api.py` → `TestOpenConfig`.
 
 ## Input Validation — Host Field
 
-**Files:** `netconfig/models/device.py`, `netconfig/models/device_profile.py`
+**Files:** `netcanon/models/device.py`, `netcanon/models/device_profile.py`
 
 `DeviceTarget.host`, `DeviceProfileCreate.host`, and `DeviceProfileUpdate.host`
 all run through `_validate_host()`, which accepts only:
@@ -179,7 +179,7 @@ These directories are created automatically at runtime.
 
 ## Localhost-Only Binding
 
-**File:** `netconfig_desktop/settings.py`
+**File:** `netcanon_desktop/settings.py`
 
 The desktop app binds the embedded Uvicorn server to `127.0.0.1` only.
 `--host` / `--port` flags for public binding are a web-deployment-only

@@ -24,8 +24,8 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
 
 pytestmark = pytest.mark.unit
 

@@ -245,7 +245,7 @@ meta:
 
 # ---------------------------------------------------------------------------
 # Per-field expectations.  Walks CanonicalIntent top-down per
-# netconfig/migration/canonical/intent.py.
+# netcanon/migration/canonical/intent.py.
 # ---------------------------------------------------------------------------
 
 per_field_expectation:

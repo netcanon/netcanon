@@ -25,18 +25,18 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.port_names import translate_port_names
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.fortigate_cli.render import (
+from netcanon.migration.canonical.port_names import translate_port_names
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli.render import (
     _parent_for_vlan_iface,
 )
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 
 pytestmark = pytest.mark.unit

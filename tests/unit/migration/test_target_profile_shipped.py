@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.target_profiles import (
+from netcanon.migration.target_profiles import (
     ProfileLoadError,
     TargetLAGCaps,
     TargetModule,

@@ -14,21 +14,21 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -754,14 +754,14 @@ class TestInterfaceTypeInferenceRoundTrip:
 
 class TestRegistry:
     def test_mikrotik_in_registry(self):
-        import netconfig.migration  # side-effect
-        from netconfig.migration.codecs.registry import list_codecs
+        import netcanon.migration  # side-effect
+        from netcanon.migration.codecs.registry import list_codecs
         assert "mikrotik_routeros" in list_codecs()
 
     def test_four_codecs_registered(self):
         """The canonical-bridged codec ecosystem has 4 real codecs now."""
-        import netconfig.migration  # side-effect
-        from netconfig.migration.codecs.registry import list_codecs
+        import netcanon.migration  # side-effect
+        from netcanon.migration.codecs.registry import list_codecs
         codecs = list_codecs()
         assert "cisco_iosxe" in codecs
         assert "cisco_iosxe_cli" in codecs

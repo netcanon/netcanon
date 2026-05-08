@@ -18,26 +18,26 @@ from pathlib import Path
 
 import pytest
 
-import netconfig.migration  # noqa: F401
+import netcanon.migration  # noqa: F401
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.aruba_aoss.codec import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss.codec import (
     _format_port_list,
     _parse_port_list,
 )
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -565,7 +565,7 @@ class TestProbe:
 class TestCrossAdapter:
     def test_aruba_to_opnsense(self):
         """Aruba AOS-S parsed and rendered as OPNsense config.xml."""
-        from netconfig.migration.codecs.opnsense import OPNsenseCodec
+        from netcanon.migration.codecs.opnsense import OPNsenseCodec
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         job = run_plan(ArubaAOSSCodec(), OPNsenseCodec(), raw)
         assert job.status is MigrationJobStatus.completed
@@ -624,11 +624,11 @@ class TestCrossAdapter:
 
 class TestRegistry:
     def test_aruba_in_registry(self):
-        from netconfig.migration.codecs.registry import list_codecs
+        from netcanon.migration.codecs.registry import list_codecs
         assert "aruba_aoss" in list_codecs()
 
     def test_five_real_codecs_registered(self):
-        from netconfig.migration.codecs.registry import list_codecs
+        from netcanon.migration.codecs.registry import list_codecs
         codecs = list_codecs()
         for expected in (
             "cisco_iosxe", "cisco_iosxe_cli", "opnsense",

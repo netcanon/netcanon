@@ -284,7 +284,7 @@ class JobProgressPanel:
 
     The panel is rendered in ``base.html`` so it's available from every page
     and survives both navigation and full page reloads (the active job ID
-    is held in ``localStorage`` under ``netconfig.activeJob``).
+    is held in ``localStorage`` under ``netcanon.activeJob``).
 
     Per-device rows carry ``data-host`` and ``data-status`` attributes so
     tests can assert specific devices reach specific states without poking
@@ -337,7 +337,7 @@ class JobProgressPanel:
     def clear_storage(self) -> None:
         """Remove any persisted active-job key from localStorage."""
         self._page.evaluate(
-            "() => { try { localStorage.removeItem('netconfig.activeJob'); } catch(_) {} }"
+            "() => { try { localStorage.removeItem('netcanon.activeJob'); } catch(_) {} }"
         )
 
 

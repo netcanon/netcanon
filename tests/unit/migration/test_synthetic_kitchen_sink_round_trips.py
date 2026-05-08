@@ -44,13 +44,13 @@ from typing import Any
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.base import ParseError
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.base import ParseError
 
 # Side-effect imports to register every codec.  Mirrors
 # ``test_real_captures.py`` so synthetic discovery sees the same
 # registry view.
-from netconfig.migration.codecs import (  # noqa: F401
+from netcanon.migration.codecs import (  # noqa: F401
     arista_eos,
     aruba_aoss,
     cisco_iosxe,
@@ -60,7 +60,7 @@ from netconfig.migration.codecs import (  # noqa: F401
     mikrotik_routeros,
     opnsense,
 )
-from netconfig.migration.codecs.registry import get_codec, list_codecs
+from netcanon.migration.codecs.registry import get_codec, list_codecs
 
 pytestmark = pytest.mark.unit
 

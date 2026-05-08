@@ -64,7 +64,7 @@ class TestListMigrationAdapters:
         """Universal invariant — every shipped codec resolves to a
         non-empty vendor_display_name.  Guards against adding a new
         codec without registering its vendor YAML under
-        ``netconfig/migration/vendors/<vendor>.yaml``; without the
+        ``netcanon/migration/vendors/<vendor>.yaml``; without the
         YAML the frontend's vendor dropdown would fall back to the
         raw vendor_id string.
 
@@ -82,7 +82,7 @@ class TestListMigrationAdapters:
                 bad.append(entry["name"])
         assert not bad, (
             f"Codecs without a resolvable vendor_display_name: "
-            f"{bad}.  Add ``netconfig/migration/vendors/<vendor>.yaml`` "
+            f"{bad}.  Add ``netcanon/migration/vendors/<vendor>.yaml`` "
             f"with a ``display_name:`` field for each."
         )
 

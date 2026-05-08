@@ -1,6 +1,6 @@
 # What the cisco_iosxe NETCONF render actually emits
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical`
 (authoritative in-tree source for "what the render walks")
 Retrieved: 2026-05-01
 

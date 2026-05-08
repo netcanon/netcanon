@@ -29,7 +29,6 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: System Administrators",
     "Intended Audience :: Information Technology",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
@@ -84,10 +83,10 @@ Documentation = "https://github.com/OWNER/REPO/blob/main/README.md"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["netconfig*", "netconfig_desktop*"]
+include = ["netcanon*", "netcanon_desktop*"]
 
 [tool.setuptools.package-data]
-netconfig = ["templates/*.html"]
+netcanon = ["templates/*.html"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -104,8 +103,8 @@ markers = [
 addopts = "-x --strict-markers -q"
 
 [tool.coverage.run]
-source = ["netconfig"]
-omit = ["tests/*", "netconfig/templates/*"]
+source = ["netcanon"]
+omit = ["tests/*", "netcanon/templates/*"]
 
 [tool.coverage.report]
 show_missing = true

@@ -61,7 +61,7 @@ body:
       label: Provenance
       description: |
         Where did this capture come from?  e.g. "production switch in my own
-        network, sanitized via netconfig sanitize", "public-research repo
+        network, sanitized via netcanon sanitize", "public-research repo
         github.com/X/Y under MIT license", "vendor documentation example."
     validations:
       required: true

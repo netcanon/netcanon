@@ -15,8 +15,8 @@ Ships on two platforms kept at strict feature parity:
 
 | Platform | Package | Entry point |
 |---|---|---|
-| Web (browser) | `netconfig/` | `uvicorn netconfig.main:app` |
-| Desktop (Windows) | `netconfig_desktop/` | `python -m netconfig_desktop` |
+| Web (browser) | `netcanon/` | `uvicorn netcanon.main:app` |
+| Desktop (Windows) | `netcanon_desktop/` | `python -m netcanon_desktop` |
 
 ---
 
@@ -24,7 +24,7 @@ Ships on two platforms kept at strict feature parity:
 
 ```bash
 pip install -e ".[dev]"
-uvicorn netconfig.main:app --host 127.0.0.1 --port 8000
+uvicorn netcanon.main:app --host 127.0.0.1 --port 8000
 # -> http://127.0.0.1:8000        (UI)
 # -> http://127.0.0.1:8000/docs   (Swagger)
 ```
@@ -33,7 +33,7 @@ Desktop shell:
 
 ```bash
 pip install -e ".[desktop]"
-python -m netconfig_desktop
+python -m netcanon_desktop
 ```
 
 Run the test suite:
@@ -58,9 +58,9 @@ is the source of truth for pass counts.
 | Understand the architecture | [`ARCHITECTURE.md`](ARCHITECTURE.md) — four-layer model, canonical bridge, codec types |
 | Follow the contributor rules | [`CLAUDE.md`](CLAUDE.md) — hard rules, parity checklist, gotchas |
 | Look up project jargon | [`docs/glossary.md`](docs/glossary.md) — canonical, codec, mesh, ship-before-wire, target profile, etc. |
-| Read the canonical model overview | [`netconfig/migration/canonical/README.md`](netconfig/migration/canonical/README.md) — Tier 1 / 2 / 3 fields and promotion rules |
-| Add or change an HTTP route | [`netconfig/api/routes/README.md`](netconfig/api/routes/README.md) — frozen pipeline-stage signatures, endpoint inventory |
-| Add a new codec (vendor parser/renderer) | [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) |
+| Read the canonical model overview | [`netcanon/migration/canonical/README.md`](netcanon/migration/canonical/README.md) — Tier 1 / 2 / 3 fields and promotion rules |
+| Add or change an HTTP route | [`netcanon/api/routes/README.md`](netcanon/api/routes/README.md) — frozen pipeline-stage signatures, endpoint inventory |
+| Add a new codec (vendor parser/renderer) | [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md) |
 | Add a new device definition / target profile | [`definitions/README.md`](definitions/README.md) — layered definitions (family base + os_version / model overlays), target-profile module-variant schema |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — MTU as a worked example |
 | Add a new target-profile YAML | [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — flat-port + module-variant shapes, fit-check propagation |
@@ -78,7 +78,7 @@ is the source of truth for pass counts.
 ## Layout
 
 ```
-netconfig/              FastAPI application (shared by both platforms)
+netcanon/              FastAPI application (shared by both platforms)
  ├── api/routes/          HTTP endpoints (backups, migration, configs, …)
  ├── collectors/          SSH/NETCONF/REST fetchers — one factory,
  │                        one mock-point (`get_collector`)
@@ -91,7 +91,7 @@ netconfig/              FastAPI application (shared by both platforms)
  └── templates/           Jinja2 templates (every interactive element
                           must carry a data-testid — see CLAUDE.md)
 
-netconfig_desktop/      Windows tray/webview shell around the same server
+netcanon_desktop/      Windows tray/webview shell around the same server
 definitions/            Device definition YAMLs (shared with backup layer)
 tests/unit/             Pure-function tests, no I/O
 tests/integration/      FastAPI TestClient tests, SSH mocked at get_collector

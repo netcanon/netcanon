@@ -17,7 +17,7 @@ target -- see ``tests/fixtures/real/user_smoke_findings.md`` issues
   all, so VLAN-routed networks vanished in translation.
 
 The shared user-secret policy lives in
-``netconfig/migration/_user_secrets.py`` (commit ``da8883f``); we
+``netcanon/migration/_user_secrets.py`` (commit ``da8883f``); we
 exercise it transitively through the FortiGate render path here so
 the codec-level wiring is covered.
 """
@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
@@ -34,9 +34,9 @@ from netconfig.migration.canonical.intent import (
     CanonicalLocalUser,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.port_names import translate_port_names
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.canonical.port_names import translate_port_names
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 
 pytestmark = pytest.mark.unit
 
@@ -195,7 +195,7 @@ class TestIssue2PortCollision:
         ``port1``, MikroTik ``ether1``, OPNsense ``igb0``) leave
         stack/module unset -- the formatter takes the simple ``portN``
         path so existing translations stay unchanged."""
-        from netconfig.migration.codecs.fortigate_cli.port_names import (
+        from netcanon.migration.codecs.fortigate_cli.port_names import (
             classify_port_name,
             format_port_identity,
         )
@@ -210,10 +210,10 @@ class TestIssue2PortCollision:
         the disambiguator only kicks in when module > 0 (or stack >
         1) so single-stack/base-module Cisco sources don't see a
         breaking change."""
-        from netconfig.migration.codecs.fortigate_cli.port_names import (
+        from netcanon.migration.codecs.fortigate_cli.port_names import (
             format_port_identity,
         )
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
         )
         ident = cisco_classify("TenGigabitEthernet1/0/24")
@@ -222,10 +222,10 @@ class TestIssue2PortCollision:
 
     def test_module_one_uses_disambiguated_name(self) -> None:
         """Cisco Gi1/1/1 (module=1) must produce port-1-1-1."""
-        from netconfig.migration.codecs.fortigate_cli.port_names import (
+        from netcanon.migration.codecs.fortigate_cli.port_names import (
             format_port_identity,
         )
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
         )
         ident = cisco_classify("GigabitEthernet1/1/1")
@@ -361,7 +361,7 @@ class TestIssue6VlanChildEmit:
         the existing ``Vlan<id>`` interface short-circuits the
         synthetic emit (its name matches ``_looks_like_vlan_iface``
         + ``vlanid`` so the dedup guard suppresses the duplicate)."""
-        from netconfig.migration.codecs.fortigate_cli.render import (
+        from netcanon.migration.codecs.fortigate_cli.render import (
             _build_vlan_children,
         )
         vlan = CanonicalVlan(id=50, name="mgmt")

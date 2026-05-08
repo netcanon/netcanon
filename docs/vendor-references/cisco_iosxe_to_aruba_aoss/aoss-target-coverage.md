@@ -1,6 +1,6 @@
 # What the AOS-S target codec accepts vs what the cisco_iosxe parse emits
 
-Source: `netconfig.migration.codecs.aruba_aoss.codec.ArubaAOSSCodec` capability matrix
+Source: `netcanon.migration.codecs.aruba_aoss.codec.ArubaAOSSCodec` capability matrix
 Retrieved: 2026-05-01
 
 Source: [Aruba ArubaOS-Switch 16.11 Management and Configuration Guide](https://www.arubanetworks.com/techdocs/AOS-S/16.10/MCG/2930F-3810-5400/index.htm)

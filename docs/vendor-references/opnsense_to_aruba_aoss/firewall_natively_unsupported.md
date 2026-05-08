@@ -10,7 +10,7 @@ OPNsense's primary purpose is firewall / NAT / VPN.  `<filter>`,
 blocks carry the bulk of an OPNsense config.  None of these are
 modelled in `CanonicalIntent` v1.  The opnsense codec capability
 matrix lists `/filter/rule` and `/nat/outbound` as unsupported
-pending the netconfig-ext YANG module.  Such state may land in
+pending the netcanon-ext YANG module.  Such state may land in
 `raw_sections` (Tier 3, informational) on parse.
 
 ## Aruba AOS-S

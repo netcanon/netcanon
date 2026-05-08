@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.models.device_profile import DeviceProfile
-from netconfig.storage.device_profile_store import FileDeviceProfileStore
+from netcanon.models.device_profile import DeviceProfile
+from netcanon.storage.device_profile_store import FileDeviceProfileStore
 
 pytestmark = pytest.mark.unit
 

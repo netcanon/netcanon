@@ -51,14 +51,14 @@ These tests pin:
 """
 
 import pytest
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalLocalUser,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.mikrotik_routeros.render import (
+from netcanon.migration.codecs.mikrotik_routeros.render import (
     _routeros_group_for_privilege,
     render_intent,
 )

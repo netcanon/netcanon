@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`netconfig.migration.canonical.vlan_names`.
+Unit tests for :mod:`netcanon.migration.canonical.vlan_names`.
 
 Layer A of the cross-mesh test pyramid (per the P2 strategy
 document): transform-level correctness on synthetic
@@ -15,13 +15,13 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.vlan_names import (
+from netcanon.migration.canonical.vlan_names import (
     VlanRenameResult,
     build_vlan_rename_transform,
     translate_vlan_ids,

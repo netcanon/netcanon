@@ -27,8 +27,8 @@ when present, falling back to the zone tag for legacy XML.
 See also:
 - ``tests/fixtures/real/phase4_findings_aruba_aoss.md`` O1 + O2
 - ``tests/fixtures/real/phase4_findings_arista_eos.md`` OP-1
-- ``netconfig/migration/codecs/opnsense/render.py`` per-iface emit
-- ``netconfig/migration/codecs/opnsense/parse.py``
+- ``netcanon/migration/codecs/opnsense/render.py`` per-iface emit
+- ``netcanon/migration/codecs/opnsense/parse.py``
   ``_parse_interface_zone_canonical``
 """
 
@@ -36,12 +36,12 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
 )
-from netconfig.migration.codecs.opnsense.parse import parse_intent
-from netconfig.migration.codecs.opnsense.render import render_intent
+from netcanon.migration.codecs.opnsense.parse import parse_intent
+from netcanon.migration.codecs.opnsense.render import render_intent
 
 pytestmark = pytest.mark.unit
 

@@ -52,7 +52,7 @@ characters or fewer".  VLAN IDs 1-4094 are valid (1 reserved as
 ## Cross-vendor mapping
 
 The canonical model is VLAN-centric (see
-`netconfig/migration/canonical/intent.py` design principle 1: "VLANs
+`netcanon/migration/canonical/intent.py` design principle 1: "VLANs
 carry their port lists, NOT the other way around").  Cross-vendor
 translation hinges on the per-vendor projection transforms:
 

@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Netcanon{% endblock %}</title>
+  <!-- Theme boot: runs BEFORE the <style> block parses so the
+       document paints in the correct theme without a flash of
+       light content (FOUC).  Reads localStorage first (user
+       override), then falls back to `prefers-color-scheme` for
+       first-visit users.  Mutates `document.documentElement`
+       synchronously before any CSS applies. -->
+  <script>
+    (function() {
+      try {
+        var stored = localStorage.getItem('netcanon.theme.v1');
+        var theme;
+        if (stored === 'dark' || stored === 'light') {
+          theme = stored;
+        } else if (window.matchMedia &&
+                   window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          theme = 'dark';
+        } else {
+          theme = 'light';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+      } catch (_) {
+        /* localStorage access can fail in sandboxed iframes; fall
+           through to the default (light) already on the root. */
+      }
+    })();
+  </script>
+  <style>
+    /* ── Theme tokens ──
+       One set of CSS custom properties drives the whole app.  The
+       `data-theme` attribute on <html> (set by the boot script in
+       <head>) flips between light and dark values.  Adding a new
+       colour: declare it here on :root, override it on
+       [data-theme="dark"], reference via `var(--name)` in real
+       rules below.  Raw hex values that remain unmigrated are
+       light-mode-only; incremental migration is tolerated as the
+       80/20 dark-mode ship — no churn of every declaration at
+       once.  When adding new CSS elsewhere in this file, prefer
+       var(--...) over hex. */
+    :root {
+      --page-bg:        #f5f5f5;
+      --surface:        #ffffff;
+      --surface-alt:    #fafafa;
+      --surface-elev:   #e8e8f0;   /* table headers, elevated chrome */
+      --surface-hover:  #d0d0d8;
+      --text-primary:   #222222;
+      --text-muted:     #555555;
+      --text-faint:     #888888;
+      --border:         #eeeeee;
+      --border-strong:  #cccccc;
+
+      /* Nav: deliberately dark even in light mode today — keeping
+         the colour stable but exposing the token so dark-mode can
+         reposition it later if needed. */
+      --nav-bg:         #1a1a2e;
+      --nav-fg:         #eeeeee;
+      --nav-fg-hover:   #ffffff;
+      --nav-accent:     #7eb8f7;
+      --nav-accent-hov: #a8d0ff;
+
+      /* Accent + focus ring — same colour the nav uses for its
+         active-page underline; shared with input:focus outlines. */
+      --accent:         #7eb8f7;
+
+      /* Primary button — shares the nav's dark navy. */
+      --btn-primary-bg:       #1a1a2e;
+      --btn-primary-bg-hover: #2a2a4e;
+      --btn-primary-fg:       #ffffff;
+      --btn-secondary-bg:       #e2e3e5;
+      --btn-secondary-bg-hover: #d0d0d8;
+      --btn-secondary-fg:       #383d41;
+      --btn-danger-bg:        #dc3545;
+      --btn-danger-bg-hover:  #c82333;
+      --btn-danger-fg:        #ffffff;
+
+      /* Status badge palette — the warm/cool pairs used in
+         jobs/backup UI.  Kept as-is in dark mode (see override
+         block) so semantic colour cues stay recognisable. */
+      --badge-failed-bg:    #f8d7da;
+      --badge-failed-fg:    #721c24;
+      --badge-running-bg:   #fff3cd;
+      --badge-running-fg:   #856404;
+      --badge-pending-bg:   #e2e3e5;
+      --badge-pending-fg:   #383d41;
+      --badge-completed-bg: #d4edda;
+      --badge-completed-fg: #155724;
+      --badge-partial-bg:   #ffeaa7;
+      --badge-partial-fg:   #7a5d00;
+
+      --alert-info-bg:      #d1ecf1;
+      --alert-info-fg:      #0c5460;
+
+      /* Shadows — stronger in dark mode since the base is
+         off-black and less-contrasty shadows disappear. */
+      --shadow-card:  0 1px 3px rgba(0,0,0,.1);
+      --shadow-lift:  0 2px 8px rgba(0,0,0,.25);
+      --shadow-modal: 0 4px 24px rgba(0,0,0,.3);
+
+      /* `<pre>` config-viewer chrome — already dark even in
+         light mode (VS Code Dark+ palette).  Expose tokens so
+         the viewer itself re-theme-able in future. */
+      --pre-bg:  #1e1e1e;
+      --pre-fg:  #d4d4d4;
+    }
+    /* Dark mode: off-black base (#121212–#1e1e1e range — avoids the
+       halation of pure #000 on OLED while keeping contrast high);
+       elevated surfaces step LIGHTER, inverting the light-mode
+       convention.  Nav colours keep their dark navy — it already
+       reads correctly against a dark body because Netcanon's nav
+       was always dark.  Accent + badge colours retune for enough
+       contrast against the dark body without losing their
+       semantic meaning. */
+    [data-theme="dark"] {
+      --page-bg:        #121212;
+      --surface:        #1e1e1e;
+      --surface-alt:    #262626;
+      --surface-elev:   #2a2a38;
+      --surface-hover:  #333344;
+      --text-primary:   #e8e8ea;
+      --text-muted:     #b0b0b8;
+      --text-faint:     #808088;
+      --border:         #333338;
+      --border-strong:  #555560;
+
+      --nav-bg:         #0d0d18;   /* slightly darker than body */
+      --nav-fg:         #e8e8ea;
+      --nav-fg-hover:   #ffffff;
+      --nav-accent:     #7eb8f7;
+      --nav-accent-hov: #a8d0ff;
+
+      --accent:         #7eb8f7;
+
+      --btn-primary-bg:       #2e2e50;   /* lifted for visibility */
+      --btn-primary-bg-hover: #3e3e68;
+      --btn-primary-fg:       #ffffff;
+      --btn-secondary-bg:       #333344;
+      --btn-secondary-bg-hover: #44445a;
+      --btn-secondary-fg:       #e8e8ea;
+      --btn-danger-bg:        #c0392b;
+      --btn-danger-bg-hover:  #a5281b;
+      --btn-danger-fg:        #ffffff;
+
+      /* Badges: darker tones with brighter foreground text for
+         WCAG 4.5:1 body-text contrast.  Semantic colour cues
+         (red=fail, green=ok, yellow=running) preserved. */
+      --badge-failed-bg:    #4a1d1f;
+      --badge-failed-fg:    #ffb3b8;
+      --badge-running-bg:   #4a3a0a;
+      --badge-running-fg:   #ffdf70;
+      --badge-pending-bg:   #2e3033;
+      --badge-pending-fg:   #c0c4c8;
+      --badge-completed-bg: #183e23;
+      --badge-completed-fg: #a8e6b8;
+      --badge-partial-bg:   #4a3d05;
+      --badge-partial-fg:   #ffe088;
+
+      --alert-info-bg:      #1a3a44;
+      --alert-info-fg:      #9ed8e8;
+
+      --shadow-card:  0 1px 3px rgba(0,0,0,.4);
+      --shadow-lift:  0 2px 10px rgba(0,0,0,.55);
+      --shadow-modal: 0 4px 26px rgba(0,0,0,.65);
+
+      --pre-bg:  #181818;
+      --pre-fg:  #d4d4d4;
+    }
+    /* Smooth the transition on theme flip so the page doesn't
+       snap — 150ms is short enough to feel instant but visible.
+       Transitions are scoped to colour-ish properties to avoid
+       layout-shift judder on other CSS animations. */
+    body, nav, button, input, select, textarea, table, th, td,
+    .badge, form, .alert, pre {
+      transition: background-color .15s ease, color .15s ease,
+                  border-color .15s ease;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: var(--page-bg); color: var(--text-primary); }
+    /* Nav: full-width dark background, inner content constrained to
+       match <main>'s 1100px max-width so the brand aligns with the
+       left edge of page content and the last link aligns with the
+       right edge.  `max(1rem, calc(50vw - 550px))` expands horizontal
+       padding on wide viewports (keeping content at 1100px wide) and
+       collapses to a 1rem gutter below ~1132px so narrow screens
+       still use the full width. */
+    nav { background: var(--nav-bg); padding: .75rem max(1rem, calc(50vw - 550px)); display: flex; gap: 1.5rem; align-items: center; }
+    nav a { color: var(--nav-fg); text-decoration: none; font-size: .95rem; }
+    nav a:hover { color: var(--nav-fg-hover); text-decoration: underline; }
+    nav a.active { color: var(--nav-fg-hover); border-bottom: 2px solid var(--nav-accent); padding-bottom: 2px; }
+    nav .brand { color: var(--nav-accent); font-weight: bold; font-size: 1.1rem; text-decoration: none; }
+    nav .brand:hover { color: var(--nav-accent-hov); text-decoration: none; }
+    /* Spacer pushes the theme toggle (and any future right-rail
+       nav items) to the far right, visually separating them from
+       the page-nav cluster on the left. */
+    nav .spacer { flex: 1 1 auto; }
+    /* Theme toggle: icon-only button, always visible on the top
+       bar.  Sun/moon symbol flips via CSS based on
+       [data-theme].  Transparent background, hover lightens. */
+    #nav-theme-toggle {
+      background: transparent;
+      color: var(--nav-fg);
+      border: 1px solid transparent;
+      border-radius: 4px;
+      padding: .3rem .55rem;
+      font-size: 1rem;
+      line-height: 1;
+      cursor: pointer;
+      font-weight: normal;
+      transition: background-color .12s ease, color .12s ease,
+                  border-color .12s ease;
+    }
+    #nav-theme-toggle:hover,
+    #nav-theme-toggle:focus-visible {
+      background: rgba(255,255,255,.08);
+      color: var(--nav-fg-hover);
+      border-color: rgba(255,255,255,.18);
+      outline: none;
+    }
+    /* Icon swap: light theme shows moon (click to go dark);
+       dark theme shows sun (click to go light).  Using CSS
+       attribute-state + content swap means no DOM mutation on
+       toggle — the button's aria-label is updated by JS for
+       screen-reader accuracy but the glyph flips via CSS alone. */
+    #nav-theme-toggle .moon,
+    #nav-theme-toggle .sun {
+      display: none;
+    }
+    [data-theme="light"] #nav-theme-toggle .moon { display: inline; }
+    [data-theme="dark"]  #nav-theme-toggle .sun  { display: inline; }
+
+    main { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+    h1 { margin-bottom: 1.25rem; font-size: 1.5rem; }
+    h2 { margin: 1.5rem 0 .75rem; font-size: 1.15rem; }
+    table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 6px; overflow: hidden; box-shadow: var(--shadow-card); color: var(--text-primary); }
+    th { background: var(--surface-elev); text-align: left; padding: .5rem .75rem; font-size: .85rem; color: var(--text-primary); }
+    td { padding: .5rem .75rem; font-size: .9rem; border-top: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: var(--surface-alt); }
+    .badge { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .8rem; font-weight: 600; }
+    .badge-failed  { background: var(--badge-failed-bg);    color: var(--badge-failed-fg); }
+    .badge-running { background: var(--badge-running-bg);   color: var(--badge-running-fg); }
+    .badge-pending { background: var(--badge-pending-bg);   color: var(--badge-pending-fg); }
+    .badge-completed { background: var(--badge-completed-bg); color: var(--badge-completed-fg); }
+    .badge-partial { background: var(--badge-partial-bg);   color: var(--badge-partial-fg); }
+    form { background: var(--surface); padding: 1.25rem; border-radius: 6px; box-shadow: var(--shadow-card); color: var(--text-primary); }
+    .form-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-end; margin-bottom: .75rem; }
+    .form-group { display: flex; flex-direction: column; gap: .25rem; }
+    label { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
+    input, select { padding: .4rem .6rem; border: 1px solid var(--border-strong); border-radius: 4px; font-size: .9rem; background: var(--surface); color: var(--text-primary); }
+    input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    button { padding: .45rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: .9rem; font-weight: 600; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
+    .btn-primary:hover:not(:disabled) { background: var(--btn-primary-bg-hover); }
+    .btn-secondary { background: var(--btn-secondary-bg); color: var(--btn-secondary-fg); }
+    .btn-secondary:hover:not(:disabled) { background: var(--btn-secondary-bg-hover); }
+    .btn-danger { background: var(--btn-danger-bg); color: var(--btn-danger-fg); font-size: .8rem; padding: .3rem .7rem; }
+    .btn-danger:hover:not(:disabled) { background: var(--btn-danger-bg-hover); }
+    .empty-msg { color: var(--text-faint); font-style: italic; padding: 1rem 0; }
+    pre { background: var(--pre-bg); color: var(--pre-fg); padding: 1rem; border-radius: 6px; overflow: auto; font-size: .85rem; line-height: 1.5; }
+    .alert { padding: .75rem 1rem; border-radius: 4px; margin-bottom: 1rem; }
+    .alert-info { background: var(--alert-info-bg); color: var(--alert-info-fg); }
+    /* Config viewer modal.  The INNER chrome (header + pre) is
+       dark in both themes — VS Code "Dark+" palette is designed
+       for dark surfaces and we keep it in light mode too because
+       it's the de-facto code-viewer convention.  Only the outer
+       box background is theme-sensitive (it shows at the
+       border-radius rounded corners). */
+    #_config-viewer { display:none; position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:10000; align-items:center; justify-content:center; }
+    #_config-viewer-box { background:var(--surface); border-radius:8px; box-shadow:var(--shadow-modal); width:min(800px,94vw); max-height:80vh; display:flex; flex-direction:column; overflow:hidden; }
+    #_config-viewer-header { display:flex; align-items:center; padding:.5rem 1rem; background:#1a1a2e; color:#eee; gap:.5rem; flex-wrap:wrap; }
+    #_config-viewer-title { flex:1 1 180px; font-family:monospace; font-size:.9rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #_config-viewer-search { background:#2c2c44; color:#eee; border:1px solid #555; border-radius:3px;
+                             padding:.2rem .45rem; font-size:.8rem; width:150px; }
+    #_config-viewer-search:focus { outline:1px solid #7eb8f7; border-color:#7eb8f7; }
+    #_config-viewer-search-count { font-size:.75rem; color:#bbb; min-width:4.5rem; text-align:center;
+                                   font-family:monospace; }
+    .cv-nav-btn { background:transparent; color:#eee; font-size:.85rem; padding:.15rem .4rem;
+                  border:1px solid #555; border-radius:3px; cursor:pointer; font-weight:normal; }
+    .cv-nav-btn:hover:not(:disabled) { background:#333; }
+    .cv-nav-btn:disabled { opacity:.4; cursor:not-allowed; }
+    #_config-viewer-box pre { flex:1; overflow:auto; margin:0; border-radius:0; white-space:pre; }
+    /* Syntax highlighting — VS Code "Dark+" inspired palette */
+    #_config-viewer-pre .tok-comment { color:#6a9955; font-style:italic; }
+    #_config-viewer-pre .tok-keyword { color:#569cd6; font-weight:600; }
+    #_config-viewer-pre .tok-string  { color:#ce9178; }
+    #_config-viewer-pre .tok-ip      { color:#b5cea8; }
+    #_config-viewer-pre .tok-number  { color:#b5cea8; }
+    #_config-viewer-pre .tok-tag     { color:#569cd6; }
+    #_config-viewer-pre .tok-attr    { color:#9cdcfe; }
+    /* Search highlighting */
+    #_config-viewer-pre mark         { background:#665a00; color:#fff3b0; border-radius:2px; padding:0 1px; }
+    #_config-viewer-pre mark.current { background:#d4a017; color:#1e1e1e; outline:1px solid #ffe066; }
+  </style>
+</head>
+<body>
+  <nav data-testid="nav">
+    <a href="/" class="brand" data-testid="nav-brand">Netcanon</a>
+    <a href="/"            data-testid="nav-home"        {% if active_page == 'home' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
+    <a href="/devices"     data-testid="nav-devices"     {% if active_page == 'devices' %}class="active" aria-current="page"{% endif %}>Devices</a>
+    <a href="/jobs"        data-testid="nav-jobs"        {% if active_page == 'jobs' %}class="active" aria-current="page"{% endif %}>Jobs</a>
+    <a href="/schedules"   data-testid="nav-schedules"   {% if active_page == 'schedules' %}class="active" aria-current="page"{% endif %}>Schedules</a>
+    <a href="/configs"     data-testid="nav-configs"     {% if active_page == 'configs' %}class="active" aria-current="page"{% endif %}>Configs</a>
+    <a href="/definitions" data-testid="nav-definitions" {% if active_page == 'definitions' %}class="active" aria-current="page"{% endif %}>Definitions</a>
+    <a href="/migrate"     data-testid="nav-migrate"     {% if active_page == 'migrate' %}class="active" aria-current="page"{% endif %}>Migrate</a>
+    <a href="/docs"        data-testid="nav-api-docs">API Docs</a>
+    <span class="spacer" aria-hidden="true"></span>
+    <button type="button"
+            id="nav-theme-toggle"
+            data-testid="nav-theme-toggle"
+            aria-label="Switch theme"
+            title="Switch between light and dark theme"
+            onclick="toggleTheme()">
+      <span class="moon" aria-hidden="true">&#x263D;</span>
+      <span class="sun"  aria-hidden="true">&#x2600;</span>
+    </button>
+  </nav>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  <!-- Config viewer modal -->
+  <div id="_config-viewer" data-testid="config-viewer"
+       role="dialog" aria-labelledby="_config-viewer-title" aria-modal="true"
+       onclick="if(event.target===this)closeConfigViewer()">
+    <div id="_config-viewer-box">
+      <div id="_config-viewer-header">
+        <span id="_config-viewer-title" data-testid="config-viewer-title"></span>
+        <input type="search" id="_config-viewer-search"
+               data-testid="config-viewer-search"
+               placeholder="Search…" aria-label="Search within config"
+               autocomplete="off" spellcheck="false">
+        <span id="_config-viewer-search-count"
+              data-testid="config-viewer-search-count"
+              aria-live="polite"></span>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-search-prev"
+                onclick="configViewerNav(-1)" aria-label="Previous match"
+                title="Previous match (Shift+Enter)">&#9650;</button>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-search-next"
+                onclick="configViewerNav(1)" aria-label="Next match"
+                title="Next match (Enter)">&#9660;</button>
+        <button type="button" class="cv-nav-btn"
+                data-testid="config-viewer-close"
+                onclick="closeConfigViewer()" aria-label="Close"
+                style="font-size:1.1rem">&#10005;</button>
+      </div>
+      <pre id="_config-viewer-pre" data-testid="config-viewer-content">Loading&#8230;</pre>
+    </div>
+  </div>
+
+  <!-- Job progress panel (global — persists across navigation & reloads) -->
+  <style>
+    #_job-progress {
+      position:fixed; bottom:1rem; right:1rem; width:min(420px,92vw);
+      z-index:9998; background:var(--surface); border-radius:8px;
+      box-shadow:var(--shadow-lift); font-size:.85rem;
+      overflow:hidden; border:1px solid var(--border);
+      color:var(--text-primary);
+      /* Default display is driven by inline style on the element +
+         JS — don't set display:none here, it defeats .style.display=''. */
+    }
+    #_job-progress-header {
+      display:flex; align-items:center; gap:.5rem; padding:.5rem .75rem;
+      background:var(--nav-bg); color:var(--nav-fg); cursor:pointer; user-select:none;
+    }
+    #_job-progress-header:hover { background:var(--btn-primary-bg-hover); }
+    #_job-progress-summary { flex:1; font-family:monospace; font-size:.82rem; }
+    #_job-progress-chevron { font-size:.7rem; transition:transform .15s; }
+    #_job-progress-chevron.open { transform:rotate(180deg); }
+    #_job-progress-body {
+      max-height:40vh; overflow:auto; padding:.25rem 0;
+    }
+    .jp-row {
+      display:flex; align-items:center; gap:.5rem; padding:.3rem .75rem;
+      border-top:1px solid var(--border); font-size:.82rem;
+    }
+    .jp-row:first-child { border-top:none; }
+    .jp-icon {
+      width:1rem; flex:0 0 1rem; text-align:center; font-weight:700;
+      font-family:monospace;
+    }
+    .jp-icon-queued   { color:#888; }
+    .jp-icon-running  { color:#856404; animation:jp-spin 1.2s linear infinite; }
+    .jp-icon-success  { color:#155724; }
+    .jp-icon-failed   { color:#721c24; }
+    @keyframes jp-spin { to { transform:rotate(360deg); } }
+    .jp-host { flex:1; font-family:monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .jp-state { color:var(--text-muted); font-size:.75rem; text-transform:uppercase; letter-spacing:.03em; }
+    .jp-duration { color:var(--text-faint); font-size:.72rem; font-family:monospace; }
+    .jp-error {
+      font-size:.72rem; color:var(--badge-failed-fg); padding:.1rem .75rem .3rem 2.25rem;
+      font-family:monospace; overflow:hidden; text-overflow:ellipsis;
+      white-space:nowrap;
+    }
+    #_job-progress-footer {
+      display:none; padding:.4rem .75rem; background:var(--surface-alt);
+      border-top:1px solid var(--border); gap:.5rem; align-items:center;
+      justify-content:flex-end; font-size:.8rem;
+    }
+    #_job-progress-footer a { color:var(--accent); text-decoration:none; margin-right:auto; }
+    #_job-progress-footer a:hover { text-decoration:underline; }
+    /* Toast variants: theme-aware colour pairs driven by CSS vars
+       so dark mode inherits the same semantic hues.  The showToast
+       JS assigns one of these classes instead of setting inline
+       style.background / style.color. */
+    #_toast.toast-info    { background:var(--alert-info-bg);      color:var(--alert-info-fg); }
+    #_toast.toast-error   { background:var(--badge-failed-bg);    color:var(--badge-failed-fg); }
+    #_toast.toast-success { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  </style>
+  <div id="_job-progress"
+       data-testid="job-progress-panel"
+       role="region" aria-label="Backup job progress"
+       aria-live="polite"
+       style="display:none">
+    <div id="_job-progress-header"
+         data-testid="job-progress-header"
+         onclick="toggleJobProgress()">
+      <strong id="_job-progress-job-id"
+              data-testid="job-id-display"></strong>
+      <span id="_job-progress-summary"
+            data-testid="job-progress-summary"
+            aria-label="Job progress summary"></span>
+      <span id="_job-progress-status"
+            data-testid="job-status-display"
+            style="display:none"></span>
+      <span id="_job-progress-chevron"
+            data-testid="job-progress-toggle"
+            aria-hidden="true">&#9660;</span>
+    </div>
+    <div id="_job-progress-body"
+         data-testid="job-progress-body"></div>
+    <div id="_job-progress-footer"
+         data-testid="job-progress-footer">
+      <a href="#" id="_job-progress-view-link"
+         data-testid="job-progress-view-link">View full job details</a>
+      <button type="button" class="btn-secondary"
+              data-testid="job-progress-dismiss"
+              onclick="dismissJobProgress()"
+              style="padding:.2rem .7rem;font-size:.78rem">Dismiss</button>
+    </div>
+  </div>
+
+  <!-- Toast notification -->
+  <div id="_toast" data-testid="toast" role="status" aria-live="polite" aria-atomic="true"
+       style="position:fixed;bottom:1.5rem;right:1.5rem;max-width:360px;z-index:9999;display:none;
+              padding:.75rem 1rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);
+              font-size:.9rem;line-height:1.4">
+    <span id="_toast-msg"></span>
+  </div>
+
+  <script>
+  /* ── Localize UTC timestamps ── */
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-utc]').forEach(el => {
+      try { el.textContent = new Date(el.dataset.utc).toLocaleString(); } catch (_) {}
+    });
+  });
+
+  /* ── Toast notifications ── */
+  /* Variant is applied via CSS class so dark-mode tokens drive the
+     colour pair — inline background/color hex would ignore the
+     theme. */
+  function showToast(msg, type) {
+    var variant = (type === 'error' || type === 'success') ? type : 'info';
+    var toast = document.getElementById('_toast');
+    var msgEl = document.getElementById('_toast-msg');
+    toast.classList.remove('toast-info', 'toast-error', 'toast-success');
+    toast.classList.add('toast-' + variant);
+    msgEl.textContent = msg;
+    toast.style.display = '';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(function() { toast.style.display = 'none'; }, 4000);
+  }
+  /* ── Config viewer (extracted to _partials/config-viewer.js) ── */
+  {% include "_partials/config-viewer.js" %}
+
+
+  /* ── Job progress panel (extracted to _partials/job-progress.js) ── */
+  {% include "_partials/job-progress.js" %}
+
+
+  /* ── Theme toggle (extracted to _partials/theme-toggle.js) ── */
+  {% include "_partials/theme-toggle.js" %}
+
+  /* ── Config downloader (WebView-safe blob approach) ── */
+  async function downloadConfig(filename) {
+    try {
+      var res = await fetch('/api/v1/configs/' + encodeURIComponent(filename));
+      if (!res.ok) { showToast('Download failed: ' + res.statusText, 'error'); return; }
+      var blob = new Blob([await res.text()], { type: 'text/plain' });
+      var url  = URL.createObjectURL(blob);
+      var a    = document.createElement('a');
+      a.href = url; a.download = filename; a.style.display = 'none';
+      document.body.appendChild(a); a.click();
+      setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    } catch(e) { showToast('Download error: ' + e.message, 'error'); }
+  }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -24,8 +24,8 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from netconfig.config import Settings
-from netconfig.main import create_app
+from netcanon.config import Settings
+from netcanon.main import create_app
 from tests.conftest import FakeCollector
 
 pytestmark = pytest.mark.integration
@@ -99,7 +99,7 @@ def arista_client(arista_app):
     returns the canned EOS config."""
     fake = FakeCollector(output=ARISTA_FAKE_OUTPUT)
     with patch(
-        "netconfig.api.routes.backups.get_collector",
+        "netcanon.api.routes.backups.get_collector",
         return_value=fake,
     ):
         with TestClient(arista_app, raise_server_exceptions=True) as c:
@@ -234,7 +234,7 @@ class _RaisingCollector:
 class TestAristaBackupFailureSurface:
     def test_collector_failure_marks_result_failed(self, arista_app):
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=_RaisingCollector(),
         ):
             with TestClient(arista_app, raise_server_exceptions=True) as c:

@@ -48,7 +48,7 @@ All four cells trip on the same field with identical drift:
 | user_contrib_fg100e_fos7213.conf | `dns_servers` | `["1.1.1.1", "8.8.8.8"]` | `[]` | A |
 | synthetic/kitchen_sink.conf | `dns_servers` | `["1.1.1.1", "8.8.8.8"]` | `[]` | A |
 
-**Locus (A):** `netconfig/migration/codecs/opnsense/render.py` —
+**Locus (A):** `netcanon/migration/codecs/opnsense/render.py` —
 `render_canonical()` builds `<system>` (lines 75–179) with
 hostname / domain / RADIUS / users / privs but **never emits
 `<dnsserver>` from `intent.dns_servers`**.  The only `dns_servers`
@@ -82,7 +82,7 @@ in lock-step on the same iface list:
 shift pattern across the same `(cluster-vlan, dmz, fortihome-ssl,
 fortilink, ha1)` interface group — strongly indicates a single
 upstream cause, not three independent bugs.  The smoking gun is in
-`netconfig/migration/codecs/juniper_junos/render.py` lines 207–268:
+`netcanon/migration/codecs/juniper_junos/render.py` lines 207–268:
 the `interface-range` auto-collapse promotes any group of ≥3
 interfaces sharing `(mtu, description, enabled)` into an
 `AUTO-RANGE-N` block + per-iface `member` lines, then **suppresses
@@ -108,7 +108,7 @@ Single synthetic fixture: `kitchen_sink.conf`.
 |---|---|---|
 | `static_routes` | per-record `interface` field: source `port1`/`agg1` → target `""`/`""` | A (also B for stale-YAML wording) |
 
-**Locus (A):** `netconfig/migration/codecs/mikrotik_routeros/render.py`
+**Locus (A):** `netcanon/migration/codecs/mikrotik_routeros/render.py`
 lines 365–378 emits `/ip route add dst-address=... gateway=GW`.
 The interface column is emitted **only when `route.gateway` is
 empty** (`elif route.interface:` branch).  Both fixture routes
@@ -185,6 +185,6 @@ fortigate_cli source-vendor CODEC_BUGs.
   — 309–352 (interface sub-fields good)
 - `tests/fixtures/cross_vendor_expectations/fortigate_cli__mikrotik_routeros.yaml`
   — 231–244 (`static_routes` good)
-- `netconfig/migration/codecs/opnsense/render.py` — fix #1 locus
-- `netconfig/migration/codecs/juniper_junos/render.py` — fix #2 locus
-- `netconfig/migration/codecs/mikrotik_routeros/render.py` — fix #3 locus
+- `netcanon/migration/codecs/opnsense/render.py` — fix #1 locus
+- `netcanon/migration/codecs/juniper_junos/render.py` — fix #2 locus
+- `netcanon/migration/codecs/mikrotik_routeros/render.py` — fix #3 locus

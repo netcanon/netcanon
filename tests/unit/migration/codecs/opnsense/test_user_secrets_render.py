@@ -7,7 +7,7 @@ be re-used on the target; emitting them as-is leaks the source hash
 literal as the password element value (CRITICAL security bug — see
 ``tests/fixtures/real/user_smoke_findings.md`` issue #1).
 
-Render must consult :func:`netconfig.migration._user_secrets.is_migratable`
+Render must consult :func:`netcanon.migration._user_secrets.is_migratable`
 and either:
 
 * emit ``<password>$2y$10$...</password>`` for migratable bcrypt or
@@ -18,8 +18,8 @@ and either:
   ``<password>`` child entirely for unmigratable formats.
 
 See also:
-- ``netconfig/migration/_user_secrets.py`` — shared policy module
-- ``netconfig/migration/codecs/opnsense/render.py`` — implementation
+- ``netcanon/migration/_user_secrets.py`` — shared policy module
+- ``netcanon/migration/codecs/opnsense/render.py`` — implementation
 - ``tests/unit/migration/codecs/aruba_aoss/test_loopback_oobm_render.py``
   — sister tests for the Aruba comment-form path
 """
@@ -28,11 +28,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalLocalUser,
 )
-from netconfig.migration.codecs.opnsense.render import render_intent
+from netcanon.migration.codecs.opnsense.render import render_intent
 
 pytestmark = pytest.mark.unit
 

@@ -6,7 +6,7 @@ Retrieved: 2026-05-01
 Source: [Aruba ArubaOS-Switch 16.11 IPv4 Configuration Guide for 2930F/2930M/3810/5400R](https://www.arubanetworks.com/techdocs/AOS-S/16.10/IPv4/2930F-3810-5400/index.htm)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
 (in-tree code documenting what the parser carries through)
 Retrieved: 2026-05-01
 

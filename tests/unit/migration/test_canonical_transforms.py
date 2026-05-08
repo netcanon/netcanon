@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`netconfig.migration.canonical.transforms` — the
+Unit tests for :mod:`netcanon.migration.canonical.transforms` — the
 shared post-parse bridging transforms between port-centric and VLAN-
 centric VLAN membership representations.  Covers Bug 3 from
 translator-plans.txt (KNOWN DATA-LOSS BUGS).
@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.transforms import (
+from netcanon.migration.canonical.transforms import (
     project_switchport_to_vlan,
     project_vlan_to_switchport,
 )
@@ -206,8 +206,8 @@ class TestCiscoToArubaSwitchport:
     survive into Aruba's VLAN-centric output."""
 
     def test_access_ports_appear_in_aruba_vlan_untagged(self):
-        from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+        from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 
         raw = """\
 hostname sw1
@@ -250,8 +250,8 @@ end
         assert "GigabitEthernet1/0/3" in aruba_out
 
     def test_trunk_port_appears_in_aruba_vlan_tagged(self):
-        from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+        from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 
         raw = """\
 hostname sw1

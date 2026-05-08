@@ -1,5 +1,5 @@
 """
-Fixtures for the netconfig_desktop unit tests.
+Fixtures for the netcanon_desktop unit tests.
 
 All PySide6 (Qt — QApplication / QMainWindow / QWebEngineView), pystray, and
 uvicorn interactions are mocked so the tests run without a display, tray OS
@@ -98,8 +98,8 @@ def mock_pyside6() -> Generator[MagicMock, None, None]:
 
 @pytest.fixture()
 def mock_pystray() -> Generator[MagicMock, None, None]:
-    """Patch pystray inside ``netconfig_desktop.tray``."""
-    with patch("netconfig_desktop.tray.pystray") as mock_pt:
+    """Patch pystray inside ``netcanon_desktop.tray``."""
+    with patch("netcanon_desktop.tray.pystray") as mock_pt:
         fake_icon = MagicMock(name="pystray.Icon")
         mock_pt.Icon.return_value = fake_icon
         mock_pt.Menu = MagicMock(return_value=MagicMock())
@@ -110,20 +110,20 @@ def mock_pystray() -> Generator[MagicMock, None, None]:
 @pytest.fixture()
 def mock_generate_tray_image() -> Generator[MagicMock, None, None]:
     """Patch Pillow-backed icon generation so tests need no Pillow."""
-    with patch("netconfig_desktop.tray.generate_tray_image") as mock_img:
+    with patch("netcanon_desktop.tray.generate_tray_image") as mock_img:
         mock_img.return_value = MagicMock(name="PIL.Image")
         yield mock_img
 
 
 @pytest.fixture()
 def mock_write_ico() -> Generator[MagicMock, None, None]:
-    """Patch ICO writing (``from netconfig_desktop.icons import write_ico`` in start()).
+    """Patch ICO writing (``from netcanon_desktop.icons import write_ico`` in start()).
 
     Because the import happens inside the function body each call, patching the
-    function on the ``netconfig_desktop.icons`` module is the correct target.
+    function on the ``netcanon_desktop.icons`` module is the correct target.
     """
-    with patch("netconfig_desktop.icons.write_ico") as mock_ico:
-        mock_ico.return_value = "/tmp/netconfig.ico"
+    with patch("netcanon_desktop.icons.write_ico") as mock_ico:
+        mock_ico.return_value = "/tmp/netcanon.ico"
         yield mock_ico
 
 

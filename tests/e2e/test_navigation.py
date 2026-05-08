@@ -66,7 +66,7 @@ class TestThemeToggle:
 
     * Button is always visible on the nav across pages.
     * Click flips `<html data-theme>` between ``light``/``dark``.
-    * Choice persists to ``localStorage["netconfig.theme.v1"]``.
+    * Choice persists to ``localStorage["netcanon.theme.v1"]``.
     * Reload re-applies the persisted theme (no flash of wrong
       theme — the inline boot script in ``<head>`` runs before
       CSS parses).
@@ -79,7 +79,7 @@ class TestThemeToggle:
 
     def _stored_theme(self, page: Page) -> str:
         return page.evaluate(
-            "() => localStorage.getItem('netconfig.theme.v1') || ''"
+            "() => localStorage.getItem('netcanon.theme.v1') || ''"
         )
 
     def test_toggle_button_visible_on_dashboard(
@@ -103,7 +103,7 @@ class TestThemeToggle:
         # Reset local state so the test is deterministic regardless
         # of OS prefers-color-scheme.
         page.evaluate(
-            "() => { localStorage.setItem('netconfig.theme.v1', 'light'); "
+            "() => { localStorage.setItem('netcanon.theme.v1', 'light'); "
             "document.documentElement.setAttribute('data-theme', 'light'); }"
         )
         assert self._theme_attr(page) == "light"
@@ -119,7 +119,7 @@ class TestThemeToggle:
     ):
         page.goto("/")
         page.evaluate(
-            "() => localStorage.setItem('netconfig.theme.v1', 'dark')"
+            "() => localStorage.setItem('netcanon.theme.v1', 'dark')"
         )
         page.reload()
         assert self._theme_attr(page) == "dark"
@@ -132,7 +132,7 @@ class TestThemeToggle:
         accessibility guidance."""
         page.goto("/")
         page.evaluate(
-            "() => { localStorage.setItem('netconfig.theme.v1', 'light'); "
+            "() => { localStorage.setItem('netcanon.theme.v1', 'light'); "
             "document.documentElement.setAttribute('data-theme', 'light'); "
             "_updateThemeToggleAriaLabel('light'); }"
         )
@@ -154,7 +154,7 @@ class TestThemeToggle:
         page.goto("/")
         # Force light for deterministic baseline.
         page.evaluate(
-            "() => { localStorage.setItem('netconfig.theme.v1', 'light'); "
+            "() => { localStorage.setItem('netcanon.theme.v1', 'light'); "
             "document.documentElement.setAttribute('data-theme', 'light'); }"
         )
         light_bg = page.evaluate(

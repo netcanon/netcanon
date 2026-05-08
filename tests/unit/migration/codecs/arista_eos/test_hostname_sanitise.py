@@ -5,20 +5,20 @@ source agent.  ``intent.hostname = "Quinta Router"`` previously
 emitted ``hostname Quinta Router`` which the EOS parser
 (`\\s*$` anchor) refused at parse-time, so the round-trip lost
 the hostname entirely.  Render now routes the value through
-:func:`netconfig.migration._naming.sanitise_hostname` so the
+:func:`netcanon.migration._naming.sanitise_hostname` so the
 emitted form is consumable.
 
 See also:
-- netconfig/migration/_naming.py — shared sanitiser
-- netconfig/migration/codecs/arista_eos/render.py — call site
+- netcanon/migration/_naming.py — shared sanitiser
+- netcanon/migration/codecs/arista_eos/render.py — call site
 """
 
 from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 
 pytestmark = pytest.mark.unit
 

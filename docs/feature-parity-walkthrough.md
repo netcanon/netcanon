@@ -35,7 +35,7 @@ The numbered list below is the file-touch sequence from `git show
 today; verify by running `git show 145642e:<path>` against any
 suspicion.
 
-1. **Canonical schema — `netconfig/migration/canonical/intent.py`.**
+1. **Canonical schema — `netcanon/migration/canonical/intent.py`.**
    Adds the `CanonicalSNMPv3User` model (`name`, `group`,
    `auth_protocol`, `auth_passphrase`, `priv_protocol`,
    `priv_passphrase`, `engine_id`) and a `v3_users:
@@ -53,12 +53,12 @@ suspicion.
    coverage (it can read v3 user lines from a backup but doesn't
    render them — see the codec's `direction` ClassVar).
 3. **Capability declarations — non-supporting codecs.**
-   `netconfig/migration/codecs/opnsense/codec.py` and
-   `netconfig/migration/codecs/cisco_iosxe/codec.py` (the NETCONF
+   `netcanon/migration/codecs/opnsense/codec.py` and
+   `netcanon/migration/codecs/cisco_iosxe/codec.py` (the NETCONF
    stub) added `"snmpv3"` to their `unsupported_rename_categories`
    ClassVar.  This is the only signal the UI consults to decide
    whether the SNMPv3 pane should show its compatibility banner.
-4. **Rename orchestrator — `netconfig/migration/canonical/snmpv3_user_names.py`.**
+4. **Rename orchestrator — `netcanon/migration/canonical/snmpv3_user_names.py`.**
    New module, sibling to `port_names.py`, `vlan_names.py`,
    `local_user_names.py`, and `snmp_names.py`.  Same shape as its
    siblings: a public `build_snmpv3_user_rename_transform(rename_map=...)`
@@ -66,7 +66,7 @@ suspicion.
    into the override stack.  Sentinel semantics match the four older
    orchestrators — `None` is "do nothing", `{}` is "auto-introspect",
    `{src: tgt}` renames, `{src: None}` drops.
-5. **Pipeline wiring — `netconfig/services/migration_pipeline.py`.**
+5. **Pipeline wiring — `netcanon/services/migration_pipeline.py`.**
    `run_plan_with_overrides` gained an optional
    `snmpv3_user_rename_map` keyword argument.  The signature
    *extension* respects the Hard Rule against changing existing
@@ -74,19 +74,19 @@ suspicion.
    the parameter has a `None` default.  The module's top-of-file
    docstring lists "the five rename categories" as the engaged-
    category vocabulary; that count is anchored in code, not prose.
-6. **API endpoint — `netconfig/api/routes/migration.py`.**
+6. **API endpoint — `netcanon/api/routes/migration.py`.**
    New route `POST /api/v1/migration/plan/snmpv3` (handler
    `plan_migration_snmpv3`).  Delegates straight into
    `run_plan_with_overrides` with only `snmpv3_user_rename_map`
    populated — the other four maps default to `None`.  The module
    docstring's "Endpoints" inventory was updated in the same commit;
    that's the inventory-rot rule from CLAUDE.md applied.
-7. **Web UI — `netconfig/templates/migrate.html` + new partial.**
+7. **Web UI — `netcanon/templates/migrate.html` + new partial.**
    The template gained a fifth rail button
    (`migrate-rename-rail-snmpv3`), a pane wrapper, an empty-state
    slot, the per-user rename table, and a compat-banner slot.  The
    per-user row rendering logic lives in
-   `netconfig/templates/_partials/snmpv3-user-rename-table.js` — a
+   `netcanon/templates/_partials/snmpv3-user-rename-table.js` — a
    new partial added in the same commit.  Two existing partials
    (`rename-panel.js`, `rename-apply.js`) gained branches for the
    new category.  The migrate.html "Contents map" comment block at
@@ -94,7 +94,7 @@ suspicion.
    updated in the same commit (CLAUDE.md doc-sync rule for new
    partials).
 8. **Desktop platform — no diff.**
-   The desktop shell (`netconfig_desktop/`) embeds the same FastAPI
+   The desktop shell (`netcanon_desktop/`) embeds the same FastAPI
    app and renders the same HTML through a WebView.  A pure server +
    template feature like this one needs no desktop-specific code —
    the new pane appears in the embedded window automatically.  The
@@ -199,14 +199,14 @@ suspicion.
 
 | Layer | Do you need this? | Where |
 |---|---|---|
-| Canonical schema | If new field shape | `netconfig/migration/canonical/intent.py` |
+| Canonical schema | If new field shape | `netcanon/migration/canonical/intent.py` |
 | Per-codec parse | If existing wire-format carries the data | each `<vendor>/codec.py` |
 | Per-codec render | If target codecs need to emit | each `<vendor>/codec.py` |
 | Capability declaration | If some codecs don't support the entity | `unsupported_rename_categories` ClassVar on the non-supporting codec(s) |
-| Rename orchestrator | If user can rename / drop the entity | new sibling under `netconfig/migration/canonical/` |
+| Rename orchestrator | If user can rename / drop the entity | new sibling under `netcanon/migration/canonical/` |
 | Pipeline parameter | If overrides flow from API | `migration_pipeline.run_plan_with_overrides` (extension only — never change existing parameter shapes) |
-| API endpoint | If UI surfaces overrides | `netconfig/api/routes/migration.py` |
-| Web UI | If operator-facing | `netconfig/templates/migrate.html` + new partial |
+| API endpoint | If UI surfaces overrides | `netcanon/api/routes/migration.py` |
+| Web UI | If operator-facing | `netcanon/templates/migrate.html` + new partial |
 | Desktop UI parity | Always for new visible surfaces | WebView visual sanity check |
 | testids | Always for new interactive elements | `tests/testid_reference.md` self-grep |
 | Orchestrator unit tests | If orchestrator added | `tests/unit/migration/test_<feature>_names.py` |
@@ -269,13 +269,13 @@ suspicion.
 * [`adding-a-canonical-field.md`](adding-a-canonical-field.md) —
   sibling worked example for a smaller-shape feature (MTU
   wire-through), useful when only the canonical-field row applies
-* [`../netconfig/migration/canonical/README.md`](../netconfig/migration/canonical/README.md)
+* [`../netcanon/migration/canonical/README.md`](../netcanon/migration/canonical/README.md)
   — orchestrator pattern (Layer 3 entry guide)
-* [`../netconfig/api/routes/README.md`](../netconfig/api/routes/README.md)
+* [`../netcanon/api/routes/README.md`](../netcanon/api/routes/README.md)
   — route conventions (Layer 4 entry guide)
 * [`../tests/testid_reference.md`](../tests/testid_reference.md) —
   interactive-element inventory and the SNMPv3 section that landed
   in the same commit
-* [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md)
+* [`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md)
   — codec authorship guide; consult when extending the per-codec
   parse + render row above

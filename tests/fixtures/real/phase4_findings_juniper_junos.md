@@ -1,6 +1,6 @@
 # Phase 4b — `juniper_junos` source findings
 
-Source codec: `juniper_junos` (`netconfig/migration/codecs/juniper_junos/`).
+Source codec: `juniper_junos` (`netcanon/migration/codecs/juniper_junos/`).
 Reconciled from `tests/fixtures/real/_phase4_runs/latest.json` (run
 `2026-05-03T20:35:17Z`) against the seven cross-vendor expectation YAMLs
 under `tests/fixtures/cross_vendor_expectations/juniper_junos__*.yaml`.
@@ -40,7 +40,7 @@ arista lag drop).
 
 | Fixture | Field | Drift detail | Bucket | Recommendation |
 |---|---|---|---|---|
-| `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].lag_member_of` | source `'ae1'` on et-0/0/48..et-1/0/49; target `None` | A (target render) | Arista render: zero-based `ae<N>` → one-based `Port-Channel<N+1>` mesh missing channel-group emit on member ifaces (`netconfig/migration/codecs/arista_eos/render.py`). YAML says `disposition: good`. |
+| `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].lag_member_of` | source `'ae1'` on et-0/0/48..et-1/0/49; target `None` | A (target render) | Arista render: zero-based `ae<N>` → one-based `Port-Channel<N+1>` mesh missing channel-group emit on member ifaces (`netcanon/migration/codecs/arista_eos/render.py`). YAML says `disposition: good`. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `lags` | source 2 LAGs (`ae0`,`ae1`); target `[]` ("all 2 lags dropped") | A (target render) | Arista render drops the LAG list entirely on this fixture even though it preserves it for `kitchen_sink` (where it merely renames). Likely conditional-emit gate (`render.py` LAG block) requires every member iface to also be present in the rendered iface list, which fails when the qfx port-name regex disagrees. |
 | `kitchen_sink.set` | `lags` | source 2 LAGs; target 2 LAGs but `name` drift `ae0→Port-Channel0`, `ae1→Port-Channel1` | C (cosmetic rename) | Expected vendor rename (zero-based → one-based per YAML note). YAML says `disposition: good`; the comparator counts the rename as drift. Either flip YAML to `lossy` (with name-rename note) or teach the comparator to treat structural rename as preserved. |
 | `kitchen_sink.set` | `routing_instances[].name` | count drift `3 → 2` (`virtual-router` instance `RTR_C` dropped) | B (stale YAML) | Arista has no `virtual-router` analogue per YAML note ("instance-type=virtual-router … is unsupported on Arista — drops with banner"). YAML lists `routing_instances[].name: good` but the parent `routing_instances: lossy`. Tighten name disposition to `lossy` to match the documented drop-with-banner behaviour. |
@@ -49,7 +49,7 @@ arista lag drop).
 
 | Fixture | Field | Drift detail | Bucket | Recommendation |
 |---|---|---|---|---|
-| `batfish_evpntype5_router1_junos2541.set` | `vlans[].ipv4_addresses` | source `[]` for VLAN100/200/300/400; target carries `172.16.x.x/24` | A (Junos parser gap) | Junos parser does NOT absorb `irb.<unit>` IRB unit IPs back into the VLAN with `l3-interface irb.<unit>`. Locus: `netconfig/migration/codecs/juniper_junos/parse.py` (no `tagged_ports`/`ipv4_addresses` projection — verified with grep). Aruba round-trip exposes it because Aruba does the projection on render+reparse. |
+| `batfish_evpntype5_router1_junos2541.set` | `vlans[].ipv4_addresses` | source `[]` for VLAN100/200/300/400; target carries `172.16.x.x/24` | A (Junos parser gap) | Junos parser does NOT absorb `irb.<unit>` IRB unit IPs back into the VLAN with `l3-interface irb.<unit>`. Locus: `netcanon/migration/codecs/juniper_junos/parse.py` (no `tagged_ports`/`ipv4_addresses` projection — verified with grep). Aruba round-trip exposes it because Aruba does the projection on render+reparse. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].switchport_mode` | source `'trunk'` on `ae0`/`ae1`; target `None` | A (target render) | Aruba render does not emit switchport mode on trunk LAG members. YAML expects `good`. Fix locus: aruba_aoss render path for LAG/Trk interfaces. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].trunk_allowed_vlans` | source `[1,2,3,…+4091]` on `ae0`/`ae1` ("vlan members all"); target `[]` | A (target render) — and methodology cofactor | Aruba render drops the all-VLANs trunk allow list. Two co-issues: (1) the Junos parser blowing `vlan members all` into `range(1,4095)` is reasonable but creates a structurally large list; (2) the aruba renderer doesn't emit it. Fix aruba render OR teach Junos parser to keep `all` as a sentinel. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].lag_member_of` | source `'ae1'` on et-0/0/48..et-1/0/49; target `None` | A (target render) | Aruba render not emitting LAG membership on physical members. YAML says `good`. Same fix-locus as Arista row above (different codec but same surface). |
@@ -62,7 +62,7 @@ arista lag drop).
 | `ksator_labmgmt_qfx5100_junos173.set` | `interfaces[].lag_member_of` | source `'ae1'`; target `'Port-channel1'` | C (cosmetic rename) | Vendor-correct zero-based → one-based mesh (Junos `ae<N>` ↔ Cisco `Port-channel<N>` per YAML note). Comparator flags the string mismatch as CODEC_BUG. YAML says `good`; tighten to `lossy` or absorb rename in comparator. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `vlans[].id` | count drift `16 → 4094` | B (stale YAML — `vlan members all` semantics) | Source has `set interfaces ae0/ae1 unit 0 family ethernet-switching vlan members all` which Junos parser expands to `range(1,4095)`; cisco renders all 4094 vlans into the vlan-database, parses back, balloons the list. YAML says `vlans[].id: good`; should be `lossy` for any source carrying `vlan members all`. Same root cause as the trunk_allowed_vlans drop on aruba above. |
 | `ksator_labmgmt_qfx5100_junos173.set` | `lags` | source 2 LAGs; target 2 LAGs but `name` rename `ae0→Port-channel0`, `ae1→Port-channel1` | C (cosmetic rename) | Same as Arista lags row — vendor-correct rename flagged by comparator. YAML `lags: good` is honest about everything except the name; comparator should treat structural rename as preserved (or YAML flips to lossy). |
-| `kitchen_sink.set` | `vlans[].tagged_ports` | source `[]` on USERS/VOICE; target `['ge-0/0/1']` | A (Junos parser gap) | Junos parser does not project per-iface `vlan members <NAME>` onto the named VLAN's `tagged_ports`. Cisco target codec performs the projection on its render/parse. Locus: `netconfig/migration/codecs/juniper_junos/parse.py` — needs a post-pass after L2 vlan-members resolution (analogous to lag_state materialisation already present at `parse.py:392-426`). |
+| `kitchen_sink.set` | `vlans[].tagged_ports` | source `[]` on USERS/VOICE; target `['ge-0/0/1']` | A (Junos parser gap) | Junos parser does not project per-iface `vlan members <NAME>` onto the named VLAN's `tagged_ports`. Cisco target codec performs the projection on its render/parse. Locus: `netcanon/migration/codecs/juniper_junos/parse.py` — needs a post-pass after L2 vlan-members resolution (analogous to lag_state materialisation already present at `parse.py:392-426`). |
 | `kitchen_sink.set` | `lags` | same as ksator (rename `ae<N>→Port-channel<N>`) | C (cosmetic rename) | See above. |
 
 ### juniper_junos → fortigate_cli (5)
@@ -137,7 +137,7 @@ arista lag drop).
 
 1. **Junos parser: project per-iface VLAN membership and IRB unit IPs
    onto the named VLAN.**  Locus:
-   `netconfig/migration/codecs/juniper_junos/parse.py` — add a
+   `netcanon/migration/codecs/juniper_junos/parse.py` — add a
    post-pass after the existing L2 vlan-members resolution
    (`parse.py:392-426`) that fills `vlans[].tagged_ports` and a
    parallel post-pass that fills `vlans[].ipv4_addresses` from any
@@ -180,6 +180,6 @@ arista lag drop).
   `phase4_findings_mikrotik_routeros.md`,
   `phase4_findings_opnsense.md` — several findings here (LAG rename,
   SNMP gaps) cross-pollinate with peer reports.
-* `netconfig/migration/codecs/juniper_junos/parse.py` — Junos parser;
+* `netcanon/migration/codecs/juniper_junos/parse.py` — Junos parser;
   the only fix locus on the source side (one finding cluster, 3
   cells).

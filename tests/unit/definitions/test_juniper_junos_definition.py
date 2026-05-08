@@ -6,7 +6,7 @@ repository tree (not a tmp fixture) and assert the schema-validated
 shape plus the probe regex behaviour against canned ``show version``
 output captured from real Junos SRX / EX / QFX / MX devices.
 
-The codec pairing lives at ``netconfig/migration/codecs/juniper_junos``;
+The codec pairing lives at ``netcanon/migration/codecs/juniper_junos``;
 this definition is what the backup pipeline uses to *fetch* the
 ``set``-form running configuration whose translation that codec
 performs.
@@ -19,8 +19,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from netconfig.collectors.probe import parse_probe_output
-from netconfig.definitions.schema import DeviceDefinition
+from netcanon.collectors.probe import parse_probe_output
+from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
@@ -251,7 +251,7 @@ class TestJunosDefinitionCodecPairing:
         )
 
     def test_set_form_capture_parses(self, display_set_output):
-        from netconfig.migration.codecs.juniper_junos import JunosCodec
+        from netcanon.migration.codecs.juniper_junos import JunosCodec
 
         codec = JunosCodec()
         intent = codec.parse(display_set_output)
@@ -271,7 +271,7 @@ class TestJunosDefinitionLoaderIntegration:
     def test_loader_picks_up_juniper_family_base(self, tmp_path):
         """When pointed at a tree containing the Junos YAML, the loader
         returns it under its declared type_key."""
-        from netconfig.definitions.loader import DefinitionLoader
+        from netcanon.definitions.loader import DefinitionLoader
 
         defs = tmp_path / "definitions"
         (defs / "juniper" / "junos").mkdir(parents=True)

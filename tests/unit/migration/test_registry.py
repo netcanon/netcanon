@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.migration.codecs.registry``.
+Unit tests for ``netcanon.migration.codecs.registry``.
 
 The registry is a process-global singleton populated at import time,
 so these tests use a throwaway subclass registered under a unique
@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.base import CodecBase
-from netconfig.migration.codecs.registry import (
+from netcanon.migration.codecs.base import CodecBase
+from netcanon.migration.codecs.registry import (
     _REGISTRY,
     get_codec,
     list_codecs,
     register,
 )
-from netconfig.models.migration import CapabilityMatrix
+from netcanon.models.migration import CapabilityMatrix
 
 pytestmark = pytest.mark.unit
 
@@ -139,18 +139,18 @@ class TestListAdapters:
 
     def test_mock_adapter_is_always_registered(self):
         """The package __init__ pre-registers the reference mock adapter."""
-        import netconfig.migration  # noqa: F401 — ensure import
+        import netcanon.migration  # noqa: F401 — ensure import
         assert "mock" in list_codecs()
 
 
 class TestAutoDiscovery:
     """The migration package auto-discovers codec sub-packages; adding
-    a new codec should require no edit to netconfig/migration/__init__.py."""
+    a new codec should require no edit to netcanon/migration/__init__.py."""
 
     def test_all_built_in_codecs_discovered(self):
-        """Every sub-package under netconfig/migration/codecs/ registers
+        """Every sub-package under netcanon/migration/codecs/ registers
         via auto-discovery at package import time."""
-        import netconfig.migration  # noqa: F401 — ensure discovery ran
+        import netcanon.migration  # noqa: F401 — ensure discovery ran
         registered = set(list_codecs())
         expected = {
             "mock",
@@ -166,9 +166,9 @@ class TestAutoDiscovery:
     def test_discovery_is_idempotent(self):
         """Re-importing the package must not duplicate or reject registrations."""
         import importlib
-        import netconfig.migration
+        import netcanon.migration
         before = set(list_codecs())
-        importlib.reload(netconfig.migration)
+        importlib.reload(netcanon.migration)
         after = set(list_codecs())
         assert before == after, (
             f"registry drifted across reload: "

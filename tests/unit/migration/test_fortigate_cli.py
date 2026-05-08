@@ -19,27 +19,27 @@ from pathlib import Path
 
 import pytest
 
-import netconfig.migration  # noqa: F401
+import netcanon.migration  # noqa: F401
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.fortigate_cli.codec import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli.codec import (
     _mask_to_prefix,
     _parse_blocks,
     _prefix_to_mask,
 )
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
     CanonicalStaticRoute,
 )
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -181,7 +181,7 @@ class TestMaskHelpers:
             _mask_to_prefix("255.0.255.0")
 
     def test_invalid_cidr_rejected(self):
-        from netconfig.migration.codecs.base import RenderError
+        from netcanon.migration.codecs.base import RenderError
         with pytest.raises(RenderError):
             _prefix_to_mask(33)
 
@@ -568,5 +568,5 @@ class TestCrossAdapter:
 
 class TestRegistry:
     def test_registered(self):
-        from netconfig.migration.codecs.registry import list_codecs
+        from netcanon.migration.codecs.registry import list_codecs
         assert "fortigate_cli" in list_codecs()

@@ -20,7 +20,7 @@ Lookup strategy (codec-side, deterministic):
 3. Fallback: first LAG, then first physical, then literal ``"lan"``.
 
 See also:
-- ``netconfig/migration/codecs/opnsense/render.py`` —
+- ``netcanon/migration/codecs/opnsense/render.py`` —
   ``_vlan_parent_for`` + ``_vlan_parent_default``
 - ``tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml``
   — reference real-OPNsense VLAN XML shape
@@ -30,13 +30,13 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.opnsense.render import render_intent
+from netcanon.migration.codecs.opnsense.render import render_intent
 
 pytestmark = pytest.mark.unit
 

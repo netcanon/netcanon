@@ -2,7 +2,7 @@
 Regression tests for the cisco_iosxe_cli top-level parsers added in
 Phase 4 rank-6 fix backlog.
 
-Before this fix, ``netconfig/migration/codecs/cisco_iosxe_cli/parse.py``
+Before this fix, ``netcanon/migration/codecs/cisco_iosxe_cli/parse.py``
 silently dropped:
 
 * ``ip name-server`` (top-level form — the DHCP-pool form was the only
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli.parse import parse_intent
+from netcanon.migration.codecs.cisco_iosxe_cli.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 

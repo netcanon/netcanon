@@ -5,20 +5,20 @@ source agent.  ``intent.hostname = "Quinta Router"`` previously
 emitted ``hostname Quinta Router`` which the IOS-XE parser
 (``\\S+``) silently truncated to ``Quinta`` on round-trip, dropping
 the trailing token.  Render now routes the value through
-:func:`netconfig.migration._naming.sanitise_hostname` so the
+:func:`netcanon.migration._naming.sanitise_hostname` so the
 emitted form survives the parser without truncation.
 
 See also:
-- netconfig/migration/_naming.py — shared sanitiser
-- netconfig/migration/codecs/cisco_iosxe_cli/render.py — call site
+- netcanon/migration/_naming.py — shared sanitiser
+- netcanon/migration/codecs/cisco_iosxe_cli/render.py — call site
 """
 
 from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 

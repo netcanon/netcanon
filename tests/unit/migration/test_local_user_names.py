@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`netconfig.migration.canonical.local_user_names`.
+Unit tests for :mod:`netcanon.migration.canonical.local_user_names`.
 
 Layer A tests — transform-level correctness on synthetic
 :class:`CanonicalIntent` trees, no I/O, no codec-specific behaviour.
@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalLocalUser,
 )
-from netconfig.migration.canonical.local_user_names import (
+from netcanon.migration.canonical.local_user_names import (
     LocalUserRenameResult,
     build_local_user_rename_transform,
     translate_local_user_names,

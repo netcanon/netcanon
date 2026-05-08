@@ -1,7 +1,7 @@
 # Cross-vendor fidelity expectations: cisco_iosxe_cli -> mikrotik_routeros
 #
 # This file enumerates the per-field translation disposition for every
-# top-level field on CanonicalIntent (see netconfig/migration/canonical/
+# top-level field on CanonicalIntent (see netcanon/migration/canonical/
 # intent.py).  Each disposition is grounded in vendor documentation
 # excerpts under docs/vendor-references/cisco_iosxe_cli_to_mikrotik_routeros/.
 #

@@ -11,8 +11,8 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
-from netconfig.definitions.schema import ProbeConfig
+from netcanon.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
+from netcanon.definitions.schema import ProbeConfig
 
 pytestmark = pytest.mark.unit
 

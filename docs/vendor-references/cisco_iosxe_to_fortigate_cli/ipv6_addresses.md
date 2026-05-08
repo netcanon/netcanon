@@ -13,7 +13,7 @@ identical to IPv4 — a list of `<address>` records keyed by `<ip>`,
 each carrying `<config><ip>` + `<config><prefix-length>` (0-128).
 OpenConfig also carries an explicit `<config><type>` leaf for
 distinguishing **global** / **link-local** scope, but the
-`netconfig.migration.codecs.cisco_iosxe` codec does NOT read this
+`netcanon.migration.codecs.cisco_iosxe` codec does NOT read this
 leaf — `_parse_ipv6()` hard-codes `scope="global"` on every
 `CanonicalIPv6Address` it produces:
 

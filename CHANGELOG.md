@@ -11,6 +11,78 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 1.5: package directory + import + env-var rename
+
+The Phase 1 wave deliberately deferred the directory rename to keep
+the diff scope-clean.  This wave executes it.  No code-behaviour
+changes; pure structural rename + import path + env var prefix.
+
+#### What renamed
+
+* **Package directories** (via `git mv`):
+  * `netconfig/` → `netcanon/`
+  * `netconfig_desktop/` → `netcanon_desktop/`
+* **Import paths** in 352 files (1,508 `netconfig` references at
+  word boundaries → `netcanon`; 114 `netconfig_desktop` references
+  → `netcanon_desktop`).  Word-boundary regex protected
+  `docs/archive/netconfigreport.txt` references from accidental
+  rewrite.
+* **Env var prefix** (20 occurrences): `NETCONFIG_*` → `NETCANON_*`
+  in `.env.example`, `netcanon/config.py`,
+  `netcanon_desktop/preferences.py`, and operator-facing prose in
+  `CLAUDE.md` + CHANGELOG.  This IS a breaking change for any
+  operator with shell scripts or `.env` files using `NETCONFIG_*`
+  — it ships pre-public so no real users are affected.
+* **`pyproject.toml`** structural fields: `[tool.setuptools.packages.find]
+  include = ["netcanon*", "netcanon_desktop*"]`,
+  `[tool.setuptools.package-data] netcanon = [...]`,
+  `[tool.coverage.run] source = ["netcanon"]`.
+* **`localStorage` keys** (web platform): `netconfig.theme.v1` →
+  `netcanon.theme.v1` and `netconfig.activeJob` →
+  `netcanon.activeJob`.  Pre-public; no real-user state migration
+  required.  The `v1` suffix is preserved as the migration anchor
+  for future schema changes.
+* **Logger name**: `logging.getLogger("netconfig")` →
+  `getLogger("netcanon")` (one occurrence, plus its assertion in
+  `tests/unit/test_logging_config.py`).
+* **Log filename**: `netconfig.log` → `netcanon.log` under
+  `%APPDATA%\Netcanon\` on Windows desktop.
+
+#### Deliberately preserved
+
+* **`docs/archive/`** (5 files) — historical reports.  Their
+  reference to "netconfig" reflects project state at archive time;
+  rewriting would falsify the historical record.  Future
+  contributors reading the archive understand the rename happened
+  in this wave; no need to retroactively rewrite the archive.
+* **`docs/archive/netconfigreport.txt`** filename — same rationale.
+  The word-boundary regex `\bnetconfig\b` correctly skipped this
+  filename during the substitution pass.
+
+#### Test verification
+
+Reinstalled editable package (`pip install -e .`) — `netcanon
+0.1.0` builds + installs cleanly.  PEP 639 license-classifier
+collision (the deprecated
+`License :: OSI Approved :: MIT License` classifier alongside the
+new `license = "MIT"` field) was caught at install time and
+removed from `pyproject.toml`.  Unit + integration tiers pass
+clean post-rename — every import resolved correctly under the new
+package name.
+
+#### Outstanding follow-ups for the public release
+
+* Phase 1's "history rewrite" is **already complete** (separate
+  wave; ran `git filter-repo` for blob + commit-message text +
+  author-email scrub + `configs/` purge).  The Phase 1 entry's
+  "Pending" wording is historically accurate — the rewrite landed
+  shortly after.
+* Local git config still holds the personal author identity for
+  this clone; future commits in this repo will reintroduce it
+  unless operator runs `git config user.email
+  "noreply.netcanon@gmail.com"` + `git config user.name "Netcanon
+  contributor"` (repo-local; doesn't touch global config).
+
 ### Public release plan — Phase 1 pre-flight + rebrand to Netcanon
 
 First pass at the public-launch pre-flight checklist from
@@ -56,8 +128,8 @@ artefacts + PII scrub.
 
 #### Rebrand: NetConfig → Netcanon
 
-The pre-flight name-conflict check found `netconfig` taken on
-PyPI (squatter) and `github.com/netconfig` claimed.  After
+The pre-flight name-conflict check found `netcanon` taken on
+PyPI (squatter) and `github.com/netcanon` claimed.  After
 scoring candidates against availability + collision +
 on-brand-ness, **Netcanon** won: 8 letters, fully available
 across PyPI / GitHub / Docker Hub / relevant TLDs, and the name
@@ -72,15 +144,15 @@ reference).
   `pyproject.toml`.
 * **Self-reference** `desktop-build = ["netcanon[desktop]"]`
   updated.
-* **`pip install netconfig`** → `pip install netcanon` in
+* **`pip install netcanon`** → `pip install netcanon` in
   install instructions (2 occurrences).
 
 Deliberately **not yet renamed** (deferred to Phase 1.5 to keep
 this wave's diff scope-clean):
 
-* Python package directories `netconfig/` and
-  `netconfig_desktop/` (and all import paths).
-* Env var prefix `NETCONFIG_*` (operator-facing; rename =
+* Python package directories `netcanon/` and
+  `netcanon_desktop/` (and all import paths).
+* Env var prefix `NETCANON_*` (operator-facing; rename =
   breaking change for any existing shell scripts).
 
 #### PII scrub
@@ -136,9 +208,9 @@ closes that gap.
   public DNS/NTP retained as fixture grammar, or sourced from
   public corpora (Batfish, HPE Community, etc.) with
   documented provenance in `tests/fixtures/real/NOTICE.md`.
-* **Project-name conflicts.**  PyPI: `netconfig`,
-  `netconfig-translator`, `net-config` all taken (squatters).
-  GitHub `/netconfig` claimed.  Resolved by rebrand.
+* **Project-name conflicts.**  PyPI: `netcanon`,
+  `netcanon-translator`, `net-config` all taken (squatters).
+  GitHub `/netcanon` claimed.  Resolved by rebrand.
 * **44 untracked phase4-run JSONs** in
   `tests/fixtures/real/_phase4_runs/` contain PII narrative
   refs.  Already gitignored (`.gitignore` line 68 carves out
@@ -154,8 +226,8 @@ closes that gap.
   commits, (c) replace `[redacted-domain]` /
   `[redacted-WAN-IP]` / `[redacted-email]` blob text in
   history.  Destructive but safe — no external clones exist.
-* **Package directory rename.**  `netconfig/` → `netcanon/`
-  (and `netconfig_desktop/` → `netcanon_desktop/`) is Phase
+* **Package directory rename.**  `netcanon/` → `netcanon/`
+  (and `netcanon_desktop/` → `netcanon_desktop/`) is Phase
   1.5.
 
 Test state post-rebrand: unit + integration tiers pass clean,
@@ -167,37 +239,37 @@ The desktop-parity audit identified 7 actionable items in the
 "necessary differences" category — desktop-platform-specific surfaces
 the web platform doesn't need.  This wave addresses them as a coherent
 feature so operator workflow on the desktop matches the configurable
-surface that the web platform exposes via `NETCONFIG_*` env vars.
+surface that the web platform exposes via `NETCANON_*` env vars.
 
-* **Item 1 — `DesktopPreferences` model** (`netconfig_desktop/preferences.py`):
+* **Item 1 — `DesktopPreferences` model** (`netcanon_desktop/preferences.py`):
   Pydantic model with optional path overrides (`configs_dir`,
   `definitions_dir`, `data_dir`), `port` (1024–65535 spinbox range),
   `open_in_editor` toggle, and a forward-compatible
   `open_browser_on_start` field.  `load()` is corruption-tolerant —
   malformed JSON returns factory defaults so the desktop never refuses
   to start because of a botched preferences file.
-* **Item 2 — Preferences dialog UI** (`netconfig_desktop/preferences_dialog.py`):
+* **Item 2 — Preferences dialog UI** (`netcanon_desktop/preferences_dialog.py`):
   PySide6 `QDialog` with browse buttons, port spinner, toggles, and an
   "Open Configs Folder" convenience button.  Each interactive widget
   carries `setObjectName()` per the `pref-dialog-<field>-<action>`
   convention (the desktop equivalent of `data-testid`).
 * **Item 3 — `Settings.data_dir` field + `effective_data_dir` property**
-  (`netconfig/config.py`): backward-compatible explicit override for
+  (`netcanon/config.py`): backward-compatible explicit override for
   the data-root directory holding `jobs/`, `schedules/`, `devices/`.
   When `None`, falls back to the historical `configs_dir.parent`
-  derivation.  `netconfig/main.py` reads through `effective_data_dir`
+  derivation.  `netcanon/main.py` reads through `effective_data_dir`
   at all four lifespan call sites; an `inspect.getsource` regression
   guard catches future copy-pastes of the old derivation.
-* **Item 4 — Tray menu surface** (`netconfig_desktop/tray.py` +
+* **Item 4 — Tray menu surface** (`netcanon_desktop/tray.py` +
   `app.py`): four-item menu (Show / Preferences… / Open configs folder /
   Quit).  The two new callbacks are optional kwargs so existing tray
   construction stays backward-compatible.
-* **Item 5 — Single-instance enforcement** (`netconfig_desktop/single_instance.py`):
+* **Item 5 — Single-instance enforcement** (`netcanon_desktop/single_instance.py`):
   Windows named-mutex guard (`Global\NetcanonSingleInstance_v1`)
-  prevents a second `netconfig_desktop` from launching and silently
+  prevents a second `netcanon_desktop` from launching and silently
   failing on the port-bind.  No-op on non-Windows so test suite runs
   on Linux / macOS.
-* **Item 6 — Documentation** (`netconfig_desktop/README.md`): module
+* **Item 6 — Documentation** (`netcanon_desktop/README.md`): module
   layout updated to list all five new files; settings table extended
   with the data-root row; new Preferences and Uninstall behaviour
   sections.
@@ -210,7 +282,7 @@ surface that the web platform exposes via `NETCONFIG_*` env vars.
 
 The audit found zero parity violations — these are necessary
 desktop-only surfaces (the web platform's equivalents are the
-`NETCONFIG_*` env vars and the inability to launch two web servers
+`NETCANON_*` env vars and the inability to launch two web servers
 without picking a different port).  The wave preserves that parity by
 giving desktop operators an equivalent configuration surface to what
 web operators already have.
@@ -294,7 +366,7 @@ tunnels.
 
 The canonical model classifies firewall_rules / nat_rules / vpn /
 routing_protocols as **Tier 3 — "parse for display, never auto-render"**
-(see `netconfig/migration/canonical/intent.py:39-41`).  Codec parsers
+(see `netcanon/migration/canonical/intent.py:39-41`).  Codec parsers
 silently skipped these stanzas because there's no canonical surface
 to populate.  Operators pasting a Cisco config containing
 `ip access-list extended OUTSIDE_IN ... ip access-group OUTSIDE_IN in`
@@ -319,7 +391,7 @@ This wave closes the notification gap from two angles:
   capability-matrix regression-guard tests.
 
 * **W11-B — parser-level Tier-3 stanza detection** (commit `c632bdc`).
-  New shared helper `netconfig/migration/_tier3_detection.py` with
+  New shared helper `netcanon/migration/_tier3_detection.py` with
   per-vendor pattern sets (`_iosxe_cli`, `_fortios`, `_junos`,
   `_routeros`, `_opnsense`, plus a `_iosxe_xml` no-op stub for the
   NETCONF codec).  New `CanonicalIntent.dropped_tier3_sections:
@@ -588,7 +660,7 @@ entries across six codecs.  Audit before dispatch revealed:
 2. `firewall_rules` and `nat_rules` are explicitly classified as
    Tier 3 — "parse for display, never auto-render" — in the
    canonical model docstring
-   (`netconfig/migration/canonical/intent.py:39-40`).  The
+   (`netcanon/migration/canonical/intent.py:39-40`).  The
    docstring's rationale: auto-rendering firewall semantics
    across vendor-specific zone-pair vs interface-attached vs
    stateful-vs-stateless models risks shipping configs with
@@ -685,7 +757,7 @@ lossy` with explanatory rationale (commit `ec607d8`).
 
 ### Added (Wave 7c shared utilities)
 
-Three new helpers in `netconfig/migration/canonical/transforms.py`
+Three new helpers in `netcanon/migration/canonical/transforms.py`
 landed during Wave 7c, consolidating patterns that codecs had
 started growing independently:
 
@@ -698,11 +770,11 @@ started growing independently:
   the Junos parser's port-list materialisation to guarantee
   cross-vendor list-order parity.
 * **`_normalise_lag_name_to_arista(name)`** in
-  `netconfig/migration/codecs/arista_eos/render.py` — accepts
+  `netcanon/migration/codecs/arista_eos/render.py` — accepts
   ae / Port-channel / Trk / bond / lagg shapes and emits as the
   EOS-canonical `Port-Channel<N>` form.
 
-`netconfig/migration/codecs/README.md` "Cross-codec shared utilities"
+`netcanon/migration/codecs/README.md` "Cross-codec shared utilities"
 section gains entries for the two `transforms.py` helpers.
 
 ### Added (Phase 1 backup-definition expansion: Arista EOS / Aruba AOS-S / Juniper Junos)
@@ -809,7 +881,7 @@ Cumulative Wave 9 matrix delta: ALIGNED 2225 → 2242 (+17), CODEC_BUG
 ### Refactored (extract `_migration_helpers.py` from `migration.py`)
 
 Final cleanup pass on the `refactor/god-file-cleanup` branch.  The
-god-file audit had flagged `netconfig/api/routes/migration.py` as the
+god-file audit had flagged `netcanon/api/routes/migration.py` as the
 remaining oversized route file (~750 LOC mixing route dispatch with
 adapter resolution, input-text resolution, capability-matrix shaping,
 target-profile lookup, and override-routing predicates).  Extracted
@@ -826,7 +898,7 @@ unit-test coverage without spinning up a TestClient.
 
 * **Frozen pipeline signatures untouched** — `run_plan`,
   `run_plan_with_rename`, `run_plan_with_overrides` (the trio in
-  `netconfig/services/migration_pipeline.py`) stay frozen per the
+  `netcanon/services/migration_pipeline.py`) stay frozen per the
   hard-rule freeze-and-extend contract.  Extraction was purely on
   the request-shaping / response-shaping side, one layer above the
   pipeline.
@@ -837,7 +909,7 @@ unit-test coverage without spinning up a TestClient.
   deltas — proves the API boundary (URLs, request/response shapes,
   status codes) is unchanged.
 
-* **Docs** — `netconfig/api/routes/README.md` gains a brief
+* **Docs** — `netcanon/api/routes/README.md` gains a brief
   "Helper modules" section establishing the
   `_<router>_helpers.py` sibling pattern as a worked example for
   future contributors.  Module docstring on the new helper file
@@ -942,7 +1014,7 @@ didn't.
 **Fix** in two layers, both now trimming head + tail:
 
 1. **Collector side** (prevents new bad backups):
-   `netconfig/collectors/paramiko_collector.py::_collect_output`
+   `netcanon/collectors/paramiko_collector.py::_collect_output`
    now accepts an optional ``command`` kwarg and calls the new
    module-level helper ``_strip_command_echo(buf, command)`` before
    returning.  The helper:
@@ -956,7 +1028,7 @@ didn't.
    ``definition.commands.config``.  Matches Netmiko's
    ``strip_command=True`` + ``strip_prompt=True`` behaviour.
 2. **Parser side** (rescues legacy backups already on disk):
-   `netconfig/migration/codecs/opnsense/codec.py::_trim_xml_envelope`
+   `netcanon/migration/codecs/opnsense/codec.py::_trim_xml_envelope`
    (renamed from the original ``_trim_xml_prologue``; the old name
    is kept as a backwards-compat alias).  Called at the top of
    ``parse()``:
@@ -1000,7 +1072,7 @@ didn't.
 
 ### Docs (OPNsense rescue)
 
-- `netconfig/collectors/README.md` — `paramiko_shell` section now
+- `netcanon/collectors/README.md` — `paramiko_shell` section now
   notes the command-echo stripping behaviour and points at the
   Netmiko `strip_command=True` parallel.
 - `tests/fixtures/real/NOTICE.md` — provenance row for the new
@@ -1021,14 +1093,14 @@ it as a browsable reference — the Tier-3 rename-modal dropdowns
 are no longer the only way to discover what hardware/capabilities
 the app supports.
 
-- `netconfig/api/routes/ui.py::definitions_page` — extended to
+- `netcanon/api/routes/ui.py::definitions_page` — extended to
   pass four context variables instead of one: `definitions`
   (unchanged family-base backup list), `overlays` (version /
   model-pinned variants from the loader's `_variants` registry),
   `profiles_by_vendor` (54 target profiles grouped by vendor),
   `vendor_rows` (8 vendors with their registered codecs +
   certainty tier + direction + capability-matrix counts).
-- `netconfig/templates/definitions.html` — rewrote with four
+- `netcanon/templates/definitions.html` — rewrote with four
   `<section>` blocks, each with a `section-*` testid.  Native
   `<details>`/`<summary>` disclosure for per-vendor and per-
   profile expansion — zero custom JS for the collapsible
@@ -1083,7 +1155,7 @@ the app supports.
 
 ### Added (Global dark mode with sun/moon toggle on top nav)
 
-- `netconfig/templates/base.html` — light + dark themes via CSS
+- `netcanon/templates/base.html` — light + dark themes via CSS
   custom properties toggled on `<html data-theme>`.  Single source
   of truth: `:root` block declares light-mode tokens; a mirrored
   `[data-theme="dark"]` block overrides for dark mode.  Tokens
@@ -1097,7 +1169,7 @@ the app supports.
   high-visibility surfaces.
 - **FOUC-prevention boot script** inlined in `<head>` *before*
   the `<style>` block — a tiny IIFE reads
-  `localStorage["netconfig.theme.v1"]` (user override), falls
+  `localStorage["netcanon.theme.v1"]` (user override), falls
   back to `window.matchMedia('(prefers-color-scheme: dark)')`,
   and sets `data-theme` on `documentElement` synchronously.
   Blocks CSS parse, no flash of wrong theme on reload.
@@ -1113,10 +1185,10 @@ the app supports.
   "Switch to light theme") and `aria-pressed` (`true`/`false`)
   describing the ACTION not the current state — clearer for
   screen readers than a static "dark mode on/off" label.
-- **localStorage persistence** under `netconfig.theme.v1`
-  (matches the existing `netconfig.X.v1` key convention used by
+- **localStorage persistence** under `netcanon.theme.v1`
+  (matches the existing `netcanon.X.v1` key convention used by
   the rename-ack and active-job state).
-- `netconfig/templates/_partials/theme-toggle.js` — new partial
+- `netcanon/templates/_partials/theme-toggle.js` — new partial
   containing the `toggleTheme()` function +
   `_updateThemeToggleAriaLabel()` + DOMContentLoaded aria
   initialiser.  Included from `base.html` alongside the
@@ -1194,7 +1266,7 @@ the app supports.
 
 ### Added (Structural apply-groups collapse — Junos interface-range)
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse now
   handles ``set interfaces interface-range <rname> ...`` grammar.
   Supported sub-paths: ``member <iface>``, ``description``,
   ``mtu``, ``disable``, ``unit 0 family inet address``.  Shared
@@ -1282,7 +1354,7 @@ the app supports.
     authored group bodies verbatim.  Only groups that appear in
     ``apply_groups`` (i.e. actually composed into the candidate
     config) get persisted; orphan groups drop.
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse
   populates both fields from the GAP 8 two-pass buckets.  Render
   emits `set groups <G> <body>` lines FIRST (using
   `_quote_if_needed` per token so multi-word quoted values like
@@ -1324,7 +1396,7 @@ the app supports.
 
 ### Added (GAP 9a — Junos block-form (curly-brace hierarchical) parse)
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse now
   auto-detects block-form (hierarchical curly-brace) input and
   converts it to set-form internally via a grammar-agnostic
   walker.  The same `_dispatch_set` pipeline then applies the
@@ -1382,7 +1454,7 @@ the app supports.
 
 ### Added (GAP 8 — richer Junos apply-groups inheritance)
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — full
+- `netcanon/migration/codecs/juniper_junos/codec.py` — full
   two-pass parse refactor.  Every `set groups <g> <path>` line is
   now bucketed during a first pass; the dispatcher then replays
   group content (in REVERSE apply-groups order so the first-
@@ -1430,7 +1502,7 @@ the app supports.
 
 ### Added (GAP 6 — Arista EOS + Juniper Junos VXLAN + VRF / EVPN codec wire-up)
 
-- `netconfig/migration/codecs/arista_eos/codec.py` — parse + render
+- `netcanon/migration/codecs/arista_eos/codec.py` — parse + render
   now populate `CanonicalVxlan` from ``interface Vxlan1 / vxlan
   vlan <vid> vni <vni>`` lines, and `CanonicalRoutingInstance` from
   top-level ``vrf instance <name>`` + ``router bgp <asn> / vrf
@@ -1440,7 +1512,7 @@ the app supports.
   IRB routing.  Per-interface VRF membership (``vrf <name>`` on
   Ethernet / Port-Channel / Loopback / Vlan interfaces) populates
   :attr:`CanonicalInterface.vrf`.
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse +
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse +
   render now populate the same canonical shapes from Junos's
   equivalents: ``set vlans <name> vxlan vni <vni>``, ``set
   routing-instances <name> instance-type vrf`` + ``route-distinguisher``
@@ -1534,7 +1606,7 @@ the app supports.
 
 ### Added (GAP 7 — per-unit 802.1Q VLAN tagging on Junos sub-interfaces)
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse now
   handles `set interfaces <parent> unit <N> vlan-id <tag>`,
   populating :attr:`CanonicalInterface.access_vlan` on the
   sub-interface.  Semantically equivalent to Cisco's
@@ -1566,7 +1638,7 @@ the app supports.
 ### Added (GAP 5 — canonical VRF / routing-instance schema [ship-before-wire])
 
 - `CanonicalRoutingInstance` model in
-  `netconfig/migration/canonical/intent.py`.  Cross-vendor VRF
+  `netcanon/migration/canonical/intent.py`.  Cross-vendor VRF
   primitive modelling Cisco `vrf definition`, Arista `vrf instance`,
   and Juniper `routing-instances`.  Fields: `name`,
   `instance_type` (defaults to ``"vrf"``; Junos variants
@@ -1595,7 +1667,7 @@ the app supports.
 
 ### Added (GAP 4 — Junos apply-groups host-name inheritance + per-unit sub-interfaces)
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse now
   handles `set groups <gname> system host-name <X>` + `set apply-
   groups <gname>` pairs, populating `intent.hostname` from the
   first applied group that declared a host-name (mirrors Junos's
@@ -1604,7 +1676,7 @@ the app supports.
   are present.  Bracketed `set apply-groups [ g1 g2 ]` form
   tolerated: the bracket tokens are filtered out of the
   applied-groups list.
-- `netconfig/migration/codecs/juniper_junos/codec.py` — parse now
+- `netcanon/migration/codecs/juniper_junos/codec.py` — parse now
   materialises per-unit sub-interfaces (unit 1+) as distinct
   `CanonicalInterface` entries named `<parent>.<unit>` (e.g.
   `ge-0/0/0.100`), matching Cisco's dot1Q convention so canonical
@@ -1675,7 +1747,7 @@ the app supports.
 - `juniper_junos` codec certainty promoted from `experimental` to
   `best_effort` — 3 real captures across Junos 15.1 + 17.3 + 18.4
   all round-trip stable.
-- `netconfig/migration/codecs/arista_eos/codec.py` — render-side
+- `netcanon/migration/codecs/arista_eos/codec.py` — render-side
   LAG bug fixed.  The render loop emitted `interface Port-ChannelN`
   stubs but did NOT emit the matching `channel-group N mode <mode>`
   on member Ethernet interfaces.  Arista LAGs (like Cisco IOS)
@@ -1688,7 +1760,7 @@ the app supports.
   interfaces whose `lag_member_of` is populated, with canonical-
   to-EOS mode normalisation (`static` → `on`, `passive` →
   `passive`, else `active`).
-- `netconfig/migration/codecs/juniper_junos/codec.py` — render-side
+- `netcanon/migration/codecs/juniper_junos/codec.py` — render-side
   bare-interface bug fixed.  The v2a render loop emitted interface
   set-lines only when the canonical interface carried a
   description / disable flag / IPv4 address.  The Junos parse side
@@ -1729,7 +1801,7 @@ the app supports.
 
 ### Changed (GAP 2 — Juniper Junos render-side v2a [flat set-form, no apply-groups])
 
-- `netconfig/migration/codecs/juniper_junos/codec.py` — render
+- `netcanon/migration/codecs/juniper_junos/codec.py` — render
   implementation replaces the previous ``NotImplementedError`` stub.
   Direction promoted from ``parse_only`` to ``bidirectional``.
   Codec remains ``experimental`` tier pending additional real
@@ -1788,7 +1860,7 @@ the app supports.
 ### Added (GAP 1 — EVPN-VXLAN canonical schema [ship-before-wire])
 
 - `CanonicalVxlan` + `CanonicalEvpnType5Route` models in
-  `netconfig/migration/canonical/intent.py`.  ``CanonicalVxlan``
+  `netcanon/migration/canonical/intent.py`.  ``CanonicalVxlan``
   carries ``vlan_id``, ``vni`` (24-bit, validated 1..16777215),
   optional ``mcast_group``, and ``flood_list`` for head-end
   replication.  ``CanonicalEvpnType5Route`` carries ``vrf``,
@@ -1821,7 +1893,7 @@ the app supports.
 
 ### Added (Phase 13 — Juniper Junos codec v1 [parse-only] + 7 switching target profiles)
 
-- `netconfig/migration/codecs/juniper_junos/` package — first
+- `netcanon/migration/codecs/juniper_junos/` package — first
   hierarchical-grammar vendor in the portfolio.  v1 parses
   ``set``-form configuration text (output of
   ``show configuration | display set`` on Junos EX/QFX/MX/SRX).
@@ -1890,7 +1962,7 @@ the app supports.
 - Docs synced per CLAUDE.md Documentation Sync Checklist:
   - `CHANGELOG` — this entry
   - `ARCHITECTURE.md` — codec count 6 → 7
-  - `netconfig/migration/codecs/README.md` — wire-format table
+  - `netcanon/migration/codecs/README.md` — wire-format table
     gains "Flat set-form command text (Junos)" row
   - `codecs/base.py` INPUT_FORMATS — new `cli-junos-set` entry
   - `vendors/juniper_junos.yaml` — vendor declaration
@@ -1910,11 +1982,11 @@ and per-unit sub-interface modelling.
 
 ### Added (Phase 12 — Arista EOS codec v1: 6th shipped vendor, first DC-switching-native)
 
-- `netconfig/migration/codecs/arista_eos/` package — bidirectional
+- `netcanon/migration/codecs/arista_eos/` package — bidirectional
   codec for Arista EOS ``show running-config`` text.  Closes the
   biggest cross-vendor DC migration corridor in enterprise networks
   (Cisco Catalyst 9K / Nexus → Arista 7050 / 7280 / 7500).
-- New vendor YAML `netconfig/migration/vendors/arista_eos.yaml`.
+- New vendor YAML `netcanon/migration/vendors/arista_eos.yaml`.
 - New INPUT_FORMATS entry `cli-arista` in `codecs/base.py`.
 - UI vendor-labels dropdown gains `arista_eos: 'Arista EOS'` so the
   rename-modal vendor picker surfaces Arista as a target.
@@ -1993,7 +2065,7 @@ and per-unit sub-interface modelling.
 
 ### Changed (god-file cleanup — fortigate_cli codec split into parse.py + render.py)
 
-- `netconfig/migration/codecs/fortigate_cli/codec.py` was the 4th-
+- `netcanon/migration/codecs/fortigate_cli/codec.py` was the 4th-
   largest codec file at ~1068 LOC carrying both parse dispatchers
   (`_apply_<path>` functions) and render logic inline on the
   `FortiGateCLICodec` class.  Split into:
@@ -2021,13 +2093,13 @@ and per-unit sub-interface modelling.
   parse.py 675, render.py 290.  Total is up slightly because
   each new module carries its own docstring + imports — the win
   is focus, not line reduction.
-- `netconfig/migration/codecs/fortigate_cli/__init__.py` docstring
+- `netcanon/migration/codecs/fortigate_cli/__init__.py` docstring
   refreshed: stale `certainty: best_effort` claim corrected to
   `certified` (matches RESULTS.md post-promotion), module-layout
   section added describing the new parse/render split, Tier-2
   coverage (SNMP / admin / RADIUS / DHCP) enumerated, structural
   quirks updated with the `set radius-port 0` canonicalisation.
-- `netconfig/migration/codecs/README.md` Module layout section
+- `netcanon/migration/codecs/README.md` Module layout section
   extended with the `parse.py` / `render.py` split pattern.
   Lists remaining split candidates (mikrotik_routeros,
   cisco_iosxe_cli, aruba_aoss, opnsense) and the re-export
@@ -2039,7 +2111,7 @@ and per-unit sub-interface modelling.
 ### Added (P2C5 — per-pane SNMP community rename: fourth per-pane override category)
 
 - New canonical orchestrator
-  `netconfig/migration/canonical/snmp_names.py` — community-string
+  `netcanon/migration/canonical/snmp_names.py` — community-string
   rename via the same `build_X_rename_transform(rename_map) →
   (transform, result)` shape as ports / VLANs / local_users.
   Scope is scalar (`CanonicalIntent.snmp` holds a single
@@ -2111,12 +2183,12 @@ and per-unit sub-interface modelling.
   - `tests/testid_reference.md` — 11 new testid rows documented
     for the SNMP pane (verified via grep self-check: reference
     count matches template/partial count).
-  - `netconfig/templates/migrate.html` Contents map comment —
+  - `netcanon/templates/migrate.html` Contents map comment —
     adds the new partial entry.
-  - Route docstring in `netconfig/api/routes/migration.py`
+  - Route docstring in `netcanon/api/routes/migration.py`
     (top-of-file endpoint enumeration) — lists `/plan/snmp`.
   - Pipeline docstring in
-    `netconfig/services/migration_pipeline.py` — category
+    `netcanon/services/migration_pipeline.py` — category
     support list updated; new capture-only field documented.
   - Model docstrings on `MigrationJob` + `MigrationPlanRequest`.
   - `HUMAN_TESTING.md` — new SNMP-pane manual-test scenarios.
@@ -2436,7 +2508,7 @@ wrong, prose rots silently.
 ### Added (P2C4 — local-users rename pane + three-category composition fix)
 
 - Third per-pane override category after ports + VLANs.  New
-  orchestrator `netconfig/migration/canonical/local_user_names.py`
+  orchestrator `netcanon/migration/canonical/local_user_names.py`
   walks `CanonicalIntent.local_users` and applies a string → string
   (or string → None for drop) rewrite map.  Collision merge:
   highest `privilege_level` wins, first non-empty `role` wins,
@@ -2460,7 +2532,7 @@ wrong, prose rots silently.
   rendered by new `_partials/local-user-rename-table.js`
   (structural copy of vlan-rename-table.js, string keys, free-text
   rewrite).  Every operator override is persisted to localStorage
-  under the same `netconfig.rename-ack.v1:…` key as the other
+  under the same `netcanon.rename-ack.v1:…` key as the other
   categories — additive schema, old payloads load unchanged.
 - Apply flow: `local_user_rename_map` included in the POST body
   only when the operator actually touched a user row (gate-on-
@@ -2481,7 +2553,7 @@ wrong, prose rots silently.
   `patterns:` regex map).  Empty defaults keep existing definitions
   working unchanged; only definitions that opt in by declaring a
   probe command participate.
-- New pure-function parser at `netconfig/collectors/probe.py` with
+- New pure-function parser at `netcanon/collectors/probe.py` with
   11 unit tests (`tests/unit/test_probe_parser.py`).  Handles
   multi-line output, missing captures, malformed regexes, auto-
   timestamps successful results.
@@ -2520,7 +2592,7 @@ wrong, prose rots silently.
   the localStorage persistence entry.
 - localStorage ack persistence: overrides survive page reloads
   keyed on `(source_codec, target_codec, hostname)` under
-  `netconfig.rename-ack.v1:…`.  Load on modal-open, save on every
+  `netcanon.rename-ack.v1:…`.  Load on modal-open, save on every
   render-summary (universal choke point), clear on Reset-all.
   Surfaces an age hint on restore ("Restored prior overrides
   (N port, M VLAN) from 3m ago").
@@ -2537,7 +2609,7 @@ wrong, prose rots silently.
 ### Added (P2C2 — canonical VLAN-rename orchestrator + /plan/vlans endpoint)
 
 - Cross-vendor VLAN-ID rewrite transform
-  (`netconfig/migration/canonical/vlan_names.py`) — walks the
+  (`netcanon/migration/canonical/vlan_names.py`) — walks the
   canonical tree and rewrites every VLAN-referring field
   (`CanonicalVlan.id`, `access_vlan`, `trunk_allowed_vlans`,
   `trunk_native_vlan`, `voice_vlan`).  Drop semantics via `None`
@@ -2679,7 +2751,7 @@ consumes.
   in ``tests/unit/migration/test_fortigate_cli.py`` pins the fix.
 - ``certainty`` ClassVar bumped from ``best_effort`` to
   ``certified`` in
-  ``netconfig/migration/codecs/fortigate_cli/codec.py``; matching
+  ``netcanon/migration/codecs/fortigate_cli/codec.py``; matching
   test updated in
   ``tests/unit/migration/test_fortigate_cli.py::TestR3Fields::test_certainty``
   with comment citing the promotion evidence.
@@ -2725,7 +2797,7 @@ consumes.
   ``opnsense/core`` fixtures didn't exercise the ``<vlans>`` block
   at all, so this bug slept until real-deployment contact.  Fix:
   added a ``<vlans>`` render block in
-  ``netconfig/migration/codecs/opnsense/codec.py`` that emits
+  ``netcanon/migration/codecs/opnsense/codec.py`` that emits
   ``<tag>`` + ``<descr>`` per VLAN (round-trip-symmetric with what
   the parser reads).  Regression test
   ``TestRoundTrip::test_roundtrip_preserves_vlans`` in
@@ -2734,7 +2806,7 @@ consumes.
   asserts the VLAN ids and names survive.
 - ``certainty`` ClassVar bumped from ``best_effort`` to
   ``certified`` in
-  ``netconfig/migration/codecs/opnsense/codec.py``; matching
+  ``netcanon/migration/codecs/opnsense/codec.py``; matching
   ``test_certainty_is_certified`` added in
   ``tests/unit/migration/test_opnsense.py`` with comment citing the
   promotion evidence.
@@ -2848,7 +2920,7 @@ consumes.
   decisively.
 - ``certainty`` ClassVar bumped from ``best_effort`` to
   ``certified`` in
-  ``netconfig/migration/codecs/cisco_iosxe_cli/codec.py``;
+  ``netcanon/migration/codecs/cisco_iosxe_cli/codec.py``;
   matching test renamed/updated in
   ``tests/unit/migration/test_cisco_iosxe_cli.py``
   (``test_certainty_is_certified``).
@@ -2885,7 +2957,7 @@ consumes.
   parse deterministically, produce matching canonical trees — the
   harness invariants held without a single fix.
 - ``certainty`` ClassVar bumped from ``best_effort`` to ``certified``
-  in ``netconfig/migration/codecs/aruba_aoss/codec.py``; matching
+  in ``netcanon/migration/codecs/aruba_aoss/codec.py``; matching
   test updated in ``tests/unit/migration/test_aruba_aoss.py`` with
   a comment citing the promotion evidence (pattern mirrors the
   MikroTik certification commit).
@@ -2958,7 +3030,7 @@ consumes.
 ### Added (FortiGate CLI codec — 5th real vendor, recursive grammar)
 
 - **``FortiGateCLICodec``** in
-  ``netconfig/migration/codecs/fortigate_cli/`` — parses and renders
+  ``netcanon/migration/codecs/fortigate_cli/`` — parses and renders
   FortiOS 7.x CLI (``config/edit/set/next/end`` 5-keyword grammar).
   Recursive block model handles arbitrary nesting including nested
   ``config`` inside ``config`` (NTP ntpserver sub-table).
@@ -2975,7 +3047,7 @@ consumes.
   unsupported (Tier 3); alias 25-char truncation marked lossy.
 - **Auto-detection probe:** ``#config-version=`` banner (98%),
   5-keyword grammar markers (75-92%).
-- **Vendor YAML** at ``netconfig/migration/vendors/fortigate.yaml``
+- **Vendor YAML** at ``netcanon/migration/vendors/fortigate.yaml``
   declaring ``[firewall, router]``.
 
 ### Added (full-mesh cross-codec matrix test)
@@ -2999,7 +3071,7 @@ consumes.
 
 ### Added (Aruba AOS-S codec — 4th real vendor, VLAN-centric)
 
-- **``ArubaAOSSCodec``** in ``netconfig/migration/codecs/aruba_aoss/``
+- **``ArubaAOSSCodec``** in ``netcanon/migration/codecs/aruba_aoss/``
   — parses and renders Aruba AOS-S (ProCurve / ArubaOS-Switch 16.x)
   ``show running-config`` text.  Architecturally the first codec
   where VLAN port membership lives naturally on the VLAN object
@@ -3017,7 +3089,7 @@ consumes.
   - IP accepts both ``A.B.C.D/N`` and ``A.B.C.D M.M.M.M``
   - Default gateway ↔ ``0.0.0.0/0`` static route round-trip
   - ``no untagged 1-24`` port-list subtraction
-- **Vendor YAML** at ``netconfig/migration/vendors/aruba_aoss.yaml``
+- **Vendor YAML** at ``netcanon/migration/vendors/aruba_aoss.yaml``
   declaring ``[switch, router]``.
 - **OPNsense renderer hardened**: bare-numeric interface names
   (legal on Aruba, invalid as XML element tags) now sanitise via
@@ -3030,8 +3102,8 @@ consumes.
 
 ### Changed (auto-discover codec packages — zero-bookkeeping vendor add)
 
-- **``netconfig/migration/__init__.py``** now auto-discovers every
-  codec sub-package under ``netconfig/migration/codecs/`` using
+- **``netcanon/migration/__init__.py``** now auto-discovers every
+  codec sub-package under ``netcanon/migration/codecs/`` using
   ``pkgutil.iter_modules``.  Each package's module-level
   ``@register`` decorator fires on import, populating the registry.
 - Adding a new vendor is now a true drop-in: create the codec
@@ -3088,7 +3160,7 @@ consumes.
     (98%), multiple ``/section`` headers + find-default-name idiom
     (97%), individual sections / idioms (80-95%)
   - ``mock`` — weak JSON-shape detection (40-55%)
-- **`netconfig/services/migration_detect.py`** — pure-function
+- **`netcanon/services/migration_detect.py`** — pure-function
   detection service.  ``detect_codec(raw)`` walks every registered
   codec's ``.probe()``, filters by ``min_confidence``, and returns a
   ranked list.  ``best_codec(raw)`` is a convenience wrapper that
@@ -3123,7 +3195,7 @@ consumes.
 ### Added (MikroTik RouterOS codec — third canonical-bridged vendor)
 
 - **``MikroTikRouterOSCodec``** in
-  ``netconfig/migration/codecs/mikrotik_routeros/`` — parses and renders
+  ``netcanon/migration/codecs/mikrotik_routeros/`` — parses and renders
   RouterOS ``/export verbose`` text through ``CanonicalIntent``.  First
   third-party validation that the canonical dict is portable across
   structurally different formats (XML / indented IOS CLI / section-
@@ -3139,7 +3211,7 @@ consumes.
   other interfaces render as `add` lines.  Round-trip invariant holds
   for the canonical subset.
 - **Vendor YAML** added at
-  ``netconfig/migration/vendors/mikrotik_routeros.yaml`` declaring
+  ``netcanon/migration/vendors/mikrotik_routeros.yaml`` declaring
   device classes ``[router, firewall]``.
 - **Capability matrix** marks firewall/filter rules and NAT as
   unsupported (Tier 3 — informational only), interface type as lossy
@@ -3155,7 +3227,7 @@ consumes.
 ### Added (canonical intent dict — cross-vendor translation bridge)
 
 - **``CanonicalIntent``** pydantic model in
-  ``netconfig/migration/canonical/intent.py`` — the shared tree shape
+  ``netcanon/migration/canonical/intent.py`` — the shared tree shape
   every codec's ``parse()`` emits and ``render()`` consumes.  Defines
   Tier 1 (auto-translatable: hostname, interfaces, VLANs, static
   routes), Tier 2 (review-required: DHCP, SNMP, LAGs, users, RADIUS),
@@ -3234,13 +3306,13 @@ consumes.
 ### Added (R2: declarative vendor YAML)
 
 - **Vendor declarations** extracted to YAML files under
-  ``netconfig/migration/vendors/``.  Three shipped: ``mock.yaml``,
+  ``netcanon/migration/vendors/``.  Three shipped: ``mock.yaml``,
   ``cisco_iosxe.yaml``, ``opnsense.yaml``.  Each declares ``id``,
   ``display_name``, ``device_classes``, ``default_timeout``, ``notes``.
   No Python code — adding a new vendor is a 30-second YAML-copy
   operation.
-- **``VendorInfo``** pydantic model in ``netconfig.models.migration``.
-- **``load_vendors()``** function in ``netconfig.migration.vendors``
+- **``VendorInfo``** pydantic model in ``netcanon.models.migration``.
+- **``load_vendors()``** function in ``netcanon.migration.vendors``
   scans the directory at startup, validates against the model, skips
   corrupt files with a log.  Loaded into ``app.state.vendors``.
 - **``CodecInfo``** now carries ``vendor_id`` and
@@ -3265,8 +3337,8 @@ consumes.
   `CiscoIOSXEAdapter` → `CiscoIOSXECodec`, `OPNsenseAdapter` →
   `OPNsenseCodec`, `get_adapter` → `get_codec`, `list_adapters` →
   `list_codecs`.
-- **Directory:** `netconfig/migration/adapters/` →
-  `netconfig/migration/codecs/`.  `adapter.py` → `codec.py`.
+- **Directory:** `netcanon/migration/adapters/` →
+  `netcanon/migration/codecs/`.  `adapter.py` → `codec.py`.
 - **Test files:** `test_mock_adapter.py` → `test_mock_codec.py`,
   `test_cross_adapter_pipeline.py` → `test_cross_codec_pipeline.py`.
 - **`CapabilityMatrix.vendor_id: str`** — new field, links the codec
@@ -3281,15 +3353,15 @@ Three files identified as god-files during a structural audit;
 all three refactored with zero behaviour change (674 tests pass
 before and after, same count).
 
-- **`netconfig/main.py` (539 → 208 lines).**  All 12 UI route
+- **`netcanon/main.py` (539 → 208 lines).**  All 12 UI route
   handlers (``/``, ``/jobs``, ``/schedules``, ``/configs``,
   ``/configs/{L}/vs/{R}``, ``/devices``, ``/definitions``,
   ``/migrate``, ``/docs``, ``/health``) extracted to a new
-  ``netconfig/api/routes/ui.py`` (406 lines).  ``_format_interval``
+  ``netcanon/api/routes/ui.py`` (406 lines).  ``_format_interval``
   and the Jinja2 ``templates`` instance moved with them.
   ``create_app`` now only wires routers and configures the lifespan.
 
-- **`netconfig/templates/base.html` (834 → 262 lines).**  Two
+- **`netcanon/templates/base.html` (834 → 262 lines).**  Two
   self-contained JS widgets extracted to Jinja ``{% include %}``
   partials (no ``StaticFiles`` mount needed):
   - ``_partials/config-viewer.js`` (346 lines) — syntax highlighter,
@@ -3318,7 +3390,7 @@ before and after, same count).
 
 - **Import fix:** ``tests/unit/test_schedule_models.py`` updated to
   import ``_format_interval`` from its new home in
-  ``netconfig.api.routes.ui`` instead of ``netconfig.main``.
+  ``netcanon.api.routes.ui`` instead of ``netcanon.main``.
 
 ### Fixed + Added (translator `/migrate` UX after manual QA pass)
 
@@ -3340,7 +3412,7 @@ bug, three workflow gaps, one display issue.
   - `opnsense` → `xml-opnsense` (`config.xml`)
   - `mock` → `json-flat`
   - reserved: `xml-panos`, `cli-ios`, `cli-fortigate`, `cli-mikrotik`
-  Catalogued in `netconfig.migration.adapters.base.INPUT_FORMATS`
+  Catalogued in `netcanon.migration.adapters.base.INPUT_FORMATS`
   (frozenset).  `AdapterInfo` now exposes the field so the UI can
   read it from `GET /api/v1/migration/adapters`.
 - **Added: format-hint banner on `/migrate`** — explains in-line
@@ -3434,7 +3506,7 @@ drift flagged in earlier sessions, untouched here.
 ### Added (translator Phase 1 — OPNsense adapter + write endpoints)
 
 - **Second real adapter: `OPNsenseAdapter`** under
-  `netconfig/migration/adapters/opnsense/`.  Parses/renders OPNsense
+  `netcanon/migration/adapters/opnsense/`.  Parses/renders OPNsense
   `config.xml`.  Scope: system hostname/domain and interfaces
   (zone, `if`, descr, enable-flag, ipaddr, subnet).  Declares
   `device_classes=[firewall, router]`.
@@ -3468,7 +3540,7 @@ drift flagged in earlier sessions, untouched here.
     shipping the bytes through HTTP.
   - `force=true` in the body skips the device-class guard.
 - **New model:** `MigrationPlanRequest` in
-  `netconfig.models.migration` — documented, tested, ready for a
+  `netcanon.models.migration` — documented, tested, ready for a
   Phase 2 UI to reuse.
 
 - **Manual testing now possible** end-to-end via curl:
@@ -3537,7 +3609,7 @@ drift flagged in earlier sessions, untouched here.
 ### Added (translator Phase 0.5 — Cisco IOS-XE adapter)
 
 - **First real adapter: `CiscoIOSXEAdapter`** under
-  `netconfig/migration/adapters/cisco_iosxe/`.  Scope:
+  `netcanon/migration/adapters/cisco_iosxe/`.  Scope:
   `openconfig-interfaces` + `openconfig-if-ip` subset (name,
   description, enabled, type, IPv4 address + prefix-length on
   subinterfaces).  Enough to prove the adapter contract against
@@ -3603,7 +3675,7 @@ drift flagged in earlier sessions, untouched here.
   config through a firewall adapter).  Adapters declare one or more
   ``DeviceClass`` values on their ``CapabilityMatrix``; the pipeline
   refuses a pair with no class in common unless ``force=True``.
-- **New `DeviceClass` enum** in `netconfig.models.migration`:
+- **New `DeviceClass` enum** in `netcanon.models.migration`:
   ``switch``, ``router``, ``firewall``, ``load_balancer``,
   ``wireless_controller``, ``access_point``, ``waf``.  Taxonomy is
   flat and additive; multi-class devices (L3 switches, UTM
@@ -3613,7 +3685,7 @@ drift flagged in earlier sessions, untouched here.
   adapters can be developed before their class declarations are
   finalised.
 - **`check_class_compat(source, target) -> CompatibilityReport`** in
-  `netconfig.services.migration_validate`.  Reuses the
+  `netcanon.services.migration_validate`.  Reuses the
   `CompatibilityReport` shape from the diff models so UIs can render
   both class-mismatch and xpath-mismatch banners with the same
   component.  Severity branches: same/overlapping class → `ok`;
@@ -3641,14 +3713,14 @@ drift flagged in earlier sessions, untouched here.
 - **Phase 0 of the translator / migration engine landed.**  Scope per
   `translator-plans.txt` §12: prove the shape end-to-end with a
   reference adapter, no real YANG tooling required yet.
-- **New pydantic models** in `netconfig.models.migration`:
+- **New pydantic models** in `netcanon.models.migration`:
   `CapabilityMatrix` (with a `classify()` resolver using
   "strictest-wins" semantics — unsupported > lossy > supported),
   `LossyPath`, `UnsupportedPath`, `ValidationReport`, `XPathDelta`,
   `TransformSpec`, `MigrationJob`, `MigrationJobStatus`, `AdapterInfo`.
   Shape deliberately mirrors `CompatibilityReport` + `BackupJob` so UI
   banners and lifecycle conventions stay consistent.
-- **`netconfig.migration` package**:
+- **`netcanon.migration` package**:
   - `adapters/base.py` — `AdapterBase` ABC + `ParseError` / `RenderError`.
   - `adapters/registry.py` — in-memory `register` / `get_adapter` /
     `list_adapters` with name-collision and missing-name guards.
@@ -3657,7 +3729,7 @@ drift flagged in earlier sessions, untouched here.
     (supported, lossy, unsupported).
   - `canonical/loader.py` — Phase 0.5 stub; `NotImplementedError`
     with clear roadmap pointer.  `PLANNED_MODULES` tuple documents
-    the OpenConfig + `netconfig-ext` modules that will be pinned
+    the OpenConfig + `netcanon-ext` modules that will be pinned
     once libyang lands.
 - **New services**:
   - `services/migration_validate.py` — walks a tree's xpaths,
@@ -3742,10 +3814,10 @@ drift flagged in earlier sessions, untouched here.
   flash of unstyled content.
 - Keyboard-accessible: markers are `<button>`s so Tab / Enter / Space
   all work.
-- **New model:** `netconfig.models.diff.DiffGroup` — `{kind, lines}`
+- **New model:** `netcanon.models.diff.DiffGroup` — `{kind, lines}`
   where ``kind`` is the per-line classification or the new
   ``"collapsed"`` group.
-- **New service:** `netconfig.services.diff.fold_context(lines,
+- **New service:** `netcanon.services.diff.fold_context(lines,
   context=3)` — pure, two-sweep Manhattan-style distance-to-change
   computation.  Default context (`3` lines) matches unified-diff
   convention.
@@ -3783,9 +3855,9 @@ drift flagged in earlier sessions, untouched here.
   stays consistent between the viewer and the diff view.
 - **Compare button** on every row of `/configs`; lightweight modal
   picker keyed on `type_key` + `file_extension`.
-- **New models:** `netconfig.models.diff.{DiffLine, CompatibilityReport,
+- **New models:** `netcanon.models.diff.{DiffLine, CompatibilityReport,
   DiffRequest, DiffReport}`.  **New service:**
-  `netconfig.services.diff.{check_compatibility, compute_diff}` — pure,
+  `netcanon.services.diff.{check_compatibility, compute_diff}` — pure,
   no I/O, easily testable.
 - **New tests:**
   - `tests/unit/test_diff_service.py` (12 tests): pure-function tests
@@ -3834,9 +3906,9 @@ drift flagged in earlier sessions, untouched here.
   device now completes in ~3 × the per-device latency instead of 30 ×.
 - **`Settings.backup_concurrency`** — new configurable, range `[1, 10]`,
   default `10`.  Hard-capped at `MAX_BACKUP_CONCURRENCY = 10` in
-  `netconfig/config.py` to protect target SSH servers (most vendor caps
+  `netcanon/config.py` to protect target SSH servers (most vendor caps
   are 5–16) and bound server thread count.  Override via
-  `NETCONFIG_BACKUP_CONCURRENCY`; see `.env.example`.
+  `NETCANON_BACKUP_CONCURRENCY`; see `.env.example`.
 - **Serial fast-path** — jobs with a single device (or deployments
   pinned to `backup_concurrency=1`) skip the thread pool entirely;
   traces and error paths stay unchanged for those callers.
@@ -3866,14 +3938,14 @@ drift flagged in earlier sessions, untouched here.
     success, `✗` failed), host label, per-device duration, and truncated
     error on failure.
   - **Persists across full page reloads** — the active job ID is stored
-    in `localStorage["netconfig.activeJob"]`; on `DOMContentLoaded` the
+    in `localStorage["netcanon.activeJob"]`; on `DOMContentLoaded` the
     panel resumes polling if the stored job is still non-terminal, and
     renders the final state otherwise.
   - Explicit `Dismiss` button (no auto-dismiss) clears the panel AND the
     localStorage key.  A "View full job details" deep link jumps to the
     corresponding card on `/jobs`.
-  - Dispatches `netconfig:job-started`, `netconfig:job-progress`,
-    `netconfig:job-complete`, and `netconfig:job-dismissed` `CustomEvent`s
+  - Dispatches `netcanon:job-started`, `netcanon:job-progress`,
+    `netcanon:job-complete`, and `netcanon:job-dismissed` `CustomEvent`s
     on `document` so page-level code (e.g. the dashboard row injector)
     can react without re-polling.
 - **New `data-testid`s:** `job-progress-panel`, `job-progress-header`,
@@ -3890,7 +3962,7 @@ drift flagged in earlier sessions, untouched here.
 - **Inline job status banner** on `index.html` — replaced by the global
   floating progress panel (above).  The dashboard's submit handler now
   delegates to `startJobProgress(jobId)` and listens for the
-  `netconfig:job-complete` event for the "inject a row into the recent
+  `netcanon:job-complete` event for the "inject a row into the recent
   jobs table" step.
 
 ### Added (config viewer: syntax highlighting + in-modal search)
@@ -3944,10 +4016,10 @@ drift flagged in earlier sessions, untouched here.
     (name, interval\_minutes, devices list)
   - **`DELETE /api/v1/schedules/{id}`** — delete a schedule
   - **`POST /api/v1/schedules/{id}/toggle`** — enable / disable a schedule
-- **`BackupSchedule` model** (`netconfig/models/schedule.py`) — stores schedule
+- **`BackupSchedule` model** (`netcanon/models/schedule.py`) — stores schedule
   metadata: id, name, enabled, interval\_minutes, devices, created\_at,
   last\_run\_at, next\_run\_at, last\_job\_id.
-- **`FileScheduleStore`** (`netconfig/storage/schedule_store.py`) — persists
+- **`FileScheduleStore`** (`netcanon/storage/schedule_store.py`) — persists
   schedule definitions as JSON under `{data_root}/schedules/`.
 - **APScheduler integration** — `AsyncIOScheduler` (timezone=UTC) is started in
   the app lifespan.  Each enabled schedule registers an `IntervalTrigger` job.
@@ -4003,8 +4075,8 @@ drift flagged in earlier sessions, untouched here.
   files that pre-date migration.
 - **`Settings.open_in_editor: bool = False`** — new flag.  When `True`, enables
   the `POST /api/v1/configs/{filename}/open` endpoint.  Set to `True` in
-  `netconfig_desktop/settings.py`.  Can also be enabled for local web
-  deployments via `NETCONFIG_OPEN_IN_EDITOR=true`.
+  `netcanon_desktop/settings.py`.  Can also be enabled for local web
+  deployments via `NETCANON_OPEN_IN_EDITOR=true`.
 - **`POST /api/v1/configs/{filename}/open`** — opens the named config file in
   the OS default text editor (`os.startfile` on Windows, `open` on macOS,
   `xdg-open` on Linux).  Returns 204 on success; 403 if disabled; 404 if not
@@ -4031,39 +4103,39 @@ drift flagged in earlier sessions, untouched here.
 
 ### Added (logging)
 
-- **`netconfig/logging_config.py`** — New `configure_logging(level, log_file)` function.
+- **`netcanon/logging_config.py`** — New `configure_logging(level, log_file)` function.
   Sets up a `StreamHandler` (stderr) plus an optional `RotatingFileHandler` (5 MB, 3
   backups) on the root logger.  Idempotent: skips when real (non-pytest) handlers are
   already present.  Suppresses `paramiko`, `uvicorn.access`, `multipart`, and `asyncio`
   to `WARNING` regardless of root level to reduce noise in INFO/DEBUG runs.
-- **`netconfig_desktop/__main__.py`** — `_configure_logging()` called before
+- **`netcanon_desktop/__main__.py`** — `_configure_logging()` called before
   `DesktopApp()`.  In frozen (installed) mode writes to
-  `%APPDATA%\Netcanon\netconfig.log`; in dev mode uses console only.  Fatal startup
+  `%APPDATA%\Netcanon\netcanon.log`; in dev mode uses console only.  Fatal startup
   exceptions now go through `logger.critical(..., exc_info=True)` before the message
   box so the stack trace is captured in the log file.
-- **`netconfig_desktop/server.py`** — `log_config=None` added to `uvicorn.Config` so
+- **`netcanon_desktop/server.py`** — `log_config=None` added to `uvicorn.Config` so
   uvicorn's startup does not call `logging.config.dictConfig()` and overwrite the root
   logger configuration set by `configure_logging()`.
-- **`netconfig_desktop/settings.py`** — `log_level` default raised from `"warning"` to
+- **`netcanon_desktop/settings.py`** — `log_level` default raised from `"warning"` to
   `"info"` so desktop INFO logs reach the file handler.
 
 ### Changed (logging)
 
-- **`netconfig/api/routes/backups.py`** — Device backup failures upgraded from
+- **`netcanon/api/routes/backups.py`** — Device backup failures upgraded from
   `WARNING` to `ERROR` and now include `exc_info=True` for full traceback capture.
-- **`netconfig/api/routes/configs.py`** — Added module logger; all three endpoints now
+- **`netcanon/api/routes/configs.py`** — Added module logger; all three endpoints now
   emit structured log records (`DEBUG` for list/get, `INFO` for delete success,
   `WARNING` for 404 paths).
-- **`netconfig/api/routes/definitions.py`** — Added module logger; reload endpoint
+- **`netcanon/api/routes/definitions.py`** — Added module logger; reload endpoint
   logs loaded count and source directory at `INFO`.
-- **`netconfig/storage/file_store.py`** — Added module logger; `save()` logs filename
+- **`netcanon/storage/file_store.py`** — Added module logger; `save()` logs filename
   and byte count at `INFO`, `list_configs()` at `DEBUG`, `delete()` at `INFO`.
-- **`netconfig_desktop/app.py`** — Lifecycle events (start, server ready, quit, window
+- **`netcanon_desktop/app.py`** — Lifecycle events (start, server ready, quit, window
   closed) logged at `INFO`.
-- **`netconfig_desktop/tray.py`** — Added module logger; `run_detached()` at `DEBUG`,
+- **`netcanon_desktop/tray.py`** — Added module logger; `run_detached()` at `DEBUG`,
   Show/Quit callbacks at `DEBUG`/`INFO`, `stop()` exception swallowed at `DEBUG`
   (was silent).
-- **`netconfig_desktop/window.py`** — Added module logger; `create()` and `start()` at
+- **`netcanon_desktop/window.py`** — Added module logger; `create()` and `start()` at
   `INFO`, show/hide/destroy at `DEBUG`, `on_closed` callback exception at `DEBUG`
   (was silent).
 
@@ -4072,7 +4144,7 @@ drift flagged in earlier sessions, untouched here.
 - `tests/unit/test_logging_config.py` — 17 new unit tests across three classes:
   `TestConfigureLoggingBasic` (handler type, levels, idempotency),
   `TestFileHandler` (rotating handler, directory creation, write-through),
-  `TestNoisyLoggerSuppression` (third-party loggers capped at WARNING, netconfig.*
+  `TestNoisyLoggerSuppression` (third-party loggers capped at WARNING, netcanon.*
   left at NOTSET).  `reset_root_logger` autouse fixture restores root logger state
   after each test.
 
@@ -4080,7 +4152,7 @@ drift flagged in earlier sessions, untouched here.
 
 ### Security
 
-- **Credential encryption at rest** (`netconfig/security/credentials.py`) —
+- **Credential encryption at rest** (`netcanon/security/credentials.py`) —
   Device passwords and enable passwords are now encrypted with Fernet
   symmetric encryption before being written to disk.  The key is stored in
   the OS secure credential store (Windows Credential Manager / macOS Keychain
@@ -4088,18 +4160,18 @@ drift flagged in earlier sessions, untouched here.
   profiles and schedule device lists are automatically migrated to encrypted
   storage on first load.  In-memory model objects always hold plaintext;
   encryption is a storage-layer concern only.
-- **Path traversal protection** (`netconfig/storage/file_store.py`) —
+- **Path traversal protection** (`netcanon/storage/file_store.py`) —
   `resolve_path()` now rejects any filename that does not match the expected
   naming convention regex before touching the filesystem.  Both the
   subdirectory and flat-fallback paths are verified to lie inside the storage
   root via `Path.resolve().is_relative_to()`.
-- **Open-in-editor extension whitelist** (`netconfig/api/routes/configs.py`) —
+- **Open-in-editor extension whitelist** (`netcanon/api/routes/configs.py`) —
   `POST /api/v1/configs/{filename}/open` now checks the file extension against
   an explicit allowlist (`{.cfg, .conf, .txt, .xml, .log}`) and returns 400
   for any other type, preventing the OS handler from being invoked on
   executables or other unintended file types.
-- **Host field validation** (`netconfig/models/device.py`,
-  `netconfig/models/device_profile.py`) — `DeviceTarget.host`,
+- **Host field validation** (`netcanon/models/device.py`,
+  `netcanon/models/device_profile.py`) — `DeviceTarget.host`,
   `DeviceProfileCreate.host`, and `DeviceProfileUpdate.host` now validate
   against `ipaddress.ip_address()` or an RFC-1123 hostname regex.  Shell
   metacharacters, path separators, and other invalid values are rejected
@@ -4141,11 +4213,11 @@ drift flagged in earlier sessions, untouched here.
 
 ### Added (device profiles)
 
-- **`DeviceProfile` model** (`netconfig/models/device_profile.py`) — stores
+- **`DeviceProfile` model** (`netcanon/models/device_profile.py`) — stores
   profile metadata: `id` (UUID), `name`, `type_key`, `host`, `port`, `username`,
   `password`, `enable_password` (optional), `notes` (optional), `created_at`.
   `DeviceProfileCreate` and `DeviceProfileUpdate` companion models.
-- **`FileDeviceProfileStore`** (`netconfig/storage/device_profile_store.py`) —
+- **`FileDeviceProfileStore`** (`netcanon/storage/device_profile_store.py`) —
   persists profiles as JSON under `{data_root}/devices/{id}.json`.
 - **`GET/POST /api/v1/devices/`** and **`GET/PUT/DELETE /api/v1/devices/{id}`** —
   full CRUD for device profiles.
@@ -4278,6 +4350,6 @@ drift flagged in earlier sessions, untouched here.
 - Multi-vendor SSH configuration backup via Netmiko and Paramiko Shell strategies
 - FastAPI + Jinja2 web UI: Dashboard, Configs browser, Definitions viewer
 - Windows desktop shell: PySide6/QtWebEngine window, pystray system-tray icon,
-  embedded Uvicorn server (`netconfig_desktop`)
+  embedded Uvicorn server (`netcanon_desktop`)
 - cx_Freeze MSI installer (`setup_desktop.py`)
 - Four-layer test suite: unit, integration, E2E (Playwright), desktop

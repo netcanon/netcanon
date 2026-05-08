@@ -25,10 +25,10 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.config import Settings
-from netconfig.definitions.loader import DefinitionLoader
-from netconfig.main import create_app
-from netconfig_desktop.server import ServerThread
+from netcanon.config import Settings
+from netcanon.definitions.loader import DefinitionLoader
+from netcanon.main import create_app
+from netcanon_desktop.server import ServerThread
 
 pytestmark = pytest.mark.desktop
 

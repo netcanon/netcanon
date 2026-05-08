@@ -132,7 +132,7 @@ meta:
 # ---------------------------------------------------------------------------
 # Per-field expectations.  Walks every top-level CanonicalIntent field
 # (and meaningful sub-fields) defined in
-# netconfig/migration/canonical/intent.py.
+# netcanon/migration/canonical/intent.py.
 # ---------------------------------------------------------------------------
 
 per_field_expectation:
@@ -280,7 +280,7 @@ per_field_expectation:
     reason: >
       The cisco_iosxe parser hard-codes scope="global" on every
       parsed IPv6 address (see
-      `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
+      `netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
       Even when the source XML carries draft `address-type` augment
       indicating link-local, the canonical record receives
       scope="global".  The Arista render emits `ipv6 address X/N`

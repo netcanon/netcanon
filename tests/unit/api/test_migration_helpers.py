@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`netconfig.api.routes._migration_helpers`.
+"""Unit tests for :mod:`netcanon.api.routes._migration_helpers`.
 
 Helpers were extracted out of ``migration.py`` during the
 ``refactor/god-file-cleanup`` branch.  Previously they were exercised
@@ -21,16 +21,16 @@ from types import SimpleNamespace
 import pytest
 from fastapi import HTTPException
 
-from netconfig.api.routes._migration_helpers import (
+from netcanon.api.routes._migration_helpers import (
     build_codec_info_list,
     get_target_profiles,
     request_has_overrides_or_profile,
     resolve_adapter_or_422,
     resolve_input_text,
 )
-from netconfig.models.backup import ConfigRecord
-from netconfig.models.migration import MigrationPlanRequest
-from netconfig.storage.base import BaseConfigStore
+from netcanon.models.backup import ConfigRecord
+from netcanon.models.migration import MigrationPlanRequest
+from netcanon.storage.base import BaseConfigStore
 
 
 pytestmark = pytest.mark.unit

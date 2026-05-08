@@ -1,4 +1,4 @@
-"""Unit tests for ``netconfig.migration._tier3_detection``.
+"""Unit tests for ``netcanon.migration._tier3_detection``.
 
 Pin the per-vendor detector behaviour against synthetic fixtures so the
 "detected in source but not translated" banner has stable inputs.
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration._tier3_detection import (
+from netcanon.migration._tier3_detection import (
     detect_tier3_sections_fortios,
     detect_tier3_sections_iosxe_cli,
     detect_tier3_sections_iosxe_xml,
@@ -319,7 +319,7 @@ class TestCodecWiring:
     enough — the helper tests above pin the detector content."""
 
     def test_arista_eos_populates_field(self) -> None:
-        from netconfig.migration.codecs.arista_eos.codec import AristaEOSCodec
+        from netcanon.migration.codecs.arista_eos.codec import AristaEOSCodec
 
         raw = (
             "hostname r1\n"
@@ -330,7 +330,7 @@ class TestCodecWiring:
         assert "ip access-list extended OUTSIDE_IN" in intent.dropped_tier3_sections
 
     def test_aruba_aoss_populates_field(self) -> None:
-        from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+        from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
 
         raw = (
             'hostname "sw"\n'
@@ -342,7 +342,7 @@ class TestCodecWiring:
         assert "ip access-list extended LOCK" in intent.dropped_tier3_sections
 
     def test_cisco_iosxe_cli_populates_field(self) -> None:
-        from netconfig.migration.codecs.cisco_iosxe_cli.codec import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
             CiscoIOSXECLICodec,
         )
 
@@ -363,7 +363,7 @@ class TestCodecWiring:
         )
 
     def test_cisco_iosxe_netconf_populates_field_as_empty(self) -> None:
-        from netconfig.migration.codecs.cisco_iosxe.codec import (
+        from netcanon.migration.codecs.cisco_iosxe.codec import (
             CiscoIOSXECodec,
         )
 
@@ -380,7 +380,7 @@ class TestCodecWiring:
         assert intent.dropped_tier3_sections == []
 
     def test_fortigate_populates_field(self) -> None:
-        from netconfig.migration.codecs.fortigate_cli.codec import (
+        from netcanon.migration.codecs.fortigate_cli.codec import (
             FortiGateCLICodec,
         )
 
@@ -397,7 +397,7 @@ class TestCodecWiring:
         assert "config firewall policy" in intent.dropped_tier3_sections
 
     def test_juniper_junos_populates_field(self) -> None:
-        from netconfig.migration.codecs.juniper_junos.codec import JunosCodec
+        from netcanon.migration.codecs.juniper_junos.codec import JunosCodec
 
         raw = (
             "set system host-name r1\n"
@@ -410,7 +410,7 @@ class TestCodecWiring:
         )
 
     def test_mikrotik_routeros_populates_field(self) -> None:
-        from netconfig.migration.codecs.mikrotik_routeros.codec import (
+        from netcanon.migration.codecs.mikrotik_routeros.codec import (
             MikroTikRouterOSCodec,
         )
 
@@ -422,7 +422,7 @@ class TestCodecWiring:
         assert "/ip firewall filter" in intent.dropped_tier3_sections
 
     def test_opnsense_populates_field(self) -> None:
-        from netconfig.migration.codecs.opnsense.codec import OPNsenseCodec
+        from netcanon.migration.codecs.opnsense.codec import OPNsenseCodec
 
         raw = (
             "<opnsense>"
@@ -436,7 +436,7 @@ class TestCodecWiring:
 
     def test_clean_input_returns_empty_list(self) -> None:
         """Sanity: a config with only Tier-1/2 content yields []."""
-        from netconfig.migration.codecs.cisco_iosxe_cli.codec import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
             CiscoIOSXECLICodec,
         )
 

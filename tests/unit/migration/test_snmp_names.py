@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`netconfig.migration.canonical.snmp_names`.
+Unit tests for :mod:`netcanon.migration.canonical.snmp_names`.
 
 Layer A tests — transform-level correctness on synthetic
 :class:`CanonicalIntent` trees, no I/O, no codec-specific behaviour.
@@ -23,11 +23,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
 )
-from netconfig.migration.canonical.snmp_names import (
+from netcanon.migration.canonical.snmp_names import (
     SnmpRenameResult,
     build_snmp_community_rename_transform,
     translate_snmp_community,

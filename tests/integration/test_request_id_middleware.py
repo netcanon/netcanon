@@ -119,14 +119,14 @@ class TestLogRecordCorrelation:
     ):
         """Caplog sees the log record.  The record's ``request_id``
         attribute (set by the filter) should match the inbound id."""
-        from netconfig.logging_config import RequestIdFilter
+        from netcanon.logging_config import RequestIdFilter
         # Caplog's handler doesn't have RequestIdFilter by default
         # (pytest owns it).  Install the filter on caplog's handler
         # so the attribute injection happens on captured records.
         caplog.handler.addFilter(RequestIdFilter())
         inbound = "itest-0001"
         with caplog.at_level(
-            "INFO", logger="netconfig.api.routes.migration",
+            "INFO", logger="netcanon.api.routes.migration",
         ):
             client.get(
                 "/api/v1/migration/adapters",
@@ -136,7 +136,7 @@ class TestLogRecordCorrelation:
         # does emit an INFO line with the job id.  Use a minimal
         # body that reaches the logger.info() call.
         with caplog.at_level(
-            "INFO", logger="netconfig.api.routes.migration",
+            "INFO", logger="netcanon.api.routes.migration",
         ):
             resp = client.post(
                 "/api/v1/migration/plan",
@@ -152,7 +152,7 @@ class TestLogRecordCorrelation:
         # Find the route's own INFO log.
         plan_records = [
             r for r in caplog.records
-            if r.name == "netconfig.api.routes.migration"
+            if r.name == "netcanon.api.routes.migration"
             and r.levelname == "INFO"
         ]
         assert plan_records, (

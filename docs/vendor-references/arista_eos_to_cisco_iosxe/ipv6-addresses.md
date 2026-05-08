@@ -55,7 +55,7 @@ cisco_iosxe codec doesn't emit them.
 The codec's `_iface_dict_to_canonical()` body hard-codes
 `scope="global"` on every parsed IPv6 address it builds from the
 NETCONF wire (see
-`netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
+`netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
 
 When this codec is the **render** target (this pair), the render
 side emits the address with no scope hint regardless of what the

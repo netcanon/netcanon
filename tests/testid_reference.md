@@ -17,7 +17,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-devices`      | `<a>`   | Link to `/devices`; active on Devices page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
-| `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netconfig.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
+| `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netcanon.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
 | `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
 
 ## Dashboard (`index.html`)
@@ -146,15 +146,15 @@ way.  The "Reverse direction" button swaps the two.
 
 Floating bottom-right widget rendered on every page.  Receives job updates
 via `startJobProgress(jobId)` and survives full page reloads — the active
-job ID is stored in `localStorage["netconfig.activeJob"]`.  The panel
+job ID is stored in `localStorage["netcanon.activeJob"]`.  The panel
 dispatches `CustomEvent`s on `document` that page-level code can listen for:
 
 | Event                          | Detail              | When |
 |--------------------------------|---------------------|------|
-| `netconfig:job-started`        | `{ jobId }`         | `startJobProgress()` called |
-| `netconfig:job-progress`       | `{ job }`           | Each poll tick |
-| `netconfig:job-complete`       | `{ job }`           | Job reached terminal state |
-| `netconfig:job-dismissed`      | `{ jobId }`         | User clicked dismiss OR manual clear |
+| `netcanon:job-started`        | `{ jobId }`         | `startJobProgress()` called |
+| `netcanon:job-progress`       | `{ job }`           | Each poll tick |
+| `netcanon:job-complete`       | `{ job }`           | Job reached terminal state |
+| `netcanon:job-dismissed`      | `{ jobId }`         | User clicked dismiss OR manual clear |
 
 ### Per-device status SOP (values of `data-status` on a device row)
 
@@ -492,7 +492,7 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-result`                      | `<div>`    | Hidden container for everything below; revealed after first result |
 | `migrate-status-summary`              | `<div>`    | "Job {id}… — status: completed/partial/failed" |
 | `migrate-compatibility-banner`        | `<div>`    | Severity-coloured banner mirroring `ValidationReport.severity` |
-| `migrate-tier3-banner`                | `<div>`    | Notification banner — visible iff `MigrationJob.dropped_tier3_sections` is non-empty.  Surfaces source-side stanza headers the parser deliberately drops (ACLs, NAT, QoS, route-maps, IPsec, etc).  See `netconfig/migration/_tier3_detection.py` |
+| `migrate-tier3-banner`                | `<div>`    | Notification banner — visible iff `MigrationJob.dropped_tier3_sections` is non-empty.  Surfaces source-side stanza headers the parser deliberately drops (ACLs, NAT, QoS, route-maps, IPsec, etc).  See `netcanon/migration/_tier3_detection.py` |
 | `migrate-tier3-count`                 | `<strong>` | Detected-section count rendered inside the Tier-3 banner |
 | `migrate-tier3-section-N`             | `<li>`     | One row per detected stanza header, indexed `N=0..len-1`.  Children are `<code>` elements with the literal label |
 | `migrate-stats`                       | `<div>`    | Supported/lossy/unsupported path counts |
@@ -659,7 +659,7 @@ surfaces under a shared left-rail navigation):
 > **Aspirational — not yet shipped.**  The testids in the table below are
 > reserved names for the upcoming Phase 2 work (transforms wizard, semantic
 > delta banner, deploy confirmation flow).  None of these testids exist in
-> any template today.  Searching the `netconfig/templates/` tree for any of
+> any template today.  Searching the `netcanon/templates/` tree for any of
 > them will return zero hits — that is expected.
 >
 > They are listed here so the Phase 2 implementation lands with stable

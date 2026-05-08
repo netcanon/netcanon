@@ -35,25 +35,25 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos.parse import (
+from netcanon.migration.codecs.arista_eos.parse import (
     parse_intent as arista_parse,
 )
-from netconfig.migration.codecs.arista_eos.render import (
+from netcanon.migration.codecs.arista_eos.render import (
     render_intent as arista_render,
 )
-from netconfig.migration.codecs.aruba_aoss.parse import (
+from netcanon.migration.codecs.aruba_aoss.parse import (
     parse_intent as aruba_parse,
 )
-from netconfig.migration.codecs.aruba_aoss.render import (
+from netcanon.migration.codecs.aruba_aoss.render import (
     render_intent as aruba_render,
 )
-from netconfig.migration.codecs.cisco_iosxe_cli.parse import (
+from netcanon.migration.codecs.cisco_iosxe_cli.parse import (
     parse_intent as cisco_parse,
 )
-from netconfig.migration.codecs.juniper_junos.parse import (
+from netcanon.migration.codecs.juniper_junos.parse import (
     parse_intent as junos_parse,
 )
-from netconfig.migration.codecs.juniper_junos.render import (
+from netcanon.migration.codecs.juniper_junos.render import (
     render_intent as junos_render,
 )
 
@@ -203,7 +203,7 @@ def test_arista_render_emits_trunk_native_vlan() -> None:
     """A bare CanonicalIntent with one trunk interface carrying
     ``trunk_native_vlan=10`` must render to text containing the
     ``switchport trunk native vlan 10`` directive."""
-    from netconfig.migration.canonical.intent import (
+    from netcanon.migration.canonical.intent import (
         CanonicalIntent, CanonicalInterface, CanonicalVlan,
     )
     intent = CanonicalIntent(

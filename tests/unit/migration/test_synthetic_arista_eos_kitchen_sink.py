@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 
 pytestmark = pytest.mark.unit
 

@@ -41,19 +41,19 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos.parse import (
+from netcanon.migration.codecs.arista_eos.parse import (
     parse_intent as arista_parse,
 )
-from netconfig.migration.codecs.arista_eos.render import (
+from netcanon.migration.codecs.arista_eos.render import (
     render_intent as arista_render,
 )
-from netconfig.migration.codecs.aruba_aoss.parse import (
+from netcanon.migration.codecs.aruba_aoss.parse import (
     parse_intent as aruba_parse,
 )
-from netconfig.migration.codecs.juniper_junos.parse import (
+from netcanon.migration.codecs.juniper_junos.parse import (
     parse_intent as junos_parse,
 )
-from netconfig.migration.codecs.juniper_junos.render import (
+from netcanon.migration.codecs.juniper_junos.render import (
     render_intent as junos_render,
 )
 
@@ -235,7 +235,7 @@ def test_arista_render_projects_vlan_to_switchport_on_bare_intent() -> None:
     ``vlans[].untagged_ports`` (no per-iface switchport state).
     The output must contain ``switchport access vlan N`` lines on
     each port."""
-    from netconfig.migration.canonical.intent import (
+    from netcanon.migration.canonical.intent import (
         CanonicalIntent, CanonicalInterface, CanonicalVlan,
     )
 

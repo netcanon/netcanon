@@ -1,6 +1,6 @@
 # Aruba AOS-S 16.x  (formerly HP ProCurve)
 #
-# Pairs with the migration codec at netconfig/migration/codecs/aruba_aoss
+# Pairs with the migration codec at netcanon/migration/codecs/aruba_aoss
 # which round-trips AOS-S native config to/from CanonicalIntent.  This file
 # is what the backup pipeline uses to *fetch* the running-config from a
 # real Aruba 25xx / 29xx / 5400R-series switch.

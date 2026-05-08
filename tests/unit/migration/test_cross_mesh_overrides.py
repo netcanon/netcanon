@@ -33,7 +33,7 @@ import pytest
 # trip tests in this file construct ArubaAOSSCodec() directly for
 # readability; they could switch to ``_resolve_codec("aruba_aoss")``
 # but the class-name form reads better at the call site.
-from netconfig.migration.codecs import (  # noqa: F401 — side-effect import
+from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     _mock,
     arista_eos,
     aruba_aoss,
@@ -44,9 +44,9 @@ from netconfig.migration.codecs import (  # noqa: F401 — side-effect import
     mikrotik_routeros,
     opnsense,
 )
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.registry import get_codec, list_codecs
-from netconfig.services.migration_pipeline import run_plan_with_overrides
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.registry import get_codec, list_codecs
+from netcanon.services.migration_pipeline import run_plan_with_overrides
 
 
 def _resolve_codec_class(name: str):
@@ -62,7 +62,7 @@ def _resolve_codec_class(name: str):
         raise KeyError(
             f"Codec {name!r} not registered.  Known codecs: "
             f"{sorted(list_codecs())}.  Did you forget to import "
-            f"``netconfig.migration.codecs.<vendor>`` at the top of "
+            f"``netcanon.migration.codecs.<vendor>`` at the top of "
             f"this file?"
         )
     return type(get_codec(name))
@@ -805,7 +805,7 @@ def test_ipv6_address_survives_cross_mesh_render(target_name: str):
     render together — that is the silent-drop class of bug GAP-
     EVPN-3 was filed for.
     """
-    from netconfig.migration.canonical.intent import (
+    from netcanon.migration.canonical.intent import (
         CanonicalIntent,
         CanonicalInterface,
         CanonicalIPv6Address,

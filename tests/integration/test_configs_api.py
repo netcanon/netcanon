@@ -13,8 +13,8 @@ from unittest.mock import patch
 
 import pytest
 
-from netconfig.config import Settings
-from netconfig.storage.file_store import FileConfigStore
+from netcanon.config import Settings
+from netcanon.storage.file_store import FileConfigStore
 
 pytestmark = pytest.mark.integration
 
@@ -151,7 +151,7 @@ class TestOpenConfig:
 
         from fastapi.testclient import TestClient
 
-        from netconfig.main import create_app
+        from netcanon.main import create_app
         from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
 
         settings = Settings(
@@ -162,7 +162,7 @@ class TestOpenConfig:
         app = create_app(settings)
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
-            "netconfig.api.routes.backups.get_collector", return_value=fake
+            "netcanon.api.routes.backups.get_collector", return_value=fake
         ):
             with TestClient(app, raise_server_exceptions=True) as c:
                 yield c

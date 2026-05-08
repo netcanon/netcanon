@@ -72,7 +72,7 @@ pytest tests/e2e -m e2e -v
 pytest tests/desktop/ -v
 
 # Full suite with coverage
-pytest --cov=netconfig --cov-report=term-missing
+pytest --cov=netcanon --cov-report=term-missing
 
 # Parallel execution (unit + integration only — E2E is session-scoped)
 pytest -m "not e2e" -n auto
@@ -90,7 +90,7 @@ pytest -m "not e2e" -n auto
 ## Mocking Strategy
 
 SSH collection is mocked at a **single entry point**: `get_collector` in
-`netconfig.api.routes.backups`.  This function is the sole factory that
+`netcanon.api.routes.backups`.  This function is the sole factory that
 maps a definition's strategy to a concrete collector instance.
 
 - **Integration tests**: `unittest.mock.patch` in the `client` fixture
@@ -136,5 +136,5 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 | Codec certification state + coverage matrix | [`fixtures/real/RESULTS.md`](fixtures/real/RESULTS.md) |
 | Cross-mesh fidelity reconciliation (Phase 4) | [`fixtures/real/PHASE4_RECONCILIATION.md`](fixtures/real/PHASE4_RECONCILIATION.md) |
 | Operator-spotted cross-vendor bugs | [`fixtures/real/user_smoke_findings.md`](fixtures/real/user_smoke_findings.md) |
-| Codec authoring (how to add a new vendor) | [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) |
+| Codec authoring (how to add a new vendor) | [`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md) |
 | Device-definition + target-profile schema | [`../definitions/README.md`](../definitions/README.md) |

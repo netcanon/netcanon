@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.services.migration_validate``.
+Unit tests for ``netcanon.services.migration_validate``.
 
 Exercises every branch of severity aggregation (ok / warn / block)
 and the helper that classifies tree xpaths against a matrix.
@@ -9,13 +9,13 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.models.migration import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.models.migration import (
     CapabilityMatrix,
     LossyPath,
     UnsupportedPath,
 )
-from netconfig.services.migration_validate import (
+from netcanon.services.migration_validate import (
     classify_tree,
     validate_against,
 )

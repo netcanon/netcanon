@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.services.migration_detect`` and the
+Unit tests for ``netcanon.services.migration_detect`` and the
 per-codec :meth:`CodecBase.probe` overrides (R5 auto-detection).
 """
 
@@ -7,15 +7,15 @@ from __future__ import annotations
 
 import pytest
 
-import netconfig.migration  # noqa: F401 — side-effect: register codecs
+import netcanon.migration  # noqa: F401 — side-effect: register codecs
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import CodecBase
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.services.migration_detect import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import CodecBase
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.services.migration_detect import (
     DetectCandidate,
     best_codec,
     detect_codec,

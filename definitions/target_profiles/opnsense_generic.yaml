@@ -4,7 +4,7 @@
 # compatible hardware.  The codec can classify / format any NIC
 # driver (igb, igc, em, ix, cxgbe, bnxt, mlxen, vmx, vtnet, mvneta,
 # ax, lagg, wg, gif, gre, ovpns, ovpnc — see
-# netconfig/migration/codecs/opnsense/port_names.py), but we can't
+# netcanon/migration/codecs/opnsense/port_names.py), but we can't
 # pre-enumerate every possible port layout.
 #
 # Use this profile when migrating TO OPNsense on:

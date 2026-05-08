@@ -35,7 +35,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 pytestmark = pytest.mark.unit
 
@@ -81,7 +81,7 @@ def test_populates_every_expected_canonical_field(raw_xml: str) -> None:
     """Pin the canonical-field coverage of the OPNsense parser.
 
     Every field below is wired in
-    ``netconfig/migration/codecs/opnsense/parse.py``.  When wire-up
+    ``netcanon/migration/codecs/opnsense/parse.py``.  When wire-up
     expands (``intent.dns_servers``, ``intent.ntp_servers``,
     ``intent.timezone``, ``intent.syslog_servers``,
     ``intent.static_routes`` are next on deck), add the new

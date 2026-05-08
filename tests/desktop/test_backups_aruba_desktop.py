@@ -24,9 +24,9 @@ from unittest.mock import patch
 
 import pytest
 
-from netconfig.config import Settings
-from netconfig.main import create_app
-from netconfig_desktop.server import ServerThread
+from netcanon.config import Settings
+from netcanon.main import create_app
+from netcanon_desktop.server import ServerThread
 from tests.conftest import FakeCollector
 
 pytestmark = pytest.mark.desktop
@@ -78,7 +78,7 @@ class TestArubaDefinitionServedByEmbeddedServer:
         # is harmless (no SSH).  The smoke check below only hits GET
         # endpoints, but defence-in-depth is cheap.
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=FakeCollector(output="! noop\n"),
         ):
             server = ServerThread(app, port=port, log_level="critical")

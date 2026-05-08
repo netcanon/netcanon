@@ -177,7 +177,7 @@ class TestJobTerminalStatus:
 
         collector = _SelectiveFailCollector(fail_hosts)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(test_app, raise_server_exceptions=True) as c:
@@ -257,7 +257,7 @@ class TestDeviceStatusLifecycle:
 
         collector = _ObservingCollector(test_app)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(test_app, raise_server_exceptions=True) as c:
@@ -345,7 +345,7 @@ class _BarrierCollector:
 
 def _build_parallel_app(test_settings, concurrency: int):
     """Return a fresh FastAPI app with ``backup_concurrency=concurrency``."""
-    from netconfig.main import create_app
+    from netcanon.main import create_app
 
     parallel = test_settings.model_copy(update={"backup_concurrency": concurrency})
     return create_app(parallel)
@@ -363,7 +363,7 @@ class TestBackupConcurrency:
         collector = _BarrierCollector(parties=3)
 
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(app, raise_server_exceptions=True) as c:
@@ -385,11 +385,11 @@ class TestBackupConcurrency:
 
     def test_concurrency_clamped_to_hard_max_of_10(self, test_settings):
         """Even if Settings allowed higher, 10 is the ceiling."""
-        from netconfig.config import MAX_BACKUP_CONCURRENCY
+        from netcanon.config import MAX_BACKUP_CONCURRENCY
         assert MAX_BACKUP_CONCURRENCY == 10
         # Pydantic rejects out-of-range values at Settings construction.
         import pytest
-        from netconfig.config import Settings
+        from netcanon.config import Settings
         with pytest.raises(Exception):  # ValidationError
             Settings(
                 definitions_dir=test_settings.definitions_dir,
@@ -435,7 +435,7 @@ class TestBackupConcurrency:
 
         collector = _CountingCollector()
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(app, raise_server_exceptions=True) as c:
@@ -472,7 +472,7 @@ class TestBackupConcurrency:
 
         app = _build_parallel_app(test_settings, concurrency=10)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=ThreadNameCollector(),
         ):
             with TestClient(app, raise_server_exceptions=True) as c:

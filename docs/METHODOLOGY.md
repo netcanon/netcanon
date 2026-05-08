@@ -145,7 +145,7 @@ unsupported = [
 ]
 ```
 
-See [`cisco_iosxe_cli/codec.py` lines 132-260](../netconfig/migration/codecs/cisco_iosxe_cli/codec.py)
+See [`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 for the canonical authoring shape.  Each declaration has a citation
 to the specific drift it acknowledges.  These declarations surface to
 operators directly via the UI's Validation panel
@@ -222,7 +222,7 @@ Classify every translatable surface by stability tier:
   doesn't try to translate them.
 
 Worked example: Netcanon's `CanonicalIntent` model classifies every
-field by tier (see [`intent.py` lines 31-49](../netconfig/migration/canonical/intent.py)).
+field by tier (see [`intent.py` lines 31-49](../netcanon/migration/canonical/intent.py)).
 Firewall rules, NAT rules, VPN configuration, and routing-protocol
 state are explicitly Tier 3 with a documented architectural rationale
 ("zone-pair vs interface ACL vs table-driven rule sets — semantics
@@ -240,7 +240,7 @@ drift into the codebase by accident.
 The triad: every supported xpath listed; every lossy declaration
 cites the specific drift; every unsupported declaration cites the
 rationale.  No silent unsupported.  See
-[`cisco_iosxe_cli/codec.py` lines 132-260](../netconfig/migration/codecs/cisco_iosxe_cli/codec.py)
+[`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 for the canonical declaration shape.  Each `LossyPath` carries a
 multiline reason explaining the exact drift; each `UnsupportedPath`
 carries a multiline reason explaining either the architectural
@@ -471,7 +471,7 @@ real artefact rather than an abstract claim.
 > implicit-knowledge to hard-rule.
 
 > **Pattern:** Capability matrix declarations.
-> **Live example:** [`cisco_iosxe_cli/codec.py` lines 132-260](../netconfig/migration/codecs/cisco_iosxe_cli/codec.py)
+> **Live example:** [`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 > — every `LossyPath` and `UnsupportedPath` carries a multiline
 > reason citing the specific drift or rationale; the
 > `/routing-instances/instance` declaration explicitly cites the
@@ -490,7 +490,7 @@ real artefact rather than an abstract claim.
 
 > **Pattern:** Tier-based classification.
 > **Live example:**
-> [`netconfig/migration/canonical/intent.py` lines 31-49](../netconfig/migration/canonical/intent.py)
+> [`netcanon/migration/canonical/intent.py` lines 31-49](../netcanon/migration/canonical/intent.py)
 > — the docstring enumerates Tier 1 / 2 / 3 explicitly with
 > per-field assignment;
 > [`docs/CAPABILITIES.md` lines 47-114](CAPABILITIES.md) translates

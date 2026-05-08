@@ -18,11 +18,11 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalStaticRoute,
 )
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 
 pytestmark = pytest.mark.unit
 

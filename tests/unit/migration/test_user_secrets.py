@@ -5,14 +5,14 @@ juniper_junos, and opnsense renderers (Wave 2) to avoid leaking
 foreign hashes (Cisco type-9, Arista sha512, etc.) as plaintext-
 equivalent text on the target wire.
 
-See also: netconfig/migration/_user_secrets.py
+See also: netcanon/migration/_user_secrets.py
 """
 
 from __future__ import annotations
 
 import pytest
 
-from netconfig.migration._user_secrets import (
+from netcanon.migration._user_secrets import (
     _TARGET_ACCEPTS,
     _UNIVERSALLY_UNMIGRATABLE,
     classify_hash,

@@ -36,7 +36,7 @@ Target profiles are NOT backup-side device definitions — those live
 under `definitions/<vendor>/` and are consumed by the SSH / NETCONF /
 REST collectors.  Target profiles are migration-side only and are
 loaded from `definitions/target_profiles/` by
-`netconfig/migration/target_profiles.py::load_profiles_dir`.
+`netcanon/migration/target_profiles.py::load_profiles_dir`.
 
 ---
 
@@ -166,7 +166,7 @@ dropdowns.  A mismatch silently breaks rename-mesh suggestion
 list").
 
 For Aruba AOS-S, `format_port_identity` in
-[`netconfig/migration/codecs/aruba_aoss/port_names.py`](../netconfig/migration/codecs/aruba_aoss/port_names.py)
+[`netcanon/migration/codecs/aruba_aoss/port_names.py`](../netcanon/migration/codecs/aruba_aoss/port_names.py)
 emits forms like `1/24` (two-part stack/port) and `1/A1` (uplink with
 subslot letter).  That's why the profile uses `1/N` access ports and
 `1/A1`-style uplink ids — exactly what AOS-S would render.  Cisco's
@@ -234,7 +234,7 @@ frozenset; the CI guard ensures they stay in lockstep.
 
 ### 7. Verify the UI surfaces it
 
-Restart the server (`uvicorn netconfig.main:app --reload`), open the
+Restart the server (`uvicorn netcanon.main:app --reload`), open the
 migrate page, paste any Aruba source config, and confirm:
 
 * the new model appears in the target-profile dropdown with its
@@ -248,7 +248,7 @@ migrate page, paste any Aruba source config, and confirm:
   cap.
 
 The fit-check JS lives in
-[`netconfig/templates/migrate.html`](../netconfig/templates/migrate.html)
+[`netcanon/templates/migrate.html`](../netcanon/templates/migrate.html)
 (search for `max_vlans` and `mig-rename-vlans-fitcheck`).  No code
 changes are required — the data flows from `TargetProfile` →
 `/api/v1/migration/target-profiles` → the rename-modal renderer.
@@ -256,7 +256,7 @@ changes are required — the data flows from `TargetProfile` →
 ### 8. No code changes needed
 
 Target profiles are pure data.
-`netconfig/migration/target_profiles.py::load_profiles_dir` walks the
+`netcanon/migration/target_profiles.py::load_profiles_dir` walks the
 directory at app start, the API serves whatever loaded successfully,
 and the UI renders from that.  A new YAML file + a new unit test +
 (optionally) one allowlist entry are the entire change set.
@@ -317,7 +317,7 @@ for everything in that second list.
   ceiling and the render step will then fail or silently truncate.
   Cross-check against the codec's `_CAPS` matrix before picking a
   number — see
-  [`netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md).
+  [`netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md).
 * **Don't skip the unit test.**  A copy-paste typo between sibling
   SKUs (the 24G profile that inherits a 48G port range) is the
   exact failure mode the test class exists to catch.  It costs five
@@ -335,7 +335,7 @@ for everything in that second list.
 * [`../definitions/README.md`](../definitions/README.md) — schema
   reference for backup-side device definitions; target profiles
   share the same YAML-loader pattern
-* [`../netconfig/migration/target_profiles.py`](../netconfig/migration/target_profiles.py)
+* [`../netcanon/migration/target_profiles.py`](../netcanon/migration/target_profiles.py)
   — `TargetProfile` / `TargetModule` model classes; the module
   docstring carries the canonical worked-YAML example
 * [`../tests/fixtures/module_variants.py`](../tests/fixtures/module_variants.py)

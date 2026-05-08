@@ -6,7 +6,7 @@ Retrieved: 2026-05-01
 Source: [Junos family inet6 statement reference](https://www.juniper.net/documentation/en_US/junos/topics/reference/configuration-statement/interfaces-edit-family-inet6.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
 (in-tree code documenting the scope hard-code)
 Retrieved: 2026-05-01
 

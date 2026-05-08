@@ -3,7 +3,7 @@
 Source: [OPNsense Firewall manual](https://docs.opnsense.org/manual/firewall.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.opnsense.codec.OPNsenseCodec._CAPS.unsupported`
+Source: `netcanon.migration.codecs.opnsense.codec.OPNsenseCodec._CAPS.unsupported`
 (in-tree authoritative declaration)
 Retrieved: 2026-05-01
 
@@ -25,9 +25,9 @@ of them are in canonical scope for cross-vendor migration.
 The OPNsense codec's `CapabilityMatrix._CAPS` declares these under
 `unsupported`:
 
-- `/filter/rule` — "Firewall rules require the netconfig-ext YANG
+- `/filter/rule` — "Firewall rules require the netcanon-ext YANG
   module (Phase 2) — OpenConfig has no firewall model."
-- `/nat/outbound` — "NAT table translation needs netconfig-ext +
+- `/nat/outbound` — "NAT table translation needs netcanon-ext +
   careful semantic mapping to target stateful engines."
 
 The OPNsense parser does NOT route these subtrees into

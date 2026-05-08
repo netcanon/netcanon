@@ -5,14 +5,14 @@ cisco_iosxe_cli render paths to rewrite whitespace in hostname
 tokens (Phase 4b cross-vendor cleanup, flagged by the
 mikrotik_routeros source agent).
 
-See also: netconfig/migration/_naming.py
+See also: netcanon/migration/_naming.py
 """
 
 from __future__ import annotations
 
 import pytest
 
-from netconfig.migration._naming import sanitise_hostname
+from netcanon.migration._naming import sanitise_hostname
 
 pytestmark = pytest.mark.unit
 

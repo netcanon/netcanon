@@ -71,7 +71,7 @@ interface GigabitEthernet1/0/1
 
 The canonical model is `CanonicalRoutingInstance` plus per-interface
 `CanonicalInterface.vrf`.  Schema documented in
-`netconfig/migration/canonical/intent.py`:
+`netcanon/migration/canonical/intent.py`:
 
 ```
 class CanonicalRoutingInstance(BaseModel):
@@ -87,11 +87,11 @@ class CanonicalRoutingInstance(BaseModel):
 This direction is the **easier** asymmetry of the pair: the Arista
 codec parses `vrf instance` blocks AND walks `router bgp / vrf <name>`
 sub-stanzas to extract RD + RT communities (see
-`netconfig/migration/codecs/arista_eos/parse.py` `_parse_router_bgp_vrf_routing_instances`
+`netcanon/migration/codecs/arista_eos/parse.py` `_parse_router_bgp_vrf_routing_instances`
 function).  The Cisco IOS-XE codec render path emits `vrf definition`
 blocks with the canonical RD + RT data via `address-family ipv4 /
 route-target import|export` — see
-`netconfig/migration/codecs/cisco_iosxe_cli/render.py` `_render_vrfs`
+`netcanon/migration/codecs/cisco_iosxe_cli/render.py` `_render_vrfs`
 section.
 
 Per-interface `vrf` field renders as Cisco's `vrf forwarding <name>`

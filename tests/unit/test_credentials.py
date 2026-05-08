@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.security.credentials``.
+Unit tests for ``netcanon.security.credentials``.
 
 The OS keyring is mocked throughout — no real credential store is touched.
 ``reset_fernet()`` is called between tests so each test gets a fresh key.
@@ -34,7 +34,7 @@ def _make_fernet_key() -> str:
 @pytest.fixture(autouse=True)
 def reset_module():
     """Reset the cached Fernet instance before every test."""
-    from netconfig.security.credentials import reset_fernet
+    from netcanon.security.credentials import reset_fernet
 
     reset_fernet()
     yield
@@ -54,7 +54,7 @@ class TestKeyInitialisation:
             patch("keyring.get_password", return_value=None),
             patch("keyring.set_password") as mock_set,
         ):
-            from netconfig.security import credentials
+            from netcanon.security import credentials
 
             credentials._fernet = None
             # Trigger initialisation by encrypting something
@@ -72,7 +72,7 @@ class TestKeyInitialisation:
             patch("keyring.get_password", return_value=key),
             patch("keyring.set_password") as mock_set,
         ):
-            from netconfig.security import credentials
+            from netcanon.security import credentials
 
             credentials._fernet = None
             credentials.encrypt("hello")
@@ -82,7 +82,7 @@ class TestKeyInitialisation:
         """Second call must not hit the keyring again."""
         key = _make_fernet_key()
         with patch("keyring.get_password", return_value=key) as mock_get:
-            from netconfig.security import credentials
+            from netcanon.security import credentials
 
             credentials._fernet = None
             credentials.encrypt("first")
@@ -106,36 +106,36 @@ class TestEncryptDecrypt:
             yield
 
     def test_encrypt_returns_string(self):
-        from netconfig.security.credentials import encrypt
+        from netcanon.security.credentials import encrypt
 
         result = encrypt("my_password")
         assert isinstance(result, str)
 
     def test_encrypt_differs_from_plaintext(self):
-        from netconfig.security.credentials import encrypt
+        from netcanon.security.credentials import encrypt
 
         assert encrypt("my_password") != "my_password"
 
     def test_decrypt_recovers_plaintext(self):
-        from netconfig.security.credentials import decrypt, encrypt
+        from netcanon.security.credentials import decrypt, encrypt
 
         plaintext = "super_secret_pass!"
         assert decrypt(encrypt(plaintext)) == plaintext
 
     def test_round_trip_empty_string(self):
-        from netconfig.security.credentials import decrypt, encrypt
+        from netcanon.security.credentials import decrypt, encrypt
 
         assert decrypt(encrypt("")) == ""
 
     def test_round_trip_unicode(self):
-        from netconfig.security.credentials import decrypt, encrypt
+        from netcanon.security.credentials import decrypt, encrypt
 
         value = "p\u00e4\u00df\u0077\u00f6rd"  # "pässwörd"
         assert decrypt(encrypt(value)) == value
 
     def test_two_encryptions_of_same_value_differ(self):
         """Fernet uses a random IV, so each encryption produces a unique token."""
-        from netconfig.security.credentials import encrypt
+        from netcanon.security.credentials import encrypt
 
         t1 = encrypt("same")
         t2 = encrypt("same")
@@ -144,7 +144,7 @@ class TestEncryptDecrypt:
     def test_decrypt_invalid_token_raises(self):
         from cryptography.fernet import InvalidToken
 
-        from netconfig.security.credentials import decrypt
+        from netcanon.security.credentials import decrypt
 
         with pytest.raises(InvalidToken):
             decrypt("not-a-fernet-token")
@@ -166,7 +166,7 @@ class TestDecryptField:
             yield
 
     def test_encrypted_value_returns_plaintext_and_true(self):
-        from netconfig.security.credentials import decrypt_field, encrypt
+        from netcanon.security.credentials import decrypt_field, encrypt
 
         token = encrypt("secret123")
         plaintext, was_enc = decrypt_field(token)
@@ -175,14 +175,14 @@ class TestDecryptField:
 
     def test_legacy_plaintext_returns_value_and_false(self):
         """Plaintext that isn't a Fernet token → treated as legacy, not encrypted."""
-        from netconfig.security.credentials import decrypt_field
+        from netcanon.security.credentials import decrypt_field
 
         plaintext, was_enc = decrypt_field("hunter2")
         assert plaintext == "hunter2"
         assert was_enc is False
 
     def test_empty_string_returns_false(self):
-        from netconfig.security.credentials import decrypt_field
+        from netcanon.security.credentials import decrypt_field
 
         val, was_enc = decrypt_field("")
         assert val == ""

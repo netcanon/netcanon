@@ -88,7 +88,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 # Side-effect imports register every codec with the registry.
-from netconfig.migration.codecs import (  # noqa: E402, F401
+from netcanon.migration.codecs import (  # noqa: E402, F401
     arista_eos,
     aruba_aoss,
     cisco_iosxe,
@@ -98,12 +98,12 @@ from netconfig.migration.codecs import (  # noqa: E402, F401
     mikrotik_routeros,
     opnsense,
 )
-from netconfig.migration.codecs.base import CodecBase  # noqa: E402
-from netconfig.migration.codecs.registry import (  # noqa: E402
+from netcanon.migration.codecs.base import CodecBase  # noqa: E402
+from netcanon.migration.codecs.registry import (  # noqa: E402
     get_codec,
     list_codecs,
 )
-from netconfig.migration.canonical.intent import CanonicalIntent  # noqa: E402
+from netcanon.migration.canonical.intent import CanonicalIntent  # noqa: E402
 
 
 REAL_FIXTURES_ROOT = _REPO_ROOT / "tests" / "fixtures" / "real"

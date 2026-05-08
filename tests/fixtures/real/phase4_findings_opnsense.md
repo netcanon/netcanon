@@ -40,7 +40,7 @@ Affected cells: `opnsense_acl_test_config.xml`, `opnsense_core_default.xml`,
 
 YAML disposition: `domain: good`.  Drift is real.
 
-**Locus.** `netconfig/migration/codecs/fortigate_cli/parse.py:268-274` —
+**Locus.** `netcanon/migration/codecs/fortigate_cli/parse.py:268-274` —
 `_apply_system_dns` captures `primary` and `secondary` resolver IPs but
 makes no reference to the `domain` setting.  The renderer at
 `render.py:443-451` correctly emits `set domain "<value>"` inside
@@ -55,7 +55,7 @@ empty).
 
 YAML disposition: `radius_servers: good`.  Drift is real.
 
-**Locus.** `netconfig/migration/codecs/arista_eos/{parse,render}.py` —
+**Locus.** `netcanon/migration/codecs/arista_eos/{parse,render}.py` —
 zero occurrences of `radius` (case-insensitive grep).  The arista codec
 has no RADIUS surface; the canonical list is silently dropped on render.
 Either implement EOS render (`radius-server host <ip> auth-port 1812
@@ -83,7 +83,7 @@ Bucket-C entries.
 
 ## Top 3 fixes (priority order)
 
-1. **`netconfig/migration/codecs/fortigate_cli/parse.py:268`** — extend
+1. **`netcanon/migration/codecs/fortigate_cli/parse.py:268`** — extend
    `_apply_system_dns` to capture `set domain` from the `config system
    dns` block (`intent.domain = block.settings["domain"][0]` when
    present).  Five-line change, kills 5 of 10 OPNsense-sourced bugs.
@@ -101,7 +101,7 @@ Bucket-C entries.
    juniper / aruba and juniper / arista source pairs.  Pure tooling fix,
    no codec change.
 
-3. **`netconfig/migration/codecs/aruba_aoss/{render,parse}.py`** — render
+3. **`netcanon/migration/codecs/aruba_aoss/{render,parse}.py`** — render
    `radius-server host <ip> auth-port <port> acct-port <port> key
    "<key>"` whenever the canonical record carries non-default ports;
    extend `_RADIUS_HOST_RE` (parse.py:156) to optionally capture the
@@ -122,9 +122,9 @@ the next phase-4d wave should pick up after the codec backlog is reviewed.
 - `tests/fixtures/cross_vendor_expectations/opnsense__fortigate_cli.yaml`,
   `opnsense__arista_eos.yaml`, `opnsense__aruba_aoss.yaml` — Phase 3
   expectation YAMLs reconciled against
-- `netconfig/migration/codecs/fortigate_cli/parse.py:268` — locus of the
+- `netcanon/migration/codecs/fortigate_cli/parse.py:268` — locus of the
   domain parse gap (top fix)
-- `netconfig/migration/codecs/aruba_aoss/render.py:368-374` and
+- `netcanon/migration/codecs/aruba_aoss/render.py:368-374` and
   `parse.py:156-161` — locus of the RADIUS port omission
-- `netconfig/migration/codecs/arista_eos/` — RADIUS surface entirely
+- `netcanon/migration/codecs/arista_eos/` — RADIUS surface entirely
   absent; either implement or YAML-reclassify

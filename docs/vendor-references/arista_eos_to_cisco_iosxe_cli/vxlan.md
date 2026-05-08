@@ -20,7 +20,7 @@ interface Vxlan1
 
 The Arista codec parses these into `CanonicalVxlan` records (per VLAN
 mapping) and `CanonicalRoutingInstance.l3_vni` (per VRF / Type-5
-mapping).  See `netconfig/migration/codecs/arista_eos/parse.py`
+mapping).  See `netcanon/migration/codecs/arista_eos/parse.py`
 GAP-EVPN-2 and GAP-EVPN-3 commentary.
 
 ## Cisco IOS-XE
@@ -56,10 +56,10 @@ The canonical model is `CanonicalVxlan` plus the
 `CanonicalRoutingInstance.l3_vni` field for L3 / Type-5 VNI.
 
 The Cisco IOS-XE render path **does not** emit VXLAN/NVE
-configuration: `netconfig/migration/codecs/cisco_iosxe_cli/render.py`
+configuration: `netcanon/migration/codecs/cisco_iosxe_cli/render.py`
 has no NVE / VLAN-configuration / l2vpn-evpn render block.  The Cisco
 IOS-XE codec capability matrix at
-`netconfig/migration/codecs/cisco_iosxe_cli/codec.py` lists all
+`netcanon/migration/codecs/cisco_iosxe_cli/codec.py` lists all
 VXLAN-related xpaths under `unsupported`:
 
 ```

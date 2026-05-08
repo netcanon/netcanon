@@ -9,7 +9,7 @@ Retrieved: 2026-05-01
 Source: [OPNsense Interfaces manual](https://docs.opnsense.org/manual/interfaces.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
 (in-tree code documenting what the parser carries through)
 Retrieved: 2026-05-01
 

@@ -9,7 +9,7 @@ which silently dropped cross-vendor interface names whenever a
 JunOS / IOS-XE / Cisco-CLI capture flowed through this codec via
 Phase 4 bidirectionality fixtures.  The widened pattern accepts
 any token starting with an alphanumeric followed by alphanumerics,
-``.``, ``/``, or ``-``.  See ``netconfig/migration/codecs/aruba_aoss/
+``.``, ``/``, or ``-``.  See ``netcanon/migration/codecs/aruba_aoss/
 parse.py`` and ``tests/fixtures/real/PHASE4_RECONCILIATION.md``.
 """
 
@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.aruba_aoss.parse import _IFACE_HEADER_RE
+from netcanon.migration.codecs.aruba_aoss.parse import _IFACE_HEADER_RE
 
 pytestmark = pytest.mark.unit
 

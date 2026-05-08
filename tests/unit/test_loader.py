@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.definitions.loader.DefinitionLoader``.
+Unit tests for ``netcanon.definitions.loader.DefinitionLoader``.
 
 These tests write minimal YAML files to tmp directories and verify the
 two-pass loader: parse → sort by priority → apply in order.
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.definitions.loader import DefinitionLoader
+from netcanon.definitions.loader import DefinitionLoader
 
 pytestmark = pytest.mark.unit
 

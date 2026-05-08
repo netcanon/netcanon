@@ -2,7 +2,7 @@
 
 Third-party Cisco / Aruba / FortiGate / OPNsense / MikroTik config snippets
 used as **real-world parser validation fixtures**.  None of these files are
-authored by netconfig; they are included verbatim under their upstream
+authored by netcanon; they are included verbatim under their upstream
 licenses for the sole purpose of exercising our codec parsers against
 configs the project didn't itself design.
 

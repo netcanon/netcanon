@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.services.migration_pipeline.run_plan``.
+Unit tests for ``netcanon.services.migration_pipeline.run_plan``.
 
 Phase 0 pipeline: parse → transform → validate → render.  No collect
 (caller supplies ``raw_text``), no diff, no deploy, no snapshot.
@@ -11,12 +11,12 @@ import json
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.models.migration import (
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.models.migration import (
     MigrationJobStatus,
     TransformSpec,
 )
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -140,7 +140,7 @@ class TestRunPlanLogging:
     """
 
     def test_parse_error_logs_exception(self, caplog):
-        with caplog.at_level("DEBUG", logger="netconfig.services.migration_pipeline"):
+        with caplog.at_level("DEBUG", logger="netcanon.services.migration_pipeline"):
             run_plan(MockCodec(), MockCodec(), "not valid json")
         # At least one ERROR-level record with exc_info attached —
         # logger.exception() produces this shape.
@@ -160,7 +160,7 @@ class TestRunPlanLogging:
         )
 
     def test_happy_path_emits_stage_transition_debug(self, caplog):
-        with caplog.at_level("DEBUG", logger="netconfig.services.migration_pipeline"):
+        with caplog.at_level("DEBUG", logger="netcanon.services.migration_pipeline"):
             run_plan(
                 MockCodec(), MockCodec(),
                 json.dumps({"/interfaces/eth0/ip": "10.0.0.1"}),
@@ -186,7 +186,7 @@ class TestRunPlanLogging:
         # refusal via force=False against an incompatible fixture
         # helper.  MockCodec is symmetric so we just assert the
         # happy path doesn't accidentally warn.
-        with caplog.at_level("WARNING", logger="netconfig.services.migration_pipeline"):
+        with caplog.at_level("WARNING", logger="netcanon.services.migration_pipeline"):
             run_plan(MockCodec(), MockCodec(), "{}")
         warnings = [r for r in caplog.records if r.levelname == "WARNING"]
         # MockCodec pair is compatible → no guard warning expected.
@@ -214,13 +214,13 @@ class TestOrchestratorDebugUniformity:
     """
 
     def test_port_rename_emits_entry_debug(self, caplog):
-        from netconfig.migration.canonical.port_names import (
+        from netcanon.migration.canonical.port_names import (
             translate_port_names,
         )
-        from netconfig.migration.canonical.intent import CanonicalIntent
+        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
-            "DEBUG", logger="netconfig.migration.canonical.port_names",
+            "DEBUG", logger="netcanon.migration.canonical.port_names",
         ):
             translate_port_names(
                 CanonicalIntent(), MockCodec(), MockCodec(),
@@ -239,13 +239,13 @@ class TestOrchestratorDebugUniformity:
         """Uses an EMPTY map so the no-op early-return fires — the
         entry log must still appear (this is exactly the scenario
         the prior exit-only log regressed on)."""
-        from netconfig.migration.canonical.vlan_names import (
+        from netcanon.migration.canonical.vlan_names import (
             translate_vlan_ids,
         )
-        from netconfig.migration.canonical.intent import CanonicalIntent
+        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
-            "DEBUG", logger="netconfig.migration.canonical.vlan_names",
+            "DEBUG", logger="netcanon.migration.canonical.vlan_names",
         ):
             translate_vlan_ids(CanonicalIntent(), rename_map={})
         entries = [
@@ -256,14 +256,14 @@ class TestOrchestratorDebugUniformity:
         assert entries, "expected entry DEBUG on no-op call"
 
     def test_local_user_rename_emits_entry_debug(self, caplog):
-        from netconfig.migration.canonical.local_user_names import (
+        from netcanon.migration.canonical.local_user_names import (
             translate_local_user_names,
         )
-        from netconfig.migration.canonical.intent import CanonicalIntent
+        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
             "DEBUG",
-            logger="netconfig.migration.canonical.local_user_names",
+            logger="netcanon.migration.canonical.local_user_names",
         ):
             translate_local_user_names(CanonicalIntent(), rename_map={})
         entries = [
@@ -276,13 +276,13 @@ class TestOrchestratorDebugUniformity:
     def test_snmp_rename_emits_entry_debug(self, caplog):
         """Entry log fires EVEN on the empty-map / no-snmp-block
         no-op path — same uniformity guarantee as the siblings."""
-        from netconfig.migration.canonical.snmp_names import (
+        from netcanon.migration.canonical.snmp_names import (
             translate_snmp_community,
         )
-        from netconfig.migration.canonical.intent import CanonicalIntent
+        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
-            "DEBUG", logger="netconfig.migration.canonical.snmp_names",
+            "DEBUG", logger="netcanon.migration.canonical.snmp_names",
         ):
             translate_snmp_community(CanonicalIntent(), rename_map={})
         entries = [
@@ -297,16 +297,16 @@ class TestOrchestratorDebugUniformity:
         entry AND exit DEBUG records should fire, with exit carrying
         applied/dropped/warnings counts.  Uses snmp since the happy
         path is most compact (single-row scalar rename)."""
-        from netconfig.migration.canonical.snmp_names import (
+        from netcanon.migration.canonical.snmp_names import (
             translate_snmp_community,
         )
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalSNMP,
         )
 
         intent = CanonicalIntent(snmp=CanonicalSNMP(community="public"))
         with caplog.at_level(
-            "DEBUG", logger="netconfig.migration.canonical.snmp_names",
+            "DEBUG", logger="netcanon.migration.canonical.snmp_names",
         ):
             translate_snmp_community(
                 intent, rename_map={"public": "monitoring-ro"},
@@ -367,7 +367,7 @@ class TestCodecParseEndDebugUniformity:
     def test_codec_parse_emits_debug_summary(
         self, codec_name, caplog,
     ):
-        from netconfig.migration.codecs.registry import get_codec
+        from netcanon.migration.codecs.registry import get_codec
         codec = get_codec(codec_name)
         sample = getattr(codec, "sample_input", "")
         if not sample:

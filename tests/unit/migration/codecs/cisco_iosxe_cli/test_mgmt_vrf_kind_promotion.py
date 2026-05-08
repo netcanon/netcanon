@@ -29,15 +29,15 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIPv4Address,
     CanonicalInterface,
 )
-from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli.codec import (
+from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
     CiscoIOSXECLICodec,
 )
-from netconfig.migration.codecs.cisco_iosxe_cli.parse import parse_intent
+from netcanon.migration.codecs.cisco_iosxe_cli.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 
@@ -194,7 +194,7 @@ def test_mgmt_vrf_cascades_to_aruba_oobm() -> None:
     Aruba's port formatter would produce ``1/1``, and the OOBM
     block would never appear in the output.
     """
-    from netconfig.migration.canonical.port_names import (
+    from netcanon.migration.canonical.port_names import (
         translate_port_names,
     )
 

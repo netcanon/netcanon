@@ -40,7 +40,7 @@ on Aruba parser hyphens) and the broader synthesis in
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (rank 1 in the top-6
 table) before editing.
 
-Fix locus: `netconfig/migration/codecs/aruba_aoss/parse.py:174-176`.
+Fix locus: `netcanon/migration/codecs/aruba_aoss/parse.py:174-176`.
 The current regex is:
 
     _IFACE_HEADER_RE = re.compile(
@@ -94,7 +94,7 @@ Companion concerns documented in the per-vendor markdowns:
 Test that should pass after fix:
 
     # tests/unit/migration/codecs/aruba_aoss/test_parse_iface_header.py
-    from netconfig.migration.codecs.aruba_aoss.parse import _IFACE_HEADER_RE
+    from netcanon.migration.codecs.aruba_aoss.parse import _IFACE_HEADER_RE
 
     def test_iface_header_accepts_cross_vendor_names():
         assert _IFACE_HEADER_RE.match("interface ge-0/0/1")
@@ -148,7 +148,7 @@ Phase 4 backlog.  Read the per-vendor findings in
 synthesis is in `tests/fixtures/real/PHASE4_RECONCILIATION.md`
 (rank 2 of the top-6).
 
-Fix locus: `netconfig/migration/codecs/mikrotik_routeros/render.py`
+Fix locus: `netcanon/migration/codecs/mikrotik_routeros/render.py`
 lines 85-110, where `ethernet_ifaces` is filtered through
 `_is_ethernet_name(i.name) or _is_ethernet_name(i.default_name) or
 (i.interface_type == "ianaift:ethernetCsmacd" and i.default_name)`.
@@ -264,9 +264,9 @@ Phase 4 backlog.  Read
 for the bug-by-bug detail.  Top-level synthesis is in
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (rank 3 of the top-6).
 
-Fix locus: `netconfig/migration/codecs/opnsense/render.py:126-144`
+Fix locus: `netcanon/migration/codecs/opnsense/render.py:126-144`
 (per-iface zone emit), with a companion change in
-`netconfig/migration/codecs/opnsense/parse.py:354-360`
+`netcanon/migration/codecs/opnsense/parse.py:354-360`
 (`_parse_interface_zone_canonical`).
 
 Two cooperating defects:
@@ -369,7 +369,7 @@ and B, ~22 cells).  Top-level synthesis is in
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (rank 4 of the
 top-6).
 
-Fix locus: `netconfig/migration/codecs/juniper_junos/render.py` —
+Fix locus: `netcanon/migration/codecs/juniper_junos/render.py` —
 three additions:
 
 1. **`family ethernet-switching` per-iface block.**  For each
@@ -488,7 +488,7 @@ findings) before editing.  Top-level synthesis is in
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (rank 5 of the
 top-6).
 
-Fix locus: `netconfig/migration/codecs/juniper_junos/parse.py`
+Fix locus: `netcanon/migration/codecs/juniper_junos/parse.py`
 lines 319-332 — the routing-instance binding handler that calls
 `iface_by_name.get(iface_name)`.  The render side at
 `juniper_junos/render.py:397-405` always appends `.0` to the iface
@@ -567,7 +567,7 @@ CI-3 — 8 cells), `tests/fixtures/real/phase4_findings_juniper_junos.md`
 synthesis is in `tests/fixtures/real/PHASE4_RECONCILIATION.md`
 (rank 6 of the top-6).
 
-Fix locus: `netconfig/migration/codecs/cisco_iosxe_cli/parse.py`,
+Fix locus: `netcanon/migration/codecs/cisco_iosxe_cli/parse.py`,
 specifically the top-level scope around lines 219-249 where
 `_extract_hostname` and `_parse_static_routes` already live.
 

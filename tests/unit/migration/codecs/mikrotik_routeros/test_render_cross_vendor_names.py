@@ -12,13 +12,13 @@ sections, and confirm the round-trip preserves attributes.
 """
 
 import pytest
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
     CanonicalIPv4Address,
 )
-from netconfig.migration.codecs.mikrotik_routeros.parse import parse_intent
-from netconfig.migration.codecs.mikrotik_routeros.render import render_intent
+from netcanon.migration.codecs.mikrotik_routeros.parse import parse_intent
+from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
 
 
 

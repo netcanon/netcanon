@@ -30,19 +30,19 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIntent,
     CanonicalIPv6Address,
 )
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.juniper_junos import JunosCodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 pytestmark = pytest.mark.unit
 

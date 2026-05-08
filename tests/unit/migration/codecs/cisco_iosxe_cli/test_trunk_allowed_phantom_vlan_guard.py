@@ -1,7 +1,7 @@
 """
 Regression tests for the cisco_iosxe_cli trunk-allowed phantom-VLAN guard.
 
-Before this fix, ``netconfig/migration/codecs/cisco_iosxe_cli/parse.py``
+Before this fix, ``netcanon/migration/codecs/cisco_iosxe_cli/parse.py``
 called :func:`canonical.transforms.project_switchport_to_vlan` at the
 end of parse to mirror per-port switchport state into the VLAN-centric
 ``tagged_ports`` / ``untagged_ports`` lists.  The shared transform
@@ -27,8 +27,8 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.cisco_iosxe_cli.parse import parse_intent
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe_cli.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 

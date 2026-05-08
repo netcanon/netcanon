@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.collectors.base import BaseCollector
-from netconfig.config import Settings
-from netconfig.definitions.schema import DeviceDefinition
-from netconfig.models.device import DeviceTarget
+from netcanon.collectors.base import BaseCollector
+from netcanon.config import Settings
+from netcanon.definitions.schema import DeviceDefinition
+from netcanon.models.device import DeviceTarget
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ def test_app(test_settings: Settings):
     Each test that requests this fixture gets an independent application with
     its own in-memory job registry and its own ``FileConfigStore``.
     """
-    from netconfig.main import create_app
+    from netcanon.main import create_app
 
     return create_app(test_settings)
 

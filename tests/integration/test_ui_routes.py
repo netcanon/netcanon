@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import patch
 
-from netconfig.main import create_app
+from netcanon.main import create_app
 from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
 
 pytestmark = pytest.mark.integration
@@ -124,7 +124,7 @@ class TestJobPersistence:
         """After a completed backup the job JSON file exists on disk."""
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
-            "netconfig.api.routes.backups.get_collector", return_value=fake
+            "netcanon.api.routes.backups.get_collector", return_value=fake
         ):
             app = create_app(test_settings)
             with TestClient(app, raise_server_exceptions=True) as c:
@@ -139,7 +139,7 @@ class TestJobPersistence:
         """Jobs loaded on startup survive a simulated server restart."""
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
-            "netconfig.api.routes.backups.get_collector", return_value=fake
+            "netcanon.api.routes.backups.get_collector", return_value=fake
         ):
             app1 = create_app(test_settings)
             with TestClient(app1, raise_server_exceptions=True) as c1:
@@ -157,7 +157,7 @@ class TestJobPersistence:
         """A manually triggered job has ``schedule_id=None`` after reload."""
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
-            "netconfig.api.routes.backups.get_collector", return_value=fake
+            "netcanon.api.routes.backups.get_collector", return_value=fake
         ):
             app1 = create_app(test_settings)
             with TestClient(app1, raise_server_exceptions=True) as c1:
@@ -172,7 +172,7 @@ class TestJobPersistence:
         """A manually triggered job has ``schedule_name=None`` after reload."""
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
-            "netconfig.api.routes.backups.get_collector", return_value=fake
+            "netcanon.api.routes.backups.get_collector", return_value=fake
         ):
             app1 = create_app(test_settings)
             with TestClient(app1, raise_server_exceptions=True) as c1:
@@ -238,7 +238,7 @@ class TestThemeToggleRendered:
         (not an external <script src>) so it runs synchronously
         before CSS parses."""
         resp = client.get("/")
-        assert "netconfig.theme.v1" in resp.text
+        assert "netcanon.theme.v1" in resp.text
         assert "prefers-color-scheme" in resp.text
         # Boot script references documentElement (not body/DOM) —
         # required so the attribute is set before the body renders.
@@ -520,7 +520,7 @@ class TestDefinitionsPageEnriched:
         import yaml as _yaml
         from fastapi.testclient import TestClient
 
-        from netconfig.main import create_app
+        from netcanon.main import create_app
 
         overlay_yaml = _yaml.safe_dump({
             "type_key": "Cisco",

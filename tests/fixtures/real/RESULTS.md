@@ -26,7 +26,7 @@ equal trees).
 
 ## cisco_iosxe_cli
 
-**Codec:** `netconfig.migration.codecs.cisco_iosxe_cli.CiscoIOSXECLICodec`
+**Codec:** `netcanon.migration.codecs.cisco_iosxe_cli.CiscoIOSXECLICodec`
 **Direction:** `parse_only` *(round-trip N/A)*
 **Certainty:** `certified` ✅
 
@@ -123,7 +123,7 @@ the bar is met on both grammar fronts.
 
 ## opnsense
 
-**Codec:** `netconfig.migration.codecs.opnsense.OPNsenseCodec`
+**Codec:** `netcanon.migration.codecs.opnsense.OPNsenseCodec`
 **Direction:** `bidirectional`
 **Certainty:** `certified` ✅
 
@@ -158,13 +158,13 @@ search for `<opnsense>`) happily reported 98% confidence, but the
 subsequent parse via `ET.fromstring` refused the shape with
 `syntax error: line 1, column 0`.  Two-layer fix:
 
-1. `netconfig/collectors/paramiko_collector.py::_collect_output`
+1. `netcanon/collectors/paramiko_collector.py::_collect_output`
    now strips the echoed command + trailing CRLF noise from the
    head of the buffer before returning.  Netmiko got this for
    free via `strip_command=True`; the raw paramiko-shell strategy
    had to do it explicitly.  Prevents NEW backups from hitting
    the bug.
-2. `netconfig/migration/codecs/opnsense/codec.py::_trim_xml_prologue`
+2. `netcanon/migration/codecs/opnsense/codec.py::_trim_xml_prologue`
    provides a defensive prefix-trim: before `ET.fromstring`, the
    codec locates the first `<?xml` or `<opnsense` marker within
    the first 2 KiB and discards anything before it.  Rescues
@@ -202,7 +202,7 @@ one real-deployment capture (the highest-signal class of fixture).
 
 ## mikrotik_routeros
 
-**Codec:** `netconfig.migration.codecs.mikrotik_routeros.MikroTikRouterOSCodec`
+**Codec:** `netcanon.migration.codecs.mikrotik_routeros.MikroTikRouterOSCodec`
 **Direction:** `bidirectional`
 **Certainty:** `best_effort` *(unchanged)*
 
@@ -281,7 +281,7 @@ the same pass to unblock the promotion:
 
 ## fortigate_cli
 
-**Codec:** `netconfig.migration.codecs.fortigate_cli.FortiGateCLICodec`
+**Codec:** `netcanon.migration.codecs.fortigate_cli.FortiGateCLICodec`
 **Direction:** `bidirectional`
 **Certainty:** `certified` ✅
 
@@ -331,7 +331,7 @@ FortiOS uses singular `set comment "<text>"` (not plural
 `set comments`) on per-route descriptions inside `config router
 static`.  The render path was emitting it correctly but a parser-
 side gap meant round-trips lost the route description.  Fix in
-`netconfig/migration/codecs/fortigate_cli/parse.py` lines around
+`netcanon/migration/codecs/fortigate_cli/parse.py` lines around
 570 + `render.py` near 837 makes the path symmetric.
 
 ### Certification decision
@@ -348,7 +348,7 @@ fixture).
 
 ## aruba_aoss
 
-**Codec:** `netconfig.migration.codecs.aruba_aoss.ArubaAOSSCodec`
+**Codec:** `netcanon.migration.codecs.aruba_aoss.ArubaAOSSCodec`
 **Direction:** `bidirectional`
 **Certainty:** `certified` ✅
 
@@ -483,7 +483,7 @@ designed to catch.
 
 ## arista_eos
 
-**Codec:** `netconfig.migration.codecs.arista_eos.AristaEOSCodec`
+**Codec:** `netcanon.migration.codecs.arista_eos.AristaEOSCodec`
 **Direction:** `bidirectional`
 **Certainty:** `certified` ✅ — four real captures across four EOS majors (4.21 + 4.22 + 4.23 + 4.26), all round-trip stable; 3 bugs surfaced + fixed across the promotion path.
 
@@ -521,7 +521,7 @@ Nice-to-have follow-ups (not gating):
 
 ## juniper_junos
 
-**Codec:** `netconfig.migration.codecs.juniper_junos.JunosCodec`
+**Codec:** `netcanon.migration.codecs.juniper_junos.JunosCodec`
 **Direction:** `bidirectional` *(v2a — flat set-form render, no apply-groups; v2b apply-groups collapse + block-form parse deferred)*
 **Certainty:** `certified` ✅ — five real captures across four Junos majors (15.1 + 17.3 + 18.4 + 25.4), all round-trip stable.  v2a parses set-form only; block-form reserved for v2b.
 
@@ -667,7 +667,7 @@ re-deriving the projection:
   onto the matching `CanonicalVlan.ipv4_addresses` so VLAN-centric
   renderers (Arista EOS, Aruba AOS-S) see the addresses.  Originally
   inlined in `cisco_iosxe._synthesize_vlans_from_svis`; now lifted
-  into `netconfig/migration/canonical/transforms.py` and called from
+  into `netcanon/migration/canonical/transforms.py` and called from
   the Cisco IOS-XE CLI, Arista EOS, and Aruba AOS-S parsers.
 * **`_natural_port_sort_key`** — natural sort order for port-style
   identifiers (`1/1` < `1/2` < `1/10`, not `1/1` < `1/10` < `1/2`).

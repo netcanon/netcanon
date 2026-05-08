@@ -1,7 +1,7 @@
 # Cross-vendor fidelity expectations: arista_eos -> cisco_iosxe_cli
 #
 # This file enumerates the per-field translation disposition for every
-# top-level field on CanonicalIntent (see netconfig/migration/canonical/
+# top-level field on CanonicalIntent (see netcanon/migration/canonical/
 # intent.py).  Each disposition is grounded in vendor documentation
 # excerpts under docs/vendor-references/arista_eos_to_cisco_iosxe_cli/.
 #

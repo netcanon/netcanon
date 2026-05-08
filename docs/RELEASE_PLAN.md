@@ -52,7 +52,7 @@ material in the repo already; some are missing entirely.
 | Real-IP / secret scrub audit | Hard rule already prevents | Run a final `git log --all -p \| grep` for IPs/hostnames before going public |
 | Semver versioning + tag | Need to decide | Recommended: `v0.1.0` to signal pre-1.0 — sets honest expectations |
 | Public-facing repo URL | Need to decide | GitHub is the obvious primary for this audience |
-| Project name conflict check | Not yet done | Verify `netconfig` (or alternate) is available on PyPI, GitHub, Docker Hub.  See "Project identity & discoverability" below |
+| Project name conflict check | Not yet done | Verify `netcanon` (or alternate) is available on PyPI, GitHub, Docker Hub.  See "Project identity & discoverability" below |
 
 ---
 
@@ -62,8 +62,8 @@ A tool without a clear public identity gets confused with adjacent
 tools and skipped over in search results.  Items that need
 deliberate work:
 
-* **Name conflict check.**  `netconfig` on PyPI may be taken;
-  `netconfig-translator` or similar may be necessary.  Same on
+* **Name conflict check.**  `netcanon` on PyPI may be taken;
+  `netcanon-translator` or similar may be necessary.  Same on
   GitHub.  Same on Docker Hub.  Verify before committing to a name
   — a mid-launch rename is significantly painful.
 * **Logo or identity mark.**  Even a simple one.  Operators
@@ -408,7 +408,7 @@ as a release-blocker (MUST tier).
 
 **Status as of 2026-05-05:** The helper does NOT yet exist.  No
 ``tools/sanitize_config.py`` in the repo; no API endpoint; no UI
-surface.  The existing ``netconfig.migration._naming.sanitise_hostname``
+surface.  The existing ``netcanon.migration._naming.sanitise_hostname``
 helper is for cross-vendor render-time normalisation (whitespace
 collapse), NOT for redacting sensitive data.
 
@@ -419,12 +419,12 @@ paths**, NOT three separate implementations.  This avoids the version-
 skew + maintenance-fragmentation tax of an ad-hoc script that lives
 alongside but evolves independently of the main app:
 
-1. **`netconfig.tools.sanitize` Python module** — the actual
+1. **`netcanon.tools.sanitize` Python module** — the actual
    sanitisation logic.  Vendor-aware via the existing codec parsers;
    operates on the canonical model rather than raw text.  Single
    source of truth.
 
-2. **CLI subcommand `netconfig sanitize`** — exposed via the PyPI
+2. **CLI subcommand `netcanon sanitize`** — exposed via the PyPI
    package's console-scripts entry point.  For operators NOT running
    the FastAPI server (one-shot pip install, CI / scripting).
 
@@ -477,12 +477,12 @@ For PyPI / native users not running the server:
 
 ```
 pip install netcanon
-netconfig sanitize -i my-config.txt -o sanitized.txt \
+netcanon sanitize -i my-config.txt -o sanitized.txt \
   --source-vendor cisco_iosxe_cli
 ```
 
 For Windows MSI users: the MSI ships the same Python entry point
-under `<install>\netconfig.exe sanitize ...` — OR (better) they hit
+under `<install>\netcanon.exe sanitize ...` — OR (better) they hit
 the local FastAPI server's HTTP endpoint same as Docker users (the
 MSI starts the server on `127.0.0.1:<port>` already).
 
@@ -514,7 +514,7 @@ real device names appearing.
 ### `--dry-run` mode (critical for trust)
 
 ```
-netconfig sanitize --dry-run -i my-config.txt --source-vendor cisco_iosxe_cli
+netcanon sanitize --dry-run -i my-config.txt --source-vendor cisco_iosxe_cli
 ```
 
 Prints the substitution table:
@@ -575,7 +575,7 @@ have a desktop session at all.
 docker run -p 127.0.0.1:8765:8000 \
   -v $(pwd)/configs:/app/configs \
   -v $(pwd)/devices:/app/devices \
-  ghcr.io/<owner>/netconfig:0.1.0
+  ghcr.io/<owner>/netcanon:0.1.0
 ```
 
 Build properties:
@@ -659,7 +659,7 @@ When this wave actually starts, work this order:
 | **2 — Project identity foundation** | 1 session | Logo, GitHub Topics, project description, tagline.  Comparison table vs adjacent tools |
 | **3 — Pre-launch quality hardening** | 2-3 sessions | Failure-mode tour (every error path produces actionable message); browser-compat sweep; empty-state + loading-state pass; copy-quality pass; tooltip layer |
 | **4 — Demo + sample artifacts** | 1 session | `tools/demo.py`; per-scenario walkthroughs under `docs/walkthroughs/` |
-| **4.5 — Sanitization tooling** | 1-2 sessions | `netconfig.tools.sanitize` shared library + CLI subcommand `netconfig sanitize` + HTTP API endpoint `POST /api/v1/sanitize`.  Vendor-aware via canonical-model walk; `--dry-run` mode; round-trip regression-guards on every real-capture fixture.  Three invocation paths, single source of truth.  Blocks Phase 5 because `BUG_REPORTING.md` documents this as the canonical fixture-submission path |
+| **4.5 — Sanitization tooling** | 1-2 sessions | `netcanon.tools.sanitize` shared library + CLI subcommand `netcanon sanitize` + HTTP API endpoint `POST /api/v1/sanitize`.  Vendor-aware via canonical-model walk; `--dry-run` mode; round-trip regression-guards on every real-capture fixture.  Three invocation paths, single source of truth.  Blocks Phase 5 because `BUG_REPORTING.md` documents this as the canonical fixture-submission path |
 | **5 — Operator-facing docs** | 2 sessions | Per-vendor "what works for me?" pages; "How we test" page narrating the cross-mesh audit; "What we won't do" Tier-3 page; troubleshooting page; failure-mode showcase; `BUG_REPORTING.md` referencing the Phase 4.5 sanitiser invocation paths |
 | **6 — Packaging foundation** | 1 session | Dockerfile (multi-stage, distroless, non-root, reproducible), GHCR publish workflow, PyPI publish workflow with Trusted Publishing.  Verifies the sanitiser's three invocation paths all land in their respective artefacts |
 | **7 — README rewrite** | 1 session | Lead with tagline + asciinema + before/after example + matrix-honesty trust signal |

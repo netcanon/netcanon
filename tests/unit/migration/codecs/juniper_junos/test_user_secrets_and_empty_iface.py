@@ -6,7 +6,7 @@ Two related fixes from ``user_smoke_findings.md``:
   used to emit ``authentication encrypted-password "9 $9$..."``
   unconditionally, leaking Cisco type-9 (scrypt) hashes that
   Junos cannot consume.  The new policy gates emit through
-  ``netconfig.migration._user_secrets.is_migratable("juniper_junos")``
+  ``netcanon.migration._user_secrets.is_migratable("juniper_junos")``
   and falls back to a ``# password manager user-name "X" -- review:``
   comment line when the source hash format isn't one Junos
   accepts.  Native Junos hashes (``junos:`` prefix) and foreign
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -33,7 +33,7 @@ from netconfig.migration.canonical.intent import (
     CanonicalRoutingInstance,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.juniper_junos.render import render_intent
+from netcanon.migration.codecs.juniper_junos.render import render_intent
 
 pytestmark = pytest.mark.unit
 

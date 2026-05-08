@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.window``.
+Unit tests for ``netcanon_desktop.window``.
 
 PySide6 is mocked via ``sys.modules`` injection so no display is required.
 """
@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from netconfig_desktop.window import WebViewWindow
+from netcanon_desktop.window import WebViewWindow
 
 pytestmark = pytest.mark.desktop
 
@@ -60,7 +60,7 @@ class TestWebViewWindowCreate:
     def test_icon_written_and_set(self, created_win, mock_pyside6, mock_write_ico):
         win, ns = created_win
         mock_write_ico.assert_called_once()
-        ns.QIcon.assert_called_once_with("/tmp/netconfig.ico")
+        ns.QIcon.assert_called_once_with("/tmp/netcanon.ico")
 
 
 class TestWebViewWindowStart:

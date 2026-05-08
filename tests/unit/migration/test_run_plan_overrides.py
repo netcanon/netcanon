@@ -1,5 +1,5 @@
 """
-Unit tests for :func:`netconfig.services.migration_pipeline.run_plan_with_overrides`.
+Unit tests for :func:`netcanon.services.migration_pipeline.run_plan_with_overrides`.
 
 This is the shared engine introduced in P2C1.  It subsumes the port-
 rename-specific path that :func:`run_plan_with_rename` used to provide
@@ -34,9 +34,9 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.services.migration_pipeline import (
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.services.migration_pipeline import (
     run_plan,
     run_plan_with_overrides,
     run_plan_with_rename,

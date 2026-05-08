@@ -40,7 +40,7 @@ have a per-interface `lag_member_of` backref).
 ### 1. Declare the field on the canonical model
 
 If it's a per-interface attribute, add to `CanonicalInterface` in
-`netconfig/migration/canonical/intent.py`:
+`netcanon/migration/canonical/intent.py`:
 
 ```python
 class CanonicalInterface(BaseModel):
@@ -70,7 +70,7 @@ class CanonicalIntent(BaseModel):
 
 For MTU, the interesting cases:
 
-**Cisco IOS-XE CLI** (`netconfig/migration/codecs/cisco_iosxe_cli/codec.py`):
+**Cisco IOS-XE CLI** (`netcanon/migration/codecs/cisco_iosxe_cli/codec.py`):
 add a regex at module scope, match inside the interface-stanza loop,
 forward into the intermediate dict, and set on the built
 `CanonicalInterface`:
@@ -256,7 +256,7 @@ the UI:
 
 One commit per canonical field, touching:
 
-- `netconfig/migration/canonical/intent.py` (model)
+- `netcanon/migration/canonical/intent.py` (model)
 - 4-5 codec files (parse + render per codec)
 - `tests/unit/migration/test_<feature>_wire_through.py` (NEW)
 - Possibly `translator-plans.txt` + `HUMAN_TESTING.md`
@@ -297,7 +297,7 @@ Some fields have cross-feature semantics — e.g. adding `lag_member_of`
 on `CanonicalInterface` also needs a shared transform
 (`project_switchport_to_vlan` for Cisco, similar for others) or the
 canonical tree will be incomplete.  If your field is part of a bigger
-structural shift, create `netconfig/migration/canonical/transforms.py`
+structural shift, create `netcanon/migration/canonical/transforms.py`
 helpers and wire them in each codec's `parse()` after the per-line
 extraction.
 
@@ -358,7 +358,7 @@ calling out:
 
 ## See also
 
-- [`../netconfig/migration/canonical/README.md`](../netconfig/migration/canonical/README.md) — canonical intent model overview and Tier 1 / 2 / 3 promotion rules
-- [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) — codec authorship guide (every codec touched by a wire-through lives here)
+- [`../netcanon/migration/canonical/README.md`](../netcanon/migration/canonical/README.md) — canonical intent model overview and Tier 1 / 2 / 3 promotion rules
+- [`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md) — codec authorship guide (every codec touched by a wire-through lives here)
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — four-layer design and where canonical sits in the migration pipeline
 - [`glossary.md`](glossary.md) — project-jargon reference (canonical, codec, wire-through, ship-before-wire)

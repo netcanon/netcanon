@@ -1,6 +1,6 @@
 # OpenConfig YANG parse scope of the cisco_iosxe codec
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.parse`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.parse`
 (authoritative in-tree source for "what the parser walks")
 Retrieved: 2026-05-01
 

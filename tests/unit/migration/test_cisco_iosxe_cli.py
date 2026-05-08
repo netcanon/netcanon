@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -265,7 +265,7 @@ class TestSVIVlanSynthesis:
     def test_svi_ip_reaches_aruba_render(self):
         """End-to-end regression: the exact case from the user's
         real config."""
-        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
         raw = (
             'hostname "Switch"\n'
             "!\n"
@@ -463,7 +463,7 @@ class TestRenderSynthesisesInterfacesFromVlanMembership:
     """
 
     def test_synthesises_access_ports_from_vlan_untagged_list(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalVlan,
         )
         intent = CanonicalIntent(hostname="sw")
@@ -478,7 +478,7 @@ class TestRenderSynthesisesInterfacesFromVlanMembership:
         assert out.count("switchport access vlan 10") == 3
 
     def test_synthesises_trunk_ports_from_vlan_tagged_list(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalVlan,
         )
         intent = CanonicalIntent(hostname="sw")
@@ -537,10 +537,10 @@ class TestRenderPortIdentitySubslotLetter:
     """
 
     def test_aruba_letter_slot_maps_to_cisco_module_1(self):
-        from netconfig.migration.codecs.aruba_aoss.port_names import (
+        from netcanon.migration.codecs.aruba_aoss.port_names import (
             classify_port_name as a_classify,
         )
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             format_port_identity as c_format,
         )
         # 1/A1, 1/A2, 1/A3, 1/A4 should each get a UNIQUE Cisco
@@ -560,10 +560,10 @@ class TestRenderPortIdentitySubslotLetter:
         """Letter slots are typically SFP+ uplinks; prefix should
         bump to TenGigabitEthernet when no explicit speed hint is
         set on the canonical PortIdentity."""
-        from netconfig.migration.codecs.aruba_aoss.port_names import (
+        from netcanon.migration.codecs.aruba_aoss.port_names import (
             classify_port_name as a_classify,
         )
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             format_port_identity as c_format,
         )
         out = c_format(a_classify("1/A1"))
@@ -574,8 +574,8 @@ class TestRenderPortIdentitySubslotLetter:
     def test_letter_b_maps_to_module_2(self):
         """Module-bay B (e.g. on modular 5400 chassis) should map to
         Cisco module=2."""
-        from netconfig.migration.canonical.port_names import PortIdentity
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.canonical.port_names import PortIdentity
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             format_port_identity as c_format,
         )
         ident = PortIdentity(
@@ -604,7 +604,7 @@ class TestTreeShapeCompatibility:
         The validation severity is ``block`` because the NETCONF
         target honestly declares those un-rendered surfaces as
         unsupported, but the interfaces still classify cleanly."""
-        from netconfig.services.migration_validate import validate_against
+        from netcanon.services.migration_validate import validate_against
 
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         cli_codec = CiscoIOSXECLICodec()
@@ -703,7 +703,7 @@ class TestDefaultGatewayParse:
         """Cisco parse -> Aruba render should re-emit the native
         ``ip default-gateway`` form (Aruba's renderer collapses
         0.0.0.0/0 routes back to that syntax)."""
-        from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
         raw = "hostname sw1\nip default-gateway 192.168.11.1\n"
         intent = CiscoIOSXECLICodec().parse(raw)
         aruba_out = ArubaAOSSCodec().render(intent)
@@ -722,14 +722,14 @@ class TestDefaultGatewayParse:
 
 class TestRegistry:
     def test_cli_codec_in_registry(self):
-        from netconfig.migration.codecs.registry import list_codecs
-        import netconfig.migration  # side-effect
+        from netcanon.migration.codecs.registry import list_codecs
+        import netcanon.migration  # side-effect
         assert "cisco_iosxe_cli" in list_codecs()
 
     def test_two_codecs_for_same_vendor(self):
         """cisco_iosxe and cisco_iosxe_cli both registered — first
         multi-codec-per-vendor case."""
-        from netconfig.migration.codecs.registry import list_codecs
+        from netcanon.migration.codecs.registry import list_codecs
         codecs = list_codecs()
         assert "cisco_iosxe" in codecs
         assert "cisco_iosxe_cli" in codecs

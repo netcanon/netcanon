@@ -13,7 +13,7 @@ Netcanon is a FastAPI application that co-hosts two independent jobs:
 ```
             ┌────────────────────────────────────────────────────┐
             │                  FastAPI app                        │
-            │  (netconfig/main.py, shared by web + desktop)      │
+            │  (netcanon/main.py, shared by web + desktop)      │
             └──────────────┬─────────────────────────┬────────────┘
                            │                         │
                   ┌────────▼────────┐       ┌────────▼────────┐
@@ -26,20 +26,20 @@ Netcanon is a FastAPI application that co-hosts two independent jobs:
                   └─────────────────┘       └─────────────────┘
 ```
 
-**Backup** (`netconfig/collectors/`, `netconfig/api/routes/backups.py`):
+**Backup** (`netcanon/collectors/`, `netcanon/api/routes/backups.py`):
 fetches the current running configuration from devices over a
 pluggable transport (SSH via Netmiko / NETCONF / REST), validates
 against a device-class schema, stores in `configs/<host>.<ext>`.
 Scheduled or on-demand.  Mocked in tests at a single factory
 (`get_collector`).
 
-**Migration** (`netconfig/migration/`): the subject of most of this
+**Migration** (`netcanon/migration/`): the subject of most of this
 document.  Takes a stored backup, parses it into a shared intent tree,
 and renders that tree in another vendor's native format.
 
 The rest of this document is about the migration layer.  The backup
 layer is architecturally simpler — see
-[`netconfig/collectors/README.md`](netconfig/collectors/README.md).
+[`netcanon/collectors/README.md`](netcanon/collectors/README.md).
 Backup definitions ship for Cisco IOS-XE, Fortigate FortiOS, MikroTik
 RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS — see
 [`definitions/README.md`](definitions/README.md) for the per-vendor
@@ -84,7 +84,7 @@ conflated in vendor-specific tooling:
 - Shared taxonomy anchor with the backup layer's `type_key` field
 
 **Layered definitions (backup side).**  The `DeviceDefinition` schema
-in `netconfig/definitions/schema.py` supports two-level lookup:
+in `netcanon/definitions/schema.py` supports two-level lookup:
 
 * **Family-base** entries (`os_version` and `model` both unset) form
   the default `dict[type_key, DeviceDefinition]` returned by
@@ -108,7 +108,7 @@ authoring guide.
 
 ### Layer 2 — Format Codec
 
-**Where:** `netconfig/migration/codecs/<vendor>/codec.py`
+**Where:** `netcanon/migration/codecs/<vendor>/codec.py`
 **What:** Translates between a **wire format** and the **canonical
 intent tree**.  Every codec declares:
 
@@ -131,16 +131,16 @@ certainty:        enum     # certified | best_effort | experimental
   OpenConfig) and `cisco_iosxe_cli` (`show running-config` parser) are
   both `vendor_id="cisco_iosxe"` but speak different wire formats.
 * **Auto-registration.** Drop a subpackage under
-  `netconfig/migration/codecs/`, decorate the class with `@register`,
+  `netcanon/migration/codecs/`, decorate the class with `@register`,
   and `pkgutil` auto-discovery at app startup picks it up — no manual
   wiring.
 
 For authoring instructions see
-[`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md).
+[`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md).
 
 ### Layer 3 — Canonical Intent Model (CIM)
 
-**Where:** `netconfig/migration/canonical/intent.py`
+**Where:** `netcanon/migration/canonical/intent.py`
 **What:** The shared tree shape codecs parse into and render out of.
 
 The current CIM is a lightweight OpenConfig-inspired pydantic model
@@ -167,7 +167,7 @@ landed in a single commit ahead of any Arista / Junos / NX-OS
 wire-up, letting the UI report "VXLAN detected but not translated"
 instead of silently dropping it.
 
-**Shared transforms:** `netconfig/migration/canonical/transforms.py`
+**Shared transforms:** `netcanon/migration/canonical/transforms.py`
 holds post-parse passes that bridge representation differences (e.g.
 `project_switchport_to_vlan` converts Cisco's per-port VLAN
 membership to Aruba's VLAN-centric membership lists).  These run
@@ -176,7 +176,7 @@ regardless of which vendor originated it.
 
 ### Layer 4 — Transport
 
-**Where:** `netconfig/collectors/` (currently only the backup side
+**Where:** `netcanon/collectors/` (currently only the backup side
 exercises transport layer; migration is file-input for now)
 **What:** How bytes get in and out of a device.  SSH via Netmiko,
 NETCONF, REST APIs — pluggable per vendor.
@@ -206,7 +206,7 @@ stale as codecs promote).
 
 ## Pipeline orchestration
 
-**Where:** `netconfig/services/migration_pipeline.py`
+**Where:** `netcanon/services/migration_pipeline.py`
 **What:** A single public function `run_plan(source_codec, target_codec,
 raw, transforms=...)` that drives:
 
@@ -229,10 +229,10 @@ stages stay frozen.  See the module docstring.
 ## Per-pane overrides (Tier-3 rename modal)
 
 **Where:** `run_plan_with_overrides` in
-`netconfig/services/migration_pipeline.py` +
-`netconfig/migration/canonical/{port_names,vlan_names,local_user_names,snmp_names}.py`
-+ `netconfig/api/routes/migration.py` (per-pane POST endpoints) +
-the left-rail category nav in `netconfig/templates/migrate.html`
+`netcanon/services/migration_pipeline.py` +
+`netcanon/migration/canonical/{port_names,vlan_names,local_user_names,snmp_names}.py`
++ `netcanon/api/routes/migration.py` (per-pane POST endpoints) +
+the left-rail category nav in `netcanon/templates/migrate.html`
 with per-category partials under `_partials/`.
 
 **What:** The Tier-3 rename modal lets operators override the
@@ -241,7 +241,7 @@ leaving the translate workflow.  Each category (Ports, VLANs,
 Local Users, SNMP community today; future SNMP trap-hosts /
 RADIUS) has:
 
-1. **An orchestrator** under `netconfig/migration/canonical/`
+1. **An orchestrator** under `netcanon/migration/canonical/`
    that walks the canonical tree and applies a caller-supplied
    override map.  Returns a result struct with `applied`,
    `dropped`, and `warnings` lists so the UI can show exactly
@@ -303,7 +303,7 @@ the existing transforms; document the choice in both
 
 **localStorage ack persistence (UI):** operator overrides are
 persisted under
-`netconfig.rename-ack.v1:<source_codec>:<target_codec>:<hostname>`.
+`netcanon.rename-ack.v1:<source_codec>:<target_codec>:<hostname>`.
 Moving to a different device (different hostname), different
 codec pair, or pressing Reset-all clears or scopes away saved
 state.  Version segments for source/target are omitted until
@@ -345,7 +345,7 @@ the corresponding source count — no cross-pane coupling.  Hidden
 when the profile doesn't declare the limit, same discipline as
 the ports fit-check's "no profile = no banner" rule.
 
-See [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
+See [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md)
 for the codec-authorship side of this (every codec must expose
 `classify_port_name` / `format_port_identity` to participate in
 the port-rename mesh; VLAN orchestrator is codec-agnostic).
@@ -354,7 +354,7 @@ the port-rename mesh; VLAN orchestrator is codec-agnostic).
 
 ## Auto-detection
 
-**Where:** `netconfig/services/migration_detect.py` + per-codec `probe()`
+**Where:** `netcanon/services/migration_detect.py` + per-codec `probe()`
 
 The migration UI can auto-propose the right source codec when given
 raw config text.  Each codec's `probe(raw_prefix)` returns
@@ -371,7 +371,7 @@ Some concerns are vendor-agnostic and live in shared sibling modules
 at the migration-package root rather than per-codec.  Each policy is
 called by multiple codecs to keep cross-vendor behaviour consistent:
 
-**Hash-portability policy** (`netconfig/migration/_user_secrets.py`).
+**Hash-portability policy** (`netcanon/migration/_user_secrets.py`).
 When a render path consumes `CanonicalLocalUser.hashed_password`, it
 calls `is_migratable(hashed, target_vendor)` to decide whether the
 target's CLI accepts that hash form.  Cross-vendor mismatches (e.g.
@@ -380,7 +380,7 @@ Cisco type-9 scrypt → Junos, OPNsense bcrypt → Arista) emit a
 syntax instead of leaking the hash literal as plaintext.  Per-target
 accepted-algorithm sets live in `_TARGET_ACCEPTS[<vendor>]`.
 
-**Naming-value sanitisation** (`netconfig/migration/_naming.py`).
+**Naming-value sanitisation** (`netcanon/migration/_naming.py`).
 Some target CLI parsers (Arista EOS, Cisco IOS-XE) reject whitespace
 in hostname / domain / VRF-name tokens; renderers call
 `sanitise_hostname()` so the wire form round-trips through the
@@ -388,7 +388,7 @@ target's own parser.  Source state preserved on canonical, sanitised
 only at the wire boundary.
 
 **Switchport ↔ VLAN projection**
-(`netconfig/migration/canonical/transforms.py`).  The
+(`netcanon/migration/canonical/transforms.py`).  The
 canonical model carries L2 membership both ways: per-iface
 `switchport_mode`/`access_vlan`/`trunk_allowed_vlans` AND per-vlan
 `tagged_ports`/`untagged_ports`.  Codecs whose parse populates only
@@ -409,7 +409,7 @@ mgmt-classified interfaces.
 
 When adding a new codec, audit each policy and decide whether to
 opt in.  Most cases: opt in.  Re-implementing the policy locally is
-the wrong call — see `netconfig/migration/codecs/README.md`
+the wrong call — see `netcanon/migration/codecs/README.md`
 "Cross-codec shared utilities" section.
 
 ---
@@ -417,7 +417,7 @@ the wrong call — see `netconfig/migration/codecs/README.md`
 ## Target profiles (hardware-aware rename-modal metadata)
 
 **Where:** `definitions/target_profiles/*.yaml` +
-`netconfig/migration/target_profiles.py`
+`netcanon/migration/target_profiles.py`
 **What:** Declarative descriptions of a target device's port
 inventory — vendor, model, device class, stacking mode,
 chassis-fixed ports + optional swappable-module variants, LAG
@@ -528,7 +528,7 @@ shared type may unify on `(vendor, os_family)` — see
 
 See [`definitions/README.md`](definitions/README.md) for full
 schema + authoring guide;
-[`netconfig/migration/target_profiles.py`](netconfig/migration/target_profiles.py)
+[`netcanon/migration/target_profiles.py`](netcanon/migration/target_profiles.py)
 for the loader + accessor implementation.
 
 ### The `/definitions` browsing page
@@ -556,8 +556,8 @@ Netcanon knows about — four sections in one page:
    (`certified` / `best_effort` / `experimental`), and per-codec
    capability-matrix counts (supported / lossy / unsupported xpaths).
 
-Template: [`netconfig/templates/definitions.html`](netconfig/templates/definitions.html).
-Route: [`netconfig/api/routes/ui.py::definitions_page`](netconfig/api/routes/ui.py).
+Template: [`netcanon/templates/definitions.html`](netcanon/templates/definitions.html).
+Route: [`netcanon/api/routes/ui.py::definitions_page`](netcanon/api/routes/ui.py).
 Collapsible panels use native `<details>` / `<summary>` — zero
 JS, browser-built-in keyboard + screen-reader behaviour.
 The profile filter is a pure DOM hide/show on a pre-lowercased
@@ -571,7 +571,7 @@ container, plus per-row, per-module, per-codec testids).
 
 ## Template organisation
 
-Jinja2 templates live in `netconfig/templates/`.  The base layout is
+Jinja2 templates live in `netcanon/templates/`.  The base layout is
 `base.html`; each page is an extending template.
 
 **Large page templates split into partials.**  `migrate.html` and
@@ -579,7 +579,7 @@ Jinja2 templates live in `netconfig/templates/`.  The base layout is
 to factor long `<script>` blocks out into reusable partial files:
 
 ```
-netconfig/templates/
+netcanon/templates/
 ├── migrate.html              # outer HTML + script — the largest
 │                             # page template, hosts the Tier-3
 │                             # rename modal that depends on the
@@ -629,7 +629,7 @@ the source of truth):
 * **theme-toggle.js** — global light/dark mode toggle wired to
   the `nav-theme-toggle` button.  Flips `<html data-theme>`
   between `light`/`dark`, persists to
-  `localStorage["netconfig.theme.v1"]`, updates `aria-label` +
+  `localStorage["netcanon.theme.v1"]`, updates `aria-label` +
   `aria-pressed` to reflect the next-action.  The inline boot
   script in `base.html`'s `<head>` (NOT this partial) sets the
   initial theme synchronously before CSS parses — required for
@@ -662,7 +662,7 @@ declarations is tolerated.
 Three rules keep the pattern robust:
 
 1. **Inline boot script, blocking, in `<head>`.**  The tiny IIFE
-   in `base.html`'s `<head>` reads `localStorage["netconfig.theme.v1"]`
+   in `base.html`'s `<head>` reads `localStorage["netcanon.theme.v1"]`
    (user override) then falls back to `prefers-color-scheme` and
    sets the `data-theme` attribute on `documentElement`
    *synchronously* before any CSS parses.  This prevents FOUC
@@ -712,7 +712,7 @@ promotion: new fixtures surface latent bugs and cover grammar
 surfaces the current corpus doesn't touch.
 
 Mocking single entry point: **SSH collection is mocked at
-`netconfig.api.routes.backups.get_collector`, never at `ConnectHandler`
+`netcanon.api.routes.backups.get_collector`, never at `ConnectHandler`
 or `paramiko.SSHClient` directly** (see CLAUDE.md hard rule).
 
 ### Cross-mesh fidelity audit harness
@@ -809,7 +809,7 @@ that have shipped:
 - **Phase 1** — real bidirectional codecs across the major switching/firewall
   vendors (Cisco IOS-XE CLI + NETCONF, Aruba AOS-S, OPNsense, MikroTik
   RouterOS, FortiGate CLI, Arista EOS, Juniper Junos).  See
-  `netconfig/migration/codecs/` for the live registry.
+  `netcanon/migration/codecs/` for the live registry.
 - **R5** — auto-detection probe
 - **R6/7** — real-capture validation harness + fixture corpus
 - **Tier 2 wire-throughs** — SNMP + SNMPv3, LAGs, local_users, DHCP pools,
@@ -837,9 +837,9 @@ What's queued:
 ## See also
 
 - [`definitions/README.md`](definitions/README.md) — device-definition + target-profile YAML schema
-- [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md) — codec authorship guide
-- [`netconfig/migration/canonical/README.md`](netconfig/migration/canonical/README.md) — canonical intent model and Tier 1 / 2 / 3 promotion rules
-- [`netconfig/api/routes/README.md`](netconfig/api/routes/README.md) — HTTP route inventory and frozen pipeline-stage signatures
+- [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md) — codec authorship guide
+- [`netcanon/migration/canonical/README.md`](netcanon/migration/canonical/README.md) — canonical intent model and Tier 1 / 2 / 3 promotion rules
+- [`netcanon/api/routes/README.md`](netcanon/api/routes/README.md) — HTTP route inventory and frozen pipeline-stage signatures
 - [`docs/glossary.md`](docs/glossary.md) — project-jargon reference
 - [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) — worked example: MTU wire-through across every codec
 - [`docs/adding-a-target-profile.md`](docs/adding-a-target-profile.md) — worked example: shipping a hardware-shape YAML for the rename UI fit-checks

@@ -15,7 +15,7 @@ each `<interface><ethernet>` element.  A real Catalyst 9K NETCONF
 reply carries both — VLAN headers (`<id>`, `<name>`) and
 per-interface trunk / access membership.
 
-The `netconfig.migration.codecs.cisco_iosxe.parse()` walks
+The `netcanon.migration.codecs.cisco_iosxe.parse()` walks
 `<interfaces>` only.  It does NOT walk `<network-instances>`
 (where VLAN headers live) and does NOT walk the `switched-vlan`
 augment.  After parse:

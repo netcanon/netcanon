@@ -15,15 +15,15 @@ of vendor keyword decoration.  The fix infers scope from the
 prefix when the keyword is absent.
 
 See:
-* netconfig/migration/codecs/cisco_iosxe_cli/parse.py:_is_link_local_v6
-* netconfig/migration/codecs/juniper_junos/parse.py (working reference)
+* netcanon/migration/codecs/cisco_iosxe_cli/parse.py:_is_link_local_v6
+* netcanon/migration/codecs/juniper_junos/parse.py (working reference)
 """
 
 from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli.parse import (
+from netcanon.migration.codecs.cisco_iosxe_cli.parse import (
     _is_link_local_v6,
     parse_intent,
 )

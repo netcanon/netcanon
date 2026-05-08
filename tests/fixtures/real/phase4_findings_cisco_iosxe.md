@@ -6,7 +6,7 @@ cisco_iosxe_cli (2), fortigate_cli (1), juniper_junos (1),
 mikrotik_routeros (1), opnsense (1).
 
 Source codec: `cisco_iosxe` (Phase-0.5 NETCONF / OpenConfig stub —
-`netconfig/migration/codecs/cisco_iosxe/codec.py`).  Its `parse()` walks
+`netcanon/migration/codecs/cisco_iosxe/codec.py`).  Its `parse()` walks
 the `<interfaces>` subtree only; every other declared-`supported`
 matrix path (system, vlans, network-instances, snmp, routing) is
 aspirational wire-up that hasn't landed.  All seven CODEC_BUGs surface
@@ -68,7 +68,7 @@ above count cells, not root causes.
 * **Likely missing records:** seven of the ten source interfaces are
   Cisco-shaped multi-slash names (`GigabitEthernet0/0/0` …
   `0/0/4`, `Port-channel1`, `Vlan10`).  AOS-S parser regex
-  `_IFACE_HEADER_RE` (`netconfig/migration/codecs/aruba_aoss/parse.py:207`)
+  `_IFACE_HEADER_RE` (`netcanon/migration/codecs/aruba_aoss/parse.py:207`)
   accepts at most one `/` segment.  When the AOS-S render emits
   `interface GigabitEthernet0/0/0` (no port-rename mesh applied), the
   re-parse drops every multi-slash name.  Loopback / Tunnel / Vlan
@@ -100,12 +100,12 @@ half).**
   172.16.100.1/24 — the latter from a dot1q sub-interface absorbed
   onto the parent); target carries only the first.
 * **Codec locus — render side:**
-  `netconfig/migration/codecs/cisco_iosxe_cli/render.py:253-255`
+  `netcanon/migration/codecs/cisco_iosxe_cli/render.py:253-255`
   emits every address as a bare `ip address X.X.X.X MASK` — Cisco
   IOS-XE rejects this on a real device (only the first is primary;
   the rest must be `ip address X.X.X.X MASK secondary`).
 * **Codec locus — parse side:**
-  `netconfig/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
+  `netcanon/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
   has the inverse defect: an explicit `if not current["ipv4"]:
   # primary only` guard discards every line beyond the first.  Even
   if the renderer emitted the `secondary` keyword the parser would
@@ -131,7 +131,7 @@ half).**
   `<type>ianaift:l2vlan</type>`); target after CLI re-parse carries
   `ianaift:l3ipvlan`.
 * **Codec locus:**
-  `netconfig/migration/codecs/cisco_iosxe_cli/parse.py:91` hard-codes
+  `netcanon/migration/codecs/cisco_iosxe_cli/parse.py:91` hard-codes
   `"vlan": "ianaift:l3ipvlan"` in the name-prefix → IANA-ifType
   lookup.  IANA distinguishes `l2vlan` (135 — bridge / 802.1Q
   sub-interface) from `l3ipvlan` (136 — routed VLAN / SVI carrying
@@ -163,7 +163,7 @@ half).**
   iBGP peering loopback` 33).  All five truncated at byte 25 by the
   FortiGate render.
 * **Codec locus:**
-  `netconfig/migration/codecs/fortigate_cli/render.py:545-548` emits
+  `netcanon/migration/codecs/fortigate_cli/render.py:545-548` emits
   `iface.description[:25]` with the comment "FortiOS alias caps at
   25 chars per spec".  This is documented, not a bug.
   `fortigate_cli/codec.py` declares
@@ -228,7 +228,7 @@ half).**
   on re-parse if the named interface wasn't declared via
   `/interface ethernet|bridge|...`.
 * **Codec locus:**
-  `netconfig/migration/codecs/mikrotik_routeros/render.py` emits
+  `netcanon/migration/codecs/mikrotik_routeros/render.py` emits
   `/interface ethernet`, `/interface bridge`, `/interface bonding`,
   `/interface vlan` stanzas.  Loopback (`ianaift:softwareLoopback`)
   and Tunnel (`ianaift:tunnel`) interfaces from the source canonical
@@ -263,7 +263,7 @@ half).**
   `GigabitEthernet0/0/1` 3 addrs → 1, `GigabitEthernet0/0/3` 2
   addrs → 1.  Only the primary survives.
 * **Codec locus:**
-  `netconfig/migration/codecs/opnsense/render.py:252-254` emits only
+  `netcanon/migration/codecs/opnsense/render.py:252-254` emits only
   `iface.ipv4_addresses[0]` to `<ipaddr>` + `<subnet>`.  This is
   declared in the codec docstring and capability matrix as a
   one-IP-per-zone modelling limit; OPNsense has `<virtualip>` blocks
@@ -284,7 +284,7 @@ half).**
 Ordered by severity × leverage (a single fix that clears multiple
 cells across the cross-mesh ranks above one-cell fixes):
 
-1. **`netconfig/migration/codecs/aruba_aoss/parse.py:207`** — widen
+1. **`netcanon/migration/codecs/aruba_aoss/parse.py:207`** — widen
    `_IFACE_HEADER_RE` to accept multi-slash Cisco-shaped port names
    (or fix the AOS-S render to apply the port-rename mesh, which
    the YAML claims is already happening).  Single-line regex change
@@ -294,7 +294,7 @@ cells across the cross-mesh ranks above one-cell fixes):
    `tests/unit/migration/codecs/aruba_aoss/test_parse_iface_header.py`
    asserting `_IFACE_HEADER_RE.match("interface GigabitEthernet0/0/0")`
    is non-`None`.
-2. **`netconfig/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
+2. **`netcanon/migration/codecs/cisco_iosxe_cli/parse.py:560-561`
    + `render.py:253-255`** — coordinated change to emit / accept
    `secondary` keyword for IPv4 addresses index >= 1.  Unblocks 1
    CODEC_BUG on this same-vendor cross-format pair AND makes the
@@ -304,7 +304,7 @@ cells across the cross-mesh ranks above one-cell fixes):
    (`test_render_ipv4_secondary`) and round-trip test
    (`len(parse(render(intent_with_3_v4)).interfaces[0].ipv4_addresses)
    == 3`).
-3. **`netconfig/migration/codecs/mikrotik_routeros/render.py`** —
+3. **`netcanon/migration/codecs/mikrotik_routeros/render.py`** —
    add Loopback / Tunnel emission branches driven by canonical
    `interface_type`.  Unblocks 1 CODEC_BUG here and eliminates the
    count-drift overshoot for any source codec that carries
@@ -349,7 +349,7 @@ A separate task to investigate but not fix here:
   cisco_iosxe_cli, juniper_junos, mikrotik_routeros, fortigate_cli,
   opnsense, and aruba_aoss reports cover the reverse direction of
   every cell touched here.
-* `netconfig/migration/codecs/cisco_iosxe/codec.py` — the
+* `netcanon/migration/codecs/cisco_iosxe/codec.py` — the
   Phase-0.5 stub source codec; the parse-side wire-up gap that
   dominates `METHODOLOGY_ISSUE_under` counts (and which is *not*
   driving any of the 7 CODEC_BUGs above) is documented in its

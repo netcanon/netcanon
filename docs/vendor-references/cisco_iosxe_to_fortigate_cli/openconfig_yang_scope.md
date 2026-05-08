@@ -50,11 +50,11 @@ The OpenConfig ecosystem does model all of these subtrees in
 shipping YANG modules.  Cisco IOS-XE 17.x exposes them via the
 NETCONF agent.  The structural surface is real.
 
-## What the `netconfig.migration.codecs.cisco_iosxe` parser reads
+## What the `netcanon.migration.codecs.cisco_iosxe` parser reads
 
 The codec's `parse()` ignores everything except the `<interfaces>`
 subtree.  Looking at the parser entry point in
-`netconfig/migration/codecs/cisco_iosxe/codec.py`:
+`netcanon/migration/codecs/cisco_iosxe/codec.py`:
 
 ```python
 intent = CanonicalIntent(

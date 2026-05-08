@@ -19,7 +19,7 @@ They never reach the canonical translation layer.
 OPNsense's canonical-portable surface (the codec's capability matrix
 ``supported[]``) excludes:
 
-- ``/filter/rule`` (firewall rules require netconfig-ext YANG —
+- ``/filter/rule`` (firewall rules require netcanon-ext YANG —
   capability matrix unsupported entry).
 - ``/nat/outbound`` (NAT translation requires careful semantic
   mapping to OPNsense's stateful engine — capability matrix
@@ -50,5 +50,5 @@ Operators must:
 
 This is the dominant cross-vendor information loss path on this
 direction and is a documented architectural decision (Tier-3 by
-design — see ``netconfig/migration/canonical/intent.py`` module
+design — see ``netcanon/migration/canonical/intent.py`` module
 docstring).

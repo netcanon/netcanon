@@ -16,7 +16,7 @@ This module pins the resolution algorithm:
 * ``data_dir = Path("/explicit")`` → ``effective_data_dir == /explicit``
   (explicit override wins; this is the desktop-preferences path).
 
-The four lifespan call sites in ``netconfig/main.py`` (data_root probe,
+The four lifespan call sites in ``netcanon/main.py`` (data_root probe,
 job_store, schedule_store, device_profile_store) all read through
 ``effective_data_dir`` so they share a single resolution point.
 """
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.config import Settings
+from netcanon.config import Settings
 
 pytestmark = pytest.mark.unit
 
@@ -71,7 +71,7 @@ class TestEffectiveDataDirExplicit:
 
 
 class TestMainLifespanCallSites:
-    """Smoke-test that the four call sites in ``netconfig/main.py`` use
+    """Smoke-test that the four call sites in ``netcanon/main.py`` use
     ``effective_data_dir`` rather than ``configs_dir.parent`` directly.
 
     Failure mode this guards against: a future contributor adds another
@@ -81,7 +81,7 @@ class TestMainLifespanCallSites:
     """
 
     def test_main_uses_effective_data_dir(self):
-        from netconfig import main as main_module
+        from netcanon import main as main_module
         from inspect import getsource
 
         src = getsource(main_module)

@@ -19,12 +19,12 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import INPUT_FORMATS, CodecBase
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.codecs.registry import list_codecs, get_codec
-from netconfig.models.migration import CapabilityMatrix
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import INPUT_FORMATS, CodecBase
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.registry import list_codecs, get_codec
+from netcanon.models.migration import CapabilityMatrix
 
 pytestmark = pytest.mark.unit
 
@@ -98,7 +98,7 @@ class TestConcreteAdapterDeclarations:
         Using 'unknown' is acceptable (and tested above) but a typo like
         'xml-netcon' would silently break the UI's format-hint lookup.
         This test catches the typo at CI time."""
-        import netconfig.migration  # side-effect: register all built-ins
+        import netcanon.migration  # side-effect: register all built-ins
 
         for name in list_codecs():
             adapter = get_codec(name)
@@ -115,7 +115,7 @@ class TestConcreteAdapterDeclarations:
 
 class TestCodecInfoShape:
     def test_codec_info_model_has_input_format_field(self):
-        from netconfig.models.migration import CodecInfo
+        from netcanon.models.migration import CodecInfo
 
         # The default is 'unknown' so a minimal CodecInfo constructs cleanly
         # even if the caller forgets to pass it.
@@ -129,7 +129,7 @@ class TestCodecInfoShape:
         assert info.input_format == "unknown"
 
     def test_codec_info_preserves_declared_format(self):
-        from netconfig.models.migration import CodecInfo
+        from netcanon.models.migration import CodecInfo
 
         info = CodecInfo(
             name="cisco_iosxe",

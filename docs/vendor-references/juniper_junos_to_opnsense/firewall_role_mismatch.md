@@ -38,8 +38,8 @@ schedules, GeoIP, statefulness, advanced-options).  NAT lives in
 
 The opnsense codec capability matrix lists `/filter/rule` and
 `/nat/outbound` under `unsupported` with rationale "Firewall rules
-require the netconfig-ext YANG module" / "NAT table translation
-needs netconfig-ext + careful semantic mapping".
+require the netcanon-ext YANG module" / "NAT table translation
+needs netcanon-ext + careful semantic mapping".
 
 ## Cross-vendor mapping
 

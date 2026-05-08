@@ -1,7 +1,7 @@
 # Juniper Junos 22.x — current LTS train (22.4R is the published LTS).
 #
 # Pairs with the Juniper Junos migration codec at
-# ``netconfig/migration/codecs/juniper_junos`` so devices backed up via
+# ``netcanon/migration/codecs/juniper_junos`` so devices backed up via
 # this definition produce the exact ``set``-form text the codec parses.
 # The codec auto-detects block-form input as well, but ``| display set``
 # is the canonical paste shape and avoids the conversion path.

@@ -39,7 +39,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 

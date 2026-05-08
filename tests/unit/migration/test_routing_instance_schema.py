@@ -23,14 +23,14 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalRoutingInstance,
 )
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
 
 pytestmark = pytest.mark.unit
 

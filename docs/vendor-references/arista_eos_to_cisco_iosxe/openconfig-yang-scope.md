@@ -9,7 +9,7 @@ Retrieved: 2026-05-01
 Source: [openconfig-interfaces YANG schema docs](https://openconfig.net/projects/models/schemadocs/yangdoc/openconfig-interfaces.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical`
 (in-tree code; the authoritative source of "what the render emits")
 Retrieved: 2026-05-01
 

@@ -1,6 +1,6 @@
 """
-Unit tests for ``netconfig.storage.job_store.FileJobStore`` and
-``netconfig.storage.schedule_store.FileScheduleStore``.
+Unit tests for ``netcanon.storage.job_store.FileJobStore`` and
+``netcanon.storage.schedule_store.FileScheduleStore``.
 
 All I/O is directed to pytest's ``tmp_path`` — no network, no shared state.
 """
@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.models.backup import BackupJob, JobStatus
-from netconfig.models.schedule import BackupSchedule, ScheduleDevice
-from netconfig.storage.job_store import FileJobStore
-from netconfig.storage.schedule_store import FileScheduleStore
+from netcanon.models.backup import BackupJob, JobStatus
+from netcanon.models.schedule import BackupSchedule, ScheduleDevice
+from netcanon.storage.job_store import FileJobStore
+from netcanon.storage.schedule_store import FileScheduleStore
 
 pytestmark = pytest.mark.unit
 

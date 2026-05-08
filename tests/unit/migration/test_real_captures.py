@@ -44,13 +44,13 @@ from typing import Any
 
 import pytest
 
-from netconfig.migration.canonical.intent import CanonicalIntent
-from netconfig.migration.codecs.base import ParseError
+from netcanon.migration.canonical.intent import CanonicalIntent
+from netcanon.migration.codecs.base import ParseError
 
 # Side-effect imports to auto-register every codec with the registry
 # so ``get_codec(name)`` below can look them up by name.  If you add a
 # new codec package, add its import here.
-from netconfig.migration.codecs import (  # noqa: F401
+from netcanon.migration.codecs import (  # noqa: F401
     arista_eos,
     aruba_aoss,
     cisco_iosxe_cli,
@@ -59,7 +59,7 @@ from netconfig.migration.codecs import (  # noqa: F401
     mikrotik_routeros,
     opnsense,
 )
-from netconfig.migration.codecs.registry import get_codec
+from netcanon.migration.codecs.registry import get_codec
 
 pytestmark = pytest.mark.unit
 
@@ -432,7 +432,7 @@ def test_every_mapped_codec_is_registered() -> None:
     """Every codec name referenced by ``_DIR_TO_CODEC_NAME`` must
     exist in the registry.  Guards against typos + against removing
     a codec package without cleaning up this dict."""
-    from netconfig.migration.codecs.registry import list_codecs
+    from netcanon.migration.codecs.registry import list_codecs
     registered = set(list_codecs())
     bad = [
         (vendor_dir, codec_name)

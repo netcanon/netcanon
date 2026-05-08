@@ -12,12 +12,12 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import ParseError, RenderError
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.models.migration import DeviceClass, MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -63,7 +63,7 @@ class TestParse:
         ``<if>`` text as the canonical name so that round-trips through
         ``_zone_tag_for``'s lossy sanitisation preserve the original
         port-name identity for cross-vendor intents.  See
-        ``netconfig/migration/codecs/opnsense/parse.py``
+        ``netcanon/migration/codecs/opnsense/parse.py``
         ``_parse_interface_zone_canonical`` for the resolution rule.
         """
         xml = FIXTURES.joinpath("config_simple.xml").read_text()
@@ -122,9 +122,9 @@ class TestParseErrors:
 class TestParseTolerancePreamble:
     """Defensive: the parse() prefix-trim rescues OPNsense backups
     captured with leading command-echo noise.  See
-    ``netconfig/migration/codecs/opnsense/codec.py::_trim_xml_prologue``
+    ``netcanon/migration/codecs/opnsense/codec.py::_trim_xml_prologue``
     for rationale and the collector-side fix in
-    ``netconfig/collectors/paramiko_collector.py::_strip_command_echo``
+    ``netcanon/collectors/paramiko_collector.py::_strip_command_echo``
     for the upstream defect.
     """
 
@@ -202,12 +202,12 @@ class TestTrimXmlEnvelope:
     location) and tail (closing-tag residue) trims."""
 
     def test_preserves_input_with_no_marker(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = "nothing here"
         assert _trim_xml_envelope(raw) == raw
 
     def test_preserves_clean_xml_input(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = '<?xml version="1.0"?>\n<opnsense/>\n'
         # Actually the function truncates to the </opnsense> close —
         # a self-closing <opnsense/> lacks the literal close tag so
@@ -215,27 +215,27 @@ class TestTrimXmlEnvelope:
         assert _trim_xml_envelope(raw) == raw
 
     def test_strips_before_xml_prolog(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = 'garbage here\n<?xml version="1.0"?>\n<opnsense></opnsense>\n'
         out = _trim_xml_envelope(raw)
         assert out.startswith('<?xml version="1.0"?>')
         assert out.endswith('</opnsense>')
 
     def test_strips_before_root_element_when_no_prolog(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = "garbage\n<opnsense><hostname>x</hostname></opnsense>"
         out = _trim_xml_envelope(raw)
         assert out.startswith("<opnsense>")
 
     def test_picks_earliest_marker_when_both_present(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = 'junk\n<?xml?>\n<opnsense></opnsense>'
         out = _trim_xml_envelope(raw)
         assert out == '<?xml?>\n<opnsense></opnsense>'
 
     def test_bounded_head_scan(self):
         """Markers past the 2 KiB head-window are IGNORED."""
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = ("x" * 3000) + '<?xml?>\n<opnsense></opnsense>'
         # Head window is 2048 bytes; marker at byte 3000 won't be
         # found by the head trim.  Tail trim still runs and slices
@@ -248,7 +248,7 @@ class TestTrimXmlEnvelope:
         assert out.startswith("x" * 100)
 
     def test_empty_input_returns_empty(self):
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         assert _trim_xml_envelope("") == ""
 
     def test_strips_trailing_shell_prompt(self):
@@ -257,7 +257,7 @@ class TestTrimXmlEnvelope:
         tag, the paramiko-shell buffer contains
         ``root@supergate:~ # `` — breaks ET.fromstring further
         down the line."""
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = (
             '<?xml version="1.0"?>\n'
             '<opnsense><system><hostname>fw</hostname></system></opnsense>\n'
@@ -270,7 +270,7 @@ class TestTrimXmlEnvelope:
     def test_strips_both_ends_simultaneously(self):
         """The canonical user-reported shape: command echo at head
         AND shell prompt at tail, both in one file."""
-        from netconfig.migration.codecs.opnsense.codec import _trim_xml_envelope
+        from netcanon.migration.codecs.opnsense.codec import _trim_xml_envelope
         raw = (
             "cat /conf/config.xml\r\r\n"
             '<?xml version="1.0"?>\n<opnsense/>\n'
@@ -286,7 +286,7 @@ class TestTrimXmlEnvelope:
         """Backwards-compat: ``_trim_xml_prologue`` alias must
         still resolve (some external test code or imports may
         reference the old name)."""
-        from netconfig.migration.codecs.opnsense.codec import (
+        from netcanon.migration.codecs.opnsense.codec import (
             _trim_xml_envelope,
             _trim_xml_prologue,
         )
@@ -465,6 +465,6 @@ class TestCrossAdapter:
 
 class TestRegistry:
     def test_opnsense_in_registry(self):
-        import netconfig.migration  # side-effect import
-        from netconfig.migration.codecs.registry import list_codecs
+        import netcanon.migration  # side-effect import
+        from netcanon.migration.codecs.registry import list_codecs
         assert "opnsense" in list_codecs()

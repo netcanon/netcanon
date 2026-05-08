@@ -316,7 +316,7 @@ disposition was already correct; the codec's own declaration was
 the lie.  6 regression-guard tests pin the corrected declaration
 shape.
 
-* netconfig/migration/codecs/cisco_iosxe_cli/codec.py — flip
+* netcanon/migration/codecs/cisco_iosxe_cli/codec.py — flip
   declaration from UnsupportedPath to LossyPath
 * docs/CAPABILITIES.md — table row aligned with the corrected
   matrix

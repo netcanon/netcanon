@@ -1,0 +1,2281 @@
+{% extends "base.html" %}
+{% block title %}Migrate — Netcanon{% endblock %}
+
+{% block content %}
+<style>
+  /* Reuse the diff page's banner palette so the UI reads as one family. */
+  .mig-banner {
+    padding:.65rem 1rem; border-radius:6px; font-size:.88rem;
+    margin-top:1rem; display:flex; align-items:flex-start; gap:.75rem;
+  }
+  .mig-banner-ok     { background:#d4edda; color:#155724; }
+  .mig-banner-warn   { background:#ffeaa7; color:#7a5d00; }
+  .mig-banner-block  { background:#f8d7da; color:#721c24; }
+  .mig-banner-info   { background:#d1ecf1; color:#0c5460; }
+  .mig-banner ul     { margin:.25rem 0 0 1.25rem; padding:0; }
+  .mig-chip {
+    display:inline-block; padding:.08rem .5rem; border-radius:3px;
+    font-size:.7rem; font-weight:700; letter-spacing:.05em;
+    text-transform:uppercase; background:#1a1a2e; color:#eee;
+    font-family:monospace;
+  }
+  .mig-chip.class-switch          { background:#0c5460; }
+  .mig-chip.class-router          { background:#155724; }
+  .mig-chip.class-firewall        { background:#721c24; }
+  .mig-chip.class-load_balancer   { background:#7a5d00; }
+  .mig-chip.class-wireless_controller { background:#3d195a; }
+  .mig-chip.class-access_point    { background:#44085a; }
+  .mig-chip.class-waf             { background:#6a1f0b; }
+
+  .mig-form { background:#fff; padding:1.25rem; border-radius:6px;
+              box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .mig-pair-row { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem;
+                  align-items:center; margin-bottom:.75rem; }
+  .mig-arrow { color:#7eb8f7; font-size:1.4rem; font-weight:700;
+               text-align:center; user-select:none; }
+
+  .mig-input-mode { display:flex; gap:1rem; margin:1rem 0 .5rem; }
+  .mig-input-mode label { font-weight:600; font-size:.88rem; cursor:pointer; }
+
+  textarea.mig-raw {
+    width:100%; min-height:180px; font-family:monospace; font-size:.82rem;
+    padding:.5rem .75rem; border:1px solid #ccc; border-radius:4px;
+    resize:vertical;
+  }
+  textarea.mig-raw:focus { outline:2px solid #7eb8f7; border-color:transparent; }
+
+  #mig-result { margin-top:1rem; }
+  #mig-result.hidden { display:none; }
+  .mig-result-section {
+    background:#fff; padding:1rem 1.25rem; border-radius:6px;
+    box-shadow:0 1px 3px rgba(0,0,0,.1); margin-top:.75rem;
+  }
+  .mig-stats { font-family:monospace; font-size:.85rem; color:#555; }
+  .mig-stats .mig-stat-label { color:#888; }
+
+  pre.mig-output {
+    background:#1e1e1e; color:#d4d4d4; padding:.75rem; border-radius:6px;
+    overflow:auto; font-size:.82rem; line-height:1.4; margin:0;
+    max-height:55vh;
+  }
+
+  /* Reuse the diff page's tok-* colours verbatim so the rendered
+     output uses the same syntax palette. */
+  pre.mig-output .tok-comment { color:#6a9955; font-style:italic; }
+  pre.mig-output .tok-keyword { color:#569cd6; font-weight:600; }
+  pre.mig-output .tok-string  { color:#ce9178; }
+  pre.mig-output .tok-ip      { color:#b5cea8; }
+  pre.mig-output .tok-number  { color:#b5cea8; }
+  pre.mig-output .tok-tag     { color:#569cd6; }
+  pre.mig-output .tok-attr    { color:#9cdcfe; }
+
+  .mig-path-list { font-family:monospace; font-size:.78rem; max-height:16vh;
+                   overflow:auto; border:1px solid #eee; border-radius:4px;
+                   padding:.35rem .5rem; background:#fafafa; }
+  .mig-path-list code { background:transparent; }
+
+  /* ──────────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal — draggable 2-pane window that overlays
+     the migration result view.  Not a blocking modal: operator can
+     drag it aside to consult the rendered output underneath.
+     ────────────────────────────────────────────────────────────── */
+  #mig-rename-modal {
+    display:none; position:fixed; top:10vh; left:50%;
+    width:min(1100px, 94vw); max-height:80vh; z-index:9500;
+    background:#fff; border-radius:8px;
+    box-shadow:0 10px 40px rgba(0,0,0,.35);
+    border:1px solid #d0d4e0;
+    transform:translateX(-50%);
+    display:none; flex-direction:column; overflow:hidden;
+  }
+  #mig-rename-modal.open { display:flex; }
+  #mig-rename-modal-header {
+    background:#1a1a2e; color:#eee;
+    padding:.55rem .8rem; display:flex; align-items:center; gap:.6rem;
+    cursor:move; user-select:none; flex:0 0 auto;
+  }
+  #mig-rename-modal-header strong { font-size:.9rem; }
+  #mig-rename-modal-header .grip { font-size:.7rem; color:#7eb8f7;
+                                   letter-spacing:.1em; margin-right:.3rem;
+                                   font-family:monospace; }
+  #mig-rename-modal-header button {
+    background:transparent; color:#eee; border:1px solid #444;
+    border-radius:3px; padding:.2rem .55rem; cursor:pointer;
+    font-weight:normal; font-size:.8rem;
+  }
+  #mig-rename-modal-header button:hover { background:#333; }
+  #mig-rename-modal-toolbar {
+    padding:.5rem .8rem; background:#f5f5f8;
+    border-bottom:1px solid #e0e0e8;
+    display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
+    flex:0 0 auto;
+  }
+  #mig-rename-modal-toolbar label { font-size:.8rem; font-weight:600;
+                                    color:#555; }
+  #mig-rename-modal-toolbar select {
+    padding:.25rem .4rem; font-size:.82rem;
+    border:1px solid #ccc; border-radius:3px;
+  }
+  #mig-rename-modal-toolbar .summary { font-size:.78rem; color:#666;
+                                       font-family:monospace; margin-left:auto; }
+  .mig-rename-summary-warn { color:#7a5d00; font-weight:700; }
+  .mig-rename-summary-collision { color:#721c24; font-weight:700; }
+
+  /* Hardware fit-check banner — source-vs-target port counts,
+     grouped by kind.  Visible only when a target profile is
+     selected (needs capacity data).  Auto-colours: green when
+     source fits, amber when overage, red for speed-downshift on
+     uplinks.  Always compact — never dominates the modal. */
+  #mig-rename-fitcheck {
+    padding:.4rem .8rem; font-size:.78rem;
+    border-bottom:1px solid #e0e0e8;
+    font-family:monospace;
+  }
+  #mig-rename-fitcheck.fit-ok    { background:#eef8ee; color:#1a5928; }
+  #mig-rename-fitcheck.fit-warn  { background:#fff6e0; color:#7a5d00; }
+  #mig-rename-fitcheck.fit-block { background:#fde5e5; color:#721c24; }
+  #mig-rename-fitcheck .mig-fitcheck-kind {
+    display:inline-block; margin-right:1rem;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-kind strong {
+    font-weight:700; margin-right:.25rem;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-over {
+    color:#721c24; font-weight:700;
+  }
+  #mig-rename-fitcheck .mig-fitcheck-note {
+    color:#555; font-style:italic; margin-left:.5rem;
+  }
+
+  #mig-rename-modal-body {
+    flex:1; display:flex; overflow:hidden;
+  }
+  /* Left rail — category navigation.  Narrow vertical list of panes
+     the operator can switch between (Ports / VLANs today; more join
+     as additional per-pane override categories land under P2C4+).
+     Stays visible regardless of the active pane so operators can
+     flip between categories without losing context. */
+  #mig-rename-rail {
+    flex:0 0 auto; width:140px; overflow-y:auto;
+    border-right:1px solid #e0e0e8;
+    background:#fafafc; padding:.4rem .25rem;
+    display:flex; flex-direction:column; gap:.2rem;
+  }
+  .mig-rename-rail-btn {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:.4rem .55rem; border:1px solid transparent;
+    background:transparent; border-radius:4px; cursor:pointer;
+    font-size:.82rem; color:#333; text-align:left;
+    font-family:inherit;
+  }
+  .mig-rename-rail-btn:hover {
+    background:#eef;
+  }
+  .mig-rename-rail-btn.active {
+    background:#1a1a2e; color:#eee; border-color:#1a1a2e;
+    font-weight:700;
+  }
+  .mig-rename-rail-btn .rail-count {
+    font-size:.68rem; font-family:monospace;
+    background:rgba(0,0,0,.08); padding:.05rem .4rem;
+    border-radius:8px; margin-left:.4rem;
+  }
+  .mig-rename-rail-btn.active .rail-count {
+    background:rgba(255,255,255,.18); color:#fff;
+  }
+  .mig-rename-rail-btn .rail-badge-warn {
+    background:#fd7e14; color:#fff; font-weight:700;
+    margin-left:.3rem; padding:.05rem .4rem; border-radius:8px;
+    font-size:.68rem; font-family:monospace;
+  }
+  #mig-rename-table-pane {
+    flex:1.1; overflow:auto; padding:.6rem .8rem; border-right:1px solid #e0e0e8;
+    min-width:400px;
+  }
+  /* Category panes live inside the table pane and swap visibility
+     when the rail button is clicked.  Only one is visible at a time
+     — rail navigation is mutually exclusive. */
+  .mig-rename-category-pane { display:none; }
+  .mig-rename-category-pane.active { display:block; }
+  #mig-rename-preview-pane {
+    flex:1; overflow:auto; background:#1e1e1e; padding:.6rem .8rem;
+    min-width:300px;
+  }
+  #mig-rename-preview-pane pre {
+    margin:0; background:transparent; padding:0; color:#d4d4d4;
+    font-family:monospace; font-size:.78rem; line-height:1.35;
+    white-space:pre;
+  }
+  #mig-rename-preview-pane .preview-label {
+    font-size:.7rem; color:#888; font-family:monospace;
+    text-transform:uppercase; letter-spacing:.08em;
+    margin-bottom:.4rem; display:block;
+  }
+
+  .mig-rename-kind-section { margin-bottom:.65rem; }
+  .mig-rename-kind-section summary {
+    cursor:pointer; font-weight:600; font-size:.84rem;
+    padding:.3rem .4rem; background:#eef;  border-radius:3px;
+    list-style:none;
+  }
+  .mig-rename-kind-section summary::-webkit-details-marker { display:none; }
+  .mig-rename-kind-section summary::before {
+    content:"▶"; display:inline-block; width:1rem;
+    transition:transform .15s;
+  }
+  .mig-rename-kind-section[open] summary::before { transform:rotate(90deg); }
+  .mig-rename-kind-section .count { color:#666; font-weight:normal;
+                                    font-family:monospace; font-size:.78rem;
+                                    margin-left:.4rem; }
+  .mig-rename-kind-section .warn-count { color:#7a5d00; font-weight:700; }
+
+  table.mig-rename-table {
+    width:100%; border-collapse:collapse; font-size:.8rem;
+    margin-top:.2rem;
+  }
+  table.mig-rename-table th {
+    text-align:left; padding:.3rem .4rem; font-size:.72rem;
+    color:#666; border-bottom:1px solid #e0e0e8;
+    background:#fafafa;
+  }
+  table.mig-rename-table td {
+    padding:.25rem .4rem; vertical-align:top; font-family:monospace;
+    font-size:.78rem; border-bottom:1px dashed #eee;
+  }
+  table.mig-rename-table tr.has-warning td { background:#fffbe6; }
+  table.mig-rename-table tr.has-collision td { background:#fde5e5; }
+  table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:#0c5460; }
+  /* Drop (don't-render) rows: dim row, strike source name, grey the
+     override cell so it's unambiguous this interface will be omitted
+     from the rendered output. */
+  table.mig-rename-table tr.has-drop td { background:#f0f0f0; color:#888; }
+  table.mig-rename-table tr.has-drop td:first-child {
+    text-decoration:line-through; color:#888;
+  }
+  table.mig-rename-table tr.has-drop select,
+  table.mig-rename-table tr.has-drop input { color:#888; }
+  table.mig-rename-table td.mig-rename-no-auto {
+    color:#aaa; font-style:italic; font-family:system-ui, sans-serif;
+    font-size:.72rem;
+  }
+  .mig-rename-drop-link {
+    font-size:.7rem; color:#721c24; text-decoration:underline;
+    cursor:pointer; margin-left:.3rem; user-select:none;
+    white-space:nowrap;
+  }
+  .mig-rename-drop-link:hover { color:#a02030; }
+  .mig-rename-summary-drop { color:#555; font-weight:700; }
+  table.mig-rename-table select, table.mig-rename-table input {
+    font-family:monospace; font-size:.78rem;
+    padding:.15rem .3rem; border:1px solid #ccc; border-radius:3px;
+    width:100%;
+  }
+  table.mig-rename-table tr.has-collision input,
+  table.mig-rename-table tr.has-collision select { border-color:#721c24; }
+  .mig-rename-warn-icon {
+    color:#7a5d00; font-size:.95rem; cursor:help;
+    user-select:none;
+  }
+  .mig-rename-collision-icon {
+    color:#721c24; font-size:.95rem; cursor:help;
+    user-select:none;
+  }
+
+  #mig-rename-modal-footer {
+    padding:.5rem .8rem; background:#f5f5f8;
+    border-top:1px solid #e0e0e8;
+    display:flex; gap:.5rem; align-items:center; flex:0 0 auto;
+  }
+  #mig-rename-modal-footer button {
+    padding:.35rem .9rem; font-size:.82rem;
+  }
+  #mig-rename-modal-footer .spacer { flex:1; }
+
+  /* "Open rename modal" entry button inside the output section. */
+  .mig-rename-open-btn {
+    display:inline-flex; align-items:center; gap:.35rem;
+    font-size:.78rem; padding:.25rem .6rem;
+  }
+  .mig-rename-open-btn .badge-count {
+    background:#fd7e14; color:#fff; border-radius:8px;
+    padding:.05rem .4rem; font-size:.7rem; font-weight:700;
+    font-family:monospace;
+  }
+</style>
+
+<h1>Migrate</h1>
+<p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
+  Parse a source config through one adapter, validate it against a target
+  adapter's capability matrix, and render the result.  Backed by
+  <code>POST /api/v1/migration/plan</code>.
+</p>
+
+<form id="mig-form" class="mig-form" data-testid="migrate-form">
+  <div class="mig-pair-row">
+    <div class="form-group">
+      <label for="mig-source">Source adapter</label>
+      <select id="mig-source" name="source"
+              data-testid="migrate-source-select" required></select>
+    </div>
+    <span class="mig-arrow" aria-hidden="true">&rarr;</span>
+    <div class="form-group">
+      <label for="mig-target">Target adapter</label>
+      <select id="mig-target" name="target"
+              data-testid="migrate-target-select" required></select>
+    </div>
+  </div>
+
+  <div data-testid="migrate-adapter-info"
+       id="mig-adapter-info"
+       style="display:none; font-size:.78rem; color:#555;
+              margin-bottom:.75rem; display:flex; gap:1.5rem;
+              flex-wrap:wrap"></div>
+
+  <div class="mig-input-mode" data-testid="migrate-input-mode">
+    <label><input type="radio" name="input_mode" value="raw" checked
+                  data-testid="migrate-input-mode-raw"> Paste raw text</label>
+    <label><input type="radio" name="input_mode" value="filename"
+                  data-testid="migrate-input-mode-filename"> Pick a stored config</label>
+  </div>
+
+  <!-- Format hint — populated by JS from the source adapter's
+       input_format.  Explains what the textarea / dropdown expects,
+       so users don't paste CLI text into an adapter that wants XML. -->
+  <div id="mig-format-hint" data-testid="migrate-format-hint"
+       class="mig-banner mig-banner-info"
+       style="display:none; font-size:.82rem; margin-top:.5rem; margin-bottom:.5rem"></div>
+
+  <!-- Auto-detection banner (R5) — appears when POST /detect finds a
+       compatible source codec for the pasted text or picked stored
+       config.  Clicking "Use this" swaps the source dropdown. -->
+  <div id="mig-detect-banner" data-testid="migrate-detect-banner"
+       class="mig-banner mig-banner-info"
+       style="display:none; font-size:.82rem; margin-top:.5rem; margin-bottom:.5rem"></div>
+
+  <div id="mig-raw-wrap" data-testid="migrate-raw-wrap">
+    <textarea class="mig-raw" id="mig-raw" name="raw_text"
+              data-testid="migrate-raw-input"
+              spellcheck="false"
+              placeholder="Pick a source adapter above and a matching sample will appear here."></textarea>
+    <div style="display:flex;gap:.5rem;margin-top:.35rem">
+      <button type="button" class="btn-secondary"
+              data-testid="migrate-load-sample-btn"
+              onclick="loadSampleForSourceAdapter()"
+              style="font-size:.75rem;padding:.2rem .6rem">
+        Load sample for source adapter
+      </button>
+      <span style="font-size:.72rem;color:#888;align-self:center">
+        overwrites the textarea
+      </span>
+    </div>
+  </div>
+
+  <div id="mig-filename-wrap" data-testid="migrate-filename-wrap"
+       style="display:none">
+    <div class="form-group">
+      <label for="mig-filename">Stored config</label>
+      <select id="mig-filename" name="source_filename"
+              data-testid="migrate-filename-select">
+        <option value="">— pick one —</option>
+        {% for cfg in configs %}
+        <option value="{{ cfg.filename }}"
+                data-type-key="{{ cfg.device_type }}"
+                data-ext="{{ cfg.file_extension }}">
+          {{ cfg.filename }} ({{ cfg.device_type }})
+        </option>
+        {% endfor %}
+      </select>
+      <div id="mig-filename-compat-warn"
+           data-testid="migrate-filename-compat-warn"
+           class="mig-banner mig-banner-block"
+           style="display:none; font-size:.8rem; margin-top:.5rem"></div>
+    </div>
+  </div>
+
+  <div class="form-row" style="margin-top:1rem;align-items:center;gap:1rem">
+    <label style="font-size:.82rem;color:#555;display:flex;align-items:center;gap:.35rem">
+      <input type="checkbox" id="mig-force" name="force"
+             data-testid="migrate-force-checkbox">
+      <span title="Skip the device-class guard (NOT recommended)">Force cross-class</span>
+    </label>
+    <button type="submit" class="btn-primary"
+            id="mig-submit-btn"
+            data-testid="migrate-submit-btn">Translate</button>
+  </div>
+</form>
+
+<!-- Results region -->
+<div id="mig-result" data-testid="migrate-result" class="hidden">
+  <div class="mig-result-section">
+    <div id="mig-status-summary" data-testid="migrate-status-summary"
+         style="font-family:monospace;font-size:.88rem"></div>
+
+    <div id="mig-banner" data-testid="migrate-compatibility-banner"
+         class="mig-banner mig-banner-info" style="display:none"></div>
+
+    <!-- Tier-3 detection banner — fires when the source-side parser
+         saw stanza headers it deliberately drops (firewall rules, NAT,
+         QoS, route-maps, IPsec, etc.).  Notification only: the
+         migration tool does NOT translate these; operators must apply
+         them manually on the target device.  Populated by JS from
+         job.dropped_tier3_sections; rendered via renderTier3Banner(). -->
+    <div id="mig-tier3-banner" data-testid="migrate-tier3-banner"
+         class="mig-banner mig-banner-warn"
+         style="display:none; margin-top:.5rem"></div>
+
+    <div id="mig-stats" class="mig-stats"
+         data-testid="migrate-stats" style="margin-top:.5rem"></div>
+  </div>
+
+  <div class="mig-result-section" id="mig-output-section"
+       data-testid="migrate-output-section" style="display:none">
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem">
+      <h2 style="margin:0;font-size:1rem">Rendered output</h2>
+      <div style="display:flex;gap:.4rem">
+        <button type="button" class="btn-secondary mig-rename-open-btn"
+                id="mig-rename-open-btn"
+                data-testid="migrate-rename-open-btn"
+                onclick="openRenameModal()"
+                style="display:none"
+                title="Interactively remap interface names between source and target">
+          <span>&#9881;</span> Interface rename
+          <span id="mig-rename-badge-count" class="badge-count"
+                data-testid="migrate-rename-badge-count"
+                style="display:none"></span>
+        </button>
+        <button type="button" class="btn-secondary"
+                data-testid="migrate-copy-output-btn"
+                onclick="copyMigrateOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem"
+                title="Copy to clipboard">&#128203; Copy</button>
+        <button type="button" class="btn-secondary"
+                data-testid="migrate-download-output-btn"
+                onclick="downloadMigrateOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem"
+                title="Download as file">&#8595; Download</button>
+      </div>
+    </div>
+    <pre class="mig-output" id="mig-output"
+         data-testid="migrate-output"></pre>
+  </div>
+
+  <div class="mig-result-section" id="mig-paths-section"
+       data-testid="migrate-paths-section" style="display:none">
+    <details>
+      <summary style="cursor:pointer;font-weight:600;font-size:.88rem">
+        Validation details (supported / lossy / unsupported paths)
+      </summary>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-supported-heading">Supported</strong>
+        (<span data-testid="migrate-paths-supported-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-supported"></div>
+      </div>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-lossy-heading">Lossy</strong>
+        (<span data-testid="migrate-paths-lossy-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-lossy"></div>
+      </div>
+
+      <div style="margin-top:.75rem">
+        <strong data-testid="migrate-paths-unsupported-heading">Unsupported</strong>
+        (<span data-testid="migrate-paths-unsupported-count">0</span>)
+        <div class="mig-path-list" data-testid="migrate-paths-unsupported"></div>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- ─────────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal — draggable, 2-pane (mapping table +
+     live target preview).  Hidden by default; opens via the "Interface
+     rename" button in the output section, which only appears once a
+     successful translation produces port-rename data.
+     ────────────────────────────────────────────────────────────── -->
+<div id="mig-rename-modal" data-testid="migrate-rename-modal"
+     role="dialog" aria-modal="false"
+     aria-labelledby="mig-rename-modal-title">
+  <div id="mig-rename-modal-header" data-testid="migrate-rename-modal-header">
+    <span class="grip" aria-hidden="true">&#8942;&#8942;</span>
+    <strong id="mig-rename-modal-title">Interface rename</strong>
+    <span style="flex:1"></span>
+    <button type="button"
+            data-testid="migrate-rename-modal-reset"
+            onclick="renameModalResetAll()"
+            title="Clear all user overrides and revert to auto-heuristic">
+      Reset all
+    </button>
+    <button type="button"
+            data-testid="migrate-rename-modal-close"
+            onclick="closeRenameModal()"
+            title="Close (changes not applied)"
+            aria-label="Close">
+      &#10005;
+    </button>
+  </div>
+
+  <div id="mig-rename-modal-toolbar">
+    <!-- Target-profile controls drive the Ports-pane dropdown-vs-freetext
+         behaviour and the fit-check banner.  They have no effect on the
+         VLAN / local-users panes, so the whole group hides when a non-
+         ports category is active — prevents operators from thinking
+         they need to pick a profile before renaming VLANs or users. -->
+    <span id="mig-rename-target-profile-group"
+          data-testid="migrate-rename-target-profile-group"
+          style="display:flex;align-items:center;gap:.75rem">
+      <label for="mig-rename-target-vendor">Target:</label>
+      <select id="mig-rename-target-vendor"
+              data-testid="migrate-rename-target-vendor-select">
+        <option value="">(none — free-form)</option>
+      </select>
+      <select id="mig-rename-target-model"
+              data-testid="migrate-rename-target-model-select"
+              disabled>
+        <option value="">— pick vendor first —</option>
+      </select>
+      <select id="mig-rename-target-module"
+              data-testid="migrate-rename-target-module-select"
+              style="display:none"
+              title="Uplink module variant — only meaningful for chassis with swappable NM / expansion cards"
+              disabled>
+        <option value="">— no modules —</option>
+      </select>
+    </span>
+    <span class="summary"
+          id="mig-rename-summary"
+          data-testid="migrate-rename-summary"></span>
+  </div>
+
+  <div id="mig-rename-fitcheck"
+       data-testid="migrate-rename-fitcheck"
+       style="display:none"
+       aria-label="Hardware fit check — source vs target port counts"></div>
+
+  <div id="mig-rename-modal-body">
+    <!-- Left rail: category navigation.  Each button activates one
+         of the category panes in the centre column; the preview on
+         the right stays visible regardless of which category is
+         active.  Counts + badges surface at-a-glance how many rows
+         each category carries so the operator can prioritise. -->
+    <nav id="mig-rename-rail" data-testid="migrate-rename-rail"
+         aria-label="Rename modal categories">
+      <button type="button"
+              class="mig-rename-rail-btn active"
+              data-testid="migrate-rename-rail-ports"
+              data-category="ports"
+              onclick="showRenameCategory('ports')">
+        <span>Ports</span>
+        <span id="mig-rename-rail-ports-count" class="rail-count"
+              data-testid="migrate-rename-rail-ports-count">0</span>
+      </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-vlans"
+              data-category="vlans"
+              onclick="showRenameCategory('vlans')">
+        <span>VLANs</span>
+        <span id="mig-rename-rail-vlans-count" class="rail-count"
+              data-testid="migrate-rename-rail-vlans-count">0</span>
+      </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-local-users"
+              data-category="local_users"
+              onclick="showRenameCategory('local_users')">
+        <span>Local users</span>
+        <span id="mig-rename-rail-local-users-count" class="rail-count"
+              data-testid="migrate-rename-rail-local-users-count">0</span>
+      </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-snmp"
+              data-category="snmp"
+              onclick="showRenameCategory('snmp')">
+        <span>SNMP</span>
+        <span id="mig-rename-rail-snmp-count" class="rail-count"
+              data-testid="migrate-rename-rail-snmp-count">0</span>
+      </button>
+      <button type="button"
+              class="mig-rename-rail-btn"
+              data-testid="migrate-rename-rail-snmpv3"
+              data-category="snmpv3"
+              onclick="showRenameCategory('snmpv3')">
+        <span>SNMPv3</span>
+        <span id="mig-rename-rail-snmpv3-count" class="rail-count"
+              data-testid="migrate-rename-rail-snmpv3-count">0</span>
+      </button>
+    </nav>
+
+    <div id="mig-rename-table-pane" data-testid="migrate-rename-table-pane">
+      <!-- Ports category pane — existing rename table lives here;
+           extracted into its own wrapper so it can be hidden when
+           the VLANs pane is active. -->
+      <div id="mig-rename-ports-pane"
+           class="mig-rename-category-pane active"
+           data-testid="migrate-rename-ports-pane">
+        <div id="mig-rename-table-empty"
+             data-testid="migrate-rename-table-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No port names recognised in the translated output.
+        </div>
+        <!-- Kind sections rendered here by renderRenameTable() -->
+        <div id="mig-rename-sections"
+             data-testid="migrate-rename-sections"></div>
+      </div>
+
+      <!-- VLANs category pane — VLAN-ID rewrite table.  Parallel
+           structural shape to the ports pane (empty state + sections
+           container) populated by renderVlanRenameTable() from the
+           vlan-rename-table partial. -->
+      <div id="mig-rename-vlans-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-vlans-pane">
+        <!-- VLAN fit-check banner.  Shows when the active target
+             profile declares max_vlans AND source_vlans exceeds it.
+             Mirrors the ports fit-check pattern (pane-scoped, hidden
+             when profile doesn't declare the limit). -->
+        <div id="mig-rename-vlans-fitcheck"
+             class="mig-banner"
+             data-testid="migrate-rename-vlans-fitcheck"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-vlans-empty"
+             data-testid="migrate-rename-vlans-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No VLANs found in the source config.
+        </div>
+        <div id="mig-rename-vlans-sections"
+             data-testid="migrate-rename-vlans-sections"></div>
+      </div>
+
+      <!-- Local-users category pane — user-name rewrite table.
+           Populated by renderLocalUserRenameTable() from the
+           local-user-rename-table partial. -->
+      <div id="mig-rename-local-users-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-local-users-pane">
+        <!-- Target-compatibility banner.  Shows when the active
+             target codec's unsupported_rename_categories list
+             includes 'local_users' — warns the operator that
+             overrides in this pane won't affect rendered output.
+             Hidden by default; populated by
+             renderCompatBanners() based on CodecInfo data. -->
+        <div id="mig-rename-local-users-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-local-users-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <!-- Local-users fit-check banner.  Mirrors the VLANs
+             pattern: shows when target profile declares
+             max_local_users AND source_local_users exceeds it. -->
+        <div id="mig-rename-local-users-fitcheck"
+             class="mig-banner"
+             data-testid="migrate-rename-local-users-fitcheck"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-local-users-empty"
+             data-testid="migrate-rename-local-users-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No local users found in the source config.
+        </div>
+        <div id="mig-rename-local-users-sections"
+             data-testid="migrate-rename-local-users-sections"></div>
+      </div>
+
+      <!-- SNMP category pane — community-string rename.  Fourth per-
+           pane override after ports + VLANs + local_users.  Distinct
+           shape from the other three panes: SNMP community is a
+           SINGLE scalar on the canonical tree (not a list), so this
+           pane renders ONE row rather than a table.  Future commit
+           can extend with a trap-host rename table here — see
+           snmp-rename-table.js for the extension point comment. -->
+      <div id="mig-rename-snmp-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-snmp-pane">
+        <!-- SNMP-pane compatibility banner.  Same amber banner
+             pattern as the local-users pane — shown when the target
+             codec declares 'snmp' in its unsupported_rename_categories. -->
+        <div id="mig-rename-snmp-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-snmp-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-snmp-empty"
+             data-testid="migrate-rename-snmp-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No SNMP block found in the source config.
+        </div>
+        <div id="mig-rename-snmp-sections"
+             data-testid="migrate-rename-snmp-sections"></div>
+      </div>
+
+      <!-- SNMPv3 USM user-rename category pane — fifth per-pane
+           override after ports / VLANs / local_users / snmp_community.
+           List-oriented sibling of the local-users pane: one row per
+           source v3 user.  Rename is identity-only: auth / priv /
+           group / engine_id follow the renamed record; crypto keys
+           are NEVER combined across users.  Unsupported target
+           codecs (OPNsense, cisco_iosxe NETCONF) surface the
+           Unsupported-path compatibility banner. -->
+      <div id="mig-rename-snmpv3-pane"
+           class="mig-rename-category-pane"
+           data-testid="migrate-rename-snmpv3-pane">
+        <div id="mig-rename-snmpv3-compat"
+             class="mig-banner mig-banner-warn"
+             data-testid="migrate-rename-snmpv3-compat"
+             style="display:none;margin:.6rem;font-size:.82rem"></div>
+        <div id="mig-rename-snmpv3-empty"
+             data-testid="migrate-rename-snmpv3-empty"
+             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+          No SNMPv3 users found in the source config.
+        </div>
+        <div id="mig-rename-snmpv3-sections"
+             data-testid="migrate-rename-snmpv3-sections"></div>
+      </div>
+    </div>
+
+    <div id="mig-rename-preview-pane" data-testid="migrate-rename-preview-pane">
+      <span class="preview-label">Target output preview</span>
+      <pre id="mig-rename-preview" data-testid="migrate-rename-preview"></pre>
+    </div>
+  </div>
+
+  <div id="mig-rename-modal-footer">
+    <span style="font-size:.75rem;color:#888"
+          id="mig-rename-status"
+          data-testid="migrate-rename-status"></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn-secondary"
+            data-testid="migrate-rename-cancel-btn"
+            onclick="closeRenameModal()">Cancel</button>
+    <button type="button" class="btn-primary"
+            data-testid="migrate-rename-apply-btn"
+            id="mig-rename-apply-btn"
+            onclick="renameModalApply()">Apply &amp; regenerate</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/* ── Migrate workbench client ──
+ * Thin wiring over the already-shipped migration API.  Zero custom
+ * widgets: validation banner reuses the diff-page palette, rendered
+ * output reuses the config-viewer's _cvRenderHighlighted highlighter.
+ *
+ * Contents map (large blocks extracted to _partials/ — included via
+ * Jinja include directives; each partial shares module-scope state
+ * with the rest of this IIFE):
+ *
+ *   _partials/classify.js        — _guessKind + _looksLikeUplink
+ *                                  (shared between rename table + fit-check)
+ *   _partials/rename-table.js    — renderRenameTable (per-kind sections)
+ *   _partials/vlan-rename-table.js — renderVlanRenameTable (VLAN-pane
+ *                                  rows under the left-rail nav; P2C3)
+ *   _partials/local-user-rename-table.js — renderLocalUserRenameTable
+ *                                  (third per-pane category; P2C4)
+ *   _partials/snmp-rename-table.js — renderSnmpRenameTable (fourth per-
+ *                                  pane category, single-row scalar
+ *                                  community rename; P2C5)
+ *   _partials/rename-panel.js    — renderRenamePreview + renderRenameSummary
+ *   _partials/fit-check.js       — renderFitCheck hardware-capacity banner
+ *   _partials/rename-apply.js    — renameModalApply + drag handlers +
+ *                                  modal-specific DOMContentLoaded wiring
+ *
+ * Still inline in this file (non-rename-modal): form wiring
+ * (sourceSel / targetSel / submit / force checkbox / input mode),
+ * auto-detect, validation-banner rendering, path-list fill, result
+ * rendering, escapeHtml utility, rename-target-profile fetch +
+ * vendor/model/module dropdown populators (depend on inline state
+ * that hasn't been extracted yet).
+ *
+ * Every interactive element gets a data-testid — see
+ * tests/testid_reference.md for the full inventory.
+ */
+(function() {
+  var sourceSel  = document.getElementById('mig-source');
+  var targetSel  = document.getElementById('mig-target');
+  var infoEl     = document.getElementById('mig-adapter-info');
+  var rawWrap    = document.getElementById('mig-raw-wrap');
+  var fileWrap   = document.getElementById('mig-filename-wrap');
+  var form       = document.getElementById('mig-form');
+  var submitBtn  = document.getElementById('mig-submit-btn');
+  var result     = document.getElementById('mig-result');
+  var summary    = document.getElementById('mig-status-summary');
+  var banner     = document.getElementById('mig-banner');
+  var tier3Banner = document.getElementById('mig-tier3-banner');
+  var stats      = document.getElementById('mig-stats');
+  var outputSec  = document.getElementById('mig-output-section');
+  var output     = document.getElementById('mig-output');
+  var pathsSec   = document.getElementById('mig-paths-section');
+
+  var adapters = [];  // cache — fetched once per page load
+
+  /* ── Codec UI metadata ──
+   * All codec-presentation strings (description, sample_input,
+   * output_extension) are served by the /api/v1/migration/adapters
+   * endpoint.  The codec class is the single source of truth — see
+   * CodecBase.description / .sample_input / .output_extension.
+   *
+   * This helper returns the adapter entry + a presentation-ready
+   * "label" (vendor display name + input-format tag) so call sites
+   * can render the hint banner without caring where the data lives.
+   */
+  function adapterEntry(codecName) {
+    var a = adapters.find(function(x) { return x.name === codecName; });
+    if (!a) return null;
+    return {
+      codec:  a.name,
+      label:  (a.vendor_display_name || a.name)
+              + ' (' + (a.input_format || 'unknown') + ')',
+      desc:   a.description || (
+        'This adapter did not declare a description.  Check its '
+        + 'docstring for what parse() expects.'
+      ),
+      sample: a.sample_input || '',
+      ext:    a.output_extension || 'cfg',
+      inputFormat: a.input_format || 'unknown',
+    };
+  }
+
+  /* Backup-store-extension compatibility: which file extensions from
+   * the backups directory are this codec's parse() likely to accept?
+   * Most codecs that declare an output_extension also accept files
+   * with that extension as input (OPNsense .xml, MikroTik .rsc, etc).
+   * Codecs without an output_extension (mock) accept nothing from
+   * the store, which matches the old FORMAT_CATALOGUE behaviour. */
+  function compatibleExtensions(codecName) {
+    var a = adapters.find(function(x) { return x.name === codecName; });
+    if (!a) return [];
+    if (!a.output_extension) return [];
+    return [a.output_extension];
+  }
+
+  /** Populate both dropdowns from ``GET /api/v1/migration/adapters``. */
+  async function loadAdapters() {
+    try {
+      var resp = await fetch('/api/v1/migration/adapters');
+      if (!resp.ok) {
+        showToast('Failed to load adapters: HTTP ' + resp.status, 'error');
+        return;
+      }
+      adapters = await resp.json();
+      // Source dropdown: all codecs (parse_only + bidirectional).
+      // Target dropdown: only codecs that can render (bidirectional + render_only).
+      sourceSel.innerHTML = adapters.map(function(a) {
+        var cert = a.certainty !== 'experimental' ? '' : ' [experimental]';
+        return '<option value="' + escapeHtml(a.name) + '">'
+             + escapeHtml(a.vendor_display_name || a.name)
+             + ' — ' + escapeHtml(a.input_format)
+             + cert + '</option>';
+      }).join('');
+      targetSel.innerHTML = adapters
+        .filter(function(a) { return a.direction !== 'parse_only'; })
+        .map(function(a) {
+          // Show the codec's input_format alongside the vendor
+          // label.  Two reasons: (1) some vendors have multiple
+          // bidirectional codecs sharing a vendor_display_name
+          // (e.g. cisco_iosxe NETCONF and cisco_iosxe_cli CLI both
+          // surface as "Cisco IOS-XE") — without the format hint
+          // operators can't tell the dropdown options apart;
+          // (2) the format determines the render OUTPUT shape (CLI
+          // text vs XML payload) — operators picking a target
+          // should see whether they'll get something paste-able or
+          // a NETCONF push payload BEFORE clicking Translate.  The
+          // source dropdown above already shows the same hint.
+          var cert = a.certainty !== 'experimental' ? '' : ' [experimental]';
+          return '<option value="' + escapeHtml(a.name) + '">'
+               + escapeHtml(a.vendor_display_name || a.name)
+               + ' — ' + escapeHtml(a.input_format)
+               + ' (' + a.device_classes.join(', ') + ')'
+               + cert + '</option>';
+        }).join('');
+      renderAdapterInfo();
+    } catch (err) {
+      showToast('Network error loading adapters: ' + err.message, 'error');
+    }
+  }
+
+  /** Render the tiny info row under the two dropdowns. */
+  function renderAdapterInfo() {
+    if (!adapters.length) return;
+    var s = adapters.find(function(a) { return a.name === sourceSel.value; });
+    var t = adapters.find(function(a) { return a.name === targetSel.value; });
+    if (!s || !t) {
+      infoEl.style.display = 'none';
+      document.getElementById('mig-format-hint').style.display = 'none';
+      return;
+    }
+    infoEl.style.display = 'flex';
+    infoEl.innerHTML =
+      adapterSummary('Source', s)
+      + adapterSummary('Target', t)
+      + classGuardHint(s, t);
+    renderFormatHint();
+  }
+
+  function adapterSummary(label, a) {
+    var chips = a.device_classes.map(function(c) {
+      return '<span class="mig-chip class-' + c + '">' + c + '</span>';
+    }).join(' ');
+    return '<div><strong>' + label + ':</strong> '
+         + chips + '&nbsp; '
+         + '<span style="color:#888">'
+         + a.supported_count + ' supported, '
+         + a.lossy_count + ' lossy, '
+         + a.unsupported_count + ' unsupported'
+         + '</span></div>';
+  }
+
+  /** Quick UX hint when classes are disjoint — warn BEFORE submit. */
+  function classGuardHint(s, t) {
+    var common = s.device_classes.filter(function(c) {
+      return t.device_classes.indexOf(c) !== -1;
+    });
+    if (common.length > 0) return '';
+    return '<div data-testid="migrate-class-hint" '
+         + 'style="color:#721c24;font-weight:600">'
+         + '⚠ No shared device class — guard will block unless '
+         + '"Force cross-class" is ticked.</div>';
+  }
+
+  /** Render the "what does this adapter's parser expect?" hint.
+   *
+   * Reads description + sample_input from the adapters array
+   * (server-side codec metadata).  If the codec hasn't declared
+   * them, falls back to the generic help strings from adapterEntry().
+   */
+  function renderFormatHint() {
+    var hintEl = document.getElementById('mig-format-hint');
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) { hintEl.style.display = 'none'; return; }
+    hintEl.setAttribute('data-input-format', entry.inputFormat);
+    hintEl.style.display = '';
+    hintEl.innerHTML =
+      '<div style="flex:1">'
+      + '<strong>Source expects:</strong> ' + escapeHtml(entry.label)
+      + '<div style="margin-top:.25rem;color:inherit;opacity:.85">'
+      + escapeHtml(entry.desc) + '</div>'
+      + '</div>';
+    applyPlaceholder(entry);
+    refreshFilenameCompatWarn();
+  }
+
+  /** Set a format-appropriate placeholder on the raw textarea. */
+  function applyPlaceholder(entry) {
+    var ta = document.getElementById('mig-raw');
+    ta.placeholder = entry.sample
+      ? 'Sample for this source adapter — click "Load sample" below to populate.'
+      : 'No sample available for this input format.';
+  }
+
+  /** Global so the template's onclick can reach it. */
+  window.loadSampleForSourceAdapter = function() {
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) return;
+    if (!entry.sample) {
+      showToast('No sample available for ' + entry.codec, 'error');
+      return;
+    }
+    document.getElementById('mig-raw').value = entry.sample;
+    showToast('Loaded ' + entry.label + ' sample.', 'success');
+  };
+
+  /** Warn when the selected stored file's extension doesn't match
+      the source adapter's declared input format. */
+  function refreshFilenameCompatWarn() {
+    var warnEl = document.getElementById('mig-filename-compat-warn');
+    var fileSel = document.getElementById('mig-filename');
+    warnEl.style.display = 'none';
+    if (!fileSel.value) return;
+    var entry = adapterEntry(sourceSel.value);
+    if (!entry) return;
+    var compatExts = compatibleExtensions(entry.codec);
+    var opt = fileSel.options[fileSel.selectedIndex];
+    var ext = (opt && opt.dataset.ext) || '';
+    if (compatExts.length === 0) {
+      warnEl.style.display = '';
+      warnEl.innerHTML =
+        '⚠ Source adapter <code>' + escapeHtml(entry.codec)
+        + '</code> does not read files from the backup store. Pasting '
+        + 'via the textarea is likely to work better.';
+      return;
+    }
+    if (compatExts.indexOf(ext) === -1) {
+      warnEl.style.display = '';
+      warnEl.innerHTML =
+        '⚠ <code>' + escapeHtml(opt.value) + '</code> has extension '
+        + '<code>.' + escapeHtml(ext) + '</code> but '
+        + '<code>' + escapeHtml(entry.codec) + '</code> expects '
+        + '<strong>' + escapeHtml(entry.label) + '</strong> '
+        + '(' + compatExts.map(function(e) { return '.' + e; }).join(', ')
+        + '). Translate will almost certainly fail.';
+    }
+  }
+
+  /** Toggle textarea vs. stored-config dropdown. */
+  function onInputModeChange() {
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    rawWrap.style.display  = (mode === 'raw')      ? '' : 'none';
+    fileWrap.style.display = (mode === 'filename') ? '' : 'none';
+    if (mode === 'filename') refreshFilenameCompatWarn();
+    // New input mode → re-run detection (or clear stale banner).
+    runAutoDetect();
+  }
+
+  /* ── Auto-detection (R5) ──
+   * POST /api/v1/migration/detect with the current input and show
+   * a banner with the top candidate.  Clicking "Use this" swaps
+   * the source dropdown.
+   */
+  var detectBanner = document.getElementById('mig-detect-banner');
+  var detectTimer  = null;
+  var lastProbed   = '';     // de-dupe identical probes
+
+  /** Debounced trigger; called on every textarea keystroke. */
+  function scheduleAutoDetect() {
+    if (detectTimer) clearTimeout(detectTimer);
+    detectTimer = setTimeout(runAutoDetect, 350);
+  }
+
+  /** Call /detect with whatever the user has selected/pasted now. */
+  async function runAutoDetect() {
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    var body = null;
+    if (mode === 'raw') {
+      var text = document.getElementById('mig-raw').value;
+      if (!text || text.length < 10) {
+        clearDetectBanner();
+        return;
+      }
+      body = { raw_text: text, min_confidence: 40 };
+    } else {
+      var fname = document.getElementById('mig-filename').value;
+      if (!fname) {
+        clearDetectBanner();
+        return;
+      }
+      body = { source_filename: fname, min_confidence: 40 };
+    }
+    // De-dupe: same payload → skip the network round-trip.
+    var key = JSON.stringify(body);
+    if (key === lastProbed) return;
+    lastProbed = key;
+
+    try {
+      var resp = await fetch('/api/v1/migration/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) {
+        clearDetectBanner();
+        return;
+      }
+      var candidates = await resp.json();
+      renderDetectBanner(candidates);
+    } catch (err) {
+      // Silent fail — detection is a nice-to-have, not a blocker.
+      clearDetectBanner();
+    }
+  }
+
+  function clearDetectBanner() {
+    detectBanner.style.display = 'none';
+    detectBanner.innerHTML = '';
+  }
+
+  /** Show the top-ranked candidate with a "Use this" button. */
+  function renderDetectBanner(candidates) {
+    if (!candidates || candidates.length === 0) {
+      clearDetectBanner();
+      return;
+    }
+    var top = candidates[0];
+    var currentSource = sourceSel.value;
+    // If the user has already picked the right codec, show a green
+    // confirmation instead of an action prompt.
+    var alreadyCorrect = (top.codec === currentSource);
+    detectBanner.className =
+      'mig-banner ' + (alreadyCorrect ? 'mig-banner-ok' : 'mig-banner-info');
+    detectBanner.setAttribute('data-detected-codec', top.codec);
+    detectBanner.setAttribute('data-detected-confidence', String(top.confidence));
+    detectBanner.style.display = '';
+
+    // Find the human-readable vendor name for display.
+    var a = adapters.find(function(x) { return x.name === top.codec; });
+    var vendorLabel = a ? (a.vendor_display_name || a.name) : top.codec;
+    if (alreadyCorrect) {
+      detectBanner.innerHTML =
+        '<div style="flex:1">'
+        + '&#10003; <strong>Auto-detected:</strong> '
+        + escapeHtml(vendorLabel)
+        + ' <span class="mig-chip" style="margin-left:.35rem">'
+        + top.confidence + '% confidence</span>'
+        + '<div style="margin-top:.15rem;opacity:.8">'
+        + escapeHtml(top.reason) + '</div>'
+        + '</div>';
+    } else {
+      detectBanner.innerHTML =
+        '<div style="flex:1">'
+        + '<strong>Detected:</strong> '
+        + escapeHtml(vendorLabel)
+        + ' <span class="mig-chip" style="margin-left:.35rem">'
+        + top.confidence + '% confidence</span>'
+        + '<div style="margin-top:.15rem;opacity:.8">'
+        + escapeHtml(top.reason) + '</div>'
+        + '</div>'
+        + '<button type="button" class="btn-secondary" '
+        + 'data-testid="migrate-detect-use-btn" '
+        + 'onclick="useDetectedSource()" '
+        + 'style="font-size:.78rem;padding:.25rem .6rem;align-self:center">'
+        + 'Use this source</button>';
+    }
+  }
+
+  /** Global handler: apply the detected codec to the source dropdown. */
+  window.useDetectedSource = function() {
+    var codec = detectBanner.getAttribute('data-detected-codec');
+    if (!codec) return;
+    sourceSel.value = codec;
+    renderAdapterInfo();
+    runAutoDetect();  // refresh banner to ok-state
+    showToast('Source adapter set to ' + codec, 'success');
+  };
+
+  /** Submit the form → POST /api/v1/migration/plan → render result. */
+  async function onSubmit(e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    var origText = submitBtn.textContent;
+    submitBtn.textContent = 'Translating…';
+
+    var body = {
+      source: sourceSel.value,
+      target: targetSel.value,
+      force: document.getElementById('mig-force').checked,
+      // Always opt into the rename-aware pipeline from the UI so
+      // cross-vendor source-name leakage (the original Tier 3 complaint)
+      // is fixed out of the box, and the Interface rename button can
+      // surface actionable rename data on every translation.  Backend
+      // stays backwards-compatible — API-only callers that don't send
+      // this field still get the legacy run_plan path.
+      port_rename_map: {},
+    };
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    if (mode === 'raw') {
+      body.raw_text = document.getElementById('mig-raw').value;
+    } else {
+      var fname = document.getElementById('mig-filename').value;
+      if (!fname) {
+        showToast('Pick a stored config first.', 'error');
+        submitBtn.disabled = false;
+        submitBtn.textContent = origText;
+        return;
+      }
+      body.source_filename = fname;
+    }
+
+    try {
+      var resp = await fetch('/api/v1/migration/plan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      // The endpoint returns 200 even on parse failures (error is in
+      // the job body); HTTP 4xx means a REQUEST shape problem.
+      if (!resp.ok) {
+        var err = await resp.json().catch(function() { return {}; });
+        var detail = typeof err.detail === 'string'
+          ? err.detail
+          : JSON.stringify(err.detail || err);
+        showToast('Request rejected: ' + detail, 'error');
+        return;
+      }
+      var job = await resp.json();
+      renderResult(job);
+      // Feed the rename modal so the "Interface rename" button can
+      // open against this job without re-fetching.
+      captureJobForRename(body, job);
+    } catch (err) {
+      showToast('Network error: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = origText;
+    }
+  }
+
+  /** Populate every result panel from a MigrationJob payload. */
+  function renderResult(job) {
+    result.classList.remove('hidden');
+
+    // Top summary line.
+    summary.textContent =
+      'Job ' + job.id.substring(0, 8) + '…  —  status: ' + job.status;
+
+    // Banner severity rules (strictest wins, so the banner's colour
+    // never contradicts the message it carries):
+    //   1. job.error present        → block (red)   — overrides everything
+    //   2. job.status is 'failed'   → block (red)
+    //   3. job.status is 'partial'  → block (red)   — output exists but unsafe
+    //   4. validation.severity set  → mirror it (ok|warn|block)
+    //   5. otherwise                → info (neutral blue)
+    var severity;
+    if (job.error || job.status === 'failed' || job.status === 'partial') {
+      severity = 'block';
+    } else if (job.validation && job.validation.severity) {
+      severity = job.validation.severity;
+    } else {
+      severity = 'info';
+    }
+    banner.className = 'mig-banner mig-banner-' + severity;
+    banner.setAttribute('data-severity', severity);
+    banner.style.display = '';
+    banner.innerHTML = renderBannerContents(job);
+
+    // Tier-3 detection banner.  Notification surface — fires when the
+    // source-side parser detected stanza headers it deliberately drops
+    // (firewall, NAT, QoS, route-maps, IPsec).  Operators apply these
+    // manually on the target device; the migration tool does NOT
+    // translate them.  See ARCHITECTURE.md "Cross-cutting render-time
+    // policies" for the Tier-3 boundary rationale.
+    renderTier3Banner(job);
+
+    // Counts strip.
+    if (job.validation) {
+      var v = job.validation;
+      stats.innerHTML =
+        '<span class="mig-stat-label">Supported</span> '
+        + '<strong data-testid="migrate-stat-supported">'
+        + v.supported_paths.length + '</strong>'
+        + '  |  <span class="mig-stat-label">Lossy</span> '
+        + '<strong data-testid="migrate-stat-lossy">'
+        + v.lossy_paths.length + '</strong>'
+        + '  |  <span class="mig-stat-label">Unsupported</span> '
+        + '<strong data-testid="migrate-stat-unsupported">'
+        + v.unsupported_paths.length + '</strong>';
+    } else {
+      stats.innerHTML = '';
+    }
+
+    // Rendered output panel (syntax-highlighted via the viewer helper).
+    if (job.rendered) {
+      outputSec.style.display = '';
+      var ext = guessExtension(job);
+      if (typeof _cvRenderHighlighted === 'function') {
+        output.innerHTML = _cvRenderHighlighted(job.rendered, ext);
+      } else {
+        output.textContent = job.rendered;
+      }
+    } else {
+      outputSec.style.display = 'none';
+    }
+
+    // Expandable path list (all three buckets).
+    if (job.validation) {
+      pathsSec.style.display = '';
+      fillPathList(
+        'migrate-paths-supported',
+        'migrate-paths-supported-count',
+        job.validation.supported_paths.map(function(p) { return { path: p }; })
+      );
+      fillPathList(
+        'migrate-paths-lossy',
+        'migrate-paths-lossy-count',
+        job.validation.lossy_paths
+      );
+      fillPathList(
+        'migrate-paths-unsupported',
+        'migrate-paths-unsupported-count',
+        job.validation.unsupported_paths
+      );
+    } else {
+      pathsSec.style.display = 'none';
+    }
+
+    result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /** Pick file extension for download + syntax highlighting from the
+   *  target codec's declared output_extension.  Server-side codec
+   *  metadata is the single source of truth (R5 follow-up closed the
+   *  previous client-side leak). */
+  function guessExtension(job) {
+    var entry = adapterEntry(job.target_adapter || '');
+    return (entry && entry.ext) ? entry.ext : 'cfg';
+  }
+
+  function renderBannerContents(job) {
+    if (job.error) {
+      return '<div><strong>Error:</strong> '
+           + escapeHtml(job.error) + '</div>';
+    }
+    var v = job.validation;
+    if (!v) return '<em>No validation report.</em>';
+    if (v.severity === 'ok') {
+      return '<div>&#10003; Validation OK — every path round-trips cleanly.</div>';
+    }
+    var lines = v.reasons.map(function(r) {
+      return '<li>' + escapeHtml(r) + '</li>';
+    }).join('');
+    return '<div style="flex:1"><strong>'
+         + (v.severity === 'block' ? '&#10007; Blocked' : '&#9888; Warning')
+         + '</strong><ul>' + lines + '</ul></div>';
+  }
+
+  /** Render the Tier-3 detection banner.
+   *
+   * Reads job.dropped_tier3_sections (populated by the source codec's
+   * parse() via netcanon/migration/_tier3_detection.py).  When the
+   * list is non-empty, builds a warning banner enumerating every
+   * detected stanza header with one entry per row carrying
+   * data-testid="migrate-tier3-section-N".  When empty, the banner is
+   * hidden.  Notification only — these stanzas are NOT translated.
+   */
+  function renderTier3Banner(job) {
+    if (!tier3Banner) return;
+    var sections = (job && job.dropped_tier3_sections) || [];
+    if (!sections.length) {
+      tier3Banner.style.display = 'none';
+      tier3Banner.innerHTML = '';
+      return;
+    }
+    var rows = sections.map(function(label, idx) {
+      return '<li data-testid="migrate-tier3-section-' + idx + '">'
+           + '<code>' + escapeHtml(label) + '</code></li>';
+    }).join('');
+    tier3Banner.style.display = '';
+    tier3Banner.innerHTML =
+      '<div><strong>&#9888; Tier-3 sections detected in source</strong></div>'
+      + '<div style="margin-top:.25rem;font-size:.82rem">'
+      + 'The source config contains '
+      + '<strong data-testid="migrate-tier3-count">' + sections.length + '</strong>'
+      + ' section(s) this tool does not translate '
+      + '(firewall rules, NAT, QoS, route-maps, IPsec, etc.).  '
+      + 'These will NOT appear in the rendered output.  '
+      + 'Operator must apply them manually on the target device.'
+      + '</div>'
+      + '<ul style="margin-top:.4rem">' + rows + '</ul>';
+  }
+
+  /** Render a bucket of validation findings.
+   *
+   * Total count (header) is the raw item count — that number matches
+   * the top stats strip and reflects per-leaf impact (3 interfaces
+   * each with a description = 3 occurrences of that xpath).
+   *
+   * The rendered LIST, however, is de-duplicated on (path, reason):
+   * showing "/interfaces/interface/config/description" three times
+   * is visual noise.  We coalesce duplicates into one entry with a
+   * trailing "×3" badge when there are more than one.
+   */
+  function fillPathList(listTestid, countTestid, items) {
+    var list = document.querySelector('[data-testid="' + listTestid + '"]');
+    var count = document.querySelector('[data-testid="' + countTestid + '"]');
+    count.textContent = String(items.length);
+    if (items.length === 0) {
+      list.innerHTML = '<em style="color:#888">(none)</em>';
+      return;
+    }
+    // Coalesce by (path, reason, severity) in discovery order.
+    var order = [];
+    var byKey = {};
+    items.forEach(function(it) {
+      var key = (it.path || '') + '||' + (it.reason || '')
+              + '||' + (it.severity || '');
+      if (byKey[key]) {
+        byKey[key].count += 1;
+      } else {
+        var entry = {
+          path: it.path, reason: it.reason, severity: it.severity,
+          count: 1,
+        };
+        byKey[key] = entry;
+        order.push(entry);
+      }
+    });
+    list.innerHTML = order.map(function(it) {
+      var line = '<code>' + escapeHtml(it.path || '') + '</code>';
+      if (it.reason) {
+        line += ' <span style="color:#888">— ' + escapeHtml(it.reason) + '</span>';
+      }
+      if (it.severity) {
+        line += ' <span class="mig-chip">' + escapeHtml(it.severity) + '</span>';
+      }
+      if (it.count > 1) {
+        line += ' <span class="mig-chip" title="occurrences">&times;'
+             + it.count + '</span>';
+      }
+      return '<div data-testid="migrate-path-entry">' + line + '</div>';
+    }).join('');
+  }
+
+  /** HTML-escape a string for injection into innerHTML or attribute
+   *  contexts.  Escapes ``"`` to ``&quot;`` so the same function is
+   *  safe inside ``title="..."``-style attributes — the rename-table
+   *  partial's collision / warning icons rely on this. */
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  /** Copy the rendered output to clipboard (global so onclick can reach it). */
+  /** Copy the rendered output text to clipboard. */
+  window.copyMigrateOutput = async function() {
+    try {
+      await navigator.clipboard.writeText(output.textContent || '');
+      showToast('Copied rendered output.', 'success');
+    } catch (err) {
+      showToast('Copy failed: ' + err.message, 'error');
+    }
+  };
+
+  /** Download the rendered output as a file.  Uses the same
+   *  WebView-safe blob approach as the config downloader.  File
+   *  extension comes from the target codec's output_extension. */
+  window.downloadMigrateOutput = function() {
+    var text = output.textContent || '';
+    if (!text) { showToast('No output to download.', 'error'); return; }
+    var tgt = adapterEntry(targetSel.value);
+    var ext = (tgt && tgt.ext) ? tgt.ext : 'txt';
+    var fname = 'migration-output.' + ext;
+    var blob = new Blob([text], { type: 'text/plain' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = fname; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  };
+
+  /* ───────────────────────────────────────────────────────────────
+     Tier 3 port-rename modal client
+     ──────────────────────────────────────────────────────────── */
+
+  // Module-scope state.  Reset on every successful translation.
+  var _renameProfiles = [];          // [{vendor, model, display_name, ports, lags}]
+  var _lastJobBody = null;           // last POST body that produced an output
+  var _lastJob = null;               // last MigrationJob from the server
+  var _renameUserMap = {};           // source_name -> target_name (user overrides)
+  var _renameVlanUserMap = {};       // source_vlan_id -> target_vlan_id | null
+  var _renameLocalUserMap = {};      // source_username -> target_username | null
+  var _renameSnmpCommunityMap = {};  // source_community -> target_community | null (effectively single-entry)
+  var _renameSnmpV3UserMap = {};     // source_v3_name -> target_v3_name | null
+  var _renameCategory = 'ports';     // active rail category: 'ports' | 'vlans' | 'local_users' | 'snmp' | 'snmpv3'
+  var _renameDragState = null;       // { offsetX, offsetY } while dragging
+
+  // Kind ordering in the modal (drives the collapsible section order).
+  var _RENAME_KIND_ORDER = ['physical', 'breakout', 'lag', 'svi',
+                            'loopback', 'tunnel', 'hw_aggregate',
+                            'mgmt', 'virtual', 'unknown'];
+  var _RENAME_KIND_LABEL = {
+    physical:      'Physical ports',
+    breakout:      'Breakout lanes',
+    lag:           'Link aggregations',
+    svi:           'VLAN SVIs',
+    loopback:      'Loopbacks',
+    tunnel:        'Tunnels',
+    hw_aggregate:  'Hardware-switch aggregates',
+    mgmt:          'Management',
+    virtual:       'Virtual',
+    unknown:       'Unclassified',
+  };
+
+  /** Vendor-id → display-name lookup.  Derived on-demand from the
+   *  ``adapters`` cache populated by ``loadAdapters()`` at page load;
+   *  each CodecInfo carries its vendor's display_name resolved by the
+   *  server from ``netcanon/migration/vendors/<vendor>.yaml``.
+   *
+   *  Previously this was a hardcoded 7-entry dict maintained by hand
+   *  in this template — removed because it meant adding a new vendor
+   *  required editing this template AND the vendors/ YAML, a silent
+   *  drift risk.  The server-side vendors/*.yaml + CodecInfo response
+   *  is the single source of truth.
+   *
+   *  Returns the vendor_id verbatim when no adapter is registered
+   *  under that vendor (shouldn't happen in practice because the
+   *  target-profiles endpoint only ships vendors with at least one
+   *  codec), preserving the existing fallback behaviour. */
+  function _vendorLabel(vendor_id) {
+    if (!vendor_id) return '';
+    var a = adapters.find(function(x) { return x.vendor_id === vendor_id; });
+    return (a && a.vendor_display_name) || vendor_id;
+  }
+
+  async function loadRenameTargetProfiles() {
+    try {
+      var resp = await fetch('/api/v1/migration/target-profiles');
+      if (!resp.ok) return;
+      _renameProfiles = await resp.json();
+      populateRenameVendorDropdown();
+    } catch (_) {
+      // Target profiles are optional; silent-ignore failures so the
+      // migrate form itself still works.
+    }
+  }
+
+  function populateRenameVendorDropdown() {
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    if (!vsel) return;
+    // Clear everything after the first "(none)" sentinel.
+    while (vsel.options.length > 1) vsel.remove(1);
+    // Distinct vendor ids across loaded profiles, sorted by display
+    // label so the dropdown is human-scannable.
+    var vendors = Array.from(new Set(_renameProfiles.map(function(p) {
+      return p.vendor;
+    }))).sort(function(a, b) {
+      return _vendorLabel(a).localeCompare(_vendorLabel(b));
+    });
+    vendors.forEach(function(vendor) {
+      var opt = document.createElement('option');
+      opt.value = vendor;
+      opt.textContent = _vendorLabel(vendor);
+      vsel.appendChild(opt);
+    });
+  }
+
+  function populateRenameModelDropdown(vendor) {
+    var msel = document.getElementById('mig-rename-target-model');
+    if (!msel) return;
+    msel.innerHTML = '';
+    if (!vendor) {
+      msel.disabled = true;
+      var placeholder = document.createElement('option');
+      placeholder.value = '';
+      placeholder.textContent = '— pick vendor first —';
+      msel.appendChild(placeholder);
+      // Model reset → module dropdown also clears.
+      populateRenameModuleDropdown(vendor, '');
+      return;
+    }
+    msel.disabled = false;
+    // "(any)" sentinel first so the user can pick a vendor but not
+    // commit to a specific model yet (stays free-form).
+    var blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '— pick model —';
+    msel.appendChild(blank);
+    var models = _renameProfiles
+      .filter(function(p) { return p.vendor === vendor; })
+      .sort(function(a, b) {
+        return (a.display_name || a.model).localeCompare(
+          b.display_name || b.model);
+      });
+    models.forEach(function(p) {
+      var opt = document.createElement('option');
+      opt.value = p.model;
+      opt.textContent = p.display_name || p.model;
+      msel.appendChild(opt);
+    });
+    // Repopulate module dropdown for the (possibly-newly-selected)
+    // model — no model yet → hides the dropdown.
+    populateRenameModuleDropdown(vendor, msel.value);
+  }
+
+  /** Populate the third-stage module dropdown based on the selected
+   *  profile's ``modules`` dict.  Hides the dropdown entirely when the
+   *  profile has no modules — the UI rule is "module dropdown only
+   *  appears for chassis with swappable uplink hardware".
+   *
+   *  Called whenever vendor or model changes.  When the profile does
+   *  have modules, preselects the first SKU (or "default" if present —
+   *  matches backend :meth:`TargetProfile.default_module_sku`). */
+  function populateRenameModuleDropdown(vendor, model) {
+    var modsel = document.getElementById('mig-rename-target-module');
+    if (!modsel) return;
+    modsel.innerHTML = '';
+    var profile = (vendor && model)
+      ? _renameProfiles.find(function(p) {
+          return p.vendor === vendor && p.model === model;
+        })
+      : null;
+    var modules = (profile && profile.modules) || {};
+    var skus = Object.keys(modules);
+    if (skus.length === 0) {
+      // Legacy profile (or no profile) — dropdown hidden.
+      modsel.style.display = 'none';
+      modsel.disabled = true;
+      var ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = '— no modules —';
+      modsel.appendChild(ph);
+      return;
+    }
+    // Module-variant profile — show the dropdown and populate SKUs.
+    modsel.style.display = '';
+    modsel.disabled = false;
+    // Default-SKU resolution mirrors backend default_module_sku():
+    // "default" literal wins; otherwise first-declared wins.
+    var defaultSku = skus.indexOf('default') !== -1
+      ? 'default'
+      : skus[0];
+    skus.forEach(function(sku) {
+      var opt = document.createElement('option');
+      opt.value = sku;
+      var mod = modules[sku] || {};
+      var label = sku;
+      if (mod.description) label += ' — ' + mod.description;
+      opt.textContent = label;
+      if (sku === defaultSku) opt.selected = true;
+      modsel.appendChild(opt);
+    });
+  }
+
+  /** Return the currently-selected profile key (``vendor/model``)
+   *  or empty string if none selected.  Central accessor used by
+   *  every renderer so they all agree on which profile is active. */
+  function currentRenameProfileKey() {
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    var msel = document.getElementById('mig-rename-target-model');
+    var vendor = vsel ? vsel.value : '';
+    var model = msel ? msel.value : '';
+    return (vendor && model) ? (vendor + '/' + model) : '';
+  }
+
+  /** Return the currently-selected module SKU, or empty string when
+   *  no module-variant profile is active.  Used by
+   *  :func:`effectivePortsFor` to scope the target-port dropdown
+   *  options to the selected module. */
+  function currentRenameModuleSku() {
+    var modsel = document.getElementById('mig-rename-target-module');
+    if (!modsel || modsel.style.display === 'none') return '';
+    return modsel.value || '';
+  }
+
+  /** Return the effective port inventory for *profile* considering
+   *  the current module selection.  Mirrors backend
+   *  :meth:`TargetProfile.effective_ports` — base ``ports`` plus the
+   *  selected module's ``ports`` (falls back to base-only when the
+   *  profile has no modules or the selected SKU is unknown).
+   *
+   *  This is the single chokepoint the rename modal uses to decide
+   *  which target-port ids populate its per-row dropdowns, so adding
+   *  a fourth dimension later (e.g. "uplink mode" toggling 10G/25G)
+   *  happens here only. */
+  function effectivePortsFor(profile) {
+    if (!profile) return [];
+    var base = profile.ports || [];
+    var modules = profile.modules || {};
+    var skus = Object.keys(modules);
+    if (skus.length === 0) return base.slice();
+    var sku = currentRenameModuleSku();
+    // Unknown / empty SKU → fall back to default_module_sku() semantics.
+    if (!sku || !modules[sku]) {
+      sku = skus.indexOf('default') !== -1 ? 'default' : skus[0];
+    }
+    var modulePorts = (modules[sku] && modules[sku].ports) || [];
+    return base.concat(modulePorts);
+  }
+
+  /* ── localStorage ack persistence ──
+   * Persists the operator's rename-modal overrides across page
+   * reloads.  Keyed on the (source_codec, target_codec, hostname)
+   * triple — moving to a different device, different migration
+   * direction, or codec/version change loads a fresh slate instead
+   * of clobbering the operator's prior work.
+   *
+   * Versioning (source_version / target_version) is intentionally
+   * NOT part of the key today — the canonical parsers don't yet
+   * populate source_version, so folding empty strings into the key
+   * adds noise without discrimination.  When per-OS-version parsers
+   * land (P1C3+), extend _ackKey to append @<version> for each side
+   * and bump _ACK_SCHEMA_VERSION so any old entries get ignored on
+   * next load (cheap migration — the entries are strictly optional).
+   *
+   * Schema (v1 — additive-only; new category maps can be added as
+   * new keys without bumping the version because missing keys load
+   * as empty):
+   *   localStorage["netcanon.rename-ack.v1:<src>:<tgt>:<hostname>"]
+   *   = JSON({
+   *       ports:       {src_name: tgt_name | null},
+   *       vlans:       {src_id: tgt_id | null},
+   *       local_users: {src_username: tgt_username | null},
+   *       ts:          ISO-8601 string,
+   *     })
+   */
+  var _ACK_SCHEMA_VERSION = 'v1';
+  var _ACK_PREFIX = 'netcanon.rename-ack.';
+
+  function _ackKey(job) {
+    if (!job) return '';
+    var host = job.source_hostname || '';
+    return _ACK_PREFIX + _ACK_SCHEMA_VERSION + ':'
+         + (job.source_codec || '') + ':'
+         + (job.target_codec || '') + ':'
+         + host;
+  }
+
+  /** Load saved overrides for the current job, if any.  Returns the
+   *  parsed object on hit or ``null`` on miss.  Swallows parse
+   *  errors silently — a corrupt entry is treated as a miss rather
+   *  than blocking the modal from opening. */
+  function loadRenameAck(job) {
+    if (!job) return null;
+    try {
+      var raw = window.localStorage.getItem(_ackKey(job));
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return null;
+      return parsed;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /** Write the current user-override maps to localStorage.  Called on
+   *  every override change so a page reload mid-session doesn't lose
+   *  work.  Silently no-ops when localStorage is unavailable (private
+   *  browsing, quota exceeded) — persistence is a nice-to-have. */
+  function saveRenameAck() {
+    if (!_lastJob) return;
+    var payload = {
+      ports: Object.assign({}, _renameUserMap),
+      vlans: Object.assign({}, _renameVlanUserMap),
+      local_users: Object.assign({}, _renameLocalUserMap),
+      snmp_community: Object.assign({}, _renameSnmpCommunityMap),
+      snmpv3_users: Object.assign({}, _renameSnmpV3UserMap),
+      ts: new Date().toISOString(),
+    };
+    // Skip writes when all maps are empty — keeps localStorage
+    // clean after a Reset-all rather than leaving an empty marker.
+    if (!Object.keys(payload.ports).length
+        && !Object.keys(payload.vlans).length
+        && !Object.keys(payload.local_users).length
+        && !Object.keys(payload.snmp_community).length
+        && !Object.keys(payload.snmpv3_users).length) {
+      try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
+      return;
+    }
+    try {
+      window.localStorage.setItem(_ackKey(_lastJob), JSON.stringify(payload));
+    } catch (_) {
+      // Quota / security errors — best-effort.
+    }
+  }
+
+  /** Remove the saved ack for the current job.  Called from the
+   *  "Reset all" button so the saved state disappears along with
+   *  the in-memory state. */
+  function clearRenameAck() {
+    if (!_lastJob) return;
+    try { window.localStorage.removeItem(_ackKey(_lastJob)); } catch (_) {}
+  }
+
+  /** Apply a loaded ack payload into the user maps.  Surfaces a
+   *  status-line notice telling the operator their prior state was
+   *  restored — silently re-populating the table would be
+   *  surprising ("why does this already have overrides?"). */
+  function applyLoadedRenameAck(ack) {
+    if (!ack) return;
+    if (ack.ports && typeof ack.ports === 'object') {
+      _renameUserMap = Object.assign({}, ack.ports);
+    }
+    if (ack.vlans && typeof ack.vlans === 'object') {
+      // localStorage round-trips int keys as strings; coerce back
+      // to int so lookups against source_vlans (int ids) match.
+      _renameVlanUserMap = {};
+      Object.keys(ack.vlans).forEach(function(k) {
+        var n = parseInt(k, 10);
+        if (!isNaN(n)) _renameVlanUserMap[n] = ack.vlans[k];
+      });
+    }
+    if (ack.local_users && typeof ack.local_users === 'object') {
+      // Usernames are string-keyed, no coercion needed.
+      _renameLocalUserMap = Object.assign({}, ack.local_users);
+    }
+    if (ack.snmp_community && typeof ack.snmp_community === 'object') {
+      // Single-entry map keyed on source community string; same
+      // no-coercion story as local_users.
+      _renameSnmpCommunityMap = Object.assign({}, ack.snmp_community);
+    }
+    if (ack.snmpv3_users && typeof ack.snmpv3_users === 'object') {
+      // String-keyed securityName map; no coercion needed.
+      _renameSnmpV3UserMap = Object.assign({}, ack.snmpv3_users);
+    }
+    var portCount = Object.keys(_renameUserMap).length;
+    var vlanCount = Object.keys(_renameVlanUserMap).length;
+    var userCount = Object.keys(_renameLocalUserMap).length;
+    var snmpCount = Object.keys(_renameSnmpCommunityMap).length;
+    var v3Count = Object.keys(_renameSnmpV3UserMap).length;
+    var status = document.getElementById('mig-rename-status');
+    if (status && (portCount || vlanCount || userCount || snmpCount || v3Count)) {
+      var bits = [];
+      if (portCount) bits.push(portCount + ' port');
+      if (vlanCount) bits.push(vlanCount + ' VLAN');
+      if (userCount) bits.push(userCount + ' user');
+      if (snmpCount) bits.push(snmpCount + ' SNMP');
+      if (v3Count) bits.push(v3Count + ' SNMPv3');
+      status.textContent = 'Restored prior overrides ('
+        + bits.join(', ') + ') from ' + _friendlyTime(ack.ts) + '.';
+      status.setAttribute('data-testid-state', 'ack-restored');
+    }
+  }
+
+  function _friendlyTime(iso) {
+    if (!iso) return 'earlier session';
+    try {
+      var then = new Date(iso).getTime();
+      var now  = Date.now();
+      var diff = (now - then) / 1000;
+      if (diff < 60)        return 'just now';
+      if (diff < 3600)      return Math.round(diff / 60) + 'm ago';
+      if (diff < 86400)     return Math.round(diff / 3600) + 'h ago';
+      return Math.round(diff / 86400) + 'd ago';
+    } catch (_) {
+      return 'earlier session';
+    }
+  }
+
+  /** Render the per-pane compatibility banners.  Reads the current
+   *  target codec's CodecInfo (already cached in the module-scope
+   *  ``adapters`` list) and surfaces an amber warning on each pane
+   *  whose category appears in the target's
+   *  ``unsupported_rename_categories`` list.
+   *
+   *  Category → pane-element mapping is deliberately hard-coded
+   *  against the known rail categories — adding a new category
+   *  means adding a banner element to the pane AND an entry here.
+   *  A data-driven alternative (discover panes via DOM query) was
+   *  considered but rejected: keeping the map explicit lets the
+   *  compiler/linter catch typos and forces the author to wire the
+   *  banner element in the template at the same time.
+   */
+  function renderCompatBanners() {
+    if (!adapters.length || !_lastJob) return;
+    var targetName = (_lastJob && _lastJob.target_codec)
+      || (targetSel && targetSel.value);
+    var target = adapters.find(function(a) { return a.name === targetName; });
+    if (!target) return;
+    var unsupported = target.unsupported_rename_categories || [];
+    var categoryLabels = {
+      local_users: 'local users',
+      vlans: 'VLANs',
+      ports: 'port names',
+      snmp: 'SNMP community',
+      snmpv3: 'SNMPv3 USM users',
+    };
+    // PANE_ID_BY_CATEGORY: extend here when new categories gain
+    // compat banners.  Value is the element id of the banner div
+    // inside that pane; undefined entries are skipped silently.
+    var paneIdByCategory = {
+      local_users: 'mig-rename-local-users-compat',
+      snmp: 'mig-rename-snmp-compat',
+      snmpv3: 'mig-rename-snmpv3-compat',
+    };
+    Object.keys(paneIdByCategory).forEach(function(cat) {
+      var el = document.getElementById(paneIdByCategory[cat]);
+      if (!el) return;
+      if (unsupported.indexOf(cat) !== -1) {
+        var label = categoryLabels[cat] || cat;
+        var vendorLabel = target.vendor_display_name || target.name;
+        el.style.display = '';
+        el.innerHTML =
+          '<div style="flex:1">'
+          + '<strong>\u26A0 Target codec doesn\'t render '
+          + escapeHtml(label) + '.</strong> '
+          + escapeHtml(vendorLabel) + ' parses + renders interfaces '
+          + 'and VLANs but ' + escapeHtml(label) + ' are currently '
+          + 'Tier-3 passthrough (raw_sections).  Rename overrides '
+          + 'will apply to the canonical tree but won\'t appear in '
+          + 'the rendered output until the codec wires full '
+          + 'round-trip support for this category.'
+          + '</div>';
+      } else {
+        el.style.display = 'none';
+        el.innerHTML = '';
+      }
+    });
+  }
+
+  /** Render the per-pane fit-check banners for VLANs + local users.
+   *  Each pane's banner surfaces only when the current target
+   *  profile declares a capacity limit for that category AND the
+   *  source tree's count for that category is known.
+   *
+   *  Three states per pane:
+   *    * profile missing OR limit not declared → hidden
+   *    * source count ≤ limit → green "N / limit" banner
+   *    * source count > limit → red "over by K" banner
+   *
+   *  This is the per-pane counterpart to the ports fit-check banner
+   *  that lives in _partials/fit-check.js; VLANs and local_users get
+   *  their own banners rather than stuffing the ports fit-check
+   *  with cross-category data.  Each category's capacity is a
+   *  distinct concept (max VLAN IDs vs max user accounts vs per-
+   *  kind port counts) so separating the UI keeps the banners
+   *  specific and readable.
+   */
+  function renderPerPaneFitCheck() {
+    if (!_lastJob) return;
+    var profileKey = currentRenameProfileKey();
+    var profile = profileKey
+      ? _renameProfiles.find(function(p) {
+          return (p.vendor + '/' + p.model) === profileKey;
+        })
+      : null;
+
+    function renderOne(elId, maxValue, sourceCount, label) {
+      var el = document.getElementById(elId);
+      if (!el) return;
+      if (!profile || maxValue === null || maxValue === undefined) {
+        el.style.display = 'none';
+        el.innerHTML = '';
+        el.className = 'mig-banner';
+        return;
+      }
+      el.style.display = '';
+      if (sourceCount <= maxValue) {
+        el.className = 'mig-banner mig-banner-ok';
+        el.innerHTML =
+          '&#10003; ' + escapeHtml(label) + ' fit: '
+          + sourceCount + ' / ' + maxValue + ' (' + escapeHtml(
+              profile.display_name || (profile.vendor + ' ' + profile.model)
+            ) + ')';
+      } else {
+        // OVER-capacity is ADVISORY only by design — Apply stays
+        // enabled.  Rationale: capacity overflow is a device-side
+        // error (the target will reject), not a migration-side one,
+        // and operators may knowingly push an over-capacity config
+        // to trigger the device's own error message as a diagnostic
+        // step.  FLAG: revisit this policy once we have operator
+        // telemetry on whether silent device-side errors caused
+        // real pain — if yes, tie the Apply button disable-logic
+        // in rename-panel.js to fit-check state the same way it
+        // ties to collisions.  Deferred follow-up on the session
+        // todo list.
+        var over = sourceCount - maxValue;
+        el.className = 'mig-banner mig-banner-block';
+        el.innerHTML =
+          '&#10007; ' + escapeHtml(label) + ' OVER capacity: '
+          + sourceCount + ' / ' + maxValue
+          + ' <strong>(' + over + ' over)</strong>. '
+          + escapeHtml(
+              profile.display_name || (profile.vendor + ' ' + profile.model)
+            )
+          + ' won\'t accept this config as-is — drop '
+          + over + ' entries or pick a larger-capacity model.';
+      }
+    }
+
+    renderOne(
+      'mig-rename-vlans-fitcheck',
+      profile ? profile.max_vlans : null,
+      (_lastJob.source_vlans || []).length,
+      'VLAN',
+    );
+    renderOne(
+      'mig-rename-local-users-fitcheck',
+      profile ? profile.max_local_users : null,
+      (_lastJob.source_local_users || []).length,
+      'Local-user',
+    );
+  }
+
+  /** Switch the active rail category.  Mutually exclusive — exactly
+   *  one category pane is visible at a time.  Preview pane stays
+   *  visible regardless so the operator can see how per-category
+   *  overrides affect the final rendered output. */
+  window.showRenameCategory = function(cat) {
+    _renameCategory = cat;
+    var portsPane = document.getElementById('mig-rename-ports-pane');
+    var vlansPane = document.getElementById('mig-rename-vlans-pane');
+    var localUsersPane = document.getElementById('mig-rename-local-users-pane');
+    var snmpPane = document.getElementById('mig-rename-snmp-pane');
+    var snmpv3Pane = document.getElementById('mig-rename-snmpv3-pane');
+    if (portsPane) portsPane.classList.toggle('active', cat === 'ports');
+    if (vlansPane) vlansPane.classList.toggle('active', cat === 'vlans');
+    if (localUsersPane) localUsersPane.classList.toggle('active', cat === 'local_users');
+    if (snmpPane) snmpPane.classList.toggle('active', cat === 'snmp');
+    if (snmpv3Pane) snmpv3Pane.classList.toggle('active', cat === 'snmpv3');
+    document.querySelectorAll('.mig-rename-rail-btn').forEach(function(b) {
+      b.classList.toggle('active', b.dataset.category === cat);
+    });
+    // Hide target-profile controls + fit-check banner on non-ports
+    // panes — both consume ports-specific data (port inventory,
+    // per-kind counts) and have no effect on VLAN / user panes.
+    // Keeping them visible invites operators to think they need to
+    // pick a profile before renaming VLANs or users, which they
+    // don't.  When future VLAN/user fit-checks ship, each pane will
+    // own its own banner rather than reusing this one.
+    var profileGroup = document.getElementById('mig-rename-target-profile-group');
+    var fitcheck = document.getElementById('mig-rename-fitcheck');
+    var portsOnly = (cat === 'ports');
+    if (profileGroup) profileGroup.style.display = portsOnly ? 'flex' : 'none';
+    if (fitcheck) {
+      // Preserve the existing "no profile = hidden" rule when on
+      // ports pane — fit-check.js manages its own show/hide based
+      // on profile selection.  Here we only force-hide when leaving
+      // ports.  When returning to ports, we re-trigger renderFitCheck
+      // so it can decide based on current profile state.
+      if (!portsOnly) {
+        fitcheck.style.display = 'none';
+      } else if (typeof renderFitCheck === 'function') {
+        renderFitCheck();
+      }
+    }
+    // Re-render the newly-visible pane so it reflects any state
+    // changes the operator made in the other categories (cross-
+    // category interactions are rare but non-zero: VLAN drops can
+    // detach ports from SVIs, affecting the ports pane's dropped-
+    // VLAN detachment warnings once those ship).
+    if (cat === 'vlans' && typeof renderVlanRenameTable === 'function') {
+      renderVlanRenameTable();
+    } else if (cat === 'local_users'
+               && typeof renderLocalUserRenameTable === 'function') {
+      renderLocalUserRenameTable();
+    } else if (cat === 'snmp'
+               && typeof renderSnmpRenameTable === 'function') {
+      renderSnmpRenameTable();
+    } else if (cat === 'snmpv3'
+               && typeof renderSnmpV3UserRenameTable === 'function') {
+      renderSnmpV3UserRenameTable();
+    } else if (cat === 'ports') {
+      renderRenameTable();
+    }
+  };
+
+  /** Update the rail buttons' count badges.  Called whenever the
+   *  underlying state shifts (job swap, user override, reset all).
+   *  Counts reflect "rows in this category" — for ports that's
+   *  applied + warnings; for VLANs that's source_vlans.length.
+   *  Persistence lives on renderRenameSummary, which is a strict
+   *  super-set of this function's callers. */
+  function renderRenameRailCounts() {
+    if (!_lastJob) return;
+    var portsCount = document.getElementById('mig-rename-rail-ports-count');
+    var vlansCount = document.getElementById('mig-rename-rail-vlans-count');
+    var usersCount = document.getElementById('mig-rename-rail-local-users-count');
+    var snmpCount = document.getElementById('mig-rename-rail-snmp-count');
+    var snmpv3Count = document.getElementById('mig-rename-rail-snmpv3-count');
+    if (portsCount) {
+      var applied = _lastJob.port_renames
+        ? Object.keys(_lastJob.port_renames).length : 0;
+      var warned = (_lastJob.warnings || []).filter(function(w) {
+        return /'[^']+'/.test(w);
+      }).length;
+      portsCount.textContent = String(applied + warned);
+    }
+    if (vlansCount) {
+      var v = (_lastJob.source_vlans || []).length;
+      vlansCount.textContent = String(v);
+    }
+    if (usersCount) {
+      var u = (_lastJob.source_local_users || []).length;
+      usersCount.textContent = String(u);
+    }
+    if (snmpCount) {
+      // SNMP count is 1 when the source has a community string to
+      // rename, 0 otherwise.  Matches the "rows operator can act on"
+      // semantic used by the other panes.
+      var s = (_lastJob.source_snmp_community) ? 1 : 0;
+      snmpCount.textContent = String(s);
+    }
+    if (snmpv3Count) {
+      // SNMPv3 count = number of source USM users.  Matches the
+      // per-row semantic used by every list-oriented pane.
+      var v = (_lastJob.source_snmpv3_users || []).length;
+      snmpv3Count.textContent = String(v);
+    }
+  }
+
+  /** Call from renderResult: remember the job + request body so the
+   *  modal can use them, and toggle the rename-open button. */
+  function captureJobForRename(body, job) {
+    _lastJobBody = body;
+    _lastJob = job;
+    _renameUserMap = {};
+    _renameVlanUserMap = {};
+    _renameLocalUserMap = {};
+    _renameSnmpCommunityMap = {};
+    _renameSnmpV3UserMap = {};
+    var btn = document.getElementById('mig-rename-open-btn');
+    var badge = document.getElementById('mig-rename-badge-count');
+    if (!btn) return;
+    // Show the rename button whenever ANY pane has content to work
+    // with — port renames/warnings, source VLANs to remap, source
+    // local users to remap, or a source SNMP community to rename.
+    // Pre-P2C5 this gate stopped at users; SNMP adds the fourth
+    // open-trigger so SNMP-only source snippets (no ports / VLANs
+    // / users) still get the modal.
+    var hasRenames = job && job.port_renames
+      && Object.keys(job.port_renames).length > 0;
+    var hasWarnings = job && Array.isArray(job.warnings)
+      && job.warnings.length > 0;
+    var hasVlans = job && Array.isArray(job.source_vlans)
+      && job.source_vlans.length > 0;
+    var hasLocalUsers = job && Array.isArray(job.source_local_users)
+      && job.source_local_users.length > 0;
+    var hasSnmpCommunity = job && typeof job.source_snmp_community === 'string'
+      && job.source_snmp_community.length > 0;
+    var hasAnything = hasRenames || hasWarnings || hasVlans
+                      || hasLocalUsers || hasSnmpCommunity;
+    if (job && job.rendered && hasAnything) {
+      btn.style.display = '';
+      var attentionCount = hasWarnings ? job.warnings.length : 0;
+      if (attentionCount > 0) {
+        badge.textContent = attentionCount;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    } else {
+      btn.style.display = 'none';
+    }
+  }
+
+  /** Choose initial vendor + model based on the target codec
+   *  selected in the form.  Pre-selects the vendor dropdown when a
+   *  profile for that vendor exists; leaves model un-picked so the
+   *  operator explicitly chooses their hardware (we don't know which
+   *  model they're migrating to). */
+  function suggestTargetProfileVendor(targetCodec) {
+    if (!targetCodec || !_renameProfiles.length) return '';
+    var match = _renameProfiles.find(function(p) {
+      return targetCodec.indexOf(p.vendor) === 0;
+    });
+    return match ? match.vendor : '';
+  }
+
+  window.openRenameModal = function() {
+    if (!_lastJob || !_lastJobBody) {
+      showToast('No translation result to rename yet.', 'error');
+      return;
+    }
+    var modal = document.getElementById('mig-rename-modal');
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    // Restore persisted overrides for this (source, target, hostname)
+    // triple, if any.  Runs BEFORE the initial render so the
+    // restored state is visible on first paint rather than flashing
+    // blank then snapping to the restored state.
+    var ack = loadRenameAck(_lastJob);
+    if (ack) applyLoadedRenameAck(ack);
+    // Re-populate the vendor dropdown to pick up any late adapter
+    // data.  loadAdapters() + loadRenameTargetProfiles() race at
+    // page load; if profiles landed first, vendor labels fell back
+    // to raw vendor_ids.  By modal-open time adapters is populated,
+    // so a re-populate is cheap and gives the operator the friendly
+    // labels.  Preserves the current selection (if any) so this
+    // doesn't stomp an operator's prior pick.
+    if (typeof populateRenameVendorDropdown === 'function'
+        && Array.isArray(adapters) && adapters.length) {
+      var vselEl = document.getElementById('mig-rename-target-vendor');
+      var preserved = vselEl ? vselEl.value : '';
+      populateRenameVendorDropdown();
+      if (preserved && vselEl) vselEl.value = preserved;
+    }
+    // Seed vendor dropdown with an auto-suggestion; model left
+    // un-picked so the operator explicitly commits to hardware.
+    var vsel = document.getElementById('mig-rename-target-vendor');
+    var suggestedVendor = suggestTargetProfileVendor(targetSel.value);
+    if (suggestedVendor && !vsel.value) {
+      vsel.value = suggestedVendor;
+    }
+    populateRenameModelDropdown(vsel.value);
+    // Initial render from the current job.  Render ALL category
+    // panes so rail counts are accurate before the operator clicks
+    // anything; the active-pane rule then hides the inactive ones.
+    renderRenameTable();
+    if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
+    if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
+    if (typeof renderSnmpV3UserRenameTable === 'function') renderSnmpV3UserRenameTable();
+    renderRenameRailCounts();
+    renderCompatBanners();
+    renderPerPaneFitCheck();
+    renderRenamePreview();
+    renderRenameSummary();
+  };
+
+  window.closeRenameModal = function() {
+    var modal = document.getElementById('mig-rename-modal');
+    modal.classList.remove('open');
+    modal.style.display = 'none';
+  };
+
+  window.renameModalResetAll = function() {
+    _renameUserMap = {};
+    _renameVlanUserMap = {};
+    _renameLocalUserMap = {};
+    _renameSnmpCommunityMap = {};
+    _renameSnmpV3UserMap = {};
+    // Clear the persisted entry so a subsequent modal-open for the
+    // same (source, target, hostname) doesn't restore what the
+    // operator just reset.  renderRenameSummary below will write an
+    // empty-maps save — which saveRenameAck() short-circuits to a
+    // removeItem — but we also clear eagerly here as belt-and-braces.
+    clearRenameAck();
+    renderRenameTable();
+    if (typeof renderVlanRenameTable === 'function') renderVlanRenameTable();
+    if (typeof renderLocalUserRenameTable === 'function') renderLocalUserRenameTable();
+    if (typeof renderSnmpRenameTable === 'function') renderSnmpRenameTable();
+    if (typeof renderSnmpV3UserRenameTable === 'function') renderSnmpV3UserRenameTable();
+    renderRenameRailCounts();
+    renderRenamePreview();
+    renderRenameSummary();
+    var status = document.getElementById('mig-rename-status');
+    if (status) status.textContent = 'All overrides cleared.';
+  };
+
+  /* ── Rename-modal table renderer (extracted to _partials/rename-table.js) ── */
+  {% include "_partials/rename-table.js" %}
+
+  /* ── VLAN-rename pane renderer (extracted to _partials/vlan-rename-table.js) ── */
+  {% include "_partials/vlan-rename-table.js" %}
+
+  /* ── Local-user rename pane renderer (extracted to _partials/local-user-rename-table.js) ── */
+  {% include "_partials/local-user-rename-table.js" %}
+
+  /* ── SNMP community rename pane renderer (extracted to _partials/snmp-rename-table.js) ── */
+  {% include "_partials/snmp-rename-table.js" %}
+
+  /* ── SNMPv3 USM user-rename pane renderer (extracted to _partials/snmpv3-user-rename-table.js) ── */
+  {% include "_partials/snmpv3-user-rename-table.js" %}
+
+  /* ── Rename-modal preview + summary (extracted to _partials/rename-panel.js) ── */
+  {% include "_partials/rename-panel.js" %}
+
+  /* ── Rename-modal hardware fit-check banner (extracted to _partials/fit-check.js) ── */
+  {% include "_partials/fit-check.js" %}
+
+  /* ── Shared client-side classifiers (extracted to _partials/classify.js) ── */
+  {% include "_partials/classify.js" %}
+
+  /* ── Rename-modal apply flow + drag + selector wiring (extracted to _partials/rename-apply.js) ── */
+  {% include "_partials/rename-apply.js" %}
+
+  // Event wiring
+  sourceSel.addEventListener('change', function() {
+    renderAdapterInfo();
+    // Re-render detection banner (switch from "use this?" to "ok" state).
+    runAutoDetect();
+  });
+  targetSel.addEventListener('change', renderAdapterInfo);
+  form.querySelectorAll('input[name="input_mode"]').forEach(function(el) {
+    el.addEventListener('change', onInputModeChange);
+  });
+  var fileSel = document.getElementById('mig-filename');
+  if (fileSel) {
+    fileSel.addEventListener('change', function() {
+      refreshFilenameCompatWarn();
+      runAutoDetect();
+    });
+  }
+  var rawInput = document.getElementById('mig-raw');
+  if (rawInput) {
+    rawInput.addEventListener('input', scheduleAutoDetect);
+  }
+  form.addEventListener('submit', onSubmit);
+
+  // Initial load
+  loadAdapters();
+  loadRenameTargetProfiles();
+})();
+</script>
+{% endblock %}

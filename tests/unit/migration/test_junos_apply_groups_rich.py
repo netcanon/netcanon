@@ -27,7 +27,7 @@ import pathlib
 
 import pytest
 
-from netconfig.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.juniper_junos import JunosCodec
 
 pytestmark = pytest.mark.unit
 
@@ -378,7 +378,7 @@ class TestApplyGroupsRenderPreservation:
         assert first.apply_groups == second.apply_groups
 
     def test_empty_apply_groups_field_on_fresh_intent(self):
-        from netconfig.migration.canonical.intent import CanonicalIntent
+        from netcanon.migration.canonical.intent import CanonicalIntent
         intent = CanonicalIntent()
         assert intent.apply_groups == []
         assert intent.group_content == {}

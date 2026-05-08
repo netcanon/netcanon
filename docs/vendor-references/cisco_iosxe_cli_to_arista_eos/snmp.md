@@ -77,7 +77,7 @@ a different one.  Cross-vendor migration of v3 users requires re-
 keying on the target device.
 
 The schema docstring (`CanonicalSNMPv3User` in
-`netconfig/migration/canonical/intent.py`) documents this directly:
+`netcanon/migration/canonical/intent.py`) documents this directly:
 "Same-vendor round-trip is lossless; cross-vendor migration typically
 requires re-keying on the target device (hashes are salted with
 vendor-specific constants)."

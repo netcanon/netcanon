@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
@@ -34,16 +34,16 @@ from netconfig.migration.canonical.intent import (
     CanonicalDHCPPool,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.port_names import (
+from netcanon.migration.canonical.port_names import (
     PortIdentity,
     translate_port_names,
     build_port_rename_transform,
 )
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 pytestmark = pytest.mark.unit
 
@@ -297,7 +297,7 @@ class TestCiscoToAruba:
         them, dropping the LAN canonical interface (and its IP)
         before render was called.  Now the LAN IP survives the
         port-rename step and reaches Aruba's render path."""
-        from netconfig.migration.codecs.opnsense.codec import (
+        from netcanon.migration.codecs.opnsense.codec import (
             OPNsenseCodec,
         )
         src = OPNsenseCodec()
@@ -310,7 +310,7 @@ class TestCiscoToAruba:
     def test_aruba_opnsense_igb0_maps_to_aos_port_one(self):
         """Same root-cause as ``ixl0`` but for the Intel igb driver
         (1G NIC, common on home / SOHO OPNsense deployments)."""
-        from netconfig.migration.codecs.opnsense.codec import (
+        from netcanon.migration.codecs.opnsense.codec import (
             OPNsenseCodec,
         )
         src = OPNsenseCodec()
@@ -326,7 +326,7 @@ class TestCiscoToAruba:
         the sentinel name ``oobm`` so the renderer emits the right
         thing instead of silently dropping the interface (verified
         against Aruba MCG for AOS-S 16.10)."""
-        from netconfig.migration.codecs.arista_eos.codec import (
+        from netcanon.migration.codecs.arista_eos.codec import (
             AristaEOSCodec,
         )
         src = AristaEOSCodec()
@@ -357,7 +357,7 @@ class TestSviAbsorption:
         assert CiscoIOSXECLICodec.absorbs_svi_into_vlan is False
 
     def test_svi_warning_suppressed_when_target_absorbs(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -401,7 +401,7 @@ class TestSviAbsorption:
         directly.  Mirrors :func:`test_svi_warning_suppressed_when_
         target_absorbs` for absorbing targets — both paths suppress
         the warning, just for different reasons."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -421,7 +421,7 @@ class TestDropSemantic:
     output has no dangling pointers to the dropped name."""
 
     def _build_cat9300ish_intent(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface, CanonicalLAG,
             CanonicalVlan, CanonicalStaticRoute, CanonicalDHCPPool,
         )
@@ -494,7 +494,7 @@ class TestDropSemantic:
         assert len(intent.dhcp_servers) == 0
 
     def test_drop_cascades_to_lag_membership(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface, CanonicalLAG,
         )
         intent = CanonicalIntent(
@@ -521,7 +521,7 @@ class TestDropSemantic:
         chose not to render this.  Different from 'no target
         equivalent' (which DOES warn).  Warning noise is the whole
         point of having explicit drop."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -746,7 +746,7 @@ class TestAutoDropUnmappable:
     user rename map, or use the Tier 3 UI's "keep verbatim" link."""
 
     def test_auto_drops_unmappable_by_default(self):
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -783,7 +783,7 @@ class TestAutoDropUnmappable:
         """Opt-out: ``strip_unmappable=False`` preserves legacy
         leave-verbatim behaviour.  Used by API callers that need
         to inspect unmapped names before deciding what to do."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -804,7 +804,7 @@ class TestAutoDropUnmappable:
         """Operators who explicitly want to keep an unmappable name
         verbatim can supply a no-op rename (``{name: name}``) — the
         user map wins over auto-drop."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface,
         )
         intent = CanonicalIntent(
@@ -822,7 +822,7 @@ class TestAutoDropUnmappable:
         """SVIs that the target codec absorbs into the VLAN stanza
         are a special case — neither warned nor auto-dropped.  The
         L3 data still reaches the target via the VLAN render path."""
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent, CanonicalInterface, CanonicalVlan,
         )
         intent = CanonicalIntent(
@@ -856,7 +856,7 @@ class TestCat9300ToAruba:
 
     def test_run_plan_with_rename_produces_aruba_port_names(self):
         from pathlib import Path
-        from netconfig.services.migration_pipeline import run_plan_with_rename
+        from netcanon.services.migration_pipeline import run_plan_with_rename
 
         raw = Path(self.FIXTURE_PATH).read_text(encoding="utf-8")
         job = run_plan_with_rename(
@@ -888,7 +888,7 @@ class TestCat9300ToAruba:
         auto-resolve, the user can supply a rename_map entry to pin
         the target name.  The warning for that port goes away."""
         from pathlib import Path
-        from netconfig.services.migration_pipeline import run_plan_with_rename
+        from netcanon.services.migration_pipeline import run_plan_with_rename
 
         raw = Path(self.FIXTURE_PATH).read_text(encoding="utf-8")
         user_map = {
@@ -917,7 +917,7 @@ class TestNonCanonicalIntentTreeIsNoOp:
     browser hit this path before the guard landed)."""
 
     def test_plain_dict_tree_returns_empty_result(self):
-        from netconfig.migration.codecs.registry import get_codec
+        from netcanon.migration.codecs.registry import get_codec
         mock = get_codec("mock")
         # Mock codec returns a plain dict from parse() — mimics any
         # future back-compat codec that predates the canonical intent.
@@ -933,8 +933,8 @@ class TestNonCanonicalIntentTreeIsNoOp:
         rather than ``failed``.  This is the exact path the web UI
         hits because it always sends ``port_rename_map: {}`` to opt
         into the rename-aware pipeline."""
-        from netconfig.migration.codecs.registry import get_codec
-        from netconfig.services.migration_pipeline import run_plan_with_rename
+        from netcanon.migration.codecs.registry import get_codec
+        from netcanon.services.migration_pipeline import run_plan_with_rename
 
         mock = get_codec("mock")
         raw = '{"/unsafe/kernel_module": "rootkit"}'

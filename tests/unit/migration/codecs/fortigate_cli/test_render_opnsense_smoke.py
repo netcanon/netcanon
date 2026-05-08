@@ -49,27 +49,27 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
     CanonicalLAG,
     CanonicalVlan,
 )
-from netconfig.migration.canonical.port_names import (
+from netcanon.migration.canonical.port_names import (
     PortIdentity,
     translate_port_names,
 )
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.fortigate_cli.port_names import (
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli.port_names import (
     format_port_identity,
 )
-from netconfig.migration.codecs.fortigate_cli.render import (
+from netcanon.migration.codecs.fortigate_cli.render import (
     _build_vlan_children,
     _iface_is_empty_stub,
     _is_fortigate_native_name,
 )
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 
 def _slice_block(out: str, marker: str) -> str:

@@ -23,9 +23,9 @@ from pathlib import Path
 
 import pytest
 
-import netconfig.migration  # noqa: F401  (registers the codec)
+import netcanon.migration  # noqa: F401  (registers the codec)
 
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 
 pytestmark = pytest.mark.unit
 

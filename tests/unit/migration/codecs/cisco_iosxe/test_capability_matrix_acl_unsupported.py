@@ -16,7 +16,7 @@ classified them as ``unknown`` rather than ``unsupported``.  This
 declaration makes the silent-drop honest.
 
 See also:
-- netconfig/migration/codecs/cisco_iosxe/codec.py — declaration site
+- netcanon/migration/codecs/cisco_iosxe/codec.py — declaration site
 - tests/unit/migration/codecs/cisco_iosxe/test_capability_matrix_honesty.py
   — sibling regression guard for render-vs-matrix coverage
 """
@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 
 pytestmark = pytest.mark.unit
 

@@ -70,7 +70,7 @@ interface Ethernet1
 
 The canonical model is `CanonicalRoutingInstance` plus per-interface
 `CanonicalInterface.vrf`.  Schema documented in
-`netconfig/migration/canonical/intent.py`:
+`netcanon/migration/canonical/intent.py`:
 
 ```
 class CanonicalRoutingInstance(BaseModel):

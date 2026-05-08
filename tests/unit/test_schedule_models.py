@@ -12,8 +12,8 @@ from datetime import datetime, timezone
 import pytest
 from pydantic import ValidationError
 
-from netconfig.models.backup import BackupJob, JobStatus
-from netconfig.models.schedule import BackupSchedule, ScheduleCreate, ScheduleDevice
+from netcanon.models.backup import BackupJob, JobStatus
+from netcanon.models.schedule import BackupSchedule, ScheduleCreate, ScheduleDevice
 
 pytestmark = pytest.mark.unit
 
@@ -259,49 +259,49 @@ class TestBackupJobScheduleFields:
 
 class TestFormatInterval:
     def test_1_minute(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(1) == "Every 1 min"
 
     def test_30_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(30) == "Every 30 min"
 
     def test_59_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(59) == "Every 59 min"
 
     def test_60_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(60) == "Every 1 hour"
 
     def test_120_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(120) == "Every 2 hours"
 
     def test_90_minutes_integer_division(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(90) == "Every 1 hour"
 
     def test_1439_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(1439) == "Every 23 hours"
 
     def test_1440_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(1440) == "Every 1 day"
 
     def test_2880_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(2880) == "Every 2 days"
 
     def test_10079_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(10079) == "Every 6 days"
 
     def test_10080_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(10080) == "Every 1 week"
 
     def test_20160_minutes(self):
-        from netconfig.api.routes.ui import _format_interval
+        from netcanon.api.routes.ui import _format_interval
         assert _format_interval(20160) == "Every 2 weeks"

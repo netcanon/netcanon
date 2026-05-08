@@ -24,10 +24,10 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netconfig.models.migration import MigrationJobStatus
-from netconfig.services.migration_pipeline import run_plan
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.models.migration import MigrationJobStatus
+from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
 
@@ -217,7 +217,7 @@ class TestStageOrdering:
         If parse ran first we'd get 'malformed XML'; getting the
         class-guard message instead proves stage 0 is really first."""
         from tests.unit.migration.test_device_class import _make_adapter
-        from netconfig.models.migration import DeviceClass
+        from netcanon.models.migration import DeviceClass
 
         sw = _make_adapter("sw_only", [DeviceClass.switch])
         fw = _make_adapter("fw_only", [DeviceClass.firewall])

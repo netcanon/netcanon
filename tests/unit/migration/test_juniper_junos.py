@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
@@ -23,9 +23,9 @@ from netconfig.migration.canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.base import ParseError
-from netconfig.migration.codecs.juniper_junos import JunosCodec
-from netconfig.migration.codecs.juniper_junos.port_names import (
+from netcanon.migration.codecs.base import ParseError
+from netcanon.migration.codecs.juniper_junos import JunosCodec
+from netcanon.migration.codecs.juniper_junos.port_names import (
     classify_port_name,
     format_port_identity,
 )
@@ -417,7 +417,7 @@ class TestPortNames:
     def test_format_cross_vendor_cisco_to_junos(self):
         """Cisco GigabitEthernet1/0/24 (stack=1, module=0, port=24)
         → Junos ge-1/0/24."""
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
         )
         cisco_ident = cisco_classify("GigabitEthernet1/0/24")
@@ -427,7 +427,7 @@ class TestPortNames:
     def test_format_cross_vendor_tengig(self):
         """Cisco TenGigabitEthernet1/0/48 → Junos xe-1/0/48
         (speed hint drives media prefix choice)."""
-        from netconfig.migration.codecs.cisco_iosxe_cli.port_names import (
+        from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
         )
         cisco_ident = cisco_classify("TenGigabitEthernet1/0/48")
@@ -1356,13 +1356,13 @@ class TestBlockFormParse:
     def test_mixed_input_still_rejected_if_not_blockform(self):
         """JSON-shaped input still raises (starts with `{` but isn't
         Junos hierarchical)."""
-        from netconfig.migration.codecs.base import ParseError
+        from netcanon.migration.codecs.base import ParseError
         raw = '{"hostname": "not-junos"}'
         with pytest.raises(ParseError):
             JunosCodec().parse(raw)
 
     def test_unbalanced_braces_raises(self):
-        from netconfig.migration.codecs.base import ParseError
+        from netcanon.migration.codecs.base import ParseError
         raw = "system {\n    host-name sw1;\n"  # no closing `}`
         with pytest.raises(ParseError):
             JunosCodec().parse(raw)
@@ -1412,8 +1412,8 @@ class TestVxlanSwitchOptions:
             assert rec.source_interface == "lo0.0"
 
     def test_render_emits_switch_options_when_set(self):
-        from netconfig.migration.canonical.intent import CanonicalVxlan
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import CanonicalVxlan
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent as _CI,
             CanonicalVlan as _CV,
         )
@@ -1431,8 +1431,8 @@ class TestVxlanSwitchOptions:
         assert "set switch-options vxlan-port" not in out
 
     def test_render_emits_non_default_udp_port(self):
-        from netconfig.migration.canonical.intent import CanonicalVxlan
-        from netconfig.migration.canonical.intent import (
+        from netcanon.migration.canonical.intent import CanonicalVxlan
+        from netcanon.migration.canonical.intent import (
             CanonicalIntent as _CI,
             CanonicalVlan as _CV,
         )

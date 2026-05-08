@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.logging_config.configure_logging``.
+Unit tests for ``netcanon.logging_config.configure_logging``.
 
 Each test runs against a clean root logger state; the ``reset_root_logger``
 fixture restores the original handlers and level after every test so tests
@@ -12,7 +12,7 @@ import logging.handlers
 
 import pytest
 
-from netconfig.logging_config import configure_logging
+from netcanon.logging_config import configure_logging
 
 pytestmark = pytest.mark.unit
 
@@ -24,7 +24,7 @@ def reset_root_logger():
     Clearing non-pytest handlers at entry is what lets these tests
     exercise :func:`configure_logging`'s "first call" code path — the
     function short-circuits when the root already has application
-    handlers, so if an earlier module import (e.g. ``netconfig.main``)
+    handlers, so if an earlier module import (e.g. ``netcanon.main``)
     installed a console handler, the tests would otherwise see a
     no-op and assert against stale state.  The fixture restores the
     original handler set afterwards so other test modules are
@@ -111,12 +111,12 @@ class TestFileHandler:
         assert any(isinstance(h, logging.handlers.RotatingFileHandler) for h in handlers)
 
     def test_creates_parent_directories(self, tmp_path):
-        log_file = tmp_path / "a" / "b" / "c" / "netconfig.log"
+        log_file = tmp_path / "a" / "b" / "c" / "netcanon.log"
         configure_logging(log_file=log_file)
         assert log_file.parent.exists()
 
     def test_log_file_receives_messages(self, tmp_path):
-        log_file = tmp_path / "netconfig.log"
+        log_file = tmp_path / "netcanon.log"
         configure_logging(level="DEBUG", log_file=log_file)
         logging.getLogger("test.write").info("probe-message-xyz")
         for h in logging.getLogger().handlers:
@@ -157,11 +157,11 @@ class TestNoisyLoggerSuppression:
         assert logging.getLogger("asyncio").level == logging.WARNING
 
     def test_application_loggers_not_suppressed(self):
-        """netconfig.* loggers must NOT be individually suppressed."""
+        """netcanon.* loggers must NOT be individually suppressed."""
         configure_logging(level="DEBUG")
         # NOTSET means "inherit from parent / root" — correct behaviour.
-        assert logging.getLogger("netconfig").level == logging.NOTSET
-        assert logging.getLogger("netconfig.api.routes.backups").level == logging.NOTSET
+        assert logging.getLogger("netcanon").level == logging.NOTSET
+        assert logging.getLogger("netcanon.api.routes.backups").level == logging.NOTSET
 
 
 # ---------------------------------------------------------------------------
@@ -179,7 +179,7 @@ class TestRequestIdFilter:
         """Outside a request scope, REQUEST_ID_CTX returns '-'.  The
         filter must preserve the column alignment by injecting the
         sentinel rather than leaving the attribute missing."""
-        from netconfig.logging_config import (
+        from netcanon.logging_config import (
             REQUEST_ID_CTX,
             RequestIdFilter,
         )
@@ -193,7 +193,7 @@ class TestRequestIdFilter:
         assert record.request_id == "-"
 
     def test_filter_uses_contextvar_value(self):
-        from netconfig.logging_config import (
+        from netcanon.logging_config import (
             REQUEST_ID_CTX,
             RequestIdFilter,
         )
@@ -212,7 +212,7 @@ class TestRequestIdFilter:
         """Explicit ``extra={'request_id': '...'}`` instrumentation
         wins over the contextvar — a deliberate override shouldn't
         get stomped by the filter."""
-        from netconfig.logging_config import RequestIdFilter
+        from netcanon.logging_config import RequestIdFilter
         record = logging.LogRecord(
             name="test", level=logging.INFO, pathname="",
             lineno=0, msg="hello", args=(), exc_info=None,
@@ -223,7 +223,7 @@ class TestRequestIdFilter:
 
     def test_configure_logging_installs_filter_on_console(self):
         configure_logging()
-        from netconfig.logging_config import RequestIdFilter
+        from netcanon.logging_config import RequestIdFilter
         console_handlers = [
             h for h in logging.getLogger().handlers
             if type(h) is logging.StreamHandler
@@ -236,7 +236,7 @@ class TestRequestIdFilter:
 
     def test_configure_logging_installs_filter_on_file(self, tmp_path):
         configure_logging(log_file=tmp_path / "req.log")
-        from netconfig.logging_config import RequestIdFilter
+        from netcanon.logging_config import RequestIdFilter
         file_handlers = [
             h for h in logging.getLogger().handlers
             if isinstance(h, logging.handlers.RotatingFileHandler)
@@ -252,8 +252,8 @@ class TestRequestIdFilter:
     ):
         """End-to-end: set a request id, emit a log, read the file,
         assert the [req=...] column renders with the id."""
-        from netconfig.logging_config import REQUEST_ID_CTX
-        log_file = tmp_path / "netconfig.log"
+        from netcanon.logging_config import REQUEST_ID_CTX
+        log_file = tmp_path / "netcanon.log"
         configure_logging(level="INFO", log_file=log_file)
         token = REQUEST_ID_CTX.set("e2e12345")
         try:

@@ -78,7 +78,7 @@ vendor-specific engineID-derived constants, so an Arista-derived
 passphrase will fail on Cisco after migration.
 
 The schema docstring (`CanonicalSNMPv3User` in
-`netconfig/migration/canonical/intent.py`) documents this directly:
+`netcanon/migration/canonical/intent.py`) documents this directly:
 "Same-vendor round-trip is lossless; cross-vendor migration typically
 requires re-keying on the target device (hashes are salted with
 vendor-specific constants)."

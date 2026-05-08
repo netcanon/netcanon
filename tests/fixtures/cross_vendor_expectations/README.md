@@ -64,7 +64,7 @@ Single-value sub-objects use dot notation (`snmp.communities`,
 `snmp.v3_users`).
 
 The full enumeration of top-level fields is the union of the public
-attributes on `CanonicalIntent` in `netconfig/migration/canonical/intent.py`.
+attributes on `CanonicalIntent` in `netcanon/migration/canonical/intent.py`.
 Every authored YAML file should walk the whole list — fields not
 researched yet should still appear with `disposition: lossy` +
 `reason: "deferred to subsequent audit pass"` rather than be silently
@@ -106,10 +106,10 @@ omitted, so the coverage gap is explicit.
 
 ## Authoring workflow
 
-1.  Read `netconfig/migration/canonical/intent.py` end-to-end to
+1.  Read `netcanon/migration/canonical/intent.py` end-to-end to
     enumerate every top-level field.
 2.  For each field, read the source codec's `CapabilityMatrix` (in
-    `netconfig/migration/codecs/<source>/codec.py`) and the target
+    `netcanon/migration/codecs/<source>/codec.py`) and the target
     codec's matrix.  Drift only matters when both list it as
     `supported`.
 3.  Search vendor docs (Arista TechHub, Junos TechLibrary, Cisco
@@ -127,5 +127,5 @@ omitted, so the coverage gap is explicit.
 - `docs/vendor-references/README.md` — citation cache layout.
 - `tests/fixtures/real/CROSS_MESH_RESULTS.md` — the mechanical
   drift matrix these YAMLs interpret.
-- `netconfig/migration/canonical/intent.py` — the canonical schema
+- `netcanon/migration/canonical/intent.py` — the canonical schema
   whose top-level fields drive the YAML key list.

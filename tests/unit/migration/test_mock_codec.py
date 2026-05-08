@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from netconfig.migration.codecs._mock import MockCodec
-from netconfig.migration.codecs.base import ParseError
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError
 
 pytestmark = pytest.mark.unit
 

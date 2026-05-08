@@ -25,17 +25,17 @@ opnsense target round-trip via the canonical tree).
 from __future__ import annotations
 
 import pytest
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
     CanonicalSNMPv3User,
 )
-from netconfig.migration.codecs.juniper_junos.parse import (
+from netcanon.migration.codecs.juniper_junos.parse import (
     parse_intent as junos_parse,
 )
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.codecs.opnsense.parse import parse_intent
-from netconfig.migration.codecs.opnsense.render import render_intent
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense.parse import parse_intent
+from netcanon.migration.codecs.opnsense.render import render_intent
 
 
 

@@ -14,9 +14,9 @@ OPNsense's primary role is firewalling.  Its config.xml carries:
 The OPNsense codec's capability matrix lists these as
 ``unsupported``:
 
-- ``/filter/rule`` — "Firewall rules require the netconfig-ext YANG
+- ``/filter/rule`` — "Firewall rules require the netcanon-ext YANG
   module (Phase 2) — OpenConfig has no firewall model."
-- ``/nat/outbound`` — "NAT table translation needs netconfig-ext +
+- ``/nat/outbound`` — "NAT table translation needs netcanon-ext +
   careful semantic mapping to target stateful engines."
 
 VPN and captive-portal blocks are not in the canonical model at all.

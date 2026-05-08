@@ -23,15 +23,15 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalLAG,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.juniper_junos.parse import parse_intent
-from netconfig.migration.codecs.juniper_junos.render import render_intent
+from netcanon.migration.codecs.juniper_junos.parse import parse_intent
+from netcanon.migration.codecs.juniper_junos.render import render_intent
 
 pytestmark = pytest.mark.unit
 

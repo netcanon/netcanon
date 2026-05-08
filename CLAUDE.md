@@ -18,15 +18,15 @@ tracks per-codec certification state.
 
 Netcanon handles two independent (but co-hosted) concerns:
 
-1. **Backup** — `netconfig/collectors/` + `netconfig/api/routes/backups.py`.
+1. **Backup** — `netcanon/collectors/` + `netcanon/api/routes/backups.py`.
    Pulls raw `running-config` (or vendor equivalent) from devices over
    SSH / NETCONF / REST and stores in `configs/<host>.<ext>`.  Mocked in
    tests at a single entry point: `get_collector`.
-2. **Migration** — `netconfig/migration/`.  Translates a stored backup
+2. **Migration** — `netcanon/migration/`.  Translates a stored backup
    from one vendor's native config to another through a shared
    `CanonicalIntent` tree.  Per-vendor codecs under
-   `netconfig/migration/codecs/` — see
-   [`netconfig/migration/codecs/README.md`](netconfig/migration/codecs/README.md)
+   `netcanon/migration/codecs/` — see
+   [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md)
    for authorship guide.
 
 A change to one concern rarely touches the other.  When in doubt about
@@ -41,8 +41,8 @@ Netcanon ships on two platforms.  Both must always be kept at feature parity.
 
 | Platform | Package | Entry point |
 |----------|---------|-------------|
-| Web (browser) | `netconfig/` | `uvicorn netconfig.main:app` |
-| Desktop (Windows) | `netconfig_desktop/` | `python -m netconfig_desktop` |
+| Web (browser) | `netcanon/` | `uvicorn netcanon.main:app` |
+| Desktop (Windows) | `netcanon_desktop/` | `python -m netcanon_desktop` |
 
 **Rule:** whenever a functional feature is added or changed on one platform, the
 equivalent must be implemented on the other platform in the same commit (or the
@@ -68,21 +68,21 @@ cross-platform equivalents:
 - MSI installer, Start Menu shortcut, taskbar pinning
 - Embedded WebView window management (hide-to-tray on close, restore on show)
 - Native window chrome (title bar, window icon via `.ico`)
-- `setup_desktop.py` build script and `netconfig_desktop/` package
+- `setup_desktop.py` build script and `netcanon_desktop/` package
 - **Open in text editor** (`config-open-btn`, `POST /api/v1/configs/{filename}/open`) —
   calls `os.startfile()` on the local filesystem.  Only meaningful when the server runs
   on the same machine as the user.  Enabled via `Settings.open_in_editor = True` in
-  `netconfig_desktop/settings.py`.  The web platform equivalent is the existing
+  `netcanon_desktop/settings.py`.  The web platform equivalent is the existing
   **View** button (`config-view-link`) which renders the file in the browser.
-- **Preferences dialog** (`netconfig_desktop/preferences_dialog.py`) — operator-
+- **Preferences dialog** (`netcanon_desktop/preferences_dialog.py`) — operator-
   configurable paths (configs / definitions / data dir), embedded-server port,
   and toggles.  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
-  to the web platform's `NETCONFIG_*` env-var / `.env` configuration surface;
+  to the web platform's `NETCANON_*` env-var / `.env` configuration surface;
   desktop operators have no shell-level knob, so the dialog is the equivalent
   affordance.  PySide6 widgets carry `setObjectName()` IDs following the
   `pref-dialog-<field>-<action>` convention (the desktop equivalent of
   `data-testid` since Qt has no native test-id attribute).
-- **Single-instance enforcement** (`netconfig_desktop/single_instance.py`) —
+- **Single-instance enforcement** (`netcanon_desktop/single_instance.py`) —
   Windows named mutex (`Global\NetcanonSingleInstance_v1`) refuses to launch a
   second copy.  Without this guard the duplicate process fails to bind the
   embedded server's TCP port and surfaces as a confusing fatal-error MessageBox;
@@ -111,7 +111,7 @@ without an explicit product decision to reverse the call:
   open files via the in-app **View** / **Open in editor** affordances
   rather than from File Explorer.
 - **Crash reporting** — fatal errors surface via MessageBoxW and the
-  log file under `%APPDATA%\Netcanon\netconfig.log`; users can attach
+  log file under `%APPDATA%\Netcanon\netcanon.log`; users can attach
   the log to a bug report.  No automatic crash uploads.
 
 ---
@@ -120,10 +120,10 @@ without an explicit product decision to reverse the call:
 
 When adding a feature, verify all of the following before committing:
 
-- [ ] `netconfig/` — new route, service logic, or model implemented
-- [ ] `netconfig/templates/` — new template has `data-testid` on every
+- [ ] `netcanon/` — new route, service logic, or model implemented
+- [ ] `netcanon/templates/` — new template has `data-testid` on every
       interactive element (buttons, inputs, links, table rows)
-- [ ] `netconfig_desktop/` — any new server behaviour is exercised through
+- [ ] `netcanon_desktop/` — any new server behaviour is exercised through
       the embedded server (pure UI pages require no extra desktop work)
 - [ ] `tests/unit/` — pure-function tests cover new logic
 - [ ] `tests/integration/` — API-level tests cover new endpoints
@@ -144,21 +144,21 @@ mapping below is concrete; audit every applicable row before you run
 |---|---|
 | A new interactive HTML element (button, input, link, row, `<select>`, `<option>` inside a form) | `tests/testid_reference.md` — document the new `data-testid` in the appropriate page section.  **Self-check:** run `grep -r 'data-testid="<new-id>"' tests/testid_reference.md` before committing; if it returns nothing, you haven't done the update. |
 | A new Jinja partial (`templates/_partials/<name>.js`) | The file-level comment block in the parent template (e.g. `migrate.html`'s "Contents map" comment) **and** the "Template organisation" section of `ARCHITECTURE.md` if the partial introduces a new pattern |
-| A new codec under `netconfig/migration/codecs/<vendor>/` | `netconfig/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
-| A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netconfig/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
+| A new codec under `netcanon/migration/codecs/<vendor>/` | `netcanon/migration/codecs/README.md` — update the "Shape of a codec" codec count + wire-format table; add the vendor to `ARCHITECTURE.md` if it's a new wire-format class |
+| A new module inside an existing codec (e.g. `port_names.py`, `vlan_heuristics.py`, `_svi_absorption.py`) | `netcanon/migration/codecs/README.md` "Module layout" section if the pattern is worth propagating to other codecs |
 | A new target-profile YAML under `definitions/target_profiles/` | Per-profile unit test in `tests/unit/migration/test_target_profile_shipped.py` asserting exact port-name list + count (regression guard against copy-paste mistakes) |
 | A target-profile gains `modules:` (migrates to module-variant shape) | Add its `{vendor}/{model}` key to the canonical allowlist at `tests/fixtures/module_variants.py`.  Both the unit-tier and integration-tier tests import from there; a CI-guard (`test_module_variant_allowlist_shared_with_integration_tier`) enforces the single-source invariant so no manual sync is required. |
 | A new canonical field on `CanonicalIntent` / `CanonicalInterface` / etc. | `docs/adding-a-canonical-field.md` — the MTU wire-through is the reference worked example |
-| A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netconfig/api/routes/migration.py`, `netconfig/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
+| A new route, endpoint, or public function in a module whose top-of-file docstring enumerates contents (e.g. `netcanon/api/routes/migration.py`, `netcanon/services/migration_pipeline.py`) | The module docstring itself — if it lists endpoints / phases / public surface, your addition changes that list.  "Phase 2 *will* add …" comments become lies the instant Phase 2 lands.  Module docstrings that describe *intent* rather than *inventory* are unaffected. |
 | A new hard rule / cross-cutting invariant surfaced by a bug | This file (`CLAUDE.md`) — add to the "Hard Rules (Never Break)" section with a one-line rationale pointing at the failure mode |
 | A codec is promoted to `best_effort` or `certified` | `tests/fixtures/real/RESULTS.md` — update the coverage matrix and certification decision; ARCHITECTURE.md's cert paragraph intentionally defers to RESULTS.md as source of truth |
 | A new real-capture fixture under `tests/fixtures/real/<vendor>/` | `tests/fixtures/real/NOTICE.md` — provenance + attribution; `tests/fixtures/real/RESULTS.md` — coverage matrix row |
 | A new pytest marker in `pyproject.toml` (`[tool.pytest.ini_options] markers = [...]`) or a new conftest fixture that meaningfully changes how a whole test tier runs | `tests/README.md` — the markers table and/or the "How to run" section.  Markers without doc entries are invisible to contributors running `pytest -m <name>`. |
-| A file-tree listing or "contents map" in any doc (`ARCHITECTURE.md` partial inventories, migrate.html header comment, sub-README directory trees) | Either update the listing in the same commit as the new file, OR convert the listing to a pointer ("see `netconfig/templates/_partials/` for the current set").  Exhaustive inventories that enumerate every file become a maintenance tax — prefer one-line pointers unless the enumeration carries load-bearing explanation. |
+| A file-tree listing or "contents map" in any doc (`ARCHITECTURE.md` partial inventories, migrate.html header comment, sub-README directory trees) | Either update the listing in the same commit as the new file, OR convert the listing to a pointer ("see `netcanon/templates/_partials/` for the current set").  Exhaustive inventories that enumerate every file become a maintenance tax — prefer one-line pointers unless the enumeration carries load-bearing explanation. |
 | A fourth or subsequent commit shipping pieces of the *same* new conceptual subsystem (e.g. target profiles, module variants, per-pane overrides, cross-mesh validation) | `ARCHITECTURE.md` — at the Nth commit of a thematic series, ask: "does the architecture doc have a section describing this concept, or only the piecemeal mechanics?"  If the concept is absent, add a short section in that same commit.  N is a judgement call but 3-5 commits is the rough threshold. |
 | A function gains a new parameter or changes return shape | Its docstring (Google-style sections for Args / Returns / Raises) |
 | A pipeline-stage signature (anywhere in `migration_pipeline.py`) | **DON'T.**  These are frozen (see Hard Rules).  Add a NEW function instead; the module docstring tracks which are frozen |
-| The module-variant schema gets a new field on `TargetProfile` / `TargetModule` | The class docstring in `netconfig/migration/target_profiles.py` — it includes a worked YAML example that must stay accurate |
+| The module-variant schema gets a new field on `TargetProfile` / `TargetModule` | The class docstring in `netcanon/migration/target_profiles.py` — it includes a worked YAML example that must stay accurate |
 | In-file references like "see commit abc1234" in a partial or module comment | Fine to include for load-bearing rationale; don't rely on them for discoverability — put the same info in a nearby README if other contributors need it |
 | A new CSS colour added to `base.html` (or any template's `<style>` block) | Use `var(--token)` referencing the theme-token set at the top of `base.html`'s `<style>` block.  Add a new token to BOTH the `:root` (light) and `[data-theme="dark"]` (dark) blocks if no existing token fits — a new raw hex that only works in light mode WILL look wrong in dark mode.  See ARCHITECTURE.md "Theming (dark mode)" for the three load-bearing rules |
 | A capability-matrix change on a codec (xpath flips between supported / lossy / unsupported) | The matching expectation YAML under `tests/fixtures/cross_vendor_expectations/` for every pair the codec participates in, AND a regen commit for `CROSS_MESH_RESULTS.md` + `PHASE4_RECONCILIATION.md` (run `python tools/run_full_mesh.py --matrix` followed by `python tools/run_phase4_reconciliation.py`) |
@@ -181,8 +181,8 @@ peers.  Concretely:
 * `tests/README.md` → `testid_reference.md`, `fixtures/real/RESULTS.md`,
   `fixtures/real/NOTICE.md`
 * `ARCHITECTURE.md` → `definitions/README.md`,
-  `netconfig/migration/codecs/README.md`,
-  `netconfig/migration/canonical/README.md`,
+  `netcanon/migration/codecs/README.md`,
+  `netcanon/migration/canonical/README.md`,
   `tests/fixtures/real/RESULTS.md`
 * `README.md` → `ARCHITECTURE.md`, `CLAUDE.md`, `tests/README.md`
 
@@ -199,7 +199,7 @@ See [`tests/README.md`](tests/README.md) for the full test-tier
 layout (sub-trees under `tests/unit/` for `audit/`, `api/`,
 `definitions/`, `migration/`, `tools/`, plus the integration / e2e /
 desktop tiers) and the top-level repo tree
-(`netconfig/`, `netconfig_desktop/`, `definitions/target_profiles/`,
+(`netcanon/`, `netcanon_desktop/`, `definitions/target_profiles/`,
 `tools/`).  Top-level orientation lives in
 [`README.md`](README.md)'s "Layout" section.
 
@@ -251,13 +251,13 @@ tests use these exclusively — never CSS classes or element structure.  See
   `CHANGELOG.md` (as-of-this-commit pass counts, historical LOC deltas)
   are exempt — they're timestamps, not current-state claims.
 - **Never** patch `ConnectHandler` or `paramiko.SSHClient` directly in tests —
-  patch `netconfig.api.routes.backups.get_collector` instead (the single
+  patch `netcanon.api.routes.backups.get_collector` instead (the single
   factory used by the backup route).
 - **Never** assert on the POST `/api/v1/backups` response body for final job
   state — it always returns `pending` (serialised before background task runs).
   Always GET the job by ID to read the completed state.
 - **Never** change the signatures of the existing pipeline-stage functions
-  in `netconfig/services/migration_pipeline.py`.  API routes and dozens of
+  in `netcanon/services/migration_pipeline.py`.  API routes and dozens of
   tests depend on their exact shape.  Later phases add NEW public
   functions; existing stages stay frozen.  See the module docstring.
 - **Never** commit real credential hashes to test fixtures.  Synthetic

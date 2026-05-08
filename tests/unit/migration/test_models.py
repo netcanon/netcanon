@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.models.migration``.
+Unit tests for ``netcanon.models.migration``.
 
 Covers the pydantic validation + the ``CapabilityMatrix.classify``
 resolution rules.  No service-layer or adapter code is exercised
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.models.migration import (
+from netcanon.models.migration import (
     CodecInfo,
     CapabilityMatrix,
     LossyPath,

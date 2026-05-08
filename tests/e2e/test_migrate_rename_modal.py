@@ -741,7 +741,7 @@ class TestRenameModalLocalStoragePersistence:
         # localStorage should no longer have the ack entry.
         remaining = page.evaluate(
             "() => { var hits = []; for (var i = 0; i < localStorage.length; i++) "
-            "{ var k = localStorage.key(i); if (k && k.indexOf('netconfig.rename-ack.') === 0) "
+            "{ var k = localStorage.key(i); if (k && k.indexOf('netcanon.rename-ack.') === 0) "
             "hits.push(k); } return hits; }"
         )
         assert remaining == []

@@ -9,7 +9,7 @@ Retrieved: 2026-05-01
 Source: [Junos Protocol Family and Interface Address Properties](https://www.juniper.net/documentation//us/en/software/junos/interfaces-fundamentals/topics/topic-map/protocol-family-interface-address-properties.html)
 Retrieved: 2026-05-01
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`
 (in-tree code documenting what the parser carries through)
 Retrieved: 2026-05-01
 

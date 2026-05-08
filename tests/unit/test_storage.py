@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig.storage.file_store.FileConfigStore``.
+Unit tests for ``netcanon.storage.file_store.FileConfigStore``.
 
 All I/O is directed to pytest's ``tmp_path`` — no network, no shared state.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from netconfig.storage.file_store import FileConfigStore
+from netcanon.storage.file_store import FileConfigStore
 
 pytestmark = pytest.mark.unit
 

@@ -196,7 +196,7 @@ only via `resolve()`.
   `os_version: "4.32"` resolve), and the chassis model from the leading
   `Arista DCS-…` / `Arista CCS-…` / `Arista vEOS-…` line.
 - Pairs with the Arista EOS migration codec at
-  `netconfig/migration/codecs/arista_eos` for round-tripping
+  `netcanon/migration/codecs/arista_eos` for round-tripping
   ``show running-config``.
 
 ---
@@ -204,5 +204,5 @@ only via `resolve()`.
 ## See also
 
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — four-layer design (definitions feed both the backup collectors and the migration target-profile picker)
-- [`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md) — codec authorship guide (each codec consumes target-profile shape)
-- [`../netconfig/collectors/README.md`](../netconfig/collectors/README.md) — collector strategies a definition's `connection` block selects from
+- [`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md) — codec authorship guide (each codec consumes target-profile shape)
+- [`../netcanon/collectors/README.md`](../netcanon/collectors/README.md) — collector strategies a definition's `connection` block selects from

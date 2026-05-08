@@ -24,7 +24,7 @@ configuration guide — it is the canonical Arista EOS way to express
 
 The Arista codec parses these into `CanonicalRoutingInstance` records
 with `instance_type = "mac-vrf"` (see
-`netconfig/migration/codecs/arista_eos/parse.py`
+`netcanon/migration/codecs/arista_eos/parse.py`
 `_parse_router_bgp_vrf_routing_instances` and the GAP-EVPN-1
 discussion in that function's docstring).
 
@@ -55,7 +55,7 @@ sub-stanza of `router bgp`.
 The Arista codec populates `CanonicalRoutingInstance` records with
 `instance_type = "mac-vrf"` for each per-VLAN binding.  The Cisco
 IOS-XE render path **does not** emit MAC-VRF records:
-`netconfig/migration/codecs/cisco_iosxe_cli/render.py` walks
+`netcanon/migration/codecs/cisco_iosxe_cli/render.py` walks
 `tree.routing_instances` and emits `vrf definition` blocks (the L3
 form), making no special handling for `instance_type == "mac-vrf"`.
 

@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from netconfig.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
-from netconfig.definitions.loader import DefinitionLoader
-from netconfig.definitions.schema import DeviceDefinition
+from netcanon.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
+from netcanon.definitions.loader import DefinitionLoader
+from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 

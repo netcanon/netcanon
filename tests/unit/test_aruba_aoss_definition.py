@@ -6,7 +6,7 @@ repository tree (not a tmp fixture) and assert the schema-validated
 shape plus the probe regex behaviour against canned ``show system``
 output captured from real Aruba 2530/2930F switches.
 
-The codec pairing lives at ``netconfig/migration/codecs/aruba_aoss``;
+The codec pairing lives at ``netcanon/migration/codecs/aruba_aoss``;
 this definition is what the backup pipeline uses to *fetch* the
 ``running-config`` whose translation that codec performs.
 """
@@ -18,8 +18,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from netconfig.collectors.probe import parse_probe_output
-from netconfig.definitions.schema import DeviceDefinition
+from netcanon.collectors.probe import parse_probe_output
+from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
@@ -183,7 +183,7 @@ class TestArubaDefinitionLoaderIntegration:
     def test_loader_picks_up_aruba_family_base(self, tmp_path):
         """When pointed at a tree containing the Aruba YAML, the loader
         returns it under its declared type_key."""
-        from netconfig.definitions.loader import DefinitionLoader
+        from netcanon.definitions.loader import DefinitionLoader
 
         defs = tmp_path / "definitions"
         (defs / "aruba" / "aos-s").mkdir(parents=True)

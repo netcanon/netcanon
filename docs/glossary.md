@@ -9,7 +9,7 @@ by concern and listed alphabetically within each section.
 
 - **CanonicalIntent** — the root model of the 4-layer intermediate
   representation. Every codec parses into, and renders from, this
-  vendor-neutral tree. Reference `netconfig/migration/canonical/intent.py`.
+  vendor-neutral tree. Reference `netcanon/migration/canonical/intent.py`.
 - **Capture-first transform** — load-bearing pattern in
   `run_plan_with_overrides` that populates `source_vlans`,
   `source_local_users`, `source_snmp_community`, `source_snmpv3_users`,
@@ -20,7 +20,7 @@ by concern and listed alphabetically within each section.
   `run_plan`, `run_plan_with_rename`, and `run_plan_with_overrides` are
   immutable; new override categories are added onto
   `run_plan_with_overrides` rather than by changing existing signatures.
-  Reference `netconfig/services/migration_pipeline.py`.
+  Reference `netcanon/services/migration_pipeline.py`.
 - **Sentinel semantics** — convention for per-pane override maps.
   `None` = don't engage the rename rail; `{}` = auto-heuristic;
   `{src: tgt}` = explicit rename; `{src: None}` = drop the entity.

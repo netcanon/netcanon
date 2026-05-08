@@ -2,7 +2,7 @@
 Unit tests for pure helpers inside ``paramiko_collector``.
 
 We do NOT mock paramiko / SSHClient here (see CLAUDE.md hard rule:
-integration tests patch ``netconfig.api.routes.backups.get_collector``
+integration tests patch ``netcanon.api.routes.backups.get_collector``
 instead).  This file covers the pure-function helpers that have no
 I/O dependency — currently ``_strip_command_echo``, which prevents
 OPNsense backup files landing on disk with a literal ``cat /conf/
@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.collectors.paramiko_collector import _strip_command_echo
+from netcanon.collectors.paramiko_collector import _strip_command_echo
 
 pytestmark = pytest.mark.unit
 

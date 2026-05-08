@@ -1,6 +1,6 @@
 # OpenConfig YANG render scope of the cisco_iosxe codec
 
-Source: `netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.render`
+Source: `netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec.render`
 and `_render_canonical` (authoritative in-tree source for "what the
 renderer emits")
 Retrieved: 2026-05-01

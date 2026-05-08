@@ -158,5 +158,5 @@ migration.
 The canonical schema gap is intentional in v1 (Tier 3 policy
 semantics differ enough between vendors that auto-translation would
 be unsafe).  Future work: extend canonical with a vendor-portable
-firewall-rule model (likely netconfig-ext YANG style); currently
+firewall-rule model (likely netcanon-ext YANG style); currently
 not scheduled.

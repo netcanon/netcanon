@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.aruba_aoss.parse import parse_intent
+from netcanon.migration.codecs.aruba_aoss.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 
@@ -54,7 +54,7 @@ def test_parse_projection_is_idempotent_when_called_twice() -> None:
     """``project_switchport_to_vlan`` is documented as idempotent.
     Importing + invoking it again on a parsed intent must produce the
     same canonical tree — the helper guards against double-add."""
-    from netconfig.migration.canonical.transforms import (
+    from netcanon.migration.canonical.transforms import (
         project_switchport_to_vlan,
     )
 

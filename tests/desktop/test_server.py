@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.server``.
+Unit tests for ``netcanon_desktop.server``.
 
 Uses a real (but tiny) ASGI app running on a free port so we can verify the
 readiness polling without mocking Uvicorn internals.
@@ -14,7 +14,7 @@ from starlette.applications import Starlette
 from starlette.responses import PlainTextResponse
 from starlette.routing import Route
 
-from netconfig_desktop.server import ServerThread
+from netcanon_desktop.server import ServerThread
 
 pytestmark = pytest.mark.desktop
 

@@ -3,14 +3,14 @@ Smoke test confirming the embedded desktop server serves the Juniper
 Junos definition.
 
 The desktop platform creates its FastAPI app via the same
-``netconfig.main.create_app`` factory the web platform uses, but
+``netcanon.main.create_app`` factory the web platform uses, but
 configures Settings with desktop-specific paths (APPDATA in frozen
 mode, repo-relative in dev).  The risk a BD agent introduces: shipping
 a YAML that validates standalone but breaks the desktop's definition
 load (e.g. a path that only resolves when the cwd is the repo root).
 
 This test runs the embedded server in-process via TestClient (the
-same machinery `netconfig_desktop.server.ServerThread` wraps in
+same machinery `netcanon_desktop.server.ServerThread` wraps in
 production) against a Settings tree containing the real Junos YAML,
 then asserts:
 
@@ -34,9 +34,9 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from netconfig.collectors.base import BaseCollector
-from netconfig.config import Settings
-from netconfig.main import create_app
+from netcanon.collectors.base import BaseCollector
+from netcanon.config import Settings
+from netcanon.main import create_app
 
 pytestmark = pytest.mark.desktop
 
@@ -79,7 +79,7 @@ def junos_desktop_settings(tmp_path) -> Settings:
 def junos_desktop_client(junos_desktop_settings):
     app = create_app(junos_desktop_settings)
     with patch(
-        "netconfig.api.routes.backups.get_collector",
+        "netcanon.api.routes.backups.get_collector",
         return_value=_NoopCollector(),
     ):
         with TestClient(app, raise_server_exceptions=True) as c:

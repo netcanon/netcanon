@@ -28,10 +28,10 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from netconfig.collectors.base import BaseCollector
-from netconfig.definitions.schema import DeviceDefinition
-from netconfig.main import create_app
-from netconfig.models.device import DeviceTarget
+from netcanon.collectors.base import BaseCollector
+from netcanon.definitions.schema import DeviceDefinition
+from netcanon.main import create_app
+from netcanon.models.device import DeviceTarget
 
 from tests.conftest import CISCO_FAKE_OUTPUT
 
@@ -132,7 +132,7 @@ class FakeProbingCollector(BaseCollector):
             return {}
         # Parse against the definition's own patterns — same path the
         # real NetmikoCollector.probe takes.
-        from netconfig.collectors.probe import parse_probe_output
+        from netcanon.collectors.probe import parse_probe_output
         return parse_probe_output(self.probe_output, definition.probe)
 
 
@@ -141,7 +141,7 @@ def probing_settings(tmp_path: Path):
     """Settings with a Cisco definition that declares a probe block
     + a 17.12 overlay.  No OPNsense definition — these tests don't
     need it."""
-    from netconfig.config import Settings
+    from netcanon.config import Settings
 
     defs_dir = tmp_path / "definitions"
     cisco_dir = defs_dir / "cisco"
@@ -211,7 +211,7 @@ class TestProbeFailureIsNonFatal:
     ):
         collector = FakeProbingCollector(probe_raises=True)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -230,7 +230,7 @@ class TestProbeFailureIsNonFatal:
     ):
         collector = FakeProbingCollector(probe_output="uninteresting output")
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -242,7 +242,7 @@ class TestDetectedFactsPersistence:
     def test_facts_persist_onto_linked_profile(self, probing_app):
         collector = FakeProbingCollector(probe_output=_PROBE_OUTPUT_1712)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -262,7 +262,7 @@ class TestDetectedFactsPersistence:
         persist anywhere — detected_facts is a profile-local concept."""
         collector = FakeProbingCollector(probe_output=_PROBE_OUTPUT_1712)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -276,7 +276,7 @@ class TestLayeredResolveFromDetectedFacts:
         """Probe reports 17.12.x; resolver picks the 17.12 overlay."""
         collector = FakeProbingCollector(probe_output=_PROBE_OUTPUT_1712)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -294,7 +294,7 @@ class TestLayeredResolveFromDetectedFacts:
         back to family base."""
         collector = FakeProbingCollector(probe_output=_PROBE_OUTPUT_1709)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -308,7 +308,7 @@ class TestLayeredResolveFromDetectedFacts:
         wins.  Documents the precedence rule."""
         collector = FakeProbingCollector(probe_output=_PROBE_OUTPUT_1709)
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(probing_app) as client:
@@ -333,7 +333,7 @@ class TestLegacyDefinitionsUnchanged:
 
         collector = FakeCollector()
         with patch(
-            "netconfig.api.routes.backups.get_collector",
+            "netcanon.api.routes.backups.get_collector",
             return_value=collector,
         ):
             with TestClient(test_app) as client:
@@ -363,7 +363,7 @@ class TestShippedCiscoIOSXEProbeBlock:
     """
 
     def test_cisco_iosxe_family_base_declares_probe(self):
-        from netconfig.definitions.loader import DefinitionLoader
+        from netcanon.definitions.loader import DefinitionLoader
 
         # Project-root definitions/ directory — the shipped set.
         repo_root = Path(__file__).resolve().parents[2]
@@ -392,7 +392,7 @@ class TestShippedCiscoIOSXEProbeBlock:
     def test_cisco_iosxe_1712_overlay_inherits_probe_from_family_base(self):
         """Overlay intentionally does NOT declare its own probe block.
         Probe runs on the family-base collector before resolve()."""
-        from netconfig.definitions.loader import DefinitionLoader
+        from netcanon.definitions.loader import DefinitionLoader
 
         repo_root = Path(__file__).resolve().parents[2]
         defs_dir = repo_root / "definitions"

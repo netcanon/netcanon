@@ -13,7 +13,7 @@ those surfaces ``supported`` to keep cross-mesh translations from
 classifying them as unsupported on the target side, but the actual
 emit path was narrow.  Wave 10γ-2 lifted those un-rendered surfaces to
 ``unsupported`` so cross-mesh expectation YAMLs and the
-:func:`netconfig.services.migration_validate.validate_against`
+:func:`netcanon.services.migration_validate.validate_against`
 classifier reason against accurate capability data.
 
 This module is the regression guard against a future render expansion
@@ -29,7 +29,7 @@ When the cisco_iosxe render is genuinely expanded to walk e.g.
 test will fail loudly — at which point the operator should:
 
 1. Move the corresponding ``UnsupportedPath`` to ``supported``.
-2. Update :func:`netconfig.migration.codecs.cisco_iosxe_cli.codec._walk_canonical`
+2. Update :func:`netcanon.migration.codecs.cisco_iosxe_cli.codec._walk_canonical`
    if the new emission needs new xpath shapes.
 3. Update the relevant per-pair YAMLs under
    ``tests/fixtures/cross_vendor_expectations/*__cisco_iosxe.yaml``
@@ -40,7 +40,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
     CanonicalEvpnType5Route,
     CanonicalIntent,
@@ -56,7 +56,7 @@ from netconfig.migration.canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
-from netconfig.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 
 pytestmark = pytest.mark.unit
 
@@ -349,7 +349,7 @@ class TestGranularXpathDeclarations:
         caps = CiscoIOSXECodec().capabilities
         # Granular xpath shapes from _walk_canonical that target
         # un-rendered surfaces.  Mirrors the canonical walker's emit
-        # shapes — see netconfig.migration.codecs.cisco_iosxe_cli.codec
+        # shapes — see netcanon.migration.codecs.cisco_iosxe_cli.codec
         # ._walk_canonical.
         unrendered_walker_xpaths = [
             "/system/hostname",

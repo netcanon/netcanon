@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.preferences_dialog.PreferencesDialog``.
+Unit tests for ``netcanon_desktop.preferences_dialog.PreferencesDialog``.
 
 PySide6 is mocked via the shared ``mock_pyside6`` fixture (which extends
 the namespace with QSpinBox / QCheckBox / QFormLayout / QFileDialog /
@@ -17,7 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from netconfig_desktop.preferences import DesktopPreferences
+from netcanon_desktop.preferences import DesktopPreferences
 
 pytestmark = pytest.mark.desktop
 
@@ -144,7 +144,7 @@ def mock_qt_dialog(mock_pyside6):
 @pytest.fixture()
 def dialog(mock_qt_dialog, tmp_path):
     """Return a created PreferencesDialog with default preferences."""
-    from netconfig_desktop.preferences_dialog import PreferencesDialog
+    from netcanon_desktop.preferences_dialog import PreferencesDialog
 
     prefs = DesktopPreferences()
     d = PreferencesDialog(
@@ -186,7 +186,7 @@ class TestBrowseButtons:
     def test_browse_uses_current_value_as_starting_dir(
         self, mock_qt_dialog, tmp_path
     ):
-        from netconfig_desktop.preferences_dialog import PreferencesDialog
+        from netcanon_desktop.preferences_dialog import PreferencesDialog
 
         # Path is normalised to native separators by str(Path(...));
         # use the round-trip so the assertion works on both posix and win32.
@@ -271,7 +271,7 @@ class TestOpenConfigsFolder:
     def test_open_configs_uses_default_when_field_empty(
         self, mock_qt_dialog, dialog, tmp_path
     ):
-        with patch("netconfig_desktop.preferences_dialog.os.startfile",
+        with patch("netcanon_desktop.preferences_dialog.os.startfile",
                    create=True) as mock_startfile:
             dialog._open_configs_folder()
         mock_startfile.assert_called_once_with(
@@ -282,7 +282,7 @@ class TestOpenConfigsFolder:
         self, mock_qt_dialog, dialog, tmp_path
     ):
         dialog._configs_edit.setText(str(tmp_path / "from_form"))
-        with patch("netconfig_desktop.preferences_dialog.os.startfile",
+        with patch("netcanon_desktop.preferences_dialog.os.startfile",
                    create=True) as mock_startfile:
             dialog._open_configs_folder()
         mock_startfile.assert_called_once_with(
@@ -293,7 +293,7 @@ class TestOpenConfigsFolder:
         self, mock_qt_dialog, dialog
     ):
         with patch(
-            "netconfig_desktop.preferences_dialog.os.startfile",
+            "netcanon_desktop.preferences_dialog.os.startfile",
             create=True, side_effect=OSError("not on Windows"),
         ):
             # Should not raise
@@ -302,7 +302,7 @@ class TestOpenConfigsFolder:
 
 class TestExecRequiresCreate:
     def test_exec_before_create_raises(self, mock_qt_dialog, tmp_path):
-        from netconfig_desktop.preferences_dialog import PreferencesDialog
+        from netcanon_desktop.preferences_dialog import PreferencesDialog
 
         d = PreferencesDialog(
             prefs=DesktopPreferences(),

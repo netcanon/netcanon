@@ -27,7 +27,7 @@ entries each carrying:
   * `ipv6/addresses/address/{ip, config/ip, config/prefix-length}`
 
 This is the entire surface area emitted by
-`netconfig.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical()`.
+`netcanon.migration.codecs.cisco_iosxe.codec.CiscoIOSXECodec._render_canonical()`.
 The codec walks `intent.interfaces` and emits exactly the fields
 above.  No other intent fields drive XML emission on the render path.
 

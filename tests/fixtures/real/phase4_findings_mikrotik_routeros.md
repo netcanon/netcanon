@@ -48,7 +48,7 @@ The five mikrotik_routeros source fixtures driving these cells are:
   parser correctly strips quotes and stores the literal two-word string in
   `intent.hostname`.
 * **Codec locus**: arista_eos render-side bug.
-  `netconfig/migration/codecs/arista_eos/render.py:97-98` emits
+  `netcanon/migration/codecs/arista_eos/render.py:97-98` emits
   `f"hostname {tree.hostname}"` -> `hostname Quinta Router`, an invalid
   Arista line.  When that text is fed back through
   `arista_eos/parse.py:53` (`re.compile(r"^hostname\s+(\S+)\s*$",
@@ -69,7 +69,7 @@ The five mikrotik_routeros source fixtures driving these cells are:
 * **Cell**: `mikrotik/routeros_diff_verbose_export.rsc -> cisco_iosxe_cli`
 * **Drift detail**: source `'Quinta Router'` -> target `'Quinta'`.
 * **Codec locus**: cisco_iosxe_cli render-side bug.
-  `netconfig/migration/codecs/cisco_iosxe_cli/render.py:90-91` emits
+  `netcanon/migration/codecs/cisco_iosxe_cli/render.py:90-91` emits
   `f"hostname {tree.hostname}"` unsanitised.  The cisco_iosxe_cli parser
   pattern is more permissive (`r"^hostname\s+(\S+)"` at
   `parse.py:128`, no `$` anchor) so it captures `Quinta` but silently
@@ -89,7 +89,7 @@ The five mikrotik_routeros source fixtures driving these cells are:
   leakage"`, `"IPv6 default"`) -> target `""`.  Counts match (4 / 4);
   only `description` drifts.
 * **Codec locus**: fortigate_cli render-side bug.
-  `netconfig/migration/codecs/fortigate_cli/render.py:814-827` emits the
+  `netcanon/migration/codecs/fortigate_cli/render.py:814-827` emits the
   `config router static / edit N / set dst / set gateway / set device /
   next` block but never emits `set comments "..."` — the canonical
   `route.description` is silently discarded.  FortiOS supports
@@ -108,7 +108,7 @@ The five mikrotik_routeros source fixtures driving these cells are:
 * **Drift detail**: source `[2001:db8:0:1::2/64 (global), fe80::1/64
   (link-local)]` -> target `[2001:db8:0:1::2/64]` only.
 * **Codec locus**: opnsense render-side schema limit.
-  `netconfig/migration/codecs/opnsense/render.py:259-261` deliberately
+  `netcanon/migration/codecs/opnsense/render.py:259-261` deliberately
   emits only `ipv6_addresses[0]` because the OPNsense `<interfaces>`
   XML schema models exactly one `<ipaddrv6>` / `<subnetv6>` per zone.
   Additional v6 addresses on one interface are not first-class in the
@@ -128,13 +128,13 @@ The five mikrotik_routeros source fixtures driving these cells are:
 
 1. **Hostname whitespace sanitisation in target renderers** — clears
    MT-1 and MT-2 with a 2-line change in each of
-   `netconfig/migration/codecs/arista_eos/render.py:97-98` and
-   `netconfig/migration/codecs/cisco_iosxe_cli/render.py:90-91`.
+   `netcanon/migration/codecs/arista_eos/render.py:97-98` and
+   `netcanon/migration/codecs/cisco_iosxe_cli/render.py:90-91`.
    Helper could live as a shared `_sanitise_hostname` in
    `migration/_user_secrets.py`-adjacent helper if other vendors
    replicate the pattern (real Arista / IOS-XE both reject whitespace).
 2. **fortigate_cli static-route `set comments` emission** — single
-   conditional in `netconfig/migration/codecs/fortigate_cli/render.py`
+   conditional in `netcanon/migration/codecs/fortigate_cli/render.py`
    between lines 825 and 826 (after `set device`, before `next`).
    Clears MT-3 (4 routes) and any other source whose static routes
    carry comments.
@@ -150,7 +150,7 @@ fix — handled in the cross_vendor_expectations YAML edit, not the codec.
 * `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__cisco_iosxe_cli.yaml`
 * `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__fortigate_cli.yaml`
 * `tests/fixtures/cross_vendor_expectations/mikrotik_routeros__opnsense.yaml`
-* `netconfig/migration/codecs/mikrotik_routeros/parse.py` — confirmed
+* `netcanon/migration/codecs/mikrotik_routeros/parse.py` — confirmed
   source-side parsing of `hostname`, `static_routes[].description`, and
   `interfaces[].ipv6_addresses` is correct; bugs are all on the target
   side (arista/cisco_iosxe_cli/fortigate render) or in the OPNsense

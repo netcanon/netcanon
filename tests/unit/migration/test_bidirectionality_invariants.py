@@ -26,7 +26,7 @@ removed without updating the corresponding fixture / dropdown.
 See also:
     * ``tests/unit/migration/test_cross_mesh_overrides.py`` — per-
       category smoke tests; complementary, broader, less strict.
-    * ``netconfig/templates/migrate.html`` — target dropdown that
+    * ``netcanon/templates/migrate.html`` — target dropdown that
       surfaces ``input_format`` so the operator can disambiguate
       same-vendor codec siblings.
 """
@@ -35,7 +35,7 @@ from __future__ import annotations
 import pytest
 
 # Side-effect imports to register every codec.
-from netconfig.migration.codecs import (  # noqa: F401
+from netcanon.migration.codecs import (  # noqa: F401
     arista_eos,
     aruba_aoss,
     cisco_iosxe,
@@ -45,7 +45,7 @@ from netconfig.migration.codecs import (  # noqa: F401
     mikrotik_routeros,
     opnsense,
 )
-from netconfig.migration.codecs.registry import get_codec, list_codecs
+from netcanon.migration.codecs.registry import get_codec, list_codecs
 
 pytestmark = pytest.mark.unit
 

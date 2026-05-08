@@ -22,20 +22,20 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
     CanonicalInterface,
 )
-from netconfig.migration.canonical.port_names import (
+from netcanon.migration.canonical.port_names import (
     PortIdentity,
     translate_port_names,
 )
-from netconfig.migration.codecs.cisco_iosxe_cli.codec import (
+from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
     CiscoIOSXECLICodec,
 )
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
-from netconfig.migration.codecs.opnsense.port_names import (
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.opnsense.port_names import (
     format_port_identity,
 )
 

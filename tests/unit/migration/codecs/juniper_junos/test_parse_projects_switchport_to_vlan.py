@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.juniper_junos.parse import parse_intent
+from netcanon.migration.codecs.juniper_junos.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 
@@ -64,7 +64,7 @@ def test_parse_skips_projection_for_trunk_all_sentinel() -> None:
     phantom VLANs from that sentinel form, otherwise round-trip
     stability breaks (the rendered ``set vlans VLAN-N vlan-id N`` lines
     leak generated names back through reparse).  See the trunk-all
-    guard in netconfig/migration/canonical/transforms.py."""
+    guard in netcanon/migration/canonical/transforms.py."""
     cfg = (
         "set system host-name sw1\n"
         "set vlans V100 vlan-id 100\n"

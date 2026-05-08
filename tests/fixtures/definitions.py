@@ -15,7 +15,7 @@ Usage::
 """
 from __future__ import annotations
 
-from netconfig.definitions.schema import (
+from netcanon.definitions.schema import (
     CollectorConfig,
     CommandConfig,
     ConnectionConfig,

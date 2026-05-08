@@ -1,5 +1,5 @@
 """
-Unit tests for the stateless diff service (``netconfig.services.diff``).
+Unit tests for the stateless diff service (``netcanon.services.diff``).
 
 These tests feed synthetic inputs directly to ``compute_diff`` and
 ``check_compatibility`` — no HTTP, no tmp filesystem, no FastAPI.
@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 
 import pytest
 
-from netconfig.models.backup import ConfigRecord
-from netconfig.models.diff import DiffLine
-from netconfig.services.diff import check_compatibility, compute_diff, fold_context
+from netcanon.models.backup import ConfigRecord
+from netcanon.models.diff import DiffLine
+from netcanon.services.diff import check_compatibility, compute_diff, fold_context
 
 pytestmark = pytest.mark.unit
 

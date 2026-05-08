@@ -55,7 +55,7 @@ its operational meaning is hollow.
 
 The cisco_iosxe codec hard-codes `scope="global"` on every
 parsed IPv6 address (see
-`netconfig.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
+`netcanon.migration.codecs.cisco_iosxe.codec._iface_dict_to_canonical`).
 The AOS-S parser does NOT yet populate link-local addresses
 explicitly either (the source codec also defaults to global), so on
 this direction the asymmetry is in the canonical model, not

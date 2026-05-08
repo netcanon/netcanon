@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.app``.
+Unit tests for ``netcanon_desktop.app``.
 
 All three subsystems (server, tray, window) are mocked so no real threads,
 GUI, or HTTP server are created.
@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, call, patch
 
 import pytest
 
-from netconfig_desktop.app import DesktopApp
+from netcanon_desktop.app import DesktopApp
 
 pytestmark = pytest.mark.desktop
 
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.desktop
 
 @pytest.fixture()
 def mock_server():
-    with patch("netconfig_desktop.app.ServerThread") as cls:
+    with patch("netcanon_desktop.app.ServerThread") as cls:
         instance = MagicMock(name="ServerThread")
         instance.url = "http://127.0.0.1:8765"
         cls.return_value = instance
@@ -31,7 +31,7 @@ def mock_server():
 
 @pytest.fixture()
 def mock_tray():
-    with patch("netconfig_desktop.app.TrayIcon") as cls:
+    with patch("netcanon_desktop.app.TrayIcon") as cls:
         instance = MagicMock(name="TrayIcon")
         cls.return_value = instance
         yield instance
@@ -39,7 +39,7 @@ def mock_tray():
 
 @pytest.fixture()
 def mock_window():
-    with patch("netconfig_desktop.app.WebViewWindow") as cls:
+    with patch("netcanon_desktop.app.WebViewWindow") as cls:
         instance = MagicMock(name="WebViewWindow")
         cls.return_value = instance
         yield instance
@@ -52,13 +52,13 @@ def mock_settings(tmp_path):
     settings.port = 8765
     settings.log_level = "warning"
     settings.configs_dir = tmp_path / "configs"
-    with patch("netconfig_desktop.app.desktop_settings", return_value=settings):
+    with patch("netcanon_desktop.app.desktop_settings", return_value=settings):
         yield settings
 
 
 @pytest.fixture()
 def mock_create_app():
-    with patch("netconfig_desktop.app.create_app") as mock_ca:
+    with patch("netcanon_desktop.app.create_app") as mock_ca:
         mock_ca.return_value = MagicMock(name="FastAPI")
         yield mock_ca
 
@@ -77,30 +77,30 @@ def app(mock_server, mock_tray, mock_window, mock_settings, mock_create_app):
 class TestDesktopAppConstruction:
     def test_server_created(self, app, mock_server, mock_settings):
         # ServerThread was constructed with the settings values
-        from netconfig_desktop.app import ServerThread
+        from netcanon_desktop.app import ServerThread
 
         ServerThread.assert_called_once()
 
     def test_window_created_with_server_url(self, app, mock_window, mock_server):
-        from netconfig_desktop.app import WebViewWindow
+        from netcanon_desktop.app import WebViewWindow
 
         _, kwargs = WebViewWindow.call_args
         assert kwargs.get("url") == "http://127.0.0.1:8765"
 
     def test_tray_created(self, app, mock_tray):
-        from netconfig_desktop.app import TrayIcon
+        from netcanon_desktop.app import TrayIcon
 
         TrayIcon.assert_called_once()
 
     def test_tray_receives_preferences_callback(self, app, mock_tray):
-        from netconfig_desktop.app import TrayIcon
+        from netcanon_desktop.app import TrayIcon
 
         _, kwargs = TrayIcon.call_args
         assert "on_preferences" in kwargs
         assert callable(kwargs["on_preferences"])
 
     def test_tray_receives_open_configs_callback(self, app, mock_tray):
-        from netconfig_desktop.app import TrayIcon
+        from netcanon_desktop.app import TrayIcon
 
         _, kwargs = TrayIcon.call_args
         assert "on_open_configs" in kwargs
@@ -175,7 +175,7 @@ class TestDesktopAppOnWindowClosed:
 class TestDesktopAppOpenConfigsFolder:
     def test_open_configs_folder_invokes_startfile(self, app, mock_settings):
         with patch(
-            "netconfig_desktop.app.os.startfile",
+            "netcanon_desktop.app.os.startfile",
             create=True,
         ) as mock_startfile:
             app._open_configs_folder()
@@ -185,7 +185,7 @@ class TestDesktopAppOpenConfigsFolder:
         self, app, mock_settings
     ):
         with patch(
-            "netconfig_desktop.app.os.startfile",
+            "netcanon_desktop.app.os.startfile",
             create=True,
             side_effect=OSError("non-windows"),
         ):
@@ -197,10 +197,10 @@ class TestDesktopAppShowPreferences:
     def test_show_preferences_creates_and_execs_dialog(self, app):
         with (
             patch(
-                "netconfig_desktop.preferences_dialog.PreferencesDialog"
+                "netcanon_desktop.preferences_dialog.PreferencesDialog"
             ) as MockDialog,
             patch(
-                "netconfig_desktop.preferences.DesktopPreferences.load",
+                "netcanon_desktop.preferences.DesktopPreferences.load",
                 return_value=MagicMock(name="DesktopPreferences"),
             ),
         ):

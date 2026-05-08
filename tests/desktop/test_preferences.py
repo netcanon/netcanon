@@ -1,5 +1,5 @@
 """
-Unit tests for ``netconfig_desktop.preferences.DesktopPreferences``.
+Unit tests for ``netcanon_desktop.preferences.DesktopPreferences``.
 
 Pure model + filesystem round-trip tests.  No Qt, no PySide6.
 """
@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from netconfig_desktop.preferences import DesktopPreferences
+from netcanon_desktop.preferences import DesktopPreferences
 
 pytestmark = pytest.mark.desktop
 

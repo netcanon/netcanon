@@ -88,9 +88,9 @@ LAYER 3 — CANONICAL INTENT MODEL (pluggable CIMs)
 
     openconfig-lite           — the subset we actually support
     openconfig-full           — future: full OC when libyang lands
-    netconfig-firewall-ext    — firewall rules, NAT, IPS/IDS
-    netconfig-wireless-ext    — WLC, AP, SSID, radio profiles
-    netconfig-loadbalancer    — VIPs, pools, monitors
+    netcanon-firewall-ext    — firewall rules, NAT, IPS/IDS
+    netcanon-wireless-ext    — WLC, AP, SSID, radio profiles
+    netcanon-loadbalancer    — VIPs, pools, monitors
 
   A codec declares which CIM(s) it emits.  A migration between two
   codecs that share at least one CIM can proceed directly.  Cross-CIM
@@ -153,7 +153,7 @@ LAYER 4 — TRANSPORT
 
 --- DECLARATIVE CODEC SPEC (target on-disk layout) ---
 
-  netconfig/migration/codecs/<codec_id>/
+  netcanon/migration/codecs/<codec_id>/
     codec.yaml            # all declarative fields (see above)
     parse.py              # optional — if parse_only or bidirectional
     render.py             # optional — if render_only or bidirectional
@@ -181,8 +181,8 @@ LAYER 4 — TRANSPORT
 
 --- CONTRIBUTION PATHWAY (new vendor onboarding) ---
 
-  1. Add a vendor YAML (netconfig/migration/vendors/<name>.yaml) — 30s.
-  2. Pick a CIM (usually openconfig-lite for L2/L3; netconfig-firewall-ext
+  1. Add a vendor YAML (netcanon/migration/vendors/<name>.yaml) — 30s.
+  2. Pick a CIM (usually openconfig-lite for L2/L3; netcanon-firewall-ext
      for firewalls).  New CIM = harder; requires architectural review.
   3. Write the codec.  Parse is the hard work; render is optional for
      Phase-1 "I just want to READ configs from this vendor."
@@ -404,7 +404,7 @@ LAYER 4 — TRANSPORT
   │   centric render read them back.  Aruba emitted `interface N / │
   │   enable / exit` and nothing about VLAN membership.            │
   │                                                                │
-  │   Fix shipped: netconfig/migration/canonical/transforms.py     │
+  │   Fix shipped: netcanon/migration/canonical/transforms.py     │
   │   with two idempotent in-place bridges.                        │
   │     * project_switchport_to_vlan (port -> VLAN-centric):       │
   │       access port -> append iface to vlans[N].untagged_ports;  │
@@ -545,7 +545,7 @@ LAYER 4 — TRANSPORT
 
   CANONICAL BRIDGE — Session 1 of vendor-config-research plan.
       STATUS: SHIPPED.  Defined CanonicalIntent pydantic model
-      (netconfig/migration/canonical/intent.py) with Tier-1 fields
+      (netcanon/migration/canonical/intent.py) with Tier-1 fields
       (hostname, domain, dns/ntp/syslog servers, interfaces, vlans,
       static_routes), Tier-2 (dhcp, snmp, lags, local_users, radius),
       and Tier-3 (raw_sections opaque blob).  Refactored
@@ -560,7 +560,7 @@ LAYER 4 — TRANSPORT
 
   MIKROTIK CODEC — Session 2 of vendor-config-research plan.
       STATUS: SHIPPED.  Third real codec:
-      netconfig/migration/codecs/mikrotik_routeros/.  Parses and
+      netcanon/migration/codecs/mikrotik_routeros/.  Parses and
       renders RouterOS `/export verbose` text through the canonical
       dict.  Scope: system identity, DNS + NTP servers, ethernet
       port tweaks, VLAN interfaces, bridges, IPv4 addresses, static
@@ -578,7 +578,7 @@ LAYER 4 — TRANSPORT
       four real codecs (cisco_iosxe, cisco_iosxe_cli, opnsense,
       mikrotik_routeros) overrides it with a format-specific signature
       test returning (confidence, reason).  New service
-      netconfig/services/migration_detect.py walks the registry,
+      netcanon/services/migration_detect.py walks the registry,
       returns ranked list.  New endpoint POST /api/v1/migration/detect.
       /migrate UI gained a debounced auto-detection banner with
       "Use this source" button; banner goes green when the user has
@@ -607,7 +607,7 @@ LAYER 4 — TRANSPORT
       RADIUS servers, DHCP server pools — same shape of work.
 
   FORTIGATE CLI CODEC — STATUS: SHIPPED.
-      Fifth real codec.  netconfig/migration/codecs/fortigate_cli/
+      Fifth real codec.  netcanon/migration/codecs/fortigate_cli/
       parses and renders FortiOS 7.x CLI (`config/edit/set/next/end`
       grammar) via a recursive block model.  Handles: hostname,
       DNS (primary/secondary), NTP (nested ntpserver subtable),
@@ -628,7 +628,7 @@ LAYER 4 — TRANSPORT
       828 tests passing.
 
   ARUBA AOS-S CODEC — STATUS: SHIPPED.
-      Fourth real codec.  netconfig/migration/codecs/aruba_aoss/
+      Fourth real codec.  netcanon/migration/codecs/aruba_aoss/
       parses and renders ArubaOS-Switch (ProCurve) 16.x
       `show running-config` text.  Architecturally the most important
       codec so far: it's the first one where VLAN port membership
@@ -658,7 +658,7 @@ LAYER 4 — TRANSPORT
       helpers.  Adding a new codec no longer requires editing the
       template.  708 tests passing; zero regressions.
 
-  R6  Named CIMs with netconfig-firewall-ext as the first non-OC
+  R6  Named CIMs with netcanon-firewall-ext as the first non-OC
       CIM.  ModelProjector between CIMs.  3-4 sessions.
 
   R7  Transport layer extraction, NETCONF transport, migration-
@@ -686,29 +686,29 @@ LAYER 4 — TRANSPORT
 # the small roadmap items tracked below.
 #
 # CODE LOCATIONS
-#   * netconfig/migration/canonical/port_names.py
+#   * netcanon/migration/canonical/port_names.py
 #       - PortIdentity pydantic model (vendor-agnostic bridge)
 #       - translate_port_names(intent, source, target, rename_map=None)
 #       - build_port_rename_transform(source, target, rename_map=None)
-#   * netconfig/migration/codecs/<vendor>/codec.py
+#   * netcanon/migration/codecs/<vendor>/codec.py
 #       - classify_port_name(name) → PortIdentity
 #       - format_port_identity(ident) → str | None
 #       Each codec implements ONLY its own vendor's rules.
-#   * netconfig/services/migration_pipeline.py
+#   * netcanon/services/migration_pipeline.py
 #       - run_plan_with_rename(source, target, raw, port_rename_map=)
 #         NEW public function; existing run_plan stays frozen per the
 #         "pipeline stages never change shape" rule.
-#   * netconfig/migration/target_profiles.py
+#   * netcanon/migration/target_profiles.py
 #       - TargetProfile pydantic model + YAML loader
 #   * definitions/target_profiles/*.yaml
 #       - aruba_2930f_48g_poep.yaml
 #       - cisco_c9300_24ux.yaml
 #       Add more profiles as vendor YAML — no code change needed.
-#   * netconfig/api/routes/migration.py
+#   * netcanon/api/routes/migration.py
 #       - POST /plan now accepts optional port_rename_map +
 #         target_profile; returns job.port_renames + job.warnings
 #       - GET /target-profiles (+ /{vendor}/{model})
-#   * netconfig/templates/migrate.html
+#   * netcanon/templates/migrate.html
 #       - Tier 3 draggable 2-pane modal with mapping table + live
 #         preview + collision detection + target-profile selector
 
@@ -886,7 +886,7 @@ TIER 3 — interactive rename modal in /migrate UI.
     # Unsupported + add "snmpv3" to unsupported_rename_categories
     # for the UI compat banner.
     #
-    # Orchestrator: netconfig/migration/canonical/snmpv3_user_names.py
+    # Orchestrator: netcanon/migration/canonical/snmpv3_user_names.py
     # Pipeline:  run_plan_with_overrides(snmpv3_user_rename_map=...)
     # Endpoint:  POST /api/v1/migration/plan/snmpv3
     # UI pane:   migrate.html + _partials/snmpv3-user-rename-table.js,
@@ -1343,7 +1343,7 @@ TIER 3 — interactive rename modal in /migrate UI.
 
 [SHIPPED] EVPN-VXLAN CANONICAL SCHEMA (ship-before-wire, GAP 1):
     # Adds CanonicalVxlan + CanonicalEvpnType5Route to
-    # netconfig/migration/canonical/intent.py plus vxlan_vnis[] +
+    # netcanon/migration/canonical/intent.py plus vxlan_vnis[] +
     # evpn_type5_routes[] top-level Tier-2 lists on CanonicalIntent.
     # No codec populates them in v1.  Every DC-class codec (Arista
     # EOS, Juniper Junos, Cisco IOS-XE CLI) declares /vxlan-vnis/vni
@@ -1471,8 +1471,8 @@ TIER 3 — interactive rename modal in /migrate UI.
     # offer "Load profile" dropdown in the modal toolbar.  Operators
     # doing repeated Cisco→Aruba migrations reuse their mappings
     # without re-entering them each time.
-    Where: netconfig/migration/target_profiles.py (or a new
-           netconfig/migration/rename_profiles.py if preferred) —
+    Where: netcanon/migration/target_profiles.py (or a new
+           netcanon/migration/rename_profiles.py if preferred) —
            YAML or JSON, user-writable (under configs_dir so it
            survives reinstall) + API endpoints POST/GET/DELETE
            /api/v1/migration/rename-profiles/<key>.
@@ -1517,36 +1517,36 @@ TIER 3 — interactive rename modal in /migrate UI.
 # exist in the repo.  Reuse, don't rebuild.  Summary in priority order:
 
 EXISTING, REUSE DIRECTLY (do not reinvent):
-  * netconfig/services/diff.py
+  * netcanon/services/diff.py
       - check_compatibility(left, right) -> CompatibilityReport
       - compute_diff(left, left_text, right, right_text) -> DiffReport
       - fold_context(lines, context=3) -> list[DiffGroup]  (collapsed runs)
     Pipeline stage 6 (`diff`) MUST call compute_diff for the text side.
     Tree-level semantic diff is the NEW thing to add; text diff is solved.
-  * netconfig/models/diff.py
+  * netcanon/models/diff.py
       - DiffLine, DiffGroup, CompatibilityReport, DiffReport, DiffRequest
     ValidationReport shape planned for migration should mirror
     CompatibilityReport's (compatible/severity/reasons) — same pattern.
-  * netconfig/services/ package
+  * netcanon/services/ package
       - Convention established: stateless, no I/O, pure functions.
-      - Put migration engine stages HERE, not in netconfig/migration/engine/.
+      - Put migration engine stages HERE, not in netcanon/migration/engine/.
       - Revised package layout is below (§4 updated).
-  * netconfig/security/migration.py
+  * netcanon/security/migration.py
       - migrate_credential_fields() — shared helper for detect-legacy-plaintext.
       - Reuse for any future credential migration in adapter code.
-  * netconfig/templates/base.html — client helpers
+  * netcanon/templates/base.html — client helpers
       - _cvRenderHighlighted(text, ext) — language-aware syntax highlighter
         (.tok-keyword, .tok-string, .tok-ip, .tok-number, .tok-tag,
          .tok-attr, .tok-comment classes).  Migration UI diff viewer
         reuses this verbatim — do NOT ship a second highlighter.
       - Toast system: window.showToast(msg, 'info'|'error'|'success').
-      - startJobProgress(jobId) + netconfig:job-{started,progress,
+      - startJobProgress(jobId) + netcanon:job-{started,progress,
         complete,dismissed} CustomEvents — the migration UI should adopt
         the same pattern for MigrationJob progress.
       - Config viewer modal with in-modal cross-span search (see
         _cvSearch / _cvWrapSpan).  Can be reused to preview rendered
         output before deploy.
-  * netconfig/templates/diff.html + /configs/{left}/vs/{right} route
+  * netcanon/templates/diff.html + /configs/{left}/vs/{right} route
       - Already uses FROM→TO directional paradigm (not "sides").
       - Context folding via <template> sibling + click-to-expand.
       - Migration stage 6 UI should LINK into this URL with
@@ -1666,7 +1666,7 @@ OPENCONFIG COVERAGE: ~60-70% of typical enterprise feature surface on
                  ▼                            ▼
   ┌──────────────────────────┐  ┌────────────────────────────┐
   │ Canonical Intent Tree    │  │ Capability Matrix          │
-  │ openconfig + netconfig-  │◀─┤ per-adapter YAML           │
+  │ openconfig + netcanon-  │◀─┤ per-adapter YAML           │
   │ ext YANG modules         │  │ supported/lossy/unsupported│
   └─────┬──────────┬─────────┘  └────────────────────────────┘
         ▲          │
@@ -1693,7 +1693,7 @@ BASE: openconfig/public master @ pinned commit
   - openconfig-access-control-list
   - openconfig-if-ethernet, -if-ip, -if-aggregate
 
-EXTENSION: netconfig-ext.yang (in-repo)
+EXTENSION: netcanon-ext.yang (in-repo)
   - firewall/rule (ordered-by user, stateful session model)
   - nat/source, nat/destination
   - captive-portal/*
@@ -1717,23 +1717,23 @@ RULE: every tree produced by an adapter OR transform MUST pass
 ## 4. PACKAGE STRUCTURE  (revised to match existing conventions)
 =====================================================================
 # Convention now established in the repo:
-#   netconfig/models/          — pydantic request/response/domain types
-#   netconfig/services/        — stateless pure-function engines (I/O-free)
-#   netconfig/api/routes/      — thin HTTP adapters around services
-#   netconfig/templates/       — Jinja2, share helpers via base.html
+#   netcanon/models/          — pydantic request/response/domain types
+#   netcanon/services/        — stateless pure-function engines (I/O-free)
+#   netcanon/api/routes/      — thin HTTP adapters around services
+#   netcanon/templates/       — Jinja2, share helpers via base.html
 # Migration work follows the same split.  Adapters + canonical schemas
-# ARE an ecosystem of their own, so those live under netconfig/migration/
-# (filesystem-scoped), but the engine stages live under netconfig/services/
+# ARE an ecosystem of their own, so those live under netcanon/migration/
+# (filesystem-scoped), but the engine stages live under netcanon/services/
 # alongside diff.py to keep the rule "services/ = pure Python" consistent.
 
-netconfig/
+netcanon/
   migration/                   # ecosystem-of-adapters-and-schemas namespace
     __init__.py
     canonical/
       loader.py                # libyang ctx singleton; loads modules once
-      schema/                  # openconfig/public pinned + netconfig-ext
+      schema/                  # openconfig/public pinned + netcanon-ext
         openconfig-*.yang
-        netconfig-ext.yang
+        netcanon-ext.yang
       validate.py              # @validates_yang decorator
     adapters/
       base.py                  # AdapterBase, CapabilityMatrix, exceptions
@@ -1837,11 +1837,11 @@ class AdapterBase(ABC):
 
 DISCOVERY
   # pyproject.toml
-  [project.entry-points."netconfig.migration.adapters"]
-  cisco_iosxe = "netconfig.migration.adapters.cisco_iosxe:Adapter"
-  fortigate   = "netconfig.migration.adapters.fortigate:Adapter"
-  mikrotik    = "netconfig.migration.adapters.mikrotik:Adapter"
-  opnsense    = "netconfig.migration.adapters.opnsense:Adapter"
+  [project.entry-points."netcanon.migration.adapters"]
+  cisco_iosxe = "netcanon.migration.adapters.cisco_iosxe:Adapter"
+  fortigate   = "netcanon.migration.adapters.fortigate:Adapter"
+  mikrotik    = "netcanon.migration.adapters.mikrotik:Adapter"
+  opnsense    = "netcanon.migration.adapters.opnsense:Adapter"
 
 =====================================================================
 ## 6. CAPABILITY MATRIX SCHEMA (YAML)
@@ -1853,7 +1853,7 @@ version_range: ">=25.1,<27"
 supported:
   - openconfig-interfaces:/interfaces/interface
   - openconfig-vlan:/vlans/vlan
-  - netconfig-ext:/firewall/rule
+  - netcanon-ext:/firewall/rule
   - openconfig-if-ip:/.../ipv4/addresses
 lossy:
   - path: openconfig-network-instance:/.../bgp
@@ -1876,7 +1876,7 @@ severity semantics:
 =====================================================================
 
 1. collect(device, credentials) -> raw_text: str
-   # reuses existing netconfig.collectors; no changes
+   # reuses existing netcanon.collectors; no changes
 
 2. parse(raw_text, source_adapter) -> YangTree
    # validation: libyang before return
@@ -1900,11 +1900,11 @@ severity semantics:
 
 6. diff(src_raw, tgt_raw, src_tree, tgt_tree) -> MigrationDiffReport
    # Two layers, independent:
-   #   TEXTUAL: reuse netconfig.services.diff.compute_diff(src_raw,
+   #   TEXTUAL: reuse netcanon.services.diff.compute_diff(src_raw,
    #            tgt_raw). Already handles CompatibilityReport,
    #            context folding via fold_context(), and the FROM/TO
    #            directional paradigm.
-   #   SEMANTIC: new netconfig.services.migration_diff.tree_diff(
+   #   SEMANTIC: new netcanon.services.migration_diff.tree_diff(
    #            src_tree, tgt_tree) -> list[XPathDelta].
    #            Returns {added, removed, changed} xpath lists plus
    #            risk_flags (e.g. "firewall rule order changed",
@@ -1923,7 +1923,7 @@ severity semantics:
 
 8. snapshot(target_device, pre_config) -> ConfigRecord
    # Reuses FileConfigStore.save() which is now atomic (temp+rename,
-   # see netconfig/storage/file_store.py).  Collision-counter handles
+   # see netcanon/storage/file_store.py).  Collision-counter handles
    # the same-second-same-host case.  Filename convention:
    #   "<device_type>_<safe_host>_<YYYYMMDD_HHMMSS>.<ext>"
    # Same pattern as backups so both coexist in configs/ and the
@@ -1944,7 +1944,7 @@ ORCHESTRATOR
 signature: fn(tree: YangTree, **kwargs) -> YangTree
 contract:  pure; idempotent when inputs identical; re-validated after
 
-built-ins (netconfig/migration/transforms/*):
+built-ins (netcanon/migration/transforms/*):
   rename_interfaces(mapping: dict[str,str])
     # "Gi0/1" -> "ether2", etc. Updates name refs across tree
     # (L3 config, ACLs, VLAN memberships, LAG members).
@@ -1964,7 +1964,7 @@ built-ins (netconfig/migration/transforms/*):
     # auto-removes every path marked unsupported in target caps.
     # emits a log + report entry per stripped path.
 
-discovery: entry-point "netconfig.migration.transforms"
+discovery: entry-point "netcanon.migration.transforms"
 
 =====================================================================
 ## 9. TEMPLATE AUTHORING RULES (Jinja2)
@@ -2007,7 +2007,7 @@ EXAMPLE SKELETON (fortigate/interfaces.j2):
 SEMANTIC-NOT-STRUCTURAL EQUIVALENCE
   ACLs / policies / pf rules express similar intent but with different
   primitives (address objects, zones, sessions). Canonical model picks
-  ONE lane (netconfig-ext:/firewall) and each adapter commits to a
+  ONE lane (netcanon-ext:/firewall) and each adapter commits to a
   best-effort mapping. Expect `lossy` entries in capabilities.
 
 RULE ORDERING
@@ -2087,7 +2087,7 @@ UI (/migrate page):
 
 PROGRESS PANEL:
   Reuse the existing startJobProgress(jobId) pattern from base.html
-  for MigrationJob lifecycle.  Emit netconfig:migration-{started,
+  for MigrationJob lifecycle.  Emit netcanon:migration-{started,
   stage-changed,complete,failed} CustomEvents so page-level code can
   react without re-polling.  Panel rendering can be forked from the
   existing one if stage-level detail is needed, or reused as-is if
@@ -2110,12 +2110,12 @@ TESTIDs (follow project convention; add to testid_reference.md):
 PHASE 0 — PROVE THE SHAPE  (SHIPPED)
   goal:       adapter contract + mock reference round-trip
   deliverables shipped:
-    - AdapterBase + CapabilityMatrix (netconfig/migration/adapters/base.py)
-    - Adapter registry (netconfig/migration/adapters/registry.py)
+    - AdapterBase + CapabilityMatrix (netcanon/migration/adapters/base.py)
+    - Adapter registry (netcanon/migration/adapters/registry.py)
     - MockAdapter reference (exercises every classify() branch)
-    - netconfig/services/migration_pipeline.py skeleton
-    - netconfig/services/migration_validate.py (severity aggregation)
-    - netconfig/models/migration.py: full type set
+    - netcanon/services/migration_pipeline.py skeleton
+    - netcanon/services/migration_validate.py (severity aggregation)
+    - netcanon/models/migration.py: full type set
     - DeviceClass enum + cross-class guard (stage 0)
     - GET /api/v1/migration/adapters + /capabilities (read-only)
   deferred from original Phase 0 scope:
@@ -2125,7 +2125,7 @@ PHASE 0 — PROVE THE SHAPE  (SHIPPED)
 PHASE 0.5 — FIRST REAL ADAPTER  (SHIPPED)
   goal:       real OpenConfig NETCONF round-trip against captured payloads
   deliverables shipped:
-    - CiscoIOSXEAdapter (netconfig/migration/adapters/cisco_iosxe/)
+    - CiscoIOSXEAdapter (netcanon/migration/adapters/cisco_iosxe/)
     - AdapterBase.iter_xpaths (non-abstract, dict-default, override-ready)
     - validate_against gains optional `source` param for adapter-aware walking
     - Sample NETCONF fixture (tests/fixtures/iosxe/get_config_simple.xml)
@@ -2141,7 +2141,7 @@ PHASE 0.5 — FIRST REAL ADAPTER  (SHIPPED)
 PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (SHIPPED)
   goal:       API-driven manual testing; proof of multi-adapter architecture
   deliverables shipped:
-    - OPNsenseAdapter (netconfig/migration/adapters/opnsense/)
+    - OPNsenseAdapter (netcanon/migration/adapters/opnsense/)
       * Scope: system + interfaces (zone, if, descr, enable, ipaddr, subnet)
       * Declares [firewall, router]; flattens zone-keyed XML to list shape
     - POST /api/v1/migration/plan
@@ -2150,7 +2150,7 @@ PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (SHIPPED)
     - MigrationPlanRequest pydantic model
   deliverables DEFERRED to later phases:
     - Live ncclient/SSH transport for deploy (still manual input-text only)
-    - Firewall rules / NAT in OPNsense scope (needs netconfig-ext YANG; Phase 2)
+    - Firewall rules / NAT in OPNsense scope (needs netcanon-ext YANG; Phase 2)
     - Transform registry wired to /plan (Phase 2)
     - Snapshot + deploy endpoints (Phase 2)
   new_deps:  none — stdlib xml.etree.ElementTree
@@ -2158,7 +2158,7 @@ PHASE 1 — CROSS-VENDOR WRITES + OPNSENSE  (SHIPPED)
 PHASE 2 (part 1) — /MIGRATE WORKBENCH UI  (SHIPPED)
   goal:       browser-driven manual testing of the translator
   deliverables shipped:
-    - GET /migrate page (netconfig/templates/migrate.html)
+    - GET /migrate page (netcanon/templates/migrate.html)
     - Source + target adapter dropdowns hydrated from
       GET /api/v1/migration/adapters on load
     - Paste-raw-text OR pick-stored-config input modes
@@ -2177,7 +2177,7 @@ PHASE 2 (part 1) — /MIGRATE WORKBENCH UI  (SHIPPED)
 PHASE 0.7 — LIBYANG CANONICAL VALIDATION  (pending)
   goal:       optional validates-if-available seam for stricter trees
   deliverables:
-    - libyang ctx loader (netconfig/migration/canonical/loader.py)
+    - libyang ctx loader (netcanon/migration/canonical/loader.py)
     - Vendored or submoduled openconfig/public modules
     - AdapterBase adapters opt-in to canonical validation via
       a method that returns their YANG module names
@@ -2193,7 +2193,7 @@ PHASE 1 — CROSS-VENDOR MVP
   stages:    + transforms + diff (tree-level)
   deliverables:
     - opnsense parser (lxml of config.xml -> openconfig-interfaces,
-      netconfig-ext:/firewall)
+      netcanon-ext:/firewall)
     - fortigate renderer (Jinja templates: interfaces, vlans, firewall)
     - transforms: rename_interfaces, remap_vlans, strip_unsupported
     - diff.py (tree-level)
@@ -2228,7 +2228,7 @@ PHASE 3 — SCALE OUT
 ## 13. QUICK-REFERENCE CHECKLIST WHEN ADDING A NEW CODEC
 =====================================================================
 
-[ ] netconfig/migration/codecs/<vendor>/ directory with:
+[ ] netcanon/migration/codecs/<vendor>/ directory with:
     __init__.py, parser.py, renderer.py, capabilities.yaml,
     templates/ (if CLI/XML target)
 [ ] Entry point registered in pyproject.toml
@@ -2276,7 +2276,7 @@ A: No. Cisco XR/XE, Juniper, Arista, Nokia, Aruba CX, Huawei, and
 
 Q: What's the architecture?
 A: Six-stage pipeline (collect -> parse -> transform -> validate ->
-   render -> deploy) over an OpenConfig + netconfig-ext YANG canonical
+   render -> deploy) over an OpenConfig + netcanon-ext YANG canonical
    tree. Pluggable per-vendor adapters implement parse/render with
    Jinja templates for CLI/XML targets and NETCONF edit-config for
    YANG-native targets. Capability matrices drive pre-flight
@@ -2291,7 +2291,7 @@ A: Six-stage pipeline (collect -> parse -> transform -> validate ->
 - tests/fixtures/real/RESULTS.md — per-codec certification state and
   real-capture coverage matrix (the "what blocks promotion" notes
   feed back into this roadmap)
-- netconfig/migration/codecs/README.md — codec authorship guide for
+- netcanon/migration/codecs/README.md — codec authorship guide for
   the per-vendor parse/render adapters this plan describes
 - tests/fixtures/real/PHASE4_RECONCILIATION.md — current cross-mesh
   fidelity reconciliation matrix; top-6 codec-fix backlog joins

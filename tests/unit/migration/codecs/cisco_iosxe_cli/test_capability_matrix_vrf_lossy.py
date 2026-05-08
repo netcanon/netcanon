@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.cisco_iosxe_cli.codec import CiscoIOSXECLICodec
+from netcanon.migration.codecs.cisco_iosxe_cli.codec import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 
@@ -67,7 +67,7 @@ class TestRoutingInstancesDeclaredLossy:
         for entry in codec.capabilities.lossy:
             if entry.path == "/routing-instances/instance":
                 # `LossyPath` literal accepts only "warn" or "error"
-                # (per netconfig/models/migration.py:133).  "warn"
+                # (per netcanon/models/migration.py:133).  "warn"
                 # matches the sibling /evpn-type5-routes/route entry.
                 assert entry.severity == "warn"
                 break

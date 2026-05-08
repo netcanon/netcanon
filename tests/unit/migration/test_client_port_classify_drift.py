@@ -3,7 +3,7 @@ Drift-guard for ``_partials/classify.js`` vs per-codec
 ``classify_port_name``.
 
 The client-side ``_guessKind`` / ``_looksLikeUplink`` helpers in
-``netconfig/templates/_partials/classify.js`` mirror the regex
+``netcanon/templates/_partials/classify.js`` mirror the regex
 patterns from every shipped codec's ``port_names.py``
 ``classify_port_name`` (the authoritative server-side classifier).
 The client uses them for UI grouping ONLY — the rename-modal
@@ -53,11 +53,11 @@ the codec can't classify a name (returns ``kind="unknown"``) are
 skipped — the client's fallback to ``"physical"`` is fine.
 
 See also:
-    * :mod:`netconfig.migration.canonical.port_names` — the shared
+    * :mod:`netcanon.migration.canonical.port_names` — the shared
       ``PortIdentity`` schema both sides speak.
     * Every codec's ``port_names.py`` — the authoritative per-codec
       classifier.
-    * ``netconfig/templates/_partials/classify.js`` — the client
+    * ``netcanon/templates/_partials/classify.js`` — the client
       mirror this file is a Python port of.
 """
 from __future__ import annotations
@@ -67,13 +67,13 @@ from typing import Iterable
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos import AristaEOSCodec
-from netconfig.migration.codecs.aruba_aoss import ArubaAOSSCodec
-from netconfig.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netconfig.migration.codecs.fortigate_cli import FortiGateCLICodec
-from netconfig.migration.codecs.juniper_junos.codec import JunosCodec
-from netconfig.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netconfig.migration.codecs.opnsense import OPNsenseCodec
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
+from netcanon.migration.codecs.juniper_junos.codec import JunosCodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 
 pytestmark = pytest.mark.unit
 
@@ -82,7 +82,7 @@ pytestmark = pytest.mark.unit
 # Python port of classify.js::_guessKind + _looksLikeUplink.
 #
 # Every regex here MUST match the JS regex in
-# ``netconfig/templates/_partials/classify.js`` byte-for-byte modulo Python
+# ``netcanon/templates/_partials/classify.js`` byte-for-byte modulo Python
 # vs JS regex flavour differences (no differences in the simple cases here;
 # the patterns are all basic character classes + alternation + \d).
 #
@@ -92,7 +92,7 @@ pytestmark = pytest.mark.unit
 
 def _py_guess_kind(name: str) -> str:
     """Python mirror of JS ``_guessKind``.  Keep byte-aligned with
-    ``netconfig/templates/_partials/classify.js``."""
+    ``netcanon/templates/_partials/classify.js``."""
     if re.match(r"^(Port-channel|Trk|trk|LAG|bond|lagg)\d", name, re.IGNORECASE):
         return "lag"
     if re.match(r"^Vlan\d|^vlan\d", name):
@@ -260,7 +260,7 @@ class TestClientServerKindAgreement:
             f"classify.js says {client_kind!r}.  Either "
             f"(a) {codec_label}/port_names.py added a new naming "
             f"pattern that classify.js doesn't recognise — extend "
-            f"_guessKind in netconfig/templates/_partials/classify.js "
+            f"_guessKind in netcanon/templates/_partials/classify.js "
             f"and its Python mirror in this test file; or (b) "
             f"classify.js / the Python mirror here drifted from each "
             f"other — re-align them."
@@ -317,7 +317,7 @@ class TestClassifyJsFileExists:
         import pathlib
         classify_js = (
             pathlib.Path(__file__).resolve().parents[3]
-            / "netconfig" / "templates" / "_partials" / "classify.js"
+            / "netcanon" / "templates" / "_partials" / "classify.js"
         )
         assert classify_js.is_file(), (
             f"Expected to find the client-side classifier at "
@@ -330,7 +330,7 @@ class TestClassifyJsFileExists:
         import pathlib
         classify_js = (
             pathlib.Path(__file__).resolve().parents[3]
-            / "netconfig" / "templates" / "_partials" / "classify.js"
+            / "netcanon" / "templates" / "_partials" / "classify.js"
         )
         text = classify_js.read_text(encoding="utf-8")
         assert "function _guessKind(" in text, (

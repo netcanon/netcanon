@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.codecs.arista_eos.parse import parse_intent
+from netcanon.migration.codecs.arista_eos.parse import parse_intent
 
 pytestmark = pytest.mark.unit
 

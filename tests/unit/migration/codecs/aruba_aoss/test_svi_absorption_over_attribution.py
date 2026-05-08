@@ -30,13 +30,13 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
 
 pytestmark = pytest.mark.unit
 

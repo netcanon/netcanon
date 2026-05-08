@@ -24,7 +24,7 @@ OPNsense's primary purpose is firewall / NAT / VPN.  `<filter>`,
 `<dpinger>`, plugin blocks etc. carry the bulk of an OPNsense
 config — none of these are modelled in `CanonicalIntent` v1.  The
 opnsense codec capability matrix lists `/filter/rule` and
-`/nat/outbound` as unsupported pending the netconfig-ext YANG
+`/nat/outbound` as unsupported pending the netcanon-ext YANG
 module.
 
 ## Cross-vendor disposition

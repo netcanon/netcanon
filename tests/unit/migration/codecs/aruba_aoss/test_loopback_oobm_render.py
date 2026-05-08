@@ -24,15 +24,15 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
     CanonicalLocalUser,
 )
-from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
-from netconfig.migration.codecs.aruba_aoss.render import _split_aos_hash
+from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss.render import _split_aos_hash
 
 pytestmark = pytest.mark.unit
 
@@ -212,13 +212,13 @@ def test_arista_to_aruba_loopback_management_user_round_trip() -> None:
     Loopback0, Management1 (IPv4 + IPv6), and a sha512 user hash
     must render to AOS-S with all three carrying their semantic
     forward, not silently dropped."""
-    from netconfig.migration.canonical.port_names import (
+    from netcanon.migration.canonical.port_names import (
         translate_port_names,
     )
-    from netconfig.migration.codecs.arista_eos.codec import (
+    from netcanon.migration.codecs.arista_eos.codec import (
         AristaEOSCodec,
     )
-    from netconfig.migration.codecs.arista_eos.parse import (
+    from netcanon.migration.codecs.arista_eos.parse import (
         parse_intent as arista_parse,
     )
 

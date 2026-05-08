@@ -48,9 +48,9 @@ build_exe_options: dict = {
     # Extra packages that cx_Freeze cannot discover automatically through
     # static import analysis (dynamic imports, conditional imports, etc.)
     "packages": [
-        "netconfig",
-        "netconfig.templates",
-        "netconfig_desktop",
+        "netcanon",
+        "netcanon.templates",
+        "netcanon_desktop",
         "uvicorn",
         "fastapi",
         "starlette",
@@ -73,8 +73,8 @@ build_exe_options: dict = {
         # Ship device definitions next to the EXE so desktop_settings()
         # finds them when sys.frozen is True.
         (str(DEFINITIONS_DIR), "definitions"),
-        # Jinja2 templates bundled with the netconfig package.
-        (str(HERE / "netconfig" / "templates"), "lib/netconfig/templates"),
+        # Jinja2 templates bundled with the netcanon package.
+        (str(HERE / "netcanon" / "templates"), "lib/netcanon/templates"),
     ],
     # Exclude large packages that are not needed at runtime to keep the
     # installer size reasonable.
@@ -105,7 +105,7 @@ bdist_msi_options: dict = {
                 "StartMenuFolder",            # Directory_ (Start Menu)
                 "Netcanon",                  # Name (display name)
                 "TARGETDIR",                  # Component_
-                "[TARGETDIR]netconfig.exe",   # Target
+                "[TARGETDIR]netcanon.exe",   # Target
                 None,                         # Arguments
                 "Netcanon — Network Config Collector",  # Description
                 None,                         # Hotkey
@@ -129,7 +129,7 @@ def _build_icon() -> str | None:
     (icon embedding is optional for the build to succeed).
     """
     try:
-        from netconfig_desktop.icons import write_ico
+        from netcanon_desktop.icons import write_ico
 
         ico_path = write_ico()
         return str(ico_path)
@@ -140,11 +140,11 @@ def _build_icon() -> str | None:
 
 executables = [
     Executable(
-        # Entry point — runs netconfig_desktop.__main__:main()
-        script="netconfig_desktop/__main__.py",
+        # Entry point — runs netcanon_desktop.__main__:main()
+        script="netcanon_desktop/__main__.py",
         # Win32GUI suppresses the console window so the app runs silently.
         base="Win32GUI" if sys.platform == "win32" else None,
-        target_name="netconfig.exe",
+        target_name="netcanon.exe",
         # The icon embedded in the EXE itself (taskbar / alt-tab).
         icon=_build_icon(),
         shortcut_name="Netcanon",

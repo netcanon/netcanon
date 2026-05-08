@@ -50,16 +50,16 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalLAG,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
-from netconfig.migration.codecs.aruba_aoss.parse import _parse_port_list
-from netconfig.migration.codecs.aruba_aoss.render import _format_port_list
+from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss.parse import _parse_port_list
+from netcanon.migration.codecs.aruba_aoss.render import _format_port_list
 
 pytestmark = pytest.mark.unit
 
@@ -258,7 +258,7 @@ class TestTrunkAllSentinelStampsTaggedPorts:
     """
 
     def test_trunk_all_iface_lands_in_declared_vlans(self):
-        from netconfig.migration.canonical.transforms import (
+        from netcanon.migration.canonical.transforms import (
             project_switchport_to_vlan,
         )
         intent = CanonicalIntent(
@@ -293,7 +293,7 @@ class TestJunosLagNameToArista:
     """
 
     def test_junos_ae_translates_to_port_channel(self):
-        from netconfig.migration.codecs.arista_eos.codec import AristaEOSCodec
+        from netcanon.migration.codecs.arista_eos.codec import AristaEOSCodec
         intent = CanonicalIntent(
             interfaces=[
                 CanonicalInterface(
@@ -320,7 +320,7 @@ class TestJunosLagNameToArista:
         assert "\ninterface ae1\n" not in out
 
     def test_junos_ae_round_trips_through_arista(self):
-        from netconfig.migration.codecs.arista_eos.codec import AristaEOSCodec
+        from netcanon.migration.codecs.arista_eos.codec import AristaEOSCodec
         intent = CanonicalIntent(
             interfaces=[
                 CanonicalInterface(

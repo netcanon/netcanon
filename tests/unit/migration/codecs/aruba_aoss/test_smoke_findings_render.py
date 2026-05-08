@@ -29,13 +29,13 @@ from __future__ import annotations
 
 import pytest
 
-from netconfig.migration.canonical.intent import (
+from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalVlan,
 )
-from netconfig.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
+from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
 
 pytestmark = pytest.mark.unit
 
@@ -300,10 +300,10 @@ def test_aruba_opnsense_lan_ip_survives_port_rename() -> None:
     still route through the kind=mgmt branch (returns ``"oobm"``)
     via the wave-2 cascade (commit ``56a4cde``).
     """
-    from netconfig.migration.canonical.port_names import (
+    from netcanon.migration.canonical.port_names import (
         translate_port_names,
     )
-    from netconfig.migration.codecs.opnsense.codec import (
+    from netcanon.migration.codecs.opnsense.codec import (
         OPNsenseCodec,
     )
 
@@ -342,10 +342,10 @@ def test_aruba_opnsense_igb_lan_ip_survives_port_rename() -> None:
     deployments).  Confirms the ``port=0`` fix is driver-agnostic
     — any BSD ``<driver>0`` name behaves the same way.
     """
-    from netconfig.migration.canonical.port_names import (
+    from netcanon.migration.canonical.port_names import (
         translate_port_names,
     )
-    from netconfig.migration.codecs.opnsense.codec import (
+    from netcanon.migration.codecs.opnsense.codec import (
         OPNsenseCodec,
     )
 

@@ -95,7 +95,7 @@ for the FortiGate-side shape.  Key points:
 The canonical schema has NO model for firewall policy / NAT / VPN /
 IPsec / WireGuard / captive portal in v1.  The OPNsense codec's
 capability matrix lists `/filter/rule` and `/nat/outbound` as
-unsupported with rationale: "Firewall rules require the netconfig-ext
+unsupported with rationale: "Firewall rules require the netcanon-ext
 YANG module (Phase 2) — OpenConfig has no firewall model".  The
 FortiGate codec's capability matrix similarly lists `/filter/rule`
 and `/nat/rule` as unsupported.

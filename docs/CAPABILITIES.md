@@ -92,7 +92,7 @@ lossy where vendors disagree on representation.
 
 These are present in source devices but **never auto-translated**.
 The codec parsers deliberately drop them; the
-[`_tier3_detection.py`](../netconfig/migration/_tier3_detection.py)
+[`_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)
 heuristic surfaces what was dropped via the migrate page banner so
 operators see the gap.
 
@@ -125,7 +125,7 @@ the rendered output or screen-grab the panel.
 
 The migrate page renders three lists under **Validation details**:
 Supported / Lossy / Unsupported.  Each codec declares its own matrix
-in `netconfig/migration/codecs/<vendor>/codec.py`.  The table below
+in `netcanon/migration/codecs/<vendor>/codec.py`.  The table below
 enumerates every `UnsupportedPath` and `LossyPath` declared today.
 
 #### `cisco_iosxe_cli` (Cisco IOS-XE CLI, bidirectional)
@@ -242,7 +242,7 @@ stanza headers.  The migrate page renders these as a warning banner:
 > device.
 
 Per-vendor detection patterns
-([`netconfig/migration/_tier3_detection.py`](../netconfig/migration/_tier3_detection.py)):
+([`netcanon/migration/_tier3_detection.py`](../netcanon/migration/_tier3_detection.py)):
 
 | Source codec | Patterns matched (excerpt) |
 |---|---|
@@ -266,7 +266,7 @@ guessing or silently dropping.  Operators searching for `review:`
 in rendered output find every such site.
 
 * **Hash-portability policy**
-  ([`netconfig/migration/_user_secrets.py`](../netconfig/migration/_user_secrets.py)).
+  ([`netcanon/migration/_user_secrets.py`](../netcanon/migration/_user_secrets.py)).
   Every render path that emits a local user calls
   `is_migratable(hash, target_vendor)` first; on a miss, it emits a
   vendor-correct comment of the form:
@@ -284,7 +284,7 @@ in rendered output find every such site.
   security bug).
 
 * **Aruba AOS-S DHCP comment block**
-  ([`aruba_aoss/render.py`](../netconfig/migration/codecs/aruba_aoss/render.py)).
+  ([`aruba_aoss/render.py`](../netcanon/migration/codecs/aruba_aoss/render.py)).
   AOS-S is a DHCP-relay platform on most SKUs — it doesn't run a
   DHCP server.  When canonical carries DHCP pools, the renderer
   emits a header comment block:
@@ -355,7 +355,7 @@ controls.  Operator-visible failure modes:
   keys reject with a 422 listing both the offenders and the loaded
   set.
 * **`type_key` filename grammar** — definition load-time validator
-  in [`netconfig/definitions/schema.py`](../netconfig/definitions/schema.py)
+  in [`netcanon/definitions/schema.py`](../netcanon/definitions/schema.py)
   rejects any `type_key` containing `_` or `.`.  The file-store
   filename grammar is `{type_key}_{safe_host}_{timestamp}.{ext}`
   and underscores or dots inside `type_key` make round-trip
@@ -366,7 +366,7 @@ controls.  Operator-visible failure modes:
 * **Probe non-match** — backup-side code does not auto-detect
   vendors; the operator declares `type_key` per device.  Migration
   has its own auto-detect probe (see
-  [`migration_detect.py`](../netconfig/services/migration_detect.py)).
+  [`migration_detect.py`](../netcanon/services/migration_detect.py)).
 * **Cisco paging** — Cisco devices use SPACE-injection via
   `connection.cisco_more_paging: true` in the YAML definition.
   CLAUDE.md hard rule: never replace this with `terminal length 0`.
@@ -462,7 +462,7 @@ named above.  This document deliberately omits hard-coded counts
 
 Bugs and feature requests welcome via the project's issue tracker.
 For codec authoring, start at
-[`../netconfig/migration/codecs/README.md`](../netconfig/migration/codecs/README.md).
+[`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md).
 
 When reporting a translation bug, include:
 
