@@ -37,7 +37,7 @@ ARUBA_DEF_SRC = REPO_ROOT / "definitions" / "aruba" / "aos-s" / "16.x.yaml"
 
 # Synthetic AOS-S running-config — small but recognisable shape:
 # vlan blocks, interface block, manager password line.  No real
-# secrets — the password hash is obviously fake (per CLAUDE.md hard
+# secrets — the password hash is obviously fake (per AGENTS.md hard
 # rule on test fixtures).
 ARUBA_FAKE_OUTPUT = """\
 ; J9776A Configuration Editor; Created on release #WC.16.10.0023

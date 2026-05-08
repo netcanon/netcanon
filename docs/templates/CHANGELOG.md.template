@@ -91,7 +91,7 @@ entries will be specific to your project.
 ### Documented (forward-looking)
 
 * **Commit `<SHA>`** — `<doc-only commit that captures a forward-
-  looking plan>`.  Linked from `CLAUDE.md` "See also" so post-
+  looking plan>`.  Linked from `AGENTS.md` "See also" so post-
   compaction contexts find it cold.
 
 ### Changed (`<EXAMPLE: pipeline-stage signature for run_plan>`)
@@ -151,7 +151,7 @@ discover an inaccuracy after release:
 
 - [`README.md`](README.md) — project orientation
 - [`ARCHITECTURE.md`](ARCHITECTURE.md) — design overview
-- [`CLAUDE.md`](CLAUDE.md) — contributor directives (the doc-sync
+- [`AGENTS.md`](AGENTS.md) — contributor directives (the doc-sync
   checklist that produces these entries)
 - [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing
   capabilities + known limitations

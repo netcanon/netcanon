@@ -12,7 +12,7 @@ with two co-hosted concerns:
 This document is the operator-facing source of truth for **what the
 program does and does not do**.  Internal architecture lives in
 [`../ARCHITECTURE.md`](../ARCHITECTURE.md); contributor rules live in
-[`../CLAUDE.md`](../CLAUDE.md).  Per-codec live certification status
+[`../AGENTS.md`](../AGENTS.md).  Per-codec live certification status
 lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md).
 
 ---
@@ -362,14 +362,14 @@ controls.  Operator-visible failure modes:
   parsing ambiguous.
 * **Connection failures** — surfaced on the per-device row of the
   backup-job result with the exception class name and message.
-  Mocking is at one factory: `get_collector` (CLAUDE.md hard rule).
+  Mocking is at one factory: `get_collector` (AGENTS.md hard rule).
 * **Probe non-match** — backup-side code does not auto-detect
   vendors; the operator declares `type_key` per device.  Migration
   has its own auto-detect probe (see
   [`migration_detect.py`](../netcanon/services/migration_detect.py)).
 * **Cisco paging** — Cisco devices use SPACE-injection via
   `connection.cisco_more_paging: true` in the YAML definition.
-  CLAUDE.md hard rule: never replace this with `terminal length 0`.
+  AGENTS.md hard rule: never replace this with `terminal length 0`.
 
 ---
 
@@ -441,7 +441,7 @@ codecs) `canonical(parse(render(parse(raw))))` matches
 
 For the live numbers on either matrix, consult the markdown files
 named above.  This document deliberately omits hard-coded counts
-(per CLAUDE.md hard rule on prose-rot).
+(per AGENTS.md hard rule on prose-rot).
 
 ---
 
@@ -450,7 +450,7 @@ named above.  This document deliberately omits hard-coded counts
 * It is **not** a roadmap.  See
   [`../translator-plans.txt`](../translator-plans.txt).
 * It is **not** a contributor guide.  See
-  [`../CLAUDE.md`](../CLAUDE.md).
+  [`../AGENTS.md`](../AGENTS.md).
 * It is **not** a security model.  See
   [`../SECURITY.md`](../SECURITY.md).
 * It is **not** a per-fixture certification matrix.  See
@@ -477,7 +477,7 @@ When reporting a translation bug, include:
 
 - [`../README.md`](../README.md) — quickstart
 - [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — internal four-layer design
-- [`../CLAUDE.md`](../CLAUDE.md) — contributor directives
+- [`../AGENTS.md`](../AGENTS.md) — contributor directives
 - [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md) — per-codec certification state (live)
 - [`../tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md) — cross-mesh audit matrix (live)
 - [`./glossary.md`](./glossary.md) — project vocabulary (Tier 1/2/3, TRIVIAL_EMPTY, ship-before-wire, etc.)

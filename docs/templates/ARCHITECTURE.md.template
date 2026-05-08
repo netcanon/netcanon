@@ -1,7 +1,7 @@
 # `<PROJECT_NAME>` — Architecture
 
 This is the conceptual map.  For day-to-day contributor rules see
-[`CLAUDE.md`](CLAUDE.md); for the active roadmap and backlog see
+[`AGENTS.md`](AGENTS.md); for the active roadmap and backlog see
 [`<your roadmap doc>`](<path>).
 
 <!-- PROJECT: This document answers "what shape is this codebase, and
@@ -26,7 +26,7 @@ docstrings; this is the layer above.
 ## Top-level concerns
 
 <!-- PROJECT: Replicate the "Two concerns" framing from your
-CLAUDE.md.  If you have N concerns, name all N.  Use a simple ASCII
+AGENTS.md.  If you have N concerns, name all N.  Use a simple ASCII
 diagram if it helps — the goal is a 30-second mental model. -->
 
 `<PROJECT_NAME>` is a `<short technical descriptor — e.g. "FastAPI
@@ -278,7 +278,7 @@ parse + round-trip + determinism assertions, and prints per-fixture
 coverage metrics.
 
 Mocking single entry point: `<external service>` is mocked at
-`<single factory>`, never at the SDK client level (see CLAUDE.md
+`<single factory>`, never at the SDK client level (see AGENTS.md
 hard rule).
 
 ---

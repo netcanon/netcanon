@@ -13,7 +13,7 @@ wave-by-wave through the Netcanon project but never previously got
 written down in one place.  Three audiences benefit:
 
 1. **Future contributors to Netcanon** find the rationale behind the
-   patterns embedded in `CLAUDE.md`, `ARCHITECTURE.md`, and the
+   patterns embedded in `AGENTS.md`, `ARCHITECTURE.md`, and the
    per-codec capability declarations.
 2. **A future self on a different project** can clone this doc and
    adapt it; the discipline transfers, the implementation does not.
@@ -72,8 +72,8 @@ corrected:
   in Wave 10γ-2 (commit `f81f3a5`).
 * "Phase 2 will add a resolver" docstrings: comments referencing
   unshipped future work that becomes a lie the instant Phase 2 ships.
-  CLAUDE.md's documentation sync checklist
-  ([`CLAUDE.md` lines 110-134](../CLAUDE.md)) explicitly enumerates
+  AGENTS.md's documentation sync checklist
+  ([`AGENTS.md` lines 110-134](../AGENTS.md)) explicitly enumerates
   module-docstring inventories as a row that must be touched in the
   same commit as the addition.
 
@@ -121,7 +121,7 @@ until a future contributor wastes a day on a stale claim.
 
 The disciplinary mechanism in Netcanon is a concrete *Documentation
 Sync Checklist*: a table mapping "if you change X, then touch Y."
-See [`CLAUDE.md` lines 102-138](../CLAUDE.md).  The table is
+See [`AGENTS.md` lines 102-138](../AGENTS.md).  The table is
 intentionally exhaustive rather than illustrative — every row in it
 exists because someone forgot the corresponding doc and shipped
 drift, then went back and audited what they should have updated.
@@ -299,7 +299,7 @@ it evolves to match the surface area the harness exercises.
 Every doc has a "See also" footer pointing at 2-3 closest peers.  A
 contributor landing on one doc is one hop from the others.  When you
 add a new sibling doc, add the reciprocal link in each existing peer
-in the same commit.  See [`CLAUDE.md` lines 142-159](../CLAUDE.md)
+in the same commit.  See [`AGENTS.md` lines 142-159](../AGENTS.md)
 for the project's explicit statement of this discipline; every doc
 in `docs/` ends with a "See also" footer, e.g.
 [`docs/CAPABILITIES.md` lines 476-483](CAPABILITIES.md) and
@@ -320,8 +320,8 @@ contributor who reads "Never author a `type_key` containing `_` or
 grammar uses these characters as separators, and underscores or dots
 inside a `type_key` make the filename parse mathematically ambiguous.
 
-Worked example: see [`CLAUDE.md` lines 191-200](../CLAUDE.md) for
-the `type_key` filename-safety rule.  The rule lives in CLAUDE.md
+Worked example: see [`AGENTS.md` lines 191-200](../AGENTS.md) for
+the `type_key` filename-safety rule.  The rule lives in AGENTS.md
 because the failure mode was independently rediscovered by two
 separate contributors before the validator existed; once it became
 a hard rule with rationale, it stopped being rediscovered.
@@ -369,7 +369,7 @@ The artefact taxonomy is shaped by audience.  Each artefact has a
 specific reader and a specific scope; mixing scopes across artefacts
 produces docs that are simultaneously too long and too vague.
 
-* **`CLAUDE.md`** — operational rulebook for contributors.  Lives at
+* **`AGENTS.md`** — operational rulebook for contributors.  Lives at
   repo root.  Hard rules + doc-sync checklist + cross-reference
   discipline.  Read by every contributor on every session.  *Not*
   a tutorial; *not* a design doc.  Length: tightly bounded — every
@@ -383,7 +383,7 @@ produces docs that are simultaneously too long and too vague.
   block for in-flight; promote to versioned cuts at release.
   Archival; entries are timestamps, not current-state claims, so
   the no-hard-coded-counts rule does not apply (see
-  [`CLAUDE.md` lines 209-219](../CLAUDE.md)).  *Not* forward-
+  [`AGENTS.md` lines 209-219](../AGENTS.md)).  *Not* forward-
   looking.
 * **`docs/CAPABILITIES.md`** — operator-facing capabilities + known
   limitations.  Tier 1/2/3 enumeration + capability matrix tables +
@@ -415,12 +415,12 @@ For each: what it looks like, why it's bad, how to detect it.
   comment, eighteen months after Phase 2 shipped.  Detect via grep
   for "will add" / "future extension" / "TODO" against the commit
   log; any phrase about future work whose specific commit is older
-  than 60 days is a candidate.  CLAUDE.md's documentation sync
+  than 60 days is a candidate.  AGENTS.md's documentation sync
   checklist row about *module docstrings that enumerate contents*
   is the disciplinary defence.
 * **Hard-coded counts in prose without CI guards.**  "The 50+
   hardware models we support."  Detect via the no-hard-coded-counts
-  hard rule ([`CLAUDE.md` lines 209-219](../CLAUDE.md)).  Acceptable
+  hard rule ([`AGENTS.md` lines 209-219](../AGENTS.md)).  Acceptable
   in CHANGELOG (timestamps) and test assertions (fail loudly when
   the number drifts).  Unacceptable in current-state prose, where
   the number rots silently.
@@ -458,13 +458,13 @@ This section is for the reader who wants to see each pattern as a
 real artefact rather than an abstract claim.
 
 > **Pattern:** Cross-reference discipline.
-> **Live example:** [`CLAUDE.md` lines 142-159](../CLAUDE.md) (the
+> **Live example:** [`AGENTS.md` lines 142-159](../AGENTS.md) (the
 > discipline statement); every doc in `docs/` has a "See also"
 > footer (e.g. [`docs/CAPABILITIES.md` lines 476-483](CAPABILITIES.md);
 > [`ARCHITECTURE.md` lines 837-848](../ARCHITECTURE.md)).
 
 > **Pattern:** Hard-rule structure with rationale.
-> **Live example:** [`CLAUDE.md` lines 183-234](../CLAUDE.md) — the
+> **Live example:** [`AGENTS.md` lines 183-234](../AGENTS.md) — the
 > "Hard Rules" section.  Each rule has a one-line rationale; the
 > `type_key` rule (lines 191-200) explicitly cites the two
 > independent rediscoveries that motivated promoting it from
@@ -498,7 +498,7 @@ real artefact rather than an abstract claim.
 
 > **Pattern:** Doc-sync in same commit.
 > **Live example:**
-> [`CLAUDE.md` lines 102-138](../CLAUDE.md) — the explicit row-by-row
+> [`AGENTS.md` lines 102-138](../AGENTS.md) — the explicit row-by-row
 > mapping of "if you change X, then touch Y."
 
 > **Pattern:** Forensic discipline (reproduction test FIRST).
@@ -575,7 +575,7 @@ the new project needs.
 ## Pointer to the templates
 
 A sister directory, `docs/templates/`, contains starter-template
-versions of each artefact: a skeleton `CLAUDE.md`, a skeleton
+versions of each artefact: a skeleton `AGENTS.md`, a skeleton
 `ARCHITECTURE.md`, a skeleton `CAPABILITIES.md`, etc.  The templates
 are not authoritative — they are starting points.  This document is
 the reference for *why* the templates have their shape; clone from
@@ -592,7 +592,7 @@ commit.
 
 ## See also
 
-* [`CLAUDE.md`](../CLAUDE.md) — contributor directives (the
+* [`AGENTS.md`](../AGENTS.md) — contributor directives (the
   operational rulebook this document distills the discipline behind).
 * [`ARCHITECTURE.md`](../ARCHITECTURE.md) — internal four-layer
   design (the structure the discipline operates on).

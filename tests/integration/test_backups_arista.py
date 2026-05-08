@@ -37,7 +37,7 @@ ARISTA_DEF_SRC = REPO_ROOT / "definitions" / "arista" / "eos" / "4.32.yaml"
 
 # Synthetic Arista EOS running-config — small but recognisable shape:
 # hostname / vlan / interface / username with an obviously fake hash.
-# Per CLAUDE.md hard rule on test fixtures, the secret looks plausible
+# Per AGENTS.md hard rule on test fixtures, the secret looks plausible
 # but is not a real captured hash.
 ARISTA_FAKE_OUTPUT = """\
 ! Command: show running-config

@@ -14,7 +14,7 @@
   model; `--dry-run` mode).
 * **Phase 5** — operator-facing docs (7 per-vendor pages +
   index in `docs/vendors/`, `docs/HOW_WE_TEST.md`,
-  `docs/TROUBLESHOOTING.md`, `BUG_REPORTING.md`; CLAUDE.md
+  `docs/TROUBLESHOOTING.md`, `BUG_REPORTING.md`; AGENTS.md
   doc-sync row + hard rule about user-facing-doc updates).
 * **Phase 6** — packaging foundation (multi-stage Dockerfile,
   GHCR publish workflow with cosign + SBOM, PyPI Trusted
@@ -100,7 +100,7 @@ material in the repo already; some are missing entirely.
 | `CONTRIBUTING.md` | Missing | Critical for releases.  Walks: add a fixture, add a codec, add a canonical field.  Existing `docs/adding-a-canonical-field.md` and `docs/adding-a-target-profile.md` are perfect raw material |
 | `CODE_OF_CONDUCT.md` | Probably missing | Adopt Contributor Covenant; copy-paste is fine |
 | `.github/ISSUE_TEMPLATE/` | Missing | Critical for bug-report surface (see "Repo-level 'asking for help'" below) |
-| `.github/PULL_REQUEST_TEMPLATE.md` | Missing | Lightweight; references the doc-sync checklist from `CLAUDE.md` |
+| `.github/PULL_REQUEST_TEMPLATE.md` | Missing | Lightweight; references the doc-sync checklist from `AGENTS.md` |
 | Public CI (GitHub Actions) | Verify | Pre-commit hooks + suite need to run on PRs from external contributors |
 | Real-IP / secret scrub audit | Hard rule already prevents | Run a final `git log --all -p \| grep` for IPs/hostnames before going public |
 | Semver versioning + tag | Need to decide | Recommended: `v0.1.0` to signal pre-1.0 — sets honest expectations |
@@ -369,7 +369,7 @@ Three core docs to write, plus several walkthrough/reference pages:
      answer is 'this is Tier 3 by design'"
 
 2. **`CONTRIBUTING.md`** — the project already has the raw material in
-   `CLAUDE.md`'s doc-sync checklist + `docs/adding-a-canonical-field.md`.
+   `AGENTS.md`'s doc-sync checklist + `docs/adding-a-canonical-field.md`.
    Lift those into a public-facing CONTRIBUTING that:
    * Walks adding a fixture (the matrix-friendly path)
    * Walks adding a codec (the heavy path)
@@ -810,9 +810,9 @@ Triggers that suggest "wait":
   this doc is internal)
 * [`CAPABILITIES.md`](CAPABILITIES.md) — the operator-facing source of
   truth this release plan promotes
-* [`CLAUDE.md`](../CLAUDE.md) — contributor directives; the
+* [`AGENTS.md`](../AGENTS.md) — contributor directives; the
   CONTRIBUTING.md authored during Phase 1 of this plan should lift
-  much of the matrix-honesty discipline from CLAUDE.md
+  much of the matrix-honesty discipline from AGENTS.md
 * [`CHANGELOG.md`](../CHANGELOG.md) — chronological shipped work; this
   plan is forward-looking, NOT shipped, hence not in CHANGELOG
 * [`tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md)

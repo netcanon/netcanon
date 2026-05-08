@@ -2,7 +2,7 @@
 
 ## Why this doc exists
 
-`CLAUDE.md` lays out the feature-parity discipline abstractly: every
+`AGENTS.md` lays out the feature-parity discipline abstractly: every
 functional change must land on both platforms in the same branch, every
 new interactive HTML element needs a `data-testid`, every new module or
 endpoint that changes a docstring inventory must update that
@@ -80,7 +80,7 @@ suspicion.
    `run_plan_with_overrides` with only `snmpv3_user_rename_map`
    populated — the other four maps default to `None`.  The module
    docstring's "Endpoints" inventory was updated in the same commit;
-   that's the inventory-rot rule from CLAUDE.md applied.
+   that's the inventory-rot rule from AGENTS.md applied.
 7. **Web UI — `netcanon/templates/migrate.html` + new partial.**
    The template gained a fifth rail button
    (`migrate-rename-rail-snmpv3`), a pane wrapper, an empty-state
@@ -91,7 +91,7 @@ suspicion.
    (`rename-panel.js`, `rename-apply.js`) gained branches for the
    new category.  The migrate.html "Contents map" comment block at
    the top of the file lists the partials it includes; that map was
-   updated in the same commit (CLAUDE.md doc-sync rule for new
+   updated in the same commit (AGENTS.md doc-sync rule for new
    partials).
 8. **Desktop platform — no diff.**
    The desktop shell (`netcanon_desktop/`) embeds the same FastAPI
@@ -167,7 +167,7 @@ suspicion.
     migrate-page table: rail button, rail count badge, pane
     wrapper, empty state, sections container, table, per-user row
     template, per-user override input, per-user drop link, summary
-    sub-line, and compat banner.  Run the CLAUDE.md self-grep
+    sub-line, and compat banner.  Run the AGENTS.md self-grep
     (`grep -r 'data-testid="<new-id>"' tests/testid_reference.md`)
     on each new ID to confirm the doc actually picks them up.
 17. **Module docstrings.**
@@ -176,14 +176,14 @@ suspicion.
     `routes/migration.py`'s docstring enumerates per-pane endpoints;
     `/plan/snmpv3` was added there in the same commit.  Skipping
     either docstring update would have shipped a stale inventory —
-    exactly what the CLAUDE.md "module docstring inventory" row
+    exactly what the AGENTS.md "module docstring inventory" row
     catches.
 18. **Architecture doc — `ARCHITECTURE.md`.**
     Three sections name the new category: the override-pipeline
     composition order ("ports → vlans → local_users → snmp_community
     → snmpv3_users"), the partial inventory's bullet for
     `snmpv3-user-rename-table.js`, and the per-pane summary
-    paragraph.  CLAUDE.md's "fourth or subsequent commit shipping
+    paragraph.  AGENTS.md's "fourth or subsequent commit shipping
     pieces of the same conceptual subsystem" rule applied here:
     P2C6 was the sixth per-pane commit, well past the threshold for
     explicit architecture-level acknowledgement.
@@ -218,7 +218,7 @@ suspicion.
 | Desktop tests | If server behaviour changed | `tests/desktop/` |
 | Module docstrings | If module enumerates endpoints / phases | the docstring inventory at the top of the file |
 | Architecture doc | At commit 3-5 of a thematic series | `ARCHITECTURE.md` |
-| Doc-sync table | Always | the "Documentation Sync Checklist" in `CLAUDE.md` |
+| Doc-sync table | Always | the "Documentation Sync Checklist" in `AGENTS.md` |
 
 ## Common pitfalls (extracted from real bugs)
 
@@ -232,7 +232,7 @@ suspicion.
   test (`tests/unit/migration/test_bidirectionality_invariants.py`)
   catches this with an actionable error.  Trust the failure message —
   it tells you exactly which codec mismatched.
-* **Forgetting `data-testid` on a new interactive element.** CLAUDE.md
+* **Forgetting `data-testid` on a new interactive element.** AGENTS.md
   says E2E tests use testids exclusively; a missing testid is silent
   until someone tries to write the E2E test.  The doc-side guard is
   the self-grep against `tests/testid_reference.md` before commit.
@@ -262,7 +262,7 @@ suspicion.
 
 ## See also
 
-* [`../CLAUDE.md`](../CLAUDE.md) — Feature-Parity Checklist + Doc
+* [`../AGENTS.md`](../AGENTS.md) — Feature-Parity Checklist + Doc
   Sync Checklist (the abstract rules this doc instantiates)
 * [`../ARCHITECTURE.md`](../ARCHITECTURE.md) — 4-layer architecture
   and the per-pane category section

@@ -12,12 +12,12 @@ then drives the full POST/GET round-trip via TestClient.  Confirms:
   ``juniper_junos`` migration codec — proving the definition's
   command choice produces wire form the codec actually consumes.
 
-Patch target rationale (CLAUDE.md hard rule): never patch
+Patch target rationale (AGENTS.md hard rule): never patch
 ``ConnectHandler`` / ``paramiko.SSHClient`` directly — the canonical
 seam is ``get_collector``, the single factory used by the backup
 route.
 
-POST/GET sequence rationale (CLAUDE.md hard rule): the POST response
+POST/GET sequence rationale (AGENTS.md hard rule): the POST response
 is serialised before the BackgroundTask runs and always shows
 ``status: pending``.  Always GET the job by ID for the final state.
 """
@@ -58,7 +58,7 @@ JUNOS_FAKE_OUTPUT = (
     "set system name-server 1.1.1.1\n"
     "set system login user admin class super-user\n"
     # Synthetic but plausibly-shaped Junos hash — obviously fake per
-    # CLAUDE.md "synthetic test secrets" rule.
+    # AGENTS.md "synthetic test secrets" rule.
     'set system login user admin authentication encrypted-password "$6$fake$JunosFakeHashForTest1234"\n'
     "set interfaces ge-0/0/0 description \"uplink-to-core\"\n"
     "set interfaces ge-0/0/0 mtu 9000\n"
@@ -145,7 +145,7 @@ class TestJunosBackupRoute:
         assert resp.status_code == 202
 
     def test_post_returns_pending_status(self, junos_client):
-        # CLAUDE.md hard rule: POST response is always pending.  GET for
+        # AGENTS.md hard rule: POST response is always pending.  GET for
         # the final status.
         resp = junos_client.post(
             "/api/v1/backups", json={"devices": [_device_payload()]}

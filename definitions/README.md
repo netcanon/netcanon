@@ -160,7 +160,7 @@ only via `resolve()`.
   switch to `hp_procurve` for legacy 15.x firmware.
 - `connection.cisco_more_paging: true` — Aruba's `-- MORE --` pager responds
   to space-injection (the same mechanism Cisco uses); netmiko handles it
-  internally for the `aruba_osswitch` driver.  CLAUDE.md hard rule: never
+  internally for the `aruba_osswitch` driver.  AGENTS.md hard rule: never
   `terminal length 0`.
 - Manager-mode escalation handled by netmiko via the `secret` credential —
   the definition does NOT need `needs_enable: true`.
@@ -176,7 +176,7 @@ only via `resolve()`.
   `| display set` flattens the hierarchical config to flat `set` statements
   (the canonical paste form the `juniper_junos` migration codec parses);
   `| no-more` suppresses the operational-mode pager so the whole config
-  streams without space-injection.  CLAUDE.md hard rule: never
+  streams without space-injection.  AGENTS.md hard rule: never
   `terminal length 0` (and Junos doesn't have it anyway).
 - `connection.cisco_more_paging: false` — `| no-more` is the Junos
   equivalent and is applied via the config command itself.
@@ -190,7 +190,7 @@ only via `resolve()`.
 - `connection.needs_enable: true` — SSH commonly lands at user-exec ``>``.
 - `connection.cisco_more_paging: true` — same rationale as Cisco IOS-XE
   (`terminal length 0` deliberately avoided; space-injection is reliable
-  across EOS releases).  CLAUDE.md hard rule.
+  across EOS releases).  AGENTS.md hard rule.
 - `probe.command: show version` — captures major.minor from
   `Software image version: 4.32.0F` (so overlays declared with
   `os_version: "4.32"` resolve), and the chassis model from the leading

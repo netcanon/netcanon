@@ -6,7 +6,7 @@
 # Intentionally exercises every canonical field declared 'supported'
 # or 'lossy' in MikroTikRouterOSCodec._CAPS, plus the LAG / local-user /
 # DHCP / RADIUS / SNMPv3 surfaces the parser populates.  Hashes /
-# secrets are FAKE per CLAUDE.md — they look real but are not actual
+# secrets are FAKE per AGENTS.md — they look real but are not actual
 # credentials.
 #
 # RouterOS 6/7 compatible: uses the section + add/set grammar that

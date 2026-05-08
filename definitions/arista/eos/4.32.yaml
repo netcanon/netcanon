@@ -22,7 +22,7 @@ file_extension: cfg
 connection:
   needs_enable: true          # SSH commonly lands at user-exec ``>`` prompt
   cisco_more_paging: true     # space-inject to dismiss '--More--' prompts;
-                              # NEVER use 'terminal length 0' (per CLAUDE.md
+                              # NEVER use 'terminal length 0' (per AGENTS.md
                               # hard rule — unreliable across versions)
   opnsense_shell_menu: false
 

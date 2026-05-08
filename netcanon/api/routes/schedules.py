@@ -89,7 +89,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
     empty job.
 
     Tests patch ``netcanon.api.routes.backups.get_collector`` to mock
-    device collection — see CLAUDE.md "Hard Rules".  The collector is
+    device collection — see AGENTS.md "Hard Rules".  The collector is
     invoked transitively via ``_run_backup_job``.
 
     Args:

@@ -288,7 +288,7 @@ HIGH-MNT-006: No Configuration Validation on Startup
   validate they exist or are writable. Errors appear only on first file access.
 
 MEDIUM-MNT-001: README Missing from Project Root
-  No top-level README.md. CLAUDE.md covers development rules but not how to
+  No top-level README.md. AGENTS.md covers development rules but not how to
   run the app. A new developer has no "Getting Started" guide.
 
 MEDIUM-MNT-002: Credential Migration Pattern Repeated
@@ -882,7 +882,7 @@ INFO-DST-002: PowerShell Scripts Undocumented
 INFO-DST-003: Web Platform Is Cross-Platform; Desktop Is Windows-Only
   netconfig/ works on Linux/macOS (no platform-specific code except
   open-in-editor). netconfig_desktop/ and setup_desktop.py are Windows-only.
-  Intentional per CLAUDE.md but creates distribution asymmetry.
+  Intentional per AGENTS.md but creates distribution asymmetry.
 
 
 ================================================================================

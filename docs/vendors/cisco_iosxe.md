@@ -93,7 +93,7 @@ Provenance + per-fixture detail in
 
 - **No `terminal length 0`.**  Netcanon uses `--More--`
   space-injection for paging.  This is a hard rule (see
-  [`../../CLAUDE.md`](../../CLAUDE.md)) — don't try to bypass.
+  [`../../AGENTS.md`](../../AGENTS.md)) — don't try to bypass.
 - **Mgmt-vrf interface** (`GigabitEthernet0/0` with
   `vrf forwarding Mgmt-vrf`) gets `kind=mgmt` override automatically
   by the parser, so cross-vendor rename can cascade to Aruba `oobm`

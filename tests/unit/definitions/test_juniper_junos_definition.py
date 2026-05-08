@@ -138,7 +138,7 @@ class TestJunosDefinitionShape:
         assert junos_definition.commands.post == []
 
     def test_paging_does_not_use_cisco_more_paging(self, junos_definition):
-        # CLAUDE.md hard rule: never ``terminal length 0``.  Junos uses
+        # AGENTS.md hard rule: never ``terminal length 0``.  Junos uses
         # ``| no-more`` instead — neither space-injection nor the Cisco
         # paging dance applies.
         assert junos_definition.connection.cisco_more_paging is False

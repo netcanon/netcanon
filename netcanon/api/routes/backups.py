@@ -29,7 +29,7 @@ a completed job immediately after ``POST /api/v1/backups`` — but the
 POST response body itself is always serialised in ``pending`` state
 (it's built before the background task runs).  Tests that need the
 final job state must always GET the job by ID after POSTing — never
-assert on the POST response body.  See CLAUDE.md "Hard Rules".
+assert on the POST response body.  See AGENTS.md "Hard Rules".
 
 Mocking convention: tests mock collection by patching
 ``netcanon.api.routes.backups.get_collector`` — the single factory
@@ -207,7 +207,7 @@ def _process_one_device(
     jobs skip the pool for cleaner traces).
 
     Tests patch ``netcanon.api.routes.backups.get_collector`` to mock
-    SSH/NETCONF/REST collection — see CLAUDE.md "Hard Rules".  Never
+    SSH/NETCONF/REST collection — see AGENTS.md "Hard Rules".  Never
     patch ``ConnectHandler`` or ``paramiko.SSHClient`` directly.
 
     Layered-definition resolution (P1C3):
@@ -380,7 +380,7 @@ def _run_backup_job(
     """Execute all device backups for *job* and update its state.
 
     Runs in BackgroundTasks; never returns to the route response — see
-    CLAUDE.md "Hard Rules".  ``POST /api/v1/backups`` always returns
+    AGENTS.md "Hard Rules".  ``POST /api/v1/backups`` always returns
     ``status=pending`` and the caller polls ``GET /api/v1/backups/{id}``
     for the terminal state this function writes.  Tests rely on
     TestClient executing background tasks synchronously before the POST

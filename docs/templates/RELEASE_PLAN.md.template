@@ -61,7 +61,7 @@ material in the repo already; some are missing entirely.
 | `CONTRIBUTING.md` | `<Status>` | Walks: how to add a fixture, how to add a `<COMPONENT>`, how to add to `<CORE_ABSTRACTION>` |
 | `CODE_OF_CONDUCT.md` | `<Probably missing>` | Adopt Contributor Covenant; copy-paste is fine |
 | `.github/ISSUE_TEMPLATE/` | `<Missing>` | Critical for bug-report surface |
-| `.github/PULL_REQUEST_TEMPLATE.md` | `<Missing>` | References the doc-sync checklist from `CLAUDE.md` |
+| `.github/PULL_REQUEST_TEMPLATE.md` | `<Missing>` | References the doc-sync checklist from `AGENTS.md` |
 | Public CI (GitHub Actions) | `<Verify>` | Pre-commit hooks + suite need to run on PRs from external contributors |
 | Real-data / secret scrub audit | `<Verify>` | Run a final `git log --all -p \| grep` for `<sensitive identifiers>` before going public |
 | Semver versioning + tag | `<Need to decide>` | Recommended: `v0.1.0` to signal pre-1.0 — sets honest expectations |
@@ -521,9 +521,9 @@ Triggers that suggest "wait":
   this doc is internal)
 - [`CAPABILITIES.md`](CAPABILITIES.md) — the user-facing source of
   truth this release plan promotes
-- [`CLAUDE.md`](../CLAUDE.md) — contributor directives; the
+- [`AGENTS.md`](../AGENTS.md) — contributor directives; the
   CONTRIBUTING.md authored during Phase 1 of this plan should lift
-  much of the matrix-honesty discipline from CLAUDE.md
+  much of the matrix-honesty discipline from AGENTS.md
 - [`CHANGELOG.md`](../CHANGELOG.md) — chronological shipped work;
   this plan is forward-looking, NOT shipped, hence not in CHANGELOG
 - [`docs/templates/METHODOLOGY.md`](templates/METHODOLOGY.md) — the

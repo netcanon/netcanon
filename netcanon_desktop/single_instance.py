@@ -18,7 +18,7 @@ Design notes:
   workflow where one user installs and launches Netcanon.
 * On non-Windows platforms (Linux / macOS test runs) the function
   always returns True — desktop is Windows-only per the
-  Platform-Specific Exceptions in CLAUDE.md.
+  Platform-Specific Exceptions in AGENTS.md.
 
 Usage::
 

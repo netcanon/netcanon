@@ -14,7 +14,7 @@ Covers:
   * Legacy definitions (no ``probe:`` block) keep working unchanged
     — no detected_facts populate, no overlay swap happens.
 
-All mocking happens at ``get_collector`` per CLAUDE.md's hard rule
+All mocking happens at ``get_collector`` per AGENTS.md's hard rule
 against patching ``ConnectHandler``.  A custom FakeProbingCollector
 subclass returns canned probe output + canned config output.
 """

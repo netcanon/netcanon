@@ -212,7 +212,7 @@ This file must be updated when any of the following change:
 ## See also
 
 - [`README.md`](README.md) — project orientation and quickstart
-- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the
+- [`AGENTS.md`](AGENTS.md) — contributor directives, including the
   "never commit real credentials" hard rule
 - [`docs/templates/METHODOLOGY.md`](docs/templates/METHODOLOGY.md) —
   the matrix-honesty discipline behind this document's shape

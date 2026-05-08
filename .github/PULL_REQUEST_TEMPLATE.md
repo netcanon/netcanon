@@ -11,11 +11,11 @@
 
 ## Doc-sync checklist
 
-The most-skipped reviewer concern.  Audit `CLAUDE.md`'s "Documentation Sync
+The most-skipped reviewer concern.  Audit `AGENTS.md`'s "Documentation Sync
 Checklist" table — every row that applies to your change should have its
 target doc updated in this same commit.
 
-- [ ] If a hard rule was added or modified → `CLAUDE.md`
+- [ ] If a hard rule was added or modified → `AGENTS.md`
 - [ ] If a new interactive HTML element was added → `tests/testid_reference.md`
 - [ ] If a new codec / module / canonical field was added → the relevant module README
 - [ ] If a capability-matrix declaration changed → cross-mesh audit regenerated

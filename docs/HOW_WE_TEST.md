@@ -135,7 +135,7 @@ variance taxonomy and generates
 
 Both run in CI on every PR; the matrix gets regenerated on every
 codec change per the
-[doc-sync checklist](../CLAUDE.md#documentation-sync-checklist).
+[doc-sync checklist](../AGENTS.md#documentation-sync-checklist).
 
 ---
 

@@ -11,6 +11,68 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Rename `CLAUDE.md` → `AGENTS.md` (cross-tool convention name)
+
+Renames the contributor-directives file from a vendor-named
+(`CLAUDE.md`) to the emerging cross-tool convention
+(`AGENTS.md`).  Substance unchanged — same hard rules, same
+doc-sync table, same engineering discipline; just the filename and
+its 197 cross-references across 56 files.
+
+The rename also touches the starter template at
+`docs/templates/CLAUDE.md.template` → `docs/templates/AGENTS.md.template`
+and the four genuine `Claude`-named references that lived outside
+the directive file itself:
+
+* `docs/glossary.md` — "humans and Claude agents" → "human or
+  AI-assisted"
+* `translator-plans.txt` — "Written for Claude, not humans" →
+  "Written for AI-assisted contributors and grep — not narrative
+  reading"
+* `.gitignore` — "Claude Code internal" → "AI-assistant tooling —
+  local session state, never committed", and expanded to ignore
+  `.cursor/` and `.aider*/` alongside `.claude/` so the gitignore
+  treats AI tooling generically
+* The directives file itself — content was already vendor-neutral
+  (no "Claude" string anywhere in body text); only the filename +
+  cross-refs changed
+
+The rename is a pure structural change; no rules were dropped,
+softened, or rewritten.
+
+#### Why now
+
+Pre-public-flip polish.  `AGENTS.md` is becoming the cross-tool
+standard for "the rulebook the contributor reads first" — adopted
+by OpenAI codex, several Cursor projects, and others.  The
+generic name decouples the file from any particular AI tool's
+conventions and reduces the perception that the project is tied
+to one vendor's tooling.
+
+#### What did NOT change
+
+* **Git history.**  Past commits with `Co-Authored-By` trailers
+  stay as they are — those are truthful attribution and rewriting
+  them would require a destructive `git filter-repo` pass we're
+  not doing again after the Phase 1 PII scrub.  Going forward,
+  commits attribute to the project contributor identity only.
+* **Real-world fixtures.**  Two FortiGate operator-contributed
+  fixtures contain "Claude" in their unmodified config text
+  (banner / comment / description); leaving them untouched
+  preserves fixture provenance and authenticity.
+* **The contributor directives content.**  Every hard rule, every
+  doc-sync table row, every cross-reference target stays the same
+  — only the filename changed.
+
+#### Doc-sync follow-up
+
+* `CONTRIBUTING.md` gained a small "A note on the development
+  workflow" subsection inside "What this project values":
+  acknowledges AI-assisted development as part of the workflow
+  context, declares that matrix-honesty discipline applies to the
+  AI workflow the same as the code, and points at `AGENTS.md` as
+  the canonical (tooling-agnostic) directives file.
+
 ### Distribution: mirror published images to Docker Hub
 
 `docker-publish.yml` now pushes each release to **two registries** in
@@ -127,7 +189,7 @@ feature-parity-walkthrough / translator-plans).  Headline fixes:
 * **README sanitiser link target.**  Pointed at `BUG_REPORTING.md`
   (the workflow doc) instead of `CAPABILITIES.md` (the matrix).
 * **HUMAN_TESTING.md hardcoded codec count.**  "all 7 codecs" →
-  "the registered codecs" (CLAUDE.md hard-rule violation).
+  "the registered codecs" (AGENTS.md hard-rule violation).
 * **`docs/IDENTITY.md` Topics ↔ pyproject.toml mirror claim.**
   Added `python` + `fastapi` to `pyproject.toml` `keywords` so the
   two surfaces actually match (doc claimed mirror; reality didn't).
@@ -406,7 +468,7 @@ answer to "what's the actual workflow look like?".
 
 #### Doc cross-references
 
-* `CLAUDE.md` "See also" footer extended with `docs/walkthroughs/`
+* `AGENTS.md` "See also" footer extended with `docs/walkthroughs/`
 * `docs/walkthroughs/` cross-links into `docs/vendors/`,
   `docs/CAPABILITIES.md`, `docs/COMPARISON.md`, `BUG_REPORTING.md`,
   and `docs/HOW_WE_TEST.md` — every walkthrough's "See also"
@@ -565,7 +627,7 @@ Resolved before commit.
   reproducible-in-principle (pinned base image, pinned wheels);
   byte-identical-digest verification is a follow-up post-launch.
 
-### CLAUDE.md hard rule — review every push for PII
+### AGENTS.md hard rule — review every push for PII
 
 New hard rule codifying the discipline that surfaced from the Phase
 1 PII scrub.  Applies to any push to an off-machine destination —
@@ -697,7 +759,7 @@ doc covering sanitise → verify → submit:
 This unblocks the bug-report friction collapse — operators go from
 "hand-redact every line" to "30-second `curl -F` workflow."
 
-#### CLAUDE.md additions (operator-facing-doc discipline)
+#### AGENTS.md additions (operator-facing-doc discipline)
 
 * New row in the Documentation Sync Checklist: "user-facing feature
   ships or changes" → update the relevant operator-facing docs
@@ -874,7 +936,7 @@ to apply when the repo goes public.
   matrix-honesty cell metaphor).  Logo not yet commissioned;
   brief is the spec when ready.  Includes a starter Midjourney
   prompt for AI-generated drafts.
-* **`CLAUDE.md` "See also" footer** updated with both new docs.
+* **`AGENTS.md` "See also" footer** updated with both new docs.
 
 #### What this wave does NOT do
 
@@ -908,7 +970,7 @@ changes; pure structural rename + import path + env var prefix.
 * **Env var prefix** (20 occurrences): `NETCONFIG_*` → `NETCANON_*`
   in `.env.example`, `netcanon/config.py`,
   `netcanon_desktop/preferences.py`, and operator-facing prose in
-  `CLAUDE.md` + CHANGELOG.  This IS a breaking change for any
+  `AGENTS.md` + CHANGELOG.  This IS a breaking change for any
   operator with shell scripts or `.env` files using `NETCONFIG_*`
   — it ships pre-public so no real users are affected.
 * **`pyproject.toml`** structural fields: `[tool.setuptools.packages.find]
@@ -978,7 +1040,7 @@ artefacts + PII scrub.
   OSS template).  Enforcement contact uses an `OWNER/REPO`
   placeholder to swap before public launch.
 * **`CONTRIBUTING.md`** — substantive contributor guide; lifts
-  from `CLAUDE.md`'s doc-sync checklist +
+  from `AGENTS.md`'s doc-sync checklist +
   `docs/adding-a-canonical-field.md`.  Walks the three
   contribution paths (fixture / codec / canonical field) and
   points at matrix-honesty as the project's North Star.
@@ -1151,7 +1213,7 @@ surface that the web platform exposes via `NETCANON_*` env vars.
   layout updated to list all five new files; settings table extended
   with the data-root row; new Preferences and Uninstall behaviour
   sections.
-* **Item 7 — Cross-cutting docs** (`CLAUDE.md`): Platform-Specific
+* **Item 7 — Cross-cutting docs** (`AGENTS.md`): Platform-Specific
   Exceptions section gains the Preferences dialog + single-instance
   entries; new "Deliberately omitted (preventive)" subsection
   documents telemetry / auto-update / file associations / crash
@@ -1237,7 +1299,7 @@ tunnels.
   engineer audience, packaging tier strategy (Docker primary, PyPI
   secondary, MSI tertiary), concrete release sequence, what-not-to-do
   guidance, when-to-start triggers.  Forward-looking; not yet
-  started.  Linked from `CLAUDE.md` "See also" so post-compaction
+  started.  Linked from `AGENTS.md` "See also" so post-compaction
   contexts find it cold.
 
 ### Added (Wave 11 — operator-visible notification when Tier-3 sections are dropped)
@@ -1705,7 +1767,7 @@ CamelCase: `Cisco`, `Fortigate`, `MikroTik`, `OPNsense`, `Aruba`,
 trap (commit `8c9e9d4`) confirmed the rule was load-bearing.  Both
 the schema-level validator and the file-store regex (now using
 `[^_.]+` for the `device_type` group instead of `.+?`) enforce the
-invariant from two angles.  CLAUDE.md "Hard Rules" gains a new
+invariant from two angles.  AGENTS.md "Hard Rules" gains a new
 bullet citing the rule.
 
 ### Fixed (Wave 9 cross-mesh comparator: dict-drift false-positive + LAG-rename equivalence)
@@ -2093,7 +2155,7 @@ the app supports.
   (not `@media` CSS-only), theme-aware toast/alert colour pairs
   via CSS class (never inline style).  `_partials/` inventory
   extends with `theme-toggle.js`.
-- `CLAUDE.md` Documentation Sync Checklist gains a new row: "A
+- `AGENTS.md` Documentation Sync Checklist gains a new row: "A
   new CSS colour added to `base.html`" → use `var(--token)`
   from the theme set; add to BOTH `:root` and
   `[data-theme="dark"]` if no existing token fits.  Points at
@@ -2837,7 +2899,7 @@ the app supports.
     `.set` extension allowlist added.
   - `max_vlans` lock-in extended for the Arista + Junos
     families (all 7 new profiles declare 4094).
-- Docs synced per CLAUDE.md Documentation Sync Checklist:
+- Docs synced per AGENTS.md Documentation Sync Checklist:
   - `CHANGELOG` — this entry
   - `ARCHITECTURE.md` — codec count 6 → 7
   - `netcanon/migration/codecs/README.md` — wire-format table
@@ -2911,7 +2973,7 @@ and per-unit sub-interface modelling.
   - Real-captures harness extended with `arista_eos` in the
     `_VENDOR_TO_CODEC` dispatch map; 3 auto-discovered tests for
     the ksator fixture.
-- Docs synced per CLAUDE.md Documentation Sync Checklist:
+- Docs synced per AGENTS.md Documentation Sync Checklist:
   - `tests/fixtures/real/NOTICE.md` — fixture provenance row
   - `tests/fixtures/real/RESULTS.md` — new arista_eos section
     with coverage matrix + findings + cert decision;
@@ -3057,7 +3119,7 @@ and per-unit sub-interface modelling.
     (cisco_iosxe_cli is parse_only, excluded from target set).
     New `test_four_category_overrides_in_one_call` locks in
     the full port+vlan+user+snmp composition contract.
-- Docs synced per CLAUDE.md Documentation Sync Checklist:
+- Docs synced per AGENTS.md Documentation Sync Checklist:
   - `tests/testid_reference.md` — 11 new testid rows documented
     for the SNMP pane (verified via grep self-check: reference
     count matches template/partial count).
@@ -3174,7 +3236,7 @@ wrong, prose rots silently.
   literals — one in `tests/unit/migration/test_target_profile_shipped.py`
   and one in `tests/integration/test_migration_target_profiles_api.py`
   — with a "kept in sync manually" comment on each and a matching
-  Documentation Sync Checklist row in CLAUDE.md.
+  Documentation Sync Checklist row in AGENTS.md.
 - Extracted to a canonical shared module at
   `tests/fixtures/module_variants.py` (following the existing
   `tests/fixtures/` convention for test-input data).  Both test
@@ -3186,7 +3248,7 @@ wrong, prose rots silently.
   asserts both class attributes are IDENTITY-equal (`is`) to the
   canonical set — catches accidental shadowing with a literal even
   if the content would otherwise match.
-- CLAUDE.md Documentation Sync Checklist row updated: single-file
+- AGENTS.md Documentation Sync Checklist row updated: single-file
   edit + CI-guard replaces the two-file manual-sync discipline.
 
 ### Added (deferred item 3 — more target profiles: Netgate ARM + Deciso DEC600)
@@ -3509,7 +3571,7 @@ wrong, prose rots silently.
 - New `run_plan_with_overrides` in `migration_pipeline.py` — the
   shared engine for every per-pane override surface.  Grows via
   optional category-map parameters; existing `run_plan` +
-  `run_plan_with_rename` signatures stay frozen per CLAUDE.md's
+  `run_plan_with_rename` signatures stay frozen per AGENTS.md's
   pipeline-signatures invariant.
 - Sentinel semantics standardised across categories:
   `None` → don't engage, `{}` → engage with auto-heuristic only,
@@ -3584,7 +3646,7 @@ consumes.
 
 - User-contributed real ``show full-configuration`` from a physical
   **FortiGate 100E** running **FortiOS 7.2.13** (build 1762),
-  captured via Netcanon's backup layer and sanitised per CLAUDE.md
+  captured via Netcanon's backup layer and sanitised per AGENTS.md
   hard rule.  ~35K lines — 34 interfaces, 5 VLANs, 2 LAGs, 6 DHCP
   servers, 3 admins, 1 RADIUS server, 1 SNMP community, full
   firewall policy table + VIPs + SDWAN + SSL-VPN.  First physical-
@@ -3592,7 +3654,7 @@ consumes.
   KevinGuenay were a VM hub + 70G branch, both on 7.6.6); first
   FortiOS 7.2.x capture.
 - ``user_contrib_fg100e_fos7213.conf`` — sanitisation inventory
-  (per CLAUDE.md "never commit real credential hashes" rule):
+  (per AGENTS.md "never commit real credential hashes" rule):
   - 48 ``ENC <base64>`` encrypted FortiGate secrets (admin
     passwords, RADIUS secret, FortiGuard proxy password, NTP
     key, DHCP option passwords, TACACS passwd1/2/3, etc.)
@@ -3648,7 +3710,7 @@ consumes.
 
 - User-contributed real ``config.xml`` from a deployed OPNsense
   instance ("supergate"), captured via Netcanon's own backup layer
-  (SSH + ``cat /conf/config.xml``).  Sanitised per CLAUDE.md hard
+  (SSH + ``cat /conf/config.xml``).  Sanitised per AGENTS.md hard
   rule — 2 bcrypt ``<password>`` hashes replaced with
   ``$2y$11$fakeBcrypt...`` markers; API keys and the QFeeds
   ``tip_...`` token replaced with synthetic placeholders; 2
@@ -3702,7 +3764,7 @@ consumes.
 - User-contributed real ``show running-config`` from a physical
   **Cisco Catalyst 9300-24UX** running **IOS-XE 17.12**, captured via
   Netcanon's own backup layer against the contributor's live home-
-  lab switch and sanitised per CLAUDE.md hard rules.  Fills the
+  lab switch and sanitised per AGENTS.md hard rules.  Fills the
   physical-switch coverage gap that the earlier 3 BSD-3 racc
   captures didn't address — they were all **virtual routers**
   (CSR1000v / Cat8000V) and validated IOS-XE routing grammar but not
@@ -3725,7 +3787,7 @@ consumes.
   (``0 4`` / ``5 29`` / ``30 31``).
 - Sanitisation: the two ``username X secret 9 $9$...`` hashes were
   replaced with synthetic-marked ``$9$fakeSalt...$fakeHash...`` per
-  CLAUDE.md "never commit real hashes from non-public devices" rule;
+  AGENTS.md "never commit real hashes from non-public devices" rule;
   the ``by <windows-username>`` annotation in the
   ``Last configuration change`` timestamp was updated to
   ``by netadmin``.  All other real data retained — RFC1918
@@ -4959,7 +5021,7 @@ drift flagged in earlier sessions, untouched here.
   the OS default text editor (`os.startfile` on Windows, `open` on macOS,
   `xdg-open` on Linux).  Returns 204 on success; 403 if disabled; 404 if not
   found; 500 if the OS refuses to open the file.  Documented as desktop-only
-  in `CLAUDE.md`; the web equivalent is the existing View button.
+  in `AGENTS.md`; the web equivalent is the existing View button.
 - **"Open" button** (`data-testid="config-open-btn"`) — appears in the Actions
   column of the Configs page only when `open_in_editor=True`.  Calls the open
   endpoint; shows a success or error toast via `showToast()`.
