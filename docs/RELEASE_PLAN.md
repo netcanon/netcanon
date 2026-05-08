@@ -25,10 +25,36 @@
   for each scenario).  No setup demo: `pip install netcanon &&
   python -m netcanon.cli ...` plus `python tools/demo.py` from
   source.
+* **Phase 7** — README rewrite (operator-facing front door).
+  Tagline above the fold; concrete before/after demo; trust
+  signal as invitation; headline `docker run` install; Phase-4
+  walkthroughs promoted; Tier-1/2/3 summary inline; contributor
+  scaffolding demoted below the operator content.
 
-Remaining MUST-tier release-blockers: Phase 3 (quality hardening),
-Phase 7 (README rewrite).  Phases 8–11 are the launch sequence
-(private beta → soft launch → hard launch → triage cadence).
+Remaining MUST-tier release-blockers: Phase 3 (quality hardening,
+defer-friendly).  Phases 8–11 are the launch sequence (private
+beta → soft launch → hard launch → triage cadence).
+
+### Post-launch roadmap notes
+
+These don't gate v0.1.0 but are tracked here so they don't get lost
+once `RELEASE_PLAN.md` is converted to `RELEASE_NOTES.md`:
+
+* **Backup retention / rolling delete on scheduled jobs.**  Today
+  every scheduled-job run lands a fresh `configs/<host>_<ts>.<ext>`
+  file with no automatic cleanup; long-running scheduled jobs grow
+  the backup directory unbounded.  Want: a per-schedule retention
+  policy (keep N most recent, OR keep configs newer than D days,
+  OR both) configurable at schedule-creation time, plus a one-shot
+  manual-cleanup endpoint for operators who want to prune existing
+  backups.  Touches `netcanon/storage/file_store.py` (a
+  `prune_older_than` / `keep_n_newest` helper), the schedule model
+  (`netcanon/models/schedule.py`), the schedule-creation form
+  (`netcanon/templates/schedules.html`), the desktop equivalent in
+  the preferences dialog, and a new `DELETE /api/v1/configs` (or
+  `POST /api/v1/configs/prune`) endpoint.  Keep operator-explicit:
+  default policy is "keep everything" so existing operators don't
+  see backups vanish on upgrade.
 
 This is a forward-looking working document — when the release
 actually happens, prune the "plan" sections and convert this file
@@ -41,9 +67,10 @@ public.
 ## Why this document exists
 
 The project currently sits in private development with strong matrix-
-honesty discipline (CODEC_BUG=0 across ~12,000 field-cells; cross-
-mesh fidelity audit; explicit Tier-3 boundary; honest CapabilityMatrix
-declarations).  At some point that discipline pays off only if the
+honesty discipline (CODEC_BUG=0 across the cross-mesh audit matrix —
+live count in `tests/fixtures/real/PHASE4_RECONCILIATION.md`; explicit
+Tier-3 boundary; honest CapabilityMatrix declarations).  At some point
+that discipline pays off only if the
 tool gets in front of operators and starts catching the cells the
 internal audit can't surface (the ones no fixture exercises).  This
 document is the plan for crossing that boundary deliberately.
@@ -256,12 +283,12 @@ seconds:
   in a Cisco snippet, get back the equivalent Junos / Arista /
   Aruba.  Concrete > abstract.
 * **The matrix-honesty achievement, but as a trust signal.**  "Zero
-  CODEC_BUG cells across ~12,000 cross-vendor field-cells" is
-  meaningless without context.  "We test every cross-vendor field
-  translation across 47 codec pairs against vendor-doc-grounded
-  expectations, and as of this commit none of them silently
-  translates incorrectly.  Here's the live audit matrix" — that's
-  a trust signal a network engineer will read twice.
+  CODEC_BUG cells" is meaningless without context.  "We test every
+  cross-vendor field translation across every supported vendor pair
+  against vendor-doc-grounded expectations, and as of this commit
+  none of them silently translates incorrectly.  Here's the live
+  audit matrix at `PHASE4_RECONCILIATION.md`" — that's a trust
+  signal a network engineer will read twice.
 
 The tool already DOES all this — it just doesn't tell its own
 story.
@@ -276,14 +303,14 @@ via `CAPABILITIES.md` + the Tier-3 banner + the cross-mesh audit.
 
 Lead with that:
 
-> "Multi-vendor network config translator across 8 vendors.  The
-> cross-mesh audit shows zero CODEC_BUG cells across ~12,000 field-
-> cells of test coverage — but that just means we haven't found them.
-> **Bring us configs we haven't tested yet.** Sanitized fixtures
-> welcome; we publish a sanitization helper.  We're explicit about
-> what we don't translate (firewall, NAT — see CAPABILITIES.md).
-> We're looking for the cells the audit hasn't surfaced because no
-> fixture exercised them."
+> "Multi-vendor network config translator with a verifiable cross-
+> vendor audit (the locked tagline; see IDENTITY.md).  The cross-mesh
+> audit shows zero CODEC_BUG cells across the supported field surface
+> — but that just means we haven't found them.  **Bring us configs we
+> haven't tested yet.** Sanitized fixtures welcome; we ship a
+> sanitiser.  We're explicit about what we don't translate (firewall,
+> NAT — see CAPABILITIES.md).  We're looking for the cells the audit
+> hasn't surfaced because no fixture exercised them."
 
 This framing:
 * Doesn't claim perfection
@@ -432,11 +459,13 @@ either submit raw (security risk for them, leak risk for the project)
 or skip submitting (signal loss for the project).  Build the helper
 as a release-blocker (MUST tier).
 
-**Status as of 2026-05-05:** The helper does NOT yet exist.  No
-``tools/sanitize_config.py`` in the repo; no API endpoint; no UI
-surface.  The existing ``netcanon.migration._naming.sanitise_hostname``
-helper is for cross-vendor render-time normalisation (whitespace
-collapse), NOT for redacting sensitive data.
+**Status:** SHIPPED in Phase 4.5.  The helper lives at
+[`netcanon/tools/sanitize.py`](../netcanon/tools/sanitize.py) with the
+shared library; CLI subcommand at `netcanon sanitize`; HTTP endpoint
+at `POST /api/v1/sanitize`.  See the Phase 4.5 entry in the status
+block at the top of this file (or `CHANGELOG.md`) for the shipping
+narrative.  The original problem statement and architectural-decision
+rationale below are preserved as historical record.
 
 ### Architectural decision: integrated, multi-invocation, single source of truth
 
@@ -600,23 +629,19 @@ have a desktop session at all.
 ```
 docker run -p 127.0.0.1:8765:8000 \
   -v $(pwd)/configs:/app/configs \
-  -v $(pwd)/devices:/app/devices \
-  ghcr.io/<owner>/netcanon:0.1.0
+  -v $(pwd)/data:/app/data \
+  ghcr.io/netcanon/netcanon:latest
 ```
 
-Build properties:
-* **Multi-stage build**: builder stage with deps, runtime stage with
-  just the runtime artefact
-* **Distroless or `python:3.14-slim` base**: small surface, fewer CVEs
-* **Non-root user**: critical for security-sensitive tooling
-* **Pinned Python**: 3.14 in the Dockerfile so users don't have to
-  install Python at all
-* **Signed images** via `cosign` against Sigstore — operators in
-  regulated environments will require this
-* **SBOM** via `syft` published alongside each release — same
-  audience requirement
-* **Reproducible builds**: same source → same digest.  Operators
-  in regulated environments will verify.
+**Status:** SHIPPED in Phase 6.  Image properties as shipped:
+* **Multi-stage build**: `builder` stage compiles wheels;
+  `runtime` stage installs prebuilt wheels (no compilers in runtime)
+* **`python:3.13-slim-bookworm` base**: broad wheel support;
+  ~150MB before the netcanon install
+* **Non-root `app` user** (uid=1000)
+* **Signed via cosign keyless** through GitHub Actions OIDC
+* **SBOM via syft**, attested via cosign
+* **`HEALTHCHECK`** every 30s on `GET /health`
 * **Volume-mounted state**: `/app/configs` (backups), `/app/devices`
   (device list), `/app/jobs` (job state) all volume-mounted so
   container state isn't lost on restart

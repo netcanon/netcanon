@@ -31,7 +31,7 @@ per-field capability declarations.
 
 | Tool | Scope | Direction | Multi-vendor? | Translation accuracy posture |
 |---|---|---|---|---|
-| **Netcanon** | Multi-vendor native running-config translation | Parse + Render bidirectional | ✅ 8 vendor families | Per-field capability matrix (supported / lossy / unsupported with cited reasons); cross-mesh audit harness; explicit Tier-3 boundary; matrix-honesty discipline |
+| **Netcanon** | Multi-vendor native running-config translation | Parse + Render bidirectional | ✅ Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense | Per-field capability matrix (supported / lossy / unsupported with cited reasons); cross-mesh audit harness; explicit Tier-3 boundary; matrix-honesty discipline |
 | [**Batfish**](https://github.com/batfish/batfish) | Network config analysis + routing simulation | Parse only | ✅ Many | Models behaviour; doesn't translate to other formats |
 | [**Capirca**](https://github.com/google/capirca) / [**Aerleon**](https://github.com/aerleon/aerleon) | Firewall ACL DSL → vendor-native syntax | Render only (DSL → multiple vendors) | ✅ Firewall scope | DSL is the source of truth; not a translator between native vendor formats |
 | [**NAPALM**](https://github.com/napalm-automation/napalm) | Get / set running-config; vendor-agnostic device interactions | Wraps device drivers | ✅ | Each device sees its native syntax; no translation |

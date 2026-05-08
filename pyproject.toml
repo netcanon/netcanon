@@ -24,6 +24,8 @@ keywords = [
     "arista",
     "vendor-translation",
     "config-migration",
+    "python",
+    "fastapi",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

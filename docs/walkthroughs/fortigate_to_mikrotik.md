@@ -50,12 +50,12 @@ two interfaces (`internal1`, `internal2`), and a DHCP server pool.
 
 ## Tier-3 boundary in this scenario
 
-Most of a FortiGate config is Tier-3.  A typical 35K-line FortiGate
-backup contains:
+Most of a FortiGate config is Tier-3.  A real-world FortiGate backup
+typically splits into:
 
-- ~5-10% Tier-1/2 (interfaces, VLANs, DHCP, DNS, basic routes,
-  RADIUS, SNMP) — Netcanon translates this
-- ~90-95% Tier-3 (firewall policies, NAT, VPN, UTM, SD-WAN) —
+- A small fraction of Tier-1/2 (interfaces, VLANs, DHCP, DNS, basic
+  routes, RADIUS, SNMP) — Netcanon translates this
+- The bulk Tier-3 (firewall policies, NAT, VPN, UTM, SD-WAN) —
   Netcanon's parser surfaces these via the migrate-page Tier-3
   banner but does NOT auto-render them
 

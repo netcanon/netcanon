@@ -53,8 +53,8 @@ python tools/demo.py --pair opnsense__junos
 
 The embedded scenario is intentionally minimal (system + WAN/LAN
 interfaces + DNS) so you can see the cross-paradigm grammar shift
-clearly.  In production an OPNsense `config.xml` is typically
-2,000+ lines, with the majority being Tier-3 (firewall/NAT/VPN).
+clearly.  In production an OPNsense `config.xml` is much larger,
+with the majority being Tier-3 (firewall/NAT/VPN).
 
 ## What the migrate page banner shows you
 

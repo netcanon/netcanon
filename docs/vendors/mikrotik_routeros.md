@@ -24,11 +24,6 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   / untagged port assignment
 - Static routes (`/ip route`)
 - LAGs (`/interface bonding`)
-- DHCP server pools — `/ip pool` + `/ip dhcp-server network`
-- **Renamed-port preservation** — RouterOS lets operators rename
-  `ether2` to "Access Point" etc.; Netcanon preserves the renamed
-  name + the factory `default-name` so render emits
-  `set [ find default-name=ether2 ] ...` lookup syntax
 
 [Tier 2](../CAPABILITIES.md#tier-2--translatable-with-caveats):
 
@@ -37,6 +32,13 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
   auth-password + encryption-protocol + encryption-password)
 - RADIUS — `/radius`
 - Local users — `/user`
+- DHCP server pools — `/ip pool` + `/ip dhcp-server network`
+  (per-pool subnet, gateway, range, options)
+- **Renamed-port preservation** — RouterOS lets operators rename
+  `ether2` to "Access Point" etc.; Netcanon preserves the renamed
+  name + the factory `default-name` so render emits
+  `set [ find default-name=ether2 ] ...` lookup syntax (intra-vendor
+  round-trip preservation; not a cross-vendor translation surface)
 - Wireless config — `/interface wireless` (parse-tolerant; carry-
   through for cross-vendor scenarios where wireless isn't shared)
 

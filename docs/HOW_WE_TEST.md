@@ -49,7 +49,7 @@ field) translation, classified into one of **8 variance classes**:
 | Class | Meaning |
 |---|---|
 | **ALIGNED** | Source field translates to target field exactly as the vendor docs predict.  Boring; we want most cells in this class. |
-| **CODEC_BUG** *(high severity)* | The translation produced a result that contradicts the vendor docs.  Either parse misread the source or render emitted wrong syntax.  **Goal: zero.**  As of this commit, the count is 0 across ~12,000 cells. |
+| **CODEC_BUG** *(high severity)* | The translation produced a result that contradicts the vendor docs.  Either parse misread the source or render emitted wrong syntax.  **Goal: zero.**  Live count lives in [`tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md) — that file is machine-generated, so it can't drift behind code. |
 | **EXPECTED_LOSSY** | The capability matrix declares this field path as `lossy` for this pair, with a cited reason (e.g. per-VRF static-route VRF discriminator drops on round-trip).  Verified against the declaration. |
 | **EXPECTED_UNSUPPORTED** | The capability matrix declares this field path as `unsupported` for this pair.  No render attempted; the migrate page surfaces it via the Tier-3 banner or the unsupported-paths panel. |
 | **METHODOLOGY_ISSUE_under** | The expectation under-claims — the codec actually translates correctly, but the cross-vendor expectation YAML doesn't account for it.  Methodology bug; fixed by updating the expectation. |

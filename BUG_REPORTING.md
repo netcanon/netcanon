@@ -139,7 +139,7 @@ Required fields:
 | Sanitised input snippet | The smallest reproducer (post-sanitiser) |
 | Expected output | What you expected the translation to produce |
 | Actual output | What Netcanon produced (sanitised) |
-| Netcanon version / commit SHA | `v0.1.0` or `abc123` |
+| Netcanon version / commit SHA | `v0.1.0-rc1` (or whichever release tag you ran) or commit short-SHA |
 
 Plus the confirmation checkboxes:
 - [ ] I have replaced all real credentials, IPs, and hostnames in
@@ -179,15 +179,22 @@ Plus confirmation:
 
 ### For bug reports
 
-1. **Triage within 48 hours.**  Maintainer reads the report,
+This is a one-maintainer project worked on alongside a 50-hour-a-
+week dayjob, so SLAs are realistic rather than aspirational:
+
+1. **Triage within 2 weeks.**  Maintainer reads the report,
    classifies it (CODEC_BUG vs expected-Tier-3 vs lossy-within-
-   bounds vs methodology-issue).
-2. **Reproduction within 7 days.**  We add a unit test that
+   bounds vs methodology-issue), and posts a triage comment.
+2. **Reproduction.**  When the fix lands, we add a unit test that
    captures the bug shape against your sanitised snippet.
 3. **Fix wave.**  Codec change + matrix regen + fixture import +
    regression-guard test.
 4. **Disclosure.**  Issue closes with a CHANGELOG entry crediting
    the report.
+
+If a report is critical (security, silent data loss in a translation
+that was previously declared `supported`), it'll move faster — flag
+it explicitly in the issue and we'll escalate.
 
 If we conclude it's expected behaviour (Tier-3 / lossy / by-design),
 we'll explain why and link the relevant capability matrix

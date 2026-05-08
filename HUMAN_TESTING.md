@@ -483,8 +483,8 @@ list, don't delete).
 
 ## API direct
 
-- [ ] `GET /api/v1/migration/adapters` — returns all 7 codecs with
-      new metadata fields (description, sample_input,
+- [ ] `GET /api/v1/migration/adapters` — returns the registered
+      codecs with new metadata fields (description, sample_input,
       output_extension).
 - [ ] `POST /api/v1/migration/detect` — accepts raw config in body,
       returns ranked `DetectCandidate` list.

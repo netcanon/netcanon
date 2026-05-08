@@ -56,7 +56,7 @@ vlan 10
    ip address 192.168.10.1 255.255.255.0
 ```
 
-becomes Arista output (conceptually):
+becomes Arista output:
 
 ```
 vlan 10
@@ -65,15 +65,15 @@ vlan 10
 interface Vlan10
    ip address 192.168.10.1/24
 
-interface Ethernet1
+interface 1
    switchport mode access
    switchport access vlan 10
 
-interface Ethernet2
+interface 2
    switchport mode access
    switchport access vlan 10
 
-... (Ethernet3-20 similar)
+... (interfaces 3-20 similar)
 ```
 
 This is the canonical-intermediate-model paying off: AOS-S's
@@ -81,6 +81,15 @@ VLAN-centric `untagged 1-20` projects through the canonical
 `CanonicalVlan.untagged_ports` list, then re-projects into Arista's
 per-port `switchport access vlan` directives via the
 `project_vlan_to_switchport` transform.
+
+**Note on port naming:** the demo emits bare numeric port names
+(`interface 1`, `interface 2`, ...) — Arista accepts both bare-
+numeric and `Ethernet<N>` forms.  If you want the Arista-canonical
+`Ethernet1` / `Ethernet2` form, use the migrate-page rename modal
+(web UI) or pass `rename_overrides` in the `POST /api/v1/migration/run`
+payload — the rename mesh handles the AOS-S-numeric → Arista-
+`Ethernet<N>` mapping across all bound categories (VLANs, LAGs,
+SNMP communities, etc., not just port names).
 
 ## Tier-3 boundary in this scenario
 
@@ -100,16 +109,17 @@ empty or near-empty for AOS-S → Arista migrations.  Watch for:
 Before deploying the rendered Arista config to a real DCS device,
 verify:
 
-- [ ] **Port-name expansion**: AOS-S `untagged 1-20` should expand to
-      `Ethernet1` through `Ethernet20` on Arista (not `Eth1/1-20`).
-      The port-name rename mesh handles this automatically; verify
-      the mapping for your specific Arista platform's port
-      enumeration.
+- [ ] **Port-name expansion**: AOS-S `untagged 1-20` expands to bare
+      `interface 1` through `interface 20` on Arista by default
+      (Arista accepts both bare-numeric and `Ethernet<N>` forms).
+      If you want canonical `Ethernet1` / `Ethernet2` naming, invoke
+      the rename mesh — see the "Note on port naming" callout in the
+      paradigm-flip section above.
 - [ ] **Trunk port allowed-VLAN lists**: AOS-S `tagged 21-24` for
       VLAN 20 means "ports 21-24 are tagged in VLAN 20."  The Arista
-      output should show `interface EthernetN / switchport trunk
-      allowed vlan 20` for ports 21-24.  Verify if you have any
-      multi-VLAN trunk patterns.
+      output shows `interface 21-24 / switchport mode trunk /
+      switchport trunk allowed vlan 20` (bare numeric); verify if
+      you have any multi-VLAN trunk patterns.
 - [ ] **MLAG**: if you're consolidating to an Arista MLAG pair, the
       `Port-Channel` reconciliation will translate AOS-S `trk<N>` to
       `Port-Channel<N>`.  Plan the MLAG peer-link config natively

@@ -9,7 +9,7 @@ endpoint that changes a docstring inventory must update that
 inventory in the same commit.  The rules are concrete; the *shape*
 of a real feature that actually exercises all of them is not.  This
 doc takes one canonical commit — the SNMPv3 USM cross-mesh override
-(`145642e`) — and walks through every file it touched, layer by
+(`8c6e493`) — and walks through every file it touched, layer by
 layer, so a new contributor can pattern-match instead of guessing
 which inventory rows apply to a feature with similar reach.
 
@@ -31,8 +31,8 @@ operator's overrides.
 ## Layer-by-layer file inventory
 
 The numbered list below is the file-touch sequence from `git show
-145642e --stat`.  Every entry names a real file that lives in the tree
-today; verify by running `git show 145642e:<path>` against any
+8c6e493 --stat`.  Every entry names a real file that lives in the tree
+today; verify by running `git show 8c6e493:<path>` against any
 suspicion.
 
 1. **Canonical schema — `netcanon/migration/canonical/intent.py`.**
