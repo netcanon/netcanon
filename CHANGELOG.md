@@ -11,6 +11,33 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### CI: Python 3.14 coverage + Docker build smoke test
+
+Closes the verification gap that the Dependabot Dockerfile bump
+(`python:3.13-slim-bookworm` → `python:3.14-slim-bookworm`,
+PR #2) opened: previously the test matrix tested 3.11/3.12/3.13
+only, so the bumped base image was effectively unverified by CI.
+
+Two changes:
+
+* **CI matrix expanded to include Python 3.14.**
+  `.github/workflows/ci.yml` adds `"3.14"` to the test matrix and
+  `pyproject.toml` adds the corresponding
+  `Programming Language :: Python :: 3.14` classifier so the package
+  metadata is consistent with what's tested.
+* **New `docker-build-smoke` CI job.**  Builds the Dockerfile on
+  every PR and `push` to main, runs the resulting image, and polls
+  `GET /health` for up to 60 seconds.  Catches Dockerfile-side
+  regressions (base bumps, COPY mistakes, entrypoint breakage) at
+  PR-time rather than at tag-time when `docker-publish.yml` fires
+  the GHCR push.
+
+The smoke test exercises the full container lifecycle (build →
+boot → ready → health-check responds) but doesn't run pytest
+inside the container — that's still the matrix job's role on the
+host runner.  The two layers complement: matrix verifies the
+package code; smoke verifies the image-shipping path.
+
 ### Documentation audit pass (post-Phase-7)
 
 Multi-agent review of every operator-facing doc against current state,
