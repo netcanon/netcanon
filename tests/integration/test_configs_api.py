@@ -8,6 +8,7 @@ Also covers ``POST /{filename}/open`` (open-in-editor endpoint).
 """
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -174,10 +175,19 @@ class TestOpenConfig:
         assert resp.status_code == 403
 
     def test_open_returns_404_for_missing_file(self, open_client):
-        with patch("os.startfile"):
-            resp = open_client.post("/api/v1/configs/ghost.cfg/open")
+        # No patch needed — endpoint returns 404 before any platform-specific
+        # open call.  os.startfile is Windows-only and would AttributeError
+        # on Linux CI runners if mocked unconditionally.
+        resp = open_client.post("/api/v1/configs/ghost.cfg/open")
         assert resp.status_code == 404
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="os.startfile is the Windows-only path; Linux uses xdg-open and "
+               "macOS uses 'open' via subprocess.  Cross-platform coverage of "
+               "the success path lives in the desktop-tier tests where the "
+               "subprocess.run mock pattern is shared.",
+    )
     def test_open_returns_204_on_success(self, open_client):
         filename = _seed_config(open_client)
         with patch("os.startfile") as mock_sf:
@@ -185,6 +195,10 @@ class TestOpenConfig:
         assert resp.status_code == 204
         mock_sf.assert_called_once()
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="Asserts os.startfile call args; Windows-specific path.",
+    )
     def test_open_passes_correct_path_to_startfile(self, open_client):
         filename = _seed_config(open_client)
         with patch("os.startfile") as mock_sf:
@@ -192,6 +206,10 @@ class TestOpenConfig:
         called_path = mock_sf.call_args[0][0]
         assert filename in called_path
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="Mocks os.startfile to raise; Windows-specific path.",
+    )
     def test_open_returns_500_when_startfile_raises(self, open_client):
         filename = _seed_config(open_client)
         with patch("os.startfile", side_effect=OSError("access denied")):
@@ -201,13 +219,14 @@ class TestOpenConfig:
 
     def test_open_rejects_disallowed_extension(self, open_client):
         """Executable and other non-config extensions must return 400."""
-        with patch("os.startfile"):
-            resp = open_client.post("/api/v1/configs/malware.exe/open")
+        # No patch needed — extension whitelist rejects with 400 before
+        # any platform-specific open call is made.
+        resp = open_client.post("/api/v1/configs/malware.exe/open")
         assert resp.status_code == 400
 
     def test_open_rejects_zip_extension(self, open_client):
-        with patch("os.startfile"):
-            resp = open_client.post("/api/v1/configs/archive.zip/open")
+        # Same — 400 returned before reaching the platform branch.
+        resp = open_client.post("/api/v1/configs/archive.zip/open")
         assert resp.status_code == 400
 
 
