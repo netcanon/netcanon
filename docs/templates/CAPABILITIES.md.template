@@ -53,7 +53,7 @@ this table summarises but does not gate.
 ## Translation / processing tiers
 
 <!-- PROJECT: If your project has a tier scheme (cross-vendor stable
-vs. lossy vs. opaque carry-through, like NetConfig), document it
+vs. lossy vs. opaque carry-through, like Netcanon), document it
 here.  Adapt to your domain — a database migration tool might tier
 by "schema-stable / lossy-cast / preserved-blob"; an ML pipeline
 might tier by "first-class metric / derived metric / opaque
@@ -99,7 +99,7 @@ This is an architectural decision, not a backlog item.  See the
 ## Per-`<COMPONENT>` capability matrix
 
 <!-- PROJECT: This is the heart of the doc — every `<COMPONENT>`
-declares what it can and can't do, with reasons.  In NetConfig each
+declares what it can and can't do, with reasons.  In Netcanon each
 codec gets its own subsection with a 3-column table:
 field-path | classification (Supported / Lossy / Unsupported) |
 rationale.  Adapt the column set to your project's grammar. -->
@@ -191,7 +191,7 @@ unsupported_rename_categories.>`
 
 ## `<Input-side / source-side>` limitations
 
-<!-- PROJECT: If your project has multiple concerns (e.g. NetConfig's
+<!-- PROJECT: If your project has multiple concerns (e.g. Netcanon's
 backup vs. migration), document non-`<CONCERN_B>` limitations here. -->
 
 * **`<EXAMPLE: 422 Unknown type_key>`** — `<one-line description of

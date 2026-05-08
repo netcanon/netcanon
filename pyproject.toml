@@ -3,9 +3,41 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "netconfig"
+name = "netcanon"
 version = "0.1.0"
 description = "Multi-vendor network configuration backup and translation engine"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Netcanon contributors"},
+]
+keywords = [
+    "network-automation",
+    "network-configuration",
+    "cisco",
+    "juniper",
+    "fortinet",
+    "aruba",
+    "mikrotik",
+    "opnsense",
+    "arista",
+    "vendor-translation",
+    "config-migration",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Networking",
+    "Topic :: System :: Systems Administration",
+]
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
@@ -39,9 +71,16 @@ desktop = [
     "Pillow>=10.0.0",
 ]
 desktop-build = [
-    "netconfig[desktop]",
+    "netcanon[desktop]",
     "cx_Freeze>=7.0.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/OWNER/REPO"
+Repository = "https://github.com/OWNER/REPO"
+Issues = "https://github.com/OWNER/REPO/issues"
+Changelog = "https://github.com/OWNER/REPO/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/OWNER/REPO/blob/main/README.md"
 
 [tool.setuptools.packages.find]
 where = ["."]

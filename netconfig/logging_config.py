@@ -1,5 +1,5 @@
 """
-Centralised logging configuration for NetConfig.
+Centralised logging configuration for Netcanon.
 
 Call ``configure_logging()`` once at application startup (before any other
 module is imported) to set up handlers, formatters, and third-party

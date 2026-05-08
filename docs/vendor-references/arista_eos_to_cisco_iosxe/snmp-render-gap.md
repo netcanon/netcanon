@@ -81,7 +81,7 @@ between devices.  Concretely:
   it salted with its own engineID; SNMP authentication fails.
 
 Operators migrating across vendors must re-key SNMPv3 users on the
-target.  This is upstream of the NetConfig codec layer; the
+target.  This is upstream of the Netcanon codec layer; the
 canonical model preserves the opaque hash bytes verbatim per
 `CanonicalSNMPv3User.auth_passphrase` schema docs (which call out
 the "never plaintext" guarantee but make no compatibility claim).

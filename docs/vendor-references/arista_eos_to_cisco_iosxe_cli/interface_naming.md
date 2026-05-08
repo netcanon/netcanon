@@ -43,7 +43,7 @@ Port-channels: `Port-channel10` (lower-case `c`).
 
 ## Cross-vendor mapping
 
-NetConfig handles this via the existing port-name rename mesh
+Netcanon handles this via the existing port-name rename mesh
 (`netconfig/migration/codecs/arista_eos/port_names.py` and the sibling
 `cisco_iosxe_cli/port_names.py`).  The canonical interface stores the
 vendor-native name as-is per the `CanonicalInterface.name` schema; the

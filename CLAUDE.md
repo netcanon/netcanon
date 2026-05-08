@@ -1,4 +1,4 @@
-# NetConfig — Contributor Directives
+# Netcanon — Contributor Directives
 
 These directives govern all development in this repository.  Follow them in
 every session without being asked.
@@ -16,7 +16,7 @@ tracks per-codec certification state.
 
 ## Two concerns, one FastAPI app
 
-NetConfig handles two independent (but co-hosted) concerns:
+Netcanon handles two independent (but co-hosted) concerns:
 
 1. **Backup** — `netconfig/collectors/` + `netconfig/api/routes/backups.py`.
    Pulls raw `running-config` (or vendor equivalent) from devices over
@@ -37,7 +37,7 @@ where code belongs, ask: "does this fetch bytes off a device?" → backup.
 
 ## Parallel Platform Development
 
-NetConfig ships on two platforms.  Both must always be kept at feature parity.
+Netcanon ships on two platforms.  Both must always be kept at feature parity.
 
 | Platform | Package | Entry point |
 |----------|---------|-------------|
@@ -76,14 +76,14 @@ cross-platform equivalents:
   **View** button (`config-view-link`) which renders the file in the browser.
 - **Preferences dialog** (`netconfig_desktop/preferences_dialog.py`) — operator-
   configurable paths (configs / definitions / data dir), embedded-server port,
-  and toggles.  Persisted to `%APPDATA%\NetConfig\preferences.json`.  Equivalent
+  and toggles.  Persisted to `%APPDATA%\Netcanon\preferences.json`.  Equivalent
   to the web platform's `NETCONFIG_*` env-var / `.env` configuration surface;
   desktop operators have no shell-level knob, so the dialog is the equivalent
   affordance.  PySide6 widgets carry `setObjectName()` IDs following the
   `pref-dialog-<field>-<action>` convention (the desktop equivalent of
   `data-testid` since Qt has no native test-id attribute).
 - **Single-instance enforcement** (`netconfig_desktop/single_instance.py`) —
-  Windows named mutex (`Global\NetConfigSingleInstance_v1`) refuses to launch a
+  Windows named mutex (`Global\NetcanonSingleInstance_v1`) refuses to launch a
   second copy.  Without this guard the duplicate process fails to bind the
   embedded server's TCP port and surfaces as a confusing fatal-error MessageBox;
   the friendly "already running" hint is much more discoverable.  No-op on
@@ -107,11 +107,11 @@ without an explicit product decision to reverse the call:
 - **Auto-update** — updates are delivered via fresh MSI download +
   reinstall.  Auto-update would require a code-signing infrastructure
   and persistent background scheduler we deliberately don't ship.
-- **File associations** — no `.cfg` → NetConfig handler.  Operators
+- **File associations** — no `.cfg` → Netcanon handler.  Operators
   open files via the in-app **View** / **Open in editor** affordances
   rather than from File Explorer.
 - **Crash reporting** — fatal errors surface via MessageBoxW and the
-  log file under `%APPDATA%\NetConfig\netconfig.log`; users can attach
+  log file under `%APPDATA%\Netcanon\netconfig.log`; users can attach
   the log to a bug report.  No automatic crash uploads.
 
 ---

@@ -29,7 +29,7 @@ the NETCONF datastore:
   `Cisco-IOS-XE-snmp`, `Cisco-IOS-XE-bgp`).  Mirrored on GitHub at
   `https://github.com/YangModels/yang/tree/main/vendor/cisco/xe/`.
 
-The `cisco_iosxe` codec in NetConfig targets the **OpenConfig** branch
+The `cisco_iosxe` codec in Netcanon targets the **OpenConfig** branch
 exclusively.  It does NOT bridge into Cisco-IOS-XE-native YANG.  This
 is a deliberate scoping choice — OpenConfig gives cross-vendor
 portability that native YANG would sacrifice.

@@ -1,6 +1,6 @@
 """
 Desktop-only preferences — operator-configurable settings persisted
-to ``%APPDATA%\\NetConfig\\preferences.json``.
+to ``%APPDATA%\\Netcanon\\preferences.json``.
 
 The web platform configures equivalent values via ``NETCONFIG_*`` env
 vars or ``.env`` files.  Desktop operators have no shell-level config
@@ -43,7 +43,7 @@ class DesktopPreferences(BaseModel):
     Attributes:
         configs_dir: Override for the directory storing captured config
             files.  ``None`` → use the platform default
-            (``%APPDATA%\\NetConfig\\configs\\`` when frozen).
+            (``%APPDATA%\\Netcanon\\configs\\`` when frozen).
         definitions_dir: Override for the YAML device-definitions tree.
             ``None`` → use the platform default (next to the EXE when
             frozen, repo root when dev).

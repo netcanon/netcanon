@@ -61,7 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    """Create and configure a NetConfig FastAPI application instance.
+    """Create and configure a Netcanon FastAPI application instance.
 
     Calling this multiple times produces independent application instances,
     each with its own state (definitions, storage, job registry, scheduler).
@@ -183,7 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
         scheduler.start()
         logger.info(
-            "NetConfig started — %d definition(s) loaded, %d schedule(s) active",
+            "Netcanon started — %d definition(s) loaded, %d schedule(s) active",
             len(_app.state.definitions),
             len([s for s in _app.state.schedules.values() if s.enabled]),
         )
@@ -194,7 +194,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.info("Scheduler stopped")
 
     app = FastAPI(
-        title="NetConfig",
+        title="Netcanon",
         description=(
             "Multi-vendor network configuration backup and translation engine. "
             "See /docs for the interactive API reference."
@@ -280,5 +280,5 @@ try:
 except Exception as _exc:
     import sys
 
-    print(f"NetConfig failed to start: {_exc}", file=sys.stderr)
+    print(f"Netcanon failed to start: {_exc}", file=sys.stderr)
     raise SystemExit(1) from _exc

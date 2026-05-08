@@ -1,1 +1,1 @@
-"""FastAPI router modules for the NetConfig REST API."""
+"""FastAPI router modules for the Netcanon REST API."""

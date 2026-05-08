@@ -8,7 +8,7 @@ two convenience buttons (Open Configs Folder / Save / Cancel).
 
 The dialog NEVER restarts the embedded server itself.  All changes
 are persisted to ``preferences.json`` via ``DesktopPreferences.save``;
-a "Restart NetConfig for changes to take effect" notice is shown on
+a "Restart Netcanon for changes to take effect" notice is shown on
 save so the operator knows when the new values will take hold.
 
 PySide6 widgets do not have a native ``data-testid`` attribute, so we
@@ -99,7 +99,7 @@ class PreferencesDialog:
 
         dlg = QDialog(self._parent)
         dlg.setObjectName("pref-dialog")
-        dlg.setWindowTitle("NetConfig Preferences")
+        dlg.setWindowTitle("Netcanon Preferences")
 
         outer = QVBoxLayout(dlg)
         form = QFormLayout()
@@ -296,7 +296,7 @@ class PreferencesDialog:
         QMessageBox.information(
             self._dialog,
             "Preferences saved",
-            "Restart NetConfig for changes to take effect.",
+            "Restart Netcanon for changes to take effect.",
         )
         if self._dialog is not None:
             self._dialog.accept()

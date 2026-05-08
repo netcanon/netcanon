@@ -1,4 +1,4 @@
-# NetConfig — Architecture
+# Netcanon — Architecture
 
 This is the conceptual map.  For day-to-day contributor rules see
 [`CLAUDE.md`](CLAUDE.md); for the active roadmap and backlog see
@@ -8,7 +8,7 @@ This is the conceptual map.  For day-to-day contributor rules see
 
 ## Two concerns, one app
 
-NetConfig is a FastAPI application that co-hosts two independent jobs:
+Netcanon is a FastAPI application that co-hosts two independent jobs:
 
 ```
             ┌────────────────────────────────────────────────────┐
@@ -534,7 +534,7 @@ for the loader + accessor implementation.
 ### The `/definitions` browsing page
 
 `/definitions` is the single browsing view for everything
-NetConfig knows about — four sections in one page:
+Netcanon knows about — four sections in one page:
 
 1. **Backup-side device definitions** (`section-device-definitions`):
    the legacy table — what vendor YAMLs the backup layer

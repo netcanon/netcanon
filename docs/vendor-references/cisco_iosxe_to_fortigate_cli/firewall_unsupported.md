@@ -11,7 +11,7 @@ Retrieved: 2026-05-01
 This direction is `cisco_iosxe` (NETCONF/OpenConfig) -> `fortigate_cli`
 (FortiOS).  FortiGate's primary product surface is firewall policy +
 NAT + VIP + UTM.  None of these have a canonical representation in
-the v1 NetConfig model:
+the v1 Netcanon model:
 
 * No `CanonicalFirewallPolicy` / `CanonicalSecurityPolicy` record.
 * No `CanonicalNATRule` record.

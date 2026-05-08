@@ -1,4 +1,4 @@
-# NetConfig
+# Netcanon
 
 Multi-vendor network configuration backup and translation engine.
 
@@ -71,7 +71,7 @@ is the source of truth for pass counts.
 | Manually exercise recent changes | [`HUMAN_TESTING.md`](HUMAN_TESTING.md) |
 | Write tests | [`tests/README.md`](tests/README.md) |
 | Review the security model | [`SECURITY.md`](SECURITY.md) — threat model, controls, known limitations |
-| Look up what NetConfig translates and what it doesn't | [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing capabilities, per-codec unsupported/lossy paths, Tier-3 boundary, notification surfaces |
+| Look up what Netcanon translates and what it doesn't | [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — operator-facing capabilities, per-codec unsupported/lossy paths, Tier-3 boundary, notification surfaces |
 
 ---
 

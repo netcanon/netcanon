@@ -1,5 +1,5 @@
 """
-cx_Freeze build script for the NetConfig Windows desktop application.
+cx_Freeze build script for the Netcanon Windows desktop application.
 
 Usage::
 
@@ -7,7 +7,7 @@ Usage::
 
 This produces an MSI installer under ``dist/``.  The installer:
 
-* Installs the application to ``C:\\Program Files\\NetConfig\\``
+* Installs the application to ``C:\\Program Files\\Netcanon\\``
 * Creates a Start Menu shortcut (pinnable to the taskbar)
 * Bundles Python, all dependencies, and the device definitions
 
@@ -95,7 +95,7 @@ build_exe_options: dict = {
 bdist_msi_options: dict = {
     "upgrade_code": UPGRADE_CODE,
     "add_to_path": False,
-    "initial_target_dir": r"[ProgramFilesFolder]\NetConfig",
+    "initial_target_dir": r"[ProgramFilesFolder]\Netcanon",
     # All shortcuts defined in the Executable below end up here.
     "data": {
         "Shortcut": [
@@ -103,11 +103,11 @@ bdist_msi_options: dict = {
             (
                 "StartMenuShortcut",          # Shortcut id
                 "StartMenuFolder",            # Directory_ (Start Menu)
-                "NetConfig",                  # Name (display name)
+                "Netcanon",                  # Name (display name)
                 "TARGETDIR",                  # Component_
                 "[TARGETDIR]netconfig.exe",   # Target
                 None,                         # Arguments
-                "NetConfig — Network Config Collector",  # Description
+                "Netcanon — Network Config Collector",  # Description
                 None,                         # Hotkey
                 None,                         # Icon (uses exe icon)
                 None,                         # IconIndex
@@ -147,9 +147,9 @@ executables = [
         target_name="netconfig.exe",
         # The icon embedded in the EXE itself (taskbar / alt-tab).
         icon=_build_icon(),
-        shortcut_name="NetConfig",
+        shortcut_name="Netcanon",
         shortcut_dir="StartMenuFolder",
-        copyright="NetConfig contributors",
+        copyright="Netcanon contributors",
     ),
 ]
 
@@ -159,10 +159,10 @@ executables = [
 # ---------------------------------------------------------------------------
 
 setup(
-    name="NetConfig",
+    name="Netcanon",
     version="0.1.0",
-    description="NetConfig — Network Configuration Collector",
-    author="NetConfig contributors",
+    description="Netcanon — Network Configuration Collector",
+    author="Netcanon contributors",
     options={
         "build_exe": build_exe_options,
         "bdist_msi": bdist_msi_options,

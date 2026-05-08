@@ -1,5 +1,5 @@
 """
-``DesktopApp`` — top-level orchestrator for the NetConfig desktop application.
+``DesktopApp`` — top-level orchestrator for the Netcanon desktop application.
 
 Wires together the three runtime components:
 
@@ -65,7 +65,7 @@ class DesktopApp:
         )
         self._window = WebViewWindow(
             url=self._server.url,
-            title="NetConfig",
+            title="Netcanon",
             on_closed=self._on_window_closed,
         )
         self._tray = TrayIcon(
@@ -86,7 +86,7 @@ class DesktopApp:
         ``webview.start()`` (called inside ``WebViewWindow.start()``) requires
         the main thread on Windows.
         """
-        logger.info("NetConfig desktop starting")
+        logger.info("Netcanon desktop starting")
 
         # 1. Start the embedded HTTP server in a daemon thread.
         self._server.start()
@@ -104,7 +104,7 @@ class DesktopApp:
 
         # 5. Start the pywebview event loop — BLOCKS until destroy() is called.
         self._window.start()
-        logger.info("NetConfig desktop exited cleanly")
+        logger.info("Netcanon desktop exited cleanly")
 
     # ------------------------------------------------------------------
     # Internal callbacks

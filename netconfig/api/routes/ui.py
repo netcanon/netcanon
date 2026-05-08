@@ -302,7 +302,7 @@ async def devices_page(request: Request) -> HTMLResponse:
 
 @router.get("/definitions", response_class=HTMLResponse)
 async def definitions_page(request: Request) -> HTMLResponse:
-    """Definition browser: surfaces every NetConfig data-source the
+    """Definition browser: surfaces every Netcanon data-source the
     user cares about.  Four sections:
 
     1. **Backup device definitions** (family-base) — the legacy view:
@@ -423,15 +423,15 @@ async def migrate_page(request: Request) -> HTMLResponse:
 
 @router.get("/docs")
 async def swagger_ui() -> HTMLResponse:
-    """Swagger UI wrapped in the NetConfig nav bar."""
+    """Swagger UI wrapped in the Netcanon nav bar."""
     base = get_swagger_ui_html(
         openapi_url="/api/v1/openapi.json",
-        title="NetConfig — API Docs",
+        title="Netcanon — API Docs",
     )
     html = base.body.decode("utf-8")
     nav_html = (
         '<nav id="nc-nav">'
-        '<a href="/" class="brand">NetConfig</a>'
+        '<a href="/" class="brand">Netcanon</a>'
         '<a href="/">Dashboard</a>'
         '<a href="/devices">Devices</a>'
         '<a href="/jobs">Jobs</a>'

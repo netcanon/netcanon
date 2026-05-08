@@ -4,7 +4,7 @@ Unit tests for ``Settings.data_dir`` and the ``effective_data_dir`` property.
 The desktop application needs to relocate the data root (jobs / schedules /
 device profiles) independently of ``configs_dir`` — the operator may keep
 configs on a fast SSD while the small JSON state files sit under
-``%APPDATA%\\NetConfig\\``.  ``Settings.data_dir`` is the explicit knob that
+``%APPDATA%\\Netcanon\\``.  ``Settings.data_dir`` is the explicit knob that
 makes that possible without breaking the historical ``configs_dir.parent``
 default.
 

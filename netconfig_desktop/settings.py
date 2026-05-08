@@ -8,10 +8,10 @@ on whether the application is:
   go to a ``configs/`` sibling directory that is created on first run.
 * Running as a frozen cx_Freeze executable — definitions ship next to the EXE
   (included by ``setup_desktop.py``), configs go to
-  ``%APPDATA%\\NetConfig\\configs\\`` so they survive upgrades.
+  ``%APPDATA%\\Netcanon\\configs\\`` so they survive upgrades.
 
 In frozen mode, an optional ``preferences.json`` under
-``%APPDATA%\\NetConfig\\`` is loaded and overlaid on top of the platform
+``%APPDATA%\\Netcanon\\`` is loaded and overlaid on top of the platform
 defaults (see ``DesktopPreferences``).  Only non-``None`` preference
 fields override; missing keys keep the defaults.  Dev mode deliberately
 ignores the preferences file so the repo-relative paths remain
@@ -81,9 +81,9 @@ def desktop_settings() -> Settings:
 
 
 def _appdata_dir() -> Path:
-    """Return ``%APPDATA%\\NetConfig``, creating it if necessary."""
+    """Return ``%APPDATA%\\Netcanon``, creating it if necessary."""
     base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-    app_dir = base / "NetConfig"
+    app_dir = base / "Netcanon"
     app_dir.mkdir(parents=True, exist_ok=True)
     return app_dir
 

@@ -1,7 +1,7 @@
 # Matrix-Honesty Methodology
 
 *A portable discipline for building tools that have to be honest about
-their own limits — distilled from the NetConfig multi-vendor config
+their own limits — distilled from the Netcanon multi-vendor config
 translator project.*
 
 ---
@@ -9,10 +9,10 @@ translator project.*
 ## Why this document exists
 
 This document captures a coherent development discipline that emerged
-wave-by-wave through the NetConfig project but never previously got
+wave-by-wave through the Netcanon project but never previously got
 written down in one place.  Three audiences benefit:
 
-1. **Future contributors to NetConfig** find the rationale behind the
+1. **Future contributors to Netcanon** find the rationale behind the
    patterns embedded in `CLAUDE.md`, `ARCHITECTURE.md`, and the
    per-codec capability declarations.
 2. **A future self on a different project** can clone this doc and
@@ -30,7 +30,7 @@ context where their own author is the only operator.
 
 This is not a tutorial.  Read for the patterns, not the syntax.  The
 patterns are deliberately demonstrated with file:line citations
-into NetConfig's tree so the abstract claims are grounded.
+into Netcanon's tree so the abstract claims are grounded.
 
 ---
 
@@ -55,7 +55,7 @@ promises X, the code drops X silently) destroys operator trust;
 under-claiming (the matrix marks X unsupported but the codec parses
 and renders X) hides shipped work and confuses the audit.
 
-NetConfig examples of this discipline being violated and then
+Netcanon examples of this discipline being violated and then
 corrected:
 
 * `cisco_iosxe_cli` declared `/routing-instances/instance` as
@@ -86,7 +86,7 @@ then flip the assertion to encode the correct behaviour and watch the
 fix land.  This is the only reliable way to avoid validation theatre
 (tests that pass because they describe the bug instead of the fix).
 
-The discipline catches misdiagnoses.  Three NetConfig waves proved
+The discipline catches misdiagnoses.  Three Netcanon waves proved
 this:
 
 * **Wave 7c-E** (commit `2d7a7f2`) — a flagged CODEC_BUG cell on
@@ -119,7 +119,7 @@ its docs.  The rationale is failure-mode asymmetry: code that compiles
 but is wrong fails loudly in CI; docs that are wrong fail silently
 until a future contributor wastes a day on a stale claim.
 
-The disciplinary mechanism in NetConfig is a concrete *Documentation
+The disciplinary mechanism in Netcanon is a concrete *Documentation
 Sync Checklist*: a table mapping "if you change X, then touch Y."
 See [`CLAUDE.md` lines 102-138](../CLAUDE.md).  The table is
 intentionally exhaustive rather than illustrative — every row in it
@@ -130,7 +130,7 @@ drift, then went back and audited what they should have updated.
 
 Where matrix-honesty (section above) is the abstract contract, the
 *capability declaration* is the concrete artefact that makes the
-contract enforceable.  Every NetConfig codec declares a
+contract enforceable.  Every Netcanon codec declares a
 `CapabilityMatrix` of three lists:
 
 ```python
@@ -161,7 +161,7 @@ text in CAPABILITIES.md.  Stale "future will…" comments are debt;
 stale capability claims are bugs.  Active lies in operator-facing
 messages destroy trust faster than missing features.
 
-NetConfig's notification mechanisms (Section B "Tier-3 sections
+Netcanon's notification mechanisms (Section B "Tier-3 sections
 detected banner" + Section C "Render-time review comments" of
 [`docs/CAPABILITIES.md` lines 230-318](CAPABILITIES.md)) are the
 direct manifestation of this principle: rather than silently
@@ -221,7 +221,7 @@ Classify every translatable surface by stability tier:
   surfaces are detected for *notification* but the tool deliberately
   doesn't try to translate them.
 
-Worked example: NetConfig's `CanonicalIntent` model classifies every
+Worked example: Netcanon's `CanonicalIntent` model classifies every
 field by tier (see [`intent.py` lines 31-49](../netconfig/migration/canonical/intent.py)).
 Firewall rules, NAT rules, VPN configuration, and routing-protocol
 state are explicitly Tier 3 with a documented architectural rationale
@@ -266,7 +266,7 @@ verifiable cross-format honesty:
   cell with severity tier.  See
   [`tools/run_phase4_reconciliation.py` lines 1-95](../tools/run_phase4_reconciliation.py).
 
-The variance class taxonomy is the load-bearing piece.  NetConfig's
+The variance class taxonomy is the load-bearing piece.  Netcanon's
 eight classes:
 
 * `ALIGNED` — drift matches expectation; no action.
@@ -428,7 +428,7 @@ For each: what it looks like, why it's bad, how to detect it.
   parser receives a stanza, doesn't know what to do with it, drops
   it, returns a "successful" parse.  Detect via cross-referencing
   parser dispatch tables + capability matrix + UI banner coverage.
-  NetConfig's Wave 11
+  Netcanon's Wave 11
   ([`CHANGELOG.md` lines 81-130](../CHANGELOG.md)) closed exactly
   this gap by adding parser-level Tier-3 stanza detection +
   population of `CanonicalIntent.dropped_tier3_sections` + a UI
@@ -546,9 +546,9 @@ The discipline is portable; the implementation is not.
 **Project-specific:**
 
 * The four-layer migration model (Vendor / Codec / Canonical /
-  Transport) is NetConfig's specific architecture.  A different
+  Transport) is Netcanon's specific architecture.  A different
   translator might have three layers or seven.
-* The specific tier definitions are NetConfig-specific.  Another
+* The specific tier definitions are Netcanon-specific.  Another
   project might have Tier 1 / 2 only, or Tier 1 / 2 / 3 / 4 with a
   different boundary.
 * The variance class taxonomy started at 6 classes and grew to 8 as
@@ -557,7 +557,7 @@ The discipline is portable; the implementation is not.
   same reason.
 * The doc-sync checklist categories that generalise (interactive UI
   elements, public functions, configuration schemas, capability
-  declarations) vs the rows specific to NetConfig's surface (codec
+  declarations) vs the rows specific to Netcanon's surface (codec
   authorship, target-profile YAMLs, real-capture fixtures, pytest
   markers).
 * The specific test-tier organisation (unit / integration / e2e /

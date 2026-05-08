@@ -648,7 +648,7 @@ Version Management
   - No /version or /health endpoint.
 
 Config Migration
-  - %APPDATA%\NetConfig survives reinstall.
+  - %APPDATA%\Netcanon survives reinstall.
   - No schema versioning on persisted data.
   - No migration hooks.
   - Silent failure if model changes break stored data.

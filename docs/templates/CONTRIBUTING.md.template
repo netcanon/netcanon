@@ -147,7 +147,7 @@ Use the `bug_report.yml` issue template.  Include:
 ## How to add a new `<COMPONENT>`
 
 <!-- PROJECT: This is the heaviest contribution shape.  Walk the
-contributor through it concretely.  In NetConfig adding a new codec
+contributor through it concretely.  In Netcanon adding a new codec
 is a multi-week task; the walkthrough should be honest about the
 scope. -->
 
@@ -221,7 +221,7 @@ Per the doc-sync checklist in `CLAUDE.md`:
 
 <!-- PROJECT: If your project has a single central data model that
 all the layers project into, walk the contributor through extending
-it.  In NetConfig this is `docs/adding-a-canonical-field.md` — point
+it.  In Netcanon this is `docs/adding-a-canonical-field.md` — point
 external contributors at the worked-example doc rather than
 duplicating it. -->
 

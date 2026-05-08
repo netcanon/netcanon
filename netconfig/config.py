@@ -21,7 +21,7 @@ MAX_BACKUP_CONCURRENCY: int = 10
 
 
 class Settings(BaseSettings):
-    """Runtime configuration for the NetConfig application.
+    """Runtime configuration for the Netcanon application.
 
     Attributes:
         definitions_dir: Directory tree containing ``*.yaml`` device definition

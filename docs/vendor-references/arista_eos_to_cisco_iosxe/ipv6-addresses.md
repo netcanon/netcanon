@@ -88,7 +88,7 @@ discriminator is dropped on the wire.
   output.
 * Auto-generated EUI-64 link-local addresses are not parsed by
   the Arista codec (they don't appear in `running-config` text);
-  this aspect is invisible to NetConfig regardless of target codec.
+  this aspect is invisible to Netcanon regardless of target codec.
 
 ## Disposition
 

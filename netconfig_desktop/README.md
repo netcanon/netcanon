@@ -1,6 +1,6 @@
-# NetConfig Desktop
+# Netcanon Desktop
 
-Windows desktop shell for the NetConfig web application.
+Windows desktop shell for the Netcanon web application.
 
 The desktop package wraps the existing `netconfig` FastAPI application in a
 native Windows experience without modifying any web-layer code:
@@ -28,7 +28,7 @@ python setup_desktop.py bdist_msi
 ```
 
 The MSI:
-* Installs to `C:\Program Files\NetConfig\`
+* Installs to `C:\Program Files\Netcanon\`
 * Creates a Start Menu shortcut (pinnable to the taskbar)
 * Uses `base="Win32GUI"` — no console window
 
@@ -95,7 +95,7 @@ appropriate for the current execution context:
 | Context | `definitions_dir` | `configs_dir` | Data root (`jobs/`, `schedules/`, `devices/`, logs) |
 |---------|------------------|---------------|-----|
 | Dev (unfrozen) | `<repo_root>/definitions/` | `<repo_root>/configs/` | `<repo_root>/` |
-| Frozen (cx_Freeze) | `<install_dir>/definitions/` | `%APPDATA%\NetConfig\configs\` | `%APPDATA%\NetConfig\` |
+| Frozen (cx_Freeze) | `<install_dir>/definitions/` | `%APPDATA%\Netcanon\configs\` | `%APPDATA%\Netcanon\` |
 
 The data root holds the operational JSON state stores derived under it as
 `jobs/`, `schedules/`, and `devices/` subdirectories.  By default the root
@@ -109,7 +109,7 @@ is `configs_dir.parent`, but an explicit `Settings.data_dir` (or a
 
 Operators can override the platform defaults via a Preferences dialog
 reachable from the system-tray menu (**Preferences…**).  Settings are
-persisted to `%APPDATA%\NetConfig\preferences.json` as a small JSON
+persisted to `%APPDATA%\Netcanon\preferences.json` as a small JSON
 document:
 
 | Field | Effect when set |
@@ -132,7 +132,7 @@ operator can re-open the dialog and re-save to repair it.
 
 ### Uninstall behaviour
 
-The MSI installer deliberately preserves `%APPDATA%\NetConfig\` on
+The MSI installer deliberately preserves `%APPDATA%\Netcanon\` on
 uninstall so user-captured configurations, jobs history, schedules,
 and preferences survive a reinstall / upgrade cycle.  To remove all
 user data after uninstalling, delete that folder manually.

@@ -301,7 +301,7 @@ class TestThemeToggleRendered:
 
 
 class TestDefinitionsPageEnriched:
-    """The /definitions page surfaces every NetConfig data source:
+    """The /definitions page surfaces every Netcanon data source:
     backup device definitions, version/model overlays, migration
     target profiles (with module variants), and vendor codec
     capabilities.  Before this enrichment only the first section
@@ -337,7 +337,7 @@ class TestDefinitionsPageEnriched:
     def test_target_profiles_section_rendered_when_loaded(
         self, client: TestClient,
     ) -> None:
-        """54 target profiles ship with NetConfig by default.
+        """54 target profiles ship with Netcanon by default.
         The vendor-group + row testids must appear in the rendered
         HTML (a regression would drop the whole section)."""
         resp = client.get("/definitions")

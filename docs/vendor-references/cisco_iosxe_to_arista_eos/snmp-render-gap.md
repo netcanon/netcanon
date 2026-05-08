@@ -59,7 +59,7 @@ SNMPv3 passphrase hashes are NOT cross-vendor portable.  v3 USM
 hashes are derived from a function of (passphrase, engineID), and
 engineID differs between vendors and between devices.  Operators
 migrating from Cisco IOS-XE to Arista must re-key SNMPv3 users on
-the target.  This is upstream of the NetConfig codec layer; the
+the target.  This is upstream of the Netcanon codec layer; the
 canonical model preserves opaque hash bytes verbatim per
 `CanonicalSNMPv3User.auth_passphrase` schema docs.
 

@@ -25,7 +25,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_SERVICE = "NetConfig"
+_SERVICE = "Netcanon"
 _ACCOUNT = "master_key"
 _fernet = None  # Fernet instance, initialised lazily on first use
 

@@ -61,7 +61,7 @@ class TestKeyInitialisation:
             credentials.encrypt("test")
             mock_set.assert_called_once()
             svc, acc, stored_key = mock_set.call_args.args
-            assert svc == "NetConfig"
+            assert svc == "Netcanon"
             assert acc == "master_key"
             assert len(stored_key) > 0
 

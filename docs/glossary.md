@@ -1,6 +1,6 @@
 # Glossary
 
-A central reference for project-specific jargon used across NetConfig.
+A central reference for project-specific jargon used across Netcanon.
 New contributors (humans and Claude agents) should skim this before
 diving into `ARCHITECTURE.md` or codec-level READMEs. Terms are grouped
 by concern and listed alphabetically within each section.

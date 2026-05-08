@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 class WebViewWindow:
-    """PySide6 + QtWebEngine window for the NetConfig web UI.
+    """PySide6 + QtWebEngine window for the Netcanon web UI.
 
     Args:
         url: The URL to load on startup (e.g. ``"http://127.0.0.1:8765"``).
@@ -52,7 +52,7 @@ class WebViewWindow:
     def __init__(
         self,
         url: str,
-        title: str = "NetConfig",
+        title: str = "Netcanon",
         width: int = 1280,
         height: int = 800,
         on_closed: Callable[[], None] | None = None,

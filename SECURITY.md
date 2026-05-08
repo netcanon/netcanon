@@ -1,14 +1,45 @@
-# NetConfig — Security Architecture
+# Netcanon — Security Architecture
 
 This document describes the security model, threat assumptions, implemented
-controls, and known limitations of NetConfig.  It must be updated whenever
+controls, and known limitations of Netcanon.  It must be updated whenever
 a security-relevant change is made to the codebase.
+
+---
+
+## Reporting a Vulnerability
+
+**Do not open public GitHub issues for security vulnerabilities.**
+
+Use GitHub's private vulnerability reporting flow:
+**https://github.com/OWNER/REPO/security/advisories/new**
+
+What to include:
+
+- Affected component (codec, pipeline stage, API endpoint, desktop shell)
+- Affected versions (commit SHA or release tag)
+- Steps to reproduce — sanitized; never include real credentials, IPs,
+  or hostnames in the report
+- Impact assessment as you see it
+- Suggested fix if you have one
+
+What to expect:
+
+- Acknowledgment within 7 days
+- Triage outcome within 14 days
+- Coordinated disclosure if a fix is needed
+- Credit in the advisory unless you prefer otherwise
+
+We treat any cross-trust-boundary vulnerability — auth bypass, credential
+exposure, arbitrary file write outside the configured directory, code
+execution via crafted device output — as critical.  Issues entirely within
+the local-trust boundary (a malicious local user) are accepted risks per
+the threat model below.
 
 ---
 
 ## Threat Model
 
-NetConfig is designed as a **local desktop application**.  The server
+Netcanon is designed as a **local desktop application**.  The server
 component (`netconfig/`) binds exclusively to `127.0.0.1` and is not
 intended to be exposed to a network.  All security controls are designed
 with this assumption.
@@ -179,6 +210,30 @@ Key dependencies and their security relevance:
 | `pydantic` | Input validation | v2; strict validation model |
 
 Run `pip-audit` or `safety check` regularly to detect known CVEs.
+
+---
+
+## Supply-Chain Integrity (forward-looking)
+
+The items below are planned for the public release (see
+[`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) Phase 6).  Until they
+ship, the trust chain is "GitHub commit → contributor → reviewer."
+Operators in environments that require attested supply-chain integrity
+should wait for the v0.1.0 release where the items below are wired.
+
+- **Reproducible Docker builds.**  Multi-stage Dockerfile producing
+  byte-identical images from the same source revision.  Operators in
+  regulated environments can verify the published image against a
+  local rebuild.
+- **Cosign signatures via Sigstore.**  Published GHCR images signed
+  with keyless cosign (OIDC).  Verifiable with `cosign verify`.
+- **SBOM via syft.**  Software bill of materials published alongside
+  each release; linkable to the image digest.
+- **Trusted Publishing for PyPI.**  No long-lived API tokens in CI;
+  attestations published to the Python sigstore.
+- **Pinned dependency manifest.**  Either `requirements.lock` or
+  `uv.lock` checked in; production builds resolve from the lock, not
+  `pyproject.toml` ranges.
 
 ---
 

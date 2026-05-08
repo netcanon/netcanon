@@ -1,0 +1,59 @@
+name: Feature request
+description: Suggest a new feature or scope expansion
+title: "[feature] "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the suggestion.  A note on scope:
+
+        - **In-scope:** new codecs (vendor support), new canonical fields, new
+          target profiles, new documentation paths, performance work, UI polish.
+        - **Out-of-scope:** firewall rule translation, NAT rule translation, VPN
+          tunnel translation, QoS policy translation.  These are deliberate Tier-3
+          deferrals — see `docs/CAPABILITIES.md`.  We may build a sister product
+          for these surfaces; we will not add them to this one.
+
+        Frame the request concretely — "X doesn't work for Y workflow" beats
+        "could you add Z" without context.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: The workflow you're trying to complete and where it stalls today.
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: What would the feature look like?
+      description: Concrete shape — UI / API / CLI / config field.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+      description: Workarounds, other tools, or accepting the gap.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope check
+      description: Which category does this fall into?
+      options:
+        - New codec / vendor support
+        - New canonical field
+        - New target profile
+        - Documentation
+        - Performance
+        - UI / UX polish
+        - Other (please clarify)
+    validations:
+      required: true

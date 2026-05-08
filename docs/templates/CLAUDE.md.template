@@ -45,7 +45,7 @@ the concerns>`.
 <!-- PROJECT: Only relevant if your project ships on multiple
 platforms (web + desktop, library + CLI + service, server + mobile,
 etc.).  If single-platform, delete this section and the next.  The
-NetConfig source uses this section to enforce that web and desktop
+Netcanon source uses this section to enforce that web and desktop
 shells stay at feature parity. -->
 
 `<PROJECT_NAME>` ships on `<N>` platforms.  All must be kept at feature
@@ -74,7 +74,7 @@ The following are intentionally platform-specific and do **not**
 require cross-platform equivalents:
 
 <!-- PROJECT: List per-platform features that are intentionally
-asymmetric.  Example from NetConfig: system tray icon (desktop only),
+asymmetric.  Example from Netcanon: system tray icon (desktop only),
 public-network binding flags (web only).  Be explicit so contributors
 don't waste cycles on parity work that isn't wanted. -->
 
@@ -143,7 +143,7 @@ existing peers in the same commit.
 ## Code organisation
 
 <!-- PROJECT: Brief pointer at where the code tree's layout is
-documented.  In NetConfig this is a single sentence pointing at
+documented.  In Netcanon this is a single sentence pointing at
 tests/README.md and the project root README's Layout section.  The
 goal: a contributor finds the layout in ONE hop from this file. -->
 
@@ -201,7 +201,7 @@ PROJECT-SPECIFIC RULES section below as failure modes surface. -->
   Multiple patch sites drift apart and create flaky tests that pass
   individually but fail in the suite.
   <!-- PROJECT: Replace with your project's actual factory point.
-  In NetConfig this is `netconfig.api.routes.backups.get_collector`. -->
+  In Netcanon this is `netconfig.api.routes.backups.get_collector`. -->
 - **Never** land a code change without updating the docs it renders
   stale.  The Documentation Sync Checklist above is concrete — if a
   row applies to your change, touch the listed doc in the same
@@ -226,7 +226,7 @@ PROJECT-SPECIFIC RULES section below as failure modes surface. -->
   External callers and tests depend on the exact shape.  Later phases
   add NEW public functions; existing surfaces stay frozen.
   <!-- PROJECT: Identify your frozen surfaces explicitly.  In
-  NetConfig the migration_pipeline.py public functions are frozen. -->
+  Netcanon the migration_pipeline.py public functions are frozen. -->
 - **Never** assert on a request's *initial* response body for final
   job state on async / background-task endpoints — the initial
   response always serialises before the task runs.  Always poll /

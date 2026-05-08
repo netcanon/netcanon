@@ -29,12 +29,12 @@ pytestmark = pytest.mark.e2e
 class TestNavigation:
     def test_dashboard_title(self, page: Page, base_url: str):
         page.goto("/")
-        expect(page).to_have_title("Dashboard — NetConfig")
+        expect(page).to_have_title("Dashboard — Netcanon")
 
     def test_nav_brand_visible(self, page: Page, base_url: str):
         page.goto("/")
         nav = NavBar(page)
-        expect(nav.brand).to_have_text("NetConfig")
+        expect(nav.brand).to_have_text("Netcanon")
 
     def test_nav_to_configs(self, page: Page, base_url: str):
         page.goto("/")
@@ -53,11 +53,11 @@ class TestNavigation:
 
     def test_configs_page_title(self, page: Page, base_url: str):
         page.goto("/configs")
-        expect(page).to_have_title("Configs — NetConfig")
+        expect(page).to_have_title("Configs — Netcanon")
 
     def test_definitions_page_title(self, page: Page, base_url: str):
         page.goto("/definitions")
-        expect(page).to_have_title("Definitions — NetConfig")
+        expect(page).to_have_title("Definitions — Netcanon")
 
 
 class TestThemeToggle:

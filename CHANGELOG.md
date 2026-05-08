@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to NetConfig are documented here.
+All notable changes to Netcanon are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 See also: [`README.md`](README.md) for project orientation;
@@ -10,6 +10,156 @@ much of the work below evolves.
 ---
 
 ## [Unreleased]
+
+### Public release plan — Phase 1 pre-flight + rebrand to Netcanon
+
+First pass at the public-launch pre-flight checklist from
+[`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) Phase 1, plus the
+project rebrand surfaced by the name-conflict check in the same
+checklist.  No code-behaviour changes; brand + structural
+artefacts + PII scrub.
+
+#### Pre-flight artefacts authored
+
+* **`LICENSE`** — MIT.  Vendor-tooling space is overwhelmingly
+  permissive-licensed (Netmiko, NAPALM, Nornir all MIT).
+* **`CODE_OF_CONDUCT.md`** — Contributor Covenant 2.1, fetched
+  verbatim from `contributor-covenant.org` (CC BY 4.0; standard
+  OSS template).  Enforcement contact uses an `OWNER/REPO`
+  placeholder to swap before public launch.
+* **`CONTRIBUTING.md`** — substantive contributor guide; lifts
+  from `CLAUDE.md`'s doc-sync checklist +
+  `docs/adding-a-canonical-field.md`.  Walks the three
+  contribution paths (fixture / codec / canonical field) and
+  points at matrix-honesty as the project's North Star.
+* **`SECURITY.md`** — extended with two new sections:
+  * "Reporting a Vulnerability" — uses GitHub's private
+    vulnerability reporting flow; no email contact required.
+  * "Supply-Chain Integrity (forward-looking)" — documents
+    cosign + SBOM + Trusted Publishing items planned for Phase 6.
+* **`.github/PULL_REQUEST_TEMPLATE.md`** — references the
+  doc-sync checklist + the matrix-honesty self-check.
+* **`.github/ISSUE_TEMPLATE/`** — 4 forms: `config.yml` (blank
+  issues disabled + Capabilities / Contributing / private
+  security advisory routing), `bug_report.yml` (sanitization
+  required), `feature_request.yml` (in-scope vs Tier-3-deferred
+  guidance), `fixture_submission.yml` (separate from bug
+  reports — the fixture IS the contribution).
+* **`.github/workflows/ci.yml`** — minimal CI: pytest unit +
+  integration tiers across Python 3.11 / 3.12 / 3.13, plus
+  sdist + wheel build with `twine check`.  E2E + desktop tiers
+  deferred to a follow-up CI wave.
+* **`pyproject.toml`** — extended with PyPI-required metadata:
+  dist name (`netcanon`), license (MIT), readme, authors,
+  keywords, classifiers, `[project.urls]` block (all
+  `OWNER/REPO`-templated).
+
+#### Rebrand: NetConfig → Netcanon
+
+The pre-flight name-conflict check found `netconfig` taken on
+PyPI (squatter) and `github.com/netconfig` claimed.  After
+scoring candidates against availability + collision +
+on-brand-ness, **Netcanon** won: 8 letters, fully available
+across PyPI / GitHub / Docker Hub / relevant TLDs, and the name
+carries the project's defining discipline ("canon" =
+canonical-intermediate model + authoritative matrix-honesty
+reference).
+
+* **181 substitutions** across 76 tracked files: `NetConfig` →
+  `Netcanon` in prose, page titles, copyright lines, mutex
+  names, installer scripts.
+* **PyPI dist name** flipped: `name = "netcanon"` in
+  `pyproject.toml`.
+* **Self-reference** `desktop-build = ["netcanon[desktop]"]`
+  updated.
+* **`pip install netconfig`** → `pip install netcanon` in
+  install instructions (2 occurrences).
+
+Deliberately **not yet renamed** (deferred to Phase 1.5 to keep
+this wave's diff scope-clean):
+
+* Python package directories `netconfig/` and
+  `netconfig_desktop/` (and all import paths).
+* Env var prefix `NETCONFIG_*` (operator-facing; rename =
+  breaking change for any existing shell scripts).
+
+#### PII scrub
+
+Pre-flight real-IP / personal-identifier audit surfaced multiple
+narrative-exposure points + an incomplete sanitization in a
+public fixture.  Scrubbed:
+
+* **Public fixture leak fixed.**
+  `tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf`
+  was supposed to have all real-domain occurrences sanitized
+  to `example.test` per `NOTICE.md`'s claim, but 6 occurrences
+  remained (lines 3827 / 28216 / 28220 / 28236 / 28495 /
+  28750).  An additional bare `*.lan` form was also
+  undocumented.  Both now replaced with the claimed sanitized
+  values.
+* **Narrative-exposure scrub.**  `NOTICE.md`, `CHANGELOG.md`,
+  `CROSS_MESH_RESULTS.md`, `RESULTS.md`,
+  `phase4_findings_*.md`, `user_smoke_findings.md`, and
+  `_phase4_runs/latest.json` all literally NAMED the real
+  values they claimed to have sanitized ("real WAN IP `<IP>`
+  replaced with...").  Replaced with redaction markers
+  (`[redacted-email]`, `[redacted-domain]`,
+  `[redacted-WAN-IP]`) in 42 narrative occurrences.
+
+#### Live operator backups untracked
+
+`git rm --cached` of 4 files in `configs/` that were tracked at
+HEAD despite `.gitignore` covering the directory (gitignore is
+not retroactive — files in the index stay tracked):
+
+* Two empty Cisco backup placeholders.
+* One 491-line Cisco config (2 type-8/9 password hashes).
+* One 35,095-line FortiGate config (48 ENC encrypted secrets,
+  22 BEGIN PRIVATE KEY blocks, 14 certificate blocks, 4 SSH
+  public keys, 46 MAC addresses, 5 email addresses, the
+  operator's real WAN IP).
+
+Files remain in the working tree (operator's local backups);
+they are no longer in the git index.  **History still contains
+them** — the next wave (history rewrite via `git filter-repo`)
+closes that gap.
+
+#### Findings surfaced for follow-up
+
+* **Author metadata leak.**  `git log --format='%ae'` shows 352
+  of 353 historical commits authored by a personal `gmail.com`
+  address.  History rewrite via `git filter-repo
+  --email-callback` is the next wave's main task.
+* **Real-IP audit otherwise clean.**  Outside the configs/
+  files now untracked, every "looks-public" IP in the working
+  tree is either RFC 5737 documentation range, well-known
+  public DNS/NTP retained as fixture grammar, or sourced from
+  public corpora (Batfish, HPE Community, etc.) with
+  documented provenance in `tests/fixtures/real/NOTICE.md`.
+* **Project-name conflicts.**  PyPI: `netconfig`,
+  `netconfig-translator`, `net-config` all taken (squatters).
+  GitHub `/netconfig` claimed.  Resolved by rebrand.
+* **44 untracked phase4-run JSONs** in
+  `tests/fixtures/real/_phase4_runs/` contain PII narrative
+  refs.  Already gitignored (`.gitignore` line 68 carves out
+  `latest.json`); local-only ephemera, no commit-leakage risk.
+  Operator may delete locally as a separate cleanup.
+
+#### What this wave does NOT do
+
+* **Git history rewrite.**  Pending; needs `filter-repo`
+  invocation to (a) scrub `configs/Fortigate` +
+  `configs/Cisco` from all historical commits, (b) replace
+  personal email in author/committer metadata across all 352
+  commits, (c) replace `[redacted-domain]` /
+  `[redacted-WAN-IP]` / `[redacted-email]` blob text in
+  history.  Destructive but safe — no external clones exist.
+* **Package directory rename.**  `netconfig/` → `netcanon/`
+  (and `netconfig_desktop/` → `netcanon_desktop/`) is Phase
+  1.5.
+
+Test state post-rebrand: unit + integration tiers pass clean,
+no regressions from the substitution pass.
 
 ### Added (Desktop Preferences mini-wave)
 
@@ -43,7 +193,7 @@ surface that the web platform exposes via `NETCONFIG_*` env vars.
   Quit).  The two new callbacks are optional kwargs so existing tray
   construction stays backward-compatible.
 * **Item 5 — Single-instance enforcement** (`netconfig_desktop/single_instance.py`):
-  Windows named-mutex guard (`Global\NetConfigSingleInstance_v1`)
+  Windows named-mutex guard (`Global\NetcanonSingleInstance_v1`)
   prevents a second `netconfig_desktop` from launching and silently
   failing on the port-bind.  No-op on non-Windows so test suite runs
   on Linux / macOS.
@@ -864,7 +1014,7 @@ didn't.
 ### Changed (Definitions page enriched with 4 browsing sections)
 
 The `/definitions` page was showing only 4 backup-side device
-definitions, hiding the richer data NetConfig actually has loaded:
+definitions, hiding the richer data Netcanon actually has loaded:
 1 version overlay + 54 migration target profiles (with module
 variants) + 8 vendor codec records.  The page now surfaces ALL of
 it as a browsable reference — the Tier-3 rename-modal dropdowns
@@ -1200,7 +1350,7 @@ the app supports.
   message (v1 behaviour — GAP 4 commit); GAP 9a removes that
   rejection and ships the conversion.  Operators no longer need
   to run ``| display set`` on their device to feed block-form
-  output into NetConfig.
+  output into Netcanon.
 
 ### Tests (GAP 9a)
 
@@ -2484,7 +2634,7 @@ consumes.
 
 - User-contributed real ``show full-configuration`` from a physical
   **FortiGate 100E** running **FortiOS 7.2.13** (build 1762),
-  captured via NetConfig's backup layer and sanitised per CLAUDE.md
+  captured via Netcanon's backup layer and sanitised per CLAUDE.md
   hard rule.  ~35K lines — 34 interfaces, 5 VLANs, 2 LAGs, 6 DHCP
   servers, 3 admins, 1 RADIUS server, 1 SNMP community, full
   firewall policy table + VIPs + SDWAN + SSL-VPN.  First physical-
@@ -2547,7 +2697,7 @@ consumes.
 ### Added (OPNsense promoted to `certified` — 4th codec to reach the bar + real render bug fixed)
 
 - User-contributed real ``config.xml`` from a deployed OPNsense
-  instance ("supergate"), captured via NetConfig's own backup layer
+  instance ("supergate"), captured via Netcanon's own backup layer
   (SSH + ``cat /conf/config.xml``).  Sanitised per CLAUDE.md hard
   rule — 2 bcrypt ``<password>`` hashes replaced with
   ``$2y$11$fakeBcrypt...`` markers; API keys and the QFeeds
@@ -2601,7 +2751,7 @@ consumes.
 
 - User-contributed real ``show running-config`` from a physical
   **Cisco Catalyst 9300-24UX** running **IOS-XE 17.12**, captured via
-  NetConfig's own backup layer against the contributor's live home-
+  Netcanon's own backup layer against the contributor's live home-
   lab switch and sanitised per CLAUDE.md hard rules.  Fills the
   physical-switch coverage gap that the earlier 3 BSD-3 racc
   captures didn't address — they were all **virtual routers**
@@ -3049,7 +3199,7 @@ consumes.
 
 - **R4: ``CiscoIOSXECLICodec``** — first ``parse_only`` codec, first
   multi-codec-per-vendor instance.  Parses ``show running-config``
-  text — the format NetConfig's existing Netmiko backup collectors
+  text — the format Netcanon's existing Netmiko backup collectors
   already capture.  Shares ``vendor_id=cisco_iosxe`` with the
   NETCONF codec; both produce the same tree shape so they're
   interchangeable as pipeline SOURCEs.
@@ -3815,7 +3965,7 @@ drift flagged in earlier sessions, untouched here.
 ### Added (nav bar on API Docs page)
 
 - **`GET /docs`** — FastAPI's built-in Swagger UI is now replaced by a
-  custom route that injects the NetConfig nav bar (sticky, same style as
+  custom route that injects the Netcanon nav bar (sticky, same style as
   all other pages) so users can always navigate back from the API explorer.
   The raw `/openapi.json` schema endpoint is unchanged.  `/redoc` is
   disabled (it was unreachable from the UI anyway).
@@ -3888,7 +4038,7 @@ drift flagged in earlier sessions, untouched here.
   to `WARNING` regardless of root level to reduce noise in INFO/DEBUG runs.
 - **`netconfig_desktop/__main__.py`** — `_configure_logging()` called before
   `DesktopApp()`.  In frozen (installed) mode writes to
-  `%APPDATA%\NetConfig\netconfig.log`; in dev mode uses console only.  Fatal startup
+  `%APPDATA%\Netcanon\netconfig.log`; in dev mode uses console only.  Fatal startup
   exceptions now go through `logger.critical(..., exc_info=True)` before the message
   box so the stack trace is captured in the log file.
 - **`netconfig_desktop/server.py`** — `log_config=None` added to `uvicorn.Config` so

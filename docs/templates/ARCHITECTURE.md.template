@@ -105,7 +105,7 @@ conflated:
 ### Layer 3 — `<CORE_ABSTRACTION>`
 
 <!-- PROJECT: Most projects have a central data model that the layers
-above and below project into.  In NetConfig this is the
+above and below project into.  In Netcanon this is the
 "Canonical Intent Model" — the shared tree shape that codecs parse
 into and render out of.  In your project it might be an AST, a
 domain model, an event schema, an API contract.  Name it explicitly
@@ -135,7 +135,7 @@ the other tiers are worth their cost / kept on>`.
 ## Certification / certainty model
 
 <!-- PROJECT: If your project's components have varying levels of
-maturity / confidence, document the tiering scheme here.  In NetConfig
+maturity / confidence, document the tiering scheme here.  In Netcanon
 codecs are tagged `experimental` / `best_effort` / `certified` based
 on real-fixture coverage.  Other domains: alpha/beta/stable, draft/
 review/ratified, prototype/staging/production.  Each level has an

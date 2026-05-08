@@ -1,0 +1,82 @@
+name: Bug report
+description: Report a translation bug, parsing bug, or unexpected behaviour
+title: "[bug] "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for filing a bug.  Ground rules:
+
+        - **Never paste raw configs containing real credentials, IPs, or hostnames.**
+          Use the sanitization helper documented in `BUG_REPORTING.md` (Phase 4.5
+          of the release plan) or hand-redact before pasting.
+        - For Tier-3 surfaces (firewall, NAT, VPN, QoS), the deferral is by design —
+          see `docs/CAPABILITIES.md`.  Use the feature request template if you have
+          a scope question.
+        - For "I have a sanitized capture and the matrix doesn't yet test it,"
+          use the fixture submission template — that's a contribution, not a bug.
+
+  - type: input
+    id: source-vendor
+    attributes:
+      label: Source vendor + OS version
+      description: e.g. "Cisco IOS-XE 17.6.4", "Juniper Junos 22.4R3"
+      placeholder: "Cisco IOS-XE 17.6.4"
+    validations:
+      required: true
+
+  - type: input
+    id: target-vendor
+    attributes:
+      label: Target vendor + OS version
+      description: e.g. "Aruba AOS-CX 10.13", "Arista EOS 4.32.0F"
+      placeholder: "Aruba AOS-CX 10.13"
+    validations:
+      required: true
+
+  - type: textarea
+    id: input-snippet
+    attributes:
+      label: Sanitized input config snippet
+      description: |
+        The smallest input that reproduces the bug.  **Sanitize before pasting.**
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What you expected the translation to produce
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: What the tool actually produced (sanitized)
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Netcanon version or commit SHA
+      placeholder: "v0.1.0 / 75f1d92"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: I have replaced all real credentials, IPs, and hostnames in the snippets above with synthetic equivalents.
+          required: true
+        - label: I have searched existing issues for this bug.
+          required: true

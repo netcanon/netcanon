@@ -1,6 +1,6 @@
 # `data-testid` Reference
 
-Every interactive HTML element in the NetConfig templates carries a
+Every interactive HTML element in the Netcanon templates carries a
 `data-testid` attribute.  E2E tests use these attributes exclusively — never
 CSS class names or element structure — so UI refactoring does not break tests.
 
@@ -9,7 +9,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `data-testid`      | Element | Notes |
 |--------------------|---------|-------|
 | `nav`              | `<nav>` | Top navigation bar |
-| `nav-brand`        | `<a>`   | "NetConfig" brand link — navigates to `/` |
+| `nav-brand`        | `<a>`   | "Netcanon" brand link — navigates to `/` |
 | `nav-home`         | `<a>`   | Link to `/`; has `class="active"` and `aria-current="page"` on Dashboard |
 | `nav-jobs`         | `<a>`   | Link to `/jobs`; active on Jobs page |
 | `nav-schedules`    | `<a>`   | Link to `/schedules`; active on Schedules page |

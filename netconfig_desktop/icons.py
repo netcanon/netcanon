@@ -28,7 +28,7 @@ _TEXT_WHITE = (238, 238, 238, 255)
 
 
 def _draw_icon(size: int) -> "PIL.Image.Image":  # type: ignore[name-defined]
-    """Draw a single-size NetConfig icon.
+    """Draw a single-size Netcanon icon.
 
     Renders a dark-navy rounded rectangle with a bold "NC" monogram in
     light blue.  Falls back to ``ImageFont.load_default()`` if no system

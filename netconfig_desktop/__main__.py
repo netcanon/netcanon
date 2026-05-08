@@ -13,7 +13,7 @@ import sys
 
 
 def main() -> None:
-    """Bootstrap the NetConfig desktop application."""
+    """Bootstrap the Netcanon desktop application."""
     _configure_logging()
     logger = logging.getLogger(__name__)
 
@@ -23,7 +23,7 @@ def main() -> None:
     from netconfig_desktop.single_instance import acquire_singleton
 
     if not acquire_singleton():
-        logger.info("Another NetConfig instance is already running — exiting")
+        logger.info("Another Netcanon instance is already running — exiting")
         _already_running()
         sys.exit(0)
 
@@ -42,7 +42,7 @@ def _configure_logging() -> None:
 
     Uses the frozen-vs-dev detection from ``netconfig_desktop.settings`` to
     decide whether to write a log file.  In frozen (installed) mode the log
-    goes to ``%APPDATA%\\NetConfig\\netconfig.log``; in dev mode only the
+    goes to ``%APPDATA%\\Netcanon\\netconfig.log``; in dev mode only the
     console handler is added.
     """
     import os
@@ -52,7 +52,7 @@ def _configure_logging() -> None:
 
     if getattr(sys, "frozen", False):
         base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
-        log_file = base / "NetConfig" / "netconfig.log"
+        log_file = base / "Netcanon" / "netconfig.log"
     else:
         log_file = None  # console only in development
 
@@ -66,8 +66,8 @@ def _fatal(message: str) -> None:
 
         ctypes.windll.user32.MessageBoxW(
             0,
-            f"NetConfig failed to start:\n\n{message}",
-            "NetConfig — Fatal Error",
+            f"Netcanon failed to start:\n\n{message}",
+            "Netcanon — Fatal Error",
             0x10,  # MB_ICONERROR
         )
     except Exception:  # noqa: BLE001
@@ -86,9 +86,9 @@ def _already_running() -> None:
 
         ctypes.windll.user32.MessageBoxW(
             0,
-            "NetConfig is already running.\n\n"
-            "Check your system tray for the NetConfig icon.",
-            "NetConfig",
+            "Netcanon is already running.\n\n"
+            "Check your system tray for the Netcanon icon.",
+            "Netcanon",
             0x40,  # MB_ICONINFORMATION
         )
     except Exception:  # noqa: BLE001

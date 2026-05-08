@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{% block title %}NetConfig{% endblock %}</title>
+  <title>{% block title %}Netcanon{% endblock %}</title>
   <!-- Theme boot: runs BEFORE the <style> block parses so the
        document paints in the correct theme without a flash of
        light content (FOUC).  Reads localStorage first (user
@@ -111,7 +111,7 @@
        halation of pure #000 on OLED while keeping contrast high);
        elevated surfaces step LIGHTER, inverting the light-mode
        convention.  Nav colours keep their dark navy — it already
-       reads correctly against a dark body because NetConfig's nav
+       reads correctly against a dark body because Netcanon's nav
        was always dark.  Accent + badge colours retune for enough
        contrast against the dark body without losing their
        semantic meaning. */
@@ -299,7 +299,7 @@
 </head>
 <body>
   <nav data-testid="nav">
-    <a href="/" class="brand" data-testid="nav-brand">NetConfig</a>
+    <a href="/" class="brand" data-testid="nav-brand">Netcanon</a>
     <a href="/"            data-testid="nav-home"        {% if active_page == 'home' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
     <a href="/devices"     data-testid="nav-devices"     {% if active_page == 'devices' %}class="active" aria-current="page"{% endif %}>Devices</a>
     <a href="/jobs"        data-testid="nav-jobs"        {% if active_page == 'jobs' %}class="active" aria-current="page"{% endif %}>Jobs</a>

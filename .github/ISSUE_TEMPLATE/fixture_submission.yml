@@ -1,0 +1,77 @@
+name: Fixture submission
+description: Submit a sanitized real-world config to expand the test matrix
+title: "[fixture] "
+labels: ["fixture", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you.**  Real-world fixtures are the highest-impact contribution
+        to this project — they exercise cells the synthetic suite can't reach.
+
+        This template is for "here's a sanitized capture, please add it to the
+        test matrix" submissions.  If you're filing a bug, use the bug report
+        template instead.
+
+  - type: input
+    id: vendor
+    attributes:
+      label: Vendor + OS version
+      placeholder: "Cisco IOS-XE 17.6.4"
+    validations:
+      required: true
+
+  - type: textarea
+    id: capture
+    attributes:
+      label: Sanitized capture
+      description: |
+        Paste the sanitized capture here, OR describe what you're attaching.
+        GitHub does not allow text-file attachments directly on issues; paste
+        inline if it's < 1000 lines, otherwise gist + link.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: coverage
+    attributes:
+      label: What does this fixture cover that we don't already test?
+      description: |
+        Reference `tests/fixtures/real/RESULTS.md` for current coverage.
+        Examples: "VRF on FortiGate", "EVPN type-5 on Arista with route-target
+        manual mode", "BGP graceful restart on Juniper."
+    validations:
+      required: true
+
+  - type: textarea
+    id: expectation
+    attributes:
+      label: Translation expectation (optional)
+      description: |
+        If you have an expected target-vendor output, include it.  Otherwise
+        the maintainers will derive expectations from vendor docs.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: provenance
+    attributes:
+      label: Provenance
+      description: |
+        Where did this capture come from?  e.g. "production switch in my own
+        network, sanitized via netconfig sanitize", "public-research repo
+        github.com/X/Y under MIT license", "vendor documentation example."
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: confirmation
+    attributes:
+      label: Confirmation
+      options:
+        - label: All real credentials, IPs, hostnames, and identifying information have been replaced with synthetic equivalents.
+          required: true
+        - label: I have the right to share this capture under the project's license.
+          required: true

@@ -49,7 +49,7 @@ TEMPLATE NOTES (delete after adapting):
 ### Added (`<EXAMPLE: per-pane override engine for VLAN renaming>`)
 
 `<RATIONALE — 2-4 sentences explaining what user-visible problem this
-solves and why this approach over alternatives.  In NetConfig style:
+solves and why this approach over alternatives.  In Netcanon style:
 "The Tier-3 rename modal lets operators override the auto-heuristic
 for individual canonical categories without leaving the translate
 workflow.  Previously each rename pass overwrote earlier ones; this
@@ -99,7 +99,7 @@ entries will be specific to your project.
 <!-- PROJECT: Signature changes are a hard call — the safer path is
 to add a NEW function (e.g. `run_plan_v2`) and deprecate the old
 one.  If you DO change a signature, document why callers won't
-break in the entry below.  In NetConfig the pipeline-stage
+break in the entry below.  In Netcanon the pipeline-stage
 signatures are explicitly frozen; this section header is here as a
 placeholder for projects that genuinely do version their public
 surface in-place. -->

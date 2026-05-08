@@ -60,7 +60,7 @@ class TrayIcon:
         on_quit: Callable[[], None],
         on_preferences: Optional[Callable[[], None]] = None,
         on_open_configs: Optional[Callable[[], None]] = None,
-        tooltip: str = "NetConfig",
+        tooltip: str = "Netcanon",
     ) -> None:
         self._on_show = on_show
         self._on_quit = on_quit

@@ -779,7 +779,7 @@ MEDIUM-OBS-002: Job Completion Logging Missing Summary Statistics
 
 MEDIUM-OBS-003: Desktop Log File Location Not Documented in UI
   File: netconfig_desktop/__main__.py, lines 42-48
-  Logs to %APPDATA%\NetConfig\netconfig.log on Windows but not exposed in UI.
+  Logs to %APPDATA%\Netcanon\netconfig.log on Windows but not exposed in UI.
   Users cannot easily find logs for troubleshooting.
 
 LOW-OBS-001: Job ID Truncated in Some Logs

@@ -15,7 +15,7 @@ the concrete artefacts that operationalise the discipline.
 ## What this directory is
 
 A set of generic, project-agnostic markdown / YAML templates extracted
-from a real working project (NetConfig, a multi-vendor network config
+from a real working project (Netcanon, a multi-vendor network config
 translator) where the matrix-honesty discipline has been exercised over
 hundreds of commits.  Each template encodes a pattern that worked there
 and is portable elsewhere — you don't need to be writing a network
@@ -79,7 +79,7 @@ Templates use a small set of consistent placeholder forms:
 |---|---|
 | `<PROJECT_NAME>` | Your project's name |
 | `<COMPONENT>` / `<MODULE>` | Your project's primary unit of architecture (codec, plugin, layer, package) |
-| `<CORE_ABSTRACTION>` | Your project's central data model (e.g. `CanonicalIntent` in NetConfig — replace with whatever yours is called) |
+| `<CORE_ABSTRACTION>` | Your project's central data model (e.g. `CanonicalIntent` in Netcanon — replace with whatever yours is called) |
 | `<VENDOR>` / `<INTEGRATION>` | External entities your project interfaces with |
 | `<EXAMPLE: ...>` | An illustrative example to either edit or remove |
 | `<!-- PROJECT: ... -->` | HTML-style comment with guidance the project-author should resolve and then delete |

@@ -461,7 +461,7 @@ point of the container.  They should NOT need to learn `docker exec`.
 The HTTP API IS the answer for Docker users:
 
 ```
-# Operator with NetConfig running on localhost:8765
+# Operator with Netcanon running on localhost:8765
 curl -X POST http://localhost:8765/api/v1/sanitize \
   -F "source_vendor=cisco_iosxe_cli" \
   -F "config=@my-config.txt" \
@@ -476,7 +476,7 @@ familiar with.
 For PyPI / native users not running the server:
 
 ```
-pip install netconfig
+pip install netcanon
 netconfig sanitize -i my-config.txt -o sanitized.txt \
   --source-vendor cisco_iosxe_cli
 ```
@@ -605,7 +605,7 @@ no .NET runtime, no PySide6 dance.
 
 ### Tier 2: PyPI package — for technical / library users
 
-`pip install netconfig` (or whatever name's available; check PyPI
+`pip install netcanon` (or whatever name's available; check PyPI
 now — see "Project identity & discoverability" above for the
 collision-check discipline).  Useful for:
 * Operators integrating into existing tooling pipelines (Ansible,

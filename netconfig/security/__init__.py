@@ -1,1 +1,1 @@
-"""Security utilities for NetConfig."""
+"""Security utilities for Netcanon."""

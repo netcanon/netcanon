@@ -47,7 +47,7 @@ does not.
 
 ## Cross-vendor mapping
 
-NetConfig handles this via the existing port-name rename mesh
+Netcanon handles this via the existing port-name rename mesh
 (`netconfig/migration/codecs/cisco_iosxe_cli/port_names.py` and the
 sibling `arista_eos/port_names.py`).  The canonical interface stores
 the vendor-native name as-is per the

@@ -15,7 +15,7 @@ which inventory rows apply to a feature with similar reach.
 
 ## The feature (SNMPv3 USM rename)
 
-NetConfig's migrate UI lets operators rewrite identity-bearing names
+Netcanon's migrate UI lets operators rewrite identity-bearing names
 during cross-vendor migration: ports, VLANs, local users, SNMP v1/v2c
 communities — and now SNMPv3 USM `securityName` values too.  When the
 operator opens the rename modal, picks the SNMPv3 rail, and types a

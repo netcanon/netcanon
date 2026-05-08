@@ -372,7 +372,7 @@ AUTO-044  MEDIUM  [Distribution]
              app = create_app()
          except Exception as exc:
              import sys
-             print(f"NetConfig failed to start: {exc}", file=sys.stderr)
+             print(f"Netcanon failed to start: {exc}", file=sys.stderr)
              raise SystemExit(1)
 
 AUTO-045  MEDIUM  [Cost Control]

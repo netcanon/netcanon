@@ -1,6 +1,6 @@
-# NetConfig Capabilities + Known Limitations
+# Netcanon Capabilities + Known Limitations
 
-NetConfig is a multi-vendor network device configuration translator
+Netcanon is a multi-vendor network device configuration translator
 with two co-hosted concerns:
 
 1. **Backup** — pull `running-config` (or vendor equivalent) from

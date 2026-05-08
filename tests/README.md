@@ -1,4 +1,4 @@
-# NetConfig Test Suite
+# Netcanon Test Suite
 
 Four-layer test infrastructure: **unit → integration → E2E → desktop**.
 

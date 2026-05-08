@@ -1,7 +1,7 @@
 """
 Single-instance enforcement using a Windows named mutex.
 
-Prevents the user from accidentally launching a second NetConfig
+Prevents the user from accidentally launching a second Netcanon
 process — the second copy would fail to bind the embedded server's
 TCP port (8765 by default) and surface as a fatal-error MessageBox.
 That's confusing for non-technical users because tray icons are easy
@@ -15,7 +15,7 @@ Design notes:
   We therefore stash the handle in a module-level variable.
 * The mutex name is in the ``Global\\`` namespace so the check works
   across user sessions on the same machine; this matches the desktop
-  workflow where one user installs and launches NetConfig.
+  workflow where one user installs and launches Netcanon.
 * On non-Windows platforms (Linux / macOS test runs) the function
   always returns True — desktop is Windows-only per the
   Platform-Specific Exceptions in CLAUDE.md.
@@ -38,7 +38,7 @@ ERROR_ALREADY_EXISTS: int = 183
 #: Globally-visible mutex name.  The ``v1`` suffix lets us bump the
 #: name in a future release if we ever want to coexist with old
 #: installs deliberately.
-_MUTEX_NAME: str = "Global\\NetConfigSingleInstance_v1"
+_MUTEX_NAME: str = "Global\\NetcanonSingleInstance_v1"
 
 #: Module-level reference so the mutex handle stays alive for the
 #: full process lifetime.  Do NOT replace with a local — Python GC

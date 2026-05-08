@@ -102,7 +102,7 @@ LAYER 3 — CANONICAL INTENT MODEL (pluggable CIMs)
 
 LAYER 4 — TRANSPORT
   Separate from "how to parse bytes" is "how to get those bytes off
-  a device."  Today NetConfig's backup collectors handle this
+  a device."  Today Netcanon's backup collectors handle this
   (SSH+Netmiko for CLI, Paramiko for shell).  The translator ignores
   transport entirely — you hand it a text blob.
 
@@ -1080,7 +1080,7 @@ TIER 3 — interactive rename modal in /migrate UI.
     #
     # Removed: the v1-era rejection with helpful hint (GAP 4 era).
     # Operators no longer need `show configuration | display set`
-    # to feed block-form output through NetConfig.
+    # to feed block-form output through Netcanon.
     #
     # Covered by TestBlockFormParse in test_juniper_junos.py
     # (10 tests including nested-5-deep, quoted strings, comments,
@@ -1596,13 +1596,13 @@ ABANDONED / DEFERRED FROM ORIGINAL PLAN:
 =====================================================================
 
 PROBLEM
-  Extend NetConfig (currently a multi-vendor backup tool) into a config
+  Extend Netcanon (currently a multi-vendor backup tool) into a config
   migration engine: read source device config (any vendor), transform
   into a canonical intent tree, emit config for a different target
   vendor, report semantic loss, optionally deploy.
 
 SCOPE (IN)
-  - Canonical intent model = YANG (OpenConfig + NetConfig extensions).
+  - Canonical intent model = YANG (OpenConfig + Netcanon extensions).
   - Per-vendor adapters with parse(raw)->YANG and render(YANG)->raw.
   - Capability matrices drive pre-flight loss reports.
   - Reuse existing collectors (SSH) for ingest.
@@ -2036,7 +2036,7 @@ ROUND-TRIP INVARIANT
   This is THE most valuable test. Build it first per adapter.
 
 RUNTIME VS CONFIG
-  NetConfig backs up config, not runtime. Migration similarly operates
+  Netcanon backs up config, not runtime. Migration similarly operates
   on config-intent only. Do not try to infer runtime from config.
 
 =====================================================================
@@ -2280,7 +2280,7 @@ A: Six-stage pipeline (collect -> parse -> transform -> validate ->
    tree. Pluggable per-vendor adapters implement parse/render with
    Jinja templates for CLI/XML targets and NETCONF edit-config for
    YANG-native targets. Capability matrices drive pre-flight
-   ValidationReports. Sits on top of NetConfig's existing collector
+   ValidationReports. Sits on top of Netcanon's existing collector
    and storage layers.
 
 =====================================================================

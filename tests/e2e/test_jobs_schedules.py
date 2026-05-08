@@ -39,7 +39,7 @@ pytestmark = pytest.mark.e2e
 class TestJobsPageNavigation:
     def test_jobs_page_title(self, page: Page, base_url: str):
         page.goto("/jobs")
-        expect(page).to_have_title("Jobs — NetConfig")
+        expect(page).to_have_title("Jobs — Netcanon")
 
     def test_nav_jobs_link_visible_from_dashboard(self, page: Page, base_url: str):
         page.goto("/")
@@ -139,7 +139,7 @@ class TestJobsPageWithJob:
 class TestSchedulesPageNavigation:
     def test_schedules_page_title(self, page: Page, base_url: str):
         page.goto("/schedules")
-        expect(page).to_have_title("Schedules — NetConfig")
+        expect(page).to_have_title("Schedules — Netcanon")
 
     def test_nav_to_schedules(self, page: Page, base_url: str):
         page.goto("/")

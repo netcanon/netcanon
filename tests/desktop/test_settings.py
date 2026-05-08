@@ -75,7 +75,7 @@ class TestDesktopSettingsFrozen:
         ):
             settings = desktop_settings()
 
-        assert settings.configs_dir == fake_appdata / "NetConfig" / "configs"
+        assert settings.configs_dir == fake_appdata / "Netcanon" / "configs"
 
     def test_definitions_dir_beside_exe(self, tmp_path):
         fake_exe = tmp_path / "netconfig.exe"
@@ -132,7 +132,7 @@ class TestDesktopSettingsPreferencesOverlay:
 
         # Defaults: configs under APPDATA, definitions beside EXE,
         # port == DESKTOP_PORT, open_in_editor True, data_dir None.
-        assert settings.configs_dir == fake_appdata / "NetConfig" / "configs"
+        assert settings.configs_dir == fake_appdata / "Netcanon" / "configs"
         assert settings.definitions_dir == tmp_path / "definitions"
         assert settings.port == DESKTOP_PORT
         assert settings.open_in_editor is True
@@ -140,7 +140,7 @@ class TestDesktopSettingsPreferencesOverlay:
 
     def test_preferences_overrides_paths_and_port(self, tmp_path):
         fake_exe, fake_appdata = self._frozen_env(tmp_path)
-        prefs_path = fake_appdata / "NetConfig" / "preferences.json"
+        prefs_path = fake_appdata / "Netcanon" / "preferences.json"
         prefs_path.parent.mkdir(parents=True, exist_ok=True)
         custom_configs = tmp_path / "custom_configs"
         custom_definitions = tmp_path / "custom_definitions"
@@ -173,7 +173,7 @@ class TestDesktopSettingsPreferencesOverlay:
         """Only fields present in the file should override; the rest
         keep platform defaults."""
         fake_exe, fake_appdata = self._frozen_env(tmp_path)
-        prefs_path = fake_appdata / "NetConfig" / "preferences.json"
+        prefs_path = fake_appdata / "Netcanon" / "preferences.json"
         prefs_path.parent.mkdir(parents=True, exist_ok=True)
         prefs_path.write_text(
             json.dumps({"port": 9200}),  # only port specified
@@ -189,13 +189,13 @@ class TestDesktopSettingsPreferencesOverlay:
 
         assert settings.port == 9200
         # Platform defaults still apply for the unspecified path fields
-        assert settings.configs_dir == fake_appdata / "NetConfig" / "configs"
+        assert settings.configs_dir == fake_appdata / "Netcanon" / "configs"
         assert settings.definitions_dir == tmp_path / "definitions"
 
     def test_corrupted_preferences_falls_back_to_defaults(self, tmp_path):
         """Preferences corruption must never block desktop startup."""
         fake_exe, fake_appdata = self._frozen_env(tmp_path)
-        prefs_path = fake_appdata / "NetConfig" / "preferences.json"
+        prefs_path = fake_appdata / "Netcanon" / "preferences.json"
         prefs_path.parent.mkdir(parents=True, exist_ok=True)
         prefs_path.write_text("{ not valid json", encoding="utf-8")
 
@@ -207,14 +207,14 @@ class TestDesktopSettingsPreferencesOverlay:
             settings = desktop_settings()  # Must not raise
 
         assert settings.port == DESKTOP_PORT
-        assert settings.configs_dir == fake_appdata / "NetConfig" / "configs"
+        assert settings.configs_dir == fake_appdata / "Netcanon" / "configs"
 
     def test_dev_mode_ignores_preferences_file(self, tmp_path):
         """Dev mode uses repo-relative defaults regardless of the
         preferences file; this keeps contributor workflow predictable."""
         fake_appdata = tmp_path / "AppData" / "Roaming"
         fake_appdata.mkdir(parents=True)
-        prefs_path = fake_appdata / "NetConfig" / "preferences.json"
+        prefs_path = fake_appdata / "Netcanon" / "preferences.json"
         prefs_path.parent.mkdir(parents=True, exist_ok=True)
         prefs_path.write_text(
             json.dumps({"port": 9500, "configs_dir": str(tmp_path / "x")}),

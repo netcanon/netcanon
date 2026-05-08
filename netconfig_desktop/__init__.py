@@ -1,5 +1,5 @@
 """
-NetConfig Desktop — Windows desktop shell for the NetConfig web application.
+Netcanon Desktop — Windows desktop shell for the Netcanon web application.
 
 This package wraps the ``netconfig`` FastAPI application in a native Windows
 desktop experience:

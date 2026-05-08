@@ -68,7 +68,7 @@ OpenConfig models VRFs under `openconfig-network-instance`:
 ```
 
 Cisco IOS-XE NETCONF agents expose this subtree, but the cisco_iosxe
-codec in NetConfig does not yet wire it up.
+codec in Netcanon does not yet wire it up.
 
 ## What the cisco_iosxe codec emits
 

@@ -13,7 +13,7 @@ $RECYCLE.BIN/
 *.suo
 *.user
 
-# NetConfig runtime data — device credentials, backups, job history, schedules.
+# Netcanon runtime data — device credentials, backups, job history, schedules.
 # These directories are created at runtime and must not be committed.
 devices/
 schedules/

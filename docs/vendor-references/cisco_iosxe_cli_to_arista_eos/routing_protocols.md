@@ -96,4 +96,4 @@ maps) and is gated on a future audit pass.
 
 EIGRP is **unsupported by target vendor** — Arista has no EIGRP
 implementation.  Operators migrating Cisco EIGRP to Arista must
-replan to OSPF or BGP regardless of NetConfig capability.
+replan to OSPF or BGP regardless of Netcanon capability.

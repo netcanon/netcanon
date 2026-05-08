@@ -53,7 +53,7 @@ class TestMigratePageStructure:
 
     def test_page_title(self, page: Page, base_url: str):
         page.goto("/migrate")
-        expect(page).to_have_title("Migrate — NetConfig")
+        expect(page).to_have_title("Migrate — Netcanon")
 
     def test_form_renders(self, page: Page, base_url: str):
         page.goto("/migrate")
