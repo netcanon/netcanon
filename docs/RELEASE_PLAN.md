@@ -18,13 +18,17 @@
   doc-sync row + hard rule about user-facing-doc updates).
 * **Phase 6** — packaging foundation (multi-stage Dockerfile,
   GHCR publish workflow with cosign + SBOM, PyPI Trusted
-  Publishing workflow, `/health` endpoint).  Local verified;
-  ready for the first release tag.
+  Publishing workflow, `/health` endpoint).  v0.1.0-rc1
+  shipped to GHCR + PyPI; CI green.
+* **Phase 4** — demo + walkthroughs (`tools/demo.py` with 4
+  scenarios; `docs/walkthroughs/` with paired narrative pages
+  for each scenario).  No setup demo: `pip install netcanon &&
+  python -m netcanon.cli ...` plus `python tools/demo.py` from
+  source.
 
 Remaining MUST-tier release-blockers: Phase 3 (quality hardening),
-Phase 4 (demo + walkthroughs), Phase 7 (README rewrite).
-Phases 8–11 are the launch sequence (private beta → soft launch
-→ hard launch → triage cadence).
+Phase 7 (README rewrite).  Phases 8–11 are the launch sequence
+(private beta → soft launch → hard launch → triage cadence).
 
 This is a forward-looking working document — when the release
 actually happens, prune the "plan" sections and convert this file

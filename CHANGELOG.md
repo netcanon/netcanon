@@ -11,6 +11,92 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Public release plan — Phase 4: demo + walkthroughs
+
+Phase 4 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the
+30-second "show me what this does" path that operators see before
+they read any docs.
+
+#### `tools/demo.py`
+
+One-command cross-vendor translation, no setup required (no devices,
+no FastAPI server, no fixture files on disk — just `pip install
+netcanon` and run).  Four scenarios baked in:
+
+* `cisco__junos` — Cisco IOS-XE -> Juniper Junos (DC leaf:
+  VLANs + interfaces + DNS / NTP + static route)
+* `fortigate__mikrotik` — FortiGate -> MikroTik RouterOS
+  (branch firewall: DNS + interfaces + DHCP pools)
+* `aruba__arista` — Aruba AOS-S -> Arista EOS (switch refresh:
+  VLAN-centric grammar -> per-port switchport)
+* `opnsense__junos` — OPNsense -> Juniper Junos (edge migration
+  with Tier-3 boundary on display: `<filter>` / `<nat>` /
+  `<ipsec>` deliberately deferred)
+
+Each scenario uses an embedded synthetic config (~10-25 lines).
+Output shows source, rendered target, and the dropped-Tier-3
+banner so operators see what didn't translate.
+
+CLI:
+
+```
+python tools/demo.py                       # default: cisco__junos
+python tools/demo.py --pair X__Y           # specific pair
+python tools/demo.py --list                # show available scenarios
+```
+
+The demo calls `run_plan` directly through the same codec registry
+the API uses — so when operators see the demo translate correctly,
+the production path translates the same way.
+
+#### `docs/walkthroughs/` (new directory)
+
+Narrative walkthroughs paired 1:1 with the demo scenarios.  Where
+[`docs/vendors/`](docs/vendors/) are reference docs ("what does
+Netcanon do for vendor X?"), walkthroughs are workflow docs ("you
+have a fleet of X and want to migrate to Y -- here's the path,
+the friction points, and the manual review checklist").
+
+* [`docs/walkthroughs/README.md`](docs/walkthroughs/README.md) —
+  index + format spec
+* `cisco_iosxe_to_junos.md` — DC leaf migration, paradigm flip
+  notes, hash-portability caveat
+* `fortigate_to_mikrotik.md` — branch firewall consolidation,
+  honest about the ~90-95% Tier-3 split
+* `aruba_to_arista.md` — VLAN-centric -> per-port grammar
+  inversion (the canonical-intermediate-model headline
+  transformation)
+* `opnsense_to_junos.md` — edge migration with Tier-3 boundary
+  showcase (the matrix-honesty discipline made visible)
+
+Each walkthrough has a 6-section format: Scenario / What Netcanon
+does / Run the demo / Tier-3 boundary / Manual review checklist /
+See also.  Intentionally short — operators get a 30-second answer
+to "should I be using Netcanon for this migration?" and a 5-minute
+answer to "what's the actual workflow look like?".
+
+#### Doc cross-references
+
+* `CLAUDE.md` "See also" footer extended with `docs/walkthroughs/`
+* `docs/walkthroughs/` cross-links into `docs/vendors/`,
+  `docs/CAPABILITIES.md`, `docs/COMPARISON.md`, `BUG_REPORTING.md`,
+  and `docs/HOW_WE_TEST.md` — every walkthrough's "See also"
+  closes the loop into the matrix-honesty discipline
+
+#### What this wave does NOT do
+
+* **Per-fixture demo recordings (asciinema).**  Phase 7's README
+  rewrite will produce the headline asciinema; this wave's `tools/
+  demo.py` is the underlying artefact the asciinema records.
+* **HTML / web-UI demo page.**  CLI-only for v0.1.0; a web demo
+  page is post-launch follow-up if operator-feedback signals
+  demand it.
+* **Bidirectional walkthroughs** (e.g. Junos -> Cisco).  Each pair
+  has 2 directions; v0.1.0 ships one direction per scenario.  The
+  reverse direction works (every codec is bidirectional and
+  certified) but the walkthrough narrative for each direction
+  belongs to its own page.
+
 ### Public release plan — Phase 6: packaging foundation
 
 Phase 6 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the

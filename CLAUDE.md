@@ -331,6 +331,7 @@ tests use these exclusively — never CSS classes or element structure.  See
 - [`docs/IDENTITY.md`](docs/IDENTITY.md) — project identity surfaces (tagline, GitHub repo description, GitHub Topics list, logo design brief); update when any of those surfaces change
 - [`docs/COMPARISON.md`](docs/COMPARISON.md) — positioning vs adjacent tools (Batfish, Capirca/Aerleon, NAPALM, Netmiko/Nornir, NetBox/Nautobot, ciscoconfparse) — what we compete with, what we complement, what we won't do
 - [`docs/vendors/`](docs/vendors/) — per-vendor "what works for me?" pages (one per vendor family); update the relevant page when a codec's capability changes
+- [`docs/walkthroughs/`](docs/walkthroughs/) — narrative walkthroughs of real-world migration scenarios (Cisco→Junos, FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos); paired 1:1 with scenarios in `tools/demo.py`
 - [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md) — operator-facing narrative of the cross-mesh audit + 8-class variance taxonomy; update if a new test layer or audit category lands
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — diagnostic flowchart for "my translation didn't go cleanly" (Tier-3 vs Lossy vs CODEC_BUG)
 - [`BUG_REPORTING.md`](BUG_REPORTING.md) — operator-facing fixture-submission + bug-report workflow (sanitise → verify → submit); references the Phase 4.5 sanitiser
