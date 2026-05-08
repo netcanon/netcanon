@@ -28,9 +28,14 @@ by concern and listed alphabetically within each section.
   gains a field before any codec parses or renders it. Lets UI and
   pipeline plumbing advance independently of vendor-support breadth.
 - **Tier 1 / Tier 2 / Tier 3** — canonical-field categorisation.
-  Tier 1 = auto-translatable (hostname, interfaces, vlans,
-  static_routes); Tier 2 = review-required (SNMP, local_users, lags,
-  dhcp/radius); Tier 3 = `raw_sections` passthrough.
+  Tier 1 = cross-vendor stable, auto-translatable (hostname,
+  interfaces, vlans, static_routes, DNS/NTP/syslog).  Tier 2 =
+  translatable with caveats (SNMP, local_users, lags, dhcp,
+  radius, vxlan_vnis, evpn_type5_routes, routing_instances,
+  apply_groups).  Tier 3 = detected-but-deliberately-not-translated;
+  surfaced via `CanonicalIntent.dropped_tier3_sections`
+  (notification-only — never auto-rendered).  See
+  [`CAPABILITIES.md`](CAPABILITIES.md) for the full list.
 
 ## Codec layer
 

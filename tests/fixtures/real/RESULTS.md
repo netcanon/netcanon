@@ -121,6 +121,43 @@ the bar is met on both grammar fronts.
 
 ---
 
+## cisco_iosxe (NETCONF / OpenConfig)
+
+**Codec:** `netcanon.migration.codecs.cisco_iosxe.CiscoIOSXENetconfCodec`
+**Direction:** `bidirectional`
+**Certainty:** `best_effort` ⚠️
+
+### Status
+
+Phase 0.5 stub: parse path is rich (consumes NETCONF / OpenConfig
+XML across the full canonical surface); render path is intentionally
+a minimal stub that emits a small subset of the canonical model
+(per-interface name + IPv4 address + enabled state) to keep matrix
+honesty while NETCONF render demand is low.  See Wave 10γ-2 in
+`CHANGELOG.md` for the capability-matrix correction that demoted
+un-rendered surfaces from `supported` to `unsupported`.
+
+### Coverage matrix
+
+| Fixture | Lines | Notes |
+|---|---:|---|
+| `cisco_iosxe_netconf_kitchen_sink.xml` | synth | Synthetic kitchen-sink fixture exercising the OpenConfig surfaces the parser models — `interfaces`, `network-instances`, `system`. |
+
+(The corpus is light because real-world NETCONF captures are rare in
+public datasets; operator captures of `<rpc-reply>` payloads from
+running IOS-XE devices are welcome — see `BUG_REPORTING.md`.)
+
+### Certification decision
+
+Stays at `best_effort` until either (a) NETCONF render demand
+materialises and we wire the full per-vendor render surface, or
+(b) operator-contributed real `<rpc-reply>` captures land and the
+parse-side cert bar is met across a multi-version corpus.  Neither
+gates v0.1.0 — the CLI codec (`cisco_iosxe_cli`) is the recommended
+Cisco surface and is `certified`.
+
+---
+
 ## opnsense
 
 **Codec:** `netcanon.migration.codecs.opnsense.OPNsenseCodec`

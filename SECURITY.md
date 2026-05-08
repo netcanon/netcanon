@@ -39,16 +39,26 @@ the threat model below.
 
 ## Threat Model
 
-Netcanon is designed as a **local desktop application**.  The server
-component (`netcanon/`) binds exclusively to `127.0.0.1` and is not
-intended to be exposed to a network.  All security controls are designed
-with this assumption.
+Netcanon ships in two deployment shapes:
+
+1. **Desktop application (primary).**  The Windows MSI / `python -m
+   netcanon_desktop` shell binds the embedded server exclusively to
+   `127.0.0.1`.  Security controls assume a single-user local
+   machine.
+2. **Web / Docker deployment.**  Operators who pass `--host 0.0.0.0`
+   (or run the published GHCR image) are deploying outside the
+   single-user-local-machine threat model.  Netcanon does NOT ship
+   API authentication, TLS, or rate-limiting — operators in this
+   shape must front the app with a reverse proxy that provides those
+   controls (nginx + auth_request, Caddy + basic-auth, Cloudflare
+   Access, etc.) and restrict ingress at the network layer.
 
 | Actor | Trust level |
 |-------|-------------|
 | Local user running the desktop app | Fully trusted |
 | Other processes on the same machine | Untrusted |
-| Network peers | Out of scope — server must not be exposed |
+| Network peers (desktop deployment) | Out of scope — server bound to loopback only |
+| Network peers (web deployment without reverse proxy) | Out of scope — operator responsibility to add auth + TLS |
 
 ---
 
@@ -177,13 +187,52 @@ These directories are created automatically at runtime.
 
 ---
 
-## Localhost-Only Binding
+## Localhost-Only Binding (Desktop)
 
 **File:** `netcanon_desktop/settings.py`
 
 The desktop app binds the embedded Uvicorn server to `127.0.0.1` only.
 `--host` / `--port` flags for public binding are a web-deployment-only
 concern and are never exposed in the desktop shell.
+
+For the web/Docker deployment shape, operators who choose to bind on
+a non-loopback address are responsible for fronting the app with a
+reverse proxy that adds authentication and TLS — see "Threat Model"
+above.
+
+---
+
+## Sanitiser (Bug-Reporting Workflow)
+
+**Module:** `netcanon/tools/sanitize.py`
+**CLI:** `netcanon sanitize`
+**HTTP:** `POST /api/v1/sanitize`
+
+When operators submit configs for bug reports / fixture submissions,
+the sanitiser strips identity-bearing data via field-typed redactions
+on the canonical model:
+
+| Category | Replacement |
+|---|---|
+| Hostname | `device-N` |
+| Domain | `example-N.test` |
+| Public IPv4 | RFC 5737 docs ranges |
+| Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
+| SNMP communities | `public_redacted_N` |
+| SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
+| RADIUS shared secrets | `REDACTED-RADIUS-N` |
+| Interface descriptions | `description redacted` |
+| Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
+
+Counter-per-session stable: same input value always maps to the same
+redaction (so cross-references survive — a hostname referenced 5 times
+gets the same redacted value all 5 times).  `--dry-run` prints the
+substitution table for operator review before writing output.
+
+Known limitations are listed in
+[`BUG_REPORTING.md`](BUG_REPORTING.md) — notably IPv6-public redaction
+is IPv4-only at v0.1.0; banner / comment text is parse-and-ignored
+rather than redacted.
 
 ---
 
@@ -213,27 +262,38 @@ Run `pip-audit` or `safety check` regularly to detect known CVEs.
 
 ---
 
-## Supply-Chain Integrity (forward-looking)
+## Supply-Chain Integrity
 
-The items below are planned for the public release (see
-[`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) Phase 6).  Until they
-ship, the trust chain is "GitHub commit → contributor → reviewer."
-Operators in environments that require attested supply-chain integrity
-should wait for the v0.1.0 release where the items below are wired.
+Phase 6 of the public release plan shipped the following supply-chain
+integrity controls.  Operators in environments that require attested
+provenance can verify each:
 
-- **Reproducible Docker builds.**  Multi-stage Dockerfile producing
-  byte-identical images from the same source revision.  Operators in
-  regulated environments can verify the published image against a
-  local rebuild.
-- **Cosign signatures via Sigstore.**  Published GHCR images signed
-  with keyless cosign (OIDC).  Verifiable with `cosign verify`.
-- **SBOM via syft.**  Software bill of materials published alongside
-  each release; linkable to the image digest.
-- **Trusted Publishing for PyPI.**  No long-lived API tokens in CI;
-  attestations published to the Python sigstore.
-- **Pinned dependency manifest.**  Either `requirements.lock` or
-  `uv.lock` checked in; production builds resolve from the lock, not
-  `pyproject.toml` ranges.
+- **Multi-stage Docker builds.**  `Dockerfile` separates a `builder`
+  stage (compiles wheels with `build-essential`) from a `runtime`
+  stage that installs prebuilt wheels with `pip install --no-index`.
+  No compilers in the runtime layer; no network during the runtime
+  install.
+- **Cosign signatures via Sigstore.**  Published GHCR images
+  (`ghcr.io/netcanon/netcanon`) are signed with keyless cosign through
+  GitHub Actions OIDC.  Verifiable with:
+  ```
+  cosign verify ghcr.io/netcanon/netcanon:<tag> \
+      --certificate-identity-regexp 'github.com/netcanon/netcanon' \
+      --certificate-oidc-issuer https://token.actions.githubusercontent.com
+  ```
+- **SBOM via syft + cosign attestation.**  An SPDX-format SBOM is
+  generated by syft and attached to the image as a cosign attestation.
+  Verifiable with `cosign verify-attestation`.
+- **Trusted Publishing for PyPI.**  The PyPI workflow uses
+  `pypa/gh-action-pypi-publish@release/v1` with the `pypi`
+  environment.  No long-lived API tokens; OIDC-based publish.
+- **Non-root container runtime.**  The image runs as `app` (uid=1000);
+  bind-mounted volumes are the only writable surface.
+
+**Pending:** a pinned dependency manifest (`requirements.lock` /
+`uv.lock`).  Production builds currently resolve from `pyproject.toml`
+ranges; lock-file resolution is a follow-up wave for operators in
+regulated environments.
 
 ---
 
@@ -241,10 +301,12 @@ should wait for the v0.1.0 release where the items below are wired.
 
 | Item | Risk | Accepted? | Rationale |
 |------|------|-----------|-----------|
-| No API authentication | Any local process can call the API | Yes | Local app; single-user machine assumed |
+| No API authentication | Any local process can call the API | Yes (desktop) / Operator responsibility (web/Docker) | Desktop assumes single-user local machine; web operators must add auth via reverse proxy |
 | Credentials over localhost HTTP | Plaintext in transit on loopback | Yes | Loopback is not a network interface; TLS on localhost adds no practical security |
 | OS keyring unavailable (some Linux headless) | Key falls back to generation with no secure storage | Partial | Desktop app; headless Linux is not a supported target |
 | Key loss (keyring entry deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume |
+| Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
+| IPv6-public redaction not implemented | Operator-submitted public IPv6 addresses pass through verbatim | Documented | v0.1.0 limitation; sanitiser is IPv4-only.  Hand-redact public IPv6 before submission. |
 
 ---
 
@@ -256,11 +318,21 @@ This file must be updated when any of the following change:
 - A new file-access endpoint is added
 - A new input field is accepted from untrusted sources
 - A dependency with security relevance is added or removed
-- The threat model assumption (localhost-only) changes
+- The threat model assumption (localhost-only desktop / operator-
+  responsibility web) changes
+- A new redaction category lands in `netcanon/tools/sanitize.py`
+- A new supply-chain integrity control ships (signature, attestation,
+  lock manifest, etc.)
 
 ---
 
 ## See also
 
 - [`README.md`](README.md) — project orientation and quickstart
-- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the "never commit real credentials" hard rule
+- [`BUG_REPORTING.md`](BUG_REPORTING.md) — sanitiser workflow for
+  submitting configs in public issues
+- [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — per-codec capability
+  matrix and Tier-3 boundary
+- [`CLAUDE.md`](CLAUDE.md) — contributor directives, including the
+  "never commit real credentials" hard rule and the
+  "PII review before any push to an online repo" hard rule

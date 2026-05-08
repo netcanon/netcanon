@@ -69,8 +69,9 @@ render emitted wrong target-vendor syntax.
 
 The cross-mesh audit
 ([`HOW_WE_TEST.md`](HOW_WE_TEST.md)) targets zero CODEC_BUGs across
-~12,000 field-cells.  As of the current commit, the count is 0
-within the field surfaces the fixtures exercise.  But the fixtures
+the full audit matrix.  Live count lives in
+[`tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md)
+(machine-generated; can't drift behind code).  But the fixtures
 don't exercise every real-world config — operator-submitted
 fixtures regularly find new CODEC_BUGs.
 
@@ -95,10 +96,11 @@ fixtures regularly find new CODEC_BUGs.
   surface working
 - Output is shorter than the input → expected; Tier-3 deliberately
   drops, lossy fields collapse
-- Hash-form passwords appear as `# REVIEW: ...` comments → expected;
-  the hash didn't translate to the target vendor's hash form, and
-  Netcanon **never** falls back to plaintext (see hash-portability
-  policy in [`CAPABILITIES.md`](CAPABILITIES.md))
+- Hash-form passwords appear as `# REVIEW: ...` (or `! REVIEW: ...` /
+  `; REVIEW: ...` — comment delimiter varies per target vendor) →
+  expected; the hash didn't translate to the target vendor's hash
+  form, and Netcanon **never** falls back to plaintext (see
+  [`CAPABILITIES.md`](CAPABILITIES.md) "Hash-portability policy")
 
 ---
 
@@ -148,8 +150,8 @@ If VLANs are missing on the target, check:
 
 ### "My hashed password came out as a review comment"
 
-By design.  Netcanon's
-[hash-portability policy](CAPABILITIES.md#hash-portability-policy)
+By design.  Netcanon's hash-portability policy (see
+[`CAPABILITIES.md`](CAPABILITIES.md))
 **never** falls back to plaintext.  If the source vendor's hash
 form (e.g. Cisco type-7) doesn't have a target equivalent, the
 rendered output gets a `# REVIEW: <hash> from <source vendor>`
@@ -198,8 +200,10 @@ for the full list.
    ([`docs/vendors/`](vendors/)) — operator-facing summary of
    what your vendor's codec does.
 4. **`tests/fixtures/real/RESULTS.md`** — live certification
-   state per codec; if your codec is `alpha` or `beta`, expect
-   gaps.
+   state per codec.  Codecs ship as `certified` (full bidirectional
+   parity verified against real captures) or `best_effort` (under
+   active development, gaps expected — currently the NETCONF stub
+   only).
 5. **`tests/fixtures/real/PHASE4_RECONCILIATION.md`** — the live
    cross-mesh audit if you want to see exactly which cells pass.
 6. **`BUG_REPORTING.md`** — when nothing else helps.

@@ -7,9 +7,10 @@ does for you, this is the page.
 
 Two codecs ship for the IOS-XE family:
 
-- **`cisco_iosxe_cli`** — `show running-config` text parse + render.
-  **Certification: certified.**  Recommended for cross-vendor
-  translation.
+- **`cisco_iosxe_cli`** — `show running-config` text **parse-only**
+  (Cisco serves as a translation *source*; render lands on the
+  target codec).  **Certification: certified.**  Recommended for
+  cross-vendor translation when Cisco is the source.
 - **`cisco_iosxe`** — NETCONF / OpenConfig XML.  **Certification:
   best_effort** (Phase 0.5 stub render — parses richly, renders the
   subset Netcanon's NETCONF stub knows how to emit).  Use only when

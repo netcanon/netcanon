@@ -1,9 +1,11 @@
 # Adding a canonical field — worked example (MTU)
 
 Use this as the template when extending `CanonicalIntent` with a new
-field.  The worked example is the per-interface MTU wire-through that
-landed as commit `e3b48b4`; every step below maps to a concrete change
-you can `git show` for reference.
+field.  The worked example is the per-interface MTU wire-through; the
+shape repeats for every Tier-1/2 wire-through the project has shipped
+(IPv6 addresses, SNMP, LAGs, local users, RADIUS, DHCP pools, MTU,
+SNMPv3 USM users).  See `git log --oneline -- netcanon/migration/canonical/intent.py`
+for current-tree examples.
 
 **Two shapes of this commit:**
 
@@ -24,10 +26,10 @@ you can `git show` for reference.
 ## The shape of the work
 
 Adding a canonical field is one logical feature that touches
-**all 5 codecs + the canonical model + tests** in a single commit.
-The pattern is rehearsed: the Tier 2 wire-throughs (SNMP, LAGs,
-local_users, DHCP pools, RADIUS servers) all shipped in this shape
-and so did MTU.
+**every shipped codec + the canonical model + tests** in a single
+commit.  The pattern is rehearsed: the Tier 2 wire-throughs (SNMP,
+LAGs, local_users, DHCP pools, RADIUS servers, SNMPv3 USM) all
+shipped in this shape and so did MTU.
 
 Budget: 30-60 minutes of focused work for a simple field like MTU;
 2-3 hours for something with cross-field semantics (like LAGs which
@@ -198,8 +200,9 @@ class TestCiscoToOPNsenseMTU:
         assert "<mtu>9000</mtu>" in out
 ```
 
-Target ~15-25 tests for a simple field; the MTU wire-through shipped
-with 14.
+Target ~15-25 tests for a simple field; the actual count for any
+shipped wire-through is auditable via `pytest --collect-only
+tests/unit/migration/test_<feature>_wire_through.py`.
 
 ### 5. Verify against the real-capture corpus
 
@@ -257,13 +260,15 @@ the UI:
 One commit per canonical field, touching:
 
 - `netcanon/migration/canonical/intent.py` (model)
-- 4-5 codec files (parse + render per codec)
+- Every shipped codec's `parse.py` + `render.py` (or codec.py for
+  single-file codecs) — except where a vendor genuinely can't carry
+  the field
 - `tests/unit/migration/test_<feature>_wire_through.py` (NEW)
 - Possibly `translator-plans.txt` + `HUMAN_TESTING.md`
 
-Commit message format — see `git show e3b48b4` (MTU wire-through) or
-`git show e495a0b` (local_users) for the reference pattern.  Key
-points to include:
+Commit message format — `git log --grep="wire-through"` lists
+in-tree examples (IPv6 addresses, SNMPv3 USM, etc.).  Key points to
+include:
 
 - One-line summary with the feature name
 - What got wired per codec, including deliberate skips

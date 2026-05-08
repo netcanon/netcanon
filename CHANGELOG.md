@@ -11,6 +11,243 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Documentation audit pass (post-Phase-7)
+
+Multi-agent review of every operator-facing doc against current state,
+with prioritised fixes applied across BLOCKER + HIGH + MEDIUM tiers.
+Five parallel review agents covered: top-level docs (README /
+CHANGELOG / BUG_REPORTING / HUMAN_TESTING / CONTRIBUTING / SECURITY /
+LICENSE); `docs/` root operator pages (CAPABILITIES / COMPARISON /
+IDENTITY / HOW_WE_TEST / TROUBLESHOOTING / METHODOLOGY / RELEASE_PLAN
+/ glossary); per-vendor pages (`docs/vendors/*.md`); walkthroughs
+(`docs/walkthroughs/*.md`); architecture + contributor docs
+(ARCHITECTURE / adding-a-canonical-field / adding-a-target-profile /
+feature-parity-walkthrough / translator-plans).  Headline fixes:
+
+#### BLOCKER (factually wrong / would break trust)
+
+* **README Docker volume-mount bug.**  Removed `-v $(pwd)/definitions:
+  /app/definitions` example — the in-image `definitions/` YAMLs are
+  tracked content; mounting an empty host dir over them crashes
+  startup with the same `FileNotFoundError` the Phase 6 wave caught.
+  Replaced with `-v $(pwd)/data:/app/data` (the actual operator-
+  state mount slot).
+* **README sanitiser link target.**  Pointed at `BUG_REPORTING.md`
+  (the workflow doc) instead of `CAPABILITIES.md` (the matrix).
+* **HUMAN_TESTING.md hardcoded codec count.**  "all 7 codecs" →
+  "the registered codecs" (CLAUDE.md hard-rule violation).
+* **`docs/IDENTITY.md` Topics ↔ pyproject.toml mirror claim.**
+  Added `python` + `fastapi` to `pyproject.toml` `keywords` so the
+  two surfaces actually match (doc claimed mirror; reality didn't).
+* **Phantom CLI flag.**  `cisco_iosxe_to_junos.md` referenced a
+  `--rename-interfaces` flag that doesn't exist; replaced with the
+  actual mechanism (migrate-page rename modal / `rename_overrides`
+  in the API payload).
+* **Invalid git SHAs in contributor docs.**  `adding-a-canonical-
+  field.md` referenced `e3b48b4` (MTU) and `e495a0b` (local_users);
+  `feature-parity-walkthrough.md` referenced `145642e` (SNMPv3 USM).
+  The first two were filter-repo casualties from the netconfig→
+  netcanon rename and aren't recoverable; rewrote to remove SHA
+  references and point at `git log --grep="wire-through"` for live
+  tree examples.  The SNMPv3 SHA was wrong; corrected to `8c6e493`
+  (the actual P2C6 commit).
+* **`translator-plans.txt` stale `[ ]` marker.**  Module-variant
+  target profiles marked unshipped despite Option B being fully
+  shipped (allowlist + schema + reference YAML all live); replaced
+  with `[SHIPPED]` block citing the current-tree artefacts and
+  preserving the original design-space notes for historical record.
+
+#### HIGH (cross-cutting purges)
+
+* **Hardcoded `~12,000 cells` purge.**  Appeared in
+  `docs/HOW_WE_TEST.md`, `docs/TROUBLESHOOTING.md`, and two places
+  in `docs/RELEASE_PLAN.md`.  Replaced with pointers to the live
+  source (`tests/fixtures/real/PHASE4_RECONCILIATION.md`, machine-
+  generated, can't drift behind code).  Hard-rule violation.
+* **Docker-tag policy.**  `:0.1.0` doesn't exist on GHCR yet
+  (only `:0.1.0-rc1` from Phase 6).  Switched README + RELEASE_PLAN
+  examples to `:latest` (always resolves; auto-tracks current
+  build) so operators can copy-paste without 404'ing.
+* **Stale forward-looking phase prose.**  `CONTRIBUTING.md` (Phase
+  4.5 sanitiser as future work), `SECURITY.md` (Phase 6 Supply-
+  Chain Integrity as future work), and `RELEASE_PLAN.md`'s body
+  ("Status as of 2026-05-05: helper does NOT yet exist") all
+  contradicted their own status blocks.  Rewrote to current-state.
+
+#### Vendor-page capability drift (per-vendor codec investigation)
+
+Every contested claim in the agent report was checked against the
+codec implementation directly (parse.py + render.py grep of MTU /
+VRF / RADIUS / DHCP / local_users):
+
+* **`cisco_iosxe.md`** — TL;DR clarified that `cisco_iosxe_cli` is
+  parse-only (Cisco-as-source); MTU claim retained (it IS parsed —
+  carried into canonical for target codecs to render).
+* **`fortigate.md`** — added explicit caveat that MTU + VRF binding
+  are parsed-on-source-only (FortiGate-as-source carries them
+  through; FortiGate-as-target doesn't emit them — codec gap, not
+  doc gap).  Removed "35K-line" hardcoded count from the gotchas.
+* **`mikrotik_routeros.md`** — moved DHCP server pools from Tier 1
+  to Tier 2 (matches `CAPABILITIES.md` and the codec's own
+  `# Tier 2 DHCP` source comment).  Renamed-port preservation
+  reframed as intra-vendor round-trip preservation (not a cross-
+  vendor translation surface).
+* **`aruba_aoss.md`** — moved `dhcp-snooping` and `web-management
+  ssl` / `ip authorized-managers` to a "parse-tolerant carry-
+  through" subsection (parsed on source; cross-vendor render path
+  not yet wired).
+* **`arista_eos.md`** — corrected "EOS 4.21 through 4.30+" to "4.21
+  through 4.26" (corpus-validated range).
+* **`aruba_aoss.md`** — dropped `YA` software branch + 2530 chassis
+  from the version-coverage list (no fixture); reframed as "CLI
+  grammar parses + renders for these; not pinned by a fixture yet".
+* **`juniper_junos.md`** — same treatment for SRX (no fixture;
+  reframed).  "Five distinct Junos majors" corrected to "five
+  captures across four majors" (two 25.4 captures = one major).
+
+#### Walkthrough fidelity (paired-with-demo accuracy)
+
+* **`aruba_to_arista.md`** — corrected the paradigm-flip block to
+  match what the demo actually emits (bare `interface 1` not
+  `interface Ethernet1`; both forms are valid Arista CLI).  Added
+  a "Note on port naming" callout describing how to invoke the
+  rename mesh for canonical `Ethernet<N>` form.  Manual-review
+  checklist updated to match.
+* **`cisco_iosxe_to_junos.md`** — added the missing third interface
+  line (`GigabitEthernet0/0/2`) to the sample output block.
+* **`fortigate_to_mikrotik.md`** + **`opnsense_to_junos.md`** —
+  softened hardcoded "35K-line" / "2,000+ lines" / "~5-10% Tier-1/2"
+  / "~90-95% Tier-3" prose to qualitative phrasing (hard-rule).
+
+#### `BUG_REPORTING.md` SLA realism
+
+Triage SLA changed from "48 hours" to "2 weeks", with explicit
+context that this is a one-maintainer project worked on alongside
+a full-time dayjob.  Critical reports (security, silent data loss
+in `supported`-declared translations) escalate.
+
+#### `tests/fixtures/real/RESULTS.md`: cisco_iosxe (NETCONF) section
+
+Added a `## cisco_iosxe (NETCONF / OpenConfig)` section documenting
+the codec's `best_effort` cert state, Phase 0.5 stub-render scope,
+and the cert-decision rationale (stays `best_effort` until either
+NETCONF render demand materialises or a multi-version operator-
+contributed corpus lands).  This is the doc the per-vendor index
+links to as cert source-of-truth.
+
+#### `SECURITY.md` accuracy refresh
+
+Beyond stale-Phase-6 Supply-Chain Integrity content (rewritten to
+current state — multi-stage Docker, cosign keyless signing, syft
+SBOM attestation, PyPI Trusted Publishing, non-root runtime), the
+threat model was reframed to acknowledge the dual-deployment shape
+(desktop on loopback vs. web/Docker with operator-supplied reverse
+proxy + auth).  Added a new "Sanitiser (Bug-Reporting Workflow)"
+section documenting Phase 4.5's redaction categories.  Known-risk
+table grew rows for "banner / comment text not sanitised" and
+"IPv6-public redaction not implemented" — both honest disclosure
+of the v0.1.0 sanitiser's documented limitations.
+
+#### `docs/RELEASE_PLAN.md` post-launch roadmap entry
+
+Added a "Backup retention / rolling delete on scheduled jobs"
+note: today every scheduled-job run lands a fresh
+`configs/<host>_<ts>.<ext>` file with no automatic cleanup; long-
+running schedules grow the backup directory unbounded.  Want a
+per-schedule retention policy (keep N most recent, OR keep configs
+newer than D days, OR both) configurable at schedule-creation.
+Doesn't gate v0.1.0; tracked here so it survives the eventual
+RELEASE_PLAN→RELEASE_NOTES conversion.
+
+#### Cross-cutting smaller fixes
+
+* **`docs/glossary.md` Tier-3 description** — corrected from
+  "`raw_sections` passthrough" to "detected-but-deliberately-not-
+  translated; surfaced via `CanonicalIntent.dropped_tier3_sections`"
+  (matches actual model field name).
+* **`docs/COMPARISON.md`** — "8 vendor families" → enumerated list
+  of 7 (Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik /
+  OPNsense — the codec count is 8, vendor families are 7).
+* **`docs/TROUBLESHOOTING.md`** — `alpha`/`beta` cert tiers (don't
+  exist) replaced with `best_effort` (the actual non-`certified`
+  tier in use); broken `#hash-portability-policy` anchor link
+  replaced with prose pointer.
+* **`ARCHITECTURE.md`** — Phase 1 evolution-roadmap bullet no
+  longer mislabels `cisco_iosxe_cli` as bidirectional (it's
+  parse-only).
+* **`docs/IDENTITY.md`** — "we use 13" Topics count replaced with
+  "the list below" (the count rots without a CI guard).
+
+### Public release plan — Phase 7: README rewrite
+
+Phase 7 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the
+operator-facing front door.  The pre-rewrite README read like
+internal documentation (architecture-first, contributor-table
+above the fold).  The new README leads with operator value and
+defers contributor scaffolding to a later section.
+
+#### Reframed structure
+
+* **Tagline above the fold** — the locked tagline from
+  [`docs/IDENTITY.md`](docs/IDENTITY.md) ("Multi-vendor network
+  config translator with a verifiable cross-vendor audit") is the
+  first thing readers see.
+* **Concrete before/after demo** — paste a Cisco IOS-XE snippet,
+  see the rendered Junos output, both inline.  Static text
+  equivalent of the asciinema the Phase 4 changelog flagged as
+  Phase 7's deliverable.  Live demo is one `docker run` away.
+* **Trust signal as invitation** — surfaces the zero-`CODEC_BUG`
+  cross-mesh-audit claim (the headline number lives in
+  [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md), per the prose-
+  count hard rule), then immediately points at
+  [`BUG_REPORTING.md`](BUG_REPORTING.md): the audit only covers
+  cells we have fixtures for; bring us configs we haven't tested
+  yet.  Frames the matrix-honesty discipline as an invitation
+  rather than a marketing claim.
+* **Headline install: `docker run`** — the published GHCR image
+  is the headline path (signed via Sigstore + SBOM via syft per
+  Phase 6).  `pip install netcanon` is Tier-2; Windows MSI is
+  Tier-3.  Each install path includes the actual command, not
+  just a name.
+* **Walkthroughs table promoted above the fold** — the four
+  Phase-4 walkthroughs (Cisco→Junos / FortiGate→MikroTik /
+  Aruba→Arista / OPNsense→Junos) are the answer to "is this the
+  right tool for my migration?", and now sit prominently above
+  the contributor table rather than buried in a "where to go
+  next" multi-row.
+* **Tier-1/2/3 summary inline** — operators learn what translates
+  and what doesn't directly in the README, with a pointer to
+  [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) for the full
+  matrix.  The Tier-3 boundary's "we deliberately don't auto-
+  render firewall / NAT / VPN" line is the load-bearing
+  expectation-setter and now sits in front of every reader.
+* **"Got a config that breaks it?" section** — second-from-bottom
+  CTA pointing at [`BUG_REPORTING.md`](BUG_REPORTING.md) with the
+  three-step workflow (sanitise → submit → fixture lands in test
+  matrix).  Fixture submissions are the highest-impact
+  contribution this project receives; the README now frames them
+  that way.
+* **Contributor scaffolding kept, demoted** — the developer-
+  facing "Where to go next" table, test-suite invocation, and
+  Layout block all moved under a "For contributors" heading
+  below the operator content.  Nothing removed; reordered for
+  audience.
+
+#### What this wave does NOT do
+
+* **No asciinema recording / animated GIF.**  The static
+  before/after in the "See it in 10 seconds" section is the
+  equivalent for a text README; the runnable `docker run ...
+  python tools/demo.py` is the dynamic counterpart.  An
+  asciinema upload is a follow-up if operators ask for it.
+* **Per-vendor README sections.**  Per-vendor reference lives
+  in [`docs/vendors/`](docs/vendors/) (Phase 5 deliverable);
+  the README points there rather than duplicating.
+* **Versioned `docker run` examples beyond `:0.1.0`.**  The
+  README pins to `:0.1.0`, the same tag the Phase 9 soft-launch
+  publishes.  Until that tag pushes, operators can substitute
+  `:latest` or `:0.1.0-rc1` (already on GHCR from Phase 6).
+
 ### Public release plan — Phase 4: demo + walkthroughs
 
 Phase 4 from [`docs/RELEASE_PLAN.md`](docs/RELEASE_PLAN.md) — the

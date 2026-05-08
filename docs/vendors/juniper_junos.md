@@ -9,9 +9,13 @@ does for you, this is the page.
   **Certification: certified.**  Bidirectional.
 
 The codec works against `show configuration | display set` output
-across Junos majors from 15.1 through 25.4 — including QFX, EX, vMX,
-SRX (insofar as the surfaces overlap with Tier 1+2; SRX firewall /
-NAT / VPN are Tier-3 deferred).
+across Junos majors from 15.1 through 25.4.  Fixtures cover QFX,
+EX, and vMX-style platforms; the set-form grammar is consistent
+across Junos platform families, so SRX / MX would parse + render
+through the same pipeline (insofar as the surfaces overlap with
+Tier 1+2; SRX firewall / NAT / VPN are Tier-3 deferred regardless).
+SRX-platform fixtures aren't in the corpus yet — operator captures
+welcome.
 
 ## What translates well
 
@@ -80,8 +84,9 @@ Provenance in
 - **`batfish_l3vpn_pe1_junos2541.set`** — Junos 25.4R1.12 MPLS L3VPN
   PE (VRF + iBGP `family inet-vpn unicast` + LDP)
 
-Five distinct Junos majors covered: 15.1 + 17.3 + 18.4 + 25.4
-(EVPN) + 25.4 (L3VPN).
+Five real captures covering four distinct Junos majors: 15.1, 17.3,
+18.4, 25.4 (the 25.4 captures are two scenario-distinct EVPN-Type-5
+and MPLS L3VPN snapshots).
 
 ## Common gotchas
 

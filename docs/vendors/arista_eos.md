@@ -8,8 +8,12 @@ does for you, this is the page.
 - **`arista_eos`** — EOS CLI parse + render.  **Certification:
   certified.**  Bidirectional.
 
-The codec covers EOS 4.21 through 4.30+ across DCS-7150S, DC1-LEAF
-(vEOS EVPN/MLAG), and DuplicatePrivate-style fixtures.
+The codec covers EOS 4.21 through 4.26 across DCS-7150S, DC1-LEAF
+(vEOS EVPN/MLAG), and DuplicatePrivate-style fixtures.  The
+underlying CLI grammar is stable from EOS 4.20+; newer LTS releases
+parse / render cleanly but aren't covered by a fixture in the
+corpus yet — operator captures from EOS 4.27+ are welcome (see
+[`../../BUG_REPORTING.md`](../../BUG_REPORTING.md)).
 
 ## What translates well
 
