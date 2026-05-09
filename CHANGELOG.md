@@ -21,6 +21,43 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Remove vestigial development artifacts
+
+Cleanup of legacy / duplicate files left over from earlier project
+phases that no longer add value (and in two cases were actively
+misleading about which manifest is authoritative).
+
+* **`Get-NetworkConfigs.ps1`** (553 lines) and
+  **`Test-NetworkConfigs.ps1`** (347 lines) — the project's original
+  PowerShell prototype, dating back to the first commit
+  (`Initial commit: network config collector script and captured
+  configs`).  Functionally superseded by `netcanon/collectors/` and
+  the FastAPI app.  Deleted from tracked tree; historical CHANGELOG
+  references kept (they document the rebrand-era rename sweep that
+  also touched these files).
+* **`HUMAN_TESTING.md`** (508 lines) — Claude-curated personal
+  testing checklist whose own preamble said *"Assistant keeps this
+  up to date as features ship"*.  Internal scratch material, not
+  appropriate for the public repo.  The matrix-honesty discipline
+  the project ships is documented in `docs/HOW_WE_TEST.md` /
+  `tests/fixtures/real/RESULTS.md` / `PHASE4_RECONCILIATION.md`,
+  not in a one-maintainer task queue.
+* **`requirements.txt`** + **`requirements-dev.txt`** —
+  dependency declarations that duplicated `pyproject.toml`'s
+  `[project].dependencies` and `[project.optional-dependencies].dev`
+  respectively.  Neither is referenced by the `Dockerfile` or any
+  CI workflow; both pre-date the move to PEP 621-style pyproject
+  metadata.  With Dependabot configured for `package-ecosystem:
+  "pip"`, having both manifests present would generate duplicate
+  update PRs against the same dependency set.  pyproject.toml is
+  now the single source of truth — `pip install .[dev]` covers
+  what `requirements-dev.txt` previously did.
+
+### Bonus: corrected stale path in `docs/archive/README.md`
+
+`netconfig/migration/codecs/<vendor>/parse.py` → `netcanon/`.
+A rebrand-sweep miss that survived through Phase 1.5.
+
 ### Pre-launch sanitization pass (developer-facing docs)
 
 Trims developer-facing docs of pre-launch strategy / planning content
