@@ -61,10 +61,24 @@ jobs:
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
             ${{ env.DOCKERHUB_IMAGE }}
           tags: |
-            type=ref,event=tag
+            # Semver-derived (no `v` prefix), e.g. `0.1.0-rc4` or `0.1.0`.
+            # Matches the convention of official Docker Hub images
+            # (`python:3.13-slim`, `node:20`, etc.) and the PyPI version
+            # string.  Earlier `type=ref,event=tag` line was removed
+            # (it emitted a redundant `v`-prefixed copy of the same
+            # image — `v0.1.0-rc3` AND `0.1.0-rc3` for one release).
             type=semver,pattern={{version}}
+            # Major.minor floating tag (only emits for stable releases
+            # by default; pre-releases like `-rc4` are skipped).
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            # `:latest` updates on every release-tag push.  Earlier
+            # `enable={{is_default_branch}}` gate suppressed `:latest`
+            # entirely on tag-triggered runs (the ref is the tag, not
+            # `main`, so `is_default_branch` evaluated false).  The
+            # README + CHANGELOG both document `docker pull
+            # netcanon/netcanon:latest` as the recommended quickstart;
+            # `:latest` needs to actually exist for that to work.
+            type=raw,value=latest
 
       - name: Build and push
         id: build
