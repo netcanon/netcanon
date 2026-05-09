@@ -3,6 +3,16 @@
 All notable changes to Netcanon are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+> **Note on pre-launch commit SHAs.**  Older entries below cite
+> commits by short SHA (`(commit X)`).  Pre-launch the project went
+> through a `git filter-repo` history rewrite to scrub PII (see the
+> Phase 1 entry).  That rewrite changed every commit's SHA, so most
+> short-SHA citations in entries written before Phase 1 won't
+> resolve via `git show <sha>` against current history.  The
+> *narrative* around each SHA is the load-bearing context; the SHA
+> is decorative.  Entries written after Phase 1 (the entries closest
+> to the top of `[Unreleased]`) cite current SHAs that resolve.
+
 See also: [`README.md`](README.md) for project orientation;
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the four-layer design that
 much of the work below evolves.
@@ -10,6 +20,120 @@ much of the work below evolves.
 ---
 
 ## [Unreleased]
+
+### Pre-launch sanitization pass (developer-facing docs)
+
+Trims developer-facing docs of pre-launch strategy / planning content
+that doesn't add operator value (and could read as either presumptuous
+or amateurish to a public audience).  Substance preserved everywhere
+it's load-bearing; only marketing-strategy / launch-venue / forward-
+looking-strategy material trimmed.
+
+#### `docs/RELEASE_PLAN.md` (821 → ~200 lines)
+
+The doc itself anticipated this conversion: *"when the release
+actually happens, prune the 'plan' sections and convert this file
+into a `docs/RELEASE_NOTES.md` that records what was actually done."*
+This is that conversion in place (filename kept to avoid breaking
+~7 cross-references; content rewritten).
+
+* **Kept:** as-shipped phase log (Phase 1 / 1.5 / 2 / 4 / 4.5 / 5 / 6
+  / 7 narratives), post-launch roadmap notes (backup retention, lock
+  manifest, Docker Hub README sync), the
+  pre-launch quality hardening notes (Phase 3 — still pending), the
+  universal "what we deliberately don't do" principles (no v1.0
+  until external validation, no public demo instance, no binary
+  config submissions, no firewall-translation promises, no
+  Discussions until triage capacity, no silent-drop translations).
+* **Trimmed:** the launch-strategy material ("Maximum bug-report
+  surface area" with audience analysis + posting-venue list,
+  "Specific framing that works for this tool" marketing copy,
+  "Concrete release sequence" with phase 8-11 launch playbook,
+  "Priority ranking" MUST/SHOULD/NICE breakdown, "When to start"
+  triggers).  Project identity material (now in `IDENTITY.md`),
+  sanitiser design rationale (now in `SECURITY.md` / `BUG_REPORTING.md`),
+  and packaging-tier discussion (now in `SECURITY.md` Supply-Chain
+  Integrity) all dropped from this file since they're authoritatively
+  sourced elsewhere now.
+
+#### `translator-plans.txt`
+
+Conservative trim — preserved historical record, fixed obvious
+staleness:
+
+* **Removed:** stale `PHASE 1` / `PHASE 2` / `PHASE 3` design-target
+  blocks at the bottom that duplicated the SHIPPED phases earlier in
+  the file (with old terminology — "adapter" instead of "codec" —
+  and design intents that all landed under different names).
+* **Updated:** the "Quick-reference checklist when adding a new
+  codec" — replaced obsolete file names (`parser.py` / `renderer.py`
+  / `capabilities.yaml`) with current convention (`parse.py` /
+  `render.py` / in-code `CapabilityMatrix`), removed the "entry
+  point in pyproject.toml" step (codecs aren't registered that way),
+  added the actual current required surfaces (cross-vendor
+  expectation YAMLs, real-capture fixtures + NOTICE/RESULTS rows,
+  `docs/CAPABILITIES.md` row, `docs/vendors/<vendor>.md` page).
+* **Renamed:** "Honest limitations — DO NOT PROMISE IN MARKETING" →
+  "Honest limitations" (the suffix read as internal marketing-team
+  framing).
+
+The `[SHIPPED]` historical record blocks (~600 lines documenting
+each shipped feature with design-space rationale) are kept verbatim.
+A future contributor genuinely benefits from seeing "we considered X
+and rejected it for reason Y" — that's the project's design-history
+record and removing it would be data loss.
+
+#### `AGENTS.md` — corrected stale SHA references
+
+Four pre-rewrite SHAs (`a93bee8`, `de8e0f3`, `01f394c`, `8c9e9d4`)
+that survived the rename PR's sweep updated to their post-rewrite
+equivalents (`ba72502` for the type_key validator commit; `7b3d7ed`
+/ `271f196` / `a5441b9` for BD-Aruba / BD-Junos / BD-Arista
+respectively).  These are load-bearing references in the hard-rule
+rationale and the doc-sync table — operators who follow the citations
+need them to resolve.
+
+#### `CHANGELOG.md` header — disclaimer about pre-launch SHAs
+
+Older `[Unreleased]` entries cite ~30 short SHAs that don't resolve
+against current history (all filter-repo casualties from Phase 1's
+PII scrub).  Stripping them all would be ~30 individual edits with
+unclear value — the *narrative* around each SHA is the substance,
+the SHA is decorative.  Added a one-paragraph disclaimer at the top
+of the file explaining the situation honestly.
+
+#### Personal-identifier sweep
+
+Verified clean:
+
+* No personal name / email leaks (`samuelripp` / `samuel.ripp` /
+  `Samuel` etc. — zero hits across tracked tree)
+* No operator-machine path leaks (`user12` / `C:\Users\` /
+  `/home/<user>/` — zero hits)
+* All sample IPs in tracked content are RFC1918 (`192.168.x` /
+  `10.x.x.x` / `172.16.x.x`) or RFC5737 (`192.0.2.x` /
+  `198.51.100.x` / `203.0.113.x`) docs ranges — no real WAN IPs
+* All real-world FortiGate fixtures verified to contain no operator-
+  identifying content beyond the public provenance noted in
+  `tests/fixtures/real/NOTICE.md`
+
+#### What this PR does NOT touch
+
+Resisted the urge to over-sanitize.  The following are intentionally
+kept visible:
+
+* `AGENTS.md` engineering rules + doc-sync table (the project's
+  craft signal — keep transparent)
+* `docs/METHODOLOGY.md` (the matrix-honesty discipline distilled —
+  this IS the differentiator)
+* `docs/IDENTITY.md` (project identity reference — fine to expose)
+* The `[SHIPPED]` design-space rationale in `translator-plans.txt`
+  (historical record of decisions; future contributors benefit from
+  seeing why one path was chosen over another)
+* CHANGELOG narrative about the Phase 1 PII scrub, the rc1
+  mislabel, the netcanonio detour — those read as iterative honesty
+  in moderation; condensing them happens at v0.1.0 final tag time,
+  not now
 
 ### Wire `setuptools_scm`: tag-driven package versioning
 
@@ -125,16 +249,6 @@ publish (yanked, but yanking doesn't free filenames).  The
 unused PyPI version).  This is structural to PyPI, unrelated to
 setuptools_scm, and can't be undone.  Future major / minor
 releases (`v0.1.2`, `v0.2.0`, etc.) work fine.
-
-#### Carry-over: post-launch roadmap entry now stale
-
-The `chore/pre-launch-sanitization` PR (still open) added a
-"wire setuptools-scm" entry to `docs/RELEASE_PLAN.md`'s
-post-launch roadmap notes.  That entry becomes stale the moment
-this PR merges — setuptools_scm is no longer post-launch
-roadmap; it's done.  Cleanup: when sanitization PR rebases on
-main (post-merge), drop that bullet from RELEASE_PLAN.md as
-part of the rebase.  Tracked here so it doesn't get lost.
 
 ### PyPI version bump + Docker tag-emission cleanup
 

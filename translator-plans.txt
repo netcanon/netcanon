@@ -2201,71 +2201,45 @@ PHASE 0.7 — LIBYANG CANONICAL VALIDATION  (pending)
       without C toolchains on Windows devs)
   new_deps:  libyang (optional extra), pyangbind (build-time only)
 
-PHASE 1 — CROSS-VENDOR MVP
-  goal:      non-YANG adapter on each side
-  adapters:  + opnsense (parse), + fortigate (render)
-  stages:    + transforms + diff (tree-level)
-  deliverables:
-    - opnsense parser (lxml of config.xml -> openconfig-interfaces,
-      netcanon-ext:/firewall)
-    - fortigate renderer (Jinja templates: interfaces, vlans, firewall)
-    - transforms: rename_interfaces, remap_vlans, strip_unsupported
-    - diff.py (tree-level)
-    - ValidationReport pydantic model
-    - integration test: real opnsense sample -> canonical -> fortigate
-  new_deps:  lxml (likely already present)
-
-PHASE 2 — PRODUCTIONIZE
-  goal:      deploy path + UI + snapshot/rollback
-  adapters:  + mikrotik (both directions)
-  stages:    + deploy, + snapshot
-  deliverables:
-    - mikrotik parser (/export tokenizer) + renderer (Jinja)
-    - engine/deploy.py (netconf + ssh + rest strategies)
-    - engine/snapshot.py (reuse FileConfigStore)
-    - /api/v1/migration/* routes
-    - /migrate UI page (Jinja + testids)
-    - desktop parity check (embedded server route table)
-    - E2E test: plan -> render -> diff -> deploy-to-sandbox
-  new_deps:  ncclient
-
-PHASE 3 — SCALE OUT
-  goal:      community adapters via entry points
-  adapters:  junos, arista_eos, pan_os, aruba_cx (start)
-  deliverables:
-    - adapter plugin docs
-    - reference "hello-world" adapter template
-    - capability-matrix linter CLI
-  new_deps:  none mandatory
+# Note: the PHASE 1 / PHASE 2 / PHASE 3 design-target blocks that
+# previously sat here have been removed.  Their goals all shipped:
+# every cross-vendor MVP adapter, the /migrate UI, the deploy-path
+# stages, the codec set (junos / arista_eos / etc.) all landed across
+# Phases 0.5 → 2 (part 1) above.  The SHIPPED entries earlier in this
+# file are the authoritative record.  PAN-OS and aruba_cx remain
+# pending and tracked through CHANGELOG.md / [ ] items elsewhere.
 
 =====================================================================
 ## 13. QUICK-REFERENCE CHECKLIST WHEN ADDING A NEW CODEC
 =====================================================================
 
 [ ] netcanon/migration/codecs/<vendor>/ directory with:
-    __init__.py, parser.py, renderer.py, capabilities.yaml,
-    templates/ (if CLI/XML target)
-[ ] Entry point registered in pyproject.toml
-[ ] capabilities.yaml DECLARES device_classes (at least one of
-    switch/router/firewall/load_balancer/wireless_controller/
-    access_point/waf; multi-class devices declare all that apply).
-    Undeclared adapters are legal but will surface a warn banner.
-[ ] capabilities.yaml passes the linter (tooling lives under
-    scripts/lint_caps.py in phase 3)
+    __init__.py, codec.py, parse.py, render.py, port_names.py
+    (any vendor-specific helpers: vlan_heuristics.py, etc.)
+[ ] Codec class registered via netcanon.migration.codecs.registry
+    (NOT pyproject.toml entry points)
+[ ] Codec class declares CapabilityMatrix as a ClassVar (in-code,
+    not a separate YAML); supported / lossy / unsupported paths
+    each cited
+[ ] Codec class declares direction (`bidirectional` / `parse_only` /
+    `render_only`) and certainty (`best_effort` / `certified`) as
+    ClassVars
 [ ] Unit test: parser handles malformed input without crashing
 [ ] Unit test: renderer handles empty tree gracefully
 [ ] Unit test: parse(render(tree)) == tree for supported paths
-[ ] Unit test: capability classification correct for every OC path
-    in openconfig-interfaces (at minimum)
-[ ] Ordering test: firewall rule order preserved across roundtrip
-[ ] Integration test: real-world sample config -> validate -> render
-    -> diff; assert DiffReport has zero unexpected deltas
+    (round-trip suite under tests/unit/migration/codecs/<vendor>/)
+[ ] Cross-vendor expectation YAMLs under
+    tests/fixtures/cross_vendor_expectations/ for every pair
+[ ] Real-capture fixtures under tests/fixtures/real/<vendor>/ with
+    NOTICE.md provenance + RESULTS.md row
 [ ] testid_reference.md updated if any UI added
 [ ] CHANGELOG.md entry under Unreleased
+[ ] docs/CAPABILITIES.md updated with the new vendor row
+[ ] docs/vendors/<vendor>.md operator-facing "what works for me?" page
 [ ] Desktop parity verified (embedded server includes new routes)
 
 =====================================================================
-## 14. HONEST LIMITATIONS — DO NOT PROMISE IN MARKETING
+## 14. HONEST LIMITATIONS
 =====================================================================
 
 - Non-YANG adapters are reverse-engineering config semantics; lossy.
