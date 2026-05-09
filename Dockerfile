@@ -19,6 +19,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /build
 
+# Version is derived from the git tag at build time via setuptools_scm.
+# `.git/` is excluded from the Docker context (see .dockerignore), so
+# setuptools_scm can't read tags directly here — instead the publishing
+# workflow passes the resolved version as a build-arg, which becomes
+# the SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON env var.  setuptools_scm
+# checks for that env var first before trying git.  Local docker builds
+# without CI either set the build-arg manually or fall back to the
+# fallback_version configured in pyproject.toml.
+ARG SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=""
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=$SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON
+
 # Copy project metadata + source.  README + LICENSE go in to satisfy
 # pyproject.toml (readme = "README.md", license-files = ["LICENSE"]).
 COPY pyproject.toml README.md LICENSE ./
