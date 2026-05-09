@@ -92,7 +92,21 @@ where = ["."]
 include = ["netcanon*", "netcanon_desktop*"]
 
 [tool.setuptools.package-data]
-netcanon = ["templates/*.html"]
+# IMPORTANT: keep this in sync with what's actually under
+# `netcanon/templates/`.  The previous glob `templates/*.html` only
+# matched HTML files at the top level — Jinja partials under
+# `_partials/*.js` were silently excluded from built wheels, which
+# 500'd every HTML page on a `pip install netcanon` install (the
+# bug that broke v0.1.0-rc1 and rc2).  Editable installs
+# (`pip install -e`) hide this because they import from the source
+# tree directly; production wheels do not.  See AGENTS.md doc-sync
+# rule "templates/ contents change" for the discipline; the CI
+# `docker-build-smoke` job in `ci.yml` curls `/` (not just `/health`)
+# to catch missing-partial regressions.
+netcanon = [
+    "templates/*.html",
+    "templates/_partials/*.js",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

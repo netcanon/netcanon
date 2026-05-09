@@ -11,6 +11,122 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Fix: `templates/_partials/*.js` missing from built wheel (every HTML page 500'd)
+
+**Severity: blocker.**  v0.1.0-rc1 and v0.1.0-rc2 published artefacts
+(both PyPI wheels and Docker images on GHCR + Docker Hub) shipped
+**without** the 12 Jinja partials under `netcanon/templates/_partials/`.
+Every HTML page that extends `base.html` (which includes the dashboard,
+migrate page, devices, configs, schedules — i.e. *every operator-
+facing page*) raised `jinja2.exceptions.TemplateNotFound` and FastAPI
+returned 500.  `/health` worked because it returns JSON, not a
+template.
+
+Discovered by pulling `netcanon/netcanon:v0.1.0-rc2` from Docker Hub
+into a clean container, hitting `/`, getting `Internal Server Error`,
+and checking `docker logs`:
+
+```
+jinja2.exceptions.TemplateNotFound: '_partials/config-viewer.js'
+not found in search path:
+'/usr/local/lib/python3.14/site-packages/netcanon/templates'
+```
+
+#### Root cause
+
+`pyproject.toml` had:
+
+```toml
+[tool.setuptools.package-data]
+netcanon = ["templates/*.html"]
+```
+
+That glob matches only `.html` files at the **top** of `templates/`.
+It misses files with non-`.html` extensions (the `.js` partials) AND
+files in subdirectories (the `_partials/` subdirectory).  When
+setuptools builds the wheel, those 12 files are silently excluded.
+When operators install the wheel — directly via `pip install netcanon`
+or transitively via the Docker image's multi-stage build — the
+package is missing the partials.
+
+Editable installs (`pip install -e`) hide this because they import
+files directly from the source tree on each load, bypassing the
+wheel-packaging step.  This is why local Python development works
+fine but every published artefact is broken.
+
+#### Fix (3 changes in this PR)
+
+1. **`pyproject.toml`** — expanded the package-data glob:
+   ```toml
+   netcanon = [
+       "templates/*.html",
+       "templates/_partials/*.js",
+   ]
+   ```
+   Inline comment added explaining the trap so future contributors
+   don't reintroduce it.  Verified locally: `python -m build --wheel`
+   now produces a wheel containing all 9 HTML files + all 12 `_partials/*.js`
+   files.
+
+2. **`.github/workflows/ci.yml`** — extended the `docker-build-smoke`
+   job to curl `GET /` (the dashboard) in addition to `/health`.
+   The original smoke only verified `/health`, which doesn't render
+   a template, which is why this regression slipped through CI.
+   The expanded check is small (one extra `curl`) and catches the
+   exact bug class that bit us — every operator-facing page renders
+   `base.html`, which renders the partials, so a single dashboard
+   request is sufficient signal.
+
+3. **`AGENTS.md`** — new doc-sync row mapping "new template file
+   with non-`.html` extension OR in a new subdirectory" → "update
+   `pyproject.toml` `[tool.setuptools.package-data]`".  Cites the
+   v0.1.0-rc1 / rc2 bug as the failure mode this rule prevents.
+
+#### Aftermath / coordination required
+
+Three operator-action items beyond merging this PR:
+
+* **Yank `netcanon==0.1.0`, `netcanon==0.1.0rc1`, `netcanon==0.1.0rc2`
+  from PyPI.**  All three are broken (every HTML page 500s).  Yank
+  via https://pypi.org/manage/project/netcanon/ → click each version
+  → Yank.  Yanking marks the version as "do not install for new
+  users" (`pip install netcanon` skips it) but doesn't free the
+  filename — that's PyPI's permanent policy.  Already-pinned
+  installs continue to work; new installs skip the broken versions.
+* **Mark broken Docker tags clearly.**  The `v0.1.0-rc1` and
+  `v0.1.0-rc2` tags on `ghcr.io/netcanon/netcanon` and
+  `docker.io/netcanon/netcanon` are also broken.  Either delete
+  them via the registry UI or push a tag-level note in the Docker
+  Hub repo description warning operators away.  Don't silently
+  let `:latest` keep pointing at a broken image — repoint it to the
+  next working release after the fix lands.
+* **Tag `v0.1.0-rc3` once this PR merges.**  Verifies the fix
+  end-to-end (the new docker-build-smoke step will fail-fast if
+  the wheel is still broken; if green, both registries publish a
+  working image and PyPI gets a working wheel).
+
+After v0.1.0-rc3 verifies, the path forward is unchanged: tag
+`v0.1.0` final when ready (note: PyPI version `0.1.0` is permanently
+claimed by the broken rc1 publish; the actual final release will
+need to be `v0.1.1` or higher per PyPI's filename-immutability
+policy.  See the broader PyPI versioning issue tracked in
+`docs/RELEASE_PLAN.md` post-launch roadmap notes — `setuptools-scm`
+wiring would auto-derive package version from git tags and prevent
+this class of issue recurring).
+
+#### Why CI didn't catch this
+
+The original `docker-build-smoke` job built the image and curled
+`/health` — which doesn't render a template, so the missing
+partials didn't surface.  Closed in this PR.
+
+The release workflow (`docker-publish.yml`) doesn't smoke-test
+either; it builds, signs, publishes, and runs `cosign verify` (which
+verifies the *signature*, not the application's runtime behaviour).
+That's appropriate for a publish workflow, but it means the
+`docker-build-smoke` is the load-bearing pre-publish gate — and
+it had a coverage gap.
+
 ### Correct Docker Hub namespace: `netcanonio` → `netcanon`
 
 The `v0.1.0-rc2` Docker publish failed against `docker.io/netcanonio/netcanon`

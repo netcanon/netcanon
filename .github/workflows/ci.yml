@@ -83,21 +83,41 @@ jobs:
       - name: Build image
         run: docker build -t netcanon-smoke:pr .
 
-      - name: Boot image and check /health
+      - name: Boot image and check /health + dashboard renders
         run: |
           docker run -d --name smoke -p 8000:8000 netcanon-smoke:pr
           # Poll /health for up to 60 seconds.  HEALTHCHECK in the
           # Dockerfile has start-period 10s, so ~12s is the typical
           # ready time; budget extra for slow CI runners.
+          health_ready=0
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1:8000/health; then
-              echo
-              echo "Smoke test passed."
-              exit 0
+              health_ready=1
+              break
             fi
             sleep 2
           done
-          echo "Smoke test FAILED — container never became healthy."
+          if [ "${health_ready}" -ne 1 ]; then
+            echo "Smoke test FAILED — container never became healthy."
+            echo "--- container logs ---"
+            docker logs smoke
+            exit 1
+          fi
+          echo
+          echo "Health check passed.  Now verifying the dashboard"
+          echo "renders (catches packaging-bug class where /health"
+          echo "works but Jinja templates are missing from the wheel —"
+          echo "the v0.1.0-rc1/rc2 regression that motivated this check)."
+          if curl -fsS -o /dev/null http://127.0.0.1:8000/; then
+            echo "Smoke test passed (health + dashboard render)."
+            exit 0
+          fi
+          echo "FAIL: /health returned 200 but / did not."
+          echo "Likely cause: a template file (or partial under"
+          echo "templates/_partials/) is missing from the built wheel"
+          echo "— check pyproject.toml [tool.setuptools.package-data]"
+          echo "and confirm every templates/* path the renderer needs"
+          echo "is covered by the glob list."
           echo "--- container logs ---"
           docker logs smoke
           exit 1
