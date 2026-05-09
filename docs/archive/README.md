@@ -26,7 +26,7 @@ For current-state authoritative sources, see:
 * `vendor-config-research.txt` — cross-vendor feature matrix research notes
   used during initial codec development.  Vendor syntax has evolved since;
   consult vendor documentation for current grammar (the in-tree codec
-  parsers under `netconfig/migration/codecs/<vendor>/parse.py` are the
+  parsers under `netcanon/migration/codecs/<vendor>/parse.py` are the
   authoritative reference for what each codec actually accepts).
 
 ## When to add new files here
