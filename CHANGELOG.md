@@ -11,6 +11,128 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### PyPI version bump + Docker tag-emission cleanup
+
+Three publish-side fixes bundled.  The `v0.1.0-rc3` release exposed
+two distinct issues at the registry / package-manager surface; this
+PR fixes both plus removes a long-standing redundancy.
+
+#### 1. PyPI: bump `pyproject.toml` `version` to `0.1.0rc4`
+
+**Symptom:** the `v0.1.0-rc3` PyPI publish failed with:
+
+```
+400 File already exists ('netcanon-0.1.0-py3-none-any.whl', with
+blake2_256 hash 'c61e26397f...').
+See https://pypi.org/help/#file-name-reuse for more information.
+```
+
+**Cause:** `pyproject.toml` had `version = "0.1.0"` hardcoded.  Every
+build produces files named `netcanon-0.1.0-*` regardless of the
+git tag that triggered the publish.  v0.1.0-rc1 published with the
+broken templates and permanently claimed that filename on PyPI;
+yanking doesn't free the filename (PyPI's policy: filenames are
+immutable once uploaded).  rc2 and rc3 inherited the same
+`version="0.1.0"` and PyPI rejected each as a duplicate.
+
+**Fix:** bump pyproject `version` to `"0.1.0rc4"` (PEP 440 form,
+no dash).  Each RC bumps explicitly so each gets a unique PyPI
+filename.  Inline comment in `pyproject.toml` documents the trap so
+future maintainers don't re-introduce it.
+
+The Docker side wasn't affected — Docker tags are unique per push
+regardless of the package's internal version.  v0.1.0-rc3 published
+to GHCR + Docker Hub successfully and the published image is
+working (HTML pages render correctly; verified end-to-end).  Only
+PyPI was blocked.
+
+#### 2. Docker tag emission: drop redundant `v`-prefixed tag
+
+**Symptom:** every Docker Hub release published two tags pointing
+at the same image bytes — e.g. `v0.1.0-rc3` AND `0.1.0-rc3`.
+Visible on the Docker Hub Tags page; same digest under both tags.
+
+**Cause:** `docker-publish.yml`'s `metadata-action` config had:
+
+```yaml
+tags: |
+  type=ref,event=tag                  # emits v0.1.0-rc3 (with `v`)
+  type=semver,pattern={{version}}     # emits 0.1.0-rc3  (without `v`)
+  ...
+```
+
+**Fix:** remove the `type=ref,event=tag` line.  Keep only the
+semver-derived form, which matches the convention of official
+Docker Hub images (`python:3.13-slim`, `node:20`, etc.), the PyPI
+version string, and most operator muscle memory for `docker pull`
+commands.
+
+Note: existing dual-tagged releases (`v0.1.0-rc1`, `v0.1.0-rc2`,
+`v0.1.0-rc3`) on Docker Hub stay as-is; this only affects future
+publishes.  Operators with hardcoded `:v0.1.0-rc3` references in
+their tooling will need to switch to `:0.1.0-rc3` for future
+releases.  Cleanup of the lingering `v`-prefixed tags is manual
+(via the Docker Hub UI Tag → Delete dropdown) — see the action-
+items list in the previous CHANGELOG entry.
+
+#### 3. Docker `:latest` emission on tag pushes
+
+**Symptom:** the `:latest` tag on Docker Hub / GHCR was never
+populated.  Every released RC pushed `vX.Y.Z-rcN` and `X.Y.Z-rcN`
+tags but no `:latest`.  README + CHANGELOG both documented
+`docker pull netcanon/netcanon:latest` as the recommended
+quickstart, which would fail with "manifest unknown".
+
+**Cause:** the `metadata-action` config had:
+
+```yaml
+type=raw,value=latest,enable={{is_default_branch}}
+```
+
+The `is_default_branch` template variable is only true when the
+workflow's git ref IS the default branch (e.g. push to `main`).
+For tag-triggered workflows (`push: tags: ['v*.*.*']`), the ref is
+the tag, not the branch — so `is_default_branch` evaluates false,
+and `:latest` never emits.
+
+**Fix:** drop the `enable={{is_default_branch}}` condition.
+`:latest` now updates on every release tag push.  This means RC
+tags will set `:latest` to point at the current RC — appropriate
+for a pre-launch project where there's no stable to anchor `:latest`
+to.  Once v0.1.0 final ships, RC tags become rare; if/when stable +
+RC release cadence overlaps and we want `:latest` to track stable
+only, the condition can be re-added with a different gate (e.g.
+`enable=${{ !contains(github.ref, '-') }}` to skip pre-release tags).
+
+#### Action items for the operator (manual)
+
+After this PR merges, tagging `v0.1.0-rc4` will publish:
+
+* **PyPI:** `netcanon==0.1.0rc4` (working — the templates fix from
+  the previous PR + the unique version string from this one combined
+  unblock the publish)
+* **Docker Hub + GHCR:** `:0.1.0-rc4` and `:latest` (no more
+  `v`-prefix duplicate; `:latest` finally exists and points at the
+  rc4 image)
+
+The dangling `v0.1.0-rc1` / `v0.1.0-rc2` / `v0.1.0-rc3` tags from
+earlier publishes can be deleted manually via the Docker Hub UI
+once rc4 is up — they all point at broken or pre-fix images and
+operators have no reason to pull them.  Same for GHCR via
+https://github.com/netcanon/netcanon/pkgs/container/netcanon →
+Manage versions.
+
+#### Long-term fix (post-v0.1.0)
+
+Tracked in `docs/RELEASE_PLAN.md` post-launch roadmap notes:
+**wire `setuptools-scm`** so the package version is auto-derived
+from the git tag.  No more manual pyproject bumps per RC; no more
+opportunity for `v`-prefix-vs-not confusion.  Tag `v0.1.0-rc5` →
+package builds as `0.1.0rc5` (PEP 440 normalized) automatically.
+Tag `v0.1.0` → builds as `0.1.0`.  Removes a class of bugs
+permanently.  ~10-line change to `pyproject.toml` + workflow; not
+urgent but worth doing before v0.1.0 final.
+
 ### Fix: `templates/_partials/*.js` missing from built wheel (every HTML page 500'd)
 
 **Severity: blocker.**  v0.1.0-rc1 and v0.1.0-rc2 published artefacts
