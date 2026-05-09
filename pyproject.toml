@@ -1,24 +1,17 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools_scm>=8", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "netcanon"
-# NOTE: pre-launch RC versioning.  PyPI permanently claims wheel
-# filenames (the `<name>-<version>-*.whl` shape) once uploaded; even
-# yanking a release doesn't free the filename for re-use.  v0.1.0-rc1
-# / v0.1.0-rc2 published with version="0.1.0" and the filename
-# `netcanon-0.1.0-py3-none-any.whl` is now permanently claimed,
-# blocking any future re-publish at version 0.1.0.  rc3 inherited
-# the same `version="0.1.0"` and PyPI rejected with "file already
-# exists" (Docker side worked because docker tags don't have this
-# constraint).  rc4 onward bump the pyproject version explicitly per
-# RC so each one has a unique PyPI filename.  Final v0.1.0 release
-# will need to use a fresh PEP-440 version string (e.g. "0.1.1") for
-# the same reason.  Long-term fix: wire setuptools-scm to derive
-# version from git tags automatically — see post-launch roadmap in
-# `docs/RELEASE_PLAN.md`.
-version = "0.1.0rc4"
+# Version is derived from the git tag via setuptools_scm — see
+# [tool.setuptools_scm] below.  Tag `v0.1.0` -> version `0.1.0`;
+# tag `v0.1.0-rc5` -> version `0.1.0rc5` (PEP 440 normalized).
+# Untagged commits get a dev version (`<version>.dev<N>`).
+# This eliminates the manual-bump-per-RC tax and the PyPI filename-
+# collision class of bugs (each tag produces a unique wheel
+# filename automatically).
+dynamic = ["version"]
 description = "Multi-vendor network config translator with a verifiable cross-vendor audit"
 readme = "README.md"
 license = "MIT"
@@ -100,6 +93,24 @@ Repository = "https://github.com/netcanon/netcanon"
 Issues = "https://github.com/netcanon/netcanon/issues"
 Changelog = "https://github.com/netcanon/netcanon/blob/main/CHANGELOG.md"
 Documentation = "https://github.com/netcanon/netcanon/blob/main/README.md"
+
+[tool.setuptools_scm]
+# Write the resolved version to a Python file so the running package
+# (inside a Docker container, after `pip install`, etc.) can read it
+# without needing git available at runtime.  The file is gitignored;
+# regenerated on every build.
+version_file = "netcanon/_version.py"
+# Strip PEP 440 local-version components (`+g<sha>`).  PyPI rejects
+# uploads with local versions in the version string; CI builds that
+# happen on untagged commits would otherwise produce
+# `0.1.0rc5.dev3+g<sha>` which fails the publish.  With
+# `no-local-version`, untagged builds become `0.1.0rc5.dev3` (clean
+# pre-release form, accepted by PyPI).
+local_scheme = "no-local-version"
+# Fallback version for source trees with no git history (e.g. extracted
+# tarball with no .git directory).  Should never be hit in CI or
+# normal worktree work; backstop only.  PEP 440 form.
+fallback_version = "0.0.0"
 
 [tool.setuptools.packages.find]
 where = ["."]

@@ -25,6 +25,10 @@ configs/
 .cursor/
 .aider*/
 
+# setuptools_scm auto-generated version file — written at build time
+# from the git tag; never committed.
+netcanon/_version.py
+
 # Python build artifacts
 __pycache__/
 *.py[cod]

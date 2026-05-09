@@ -11,6 +11,131 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Wire `setuptools_scm`: tag-driven package versioning
+
+Eliminates the manual `pyproject.toml` version-bump-per-RC tax and
+the entire class of PyPI filename-collision bugs.  Tag → version
+becomes automatic.
+
+#### Before (the manual cycle)
+
+`pyproject.toml` had `version = "0.1.0"` (or `"0.1.0rc4"` after the
+v0.1.0-rc4 fix) hardcoded.  Each release cycle required:
+
+1. Open a PR bumping the pyproject version manually
+2. Wait for CI green
+3. Merge
+4. Tag `v0.1.0-rcN`
+5. Hope the rc number didn't collide with anything previously
+   uploaded to PyPI (since PyPI permanently claims wheel filenames
+   even after yanking)
+
+The v0.1.0-rc1 / rc2 / rc3 / rc4 sequence each hit a variant of
+this — version `0.1.0` permanently claimed by the broken rc1
+publish; rc2 and rc3 inherited the same hardcoded `version = "0.1.0"`
+and got rejected; rc4 manually bumped to `"0.1.0rc4"`.  Future
+RCs (or v0.1.0 final, since `0.1.0` is permanently claimed) would
+have continued requiring manual bump-PRs forever.
+
+#### After (this PR)
+
+Tag, push, done.  `setuptools_scm` derives the package version
+from the git tag at build time:
+
+* Tag `v0.1.0-rc5` → wheel `netcanon-0.1.0rc5-py3-none-any.whl`
+* Tag `v0.1.1` → wheel `netcanon-0.1.1-py3-none-any.whl`
+* Untagged commit (e.g. CI run on main between releases) → wheel
+  `netcanon-0.1.0rc5.dev3-py3-none-any.whl` (PEP 440 dev version,
+  guaranteed-distinct from any tagged release)
+
+Every release tag produces a unique PyPI filename automatically.
+No collisions possible.
+
+#### Implementation
+
+* **`pyproject.toml`**:
+  - Added `setuptools_scm>=8` to `[build-system].requires`.
+  - Replaced `version = "0.1.0rc4"` with `dynamic = ["version"]`.
+  - Added `[tool.setuptools_scm]` block:
+    - `version_file = "netcanon/_version.py"` — bakes the resolved
+      version into the package so runtime can read it without
+      needing git available (matters in containers).
+    - `local_scheme = "no-local-version"` — strips PEP 440 local
+      components (`+g<sha>`).  PyPI rejects local versions in
+      releases; without this, untagged-commit builds would produce
+      strings PyPI rejects.
+    - `fallback_version = "0.0.0"` — backstop for source trees
+      with no git history (extracted tarballs, etc).  Should never
+      hit in CI or worktree work.
+
+* **`.gitignore`**: exclude `netcanon/_version.py` (auto-generated;
+  never committed).
+
+* **`Dockerfile`**: builder stage gains an
+  `ARG SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON` (defaults to
+  empty).  `setuptools_scm` checks this env var first before
+  trying git; lets the Docker builder skip needing `.git/` in its
+  context (which is excluded per `.dockerignore`).
+
+* **`.github/workflows/docker-publish.yml`**: passes
+  `${{ steps.meta.outputs.version }}` (the semver-parsed tag) as
+  the `SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON` build-arg to
+  the build-push-action.  Keeps the Docker build context clean
+  while ensuring the resolved version matches the published tag.
+
+* **`.github/workflows/ci.yml` + `.github/workflows/pypi-publish.yml`**:
+  every `actions/checkout@v6` step now uses `fetch-depth: 0`.
+  Default shallow checkouts have no tags; setuptools_scm would
+  fall back to `0.0.0` and produce misleading "version 0.0.0"
+  builds.  With full history, the tags are present and version
+  resolves correctly.
+
+* **`AGENTS.md`**: new doc-sync row covering the new release
+  workflow ("Tag, push, done"), the build-arg flow for Docker, the
+  fetch-depth requirement for any future CI step that runs
+  `pip install -e .` or `python -m build`, and the gitignored
+  `_version.py`.
+
+#### Verification
+
+Built locally on this branch (off main, post-rc4 tag):
+
+```
+$ git describe --tags --abbrev=7
+v0.1.0-rc4
+
+$ python -m setuptools_scm
+0.1.0rc5.dev0
+
+$ python -m build --wheel
+Successfully built netcanon-0.1.0rc5.dev0-py3-none-any.whl
+```
+
+Untagged commit on this branch produced
+`0.1.0rc5.dev0` — distinct from rc4 (the latest tag), PEP 440
+clean, no local-version components, would be accepted by PyPI.
+When this PR merges and you tag `v0.1.0-rc5`, the wheel will
+build as `0.1.0rc5` (no `.dev0`) and publish cleanly to PyPI.
+
+#### Carry-over: when v0.1.0 final ships
+
+PyPI version `0.1.0` is permanently claimed by the broken rc1
+publish (yanked, but yanking doesn't free filenames).  The
+"final" v0.1.0 release will need to bump to `v0.1.1` (or any
+unused PyPI version).  This is structural to PyPI, unrelated to
+setuptools_scm, and can't be undone.  Future major / minor
+releases (`v0.1.2`, `v0.2.0`, etc.) work fine.
+
+#### Carry-over: post-launch roadmap entry now stale
+
+The `chore/pre-launch-sanitization` PR (still open) added a
+"wire setuptools-scm" entry to `docs/RELEASE_PLAN.md`'s
+post-launch roadmap notes.  That entry becomes stale the moment
+this PR merges — setuptools_scm is no longer post-launch
+roadmap; it's done.  Cleanup: when sanitization PR rebases on
+main (post-merge), drop that bullet from RELEASE_PLAN.md as
+part of the rebase.  Tracked here so it doesn't get lost.
+
 ### PyPI version bump + Docker tag-emission cleanup
 
 Three publish-side fixes bundled.  The `v0.1.0-rc3` release exposed

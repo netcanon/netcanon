@@ -88,6 +88,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Pass the resolved package version into the builder stage as
+          # SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON.  metadata-action's
+          # `version` output is the semver-parsed tag (e.g. `0.1.0-rc5`
+          # for tag `v0.1.0-rc5`).  setuptools_scm consumes this in the
+          # builder stage in lieu of reading git tags directly (.git/ is
+          # excluded from the Docker context per .dockerignore).
+          build-args: |
+            SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=${{ steps.meta.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: true

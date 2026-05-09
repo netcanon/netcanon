@@ -27,6 +27,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -51,6 +57,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -79,6 +91,12 @@ jobs:
     # rather than at tag-time when docker-publish.yml fires.
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history + tags needed for setuptools_scm to derive the
+          # package version.  Default is shallow (depth=1, no tags) which
+          # would make `pip install -e .` fail with "no tags found" or
+          # produce a `0.0.0` fallback version that misleads operators.
+          fetch-depth: 0
 
       - name: Build image
         run: docker build -t netcanon-smoke:pr .

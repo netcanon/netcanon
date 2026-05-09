@@ -24,6 +24,12 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Full history + tags for setuptools_scm to derive the package
+          # version from the triggering tag.  Without this, the wheel
+          # builds with the fallback_version (`0.0.0`) and PyPI gets a
+          # garbage version string.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
