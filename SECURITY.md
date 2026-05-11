@@ -72,20 +72,74 @@ plaintext**.  The storage layer encrypts all credential fields with
 [Fernet symmetric encryption](https://cryptography.io/en/latest/fernet/)
 before writing JSON files, and decrypts them immediately after reading.
 
-### Key management
+### Key management — three-tier resolution
 
-A random 256-bit Fernet key is generated on first use and stored in the
-**OS secure credential store**:
+The Fernet key is resolved in this order, first hit wins:
+
+| Tier | Source | Best fit | Key on disk? |
+|------|--------|----------|--------------|
+| **1** | `NETCANON_FERNET_KEY` env var | Container / headless / production | No |
+| **2** | OS keyring (Windows Cred Manager / macOS Keychain / Linux SecretService) | Desktop install | No |
+| **3** | File at `$NETCANON_DATA_DIR/.fernet_key` (auto-generated) | Zero-config container | Yes, in the operator's bind-mounted data volume |
+
+The key never moves between tiers — once a key exists at any tier, that
+key is used.  Tier promotion (e.g. moving from file fallback to env var)
+is an operator-driven re-keying operation: read the key from the lower
+tier, set it as the higher-tier value, then optionally remove the lower
+tier (e.g. `rm $NETCANON_DATA_DIR/.fernet_key` after copying the value
+into `NETCANON_FERNET_KEY`).
+
+**Tier 1 — Environment variable (recommended for production):**
+Generate once with:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Inject via your orchestrator's secret-injection mechanism:
+
+```bash
+docker run -e NETCANON_FERNET_KEY=<key> ghcr.io/netcanon/netcanon:latest
+```
+
+The key never touches the application's data directory.  This is the
+recommended deployment pattern for any environment where the bind-
+mounted volume's filesystem permissions aren't sufficient credential
+protection (multi-tenant hosts, shared CI environments, regulated
+infrastructure).
+
+**Tier 2 — OS keyring (default for desktop installs):**
 
 | Platform | Backend |
 |----------|---------|
 | Windows  | Windows Credential Manager (DPAPI) |
 | macOS    | Keychain |
-| Linux    | SecretService / libsecret |
+| Linux    | SecretService / libsecret (via dbus) |
 
-The key is retrieved from the OS store on every startup via the
-[`keyring`](https://pypi.org/project/keyring/) library.  The application
-never writes the key to disk itself.
+A random 256-bit Fernet key is generated on first use and stored via
+the [`keyring`](https://pypi.org/project/keyring/) library.  The
+application never writes the key to disk itself.  This is the default
+for `pip install netcanon` and MSI / desktop-app deployments.
+
+**Tier 3 — File fallback (zero-config bootstrap):**
+When neither the env var nor a working keyring backend is available
+(typical container deployments without an injected env var), a new
+Fernet key is auto-generated and written to
+`$NETCANON_DATA_DIR/.fernet_key` with restrictive permissions (0o600
+on POSIX; Windows relies on operator-managed directory perms).  The
+file persists in the operator's bind-mounted data volume, so
+subsequent container restarts decrypt existing profiles.
+
+The key is plaintext on disk, but the disk in question is
+`NETCANON_DATA_DIR` — the same volume the operator already chose to
+trust for jobs / schedules / device profile JSON.  This is the weakest
+tier; production deployments should prefer tier 1 so the key is
+auditable through the orchestrator's secret-management surface rather
+than living in the data volume.
+
+A `WARNING`-level log line announces the auto-generation event so the
+operator can choose to upgrade to tier 1 by reading the file contents,
+setting them as `NETCANON_FERNET_KEY`, and deleting the file.
 
 ### Migration
 
@@ -319,8 +373,8 @@ regulated environments.
 |------|------|-----------|-----------|
 | No API authentication | Any local process can call the API | Yes (desktop) / Operator responsibility (web/Docker) | Desktop assumes single-user local machine; web operators must add auth via reverse proxy |
 | Credentials over localhost HTTP | Plaintext in transit on loopback | Yes | Loopback is not a network interface; TLS on localhost adds no practical security |
-| OS keyring unavailable (some Linux headless) | Key falls back to generation with no secure storage | Partial | Desktop app; headless Linux is not a supported target |
-| Key loss (keyring entry deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume |
+| OS keyring unavailable (container / headless Linux) | Resolved via env-var tier (recommended) or file-fallback tier (auto-bootstrap) | No (resolved) | Three-tier key resolution — `NETCANON_FERNET_KEY` for production; `$NETCANON_DATA_DIR/.fernet_key` auto-bootstrap for zero-config containers.  See "Credential Storage" above |
+| Key loss (keyring entry deleted / env var unset on restart / `.fernet_key` deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume.  Operators using tier 1 / tier 3 should back the key up alongside their other infrastructure secrets |
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
 | IPv6-public redaction not implemented | Operator-submitted public IPv6 addresses pass through verbatim | Documented | v0.1.0 limitation; sanitiser is IPv4-only.  Hand-redact public IPv6 before submission. |
 

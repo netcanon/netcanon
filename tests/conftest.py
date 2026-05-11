@@ -234,6 +234,14 @@ def _mock_keyring(monkeypatch):
     monkeypatch.setattr(keyring, "get_password", _fake_get_password)
     monkeypatch.setattr(keyring, "set_password", _fake_set_password)
 
+    # If the maintainer has NETCANON_FERNET_KEY exported in their shell
+    # (e.g. they're testing container behaviour locally), unset it for
+    # the duration of each test so the mocked keyring above is what
+    # tests actually exercise.  Tests that explicitly want to verify
+    # the env-var-priority tier set the var themselves via monkeypatch
+    # (see ``tests/unit/test_credentials.py::TestEnvVarKey``).
+    monkeypatch.delenv("NETCANON_FERNET_KEY", raising=False)
+
     # Reset the lazy ``_fernet`` cache so each test re-derives a key
     # from the (mocked) keyring rather than carrying state across tests.
     try:

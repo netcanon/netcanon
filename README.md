@@ -81,9 +81,15 @@ For the full audit narrative + the variance-class taxonomy, see
 ### Docker (recommended)
 
 ```bash
+# Generate a Fernet key once and keep it somewhere safe — this is the
+# encryption key for device credentials at rest.  Loss = re-entering
+# every saved device password; leak = decryptable backup state.
+NETCANON_FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+
 docker run --rm -p 8000:8000 \
     -v $(pwd)/configs:/app/configs \
     -v $(pwd)/data:/app/data \
+    -e NETCANON_FERNET_KEY="$NETCANON_FERNET_KEY" \
     ghcr.io/netcanon/netcanon:latest
 # -> http://127.0.0.1:8000        (UI)
 # -> http://127.0.0.1:8000/docs   (Swagger)
@@ -95,6 +101,13 @@ device profiles, schedules, and job state.  Don't bind-mount
 `definitions/` — those YAMLs are baked into the image as tracked
 content; mounting an empty host directory over them will crash
 startup.
+
+`NETCANON_FERNET_KEY` injects the credential-encryption key directly
+(recommended for production / orchestrated deployments — the key
+never touches disk).  If you skip the `-e` flag, Netcanon auto-
+generates a key on first run inside `data/.fernet_key` so the
+container works zero-config; for the production deployment path see
+[`SECURITY.md`](SECURITY.md) "Credential Storage".
 
 The published image is signed via Sigstore (`cosign verify
 ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.

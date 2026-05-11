@@ -21,6 +21,112 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Fix: credential encryption now works in container / headless deployments
+
+Surfaced by running the just-published Docker image locally and trying
+to save a device profile via the UI: every save returned a
+500 Internal Server Error.  Backtrace pointed at
+`netcanon/security/credentials.py:42`:
+
+```
+keyring.errors.NoKeyringError: No recommended backend was available.
+```
+
+The Fernet key used to encrypt device passwords at rest was being
+resolved exclusively via the OS keyring library.  The keyring library
+needs a backend — Windows Credential Manager / macOS Keychain / Linux
+SecretService daemon via dbus + libsecret.  **None of those exist
+inside the slim-bookworm container.**  The `keyring` library installed
+fine but its `fail.Keyring` shim raised the moment the encrypt path
+hit it.
+
+This was a deployment-pattern flaw, not a regression.  It meant the
+Docker quickstart in the README (the recommended install) crashed at
+the first device-save — the very first action an operator takes after
+running the container.  `SECURITY.md:322` quietly acknowledged it as
+"headless Linux is not a supported target", which contradicted every
+other surface that pushes Docker as the primary install.
+
+#### Three-tier Fernet key resolution
+
+`credentials.py` now resolves the key in this order, first hit wins:
+
+1. **`NETCANON_FERNET_KEY` env var** — operator-explicit.  Recommended
+   for container / headless / production deployments.  Generate once
+   with `python -c "from cryptography.fernet import Fernet;
+   print(Fernet.generate_key().decode())"` and inject via your
+   orchestrator's secret-injection mechanism.  Key never touches the
+   application's data directory.
+2. **OS keyring** — Windows Credential Manager (DPAPI) / macOS
+   Keychain / Linux SecretService.  Default for desktop installs.
+3. **File fallback at `$NETCANON_DATA_DIR/.fernet_key`** — auto-
+   generated on first use when neither env var nor keyring is
+   available (typical zero-config container).  Persists in the
+   operator's bind-mounted data volume so subsequent restarts
+   decrypt existing profiles.  Plaintext on disk but in the same
+   volume the operator already trusts for jobs / schedules / device
+   profile JSON.  Tier 1 is preferred for production.
+
+The lookup is short-circuit: tier 2 is only attempted if tier 1 misses,
+and tier 3 only if tier 2's backend raises.  Native desktop installs
+keep the existing keyring behaviour with zero changes — the new tiers
+only activate where the existing behaviour fails.
+
+#### Implementation
+
+* **`netcanon/security/credentials.py`**: rewrote `_get_fernet()` into
+  a `_resolve_key()` helper that walks the three tiers, plus per-tier
+  helpers (`_read_keyring`, `_write_keyring`, `_read_key_file`,
+  `_write_key_file`).  Each helper isolates one failure mode so the
+  control flow stays readable.  File writes attempt `os.chmod(0o600)`
+  (POSIX) and silently no-op on Windows where chmod doesn't enforce.
+  A `WARNING`-level log line announces tier-3 auto-bootstrap so the
+  operator can spot the upgrade path to tier 1.
+
+* **`tests/unit/test_credentials.py`**: new `TestEnvVarKey` class (env
+  takes priority over keyring, env value is stripped of trailing
+  whitespace, empty env var falls through) + new `TestFileFallback`
+  class (writes key file when keyring raises `NoKeyringError`, loads
+  pre-existing key file, full encrypt/decrypt round-trip with file
+  fallback as the key source).
+
+* **`tests/conftest.py`**: the autouse `_mock_keyring` fixture now
+  also unsets `NETCANON_FERNET_KEY` for the duration of each test so
+  a maintainer with the env var exported in their shell doesn't see
+  mysterious test failures.  Tests that explicitly exercise the env-
+  var tier set the var themselves via `monkeypatch.setenv`.
+
+* **`.env.example`**: documented `NETCANON_FERNET_KEY` with the
+  generation snippet and the trade-offs vs. file fallback.
+
+* **`.gitignore`**: `.fernet_key` + `**/.fernet_key` — auto-generated,
+  must never be committed.
+
+* **`SECURITY.md`**: rewrote the "Credential Storage" section with
+  the three-tier table, expanded the per-tier rationale, and updated
+  the "Known Limitations" row that previously labelled headless Linux
+  as unsupported (it's now a fully-supported deployment path).
+
+* **`README.md`**: Docker quickstart now shows the env-var pattern
+  with a one-liner key generator.  Operators following the README
+  literally get the recommended production deployment shape.
+
+#### Operator migration
+
+Existing desktop installs are unaffected — tier 2 is hit first as
+before, and the keyring path is unchanged.
+
+Existing container deployments that were running pre-fix had no
+way to save a device with a password, so there's no existing
+encrypted state to migrate.  On first run with the new image the
+container will either pick up `NETCANON_FERNET_KEY` (if set) or
+auto-bootstrap `data/.fernet_key` and proceed normally.
+
+Operators currently running unencrypted file fallback (this PR's
+tier 3) who want to promote to tier 1 (env var, recommended): read
+the existing key, set it as the env var on the next container start,
+delete `data/.fernet_key`.
+
 ### Remove vestigial development artifacts
 
 Cleanup of legacy / duplicate files left over from earlier project
