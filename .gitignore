@@ -20,6 +20,13 @@ schedules/
 jobs/
 configs/
 
+# Fernet symmetric key used for credential-at-rest encryption.  Auto-
+# generated inside $NETCANON_DATA_DIR on first use when no keyring
+# backend is available (typical container deployments).  Never commit.
+# See netcanon/security/credentials.py + SECURITY.md "Credential Storage".
+.fernet_key
+**/.fernet_key
+
 # AI-assistant tooling — local session state, never committed
 .claude/
 .cursor/
