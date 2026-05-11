@@ -495,16 +495,31 @@ class TestDefinitionsPageEnriched:
         assert "path" in first_unsupp
         assert "reason" in first_unsupp
 
-    def test_overlays_section_absent_when_no_overlays_loaded(
+    def test_overlays_section_renders_empty_state_when_no_overlays(
         self, client: TestClient,
     ) -> None:
-        """The overlays section is conditional — when the loader
-        has zero overlays (the default test harness ships only
-        family-base YAMLs), the section must NOT render.  Inverse
-        of :meth:`test_overlays_section_renders_when_overlay_added`
-        below."""
+        """The overlays section ALWAYS renders; shows an empty-state
+        message when the loader has zero overlays.
+
+        Pre-Phase-3 the section was wrapped in ``{% if overlays %}``
+        which made it disappear silently — operators reading the
+        Definitions page had no way to tell "no overlays exist" apart
+        from "feature broken / section forgot to render".  The empty
+        state explicitly says "no overlays loaded → all backups use
+        family-base definition" so the absence is legible.
+
+        Inverse of :meth:`test_overlays_section_renders_when_overlay_added`
+        below, which asserts the table renders when at least one
+        overlay is loaded.
+        """
         resp = client.get("/definitions")
-        assert 'data-testid="section-overlays"' not in resp.text
+        # Section header always present (legible empty state, not silent).
+        assert 'data-testid="section-overlays"' in resp.text
+        # Empty-state message is shown.
+        assert 'data-testid="no-overlays-msg"' in resp.text
+        # The table itself is NOT rendered when there's nothing to show.
+        assert 'data-testid="overlays-table"' not in resp.text
+        assert 'data-testid="overlay-row"' not in resp.text
 
     def test_overlays_section_renders_when_overlay_added(
         self,
