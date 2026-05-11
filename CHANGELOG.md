@@ -21,6 +21,76 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 1: actionable editor errors + overlays empty state
+
+First round of the [pre-launch quality hardening
+phase](docs/RELEASE_PLAN.md#pre-launch-quality-hardening).  Driven by a
+read-only audit across failure-mode quality, browser/UI polish, and
+operator-facing copy quality.  The audit produced a punch list; this
+round addresses the lowest-effort high-severity items that are pure
+copy + template work and don't depend on the larger structural changes
+(exception-translator layer, vocabulary discipline pass) coming in
+subsequent rounds.
+
+#### Actionable error copy on the editor endpoint
+
+`POST /api/v1/configs/{filename}/open` returned four operator-hostile
+errors that named implementation details instead of operator actions:
+
+* `"open_in_editor is disabled on this server."` — gave the operator no
+  hint of how to enable the feature.  Now names the
+  `NETCANON_OPEN_IN_EDITOR` environment variable and the `.env` field
+  explicitly, and reminds operators that the feature is intentionally
+  off for remote deployments.
+
+* `"File type not permitted for editor access."` — didn't name the file,
+  the disallowed extension, or the allowed list.  Now reports the
+  filename, the rejected extension, and the full allowed-extensions
+  enumeration so the operator can rename or download instead.
+
+* `"os.startfile is not supported on this platform."` — leaked the
+  Python implementation detail to the operator.  Now reads "Cannot
+  open files in the OS default editor on this platform (...).  Use
+  the download link to fetch the file instead." with `sys.platform`
+  for diagnostic context, no library names.
+
+* `"Could not open file: <raw exception>"` — echoed the raw OSError
+  text to the HTTP response (often a Windows path leaking server
+  filesystem layout).  Now suppresses the underlying exception from
+  the response detail (still logged server-side with `exc_info=True`)
+  and points the operator at the server log.
+
+A regression test (`test_open_returns_500_when_startfile_raises`) used
+to *assert* that the raw exception text leaked through — that assertion
+was pinning a privacy bug.  Updated to assert the new contract: the
+filename appears in the detail, the "check server log" hint appears,
+and the raw OSError string is explicitly absent.
+
+#### Overlays section no longer disappears silently when empty
+
+The Definitions page wrapped its Version / Model Overlays section in
+`{% if overlays %}` — with zero overlays loaded (the default for most
+install profiles), the section simply didn't render.  Operators
+reading the page had no way to distinguish "no overlays exist" from
+"section forgot to render / feature broken" — exactly the confusion
+that produced the original "5 loaded but only 4 visible" user report
+that motivated the overlay-rendering work in the first place.
+
+The section now always renders.  When zero overlays are loaded, an
+empty-state paragraph explains the consequence in concrete operator
+terms ("all backups will use the family-base definition for their
+device type") and tells the operator how to add an overlay ("drop a
+YAML file under `definitions/` with an `os_version` or `model` field
+to pin behaviour for a specific firmware revision").  When at least
+one overlay is loaded, the original table renders unchanged.
+
+A new `data-testid="no-overlays-msg"` is registered in
+`tests/testid_reference.md`.  The previous test
+`test_overlays_section_absent_when_no_overlays_loaded` (which pinned
+the disappearing-section behaviour) is renamed to
+`test_overlays_section_renders_empty_state_when_no_overlays` and
+asserts the new always-renders contract.
+
 ### Fix: credential encryption now works in container / headless deployments
 
 Surfaced by running the just-published Docker image locally and trying

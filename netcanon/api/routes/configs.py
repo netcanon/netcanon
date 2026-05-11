@@ -143,14 +143,26 @@ def open_config(
     if not settings.open_in_editor:
         raise HTTPException(
             status_code=403,
-            detail="open_in_editor is disabled on this server.",
+            detail=(
+                "Open-in-editor is disabled on this server.  Enable it by "
+                "setting NETCANON_OPEN_IN_EDITOR=true (or open_in_editor=true "
+                "in your .env file) and restarting.  Only enable when the "
+                "server runs on the same machine as the operator — remote "
+                "deployments should leave this off."
+            ),
         )
 
     # Extension whitelist — only open known config file types.
-    if Path(filename).suffix.lower() not in _OPEN_ALLOWED_EXTENSIONS:
+    ext = Path(filename).suffix.lower() or "(no extension)"
+    if ext not in _OPEN_ALLOWED_EXTENSIONS:
+        allowed = ", ".join(sorted(_OPEN_ALLOWED_EXTENSIONS))
         raise HTTPException(
             status_code=400,
-            detail="File type not permitted for editor access.",
+            detail=(
+                f"Cannot open {filename!r} in the editor: file type "
+                f"{ext!r} is not on the allowed list.  Allowed types: "
+                f"{allowed}."
+            ),
         )
 
     try:
@@ -171,15 +183,27 @@ def open_config(
             subprocess.run(["xdg-open", str(path)], check=True)  # noqa: S603,S607
         logger.info("Opened config %r in default editor", filename)
     except NotImplementedError:
+        # os.startfile is Windows-only; the linux/darwin branches above use
+        # subprocess so this typically fires only on exotic platforms.
         raise HTTPException(
             status_code=501,
-            detail="os.startfile is not supported on this platform.",
+            detail=(
+                f"Cannot open files in the OS default editor on this "
+                f"platform ({sys.platform!r}).  Use the download link to "
+                f"fetch the file instead."
+            ),
         )
     except Exception as exc:  # noqa: BLE001
+        # Full exception detail is logged server-side (exc_info=True).
+        # Don't echo raw OS exception text to the HTTP client — operator
+        # can't act on it and it leaks internal paths.
         logger.error("Failed to open config %r: %s", filename, exc, exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Could not open file: {exc}",
+            detail=(
+                f"The OS refused to open {filename!r} in the default "
+                f"editor.  Check the server log for the underlying error."
+            ),
         )
 
 

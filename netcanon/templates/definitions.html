@@ -346,13 +346,12 @@
 </section>
 
 {# ═════════════════ 2. Version / model overlays ═════════════════ #}
-{% if overlays %}
 <section class="defs-section" data-testid="section-overlays">
   <div class="defs-section-header">
     <h2>Version / model overlays</h2>
     <span class="defs-section-count"
           data-testid="section-overlays-count">
-      {{ overlays | length }}
+      {{ overlays | length if overlays else 0 }}
     </span>
   </div>
   <div class="defs-section-body">
@@ -367,6 +366,7 @@
       family bases; this list explains the "loaded N but showed N-M"
       split on the startup log.
     </p>
+    {% if overlays %}
     <table data-testid="overlays-table">
       <thead>
         <tr>
@@ -397,9 +397,17 @@
       {% endfor %}
       </tbody>
     </table>
+    {% else %}
+    <p class="empty-msg" data-testid="no-overlays-msg">
+      No overlays loaded.  All backups will use the family-base
+      definition for their device type.  Drop a YAML file under
+      <code>definitions/</code> with an <code>os_version</code> or
+      <code>model</code> field to pin behaviour for a specific firmware
+      revision (e.g. <code>cisco_ios_17.12.yaml</code>).
+    </p>
+    {% endif %}
   </div>
 </section>
-{% endif %}
 
 {# ═════════════════ 3. Migration target profiles ═════════════════ #}
 <section class="defs-section" data-testid="section-target-profiles">

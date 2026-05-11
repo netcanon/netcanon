@@ -239,9 +239,10 @@ The page exposes four sections — one `section-*` testid per container.
 
 | `data-testid`          | Element | Notes |
 |------------------------|---------|-------|
-| `section-overlays`        | `<section>` | Wraps the overlays section (only rendered when overlays exist) |
-| `section-overlays-count`  | `<span>` | Count badge in the section header |
-| `overlays-table`          | `<table>` | Table of all loaded overlays |
+| `section-overlays`        | `<section>` | Wraps the overlays section (always rendered; shows empty-state copy when zero overlays loaded) |
+| `section-overlays-count`  | `<span>` | Count badge in the section header (renders `0` when no overlays loaded) |
+| `no-overlays-msg`         | `<p>` | Empty-state message; shown in place of `overlays-table` when zero overlays loaded |
+| `overlays-table`          | `<table>` | Table of all loaded overlays; only present when ≥1 overlay loaded |
 | `overlay-row`             | `<tr>` | One row per overlay; also has `data-type-key`, `data-os-version`, `data-model` |
 | `overlay-os-version`      | `<td>` | OS version pin (or em-dash if absent) |
 | `overlay-model`           | `<td>` | Model pin (or em-dash if absent) |

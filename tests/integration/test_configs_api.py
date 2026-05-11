@@ -211,11 +211,25 @@ class TestOpenConfig:
         reason="Mocks os.startfile to raise; Windows-specific path.",
     )
     def test_open_returns_500_when_startfile_raises(self, open_client):
+        """500 response is operator-readable + does NOT leak raw OS error text.
+
+        Pre-Phase-3 the response detail was f"Could not open file: {exc}"
+        which echoed the raw OSError string (e.g. "access denied", or
+        worse, a Windows path containing the server's filesystem layout)
+        to the HTTP client.  The underlying exception is now suppressed
+        from the response (still logged server-side with exc_info=True);
+        the operator sees a generic "check server log" message naming
+        the file that failed.
+        """
         filename = _seed_config(open_client)
         with patch("os.startfile", side_effect=OSError("access denied")):
             resp = open_client.post(f"/api/v1/configs/{filename}/open")
         assert resp.status_code == 500
-        assert "access denied" in resp.json()["detail"]
+        detail = resp.json()["detail"]
+        assert filename in detail
+        assert "server log" in detail.lower()
+        # Privacy fix — raw exception text must NOT leak through.
+        assert "access denied" not in detail
 
     def test_open_rejects_disallowed_extension(self, open_client):
         """Executable and other non-config extensions must return 400."""
