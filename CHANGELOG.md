@@ -21,6 +21,80 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 2: vocabulary discipline
+
+Driven by a Round-1 audit-followup mapping pass: catalogue every term
+that names the same operator-level concept, pick one canonical per
+concept, sweep labels.  The audit had flagged four concept-vs-term
+collisions; mapping confirmed three were real and one was overflagged
+(see below).  Zero API breaks — every JSON field, route, model class,
+and YAML key on disk is preserved.
+
+#### "Device Profile" — pick one term for the saved-credential concept
+
+The same operator-level entity was named four different things across
+the UI: "Saved Device" (`index.html:15`), "Saved Devices" (devices.html
+page heading), "Save as Profile" (`index.html:69`), and "Profile Name"
+(`devices.html:24`).  The model class is `DeviceProfile`, the JSON
+key is `device_profile_id`, the URL is `/devices`.  Aligned to
+**"Device Profile"** everywhere operator-facing:
+
+* `index.html:15` "Saved Device" → "Device Profile"
+* `index.html:69` "Save as Profile" → "Save as device profile"
+* `devices.html:100` "Saved Devices" page heading → "Device Profiles"
+
+"Profile Name" (the field-of-the-entity, like "User Name") stays —
+it's grammatically the name *for* a profile, not the entity itself,
+so renaming it would be wrong.
+
+#### "Device Type" — backup-flow canonical (without conflating Migrate's "Adapter")
+
+The backup flow labelled the same dropdown three different ways:
+"Type" on `index.html:30`, `devices.html:29, 160`, `jobs.html:93`; the
+config-list table header at `configs.html:11` already said
+"Device Type".  Aligned everything to **"Device Type"** matching
+`configs.html` (the most-trafficked column) and the existing
+`device-type-select` testid:
+
+* `index.html:30` → "Device Type"
+* `devices.html:29` → "Device Type" (create form)
+* `devices.html:160` → "Device Type" (edit form)
+* `jobs.html:93` → "Device Type" (results table header)
+
+Specifically rejected unifying to "Codec": the migrate subsystem
+already uses "Adapter" coherently for its own (distinct) concept —
+parse-only / render-only / bidirectional codec classes from
+`netcanon/migration/codecs/`.  These are two registries, not one;
+forcing one canonical across both would damage migrate's vocabulary.
+The two flows stay lexically separate: backup uses "Device Type",
+migrate uses "Adapter".
+
+#### Host-validation error: actionable instead of "Invalid hostname or IP address"
+
+`netcanon/models/validators.py:29` raised
+`f"Invalid hostname or IP address: {v!r}"` — accurate but not
+actionable.  Operator gets no hint of what *would* be valid.  Updated
+to mirror the docstring (which already said "IPv4, IPv6, or RFC-1123
+hostname") and add concrete examples:
+
+    Invalid host '<bad>': must be a valid IPv4 address, IPv6 address,
+    or RFC-1123 hostname.  Example: '192.168.1.1', '2001:db8::1', or
+    'core-sw-01.example.com'.
+
+#### Schedule frequency — audit overflagged, no change
+
+The audit flagged `schedules.html:30` "Run every" vs
+`schedules.html:110` "Interval" as a vocabulary collision.  They're
+not — one is a form label (which works as a verb phrase) and the
+other is a table-column header (which needs to fit in narrow column
+width).  "Run every (mins)" is uglier than "Interval".  Left alone.
+
+#### testid_reference.md docstring sync
+
+Two `testid_reference.md` entries quoted the old strings as part of
+their notes — updated to match the new canonicals.  Both `data-testid`
+values themselves are unchanged.
+
 ### Phase 3 — Polish pass, Round 1: actionable editor errors + overlays empty state
 
 First round of the [pre-launch quality hardening

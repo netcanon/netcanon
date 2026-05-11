@@ -26,4 +26,8 @@ def validate_host(v: str) -> str:
         pass
     if HOSTNAME_RE.match(v):
         return v
-    raise ValueError(f"Invalid hostname or IP address: {v!r}")
+    raise ValueError(
+        f"Invalid host {v!r}: must be a valid IPv4 address, IPv6 address, "
+        f"or RFC-1123 hostname.  Example: '192.168.1.1', '2001:db8::1', "
+        f"or 'core-sw-01.example.com'."
+    )
