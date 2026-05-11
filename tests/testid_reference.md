@@ -30,7 +30,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `backup-form`           | `<form>` | The form element itself |
 | `device-list`           | `<div>` | Container for all device entry rows |
 | `device-entry`          | `<div>` | One device row (cloned when adding devices) |
-| `device-profile-select` | `<select>` | "Saved Device" picker — first option is ``— new device —`` for ad-hoc; subsequent options pre-fill the row from a persisted `DeviceProfile`.  Option elements carry `data-type-key`, `data-host`, `data-port`, `data-username` for client-side pre-fill |
+| `device-profile-select` | `<select>` | "Device Profile" picker — first option is ``— new device —`` for ad-hoc; subsequent options pre-fill the row from a persisted `DeviceProfile`.  Option elements carry `data-type-key`, `data-host`, `data-port`, `data-username` for client-side pre-fill |
 | `device-type-select`    | `<select>` | Device type dropdown; options carry `data-needs-enable` |
 | `device-host-input`     | `<input>` | Host / IP field |
 | `device-port-input`     | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
@@ -39,7 +39,7 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `device-enable-input`   | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
 | `remove-device-btn`     | `<button>` | Remove this device row; hidden when only one row exists |
 | `add-device-btn`        | `<button>` | Add a new device row |
-| `device-profile-name-input` | `<input>` | "Save as Profile" — optional free-text name.  When populated, the backup route creates/updates a persisted `DeviceProfile` alongside running the backup |
+| `device-profile-name-input` | `<input>` | "Save as device profile" — optional free-text name.  When populated, the backup route creates/updates a persisted `DeviceProfile` alongside running the backup |
 | `submit-backup-btn`     | `<button type="submit">` | Start the backup job; disabled while job is in flight |
 
 ### Job status / results (now driven by the global Job progress panel)

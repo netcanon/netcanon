@@ -12,7 +12,7 @@
       <!-- Device rows injected by JS; first row is the template -->
       <div class="form-row device-entry" data-testid="device-entry">
         <div class="form-group" style="flex:0 0 auto;min-width:160px">
-          <label>Saved Device</label>
+          <label>Device Profile</label>
           <select name="device_profile_id" data-testid="device-profile-select">
             <option value="">— new device —</option>
             {% for profile in device_profiles %}
@@ -27,7 +27,7 @@
           </select>
         </div>
         <div class="form-group">
-          <label>Type</label>
+          <label>Device Type</label>
           <select name="type_key" data-testid="device-type-select">
             {% for key, def in definitions.items() | sort %}
             <option value="{{ key }}"
@@ -66,7 +66,7 @@
                  style="width:72px;margin-top:.25rem" data-testid="device-port-input">
         </details>
         <div class="form-group profile-name-group">
-          <label>Save as Profile <span style="color:#aaa;font-weight:normal">(optional)</span></label>
+          <label>Save as device profile <span style="color:#aaa;font-weight:normal">(optional)</span></label>
           <input name="profile_name" type="text" placeholder="e.g. Office Cisco"
                  data-testid="device-profile-name-input">
         </div>

@@ -26,7 +26,7 @@
                data-testid="device-name-input" required>
       </div>
       <div class="form-group">
-        <label>Type</label>
+        <label>Device Type</label>
         <select name="type_key" data-testid="device-type-select">
           {% for key, def in definitions.items() | sort %}
           <option value="{{ key }}"
@@ -95,9 +95,9 @@
   </form>
 </section>
 
-<!-- ── Saved Devices ──────────────────────────────────────────────── -->
+<!-- ── Device Profiles ────────────────────────────────────────────── -->
 <section data-testid="devices-section">
-  <h2>Saved Devices</h2>
+  <h2>Device Profiles</h2>
 
   {% if not device_profiles %}
   <p class="empty-msg" data-testid="no-devices-msg">
@@ -157,7 +157,7 @@
                    data-testid="device-edit-name-input">
           </div>
           <div class="form-group">
-            <label>Type</label>
+            <label>Device Type</label>
             <select name="type_key" data-testid="device-edit-type-select">
               {% for key, def in definitions.items() | sort %}
               <option value="{{ key }}"
