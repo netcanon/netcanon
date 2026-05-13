@@ -21,7 +21,108 @@ much of the work below evolves.
 
 ## [Unreleased]
 
-### Doc audit + sync: Phase 3 status block + sanitize-UI references
+### Phase 3 Round 7: keyboard-shortcut cheatsheet modal (UX polish)
+
+The app shipped four undocumented keyboard shortcuts (config-viewer
+search `Enter` / `Shift+Enter` / `Esc`, diff-page collapsed-marker
+`Enter` / `Space`, configs-page compare-picker `Esc`) plus the brand-
+new theme-toggle button.  These were invisible to anyone who didn't
+read the source — and operators who run multiple tabs + Vim-style
+workflows expect a shortcuts panel.  This round adds one.
+
+Single PR (`r7-kbd-cheatsheet`).
+
+#### What ships
+
+* A new global modal rendered by `base.html` on every page,
+  documenting the existing-but-undocumented shortcuts in four
+  sections: Global / Config viewer / Diff page / Configs page.
+  Mirror's the `_config-viewer` modal's shell (same backdrop, same
+  dark-navy header, same close-button styling), narrower than the
+  config viewer (560px vs 800px) because the content is a shortcut
+  list, not config text.
+* A `?` keypress handler at the document level that toggles the
+  modal open / closed.  Bails out when a text-editable field is
+  focused (`<input type="text">`, `<textarea>`, `<select>`,
+  contenteditable) so typing `?` into the host field or a search
+  box doesn't hijack the modal.  Non-text inputs (checkboxes,
+  radios, file pickers) still pass through — the operator likely
+  meant the shortcut.
+* A nav-bar `?` trigger button between the page-nav cluster and
+  the theme toggle, mirroring the theme toggle's styling
+  (transparent background, hover lightens, focus ring).  Provides
+  discoverability for operators who don't know about the keypress.
+* `Esc` listener: closes the cheatsheet if open.  Coexists with the
+  existing config-viewer Esc handler and the configs-page
+  compare-picker Esc handler — the listeners fan out independently
+  and only the relevant modal responds.
+
+#### File breakdown
+
+* `netcanon/templates/_partials/kbd-cheatsheet.js` (new, ~95 LOC).
+  Exports `openKbdCheatsheet()` / `closeKbdCheatsheet()` globals
+  (matching the `_config-viewer` partial's convention) plus a
+  private `_kbdIsTextEditableTarget(target)` helper that
+  excludes the non-text input types so the shortcut still fires
+  on checkbox focus.
+* `netcanon/templates/base.html` — three additions: the modal
+  HTML (placed alongside `_config-viewer`), modal CSS in the
+  shared `<style>` block (uses `var(--surface)` / `var(--shadow-
+  modal)` tokens so the modal re-themes correctly under dark
+  mode), and a `{% include "_partials/kbd-cheatsheet.js" %}` line
+  alongside the other partials.  Theme-toggle CSS was extended to
+  share the rule set with the new trigger button (one selector,
+  two IDs).
+* `tests/integration/test_kbd_cheatsheet.py` (new) — **20 tests**
+  in four classes: `TestCheatsheetTestids` (parametrized over 8
+  base-inheriting routes × 9 expected testids), `TestCheatsheetTriggerButton`
+  (4 tests on the nav-bar `?` button — onclick wiring, aria-label,
+  tooltip-mentions-shortcut, position relative to theme toggle),
+  `TestCheatsheetContent` (4 tests asserting the documented keys
+  appear in each section's `<dl>` — the cheatsheet IS the docs, so
+  drift between actual shortcuts and copy is a real risk),
+  `TestCheatsheetWiring` (4 tests on the JS plumbing: open/close
+  functions present, `?` listener registered, modal hidden by
+  default, input-focus guard present).
+* `tests/testid_reference.md` — added the trigger-button row to
+  the navigation table + a new "Keyboard shortcut cheatsheet
+  modal" subsection listing all eight modal testids.
+
+#### Design decisions
+
+* **Trigger button placement** — between the page-nav cluster and
+  the theme toggle, not at the end of the right rail.  Reasoning:
+  the `?` is a discoverability lever for first-time operators; the
+  theme toggle is something existing operators already know about.
+  Putting `?` first in the right rail (reading left-to-right)
+  catches the eye sooner.
+* **Modal styling reuse** — share the `cv-nav-btn` class for the
+  close button and the `_config-viewer` backdrop pattern.  One
+  more modal in the app should look like every other modal; the
+  alternative — a custom shell — would have added visual variance
+  for no operator benefit.
+* **`?` as toggle, not just open** — pressing `?` while open closes.
+  Matches the asymmetric-key convention from Gmail / GitHub
+  shortcut palettes; alternative was open-only with explicit Esc
+  to close, but the toggle is more discoverable.
+* **No `aria-keyshortcuts`** — the W3C-recommended attribute is
+  partial-support across screen readers; the redundant `title`
+  attribute on the trigger button (`Keyboard shortcuts (?)`) is
+  more reliable.
+
+#### Verification
+
+Full test sweep passed (3473 tests, exit code 0) skipping one
+pre-existing flaky e2e test (`TestThemeToggle::test_body_
+background_reflects_theme[chromium]` fails on stashed pre-R7 main
+too — flagged for post-launch investigation, not blocking this
+round).  Manual verification: `?` keypress on every page opens
+the modal; `?` again closes; Esc closes; clicking outside the
+inner box closes; nav-bar `?` button opens; typing `?` inside the
+config-viewer search input is treated as literal text (no modal
+hijack).
+
+
 
 Mid-Phase-3 doc-staleness sweep.  All Phase 3 PRs (#15-#25) shipped
 with CHANGELOG entries — that part of the discipline held.  The

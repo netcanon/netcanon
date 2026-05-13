@@ -17,8 +17,26 @@ CSS class names or element structure — so UI refactoring does not break tests.
 | `nav-devices`      | `<a>`   | Link to `/devices`; active on Devices page |
 | `nav-definitions`  | `<a>`   | Link to `/definitions`; active on Definitions page |
 | `nav-api-docs`     | `<a>`   | Link to `/docs` |
+| `kbd-cheatsheet-open-btn` | `<button>` | Right-rail `?` nav button; opens the keyboard-shortcut cheatsheet modal.  Sits immediately before `nav-theme-toggle` |
 | `nav-theme-toggle` | `<button>` | Right-aligned sun/moon toggle; flips `<html data-theme>` between `light`/`dark`, persists to `localStorage["netcanon.theme.v1"]`.  `aria-label` and `aria-pressed` live-update to reflect the ACTION (next-state), not the current state |
 | `toast`            | `<div>` | Fixed-position toast notification; hidden by default |
+
+### Keyboard shortcut cheatsheet modal (`base.html`)
+
+Global modal rendered on every page that extends `base.html`.  Opened
+by the `?` keypress (when no text input is focused) or by clicking
+`kbd-cheatsheet-open-btn`.  Hidden by default (CSS `display:none`).
+
+| `data-testid`                              | Element  | Notes |
+|--------------------------------------------|----------|-------|
+| `kbd-cheatsheet`                           | `<div>`  | Outer modal backdrop; `role="dialog"`.  Click outside the inner box closes |
+| `kbd-cheatsheet-title`                     | `<span>` | Header title "Keyboard shortcuts" |
+| `kbd-cheatsheet-close`                     | `<button>` | Close button (✕) in the header.  Receives focus when the modal opens |
+| `kbd-cheatsheet-body`                      | `<div>`  | Scrollable body containing the shortcut sections |
+| `kbd-cheatsheet-section-global`            | `<h3>`   | "Global" section heading; covers `?` and `Esc` |
+| `kbd-cheatsheet-section-config-viewer`     | `<h3>`   | "Config viewer (search box)" section; covers `Enter`, `Shift+Enter`, `Esc` |
+| `kbd-cheatsheet-section-diff`              | `<h3>`   | "Diff page (focused collapsed marker)" section; covers `Enter`, `Space` |
+| `kbd-cheatsheet-section-configs`           | `<h3>`   | "Configs page" section; covers `Esc` (compare-picker close) |
 
 ## Dashboard (`index.html`)
 
