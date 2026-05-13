@@ -601,7 +601,7 @@ hijack).
 
 
 
-Mid-Phase-3 doc-staleness sweep.  All Phase 3 PRs (#15-#25) shipped
+Mid-Phase-3 doc-staleness sweep.  All Phase 3 PRs shipped
 with CHANGELOG entries — that part of the discipline held.  The
 **supporting docs that describe phase state and the sanitize
 workflow** drifted because the rounds shipped fast enough that the
@@ -620,8 +620,8 @@ written, but obsolete after rounds 1, 2, 1.5, 3, 3.1, 4, 4.1, 4.2,
 Updated to:
 
 * Add **Phase 3 (in-flight, 9/13 rounds shipped)** as a shipped
-  phase entry, with a per-round bullet listing every PR (#15-#25)
-  with a one-line summary of what it closed.
+  phase entry, with a per-round bullet listing every PR with a
+  one-line summary of what it closed.
 * Add four new entries to "Remaining MUST-tier work before public
   flip": Round 7 (kbd cheatsheet), Round 8 (jobs-dict eviction),
   Round 9 (runtime checks — browser-compat + memory smoke), and
@@ -673,7 +673,8 @@ might need updating:
   (`netcanon/api/_errors.py` R3, `netcanon/migration/codecs/_input_shape.py`
   R4.2) carry full module docstrings; new tests landed in the
   existing tiers; testid_reference.md got sections for the new
-  sanitize page testids in PR #24 + R6.1 updates in PR #25.  No
+  sanitize page testids in the Round 6 PR + R6.1 updates in the
+  username-redaction PR.  No
   new doc-sync rule needed.
 * **`ARCHITECTURE.md`** — the operator-error translator (R3) and
   input-shape helper (R4.2) are tactical helpers, not architectural
@@ -1122,7 +1123,7 @@ and the new cisco-prefix regression test).
 
 ### Phase 3 — Polish pass, Round 4.1: detect-suggest also updates target on round-trip
 
-Defect surfaced during live testing of Round 4 (PR #20).  Operator
+Defect surfaced during live testing of Round 4.  Operator
 landed on `/migrate` with the default source=Cisco + target=Cisco
 selection, picked an OPNsense XML config via the "Pick a stored
 config" mode, and was offered the "Use this source" suggestion by
@@ -2508,8 +2509,8 @@ Docker Hub is the unsigned mirror.
 ### CI: Python 3.14 coverage + Docker build smoke test
 
 Closes the verification gap that the Dependabot Dockerfile bump
-(`python:3.13-slim-bookworm` → `python:3.14-slim-bookworm`,
-PR #2) opened: previously the test matrix tested 3.11/3.12/3.13
+(`python:3.13-slim-bookworm` → `python:3.14-slim-bookworm`)
+opened: previously the test matrix tested 3.11/3.12/3.13
 only, so the bumped base image was effectively unverified by CI.
 
 Two changes:
