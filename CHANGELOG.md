@@ -21,6 +21,121 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 3: backup-error translator layer
+
+Phase-3 audit's headline finding: every operator-visible failure on
+the backup-execute surface funneled through a single
+`except Exception` at `netcanon/api/routes/backups.py:355` that did
+`result.error = str(exc)[:500]`.  Quality varied wildly:
+
+* **GOOD** — in-house `ValueError` (50MB cap, missing
+  `netmiko_device_type` field) raised with carefully-chosen messages.
+* **OPAQUE** — `socket.timeout`'s empty `str`, `socket.gaierror`'s
+  bare `[Errno -2] Name or service not known`.
+* **LEAKY** — `NetmikoAuthenticationException`'s 10+ line "see also"
+  troubleshooting block crammed into a single toast;
+  `paramiko.SSHException`'s wildly inconsistent messages; `OSError` on
+  save exposing the server's internal filesystem paths to the
+  operator (privacy / security).
+
+Round 3 introduces a tight translator layer that collapses this
+surface into a host-prefixed, single-line operator-readable message
+per exception type — without changing the API contract, the server
+log, or any other route.
+
+#### `netcanon.api._errors.translate_backup_error()` — new module
+
+The translator lives in `netcanon/api/_errors.py` (module-private name
+on purpose — there is no use case for this outside `routes/backups.py`,
+and a public name would invite unrelated callers to plug in and dilute
+the mapping).  Signature:
+
+```python
+translate_backup_error(exc: BaseException, *, host: str,
+                       step: str = "collect") -> str
+```
+
+Returns a string in the form `"[<host>] <translation>"`.  Caller is
+responsible for the existing `[:500]` truncation that preserves the
+`BackupResult.error` wire contract.
+
+Mapping table is an ordered list of `(exception_type, formatter)`
+pairs checked via `isinstance` — ordering matters because subclass
+relationships matter (`ConnectionRefusedError` before generic
+`OSError`; `NetmikoAuthenticationException` before any future
+re-parenting of the Netmiko hierarchy).  Thirteen specific mappings
+plus a typed fallback covering: paramiko auth, netmiko auth, netmiko
+timeout, paramiko SSH (banner / no-kex / etc), `socket.gaierror`,
+`ConnectionRefusedError`, `ConnectionError` (reset / broken pipe /
+aborted), `TimeoutError` (also `socket.timeout` on Py ≥3.10),
+`UnicodeError`, in-house `ValueError` passthrough, `OSError`
+storage-write, internal-bug catch (`KeyError` / `AttributeError`),
+fully-unknown fallback.
+
+The `step="collect"` argument is reserved for the planned follow-up
+that splits the single try/except into per-phase blocks (connect /
+collect / save).  Carried in the signature today so call sites can be
+written against the final shape without churn.
+
+#### Why a function, not a FastAPI exception handler
+
+The failing code runs inside a `BackgroundTasks` worker thread (see
+`_run_backup_job` → `ThreadPoolExecutor`), **not** in an HTTP request
+lifecycle.  FastAPI's `@app.exception_handler` only fires on the
+request stack; it cannot intercept exceptions inside a background
+worker that writes to `BackupResult.error`.  A function call from the
+broad-except is the only shape that reaches the right code path.
+This is documented in the module docstring so future contributors
+don't re-litigate the choice.
+
+#### Caller change: one line in `backups.py`
+
+The broad-except now reads:
+
+```python
+result.error = translate_backup_error(
+    exc, host=device.host, step="collect",
+)[:500]
+```
+
+The full exception still goes to the server log via the existing
+`logger.error(..., exc_info=True)` immediately below.  The diagnostic
+trail is **preserved**; only the operator-visible text shape changed.
+
+#### Test coverage — 70 new unit tests
+
+`tests/unit/test_api_errors.py` is a green-field test module with no
+existing assertions to displace.  Coverage:
+
+* **16 parametrized exception types**, each asserted against four
+  contracts (host-prefix, expected concept substring, single-line,
+  under 500 chars).
+* **6 targeted regression tests** for high-value invariants:
+  storage-path-leak guard (OSError with `.filename` set must not
+  reveal the server path), paramiko-multi-line trimming, ValueError
+  passthrough preserving in-house messages verbatim, unknown-type
+  fallback surfacing the class name for grep-ability, `socket.timeout`
+  / `TimeoutError` alias parity on Py ≥3.10, `step` argument no-op
+  forward-compat contract.
+
+No existing tests broke: grep confirmed zero test assertions on the
+operator-visible backup-error text pre-Round-3 (existing
+`RuntimeError("simulated")` patterns asserted only on
+`status == "failed"`, which is unchanged).
+
+#### Out of scope (deliberately)
+
+* `netcanon/api/routes/migration.py:172` — `LookupError → 404 detail=str(exc)`.
+  `str(LookupError)` from `get_codec` is already operator-readable;
+  the same `[host] ...` shape doesn't apply here (no host in the
+  migration domain).  Could get a cosmetic touch in Round 4.
+* `netcanon/services/migration_pipeline.py` — already prefixes its
+  errors with `parse failed:` / `render failed:` / etc.  Different
+  convention; not a copy quality bug.
+* `netcanon/api/routes/configs.py:196` — already does the right thing
+  after Phase 3 Round 1.  Referenced as a precedent in the module
+  docstring.
+
 ### Phase 3 — Polish pass, Round 1.5: defects from visual sanity check
 
 Two defects surfaced during a manual eyeballing of Rounds 1 + 2.
