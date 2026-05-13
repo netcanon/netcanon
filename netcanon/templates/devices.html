@@ -3,12 +3,14 @@
 
 {% block content %}
 <style>
-  .device-card { background:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:.6rem; overflow:hidden; }
+  /* Device-card chrome — surface + border colours flow through the
+     base.html theme tokens so dark mode flips automatically. */
+  .device-card { background:var(--surface); border-radius:6px; box-shadow:var(--shadow-card); margin-bottom:.6rem; overflow:hidden; color:var(--text-primary); }
   .device-card-header { display:flex; align-items:center; gap:.75rem; padding:.7rem 1rem; cursor:pointer; user-select:none; flex-wrap:wrap; }
-  .device-card-header:hover { background:#f8f8f8; }
-  .device-card-body { border-top:1px solid #f0f0f0; padding:.75rem 1rem 1rem; }
-  .device-edit-panel { border-top:1px solid #e8e8f0; padding:.75rem 1rem; background:#fafafa; }
-  .device-chevron { margin-left:auto; color:#aaa; font-size:.75rem; transition:transform .15s; }
+  .device-card-header:hover { background:var(--surface-hover); }
+  .device-card-body { border-top:1px solid var(--border); padding:.75rem 1rem 1rem; }
+  .device-edit-panel { border-top:1px solid var(--border); padding:.75rem 1rem; background:var(--surface-alt); }
+  .device-chevron { margin-left:auto; color:var(--text-faint); font-size:.75rem; transition:transform .15s; }
   .device-chevron.open { transform:rotate(90deg); }
   .device-confirm { display:none; gap:.35rem; align-items:center; }
 </style>
@@ -70,7 +72,7 @@
       </div>
       <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
       <details class="port-details" style="align-self:flex-end">
-        <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+        <summary style="font-size:.8rem;font-weight:600;color:var(--accent);cursor:pointer;
                         user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
         <input name="port" type="number" value="22" min="1" max="65535"
                style="width:72px;margin-top:.25rem" data-testid="device-port-input"
@@ -83,7 +85,7 @@
            rarely needed — backup CLI behaviour almost never varies by
            model within a single OS family. -->
       <details class="port-details" style="align-self:flex-end">
-        <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+        <summary style="font-size:.8rem;font-weight:600;color:var(--accent);cursor:pointer;
                         user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Pin</summary>
         <div style="display:flex;gap:.5rem;margin-top:.25rem">
           <input name="os_version" type="text" placeholder="OS ver (opt)"
@@ -122,9 +124,9 @@
 
       <strong data-testid="device-name">{{ profile.name }}</strong>
       <span class="badge" data-testid="device-type"
-            style="background:#e8e8f0;color:#333">{{ profile.type_key }}</span>
-      <span data-testid="device-host" style="font-size:.88rem;color:#555">{{ profile.host }}</span>
-      <span style="font-size:.82rem;color:#aaa">
+            style="background:var(--surface-elev);color:var(--text-primary)">{{ profile.type_key }}</span>
+      <span data-testid="device-host" style="font-size:.88rem;color:var(--text-muted)">{{ profile.host }}</span>
+      <span style="font-size:.82rem;color:var(--text-faint)">
         {{ configs_by_profile.get(profile.id, []) | length }} backup(s)
       </span>
 
@@ -202,7 +204,7 @@
                    data-testid="device-edit-notes-input">
           </div>
           <details class="port-details" style="align-self:flex-end">
-            <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+            <summary style="font-size:.8rem;font-weight:600;color:var(--accent);cursor:pointer;
                             user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
             <input name="port" type="number" value="{{ profile.port }}" min="1" max="65535"
                    style="width:72px;margin-top:.25rem"
@@ -210,7 +212,7 @@
           </details>
           <details class="port-details" style="align-self:flex-end"
                    {% if profile.os_version or profile.model %}open{% endif %}>
-            <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+            <summary style="font-size:.8rem;font-weight:600;color:var(--accent);cursor:pointer;
                             user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Pin</summary>
             <div style="display:flex;gap:.5rem;margin-top:.25rem">
               <input name="os_version" type="text" value="{{ profile.os_version or '' }}"
@@ -232,16 +234,16 @@
            last successful probe. #}
         {% if profile.detected_facts %}
         <div class="form-row" data-testid="device-edit-detected-facts"
-             style="margin-top:.5rem;padding:.5rem;background:#f0f4f8;
-                    border-left:3px solid #7eb8f7;border-radius:3px">
-          <div style="font-size:.75rem;font-weight:600;color:#6b7280;
+             style="margin-top:.5rem;padding:.5rem;background:var(--surface-alt);
+                    border-left:3px solid var(--accent);border-radius:3px">
+          <div style="font-size:.75rem;font-weight:600;color:var(--text-muted);
                       width:100%;margin-bottom:.25rem">
             Detected facts (from last probe) &mdash; read-only
           </div>
           {% for key, value in profile.detected_facts.items() %}
           <div style="font-size:.8rem;margin-right:1.5rem"
                data-testid="device-edit-detected-fact-{{ key | replace('_', '-') }}">
-            <span style="color:#6b7280">{{ key | replace('_', ' ') }}:</span>
+            <span style="color:var(--text-muted)">{{ key | replace('_', ' ') }}:</span>
             <span style="font-family:monospace">{{ value }}</span>
           </div>
           {% endfor %}
@@ -273,7 +275,7 @@
         {% for config in configs_by_profile[profile.id] | sort(attribute='timestamp', reverse=True) %}
         <tr data-testid="device-config-row">
           <td data-testid="device-config-file">
-            <code style="font-size:.78rem;color:#888">{{ config.filename }}</code>
+            <code style="font-size:.78rem;color:var(--text-faint)">{{ config.filename }}</code>
           </td>
           <td data-testid="device-config-timestamp"
               data-utc="{{ config.timestamp.isoformat() }}">

@@ -21,6 +21,143 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 Round 7.1: dark-mode coverage sweep (in-app surfaces)
+
+Visual verification on Round 7 surfaced **six pre-existing dark-mode
+coverage gaps** across the in-app templates — vendor chips, the
+configs compare-picker modal, the migrate `<textarea>` + result
+card, schedules target panels + Disabled badge, sanitize page's
+undefined-token fallbacks, the migrate/diff/sanitize banner palette,
+and the job-progress icon colours.  These existed on `main` pre-R7
+but became visible enough during R7 verification that the user
+flagged them.
+
+Single PR (`r7.1-dark-mode-coverage`).  Swagger UI internals
+theming (`/docs` page) deferred to Round 7.2 — partial-Swagger
+nav-sync work would create worse UX than the current always-light
+docs page.
+
+#### Recurring patterns DRYed out
+
+This round was overwhelmingly mechanical: replace hardcoded hex
+values with the existing CSS-variable tokens already declared in
+`base.html`.  Five patterns repeated across files:
+
+1. **`background:#fff` card surfaces** → `var(--surface)` +
+   `box-shadow:var(--shadow-card)`.  Applied to `.device-card`,
+   `.job-card`, `.mig-form`, `.mig-result-section`,
+   `#mig-rename-modal`, `#compare-picker-box`, `.san-result-section`.
+2. **Banner palette literals** (`#d4edda/#155724` etc.) →
+   `var(--badge-completed-bg/-fg)` / `var(--badge-partial-bg/-fg)`
+   / `var(--badge-failed-bg/-fg)` / `var(--alert-info-bg/-fg)`.
+   Applied to `.diff-banner-*`, `.mig-banner-*`, `#mig-rename-fitcheck.fit-*`,
+   `table.mig-rename-table tr.has-warning/collision/drop`, `.san-banner-info`.
+3. **Chip pattern `background:#e8e8f0;color:#333`** →
+   `var(--surface-elev)` + `var(--text-primary)`.  Applied to
+   `.diff-chip`, devices `device-type` chip, schedules profile
+   chip, configs `.compare-option .type-chip`.
+4. **Muted text colours** `#555/#666/#888/#aaa/#bbb` →
+   `var(--text-muted)` / `var(--text-faint)` based on contrast
+   intent.  ~20 occurrences across migrate.html, schedules.html,
+   sanitize.html, jobs.html, devices.html, index.html.
+5. **`<textarea>` not in base.html's `input, select` rule** → added
+   `textarea` to the selector list.  This single edit fixes both
+   the migrate textarea AND the sanitize textarea (and any future
+   `<textarea>` element added to the app).
+
+#### Specific high-impact fixes
+
+* **sanitize.html undefined-token fallbacks**: the page CSS
+  referenced `var(--bg-input)`, `var(--bg-card)`, and `var(--text)`
+  — none of which are declared in base.html.  The hardcoded
+  fallback values (`#fff` / `#1a1a2e` / `#ccc`) kicked in, making
+  the textarea + result card stay light in dark mode regardless of
+  the document's `data-theme` attribute.  Switched to
+  `var(--surface)` / `var(--text-primary)` / `var(--border-strong)`
+  (real tokens).
+* **configs.html compare-picker modal**: the operator-flagged "full-
+  white modal in dark mode" surface.  The `#compare-picker-box`
+  rule now uses `var(--surface)` + `var(--shadow-modal)` and the
+  inner option rows + type chips re-theme correctly.  The modal
+  header keeps its always-dark `#1a1a2e` (intentional — matches
+  the config-viewer header + nav-bar convention).
+* **migrate.html rename modal chrome**: ~20 separate hex
+  declarations across the modal toolbar, rail, table, fit-check
+  banner, row-state highlights, summary chips, and footer.  All
+  tokenized.  Active rail buttons retain their always-dark navy
+  styling (intentional — mirrors the nav).
+* **schedules.html Disabled badge**: was `#e2e3e5/#383d41` (light
+  grey on near-black) — already-defined `var(--badge-pending-bg/-fg)`
+  tokens cover the same semantic, so reused those.  Same swap
+  applied to `.enabled-badge` → `var(--badge-completed-bg/-fg)`.
+* **base.html job-progress icon colours**: the `.jp-icon-running`
+  / `-success` / `-failed` colours were sourced from the light-mode
+  badge text-foreground palette (`#856404` / `#155724` / `#721c24`)
+  which became near-invisible on dark `--surface`.  Switched to
+  the `--badge-*-fg` tokens so dark mode picks up the bright
+  contrast variants automatically.
+
+#### What stays hardcoded — by design
+
+Surfaces that are intentionally always-dark (operator-facing as
+always-dark, regardless of theme):
+
+* Nav bar (`var(--nav-bg)` = `#1a1a2e` light / `#0d0d18` dark) — same
+  navy in both modes, with a slight dark-mode adjustment.
+* Config-viewer modal header — always-dark `#1a1a2e/#eee`.
+* Config-viewer `<pre>` body + VS Code "Dark+" syntax-highlight
+  palette (tok-*) — pre blocks are always dark.
+* Job-progress panel header — always-dark navy.
+* Diff page body + collapsed-context markers + add/remove markers
+  — diff view is always dark (mirrors GitHub diff convention).
+* Migrate rename modal header + active rail buttons + preview pane.
+* `mig-chip` semantic-classification colour variants (router-green,
+  firewall-red, etc.) — always-on category colours regardless of
+  theme; semantic meaning is preserved.
+
+#### File breakdown
+
+* `base.html` — added `textarea` to the `input, select` rule;
+  tokenized the 4 `.jp-icon-*` colours.
+* `index.html` — 2 small fixes (gear-icon disclosure + "(optional)"
+  hint).
+* `devices.html` — card chrome + edit panel + chip + detected-facts
+  panel + 4 `<summary>` accent colours.
+* `jobs.html` — full card chrome + 6 muted-text colours + status
+  icon colours + btn-link tokens.
+* `configs.html` — compare-picker modal (box, options, type chip,
+  hover); hash-scroll highlight; 2 JS-injected muted-text styles.
+* `schedules.html` — badges + 2 target panels (inline) + profile
+  chip + various muted text.
+* `migrate.html` — banner palette + form + result section + path
+  list + draggable rename modal (toolbar, fitcheck, rail, table,
+  row-state highlights, summary, footer) + 4 inline text colours.
+* `diff.html` — chip + banner palette + stats + direction arrow.
+* `sanitize.html` — undefined-var fallbacks removed; banner +
+  audit table + output area tokenized.
+* `_partials/rename-table.js` — JS-emitted collision-count chip.
+* `tests/integration/test_dark_mode_coverage.py` (new, **16 tests**)
+  — regression guards for each operator-flagged surface plus the
+  recurring patterns.
+
+#### Verification
+
+Full test suite passed (exit 0, +16 new tests, total 3489).  Manual
+visual verification: every operator-flagged surface (devices, jobs,
+schedules, configs compare-picker, migrate form/textarea/rename
+modal/banners, sanitize page) re-themes correctly when the theme
+toggle flips.
+
+#### Deferred to Round 7.2
+
+The Swagger UI `/docs` page remains light-only.  Its dark mode
+needs (a) syncing the nav extension (`?` button + theme toggle, both
+currently absent from the docs page's hand-rolled nav), AND (b)
+shipping CSS overrides for ~30-40 Swagger UI class selectors
+(`.swagger-ui .opblock-*`, `.swagger-ui table`, etc.).  Doing one
+without the other creates worse UX than the status quo, so deferred
+as a self-contained follow-up round.
+
 ### Phase 3 Round 7: keyboard-shortcut cheatsheet modal (UX polish)
 
 The app shipped four undocumented keyboard shortcuts (config-viewer

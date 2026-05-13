@@ -10,7 +10,8 @@
   .diff-header h1 { margin:0; font-size:1.25rem; }
   .diff-chip {
     display:inline-block; padding:.1rem .5rem; border-radius:4px;
-    font-size:.8rem; font-weight:600; background:#e8e8f0; color:#1a1a2e;
+    font-size:.8rem; font-weight:600;
+    background:var(--surface-elev); color:var(--text-primary);
     font-family:monospace;
   }
   .diff-toolbar {
@@ -23,19 +24,22 @@
     text-transform:uppercase; background:#1a1a2e; color:#eee;
   }
   .diff-role-label.to { background:#0b6e37; }  /* green — the destination of the diff */
-  .diff-direction-arrow { color:#7eb8f7; font-size:1.1rem; font-weight:700; user-select:none; }
-  .diff-stats { font-family:monospace; color:#555; }
-  .diff-stats-lead { color:#555; margin-right:.25rem; }
-  .diff-stats .stat-add    { color:#155724; font-weight:700; }
-  .diff-stats .stat-remove { color:#721c24; font-weight:700; }
-  .diff-stats .stat-equal  { color:#888; }
+  .diff-direction-arrow { color:var(--accent); font-size:1.1rem; font-weight:700; user-select:none; }
+  .diff-stats { font-family:monospace; color:var(--text-muted); }
+  .diff-stats-lead { color:var(--text-muted); margin-right:.25rem; }
+  .diff-stats .stat-add    { color:var(--badge-completed-fg); font-weight:700; }
+  .diff-stats .stat-remove { color:var(--badge-failed-fg); font-weight:700; }
+  .diff-stats .stat-equal  { color:var(--text-faint); }
   .diff-banner {
     padding:.65rem 1rem; border-radius:6px; font-size:.88rem;
     margin-bottom:1rem; display:flex; align-items:center; gap:.75rem;
   }
-  .diff-banner-ok     { background:#d4edda; color:#155724; }
-  .diff-banner-warn   { background:#ffeaa7; color:#7a5d00; }
-  .diff-banner-block  { background:#f8d7da; color:#721c24; }
+  /* Banner colour pairs flow through --badge-* tokens so dark mode
+     re-themes them automatically — pre-tokenization these were stuck
+     in the light palette on every theme. */
+  .diff-banner-ok     { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  .diff-banner-warn   { background:var(--badge-partial-bg);   color:var(--badge-partial-fg); }
+  .diff-banner-block  { background:var(--badge-failed-bg);    color:var(--badge-failed-fg); }
   .diff-body {
     background:#1e1e1e; color:#d4d4d4; border-radius:6px;
     overflow:auto; font-family:monospace; font-size:.85rem;

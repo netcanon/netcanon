@@ -3,36 +3,40 @@
 
 {% block content %}
 <style>
-  .job-card { background:#fff; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,.1); margin-bottom:.6rem; overflow:hidden; }
+  /* Job-card chrome flows through base.html theme tokens.  The
+     btn-link / btn-link-btn pair uses the secondary-button tokens so
+     dark mode picks up the correct fg/bg contrast — pre-tokenization
+     these read as light pills on dark cards. */
+  .job-card { background:var(--surface); border-radius:6px; box-shadow:var(--shadow-card); margin-bottom:.6rem; overflow:hidden; color:var(--text-primary); }
   .job-card-header {
     display:flex; align-items:center; gap:.75rem; padding:.7rem 1rem;
     cursor:pointer; user-select:none; flex-wrap:wrap;
   }
-  .job-card-header:hover { background:#f8f8f8; }
-  .job-id  { font-family:monospace; font-size:.88rem; color:#444; min-width:7rem; }
-  .job-when { font-size:.85rem; color:#666; }
-  .job-trigger { font-size:.8rem; color:#888; margin-left:.25rem; }
-  .job-duration { font-size:.8rem; color:#aaa; }
-  .job-chevron { margin-left:auto; color:#aaa; font-size:.75rem; transition:transform .15s; }
+  .job-card-header:hover { background:var(--surface-hover); }
+  .job-id  { font-family:monospace; font-size:.88rem; color:var(--text-primary); min-width:7rem; }
+  .job-when { font-size:.85rem; color:var(--text-muted); }
+  .job-trigger { font-size:.8rem; color:var(--text-muted); margin-left:.25rem; }
+  .job-duration { font-size:.8rem; color:var(--text-faint); }
+  .job-chevron { margin-left:auto; color:var(--text-faint); font-size:.75rem; transition:transform .15s; }
   .job-chevron.open { transform:rotate(90deg); }
-  .job-card-body { border-top:1px solid #f0f0f0; padding:.75rem 1rem 1rem; }
+  .job-card-body { border-top:1px solid var(--border); padding:.75rem 1rem 1rem; }
   .job-results-table th { font-size:.8rem; }
   .job-results-table td { font-size:.85rem; vertical-align:middle; }
-  .filename { font-family:monospace; font-size:.78rem; color:#888; display:block; margin-top:.15rem; }
-  .error-msg { color:#721c24; font-size:.82rem; }
+  .filename { font-family:monospace; font-size:.78rem; color:var(--text-faint); display:block; margin-top:.15rem; }
+  .error-msg { color:var(--badge-failed-fg); font-size:.82rem; }
   .btn-link { font-size:.82rem; padding:.2rem .5rem; border-radius:3px;
-              background:#e8e8f0; color:#1a1a2e; text-decoration:none;
+              background:var(--btn-secondary-bg); color:var(--btn-secondary-fg); text-decoration:none;
               margin-right:.25rem; display:inline-block; }
-  .btn-link:hover { background:#d0d0e0; text-decoration:none; }
+  .btn-link:hover { background:var(--btn-secondary-bg-hover); text-decoration:none; }
   .btn-link-btn { font-size:.82rem; padding:.2rem .5rem; border-radius:3px;
-                  background:#e8e8f0; color:#1a1a2e; border:none; cursor:pointer;
+                  background:var(--btn-secondary-bg); color:var(--btn-secondary-fg); border:none; cursor:pointer;
                   margin-right:.25rem; font-weight:normal; }
-  .btn-link-btn:hover { background:#d0d0e0; }
+  .btn-link-btn:hover { background:var(--btn-secondary-bg-hover); }
 </style>
 
 <div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1.25rem">
   <h1 style="margin-bottom:0">Backup Jobs</h1>
-  <span style="font-size:.85rem;color:#888">{{ jobs|length }} job{{ 's' if jobs|length != 1 else '' }}</span>
+  <span style="font-size:.85rem;color:var(--text-faint)">{{ jobs|length }} job{{ 's' if jobs|length != 1 else '' }}</span>
 </div>
 
 {% if not jobs %}
@@ -59,11 +63,11 @@
     <span data-testid="job-success-count">
       {{ success_count }}/{{ job.total_devices }}
       {% if success_count == job.total_devices and job.total_devices > 0 %}
-        <span style="color:#155724">&#10003;</span>
+        <span style="color:var(--badge-completed-fg)">&#10003;</span>
       {% elif success_count == 0 and job.total_devices > 0 %}
-        <span style="color:#721c24">&#10007;</span>
+        <span style="color:var(--badge-failed-fg)">&#10007;</span>
       {% elif success_count < job.total_devices %}
-        <span style="color:#7a5d00">&#9888;</span>
+        <span style="color:var(--badge-partial-fg)">&#9888;</span>
       {% endif %}
     </span>
 

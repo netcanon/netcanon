@@ -197,7 +197,7 @@
         + '<span class="count">' + rows.length + '</span>'
         + (warnCount ? '<span class="count warn-count">'
              + warnCount + ' ⚠</span>' : '')
-        + (collisionCount ? '<span class="count" style="color:#721c24">'
+        + (collisionCount ? '<span class="count" style="color:var(--badge-failed-fg)">'
              + collisionCount + ' collisions</span>' : '');
       section.appendChild(summary);
 

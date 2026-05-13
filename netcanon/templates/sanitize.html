@@ -13,37 +13,45 @@
                         align-items:center; }
   .san-input-mode label { display:flex; gap:.35rem; align-items:center; cursor:pointer;
                         font-weight:normal; }
+  /* All theme-able colours flow through base.html's --* tokens.  The
+     pre-fix CSS referenced two token names that aren't declared
+     anywhere in base.html (an "input bg" and a "card bg" alias), so
+     the fallback hex took effect and the textarea + result card
+     stayed light even when the document data-theme flipped to dark.
+     Switched to the canonical surface tokens. */
   .san-raw            { width:100%; min-height:220px; font-family:'Consolas','Courier New',monospace;
                         font-size:.85rem; padding:.5rem; box-sizing:border-box;
-                        background:var(--bg-input, #fff); color:var(--text, #1a1a2e);
-                        border:1px solid var(--border, #ccc); border-radius:4px; }
-  .san-result-section { background:var(--bg-card, #fff); padding:1rem;
+                        background:var(--surface); color:var(--text-primary);
+                        border:1px solid var(--border-strong); border-radius:4px; }
+  .san-result-section { background:var(--surface); padding:1rem;
                         border-radius:6px; margin-top:1rem;
-                        box-shadow:0 1px 3px rgba(0,0,0,.06); }
-  .san-stats          { font-family:monospace; font-size:.88rem; color:var(--text-muted, #555);
+                        box-shadow:var(--shadow-card); color:var(--text-primary); }
+  .san-stats          { font-family:monospace; font-size:.88rem; color:var(--text-muted);
                         display:flex; flex-wrap:wrap; gap:1rem; }
-  .san-stat-label     { color:var(--text-muted, #555); }
-  .san-output         { background:#1a1a2e; color:#e6e6f0; padding:.75rem 1rem;
+  .san-stat-label     { color:var(--text-muted); }
+  .san-output         { background:var(--pre-bg); color:var(--pre-fg); padding:.75rem 1rem;
                         font-family:'Consolas','Courier New',monospace; font-size:.82rem;
                         line-height:1.4; overflow-x:auto; border-radius:4px;
                         max-height:480px; }
   .san-audit-table    { width:100%; border-collapse:collapse; font-size:.82rem; }
   .san-audit-table th,
-  .san-audit-table td { padding:.35rem .5rem; border-bottom:1px solid var(--border, #eee);
+  .san-audit-table td { padding:.35rem .5rem; border-bottom:1px solid var(--border);
                         text-align:left; vertical-align:top; }
-  .san-audit-table td.cat   { font-family:monospace; color:var(--text-muted, #555);
+  .san-audit-table td.cat   { font-family:monospace; color:var(--text-muted);
                               white-space:nowrap; }
   .san-audit-table td.orig,
   .san-audit-table td.redacted { font-family:monospace; word-break:break-all; }
-  .san-chip           { display:inline-block; background:#5cb85c; color:#fff;
+  .san-chip           { display:inline-block; background:var(--badge-completed-bg);
+                        color:var(--badge-completed-fg);
                         border-radius:8px; padding:.05rem .45rem; font-size:.72rem;
                         font-weight:700; font-family:monospace; }
-  .san-banner-info    { background:#d9edf7; color:#31708f; padding:.5rem .75rem;
+  .san-banner-info    { background:var(--alert-info-bg); color:var(--alert-info-fg);
+                        padding:.5rem .75rem;
                         border-radius:4px; margin:.5rem 0; }
 </style>
 
 <h1>Sanitize</h1>
-<p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
+<p style="color:var(--text-muted);font-size:.9rem;margin:.25rem 0 1rem">
   Strip identifying details — hostnames, usernames, public IPs,
   password hashes, SNMP communities, RADIUS shared secrets — from a
   network config before sharing it in a bug report or support ticket.
@@ -104,7 +112,7 @@
   </div>
 
   <div class="form-row" style="margin-top:.75rem;align-items:center;gap:1rem">
-    <label style="font-size:.82rem;color:#555;display:flex;align-items:center;gap:.35rem">
+    <label style="font-size:.82rem;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">
       <input type="checkbox" id="san-dry-run"
              data-testid="sanitize-dry-run-checkbox"
              title="Preview the audit log without rendering the sanitized output.  Useful when you want to verify what WILL be redacted before trusting the round-trip render.  When unchecked, both the audit and the sanitized output render together.">
@@ -120,7 +128,7 @@
 <div id="san-result" data-testid="sanitize-result" class="hidden">
   <div class="san-result-section">
     <div id="san-status-summary" data-testid="sanitize-status-summary"
-         style="font-family:monospace;font-size:.82rem;color:#888;margin-bottom:.5rem"></div>
+         style="font-family:monospace;font-size:.82rem;color:var(--text-faint);margin-bottom:.5rem"></div>
     <div id="san-stats" class="san-stats" data-testid="sanitize-stats"></div>
   </div>
 
@@ -128,7 +136,7 @@
            data-testid="sanitize-output-section">
     <div style="display:flex;justify-content:space-between;align-items:center;
                 margin-bottom:.5rem">
-      <span style="font-size:.85rem;color:#888;text-transform:uppercase;
+      <span style="font-size:.85rem;color:var(--text-faint);text-transform:uppercase;
                    letter-spacing:.05em">Sanitized output</span>
       <div style="display:flex;gap:.5rem">
         <button type="button" class="btn-secondary"
@@ -151,7 +159,7 @@
   <section class="san-result-section" data-testid="sanitize-audit-section">
     <details open>
       <summary style="cursor:pointer;font-size:.9rem;font-weight:600;
-                      padding:.25rem 0;color:#333">
+                      padding:.25rem 0;color:var(--text-primary)">
         Substitution audit
         <span id="san-audit-count" data-testid="sanitize-audit-count"
               class="san-chip" style="margin-left:.5rem"></span>
