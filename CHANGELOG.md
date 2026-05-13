@@ -21,6 +21,79 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 5: tooltip pass on form-heavy pages
+
+The Phase-3 audit flagged the backup form (`index.html`) and the
+schedules form (`schedules.html`) as **HIGH-severity** tooltip gaps —
+zero `title=` attributes across 7 + 4 form fields, leaving operators
+to guess what each field meant.  The migrate page (best-tooltipped
+before this round) had Source / Target adapter selects without
+format-specific guidance.
+
+Round 5 ships **21 tooltips** across four templates, all on
+input / select elements so they trigger on hover.  Each tooltip is
+written to answer one of three operator questions: *"what is this
+for?"*, *"what's a valid value?"*, *"what happens if I leave it blank
+or use the default?"*  Capped at ~200 chars per tooltip so browsers
+don't wrap them weirdly.
+
+#### `index.html` — backup form (7 tooltips)
+
+| Field | Tooltip |
+|---|---|
+| Device Type | "Vendor + OS family that determines how Netcanon connects (Paramiko shell vs Netmiko), what config command to run, and how to parse the output." |
+| Host / IP | "IPv4 (192.168.1.1), IPv6 (2001:db8::1), or RFC-1123 hostname (core-sw-01.example.com)." |
+| Username | "SSH login. Common defaults: admin (most vendors), netadmin (Aruba), root (OPNsense). Use a service account in production." |
+| Password | "SSH password. Encrypted at rest with Fernet — see SECURITY.md → Credential Storage for the resolution chain." |
+| Enable Password | "Privileged-mode (enable / superuser) password. Only required when the selected Device Type's definition sets `needs_enable=true` (Cisco IOS, FortiOS, …). Auto-shows when needed." |
+| Port (collapsed under ⚙) | "TCP port for SSH. Defaults to 22. Change only if the device runs SSH on a non-standard port." |
+| Save as device profile | "Optional friendly name. When set, the entry is persisted to /devices and pre-selectable in the Device Profile dropdown above for future backups." |
+
+#### `devices.html` — create form (7 tooltips)
+
+Same 7 fields as `index.html`'s backup form plus a Notes-field
+tooltip ("Free-text notes attached to the profile (rack location,
+owner, change ticket, etc.). Not used by the backup pipeline.").
+The 5 overlay-pin tooltips already shipping at
+`devices.html:84, 87, 212, 216` are unchanged — they were the audit's
+"good ratio" reference.  The edit form (10 fields, separate
+section) is deliberately left untouched: operators editing an
+existing profile already understand the schema.
+
+#### `schedules.html` — 5 tooltips (3 fields + 2 section headings)
+
+| Element | Tooltip |
+|---|---|
+| Schedule Name | "Shown in the schedules table and in job logs. Pick something a second operator would recognise without context." |
+| Run every (preset) | "How often the schedule fires. Cron expressions aren't supported — pick a preset or enter minutes via 'Custom…'." |
+| Custom minutes input | "Minutes between runs (1 to 43,200 = 30 days). Schedule fires as soon as the interval elapses after the previous run." |
+| "Target by Device Type" H3 | "Match-by-vendor: every saved Device Profile whose Device Type is checked here runs when the schedule fires. Unioned with 'Target Specific Devices' below." |
+| "Target Specific Devices" H3 | "Match-by-profile: explicitly listed profiles always run. Use for one-offs or to single out a device from a type-wide schedule." |
+
+The two H3 tooltips fold the previously-inline `<span>` hints into
+hover detail — the inline hints stay too (they're free-floating
+column-format docs that don't need a hover) but the H3 tooltip
+explains the *union* semantics the inline span can't fit.
+
+#### `migrate.html` — Source / Target adapter selects (2 tooltips)
+
+Recon-agent recommendation from Round 4: format-specific guidance on
+the adapter labels is more useful than a paragraph of intro text
+above the form (which is why Round 4 Sub-task C kept the intro
+short and deferred richer guidance to here).
+
+| Element | Tooltip |
+|---|---|
+| Source adapter | "What format your input is in. Cisco IOS-XE expects CLI text (show running-config); OPNsense expects XML (config.xml); Junos expects 'set'-form or block-form; FortiOS expects CLI (show full-configuration)." |
+| Target adapter | "What format Netcanon renders. Same-vendor (round-trip) and cross-vendor both supported. Capability gaps + Tier-3 sections that don't translate are surfaced inline after the run." |
+
+#### Zero behavioural changes
+
+Pure additive `title=` attributes; no JS, no testids changed, no
+labels reworded.  Full unit + integration suite green (3435 passed,
+57 skipped — no delta vs. post-R4.2 baseline because this is HTML-
+attribute-only work).
+
 ### Phase 3 — Polish pass, Round 4.2: input-shape helper + UI defense-in-depth
 
 Defect surfaced during the visual sanity check of Round 4 / 4.1.  When

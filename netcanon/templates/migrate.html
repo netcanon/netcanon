@@ -317,13 +317,15 @@
     <div class="form-group">
       <label for="mig-source">Source adapter</label>
       <select id="mig-source" name="source"
-              data-testid="migrate-source-select" required></select>
+              data-testid="migrate-source-select" required
+              title="What format your input is in. Cisco IOS-XE expects CLI text (show running-config); OPNsense expects XML (config.xml); Junos expects 'set'-form or block-form; FortiOS expects CLI (show full-configuration)."></select>
     </div>
     <span class="mig-arrow" aria-hidden="true">&rarr;</span>
     <div class="form-group">
       <label for="mig-target">Target adapter</label>
       <select id="mig-target" name="target"
-              data-testid="migrate-target-select" required></select>
+              data-testid="migrate-target-select" required
+              title="What format Netcanon renders. Same-vendor (round-trip) and cross-vendor both supported. Capability gaps + Tier-3 sections that don't translate are surfaced inline after the run."></select>
     </div>
   </div>
 
