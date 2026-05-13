@@ -45,12 +45,12 @@ that file.
   signal as invitation; headline `docker run` install; Phase-4
   walkthroughs promoted; Tier-1/2/3 summary inline; contributor
   scaffolding demoted below the operator content.
-* **Phase 3 (in-flight, 9/13 rounds shipped)** — pre-launch
-  quality hardening, executed as an audit-driven multi-session
-  arc.  The audit catalogued three buckets (failure-mode quality,
-  browser / desktop polish, operator-facing copy quality) and
-  produced a punch list; each round closes a thematic cluster.
-  Shipped so far:
+* **Phase 3 (complete, 14/14 MUST-tier rounds shipped)** —
+  pre-launch quality hardening, executed as an audit-driven
+  multi-session arc.  The audit catalogued three buckets
+  (failure-mode quality, browser / desktop polish, operator-facing
+  copy quality) and produced a punch list; each round closes a
+  thematic cluster.  Shipped:
   - **Round 1**: actionable editor-endpoint errors +
     visible overlays empty state on `/definitions`.
   - **Round 2**: vocabulary discipline pass — one
@@ -86,36 +86,58 @@ that file.
     (`local-user-name`, `snmpv3-user-name` categories with
     iterative per-class numbering) + operator-facing safety note
     about non-functional placeholders.
+  - **Round 7**: keyboard-shortcut cheatsheet modal (`?` opens)
+    documenting the existing-but-undocumented shortcuts
+    (config-viewer search Enter / Shift+Enter / Esc, diff-page
+    collapsed-marker Enter / Space, configs-page compare-picker
+    Esc) on a global modal with discoverability via the nav-bar
+    `?` button.
+  - **Round 7.1**: dark-mode coverage sweep across in-app
+    surfaces — six pre-existing dark-mode regressions on
+    devices / jobs / schedules / configs compare-picker / migrate
+    textarea + form + rename modal / sanitize page, all tokenized
+    via the existing `var(--surface)` / `var(--badge-*)` system.
+  - **Round 7.2**: Swagger UI `/docs` page dark mode + nav sync —
+    boot script + token definitions injected at `<body>` open,
+    nav-bar parity with base.html (page-nav + `?` cheatsheet +
+    theme toggle), ~30 Swagger UI dark-mode CSS overrides.
+  - **Round 8**: backup-job registry refactor — `app.state.jobs`
+    swapped from unbounded `dict[str, BackupJob]` to
+    `BackupJobRegistry` with LRU eviction at `max_memory_jobs`
+    (default 1000) + transparent disk lazy-load on get-by-id miss.
+    Caps memory at ~5 MB regardless of historical job count.
+  - **Round 9**: runtime checks — 6 lightweight load + memory
+    smoke tests (sustained load, eviction + persistence,
+    concurrent backups, multi-device burst, BackupJob instance
+    count bound, tracemalloc peak) + manual browser-compat sweep
+    in Chrome + Firefox.
+  - **Round 10**: cut `v0.1.0-rc7` + finalize CHANGELOG +
+    RELEASE_PLAN status (this entry) + pre-public-flip privacy
+    workflow (CHANGELOG PII scrub + private PR-archive retention
+    at netcanon/netcanon-archive + repo migration: old repo
+    renamed to netcanon-old, fresh netcanon/netcanon created
+    from current main, all rc tags + history preserved on new
+    repo; old repo retained private with PR history intact).
 
   Cumulative impact: full unit + integration suite grew from
-  3266 (post-Phase-7) to **3453 tests** (the +187 figure is part
-  test additions, part doc-fix follow-ups).  Every PR
-  squash-merged + green on the 4-Python-version CI matrix.
+  3266 (post-Phase-7) to **3556 tests** (+290 over Phase 3).
+  Every Phase 3 PR squash-merged + green on the 4-Python-version
+  CI matrix.
 
-**Remaining MUST-tier work before public flip:**
+**Next:**
 
-* **Phase 3 Round 7** — keyboard shortcut cheatsheet (`?` modal
-  documenting the existing-but-undocumented shortcuts:
-  config-viewer Enter/Shift-Enter/Esc, diff-page Enter/Space to
-  expand, compare-picker Esc close).  Small (~30 min).
-* **Phase 3 Round 8** — jobs-dict eviction (the in-memory
-  `BackupJob` registry grows unbounded; per Round-3 recon
-  this is the highest-leverage hygiene item).
-* **Phase 3 Round 9** — runtime checks: browser-compat sweep
-  (Chrome/Firefox/Safari/Edge) + memory smoke under load
-  (10 devices × 100KB × concurrent backups).  Needs Docker
-  + browsers; deferred pending host-env availability.
-* **Phase 3 Round 10** — cut `v0.1.0-rc7` + finalize
-  CHANGELOG / RELEASE_PLAN.
+* **Public flip + tag v0.1.0 final** — convert repo from private
+  to public visibility, push v0.1.0 final tag, set GitHub Topics +
+  extended description per [`IDENTITY.md`](IDENTITY.md).
+  Prerequisites: `DOCKERHUB_TOKEN` + `DOCKERHUB_USERNAME` re-added
+  as repo secrets (these stayed on the old repo post-rename);
+  PyPI Trusted Publisher re-linked to the new repo slug.
 
 **Optional:**
 
 * **Phase 8 — private beta** with trusted-tester exposure before
   fully public flip.  Skippable if confident the v0.1.0-rc cycle
   surfaced enough.
-* **Public flip + tag v0.1.0 final** — convert repo from private
-  to public visibility, push v0.1.0 final tag, set GitHub Topics +
-  extended description per [`IDENTITY.md`](IDENTITY.md).
 
 ---
 
