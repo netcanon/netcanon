@@ -19,11 +19,48 @@ Both share the same sanitization step.  Both are deeply welcome.
 ## Sanitize first, always
 
 Network configs contain credentials, encryption keys, real WAN IPs,
-real internal hostnames, and personally-identifying information.
-**Never paste raw configs into a public issue.**  Netcanon ships a
-sanitiser specifically for this workflow.
+real internal hostnames, usernames, and personally-identifying
+information.  **Never paste raw configs into a public issue.**
+Netcanon ships a sanitiser specifically for this workflow, accessible
+three ways — all share the same shared library at
+[`netcanon.tools.sanitize`](../netcanon/tools/sanitize.py), so the
+output is identical regardless of invocation path:
 
-### Option A: CLI (no server required)
+* **Option A — Browser UI** (`/sanitize` page).  Easiest if the
+  Netcanon server is running.  Paste or pick a stored config, hit
+  Sanitize, copy the output.  Audit table renders inline alongside
+  the sanitized text.
+* **Option B — CLI** (`netcanon sanitize`).  No server required;
+  the package install adds the `netcanon` command.
+* **Option C — HTTP API** (`POST /api/v1/sanitize`).  For automation
+  / scripted submission flows.
+
+### Option A: Browser UI (Netcanon server running)
+
+Open **`http://localhost:8000/sanitize`** (or whatever host:port
+your server runs on).
+
+1. **Source vendor**: pick the codec that matches your config
+   (e.g. `cisco_iosxe_cli` for IOS-XE CLI output, `opnsense` for
+   OPNsense `config.xml`).
+2. **Input mode**: paste the config text, or pick a stored config
+   from the dropdown (any backup the server has captured is
+   listed).
+3. **Preview redactions only** (optional checkbox).  When checked,
+   only the audit table renders — useful to verify what *will* be
+   redacted before trusting the round-tripped output.  When
+   unchecked (the default), the page fires both calls in parallel
+   and renders the audit + sanitized text together.
+4. Click **Sanitize**.  The result panel shows a per-category
+   counter strip, the sanitized output (with copy + download
+   buttons), and a full substitution audit table.
+
+A safety banner above the form reminds you the placeholders
+(`device-1`, `localuser1`, `fake-hash-0001`, etc.) are deliberately
+non-functional — the output is for sharing as evidence in a ticket,
+**not** for redeployment to a live device.
+
+### Option B: CLI (no server required)
 
 ```bash
 pip install netcanon
@@ -64,10 +101,10 @@ netcanon sanitize -i my-config.txt -o sanitised.txt \
 The output is in the same vendor's format as the input — operators
 who understand the source format can read the sanitised output.
 
-### Option B: HTTP API (Docker / running-server users)
+### Option C: HTTP API (automation)
 
-If you're running Netcanon as a server (Docker, embedded desktop,
-deployed instance), `curl` against the API:
+If you're running Netcanon as a server and want to script the
+submission flow, `curl` against the API directly:
 
 ```bash
 # Dry-run to preview redactions:
@@ -83,9 +120,9 @@ curl -X POST http://localhost:8000/api/v1/sanitize \
     -o sanitised.txt
 ```
 
-Both paths call the same shared library
-([`netcanon.tools.sanitize`](../netcanon/tools/sanitize.py)) — output
-is identical between CLI and HTTP invocation.
+All three paths (Browser UI, CLI, HTTP API) call the same shared
+library ([`netcanon.tools.sanitize`](../netcanon/tools/sanitize.py))
+— output is byte-identical regardless of invocation.
 
 ### What gets sanitised
 
@@ -101,8 +138,10 @@ the same redacted value all 5 times).
 | Domain | `example-N.test` |
 | Public IPv4 | RFC 5737 docs ranges (`192.0.2.x` / `198.51.100.x` / `203.0.113.x`) |
 | Private IPs (RFC 1918, ULA, link-local, loopback, multicast, CGNAT) | Preserved |
-| Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
+| Local user names | `localuserN` (iterative per-class numbering, cross-reference-stable so AAA / sudo / role references resolve to the same placeholder) |
+| Local user hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
 | SNMP communities | `public_redacted_N` |
+| SNMPv3 user names (USM securityName) | `snmpv3userN` (independent counter from local-user-name) |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
 | Interface descriptions | `description redacted` |
