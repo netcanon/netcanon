@@ -20,11 +20,16 @@ Field-typed rules (counter-per-session):
 * Public IPv4 anywhere → RFC 5737 docs ranges (192.0.2.x /
   198.51.100.x / 203.0.113.x); private IPs (RFC 1918, ULA, link-local,
   loopback, multicast, CGNAT 100.64/10) preserved
+* ``CanonicalLocalUser.name`` → ``localuserN`` (Phase-3 R6.1 addition —
+  the username is operator-identifying when chosen by the operator,
+  e.g. ``alice``, ``john.smith``, or ``user12``)
 * ``CanonicalLocalUser.hashed_password`` → format-preserving fake hash
   (e.g. ``$9$...`` Junos form preserved; FortiGate ``ENC ...`` form
   preserved; Cisco type-7 hex preserved; Linux ``$5$`` / ``$6$`` /
   bcrypt ``$2y$`` shapes preserved)
 * ``CanonicalSNMP.community`` → ``public_redacted_N``
+* ``CanonicalSNMPv3User.name`` → ``snmpv3userN`` (Phase-3 R6.1 — same
+  rationale as local-user-name above)
 * ``CanonicalSNMPv3User.auth_passphrase`` → ``REDACTED-AUTH-N``
 * ``CanonicalSNMPv3User.priv_passphrase`` → ``REDACTED-PRIV-N``
 * ``CanonicalRADIUSServer.shared_secret`` → ``REDACTED-RADIUS-N``
@@ -230,8 +235,25 @@ def sanitize_intent(
                 ))
                 addr.ip = new_ip
 
-    # ---- local users (hashed passwords) ----
+    # ---- local users (usernames + hashed passwords) ----
+    # Phase-3 R6.1: redact the username too.  Operator-chosen
+    # usernames (`alice`, `john.smith`, or the Windows-login-mirror
+    # case `user12`) are operator-PII when shared in public bug
+    # reports — leaking them enables operator-correlation attacks
+    # ("the operator at this org uses the same login on their laptop
+    # and their network gear; let me cross-reference with public
+    # social profiles").  The hashed-password redaction below stays
+    # unchanged.
     for i, user in enumerate(sanitized.local_users):
+        if user.name:
+            new_name = table.redact_local_user_name(user.name)
+            subs.append(Substitution(
+                category="local-user-name",
+                field=f"local_users[{i}].name",
+                original=user.name,
+                redacted=new_name,
+            ))
+            user.name = new_name
         if user.hashed_password:
             new_hash = table.redact_hash(user.hashed_password)
             subs.append(Substitution(
@@ -255,6 +277,18 @@ def sanitize_intent(
             sanitized.snmp.community = new_value
 
         for j, v3user in enumerate(sanitized.snmp.v3_users):
+            # Phase-3 R6.1: redact the SNMPv3 username too (same
+            # rationale as local-user-name above — USM securityName
+            # is operator-chosen identity).
+            if v3user.name:
+                new_name = table.redact_snmpv3_user_name(v3user.name)
+                subs.append(Substitution(
+                    category="snmpv3-user-name",
+                    field=f"snmp.v3_users[{j}].name",
+                    original=v3user.name,
+                    redacted=new_name,
+                ))
+                v3user.name = new_name
             if v3user.auth_passphrase:
                 new_value = table.redact_secret("AUTH")
                 subs.append(Substitution(
@@ -353,6 +387,13 @@ class _SubstitutionTable:
             "198.51.100": 0,
             "203.0.113": 0,
         }
+        # Phase-3 R6.1 additions — operator-chosen identity strings
+        # (usernames) that the renderer must preserve across cross-
+        # references.  E.g. if an AAA stanza references a local user
+        # by name, the rename must apply consistently in both the
+        # user definition AND the AAA reference.
+        self._local_user_names: dict[str, str] = {}
+        self._snmpv3_user_names: dict[str, str] = {}
 
     def redact_hostname(self, name: str) -> str:
         if name not in self._hostnames:
@@ -416,6 +457,44 @@ class _SubstitutionTable:
         n = self._secret_counters.get(category, 0) + 1
         self._secret_counters[category] = n
         return f"REDACTED-{category}-{n}"
+
+    def redact_local_user_name(self, name: str) -> str:
+        """Cross-reference-stable local-user-name redaction.
+
+        Same input → same output across the whole config so any
+        reference to the user from another stanza (AAA, sudo, role
+        assignments, ACL "permit user X" idioms) resolves to the
+        same placeholder.
+
+        Returns ``localuser1`` for the first distinct name seen,
+        ``localuser2`` for the second, etc.  Numbering is per-session
+        — restart of the sanitizer produces the same numbering for
+        the same input (assuming deterministic iteration order of
+        the canonical model's ``local_users`` list, which Pydantic
+        guarantees).
+        """
+        if name not in self._local_user_names:
+            n = len(self._local_user_names) + 1
+            self._local_user_names[name] = f"localuser{n}"
+        return self._local_user_names[name]
+
+    def redact_snmpv3_user_name(self, name: str) -> str:
+        """Cross-reference-stable SNMPv3 user-name redaction.
+
+        Same input → same output across the whole config so any
+        SNMPv3 trap-target reference or group-membership stanza
+        resolves to the same placeholder.
+
+        Returns ``snmpv3user1`` / ``snmpv3user2`` / etc.  Numbered
+        independently from :meth:`redact_local_user_name` — a config
+        with one local user + one SNMPv3 user produces ``localuser1``
+        and ``snmpv3user1``, NOT ``localuser1`` and ``snmpv3user2``
+        (per-class counter, not session-wide).
+        """
+        if name not in self._snmpv3_user_names:
+            n = len(self._snmpv3_user_names) + 1
+            self._snmpv3_user_names[name] = f"snmpv3user{n}"
+        return self._snmpv3_user_names[name]
 
     def redact_hash(self, original: str) -> str:
         """Format-preserving fake hash so the codec's render produces valid syntax.
