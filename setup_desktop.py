@@ -68,7 +68,11 @@ UPGRADE_CODE = "{A3F2C1B0-7E4D-4A9F-8B3C-2D5E6F7A8B9C}"
 
 build_exe_options: dict = {
     # Extra packages that cx_Freeze cannot discover automatically through
-    # static import analysis (dynamic imports, conditional imports, etc.)
+    # static import analysis (dynamic imports, conditional imports, etc.).
+    # Every entry must be a runtime dependency installed by the
+    # `[desktop]` extra group in pyproject.toml — dev-only deps (e.g.
+    # httpx, used by pytest's TestClient) must not be listed here or
+    # cx_Freeze fails with ImportError during the build.
     "packages": [
         "netcanon",
         "netcanon.templates",
@@ -88,7 +92,6 @@ build_exe_options: dict = {
         "PySide6",
         "PIL",
         "yaml",
-        "httpx",
     ],
     # Non-Python files that must be included in the build tree.
     "include_files": [
