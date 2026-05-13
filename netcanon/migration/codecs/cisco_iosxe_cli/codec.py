@@ -58,6 +58,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import CanonicalIntent
+from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
@@ -339,9 +340,10 @@ class CiscoIOSXECLICodec(CodecBase):
         Weaker signals: ``!`` stanza delimiter, leading ``hostname``.
         """
         lowered = raw_prefix.lower()
-        # XML or JSON - not IOS CLI.
-        stripped = raw_prefix.lstrip()
-        if stripped.startswith("<") or stripped.startswith("{"):
+        # XML or JSON - not IOS CLI.  Uses the shared shape helper so
+        # captures with leading shell echo / banner / motd framing
+        # don't bypass the guard (Round 4.2 fix).
+        if detect_input_shape(raw_prefix) is not None:
             return None
 
         # If the input carries a recognisable Aruba banner anywhere in

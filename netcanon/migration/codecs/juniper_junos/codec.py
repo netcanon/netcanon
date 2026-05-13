@@ -64,6 +64,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import CanonicalIntent
+from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
@@ -273,8 +274,9 @@ class JunosCodec(CodecBase):
           * ``set interfaces <media>-<fpc>/<pic>/<port>`` —
             Junos-specific port naming.
         """
-        stripped = raw_prefix.lstrip()
-        if stripped.startswith("<") or stripped.startswith("{"):
+        # XML / JSON shape — shared helper tolerates leading shell-echo
+        # / banner framing so real captures don't bypass the guard.
+        if detect_input_shape(raw_prefix) is not None:
             return None
         if re.search(
             r"^set version \d",

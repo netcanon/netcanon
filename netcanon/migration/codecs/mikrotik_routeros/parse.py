@@ -39,6 +39,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
+from .._input_shape import detect_input_shape
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -62,18 +63,20 @@ def parse_intent(raw: str) -> CanonicalIntent:
             "mikrotik_routeros: empty input",
             snippet="",
         )
-    stripped = raw.lstrip()
-    if stripped.startswith("<"):
+    # Shape sanity — Round-4.2 shared helper tolerates leading
+    # shell-echo / banner framing on real captures.
+    shape = detect_input_shape(raw)
+    if shape == "xml":
         raise ParseError(
             "mikrotik_routeros: input looks like XML, not RouterOS "
             "export.  Use the opnsense or cisco_iosxe codec instead.",
-            snippet=stripped[:120],
+            snippet=raw.lstrip()[:120],
         )
-    if stripped.startswith("{"):
+    if shape == "json":
         raise ParseError(
             "mikrotik_routeros: input looks like JSON, not RouterOS "
             "export.",
-            snippet=stripped[:120],
+            snippet=raw.lstrip()[:120],
         )
 
     intent = CanonicalIntent(

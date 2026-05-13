@@ -56,6 +56,7 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVxlan,
 )
+from .._input_shape import detect_input_shape
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -67,14 +68,18 @@ def parse_intent(raw: str) -> CanonicalIntent:
         raise ParseError(
             "juniper_junos: empty input", snippet="",
         )
-    stripped = raw.lstrip()
-    if stripped.startswith("<"):
+    # Shape sanity — Round-4.2 shared helper tolerates leading
+    # shell-echo / banner framing.  Only reject XML here; the leading
+    # ``{`` case below is handled by the Junos-specific block-form
+    # detector (legitimate Junos curly-brace syntax — NOT JSON).
+    if detect_input_shape(raw) == "xml":
         raise ParseError(
             "juniper_junos: input looks like XML, not Junos "
             "set-form.  If you have NETCONF get-config XML, use "
             "a different codec.",
-            snippet=stripped[:120],
+            snippet=raw.lstrip()[:120],
         )
+    stripped = raw.lstrip()
     # Detect block-form input: first non-comment meaningful
     # content contains a curly-brace at a sensible location.
     # We convert block-form → set-form here and feed the

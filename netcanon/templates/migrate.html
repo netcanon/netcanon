@@ -1260,15 +1260,33 @@
       // Feed the rename modal so the "Interface rename" button can
       // open against this job without re-fetching.
       captureJobForRename(body, job);
-      // When /plan returns a parse failure, ask /detect what codec
-      // the input actually looks like.  Common case: operator pastes
-      // an OPNsense XML into the Cisco-IOS-XE CLI codec; without this
-      // enrichment the operator sees only the raw parse error and has
-      // to guess which codec is the right one.  Best-effort, silent
-      // failure — see helper for the gating logic.
-      if (job.status === 'failed'
-          && typeof job.error === 'string'
-          && job.error.indexOf('parse failed') === 0) {
+      // Detect-suggest enrichment — fires in two cases:
+      //
+      //   (1) /plan returned an explicit parse failure.  Common case:
+      //       operator pastes an OPNsense XML into the cisco_iosxe_cli
+      //       codec; the parser raises ParseError, pipeline sets
+      //       job.error = "parse failed: ...", we offer the suggestion.
+      //
+      //   (2) /plan returned "completed" but every validation bucket
+      //       is empty AND rendered output is empty/near-empty.  Round-
+      //       4.2 added this gate as defense-in-depth: if a permissive
+      //       parser silently accepts wrong-vendor input and produces
+      //       a zero-supported result, the operator still benefits
+      //       from a "Did you mean: <other-vendor>?" hint instead of
+      //       staring at a "completed with 0 supported paths" mystery.
+      //       The downstream helper additionally gates on
+      //       ``top.codec !== planBody.source``, so legitimate empty-
+      //       config translations (operator deliberately translating a
+      //       minimal stub) don't produce spurious suggestions.
+      var isParseFailed = job.status === 'failed'
+        && typeof job.error === 'string'
+        && job.error.indexOf('parse failed') === 0;
+      var isEmptyCompleted = job.status === 'completed'
+        && job.validation
+        && (job.validation.supported_paths.length
+          + job.validation.lossy_paths.length
+          + job.validation.unsupported_paths.length) === 0;
+      if (isParseFailed || isEmptyCompleted) {
         enrichParseFailureBanner(body, job);
       }
     } catch (err) {

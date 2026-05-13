@@ -21,6 +21,138 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 4.2: input-shape helper + UI defense-in-depth
+
+Defect surfaced during the visual sanity check of Round 4 / 4.1.  When
+the operator picked a stored OPNsense XML config and submitted it
+through the `cisco_iosxe_cli` source codec, the result came back as
+`status: completed` with **zero supported / lossy / unsupported paths**
+and a near-empty rendered output (`Building configuration… / service
+timestamps … / end`).  No `ParseError` was raised, so Round-4's
+Sub-task A "Did you mean: <vendor>?" suggestion (which gates on
+`job.error.startsWith('parse failed')`) **never had a chance to fire**.
+
+#### Root cause: `stripped.startswith("<")` doesn't tolerate framing junk
+
+Every CLI-flavoured codec (cisco_iosxe_cli, fortigate_cli,
+juniper_junos, mikrotik_routeros, arista_eos, aruba_aoss) had an
+inline guard in `parse()` (and a matching one in `probe()`):
+
+```python
+stripped = raw.lstrip()
+if stripped.startswith("<") or stripped.startswith("{"):
+    raise ParseError("looks like XML or JSON, not ...")
+```
+
+That `stripped[0]` check is **too strict for real captures**.  The
+operator's OPNsense XML file led with `cat /conf/config.xml\r\r\r\n`
+— shell-command echo from the backup collector's session capture
+— and the actual `<?xml` opener wasn't until line 2.  Same gap
+exists for any input prefixed with:
+
+* OPNsense / FreeBSD shell capture (`cat ... | head`)
+* Cisco-IOS session transcript (`router# show running-config / Building configuration... / !`)
+* Operator MOTD / banner before the actual config body
+
+The parser silently fell through to its line-scanning loop, found
+nothing it recognised, and returned an empty `CanonicalIntent` →
+zero supported paths → near-empty render.
+
+#### New shared helper `netcanon.migration.codecs._input_shape.detect_input_shape()`
+
+Module-private utility — single export:
+
+```python
+detect_input_shape(raw: str, *, max_lines: int = 5) -> str | None
+# returns "xml" | "json" | None
+```
+
+Scans the first `max_lines` **non-empty** lines (stripping leading
+whitespace per line) for XML / JSON shape markers.  XML detection
+matches either `<?xml` (the declaration) or `<name[separator]` (a
+root element opener with a separator like space, `>`, or `/`).
+JSON detection matches a leading `{` at start of stripped line.
+Bounded scan keeps the helper O(1) for arbitrarily large inputs.
+
+Specifically does **not** false-positive on:
+
+* CLI descriptions / comments containing `<` mid-token
+  (e.g. `description <upstream link>`, `! <-- BGP block below -->`)
+* Junos block-form (`system { ... }`) — the bare `{` only appears
+  inside a stanza, never at column 0 of a stripped first line
+
+21 unit tests in `tests/unit/migration/test_input_shape.py` pin
+the contract: clean XML / JSON / CLI inputs, framing-tolerant
+captures, no-false-positive on CLI-with-angle-brackets, bounded
+scan behaviour, edge cases (empty / whitespace-only / namespaced
+XML / self-closing root).
+
+#### Codec sweep — 12 file touches
+
+All 6 CLI codecs migrated to the shared helper:
+
+* `parse.py` (6 files) — replaces the strict
+  `stripped.startswith(...)` guard with `detect_input_shape(raw)`.
+  Per-shape error messages preserved (XML vs JSON specificity).
+  Junos's `parse.py` keeps its special `{` handling for the
+  block-form / set-form / curly-brace branch — only the XML
+  check moved to the helper.
+* `codec.py` `probe()` (6 files) — replaces the matching strict
+  guard with the helper.  Same outcome (return `None` on
+  XML / JSON), but tolerates framing junk consistently with
+  `parse()`.
+
+Two existing tests for cisco-input rejection had to be updated
+because the error message wording is now per-shape ("looks like
+JSON" rather than the older conjoined "looks like XML or JSON");
+no functional regressions.  All five other codecs' existing
+XML / JSON rejection tests already used per-shape wording
+(`"looks like XML"` / `"looks like JSON"`) and passed unchanged.
+
+New regression test
+`test_xml_with_leading_shell_echo_rejected` pins the user-reported
+scenario: an OPNsense XML prefixed with `cat /conf/config.xml\n`
+must raise `ParseError` instead of silently producing an empty
+intent.
+
+#### UI defense-in-depth: detect-suggest also fires on empty-validation
+
+Even with the parser sweep above, **other** permissive parsers in
+the codebase could in principle produce the same
+"completed-with-zero-supported" symptom (the OPNsense XML codec
+itself, the cisco_iosxe NETCONF codec, etc.).  Extended Round-4
+Sub-task A's trigger gate to cover this case:
+
+```js
+var isParseFailed = job.status === 'failed'
+  && typeof job.error === 'string'
+  && job.error.indexOf('parse failed') === 0;
+var isEmptyCompleted = job.status === 'completed'
+  && job.validation
+  && (job.validation.supported_paths.length
+    + job.validation.lossy_paths.length
+    + job.validation.unsupported_paths.length) === 0;
+if (isParseFailed || isEmptyCompleted) {
+  enrichParseFailureBanner(body, job);
+}
+```
+
+False-positive prevention is delegated to the existing downstream
+gate in `enrichParseFailureBanner` — the suggestion only renders if
+`/detect`'s top candidate is a **different** codec from the one
+the operator submitted.  Legitimate empty-config translations
+(operator deliberately translating a minimal stub) don't produce
+spurious suggestions because the top candidate would match the
+already-picked source.
+
+`testid_reference.md` description for
+`migrate-parse-failure-detect-suggest` updated to document the
+two trigger conditions + the false-positive-prevention gate.
+
+Full unit + integration suite green (3435 passed, 57 skipped — up
+22 from the 3413 post-R4.1 baseline thanks to the 21 helper tests
+and the new cisco-prefix regression test).
+
 ### Phase 3 — Polish pass, Round 4.1: detect-suggest also updates target on round-trip
 
 Defect surfaced during live testing of Round 4 (PR #20).  Operator
