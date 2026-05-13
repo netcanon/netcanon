@@ -21,11 +21,33 @@ python -m netcanon_desktop
 
 ## Building an MSI Installer
 
+There are two paths.  Most operators want **Path A** (download the MSI
+from a GitHub Release page).  Contributors / forks that need a custom
+build go through **Path B**.
+
+### Path A — Download the CI-built MSI
+
+Every release tag (`v*.*.*` final + `v*.*.*-*` pre-release) triggers
+the `Desktop — build MSI + attach to Release` workflow, which builds
+the MSI on a `windows-latest` runner and attaches it as a release
+asset on https://github.com/netcanon/netcanon/releases.
+
+The CI MSI is currently **unsigned** — Windows SmartScreen will prompt
+on first install.  Future work: integrate SignPath (free for OSS) or
+a purchased EV cert; see the workflow file's header comment.
+
+### Path B — Build locally
+
 ```bash
 pip install -e ".[desktop-build]"
 python setup_desktop.py bdist_msi
-# Installer written to dist/
+# Installer written to dist/Netcanon-<version>-win64.msi
 ```
+
+The `version` in the MSI defaults to `MSI_VERSION_DEFAULT` (hardcoded
+in `setup_desktop.py`); the CI workflow overrides it by setting the
+`NETCANON_MSI_VERSION` env var from the triggering tag.  For local
+builds, bump `MSI_VERSION_DEFAULT` manually if you care.
 
 The MSI:
 * Installs to `C:\Program Files\Netcanon\`
