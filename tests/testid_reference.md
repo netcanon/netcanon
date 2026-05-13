@@ -683,6 +683,58 @@ diff page — no `migrate-diff-viewer` testid is needed.
 
 ---
 
+## Sanitize page (`/sanitize`)
+
+PII-redaction workbench.  Pick a source vendor, paste or select a stored
+config, submit to `POST /api/v1/sanitize`.  The page fires the sanitize
+call **twice in parallel** when dry-run is unchecked — once with
+`dry_run=true` for the audit table and once with `dry_run=false` for
+the sanitized text — so the operator sees both views in one round-trip.
+When dry-run is checked, only the audit fires and the output section
+hides.  Mirrors the migrate page's input-mode pattern; testid prefix
+is `sanitize-` everywhere.
+
+### Form + result testids
+
+| `data-testid`                       | Element     | Notes |
+|-------------------------------------|-------------|-------|
+| `nav-sanitize`                      | `<a>`       | Top-nav link, `active` when on `/sanitize` |
+| `sanitize-form`                     | `<form>`    | Outer form; submit triggers the dual-fetch flow described above |
+| `sanitize-source-select`            | `<select>`  | Source vendor; populated client-side via `GET /api/v1/migration/adapters` (shared with migrate page) |
+| `sanitize-input-mode`               | `<div>`     | Radio-group container |
+| `sanitize-input-mode-raw`           | `<input type="radio">` | Radio: paste raw text |
+| `sanitize-input-mode-filename`      | `<input type="radio">` | Radio: pick a stored config |
+| `sanitize-raw-wrap`                 | `<div>`     | Wrapper around the textarea; hidden when filename mode is active |
+| `sanitize-raw-input`                | `<textarea>` | Config text input — synthesised as a multipart File on submit (matches migrate.html's pattern) |
+| `sanitize-filename-wrap`            | `<div>`     | Wrapper around the stored-config dropdown |
+| `sanitize-filename-select`          | `<select>`  | Options are existing ConfigRecord filenames |
+| `sanitize-dry-run-checkbox`         | `<input type="checkbox">` | When checked, only the audit fires (no sanitized output rendered) |
+| `sanitize-submit-btn`               | `<button type="submit">` | Runs the sanitization |
+| `sanitize-result`                   | `<div>`     | Hidden container for everything below; revealed after first result |
+| `sanitize-status-summary`           | `<div>`     | "Sanitized in {ms}ms — N redaction(s) applied" |
+| `sanitize-stats`                    | `<div>`     | Per-category counter strip; contains one `sanitize-counter-{category}` `<span>` per category present |
+| `sanitize-counter-{category}`       | `<span>`    | Per-category counter (e.g. `sanitize-counter-ipv4-public`).  Renders the operator-readable label + count.  Categories: `hostname`, `domain`, `ipv4-public`, `interface-description`, `local-user-hash`, `snmp-community`, `snmpv3-auth`, `snmpv3-priv`, `radius-shared-secret`, `tier3-stripped` |
+| `sanitize-output-section`           | `<section>` | Wrapper for the rendered-output block; hidden when dry-run is checked |
+| `sanitize-output`                   | `<pre>`     | Sanitized config text |
+| `sanitize-copy-btn`                 | `<button>`  | Copies the sanitized text to the clipboard |
+| `sanitize-download-btn`             | `<button>`  | Downloads the sanitized text as a file; filename derives from the source filename (with `.sanitized` injected) or `<source_vendor>.sanitized.<ts>.txt` for raw-paste |
+| `sanitize-audit-section`            | `<section>` | Wrapper for the substitution audit `<details>` |
+| `sanitize-audit-count`              | `<span>`    | "N redactions" chip in the audit summary line |
+| `sanitize-audit-table`              | `<table>`   | Per-row breakdown: category, field, original, redacted |
+| `sanitize-audit-row`                | `<tr>`      | One per substitution; also carries `data-category` attribute |
+
+### Why dual-fetch on submit
+
+The sanitize API returns one of two shapes depending on `dry_run` —
+`text/plain` (sanitized config) or `application/json` (substitution
+audit).  Operators consistently want both views: *what changed* AND
+*the final text*.  Round-6 Phase-3 chose dual-parallel-fetch
+(Option B in the design doc) over a single API call + audit-only
+trade-off so the operator never has to submit twice for the
+common case.
+
+---
+
 ## See also
 
 - [`README.md`](README.md) — test-suite layout, markers, mocking strategy

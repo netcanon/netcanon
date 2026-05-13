@@ -417,6 +417,34 @@ async def migrate_page(request: Request) -> HTMLResponse:
 
 
 # ---------------------------------------------------------------------------
+# Sanitize (PII redaction page)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/sanitize", response_class=HTMLResponse)
+async def sanitize_page(request: Request) -> HTMLResponse:
+    """Sanitize workbench: pick source vendor, paste or select a
+    config, submit to ``POST /api/v1/sanitize``, and review the
+    redaction audit + sanitized output in-page.
+
+    Phase-3 Round-6 deliverable: closes the audit-flagged HIGH-severity
+    "sanitize is API-only" feature-discovery gap before v0.1.0 launch.
+    Mirrors the migrate page's input-mode pattern (paste raw / pick
+    stored) so operators familiar with one surface immediately
+    understand the other.
+    """
+    configs = request.app.state.storage.list_configs()
+    return _templates.TemplateResponse(
+        request,
+        "sanitize.html",
+        {
+            "active_page": "sanitize",
+            "configs": configs,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Swagger UI (custom-wrapped)
 # ---------------------------------------------------------------------------
 
@@ -439,6 +467,7 @@ async def swagger_ui() -> HTMLResponse:
         '<a href="/configs">Configs</a>'
         '<a href="/definitions">Definitions</a>'
         '<a href="/migrate">Migrate</a>'
+        '<a href="/sanitize">Sanitize</a>'
         '<a href="/docs" class="active">API Docs</a>'
         "</nav>"
     )

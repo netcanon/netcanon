@@ -1,0 +1,446 @@
+{% extends "base.html" %}
+{% block title %}Sanitize — Netcanon{% endblock %}
+
+{% block content %}
+<style>
+  /* ── San-* — page-scoped, mirrors mig-* in migrate.html ──────────────
+   * Kept inline (rather than promoted to base.html) so future template
+   * edits don't accidentally couple sanitize's look to migrate's.
+   * Duplication is intentional + small (~30 LOC). */
+  .san-form           { display:flex; flex-direction:column; gap:.75rem; }
+  .san-pair-row       { display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
+  .san-input-mode     { display:flex; gap:1.25rem; font-size:.88rem; margin-top:.35rem;
+                        align-items:center; }
+  .san-input-mode label { display:flex; gap:.35rem; align-items:center; cursor:pointer;
+                        font-weight:normal; }
+  .san-raw            { width:100%; min-height:220px; font-family:'Consolas','Courier New',monospace;
+                        font-size:.85rem; padding:.5rem; box-sizing:border-box;
+                        background:var(--bg-input, #fff); color:var(--text, #1a1a2e);
+                        border:1px solid var(--border, #ccc); border-radius:4px; }
+  .san-result-section { background:var(--bg-card, #fff); padding:1rem;
+                        border-radius:6px; margin-top:1rem;
+                        box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  .san-stats          { font-family:monospace; font-size:.88rem; color:var(--text-muted, #555);
+                        display:flex; flex-wrap:wrap; gap:1rem; }
+  .san-stat-label     { color:var(--text-muted, #555); }
+  .san-output         { background:#1a1a2e; color:#e6e6f0; padding:.75rem 1rem;
+                        font-family:'Consolas','Courier New',monospace; font-size:.82rem;
+                        line-height:1.4; overflow-x:auto; border-radius:4px;
+                        max-height:480px; }
+  .san-audit-table    { width:100%; border-collapse:collapse; font-size:.82rem; }
+  .san-audit-table th,
+  .san-audit-table td { padding:.35rem .5rem; border-bottom:1px solid var(--border, #eee);
+                        text-align:left; vertical-align:top; }
+  .san-audit-table td.cat   { font-family:monospace; color:var(--text-muted, #555);
+                              white-space:nowrap; }
+  .san-audit-table td.orig,
+  .san-audit-table td.redacted { font-family:monospace; word-break:break-all; }
+  .san-chip           { display:inline-block; background:#5cb85c; color:#fff;
+                        border-radius:8px; padding:.05rem .45rem; font-size:.72rem;
+                        font-weight:700; font-family:monospace; }
+  .san-banner-info    { background:#d9edf7; color:#31708f; padding:.5rem .75rem;
+                        border-radius:4px; margin:.5rem 0; }
+</style>
+
+<h1>Sanitize</h1>
+<p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
+  Strip identifying details — hostnames, public IPs, password hashes,
+  SNMP communities, RADIUS shared secrets — from a network config
+  before sharing it in a bug report or support ticket.  Pick the
+  source vendor, paste or select a stored config, and Netcanon redacts
+  at the canonical-model level — the output is in the same vendor's
+  format with every cross-reference rewritten consistently.
+</p>
+
+<form id="san-form" class="san-form" data-testid="sanitize-form">
+  <div class="san-pair-row">
+    <div class="form-group" style="min-width:260px">
+      <label for="san-source">Source vendor</label>
+      <select id="san-source" name="source_vendor"
+              data-testid="sanitize-source-select" required
+              title="The codec Netcanon uses to parse your config.  Must match the vendor that emitted it — sanitize works on the canonical-model representation, so a wrong codec produces useless output."></select>
+    </div>
+  </div>
+
+  <div class="san-input-mode" data-testid="sanitize-input-mode">
+    <label><input type="radio" name="input_mode" value="raw" checked
+                  data-testid="sanitize-input-mode-raw"> Paste raw text</label>
+    <label><input type="radio" name="input_mode" value="filename"
+                  data-testid="sanitize-input-mode-filename"> Pick a stored config</label>
+  </div>
+
+  <div id="san-raw-wrap" data-testid="sanitize-raw-wrap">
+    <textarea class="san-raw" id="san-raw"
+              data-testid="sanitize-raw-input"
+              spellcheck="false"
+              placeholder="Paste the full config text from the source device (e.g. `show running-config` for Cisco IOS-XE, `/conf/config.xml` for OPNsense, `show configuration | display set` for Junos).  The textarea content is sent over the wire as a multipart upload — nothing is logged client-side."></textarea>
+  </div>
+
+  <div id="san-filename-wrap" data-testid="sanitize-filename-wrap" style="display:none">
+    <div class="form-group">
+      <label for="san-filename">Stored config</label>
+      <select id="san-filename" data-testid="sanitize-filename-select">
+        <option value="">— pick one —</option>
+        {% for cfg in configs %}
+        <option value="{{ cfg.filename }}"
+                data-type-key="{{ cfg.device_type }}">
+          {{ cfg.filename }} ({{ cfg.device_type }})
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  <div class="form-row" style="margin-top:.75rem;align-items:center;gap:1rem">
+    <label style="font-size:.82rem;color:#555;display:flex;align-items:center;gap:.35rem">
+      <input type="checkbox" id="san-dry-run"
+             data-testid="sanitize-dry-run-checkbox"
+             title="Preview the audit log without rendering the sanitized output.  Useful when you want to verify what WILL be redacted before trusting the round-trip render.  When unchecked, both the audit and the sanitized output render together.">
+      Preview redactions only (no sanitized output)
+    </label>
+    <button type="submit" class="btn-primary"
+            id="san-submit-btn"
+            data-testid="sanitize-submit-btn">Sanitize</button>
+  </div>
+</form>
+
+<!-- Results region -->
+<div id="san-result" data-testid="sanitize-result" class="hidden">
+  <div class="san-result-section">
+    <div id="san-status-summary" data-testid="sanitize-status-summary"
+         style="font-family:monospace;font-size:.82rem;color:#888;margin-bottom:.5rem"></div>
+    <div id="san-stats" class="san-stats" data-testid="sanitize-stats"></div>
+  </div>
+
+  <section id="san-output-section" class="san-result-section"
+           data-testid="sanitize-output-section">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                margin-bottom:.5rem">
+      <span style="font-size:.85rem;color:#888;text-transform:uppercase;
+                   letter-spacing:.05em">Sanitized output</span>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" class="btn-secondary"
+                data-testid="sanitize-copy-btn"
+                onclick="sanCopyOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem">
+          &#x2398; Copy
+        </button>
+        <button type="button" class="btn-secondary"
+                data-testid="sanitize-download-btn"
+                onclick="sanDownloadOutput()"
+                style="font-size:.78rem;padding:.25rem .6rem">
+          &#x2193; Download
+        </button>
+      </div>
+    </div>
+    <pre id="san-output" class="san-output" data-testid="sanitize-output"></pre>
+  </section>
+
+  <section class="san-result-section" data-testid="sanitize-audit-section">
+    <details open>
+      <summary style="cursor:pointer;font-size:.9rem;font-weight:600;
+                      padding:.25rem 0;color:#333">
+        Substitution audit
+        <span id="san-audit-count" data-testid="sanitize-audit-count"
+              class="san-chip" style="margin-left:.5rem"></span>
+      </summary>
+      <table class="san-audit-table" data-testid="sanitize-audit-table"
+             style="margin-top:.5rem">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Field</th>
+            <th>Original</th>
+            <th>Redacted</th>
+          </tr>
+        </thead>
+        <tbody id="san-audit-tbody"></tbody>
+      </table>
+    </details>
+  </section>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ── Operator-readable category labels ─────────────────────────────
+   * The library emits machine-style strings (`ipv4-public`, `snmpv3-
+   * auth`, `local-user-hash`); operators need human prose.  Mirrors
+   * the Round-2 vocabulary-discipline pass.  Unknown categories fall
+   * through to the raw key so a future library addition doesn't
+   * render as blank text. */
+  var CATEGORY_LABELS = {
+    'hostname':              'Hostnames',
+    'domain':                'Domain names',
+    'ipv4-public':           'Public IPv4 addresses',
+    'interface-description': 'Interface descriptions',
+    'local-user-hash':       'Local user password hashes',
+    'snmp-community':        'SNMP communities',
+    'snmpv3-auth':           'SNMPv3 auth passphrases',
+    'snmpv3-priv':           'SNMPv3 priv passphrases',
+    'radius-shared-secret':  'RADIUS shared secrets',
+    'tier3-stripped':        'Tier-3 stanzas (full strip)',
+  };
+  function labelFor(cat) { return CATEGORY_LABELS[cat] || cat; }
+
+  /* ── Element refs ─────────────────────────────────────────────────── */
+  var form         = document.getElementById('san-form');
+  var sourceSel    = document.getElementById('san-source');
+  var rawWrap      = document.getElementById('san-raw-wrap');
+  var rawInput     = document.getElementById('san-raw');
+  var filenameWrap = document.getElementById('san-filename-wrap');
+  var filenameSel  = document.getElementById('san-filename');
+  var dryRunCb     = document.getElementById('san-dry-run');
+  var submitBtn    = document.getElementById('san-submit-btn');
+
+  var result       = document.getElementById('san-result');
+  var statusSum    = document.getElementById('san-status-summary');
+  var statsRow     = document.getElementById('san-stats');
+  var outputSec    = document.getElementById('san-output-section');
+  var output       = document.getElementById('san-output');
+  var auditCount   = document.getElementById('san-audit-count');
+  var auditTbody   = document.getElementById('san-audit-tbody');
+
+  /* ── Adapter loading (same source as migrate page) ────────────────── */
+  async function loadAdapters() {
+    try {
+      var resp = await fetch('/api/v1/migration/adapters');
+      if (!resp.ok) {
+        showToast('Could not load source-vendor list: '
+          + resp.statusText, 'error');
+        return;
+      }
+      var adapters = await resp.json();
+      sourceSel.innerHTML =
+        '<option value="">— pick one —</option>'
+        + adapters.map(function(a) {
+            return '<option value="' + a.name + '">'
+              + (a.vendor_display_name || a.name)
+              + ' &mdash; ' + a.input_format
+              + '</option>';
+          }).join('');
+    } catch (e) {
+      showToast('Network error loading source-vendor list: '
+        + e.message, 'error');
+    }
+  }
+
+  /* ── Input-mode toggle ────────────────────────────────────────────── */
+  form.addEventListener('change', function(e) {
+    if (e.target.name !== 'input_mode') return;
+    var raw = e.target.value === 'raw';
+    rawWrap.style.display      = raw ? '' : 'none';
+    filenameWrap.style.display = raw ? 'none' : '';
+  });
+
+  /* ── Build a multipart FormData from the current form state ───────
+   * The sanitize API expects `config` as an UploadFile.  In raw-paste
+   * mode we synthesise a File from the textarea (matches migrate.html
+   * pattern at lines ~1170-1180).  In stored-config mode we fetch
+   * the file content first via /api/v1/configs/{filename}. */
+  async function buildFormData(dryRun) {
+    var src = sourceSel.value;
+    if (!src) throw new Error('Source vendor is required');
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    var fd = new FormData();
+    fd.append('source_vendor', src);
+    fd.append('dry_run', dryRun ? 'true' : 'false');
+    if (mode === 'raw') {
+      var text = rawInput.value;
+      if (!text || !text.trim()) {
+        throw new Error('Paste a config in the textarea first');
+      }
+      var blob = new Blob([text], { type: 'text/plain' });
+      fd.append('config', new File([blob], 'pasted.txt',
+                                   { type: 'text/plain' }));
+      return fd;
+    }
+    // filename mode — fetch the stored config first.
+    var fname = filenameSel.value;
+    if (!fname) throw new Error('Pick a stored config first');
+    var resp = await fetch('/api/v1/configs/'
+      + encodeURIComponent(fname));
+    if (!resp.ok) throw new Error('Could not load stored config: '
+      + resp.statusText);
+    var text = await resp.text();
+    var blob = new Blob([text], { type: 'text/plain' });
+    fd.append('config', new File([blob], fname,
+                                 { type: 'text/plain' }));
+    return fd;
+  }
+
+  /* ── Render the per-category counters strip ───────────────────────── */
+  function renderStats(substitutions) {
+    var counts = {};
+    substitutions.forEach(function(s) {
+      counts[s.category] = (counts[s.category] || 0) + 1;
+    });
+    var keys = Object.keys(counts).sort();
+    if (keys.length === 0) {
+      statsRow.innerHTML =
+        '<span class="san-stat-label">No redactions applied.</span>';
+      return;
+    }
+    statsRow.innerHTML = keys.map(function(k) {
+      return '<span data-testid="sanitize-counter-' + k + '">'
+        + '<span class="san-stat-label">' + escapeHtml(labelFor(k))
+        + ':</span> <strong>' + counts[k] + '</strong></span>';
+    }).join('');
+  }
+
+  /* ── Render the substitution audit table ──────────────────────────── */
+  function renderAudit(substitutions) {
+    auditCount.textContent = substitutions.length
+      + ' redaction' + (substitutions.length === 1 ? '' : 's');
+    auditTbody.innerHTML = substitutions.map(function(s) {
+      return '<tr data-testid="sanitize-audit-row" '
+        + 'data-category="' + s.category + '">'
+        + '<td class="cat">' + escapeHtml(labelFor(s.category))
+        + '</td>'
+        + '<td>' + escapeHtml(s.field || '') + '</td>'
+        + '<td class="orig">' + escapeHtml(s.original) + '</td>'
+        + '<td class="redacted">' + escapeHtml(s.redacted) + '</td>'
+        + '</tr>';
+    }).join('');
+  }
+
+  /* ── Render the sanitized output ──────────────────────────────────── */
+  function renderOutput(text) {
+    output.textContent = text;
+  }
+
+  /* ── Round-6 Q3 (option B): always-show-both UX ───────────────────
+   * When dry-run is unchecked, fire BOTH calls in parallel so the
+   * operator sees the sanitized text AND the audit table together
+   * without having to submit twice.  When dry-run is checked, only
+   * the audit call fires; the output section hides.  Errors on
+   * either call surface via formatApiError + showToast — same
+   * pattern as every other form on the site (Round-1.5 helper). */
+  async function onSubmit(e) {
+    e.preventDefault();
+    submitBtn.disabled = true;
+    var origText = submitBtn.textContent;
+    submitBtn.textContent = 'Sanitizing…';
+    var t0 = performance.now();
+    try {
+      var dryRunOnly = dryRunCb.checked;
+      // Build the FormData objects up-front so file fetch errors
+      // surface before the network round-trip.
+      var dryFd = await buildFormData(true);
+      var realFd = dryRunOnly ? null : await buildFormData(false);
+      // Fire in parallel — dry-run gives us the audit, non-dry-run
+      // gives us the sanitized text.  Promise.all rejects on the
+      // first failure, which we catch and surface.
+      var auditPromise = fetch('/api/v1/sanitize', {
+        method: 'POST', body: dryFd,
+      });
+      var outputPromise = realFd
+        ? fetch('/api/v1/sanitize', { method: 'POST', body: realFd })
+        : Promise.resolve(null);
+      var responses = await Promise.all([auditPromise, outputPromise]);
+      var auditResp = responses[0];
+      var outputResp = responses[1];
+      // Check both responses for errors before consuming any body.
+      if (!auditResp.ok) {
+        var err = await auditResp.json().catch(function() { return {}; });
+        showToast('Sanitize failed (audit): '
+          + formatApiError(err, auditResp.statusText), 'error');
+        return;
+      }
+      if (outputResp && !outputResp.ok) {
+        var err2 = await outputResp.json().catch(function() { return {}; });
+        showToast('Sanitize failed (output): '
+          + formatApiError(err2, outputResp.statusText), 'error');
+        return;
+      }
+      // Both succeeded — render.
+      var auditJson = await auditResp.json();
+      var sanitizedText = outputResp ? await outputResp.text() : null;
+      result.classList.remove('hidden');
+      var dt = (performance.now() - t0).toFixed(0);
+      statusSum.textContent =
+        'Sanitized in ' + dt + 'ms — ' + auditJson.total
+        + ' redaction' + (auditJson.total === 1 ? '' : 's') + ' applied'
+        + (dryRunOnly ? ' (preview only — no output rendered)' : '');
+      renderStats(auditJson.substitutions);
+      renderAudit(auditJson.substitutions);
+      if (sanitizedText !== null) {
+        outputSec.style.display = '';
+        renderOutput(sanitizedText);
+      } else {
+        outputSec.style.display = 'none';
+      }
+      result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showToast('Sanitize error: ' + err.message, 'error');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = origText;
+    }
+  }
+
+  /* ── Copy + download helpers ──────────────────────────────────────── */
+  window.sanCopyOutput = function() {
+    if (!navigator.clipboard) {
+      showToast('Clipboard API unavailable in this browser', 'error');
+      return;
+    }
+    navigator.clipboard.writeText(output.textContent)
+      .then(function() { showToast('Sanitized output copied to clipboard',
+                                   'success'); })
+      .catch(function(e) { showToast('Copy failed: ' + e.message, 'error'); });
+  };
+
+  window.sanDownloadOutput = function() {
+    var text = output.textContent;
+    if (!text) {
+      showToast('Nothing to download yet — run sanitize first.', 'error');
+      return;
+    }
+    // Filename: prefer the source filename if we picked a stored
+    // config, otherwise the source vendor + timestamp.
+    var mode = form.querySelector(
+      'input[name="input_mode"]:checked'
+    ).value;
+    var name;
+    if (mode === 'filename' && filenameSel.value) {
+      // Inject ``.sanitized`` before the extension.
+      var orig = filenameSel.value;
+      var dot = orig.lastIndexOf('.');
+      name = dot > 0
+        ? orig.slice(0, dot) + '.sanitized' + orig.slice(dot)
+        : orig + '.sanitized';
+    } else {
+      var ts = new Date().toISOString().replace(/[:.]/g, '-');
+      name = (sourceSel.value || 'config') + '.sanitized.' + ts + '.txt';
+    }
+    var blob = new Blob([text], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url; a.download = name; a.style.display = 'none';
+    document.body.appendChild(a); a.click();
+    setTimeout(function() {
+      document.body.removeChild(a); URL.revokeObjectURL(url);
+    }, 100);
+  };
+
+  /* ── escapeHtml helper (local — base.html doesn't expose one) ─────── */
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  /* ── Wire-up ──────────────────────────────────────────────────────── */
+  form.addEventListener('submit', onSubmit);
+  document.addEventListener('DOMContentLoaded', loadAdapters);
+})();
+</script>
+{% endblock %}
