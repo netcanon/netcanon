@@ -172,7 +172,7 @@ function openJobConfig(filename) {
   fetch('/api/v1/configs/' + encodeURIComponent(filename) + '/open', { method: 'POST' })
     .then(function(r) {
       if (r.status === 204) showToast('Opened ' + filename, 'success');
-      else r.json().then(function(d) { showToast('Error: ' + (d.detail || r.statusText), 'error'); });
+      else r.json().then(function(d) { showToast('Error: ' + formatApiError(d, r.statusText), 'error'); });
     })
     .catch(function(e) { showToast('Network error: ' + e.message, 'error'); });
 }

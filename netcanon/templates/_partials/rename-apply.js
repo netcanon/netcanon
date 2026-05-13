@@ -82,9 +82,7 @@
       });
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        showToast('Request rejected: '
-          + (typeof err.detail === 'string' ? err.detail
-             : JSON.stringify(err.detail || err)), 'error');
+        showToast('Request rejected: ' + formatApiError(err, resp.statusText), 'error');
         return;
       }
       var newJob = await resp.json();

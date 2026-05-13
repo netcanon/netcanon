@@ -72,13 +72,28 @@ def reload_definitions(request: Request) -> dict:
     replaces the in-memory registry.  Useful after adding or editing
     definition files without restarting the server.
 
+    The reload refreshes BOTH:
+
+    * ``state.definitions`` — the family-base map consumed by the
+      backup flow and most read paths.
+    * ``state.definition_loader`` — the loader instance whose
+      ``_variants`` list backs the Definitions page's overlays
+      section.  Pre-fix the reload route only updated the first one;
+      operators who dropped a new overlay YAML and clicked "Reload
+      from disk" silently kept seeing the old overlay set on the
+      Definitions page until a process restart cleared it.
+
     Returns:
-        A mapping with ``loaded`` (int count) and ``type_keys`` (sorted list).
+        A mapping with ``loaded`` (int count) and ``type_keys``
+        (sorted list).
     """
     settings = request.app.state.settings
-    request.app.state.definitions = DefinitionLoader(
-        settings.definitions_dir
-    ).load_all()
+    new_loader = DefinitionLoader(settings.definitions_dir)
+    request.app.state.definitions = new_loader.load_all()
+    # Also rotate the loader reference — the /definitions page reads
+    # overlays via ``state.definition_loader._variants``; without this
+    # the overlays section stays stale until the next process restart.
+    request.app.state.definition_loader = new_loader
     count = len(request.app.state.definitions)
     logger.info(
         "Definitions reloaded from %s: %d definition(s)",
