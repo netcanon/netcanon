@@ -1153,14 +1153,58 @@
     }
   }
 
-  /** Global handler: apply the detected codec to the source dropdown. */
+  /** Apply a detected/suggested codec to the source dropdown — and, if
+   *  the operator's original target matched their original source
+   *  (round-trip translation intent), also update the target to match.
+   *
+   *  Heuristic rationale: a fresh-form operator who picks source=Cisco
+   *  and target=Cisco is asking for a round-trip translation; if detect
+   *  then says "actually this is OPNsense", they want OPNsense→OPNsense
+   *  out of the box, not OPNsense→Cisco (which is a real translation
+   *  but a different operator intent).  Conversely, an operator who
+   *  picked source=Cisco and target=Aruba deliberately wanted
+   *  cross-vendor — we must NOT overwrite that target on the
+   *  source-detection signal.
+   *
+   *  The `target === prevSource && target !== codec` gate captures both
+   *  cases cleanly: round-trip ⇒ flip both; cross-vendor ⇒ flip source
+   *  only.
+   *
+   *  Returns `{changedTarget: boolean}` so callers can adapt their
+   *  toast / button text to reflect what actually changed.
+   */
+  function applyDetectedCodec(codec) {
+    var prevSource = sourceSel.value;
+    sourceSel.value = codec;
+    // Fire `change` so adapter-info / compat-banner side effects run
+    // (mirrors operator-driven dropdown changes).
+    sourceSel.dispatchEvent(new Event('change'));
+    var changedTarget = false;
+    if (targetSel.value === prevSource && targetSel.value !== codec) {
+      targetSel.value = codec;
+      targetSel.dispatchEvent(new Event('change'));
+      changedTarget = true;
+    }
+    return { changedTarget: changedTarget };
+  }
+
+  /** Global handler: apply the detected codec from the proactive
+   *  auto-detect banner (the one that appears above the form while the
+   *  operator is still composing input).  Round 4.1 added the smart
+   *  target adjustment via applyDetectedCodec().
+   */
   window.useDetectedSource = function() {
     var codec = detectBanner.getAttribute('data-detected-codec');
     if (!codec) return;
-    sourceSel.value = codec;
+    var r = applyDetectedCodec(codec);
     renderAdapterInfo();
     runAutoDetect();  // refresh banner to ok-state
-    showToast('Source adapter set to ' + codec, 'success');
+    showToast(
+      r.changedTarget
+        ? 'Source and target set to ' + codec + ' (round-trip)'
+        : 'Source set to ' + codec,
+      'success'
+    );
   };
 
   /** Submit the form → POST /api/v1/migration/plan → render result. */
@@ -1316,10 +1360,11 @@
     btn.textContent = 'Switch source to '
                     + suggestedLabel + ' and retry';
     btn.addEventListener('click', function() {
-      sourceSel.value = top.codec;
-      // Dispatch change so adapter-info / target-compat side effects
-      // run (mirrors the operator-driven dropdown change).
-      sourceSel.dispatchEvent(new Event('change'));
+      // Use the shared helper — also flips target when the operator's
+      // original setup was round-trip (source === target before the
+      // click).  Round 4.1 plugged the proactive-banner version of
+      // this button into the same helper for behavioural consistency.
+      applyDetectedCodec(top.codec);
       // requestSubmit triggers form validation + the submit handler,
       // same path as clicking the Translate button.
       form.requestSubmit();

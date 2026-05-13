@@ -21,6 +21,71 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 4.1: detect-suggest also updates target on round-trip
+
+Defect surfaced during live testing of Round 4 (PR #20).  Operator
+landed on `/migrate` with the default source=Cisco + target=Cisco
+selection, picked an OPNsense XML config via the "Pick a stored
+config" mode, and was offered the "Use this source" suggestion by
+the proactive auto-detect banner.  Click swapped source to OPNsense
+— but left target on Cisco.  Result was OPNsense → Cisco translation,
+which is a valid translation but not what the operator expected
+(they were trying to inspect the OPNsense config, not translate it
+across vendors).
+
+The same defect applied to my Round-4 Sub-task A "Switch source to
+\<vendor\> and retry" button (`migrate-parse-failure-detect-suggest`)
+— inherited the source-only logic from the proactive banner.
+
+Root cause: both buttons did `sourceSel.value = codec` and nothing
+to target.  The signal that the operator intended a round-trip
+translation (and would want both halves of the pair swapped on
+detect-suggest acceptance) is `target === source` *before* the click
+— that means they picked the same codec for both halves and either
+deliberately wanted same-vendor processing or hadn't yet set a
+deliberate target.  Cross-vendor intent
+(`target !== source` before the click) means the operator
+deliberately picked a different translation destination and must
+not be overwritten.
+
+#### New shared helper `applyDetectedCodec(codec)`
+
+Single function that both detect-suggest buttons now call:
+
+1. Sets `sourceSel.value` to the detected codec
+2. Dispatches a `change` event (adapter-info / compat-banner side
+   effects mirror operator-driven dropdown changes)
+3. **If `targetSel.value === prevSource && targetSel.value !== codec`** —
+   the round-trip-intent gate — also updates `targetSel.value` and
+   dispatches its `change` event
+4. Returns `{changedTarget: boolean}` so callers can adapt their
+   toast / button text
+
+Behaviour table:
+
+| Pre-click source | Pre-click target | Detected codec | Post-click source | Post-click target |
+|---|---|---|---|---|
+| Cisco | Cisco | OPNsense | OPNsense | OPNsense *(flipped)* |
+| Cisco | Aruba | OPNsense | OPNsense | Aruba *(preserved)* |
+| OPNsense | Cisco | OPNsense | OPNsense | Cisco *(no change — already correct)* |
+
+Two callers wired to the helper:
+
+* `useDetectedSource()` (proactive auto-detect banner button, exists
+  since pre-Phase-3) — toast now reads
+  *"Source and target set to \<codec\> (round-trip)"* when both
+  changed, *"Source set to \<codec\>"* when only source changed.
+* The `migrate-parse-failure-detect-suggest` button (Round 4
+  Sub-task A) — uses the helper before calling
+  `form.requestSubmit()` so the re-submit goes against the
+  smart-adjusted source+target pair.
+
+`testid_reference.md` description updated to document the smart
+target adjustment + the cross-vendor preservation rule.
+
+Full unit + integration suite green (3413 passed, 57 skipped — no
+change vs. post-R4 baseline; Round 4.1 is template-only).
+
 ### Phase 3 — Polish pass, Round 4: migrate-page UX cluster
 
 Three sub-tasks targeted by the Phase-3 audit's migrate-page bucket,
