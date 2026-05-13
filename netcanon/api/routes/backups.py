@@ -353,7 +353,19 @@ def _process_one_device(
             record.filename,
         )
     except Exception as exc:  # noqa: BLE001
-        result.error = str(exc)[:500]
+        # Route the raw exception through the operator-error translator
+        # before persisting on the result row.  ``str(exc)`` pre-Round-3
+        # produced wildly varying quality (good for in-house ValueError,
+        # opaque for socket.timeout, leaky for OSError-on-save); the
+        # translator collapses that surface into a host-prefixed
+        # single-line operator-readable message with the underlying
+        # exception type as a hint where helpful.  The full exception
+        # still goes to the server log below via exc_info=True — the
+        # diagnostic trail is preserved.
+        from netcanon.api._errors import translate_backup_error
+        result.error = translate_backup_error(
+            exc, host=device.host, step="collect",
+        )[:500]
         result.duration_seconds = time.monotonic() - start
         result.status = "failed"
         logger.error(
