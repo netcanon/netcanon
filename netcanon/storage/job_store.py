@@ -72,3 +72,49 @@ class FileJobStore:
             "Loaded %d persisted job(s) from %s", len(jobs), self._dir
         )
         return jobs
+
+    def load_one(self, job_id: str) -> BackupJob | None:
+        """Load a single job from disk by ID.
+
+        Used by ``BackupJobRegistry`` as the lazy-load fallback when an
+        operator queries an evicted-from-memory job by ID.  Disk is the
+        source of truth — the in-memory registry only caches the most-
+        recent N jobs; this method retrieves anything older.
+
+        Args:
+            job_id: UUID string identifying the job.
+
+        Returns:
+            The ``BackupJob`` if its JSON file exists and parses; ``None``
+            if the file is missing OR corrupt.  Corrupt files are logged
+            (same shape as ``load_all``) so operators can spot the
+            problem in logs.
+        """
+        path = self._dir / f"{job_id}.json"
+        if not path.exists():
+            return None
+        try:
+            return BackupJob.model_validate_json(
+                path.read_text(encoding="utf-8")
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error(
+                "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
+            )
+            return None
+
+    def list_job_ids(self) -> list[str]:
+        """List every job ID with a JSON file on disk.
+
+        Cheap directory scan — does not parse the JSON.  Used for
+        ``len(registry)`` semantics (the operator-meaningful "total
+        jobs ever recorded", which includes evicted-from-memory ones)
+        and for diagnostics endpoints.
+
+        Returns:
+            List of job ID strings, sorted by filename (which is
+            effectively chronological for UUID4-named files since
+            ``glob`` returns them in filesystem order — explicit sort
+            for determinism in tests).
+        """
+        return sorted(p.stem for p in self._dir.glob("*.json"))

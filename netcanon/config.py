@@ -52,6 +52,13 @@ class Settings(BaseSettings):
             FIFO queue and start as earlier slots free up.  Capped at
             ``MAX_BACKUP_CONCURRENCY`` (10) to protect the SSH target
             devices and bound thread count on the backup server.
+        max_memory_jobs: Cap on the number of ``BackupJob`` objects held
+            in memory.  Disk (``jobs/{id}.json`` via ``FileJobStore``) is
+            the source of truth — every job is persisted there regardless
+            of this setting.  Jobs evicted from memory remain accessible
+            by ID via the registry's transparent disk lazy-load.  Default
+            1000 caps memory at ~5 MB.  Set to 0 to disable in-memory
+            caching entirely (every read hits disk).
     """
 
     definitions_dir: Path = Path("definitions")
@@ -63,6 +70,7 @@ class Settings(BaseSettings):
     open_in_editor: bool = False
     backup_concurrency: int = Field(default=MAX_BACKUP_CONCURRENCY,
                                     ge=1, le=MAX_BACKUP_CONCURRENCY)
+    max_memory_jobs: int = Field(default=1000, ge=0)
 
     model_config = SettingsConfigDict(
         env_prefix="NETCANON_",

@@ -884,18 +884,11 @@ async def swagger_ui() -> HTMLResponse:
     return HTMLResponse(content=html)
 
 
-# ---------------------------------------------------------------------------
-# Health (infrastructure, not UI — but lives here to keep main.py minimal)
-# ---------------------------------------------------------------------------
-
-
-@router.get("/health")
-async def health(request: Request):
-    """Basic health check for readiness probes."""
-    return {
-        "status": "ok",
-        "definitions": len(request.app.state.definitions),
-        "schedules": len(request.app.state.schedules),
-        "profiles": len(request.app.state.device_profiles),
-        "jobs": len(request.app.state.jobs),
-    }
+# NOTE: A second ``/health`` handler used to live here returning per-
+# resource counts (definitions / schedules / profiles / jobs).  It was
+# dead code — ``health_router`` is registered first in ``main.py``
+# (see ``app.include_router(health_router.router)``) so its minimal
+# ``{"status":"ok","version":...}`` handler always won.  Removed in R8
+# along with the registry refactor; if operators want per-resource
+# counts in the future, add them as a separate ``/diagnostics``
+# endpoint rather than reviving the shadow.

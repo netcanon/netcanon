@@ -124,6 +124,21 @@ that file.
 These don't gate v0.1.0 but are tracked so they don't get lost
 once this file is finally retired:
 
+* **Backup-job pagination + retention.**  R8 capped the in-memory
+  registry at `max_memory_jobs` (default 1000) with disk lazy-load
+  on get-by-id miss, but the list endpoint still returns only
+  memory-resident jobs and disk grows forever.  Three v0.2.0
+  follow-ups:
+  - Pagination on `GET /api/v1/backups/` (`?limit=N&offset=M`) +
+    UI updates so operators can browse history past the in-memory
+    cap.
+  - `max_disk_jobs` setting + daily cleanup task that prunes
+    ``jobs/*.json`` past the cap (and the corresponding ``configs/``
+    files if cross-referenced).
+  - Stat-sort warm-cache so startup stays sub-second even at 100k+
+    jobs (today's `load_all` parses every JSON file).
+  - `/diagnostics` endpoint exposing `jobs_memory` vs `jobs_disk`
+    counts for operators who want to monitor cache state.
 * **Backup retention / rolling delete on scheduled jobs.**  Today
   every scheduled-job run lands a fresh `configs/<host>_<ts>.<ext>`
   file with no automatic cleanup; long-running scheduled jobs grow
