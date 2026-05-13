@@ -21,6 +21,104 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Doc audit + sync: Phase 3 status block + sanitize-UI references
+
+Mid-Phase-3 doc-staleness sweep.  All Phase 3 PRs (#15-#25) shipped
+with CHANGELOG entries — that part of the discipline held.  The
+**supporting docs that describe phase state and the sanitize
+workflow** drifted because the rounds shipped fast enough that the
+narrative docs hadn't been updated since the audit kicked off.
+
+Three docs updated; zero code touched.
+
+#### `docs/RELEASE_PLAN.md` — Phase 3 status block
+
+The status block listed Phase 3 as *"Remaining MUST-tier work"* with
+a single bullet pointing at the "Pre-launch quality hardening"
+section below — that wording was accurate when the section was
+written, but obsolete after rounds 1, 2, 1.5, 3, 3.1, 4, 4.1, 4.2,
+5, 6, and 6.1 shipped.
+
+Updated to:
+
+* Add **Phase 3 (in-flight, 9/13 rounds shipped)** as a shipped
+  phase entry, with a per-round bullet listing every PR (#15-#25)
+  with a one-line summary of what it closed.
+* Add four new entries to "Remaining MUST-tier work before public
+  flip": Round 7 (kbd cheatsheet), Round 8 (jobs-dict eviction),
+  Round 9 (runtime checks — browser-compat + memory smoke), and
+  Round 10 (cut v0.1.0-rc7 + finalize CHANGELOG / RELEASE_PLAN).
+* Include cumulative test-count delta (3266 → 3453 tests) so the
+  scope is visible without grep-archaeology.
+
+The "Pre-launch quality hardening" section narrative below stays
+unchanged — it's accurate as a description of *what was audited*;
+the rounds listing above shows *what got addressed*.
+
+#### `README.md` — sanitize-UI mentions in three places
+
+Round 6 added the `/sanitize` browser page but the README's three
+sanitize mentions (trust-signal paragraph, pip-install section,
+bug-report workflow) still pointed only at the CLI / API.  Each
+now mentions all three invocation paths (Browser UI / CLI / HTTP
+API) with the UI flagged as the easiest when the server is running.
+
+#### `BUG_REPORTING.md` — restructure to three sanitize options
+
+Pre-update the doc had two options ("CLI no-server-required" / "HTTP
+API for running-server").  Post-Round-6 it has three.  Restructured:
+
+* Intro paragraph names all three paths up-front (Browser UI / CLI /
+  HTTP API) with the "all share one library" reassurance.
+* **Option A — Browser UI** now leads, with concrete walkthrough
+  steps (source vendor → input mode → optional dry-run → submit)
+  matching what the sanitize.html page actually renders.  Calls
+  out the safety banner explicitly so operators know placeholders
+  aren't redeployable.
+* **Option B — CLI** (was Option A) — unchanged content, renumbered.
+* **Option C — HTTP API** (was Option B) — unchanged content,
+  renumbered.
+* "Both paths call the same library" → "All three paths call the
+  same library".
+
+Sanitize-categories table extended with the two new R6.1 entries
+(`local-user-name` → `localuserN`, `snmpv3-user-name` → `snmpv3userN`)
++ Round 6.1's wording-improvement on the existing `local-user-hash`
+row.
+
+#### Audited but not changed
+
+Cross-checked against the AGENTS.md doc-sync table to see what else
+might need updating:
+
+* **AGENTS.md doc-sync table itself** — my new modules
+  (`netcanon/api/_errors.py` R3, `netcanon/migration/codecs/_input_shape.py`
+  R4.2) carry full module docstrings; new tests landed in the
+  existing tiers; testid_reference.md got sections for the new
+  sanitize page testids in PR #24 + R6.1 updates in PR #25.  No
+  new doc-sync rule needed.
+* **`ARCHITECTURE.md`** — the operator-error translator (R3) and
+  input-shape helper (R4.2) are tactical helpers, not architectural
+  changes; their module docstrings carry the design rationale.
+  Would be the right place if the translator pattern gets reused
+  by a third route someday.
+* **`docs/TROUBLESHOOTING.md`** — the new operator-facing error
+  messages (Rounds 1, 3, 3.1) are self-explanatory by design — they
+  *are* the troubleshooting steps, embedded in the error text.  No
+  new "common error patterns" rows needed.
+* **`docs/HOW_WE_TEST.md`** — no methodology change; just more
+  tests added within the existing unit / integration tiers (3266
+  → 3453).  Test count is by deliberate convention *not* in the
+  doc body (per the "no hard-coded counts in prose" hard rule);
+  the doc points at CI output as source of truth.
+
+Other docs unchanged: `CAPABILITIES.md`, `COMPARISON.md`,
+`IDENTITY.md`, `METHODOLOGY.md`, the per-vendor pages, the
+walkthroughs — none referenced by Phase 3 polish work.
+
+Full unit + integration suite green (3453 passed, 57 skipped — no
+delta vs. post-R6.1 baseline since this is docs-only).
+
 ### Phase 3 — Polish pass, Round 6.1: username redaction + safety note
 
 Defect surfaced by user during Round 6 visual verification.  The

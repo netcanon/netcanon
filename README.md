@@ -68,8 +68,10 @@ haven't reached — and that's where you come in.  If you have a
 running-config that translates wrong (or doesn't translate at all),
 that's the highest-impact bug report this project can receive.  See
 [`BUG_REPORTING.md`](BUG_REPORTING.md) for the workflow — Netcanon
-ships its own sanitiser (`netcanon sanitize ...`) so you never paste
-real WAN IPs, hashes, or hostnames into a public issue.
+ships its own sanitiser (the `/sanitize` browser page, the
+`netcanon sanitize` CLI, and the `POST /api/v1/sanitize` HTTP
+endpoint all share one library) so you never paste real WAN IPs,
+hashes, hostnames, or usernames into a public issue.
 
 For the full audit narrative + the variance-class taxonomy, see
 [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md).
@@ -133,7 +135,11 @@ uvicorn netcanon.main:app --host 127.0.0.1 --port 8000
 
 `netcanon` also installs the `netcanon` CLI — `netcanon sanitize -i
 my-config.txt --source-vendor cisco_iosxe_cli --dry-run` is the
-typical entrypoint for the bug-reporting workflow.
+typical CLI entrypoint for the bug-reporting workflow.  If the
+server's running, the **`/sanitize` browser page** is the easier
+path (paste or pick a stored config, click Sanitize, copy the
+output — see [`BUG_REPORTING.md`](BUG_REPORTING.md) for the full
+workflow including what gets redacted).
 
 ### Desktop (Windows)
 
@@ -220,9 +226,11 @@ four-layer design.
 
 That's the contribution this project values most.  Workflow:
 
-1. Sanitise your config with `netcanon sanitize` — strips hostnames,
-   IPs, hashes, certs, SNMP communities, etc., with a counter-per-
-   session stable substitution table you can audit before submission.
+1. Sanitise your config — open the `/sanitize` browser page (easiest
+   if the server's running), or run the `netcanon sanitize` CLI
+   (no server required).  Both strip hostnames, usernames, IPs,
+   hashes, certs, SNMP communities, etc., with a counter-per-session
+   stable substitution table you can audit before submission.
 2. Open a [bug report](https://github.com/netcanon/netcanon/issues/new?template=bug_report.yml)
    or [fixture submission](https://github.com/netcanon/netcanon/issues/new?template=fixture_submission.yml).
 3. The fixture lands in `tests/fixtures/real/<vendor>/`, the
