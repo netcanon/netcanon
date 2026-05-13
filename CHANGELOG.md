@@ -21,6 +21,122 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 4: migrate-page UX cluster
+
+Three sub-tasks targeted by the Phase-3 audit's migrate-page bucket,
+shipped as a two-commit PR.  Commit 1 adds new behaviour (detect on
+parse failure); Commit 2 is pure copy work (4 empty-state banner
+rewrites + header text).  Total ~140 LOC across one template + one doc.
+
+#### Detect-on-parse-failure: one-click recovery from wrong-codec paste
+
+Common operator mistake: paste an OPNsense XML config into the
+`cisco_iosxe_cli` CLI codec, hit Translate, get back a red banner
+saying *"Error: parse failed: cisco_iosxe_cli: input looks like XML
+or JSON, not IOS CLI."*  Today the operator has to (1) read the
+message, (2) guess which codec is right, (3) manually swap the source
+dropdown, (4) click Translate again.
+
+The `/detect` endpoint (which probes a config's first 500 bytes
+through every registered codec and returns ranked candidates) already
+existed and is wired to the textarea's input handler to populate the
+green *"Auto-detected: Cisco IOS-XE 87% confidence"* banner above the
+form.  But it was never called *reactively* after a `/plan` parse
+failure — the proactive auto-detect doesn't fire if the operator
+pastes-and-immediately-submits before the 350ms debounce elapses, and
+the wrong-codec error path had no second chance.
+
+New JS helper `enrichParseFailureBanner(planBody, job)` called from
+the migrate-form `onSubmit` when `job.error` starts with
+`"parse failed"`.  It POSTs the same input shape (XOR `raw_text` /
+`source_filename`) to `/detect` with `min_confidence=40` (matching the
+proactive threshold), and if the top candidate's codec differs from
+the source the operator submitted, appends a *"Did you mean:
+<vendor>?"* suggestion inline below the parse-error banner.  The
+suggestion includes:
+
+* The human-readable vendor display name (looked up via
+  `adapterEntry()`)
+* A confidence-percentage chip
+* The `/detect` `reason` line (e.g. "first 500 bytes contain
+  `<opnsense>` XML root element")
+* A *"Switch source to <vendor> and retry"* button (new testid
+  `migrate-parse-failure-detect-suggest`, carries
+  `data-suggested-codec`) — click swaps the source dropdown,
+  dispatches a `change` event (so adapter-info side effects fire),
+  and calls `form.requestSubmit()` to re-run `/plan`.  Two clicks
+  collapse to one.
+
+Best-effort + silent-fail: any `/detect` network blip, 5xx, or empty
+candidate list leaves the original parse-error banner untouched.
+Operator never sees a worse experience than pre-Round-4.
+
+Why client-side instead of server-side wire-up (`/plan` auto-runs
+`/detect` on failure, returns candidates inside `MigrationJob`):
+
+* Zero `MigrationJob` schema churn — adding a UX-only
+  `detect_candidates` field would pollute a model that's also
+  consumed by the deploy-side pipeline downstream
+* Failure isolation — if `/detect` is slow or flakes, the
+  parse-failure banner still renders synchronously
+* Code reuse — shares `adapterEntry()` lookup and banner-append
+  patterns with the existing `renderDetectBanner()` machinery
+
+`/plan` and `/detect` endpoint contracts unchanged.
+
+#### Four empty-state banners rewritten in Tier-3 voice
+
+Per-pane *"No X found in the source config."* banners on the rename
+modal (VLANs / local-users / SNMP community / SNMPv3 users) stated
+the fact but never explained whether that's a problem or what to
+do about it.  Operators chasing phantom bugs — or worse, retrying
+the same wrong-vendor paste — were the failure mode.
+
+The Tier-3 detection banner on the same page (gold standard for
+operator-facing tone) always couples fact to action: *"<fact>.
+Operator must apply them manually on the target device."*  Round 4
+brings the four empty-state banners into that voice:
+
+* **VLANs pane** — names the most common cause (wrong codec) and
+  the recovery path (auto-detect banner above), plus the legitimate-
+  empty case (VLAN database in a separate file)
+* **Local-users pane** — distinguishes the legitimate-empty case
+  (TACACS+ / RADIUS-only devices) from the missing-config case
+  (separate AAA file)
+* **SNMP community pane** — points at the sibling SNMPv3 pane when
+  the operator picked the wrong protocol version, plus the
+  separate-management-stanza-file case
+* **SNMPv3 users pane** — mirror of the SNMP-community hint, plus
+  the cross-vendor v3 re-key reality already documented in
+  `migration.py:520-526`
+
+No testid changes; no JS partial changes; no behaviour changes —
+pure HTML-string replacements at lines 646 / 678 / 704 / 728 of
+`migrate.html`.  Grep verified zero existing test assertions on the
+old literal strings outside `tests/testid_reference.md` descriptive
+prose (and those descriptions document the testid + element type,
+not the visible text).
+
+#### Migrate-page header: drop the developer leak
+
+The migrate-page subtitle ended with *"Backed by `POST
+/api/v1/migration/plan`"* — useful to a developer skimming for the
+endpoint, useless / mildly confusing to an operator who just wants
+to translate a config.  Rewrote the paragraph to be entirely
+operator-facing:
+
+> Pick a source vendor (or paste your config and let auto-detect
+> suggest one), pick a target, and Netcanon translates the canonical
+> config across vendors.  Capability gaps and Tier-3 sections (ACLs,
+> NAT, QoS, route-maps, IPsec) are surfaced inline after translation
+> so you can apply them manually on the target device.
+
+Three lines replacing three lines; no HTML structure change.  Rich
+inline help (tooltips on the source / target labels with format-
+specific guidance — e.g. "Cisco IOS-XE expects CLI text; OPNsense
+expects XML") is deliberately deferred to the Round 5 tooltip pass,
+where it belongs.
+
 ### Phase 3 — Polish pass, Round 3.1: Netmiko collapses-all-errors hotfix
 
 Defect surfaced during live testing of Round 3 against three bad-host
