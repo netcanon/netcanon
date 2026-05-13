@@ -27,7 +27,8 @@
       </div>
       <div class="form-group">
         <label>Device Type</label>
-        <select name="type_key" data-testid="device-type-select">
+        <select name="type_key" data-testid="device-type-select"
+                title="Vendor + OS family that determines how Netcanon connects (Paramiko shell vs Netmiko), what config command to run, and how to parse the output.">
           {% for key, def in definitions.items() | sort %}
           <option value="{{ key }}"
                   data-needs-enable="{{ 'true' if def.connection.needs_enable else 'false' }}">
@@ -39,35 +40,41 @@
       <div class="form-group">
         <label>Host / IP</label>
         <input name="host" type="text" placeholder="192.168.1.1"
-               data-testid="device-host-input" required>
+               data-testid="device-host-input" required
+               title="IPv4 (192.168.1.1), IPv6 (2001:db8::1), or RFC-1123 hostname (core-sw-01.example.com).">
       </div>
       <div class="form-group">
         <label>Username</label>
         <input name="username" type="text" placeholder="admin"
-               data-testid="device-username-input" required>
+               data-testid="device-username-input" required
+               title="SSH login. Common defaults: admin (most vendors), netadmin (Aruba), root (OPNsense). Use a service account in production.">
       </div>
       <div class="form-group">
         <label>Password</label>
         <input name="password" type="password"
-               data-testid="device-password-input" required>
+               data-testid="device-password-input" required
+               title="SSH password. Encrypted at rest with Fernet — see SECURITY.md → Credential Storage for the resolution chain.">
       </div>
       <!-- Enable password: shown only when the selected definition requires it -->
       <div class="form-group enable-group">
         <label>Enable Password</label>
         <input name="enable_password" type="password"
-               placeholder="optional" data-testid="device-enable-input">
+               placeholder="optional" data-testid="device-enable-input"
+               title="Privileged-mode (enable / superuser) password. Only required when the selected Device Type's definition sets needs_enable=true. Auto-shows when needed.">
       </div>
       <div class="form-group">
         <label>Notes</label>
         <input name="notes" type="text" placeholder="optional notes"
-               data-testid="device-notes-input">
+               data-testid="device-notes-input"
+               title="Free-text notes attached to the profile (rack location, owner, change ticket, etc.). Not used by the backup pipeline.">
       </div>
       <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
       <details class="port-details" style="align-self:flex-end">
         <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
                         user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
         <input name="port" type="number" value="22" min="1" max="65535"
-               style="width:72px;margin-top:.25rem" data-testid="device-port-input">
+               style="width:72px;margin-top:.25rem" data-testid="device-port-input"
+               title="TCP port for SSH. Defaults to 22. Change only if the device runs SSH on a non-standard port.">
       </details>
       <!-- OS-version / Model pins under Advanced.  Layered-definitions
            overlay selection: set os_version to pick a version-specific

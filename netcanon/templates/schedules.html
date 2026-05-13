@@ -24,12 +24,14 @@
         <label>Schedule Name</label>
         <input id="sched-name" name="name" type="text"
                placeholder="e.g. Daily Cisco backup"
-               data-testid="sched-name-input" required>
+               data-testid="sched-name-input" required
+               title="Shown in the schedules table and in job logs. Pick something a second operator would recognise without context.">
       </div>
       <div class="form-group">
         <label>Run every</label>
         <div class="interval-row">
-          <select id="sched-interval-preset" data-testid="sched-interval-select">
+          <select id="sched-interval-preset" data-testid="sched-interval-select"
+                  title="How often the schedule fires. Cron expressions aren't supported — pick a preset or enter minutes via 'Custom…'.">
             <option value="60">1 hour</option>
             <option value="360">6 hours</option>
             <option value="720">12 hours</option>
@@ -40,7 +42,8 @@
           <div id="sched-custom-wrap" style="display:none;gap:.35rem;align-items:center">
             <input id="sched-custom-mins" type="number" min="1" max="43200"
                    placeholder="minutes" style="width:90px"
-                   data-testid="sched-custom-interval-input">
+                   data-testid="sched-custom-interval-input"
+                   title="Minutes between runs (1 to 43,200 = 30 days). Schedule fires as soon as the interval elapses after the previous run.">
             <span style="font-size:.85rem;color:#666">min</span>
           </div>
         </div>
@@ -48,7 +51,8 @@
     </div>
 
     <!-- ── Target by device type ─────────────────────────────────── -->
-    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333"
+        title="Match-by-vendor: every saved Device Profile whose Device Type is checked here runs when the schedule fires. Unioned with 'Target Specific Devices' below.">
       Target by Device Type
       <span style="font-size:.8rem;font-weight:normal;color:#888">— back up all profiles of these types</span>
     </h3>
@@ -64,7 +68,8 @@
     </div>
 
     <!-- ── Target specific devices ──────────────────────────────────── -->
-    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333">
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333"
+        title="Match-by-profile: explicitly listed profiles always run. Use for one-offs or to single out a device from a type-wide schedule.">
       Target Specific Devices
       <span style="font-size:.8rem;font-weight:normal;color:#888">— include individual profiles regardless of type</span>
     </h3>
