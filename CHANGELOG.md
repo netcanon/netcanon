@@ -21,6 +21,73 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 3.1: Netmiko collapses-all-errors hotfix
+
+Defect surfaced during live testing of Round 3 against three bad-host
+scenarios.  All three produced the same Netmiko-timeout message
+instead of three distinct DNS / refused / unreachable translations:
+
+* `not.a.real.host.invalid` →
+  `[…] Connection or command-read timed out — the device is slow to respond…`
+  *(should have been "DNS lookup failed — verify the hostname spelling")*
+* `192.0.2.1` (RFC-5737 unreachable) →
+  *same Netmiko-timeout message*
+  *(should have been "Connection timed out — host unreachable")*
+* `127.0.0.1:1` (refused) →
+  *same Netmiko-timeout message*
+  *(should have been "Connection refused — SSH is not running on the
+  target port")*
+
+Root cause: Netmiko's `establish_connection()` (`base_connection.py:1168`)
+catches `socket.gaierror`, `paramiko.NoValidConnectionsError`, and
+`TimeoutError` then re-raises a single `NetmikoTimeoutException` with
+a generic *"TCP connection to device failed. Common causes are: 1.
+Incorrect hostname or IP address. 2. Wrong TCP port. ..."* message —
+useful for shell users, useless for operators reading a single-line
+toast.  Round 3's translator hit the wrapped `NetmikoTimeoutException`
+and never inspected the chained underlying exception, so all three
+scenarios collapsed to the same fallback message.
+
+Python preserves the original exception via the implicit
+`BaseException.__context__` attribute set automatically when you
+`raise NewError(...)` inside an `except` block.  The fix is a
+two-piece change to `netcanon.api._errors`:
+
+* **New helper `_netmiko_underlying_cause(exc)`** that walks the
+  exception chain (prefers `__cause__` if explicitly set via `raise
+  ... from ...`, falls back to `__context__`) and returns the
+  immediate underlying exception.  Walks one level only — deeper
+  recursion would risk picking up unrelated context from outer
+  try/except blocks.
+
+* **`_humanize_netmiko_timeout()` now peeks `__context__`** and
+  dispatches via `isinstance` checks to the per-cause formatter:
+  `gaierror` → DNS-failure message, `NoValidConnectionsError` /
+  `ConnectionRefusedError` → refused message, `TimeoutError` →
+  host-unreachable message.  When the chain is empty or has a type
+  we don't specifically handle (e.g. a real read-timeout AFTER a
+  successful connect), the original generic "Connection or
+  command-read timed out" message is preserved — that's still the
+  right message for read-side timeouts.
+
+* **New top-level mapping for `paramiko.NoValidConnectionsError`**
+  in the dispatch table.  Listed before `ConnectionRefusedError`
+  because `NoValidConnectionsError` is a `SSHException` subclass,
+  not a `ConnectionRefusedError` subclass.  Covers the
+  `paramiko_collector` code path (OPNsense) where the exception
+  reaches the translator directly without Netmiko wrapping.
+
+Five new regression tests in `tests/unit/test_api_errors.py` pin the
+fix: each of the three wrapped scenarios produces the right per-cause
+message + a no-chain case asserts the generic fallback is preserved
+for legitimate read-timeouts + direct-path `NoValidConnectionsError`
+hits the standalone mapping.  Interactive proof against the actual
+exception types matches the test assertions exactly.
+
+Total: ~70 LOC in `_errors.py`, ~100 LOC of new tests, zero existing
+tests broken (full suite: 3413 passed, 57 skipped — up 5 from the
+post-Round-3 baseline of 3408).
+
 ### Phase 3 — Polish pass, Round 3: backup-error translator layer
 
 Phase-3 audit's headline finding: every operator-visible failure on
