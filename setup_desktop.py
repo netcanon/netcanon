@@ -164,8 +164,12 @@ executables = [
     Executable(
         # Entry point — runs netcanon_desktop.__main__:main()
         script="netcanon_desktop/__main__.py",
-        # Win32GUI suppresses the console window so the app runs silently.
-        base="Win32GUI" if sys.platform == "win32" else None,
+        # "gui" suppresses the console window so the app runs silently.
+        # cx_Freeze 8.x renamed the old "Win32GUI" base to lowercase
+        # "gui" + made it cross-platform (the underlying behaviour on
+        # Windows is still the legacy Win32GUI bootstrap).  Old name
+        # raised DistutilsOptionError on cx_Freeze >= 8.0.
+        base="gui" if sys.platform == "win32" else None,
         target_name="netcanon.exe",
         # The icon embedded in the EXE itself (taskbar / alt-tab).
         icon=_build_icon(),

@@ -52,7 +52,7 @@ builds, bump `MSI_VERSION_DEFAULT` manually if you care.
 The MSI:
 * Installs to `C:\Program Files\Netcanon\`
 * Creates a Start Menu shortcut (pinnable to the taskbar)
-* Uses `base="Win32GUI"` — no console window
+* Uses `base="gui"` — no console window (cx_Freeze 8.x naming; previously `Win32GUI`)
 
 ---
 
