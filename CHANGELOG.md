@@ -21,6 +21,128 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 6: Sanitize UI page
+
+The Phase-3 audit flagged **sanitize-has-no-UI** as a HIGH-severity
+feature-discovery gap before v0.1.0 launch.  Today the sanitization
+library is reachable three ways:
+
+* `POST /api/v1/sanitize` (multipart, JSON or text response depending
+  on `dry_run` flag)
+* `netcanon sanitize` CLI subcommand
+* `python -c "from netcanon.tools.sanitize import sanitize_text; …"`
+
+Operators following the README's "before you file a bug report,
+sanitize your config" guidance had to choose between curl
+gymnastics and CLI installation steps.  Round 6 ships a proper
+`/sanitize` page mirroring the migrate page's input-mode idioms
+(paste raw / pick stored) so operators familiar with one surface
+immediately understand the other.
+
+#### `netcanon/templates/sanitize.html` — new template
+
+Structure mirrors `migrate.html` deliberately — same `.form-group`
++ input-mode radio + result-region pattern — but **simpler** (no
+Tier-3 rename modal, no fit-check, no compatibility-guard).
+Operator-facing copy at the top, source-vendor select + input-mode
+radio + textarea/filename picker + dry-run checkbox + submit
+button.  Result panel shows status summary, per-category counter
+strip, sanitized output `<pre>` (with copy + download buttons),
+and a substitution audit `<table>` (category, field, original,
+redacted).
+
+Scoped CSS uses `.san-*` prefix to avoid coupling sanitize's look
+to migrate's; 30 LOC of duplicated styles, intentional separation.
+
+Form-field tooltips follow the Round-5 discipline (every input has
+a `title=`).
+
+#### Dual-fetch on submit — Option B from the design
+
+The sanitize API returns one of two shapes depending on `dry_run`:
+`text/plain` (sanitized config + `X-Netcanon-Substitution-Count`
+header) or `application/json` (substitution audit).  Operators
+consistently want **both** views — *what changed* AND *the final
+text*.  Three implementation options were on the table:
+
+* (A) Match API exactly: dry-run checkbox controls mode; operator
+  submits twice to see both.  Simple, but ergonomically awkward.
+* (B) Dual parallel fetch — when dry-run is unchecked, fire both
+  calls in parallel and join the results client-side.  Operator
+  sees both views in one round-trip.  ~30 extra LOC of JS, no
+  API change.
+* (C) Extend the API to return both shapes in a single response.
+  Cleanest long-term, but breaking API change for a UX detail.
+
+Chose **(B)**.  On submit:
+
+* If `dry_run` is checked → one fetch (audit-only); output section
+  hides.
+* If `dry_run` is unchecked → two fetches in parallel via
+  `Promise.all`.  Audit result populates the counter strip + audit
+  table; non-dry-run result populates the sanitized-output `<pre>`.
+
+Either call failing surfaces via `formatApiError` + `showToast` —
+same pattern as every other form (Round-1.5 helper).
+
+#### Operator-readable category labels
+
+The library emits machine-style category strings (`ipv4-public`,
+`snmpv3-auth`, `local-user-hash`); the template ships a
+`CATEGORY_LABELS` dict that maps each to human prose ("Public
+IPv4 addresses", "SNMPv3 auth passphrases", "Local user password
+hashes").  Matches Round-2 vocabulary discipline.  Unknown
+categories (future library additions) fall through to the raw key
+so the counter strip never renders blank text.
+
+#### Route + nav plumbing
+
+* New `GET /sanitize` route in `netcanon/api/routes/ui.py` (10
+  LOC including docstring).
+* Nav link added to `base.html` between Migrate and API Docs
+  (the "tools" cluster — Migrate is the other tool).
+* Same anchor added to the Swagger UI's wrapped nav-bar
+  (`ui.py:432-443`) so operators on `/docs` keep the link too.
+
+`netcanon/main.py` registration unchanged — `ui_router` is already
+mounted.
+
+#### Test coverage
+
+`tests/integration/test_sanitize_page.py` — 10 new tests:
+
+* **Page route** (4): returns 200, returns HTML, all 21
+  required testids present, source-vendor select carries
+  `required`.
+* **Nav link** (4): present on dashboard, active on `/sanitize`,
+  not-active on other pages, present in Swagger-wrapped nav.
+* **Stored-config dropdown** (2): seeded records appear as
+  `<option>`s with their device_type label; empty-storage path
+  still renders the placeholder.
+
+Submit-flow / form interactivity coverage stays with the
+existing `tests/integration/test_sanitize_api.py` (the API is
+tested; the page just renders + posts FormData).
+
+#### `testid_reference.md` — new Sanitize section
+
+Documents all 23 sanitize-page testids with element type + notes.
+Explains the dual-fetch design choice inline so a future
+contributor reading the section understands why submit triggers
+two HTTP calls when dry-run is unchecked.
+
+#### Scope (delivered vs. estimated)
+
+Recon agent estimated 440-570 LOC total.  Actual: ~570 LOC
+across template (370) + route handler (29) + tests (130) +
+testid_reference section (52) + nav-link (3 lines).  At the
+high end of the estimate; the dual-fetch JS was slightly
+heavier than the recon's single-fetch baseline.
+
+Full unit + integration suite green (3445 passed, 57 skipped —
+up 10 from 3435 post-R5 baseline thanks to the 10 new
+sanitize-page tests).
+
 ### Phase 3 — Polish pass, Round 5: tooltip pass on form-heavy pages
 
 The Phase-3 audit flagged the backup form (`index.html`) and the
