@@ -21,6 +21,116 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 Round 7.2: Swagger UI dark mode + nav sync
+
+Closes the dark-mode story.  Round 7.1 swept the in-app templates but
+left ``/docs`` (Swagger UI) as a light-only outlier — that page is
+built from ``fastapi.openapi.docs.get_swagger_ui_html()`` and
+post-processed in ``netcanon.api.routes.ui:swagger_ui``, NOT a Jinja
+template extending base.html.  R7.1's tokenization didn't reach it.
+
+This round wraps the Swagger UI page with the same theme infrastructure
+the rest of the app has, plus CSS overrides for Swagger UI's internal
+class selectors.
+
+Single PR (`r7.2-swagger-darkmode`).
+
+#### What ships
+
+1. **Theme-detect boot script** injected at ``<body>`` open.  Reads
+   ``localStorage["netcanon.theme.v1"]`` + falls back to
+   ``prefers-color-scheme: dark``.  Mutates ``<html data-theme>``
+   before any CSS applies → no flash of light content.  Duplicates
+   the base.html boot script verbatim (the comment in ui.py flags
+   the sync requirement).
+2. **Token definitions** (``:root`` + ``[data-theme="dark"]`` blocks)
+   for ``--page-bg``, ``--surface``, ``--surface-alt/-elev/-hover``,
+   ``--text-primary/-muted/-faint``, ``--border/-strong``,
+   ``--nav-*``, ``--accent``, ``--btn-secondary-*``, ``--pre-*``,
+   ``--shadow-card``.  Only the tokens referenced by the nav + Swagger
+   overrides are included — the full base.html set wasn't needed.
+3. **Nav-bar parity** with base.html: page-nav cluster (10 links) +
+   spacer + right-rail ``?`` cheatsheet trigger + sun/moon theme
+   toggle.  Each link carries the same ``data-testid`` as base.html's
+   nav so downstream automation finds the same surface on /docs as
+   anywhere else.
+4. **Local ``toggleTheme()`` JS** inlined (the ``_partials/theme-
+   toggle.js`` JS isn't loaded on the docs page).  Stripped-down
+   version: flips ``data-theme``, persists to localStorage.  No
+   ``aria-label`` live-update — the developer-page UX cost is
+   minimal compared to duplicating the full partial.
+5. **Swagger UI dark-mode CSS overrides**: ~30 selectors wrapped in
+   ``[data-theme="dark"] .swagger-ui ...`` with ``!important`` (to
+   beat the CDN stylesheet's specificity).  Covers info / opblock
+   cards / tag headings / parameter & response tables / model
+   explorer / try-it-out inputs / code samples / secondary text.
+   Doesn't try to theme every Swagger surface — the long tail is
+   v0.2.0 polish.
+
+#### The cheatsheet button: URL-param redirect, not inline modal
+
+The ``?`` button on /docs **navigates to ``/?show-shortcuts=1``**
+instead of opening an inline cheatsheet modal.  Rationale:
+
+* The docs page has no per-page keyboard shortcuts of its own (no
+  config viewer, no diff page, no compare picker).  The cheatsheet
+  content all applies to OTHER pages.
+* Inlining the modal HTML + CSS + JS partial would duplicate ~190
+  LOC into the post-processed page for a surface that doesn't host
+  its own shortcuts.
+* Auto-opening on a real app page (home) lands the operator
+  somewhere the shortcuts actually apply, with the modal visible
+  immediately.
+
+A small handler in ``_partials/kbd-cheatsheet.js`` watches for
+``?show-shortcuts=1`` in the URL on DOMContentLoaded.  When present,
+it opens the modal AND strips the param via ``history.replaceState``
+so refreshing doesn't re-open.
+
+#### File breakdown
+
+* ``netcanon/api/routes/ui.py`` — module-level constants for boot
+  script / tokens / nav HTML / nav CSS / toggle JS / Swagger dark
+  CSS, all docstring-annotated with the sync requirement against
+  base.html.  Route handler reads cleaner now (5 named injection
+  points vs the prior inline string concat).
+* ``netcanon/templates/_partials/kbd-cheatsheet.js`` — new
+  ``DOMContentLoaded`` listener for the ``?show-shortcuts=1`` URL
+  param (~20 LOC).  Wrapped in try/catch for browsers without
+  ``URLSearchParams`` (very old IE / very old Safari) — the modal
+  stays openable via the ``?`` keypress.
+* ``tests/integration/test_swagger_docs_page.py`` (new, **26
+  tests**) across 5 classes:
+  - ``TestDocsPageBoot`` (3 tests) — boot script + tokens + dark
+    overrides defined
+  - ``TestDocsNavBar`` (15 tests, 9 parametrized) — brand,
+    page-nav links, active-class, cheatsheet button URL, theme
+    toggle, spacer positioning
+  - ``TestSwaggerDarkOverrides`` (4 tests) — opblock + scheme-
+    container overrides, !important density, input theming
+  - ``TestShowShortcutsUrlParam`` (2 tests) — URL-param handler
+    registered + replaceState used
+  - ``TestDocsResponseIntegrity`` (3 tests) — swagger-ui div,
+    bundle script, openapi URL all survive post-processing
+
+#### Sync requirement against base.html
+
+The boot script + token definitions in ui.py duplicate fragments
+of base.html.  When tokens change in base.html (e.g. adding a new
+``--accent-dim``), the same change must propagate to ui.py.
+Flagged in the ui.py docstrings.  A future refactor could lift the
+token block into a single Python constant imported by both surfaces
+— deferred to v0.2.0 polish.
+
+#### Verification
+
+Full test suite green (exit 0, **+26 tests**, total 3515).  Manual
+visual verification: /docs page re-themes correctly when toggle
+flips (info / opblock cards / tables / inputs all darken); the
+``?`` button navigates home with the cheatsheet pre-opened; theme
+toggle persists across navigation between /docs and the rest of
+the app.
+
 ### Phase 3 Round 7.1: dark-mode coverage sweep (in-app surfaces)
 
 Visual verification on Round 7 surfaced **six pre-existing dark-mode

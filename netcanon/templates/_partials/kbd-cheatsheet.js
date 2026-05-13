@@ -99,3 +99,31 @@
       closeKbdCheatsheet();
     }
   });
+
+  /**
+   * URL-param auto-open hook.
+   *
+   * The Swagger UI `/docs` page can't open the cheatsheet directly
+   * (its template doesn't extend base.html and so the modal markup
+   * isn't there).  Its nav-bar `?` button links to
+   * `/?show-shortcuts=1` instead — landing here triggers the modal
+   * automatically.  The history.replaceState call strips the param
+   * so refreshing the page doesn't re-open the modal.
+   */
+  document.addEventListener('DOMContentLoaded', function() {
+    try {
+      var params = new URLSearchParams(window.location.search);
+      if (params.get('show-shortcuts') === '1') {
+        openKbdCheatsheet();
+        params.delete('show-shortcuts');
+        var qs = params.toString();
+        var newUrl = window.location.pathname
+                   + (qs ? '?' + qs : '')
+                   + window.location.hash;
+        window.history.replaceState({}, '', newUrl);
+      }
+    } catch (_) {
+      /* URLSearchParams unsupported in very old browsers; silently
+         skip — the modal stays openable via `?` keypress. */
+    }
+  });
