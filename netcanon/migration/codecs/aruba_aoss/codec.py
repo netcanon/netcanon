@@ -37,6 +37,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import CanonicalIntent
+from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
@@ -247,8 +248,9 @@ class ArubaAOSSCodec(CodecBase):
           * ``vlan <N>`` ... ``untagged <range>`` inside the stanza
           * ``routing`` keyword on a port (not ``no switchport``)
         """
-        stripped = raw_prefix.lstrip()
-        if stripped.startswith("<") or stripped.startswith("{"):
+        # XML / JSON shape — shared helper tolerates leading shell-echo
+        # / banner framing so real captures don't bypass the guard.
+        if detect_input_shape(raw_prefix) is not None:
             return None
 
         # Unique banner.  Three observed shapes:

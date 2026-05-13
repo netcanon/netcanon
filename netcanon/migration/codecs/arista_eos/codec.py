@@ -49,6 +49,7 @@ from ...canonical.intent import (
     CanonicalEvpnType5Route,  # noqa: F401 — reserved for GAP 6+ follow-up
     CanonicalIntent,
 )
+from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
@@ -268,8 +269,9 @@ class AristaEOSCodec(CodecBase):
           * ``Port-Channel`` (capital C) distinct from Cisco's ``Port-
             channel`` (lower c).
         """
-        stripped = raw_prefix.lstrip()
-        if stripped.startswith("<") or stripped.startswith("{"):
+        # XML / JSON shape — shared helper tolerates leading shell-echo
+        # / banner framing so real captures don't bypass the guard.
+        if detect_input_shape(raw_prefix) is not None:
             return None
         if re.search(r"^!\s*device:.*EOS-", raw_prefix, re.MULTILINE):
             return (98, "Arista EOS '! device: ... EOS-' banner present")

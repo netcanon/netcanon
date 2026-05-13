@@ -43,6 +43,7 @@ import re
 import shlex
 from typing import ClassVar
 
+from .._input_shape import detect_input_shape
 from ..base import ParseError
 from ...canonical.intent import (
     CanonicalDHCPPool,
@@ -801,16 +802,14 @@ def parse_intent(raw: str) -> CanonicalIntent:
         raise ParseError(
             "fortigate_cli: empty input", snippet="",
         )
-    stripped = raw.lstrip()
-    if stripped.startswith("<"):
+    # Shape sanity — Round-4.2 shared helper tolerates leading
+    # shell-echo / banner framing on real captures.
+    shape = detect_input_shape(raw)
+    if shape is not None:
         raise ParseError(
-            "fortigate_cli: input looks like XML, not FortiOS CLI.",
-            snippet=stripped[:120],
-        )
-    if stripped.startswith("{"):
-        raise ParseError(
-            "fortigate_cli: input looks like JSON, not FortiOS CLI.",
-            snippet=stripped[:120],
+            f"fortigate_cli: input looks like {shape.upper()}, "
+            f"not FortiOS CLI.",
+            snippet=raw.lstrip()[:120],
         )
 
     intent = CanonicalIntent(

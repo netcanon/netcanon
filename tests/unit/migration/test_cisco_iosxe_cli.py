@@ -297,8 +297,25 @@ class TestParseCLIErrors:
             CiscoIOSXECLICodec().parse('<?xml version="1.0"?><data/>')
 
     def test_json_input_rejected(self):
-        with pytest.raises(ParseError, match="looks like XML or JSON"):
+        # Phase-3-R4.2: error message is now per-shape ("JSON" specifically,
+        # not the older conjoined "XML or JSON" — the shared shape helper
+        # distinguishes them).
+        with pytest.raises(ParseError, match="looks like JSON"):
             CiscoIOSXECLICodec().parse('{"key": "value"}')
+
+    def test_xml_with_leading_shell_echo_rejected(self):
+        """Round-4.2 regression guard: the shared shape helper sees
+        past leading shell-command-echo / banner framing lines that
+        real captures often have prefixed.  Pre-R4.2 the inline
+        ``stripped.startswith('<')`` check missed these and the parser
+        silently returned an empty CanonicalIntent."""
+        prefixed_xml = (
+            "cat /conf/config.xml\r\r\r\n"
+            '<?xml version="1.0"?>\r\r\n'
+            "<opnsense><theme>opnsense</theme></opnsense>"
+        )
+        with pytest.raises(ParseError, match="looks like XML"):
+            CiscoIOSXECLICodec().parse(prefixed_xml)
 
     def test_non_contiguous_mask_rejected(self):
         raw = "interface Gi0/0\n ip address 1.1.1.1 255.0.255.0\n!\n"

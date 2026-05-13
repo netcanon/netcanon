@@ -51,6 +51,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
+from .._input_shape import detect_input_shape
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -343,13 +344,19 @@ def parse_intent(raw: str) -> CanonicalIntent:
             "cisco_iosxe_cli: empty input",
             snippet="",
         )
-    # Quick sanity: if it starts with '<' it's XML, not CLI.
-    stripped = raw.lstrip()
-    if stripped.startswith("<") or stripped.startswith("{"):
+    # Shape sanity: reject XML / JSON early so the operator gets a
+    # clean error instead of a "completed with zero supported paths"
+    # near-empty render.  Uses the shared shape helper so leading
+    # shell echo / banners / motd lines don't bypass the check
+    # (Round 4.2 fix — pre-helper, ``stripped.startswith("<")`` missed
+    # captures with leading ``cat /conf/config.xml\\n<?xml ...`` framing).
+    shape = detect_input_shape(raw)
+    if shape is not None:
         raise ParseError(
-            "cisco_iosxe_cli: input looks like XML or JSON, not IOS CLI. "
-            "Use the cisco_iosxe (NETCONF) codec for XML input.",
-            snippet=stripped[:120],
+            f"cisco_iosxe_cli: input looks like {shape.upper()}, "
+            f"not IOS CLI.  Use the cisco_iosxe (NETCONF) codec for "
+            f"XML input.",
+            snippet=raw.lstrip()[:120],
         )
 
     intent = CanonicalIntent(

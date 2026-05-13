@@ -36,6 +36,7 @@ from ....models.migration import (
     UnsupportedPath,
 )
 from ...canonical.intent import CanonicalIntent
+from .._input_shape import detect_input_shape
 from ..base import CodecBase
 from ..registry import register
 from . import port_names as _port_names
@@ -256,8 +257,9 @@ class FortiGateCLICodec(CodecBase):
             * ``config system global`` stanza header
             * ``config/edit/set/next/end`` 5-keyword grammar presence
         """
-        stripped = raw_prefix.lstrip()
-        if stripped.startswith("<") or stripped.startswith("{"):
+        # XML / JSON shape — shared helper tolerates leading shell-echo
+        # / banner framing so real captures don't bypass the guard.
+        if detect_input_shape(raw_prefix) is not None:
             return None
         if raw_prefix.startswith("#config-version="):
             return (98, "FortiOS '#config-version=' banner present")
