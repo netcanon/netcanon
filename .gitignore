@@ -80,3 +80,11 @@ tests/fixtures/real/_cross_mesh_runs/*.json
 # investigation agents) but every other run is gitignored.
 tests/fixtures/real/_phase4_runs/*.json
 !tests/fixtures/real/_phase4_runs/latest.json
+
+# Pre-public-flip PR archive — local-only snapshot of all merged PRs
+# (titles / bodies / comments / diffs / commit history including
+# personal-author info) taken before deleting the PRs from the public
+# GitHub interface.  See R10 in CHANGELOG.md.  Store in a separate
+# private GitHub repo or non-git cloud for long-term retention.
+_pr-archive-pre-public.json
+_pr-archive-pre-public.md

@@ -702,12 +702,12 @@ delta vs. post-R6.1 baseline since this is docs-only).
 Defect surfaced by user during Round 6 visual verification.  The
 sanitize library redacted password hashes (`local-user-hash`,
 `snmpv3-auth`, `snmpv3-priv`) but left the **usernames themselves**
-verbatim — including in the user's own test where the local user
-`user12` (the operator's actual Windows login name, visible in their
-working directory path) was passed through unredacted.  In a public
-bug-report context that's an operator-correlation vector: "the
-operator at this org uses the same login on their workstation and
-their network gear → cross-reference with public social profiles".
+verbatim — including in the user's own test where the local-user
+record name happened to mirror their workstation login.  In a
+public bug-report context that's an operator-correlation vector:
+"the operator at this org uses the same login on their workstation
+and their network gear → cross-reference with public social
+profiles".
 
 User's diagnostic question — *"can we not make usernames within the
 same class (iosuser1/2/3, snmpv3user1/2/3, etc) mapping to fields
@@ -1932,10 +1932,9 @@ of the file explaining the situation honestly.
 
 Verified clean:
 
-* No personal name / email leaks (`samuelripp` / `samuel.ripp` /
-  `Samuel` etc. — zero hits across tracked tree)
-* No operator-machine path leaks (`user12` / `C:\Users\` /
-  `/home/<user>/` — zero hits)
+* No maintainer name / email variants present in the tracked tree
+* No operator-machine path leaks (Windows `C:\Users\...` /
+  Linux `/home/<user>/` — zero hits)
 * All sample IPs in tracked content are RFC1918 (`192.168.x` /
   `10.x.x.x` / `172.16.x.x`) or RFC5737 (`192.0.2.x` /
   `198.51.100.x` / `203.0.113.x`) docs ranges — no real WAN IPs
