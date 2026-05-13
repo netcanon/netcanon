@@ -159,6 +159,90 @@ class TestFileJobStoreLoadAll:
 
 
 # ---------------------------------------------------------------------------
+# FileJobStore — load_one() (R8 lazy-load fallback)
+# ---------------------------------------------------------------------------
+
+
+class TestFileJobStoreLoadOne:
+    """``load_one`` powers ``BackupJobRegistry``'s disk fallback for
+    get-by-id when the job has been evicted from the in-memory cache.
+    Same parse + corrupt-skip semantics as ``load_all`` but for a
+    single record."""
+
+    def test_load_one_returns_job_when_file_exists(self, tmp_path: Path):
+        store = FileJobStore(tmp_path)
+        job = _make_job()
+        store.save(job)
+        result = store.load_one(job.id)
+        assert result is not None
+        assert result.id == job.id
+        assert result.status == job.status
+
+    def test_load_one_returns_none_when_file_missing(self, tmp_path: Path):
+        """No file → ``None``.  Callers (BackupJobRegistry) translate
+        this to ``KeyError`` to match dict semantics."""
+        store = FileJobStore(tmp_path)
+        result = store.load_one("nonexistent-job-id")
+        assert result is None
+
+    def test_load_one_returns_none_for_corrupt_file(self, tmp_path: Path):
+        """Corrupt JSON → ``None`` (same behaviour as a missing file).
+        Corruption is logged for operator visibility but doesn't
+        propagate as an exception — same defensive pattern as
+        ``load_all``."""
+        store = FileJobStore(tmp_path)
+        corrupt_id = "corrupt-id"
+        (tmp_path / f"{corrupt_id}.json").write_text("not valid JSON")
+        result = store.load_one(corrupt_id)
+        assert result is None
+
+    def test_load_one_round_trip_preserves_fields(self, tmp_path: Path):
+        store = FileJobStore(tmp_path)
+        job = _make_job(
+            status=JobStatus.partial,
+            total_devices=5,
+            created_at=_ts(hour=14, minute=22),
+        )
+        store.save(job)
+        result = store.load_one(job.id)
+        assert result is not None
+        assert result.status == JobStatus.partial
+        assert result.total_devices == 5
+        assert result.created_at == _ts(hour=14, minute=22)
+
+
+# ---------------------------------------------------------------------------
+# FileJobStore — list_job_ids() (R8 disk-scan diagnostics)
+# ---------------------------------------------------------------------------
+
+
+class TestFileJobStoreListJobIds:
+    """Cheap directory scan used by ``BackupJobRegistry.total_disk_count``
+    + diagnostic endpoints.  Returns only filenames — does not parse
+    the JSON files."""
+
+    def test_list_empty_dir_returns_empty_list(self, tmp_path: Path):
+        store = FileJobStore(tmp_path)
+        assert store.list_job_ids() == []
+
+    def test_list_returns_one_id_per_json_file(self, tmp_path: Path):
+        store = FileJobStore(tmp_path)
+        jobs = [_make_job() for _ in range(3)]
+        for j in jobs:
+            store.save(j)
+        result = store.list_job_ids()
+        assert sorted(result) == sorted(j.id for j in jobs)
+
+    def test_list_ignores_non_json_files(self, tmp_path: Path):
+        store = FileJobStore(tmp_path)
+        (tmp_path / "stray.txt").write_text("not a job")
+        (tmp_path / "readme.md").write_text("# notes")
+        store.save(_make_job())
+        result = store.list_job_ids()
+        assert len(result) == 1
+
+
+# ---------------------------------------------------------------------------
 # FileScheduleStore — save()
 # ---------------------------------------------------------------------------
 

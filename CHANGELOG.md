@@ -21,6 +21,136 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 Round 8: backup-job registry — bounded memory + disk lazy-load
+
+Pre-R8 ``app.state.jobs`` was an unbounded ``dict[str, BackupJob]``
+that grew every time a backup job ran.  A server that handled 100k
+jobs over its lifetime held ~500 MB of ``BackupJob`` objects in
+memory (each job is metadata-only at ~5 KB — the actual config text
+is on disk in ``configs/`` referenced by filename, NOT inlined into
+the job).  This round caps the in-memory cache + falls through to
+disk lazy-load on get-by-id miss.
+
+Single PR (`r8-jobs-eviction`).
+
+#### Design
+
+**Disk is the source of truth.**  Every job is persisted to
+``jobs/{id}.json`` via the existing ``FileJobStore.save()`` — the
+in-memory registry is purely a cache for fast API access.  Pre-R8
+the cache was the same shape as disk; post-R8 the cache is bounded
++ disk grows independently (jobs accumulate forever on disk;
+retention policy is a v0.2.0 concern).
+
+**``BackupJobRegistry`` wraps an ``OrderedDict``** with LRU
+eviction on insert over cap.  Dict-like surface mirrors what the
+pre-R8 routes already used (``__setitem__`` / ``__getitem__`` /
+``__contains__`` / ``__len__`` / ``values()`` / ``get()``) so the
+swap from ``dict`` to registry required only type-hint updates in
+the route handlers — zero behavioural changes.
+
+**Lazy-load on memory miss**: ``__getitem__`` first checks the
+cache, then on miss calls ``FileJobStore.load_one(job_id)`` (new in
+this PR).  Loaded jobs are promoted into the cache (potentially
+evicting an even-older entry to make room).  ``__contains__`` does
+the same memory→disk fallback for the ``in`` check route handlers
+use before get-by-id.
+
+**``values()`` returns memory-resident only** (used by the list
+endpoint).  This is a deliberate semantic: operators want "recent
+jobs", not every job ever recorded.  At default cap (1000), the
+list always covers the most-recent 1000 jobs; for the typical
+deployment (tens-to-hundreds of devices × hourly-to-daily schedules
+= ~10k jobs/year) this is months of history.
+
+#### What ships
+
+* ``netcanon/storage/job_registry.py`` (new, ~225 LOC).
+  ``BackupJobRegistry`` class with full dict-like surface + warm-
+  cache constructor option + registry-specific
+  ``total_disk_count()`` for diagnostic endpoints.  Module docstring
+  documents every semantic choice (why ``__len__`` returns memory-
+  only, why ``values()`` doesn't include disk-only, etc.).
+* ``netcanon/storage/job_store.py`` — two new methods:
+  ``load_one(job_id) -> BackupJob | None`` (single-record disk read
+  for the registry's lazy-load), and ``list_job_ids() -> list[str]``
+  (cheap directory scan for ``total_disk_count``).  Same corrupt-
+  file-logging semantics as ``load_all``.
+* ``netcanon/config.py`` — new ``max_memory_jobs`` setting
+  (``Field(default=1000, ge=0)``).  Override via the
+  ``NETCANON_MAX_MEMORY_JOBS`` env var.  ``0`` disables caching
+  entirely (every read hits disk).
+* ``netcanon/main.py`` — startup swaps ``app.state.jobs`` from
+  ``job_store.load_all()`` (raw dict) to ``BackupJobRegistry(
+  job_store, max_memory_jobs=settings.max_memory_jobs)``.  The
+  constructor warms the cache from disk so the API is fast on the
+  common case post-restart.
+* ``netcanon/api/deps.py`` — ``get_jobs`` return type updated from
+  ``dict[str, BackupJob]`` to ``BackupJobRegistry``.
+* ``netcanon/api/routes/backups.py`` — three route-handler type hints
+  updated to match (no behavioural changes; the registry's dict-like
+  surface means the route bodies didn't need to change).
+* ``netcanon/api/routes/ui.py`` — removed the dead ``/health``
+  endpoint that was shadowed by ``health_router`` (registered
+  first in ``main.py``).  The endpoint referenced
+  ``len(state.jobs)`` and would have returned misleading
+  memory-only counts post-R8 anyway; cleaner to delete the dead
+  code than revive it.  If operators want per-resource diagnostic
+  counts in the future, add a dedicated ``/diagnostics`` endpoint
+  rather than reviving the shadow.
+* ``tests/unit/test_job_registry.py`` (new, **26 tests**) — covers
+  construction (default cap, custom cap, zero cap, negative
+  rejection), bounded memory (LRU eviction, zero-cap-never-caches,
+  update-doesn't-grow), LRU ordering (get-moves-to-MRU,
+  setitem-moves-to-MRU), lazy disk-load (getitem-loads-from-disk,
+  promotes-to-cache, missing-raises-KeyError, get-with-default,
+  contains-checks-disk, non-string-key-rejected), warm cache (loads-
+  recent-N, disabled-starts-empty, zero-cap-with-warm), dict
+  surface (iter, values, len), registry-specific (total_disk_count,
+  max_memory_jobs property), edge cases (cap-of-one,
+  corrupt-disk-file).
+* ``tests/unit/test_job_store.py`` — **7 new tests** in two classes:
+  ``TestFileJobStoreLoadOne`` (4 tests for the new method:
+  returns-job, returns-None-missing, returns-None-corrupt, round-
+  trip) and ``TestFileJobStoreListJobIds`` (3 tests: empty-dir,
+  one-per-json, ignores-non-json).
+* ``tests/integration/test_jobs_disk_fallback.py`` (new, **5
+  tests**) — end-to-end verification: list endpoint returns memory-
+  resident only after exceeding cap; get-by-id lazy-loads evicted
+  job from disk; get-by-id returns 404 for truly-missing job;
+  ``app.state.jobs`` IS a ``BackupJobRegistry``; registry uses the
+  ``max_memory_jobs`` setting value.
+
+#### Deferred to v0.2.0 (added to post-launch roadmap)
+
+* **Pagination for list endpoint**: today returns memory-resident
+  jobs (up to ``max_memory_jobs``).  Real pagination (`?limit=N&
+  offset=M`) + UI updates would let operators browse historical
+  jobs without raising the in-memory cap.  Defer because the typical
+  v0.1.0 install has <1000 jobs.
+* **Retention policy / auto-delete on disk**: today jobs grow on
+  disk forever.  Operators can manually prune ``jobs/*.json`` if
+  the directory gets too large.  Add a ``max_disk_jobs`` setting +
+  a daily cleanup task in v0.2.0.
+* **Startup-time optimisation**: warm-cache uses ``load_all()`` which
+  parses every JSON file — for installs with 100k+ jobs that's
+  10–20s of startup time.  v0.2.0 path: stat-sort by mtime + parse
+  only the newest N.
+* **``/diagnostics`` endpoint** exposing the registry's
+  memory/disk split (``jobs_memory`` vs ``jobs_disk``) for operators
+  who want to monitor cache hit rate.  Defer until there's a real
+  operator ask.
+
+#### Verification
+
+Full test suite green (exit 0, **+38 new tests**, total ~3550).
+The registry's dict-like surface meant the route handlers needed
+zero behavioural changes — the swap is invisible from the API
+contract perspective.  Operators on installs with <1000 jobs see
+zero difference (same hit-from-memory behaviour); operators with
+>1000 jobs see bounded memory + transparent disk fallback for
+historical job lookups.
+
 ### Phase 3 Round 7.2: Swagger UI dark mode + nav sync
 
 Closes the dark-mode story.  Round 7.1 swept the in-app templates but

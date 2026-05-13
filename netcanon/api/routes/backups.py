@@ -56,6 +56,7 @@ from ...models.device import BackupRequest, DeviceTarget
 from ...models.device_profile import DeviceProfile
 from ...storage.base import BaseConfigStore
 from ...storage.device_profile_store import FileDeviceProfileStore
+from ...storage.job_registry import BackupJobRegistry
 from ...storage.job_store import FileJobStore
 from ..deps import (
     get_definition_loader,
@@ -84,7 +85,7 @@ def create_backup(
     definitions: dict[str, DeviceDefinition] = Depends(get_definitions),
     definition_loader: DefinitionLoader = Depends(get_definition_loader),
     storage: BaseConfigStore = Depends(get_storage),
-    jobs: dict[str, BackupJob] = Depends(get_jobs),
+    jobs: BackupJobRegistry = Depends(get_jobs),
     job_store: FileJobStore = Depends(get_job_store),
     device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
     device_profile_store: FileDeviceProfileStore = Depends(
@@ -157,7 +158,7 @@ def create_backup(
     summary="List all backup jobs",
 )
 def list_jobs(
-    jobs: dict[str, BackupJob] = Depends(get_jobs),
+    jobs: BackupJobRegistry = Depends(get_jobs),
 ) -> list[BackupJob]:
     """Return all backup jobs, sorted newest-first."""
     return sorted(jobs.values(), key=lambda j: j.created_at, reverse=True)
@@ -170,7 +171,7 @@ def list_jobs(
 )
 def get_job(
     job_id: str,
-    jobs: dict[str, BackupJob] = Depends(get_jobs),
+    jobs: BackupJobRegistry = Depends(get_jobs),
 ) -> BackupJob:
     """Return the current state of a backup job.
 

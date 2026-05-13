@@ -44,6 +44,7 @@ from .config import Settings
 from .definitions.loader import DefinitionLoader
 from .storage.device_profile_store import FileDeviceProfileStore
 from .storage.file_store import FileConfigStore
+from .storage.job_registry import BackupJobRegistry
 from .storage.job_store import FileJobStore
 from .storage.schedule_store import FileScheduleStore
 
@@ -129,9 +130,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "Storage directory %s may not be writable: %s", check_dir, exc
                 )
 
-        # Job persistence — sibling directory to configs_dir
+        # Job persistence — sibling directory to configs_dir.  The
+        # FileJobStore is the source of truth (every job is persisted
+        # to {jobs_dir}/{id}.json).  BackupJobRegistry wraps it with
+        # an LRU-bounded in-memory cache: pre-R8 the in-memory dict
+        # was unbounded and grew indefinitely as jobs ran, so a server
+        # that handled 100k jobs over its lifetime held ~500 MB of
+        # BackupJob objects.  The registry caps memory at
+        # settings.max_memory_jobs (default 1000, ~5 MB) and falls
+        # through to disk lazy-load on get-by-id misses, so historical
+        # jobs remain queryable without the unbounded memory cost.
         _app.state.job_store = FileJobStore(data_root / "jobs")
-        _app.state.jobs = _app.state.job_store.load_all()
+        _app.state.jobs = BackupJobRegistry(
+            _app.state.job_store,
+            max_memory_jobs=settings.max_memory_jobs,
+            warm_cache=True,
+        )
 
         # Schedule persistence
         _app.state.schedule_store = FileScheduleStore(data_root / "schedules")

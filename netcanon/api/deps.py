@@ -24,6 +24,7 @@ from ..models.device_profile import DeviceProfile
 from ..models.schedule import BackupSchedule
 from ..storage.base import BaseConfigStore
 from ..storage.device_profile_store import FileDeviceProfileStore
+from ..storage.job_registry import BackupJobRegistry
 from ..storage.job_store import FileJobStore
 from ..storage.schedule_store import FileScheduleStore
 
@@ -49,8 +50,16 @@ def get_storage(request: Request) -> BaseConfigStore:
     return request.app.state.storage
 
 
-def get_jobs(request: Request) -> dict[str, BackupJob]:
-    """Inject the in-memory backup-job registry from application state."""
+def get_jobs(request: Request) -> BackupJobRegistry:
+    """Inject the backup-job registry from application state.
+
+    The registry exposes a dict-like surface (``__setitem__`` /
+    ``__getitem__`` / ``__contains__`` / ``__len__`` / ``values()`` /
+    ``get()``) so route handlers that pre-dated R8 (which used a
+    plain ``dict[str, BackupJob]``) keep working with no changes.
+    The registry transparently handles LRU eviction + disk lazy-load
+    on memory miss — see :class:`BackupJobRegistry` for semantics.
+    """
     return request.app.state.jobs
 
 
