@@ -242,6 +242,109 @@ def test_socket_timeout_alias_for_TimeoutError():
     assert "Connection timed out" in out
 
 
+def test_netmiko_timeout_peeks_gaierror_under_chain():
+    """Netmiko collapses ``socket.gaierror`` (DNS failure) into
+    ``NetmikoTimeoutException`` with a generic "TCP connection to
+    device failed" message.  The translator must peek at the chained
+    ``__context__`` to recover the real cause and surface the
+    actionable DNS-specific message instead.
+
+    Regression guard for the Round-3.1 hotfix: pre-3.1 a bad-hostname
+    paste produced "Connection or command-read timed out — the device
+    is slow to respond..." which is wrong; the actual cause is DNS,
+    and the operator's recovery is to verify the hostname spelling,
+    not to wait longer.
+    """
+    underlying = socket.gaierror(11001, "getaddrinfo failed")
+    try:
+        try:
+            raise underlying
+        except socket.gaierror:
+            # This mirrors Netmiko's own raise-inside-except, which
+            # sets __context__ to ``underlying`` automatically.
+            raise NetmikoTimeoutException(
+                "TCP connection to device failed.\n\nCommon causes..."
+            )
+    except NetmikoTimeoutException as exc:
+        out = translate_backup_error(exc, host="not.a.real.host.invalid")
+    assert "DNS lookup failed" in out
+    assert "Connection or command-read timed out" not in out
+
+
+def test_netmiko_timeout_peeks_noValidConnectionsError_under_chain():
+    """``paramiko.NoValidConnectionsError`` is what paramiko raises when
+    every address for the host either refused or wasn't listening
+    (e.g. SSH on port 1 of localhost).  Netmiko wraps it as
+    ``NetmikoTimeoutException``; the translator must recover the
+    "refused" semantics."""
+    import paramiko.ssh_exception
+    underlying = paramiko.ssh_exception.NoValidConnectionsError(
+        {("127.0.0.1", 1): ConnectionRefusedError(111, "Connection refused")}
+    )
+    try:
+        try:
+            raise underlying
+        except paramiko.ssh_exception.NoValidConnectionsError:
+            raise NetmikoTimeoutException(
+                "TCP connection to device failed.\n\nCommon causes..."
+            )
+    except NetmikoTimeoutException as exc:
+        out = translate_backup_error(exc, host="127.0.0.1")
+    assert "Connection refused" in out
+    assert "Connection or command-read timed out" not in out
+
+
+def test_netmiko_timeout_peeks_TimeoutError_under_chain():
+    """A real connect-timeout (host accepted SYN but didn't complete
+    handshake) surfaces as a Windows ``TimeoutError`` (WinError 10060)
+    that Netmiko wraps as ``NetmikoTimeoutException``.  Translator
+    must route to the host-unreachable message, not the read-timeout
+    fallback."""
+    underlying = TimeoutError("[WinError 10060] timed out")
+    try:
+        try:
+            raise underlying
+        except TimeoutError:
+            raise NetmikoTimeoutException(
+                "TCP connection to device failed.\n\nCommon causes..."
+            )
+    except NetmikoTimeoutException as exc:
+        out = translate_backup_error(exc, host="192.0.2.1")
+    # Both messages mention "timed out"; the precise distinction is
+    # "host unreachable" (connect-timeout) vs. "slow to respond"
+    # (read-timeout fallback).
+    assert "host unreachable" in out
+    assert "configured read timeout" not in out
+
+
+def test_netmiko_timeout_without_chain_falls_back_to_generic():
+    """When ``NetmikoTimeoutException`` arrives with no useful chained
+    cause (e.g. a real read-timeout AFTER a successful connect — the
+    handshake worked, the device just didn't reply to the config
+    command), the translator falls back to the original generic
+    "Connection or command-read timed out" message.  This is the
+    not-a-regression case: read-timeouts SHOULD show the original
+    message.
+    """
+    exc = NetmikoTimeoutException("Read timed out after 120s")
+    # No try/except wrapping → __context__ is None.
+    out = translate_backup_error(exc, host="10.0.0.5")
+    assert "Connection or command-read timed out" in out
+
+
+def test_paramiko_noValidConnectionsError_direct_path():
+    """When ``paramiko.NoValidConnectionsError`` reaches the translator
+    directly (i.e. NOT wrapped by Netmiko — used by the paramiko_collector
+    code path for OPNsense), the standalone mapping in the dispatch
+    table must route it to the connection-refused formatter."""
+    import paramiko.ssh_exception
+    exc = paramiko.ssh_exception.NoValidConnectionsError(
+        {("10.0.0.5", 22): ConnectionRefusedError(111, "Connection refused")}
+    )
+    out = translate_backup_error(exc, host="10.0.0.5")
+    assert "[10.0.0.5] Connection refused" in out
+
+
 def test_step_argument_accepted_for_forward_compat():
     """The ``step`` argument is reserved for future per-phase routing
     (connect / collect / save).  Calling with explicit step values

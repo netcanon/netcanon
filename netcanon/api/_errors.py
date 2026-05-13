@@ -57,6 +57,7 @@ import socket
 from typing import Callable
 
 import paramiko
+import paramiko.ssh_exception
 from netmiko import (
     NetmikoAuthenticationException,
     NetmikoTimeoutException,
@@ -152,7 +153,65 @@ def _humanize_netmiko_auth(exc: BaseException, host: str) -> str:
     )
 
 
+def _netmiko_underlying_cause(exc: BaseException) -> BaseException | None:
+    """Walk the exception chain to recover what Netmiko actually wrapped.
+
+    Netmiko's ``establish_connection`` catches
+    :class:`paramiko.ssh_exception.NoValidConnectionsError`, ``socket.gaierror``,
+    ``socket.timeout`` / :class:`TimeoutError`, and a handful of other
+    network-layer exceptions, then re-raises a single
+    :class:`netmiko.NetmikoTimeoutException` with a generic
+    "TCP connection to device failed.  Common causes are: 1. Incorrect
+    hostname or IP address. 2. Wrong TCP port. ..." message.  That
+    message is useful for shell users debugging a connection one-off,
+    but useless to an operator reading a failure toast for one device
+    out of ten in a batch backup — three radically different failure
+    modes (DNS, refused, unreachable) all read identically.
+
+    Python preserves the original exception via the implicit
+    :attr:`BaseException.__context__` attribute set automatically when
+    you ``raise NewError(...)`` inside an ``except`` block (vs. the
+    explicit ``__cause__`` set by ``raise NewError(...) from
+    other_exc``).  Walk both, prefer ``__cause__`` if explicitly set,
+    then fall back to ``__context__``; this works whether the wrapping
+    library uses ``from`` chaining or not.
+
+    Returns the deepest non-Netmiko underlying exception (or ``None``
+    if the chain is empty).  Translators inspect the type and route
+    to the per-cause formatter.
+    """
+    cause = exc.__cause__ if exc.__cause__ is not None else exc.__context__
+    # Walk one level deep — Netmiko's wrapping is shallow (always
+    # exactly one re-raise).  Don't recurse arbitrarily; that risks
+    # picking up unrelated context from outer try/except blocks.
+    return cause
+
+
 def _humanize_netmiko_timeout(exc: BaseException, host: str) -> str:
+    # Netmiko's generic "TCP connection to device failed" branch is the
+    # main caller of this formatter.  Recover the underlying exception
+    # via __context__ and dispatch to the per-cause formatter — that
+    # gives operators the actionable DNS / refused / unreachable
+    # distinction instead of three identical timeout strings.
+    cause = _netmiko_underlying_cause(exc)
+    if isinstance(cause, socket.gaierror):
+        return _humanize_socket_gaierror(cause, host)
+    if isinstance(cause, paramiko.ssh_exception.NoValidConnectionsError):
+        # paramiko raises NoValidConnectionsError when every address
+        # for the host either refused the connection or wasn't
+        # listening — operator action is the same as a plain
+        # ConnectionRefusedError.
+        return _humanize_connection_refused(cause, host)
+    if isinstance(cause, ConnectionRefusedError):
+        return _humanize_connection_refused(cause, host)
+    if isinstance(cause, TimeoutError):
+        # Real connect-timeout — host accepted the SYN but didn't
+        # complete the handshake within paramiko's timeout window.
+        return _humanize_socket_timeout(cause, host)
+    # No useful chain (or chain has a type we don't specifically
+    # handle — e.g. an actual Netmiko-only read timeout after a
+    # successful connect).  Fall back to the generic message that
+    # also covers read-side timeouts.
     return (
         "Connection or command-read timed out — the device is slow to "
         "respond, the link is degraded, or the configured read timeout "
@@ -233,6 +292,14 @@ _TRANSLATIONS: list[tuple[type, Callable[[BaseException, str], str]]] = [
     (paramiko.SSHException, _humanize_paramiko_ssh),
     # Network-layer reachability before generic OSError.
     (socket.gaierror, _humanize_socket_gaierror),
+    # paramiko.NoValidConnectionsError is what paramiko raises when
+    # every address for the host either refused the connection or
+    # wasn't listening — surface as "connection refused" to operators
+    # (same actionable response as a plain ConnectionRefusedError).
+    # Listed BEFORE ConnectionRefusedError because NoValidConnectionsError
+    # is a SSHException subclass, not a ConnectionRefusedError subclass.
+    (paramiko.ssh_exception.NoValidConnectionsError,
+     _humanize_connection_refused),
     (ConnectionRefusedError, _humanize_connection_refused),
     (ConnectionError, _humanize_connection_lost),  # BrokenPipe, Reset, Aborted
     (TimeoutError, _humanize_socket_timeout),  # also covers socket.timeout
