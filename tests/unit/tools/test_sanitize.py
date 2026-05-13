@@ -221,6 +221,137 @@ class TestLocalUserHashRedaction:
         assert sanitized.local_users[0].hashed_password.startswith("ENC ")
 
 
+class TestLocalUserNameRedaction:
+    """Phase-3 Round-6.1 — username redaction with iterative
+    per-class numbering and cross-reference stability.
+
+    Operator-chosen usernames (`alice`, `john.smith`, the Windows-
+    login-mirror case `user12`) are operator-PII when shared in
+    public bug reports — leaking them enables correlation attacks.
+    The hashed-password redaction alone wasn't enough.
+    """
+
+    def test_single_user_name_redacted_to_localuser1(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="alice", hashed_password="$9$realHash"),
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.local_users[0].name == "localuser1"
+        assert any(
+            s.category == "local-user-name" and s.original == "alice"
+            and s.redacted == "localuser1"
+            for s in subs
+        )
+
+    def test_multiple_users_iteratively_numbered(self):
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="alice"),
+                CanonicalLocalUser(name="bob"),
+                CanonicalLocalUser(name="charlie"),
+            ]
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.local_users[0].name == "localuser1"
+        assert sanitized.local_users[1].name == "localuser2"
+        assert sanitized.local_users[2].name == "localuser3"
+
+    def test_duplicate_input_names_collapse_to_same_placeholder(self):
+        """Cross-reference stability: same input → same output across
+        the whole config so any reference to the user from another
+        stanza (AAA, sudo, role assignment) resolves to the same
+        placeholder.  Test exercises the dict-keyed cache."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="alice"),
+                CanonicalLocalUser(name="alice"),  # duplicate (rare but legal)
+                CanonicalLocalUser(name="bob"),
+            ]
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.local_users[0].name == "localuser1"
+        assert sanitized.local_users[1].name == "localuser1"  # same placeholder
+        assert sanitized.local_users[2].name == "localuser2"  # next number
+
+    def test_empty_name_not_redacted(self):
+        """Pydantic allows empty name (= field never set); don't
+        produce a substitution row for the no-op."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="", hashed_password="$9$h"),
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.local_users[0].name == ""
+        assert not any(s.category == "local-user-name" for s in subs)
+
+    def test_name_and_hash_substitutions_independent(self):
+        """The local-user-name and local-user-hash entries are
+        emitted independently — operator can see both in the audit."""
+        intent = CanonicalIntent(
+            local_users=[
+                CanonicalLocalUser(name="user12", hashed_password="$9$realHash"),
+            ]
+        )
+        _, subs = sanitize_intent(intent)
+        cats = {s.category for s in subs}
+        assert "local-user-name" in cats
+        assert "local-user-hash" in cats
+
+
+class TestSNMPv3UserNameRedaction:
+    """Phase-3 Round-6.1 — SNMPv3 USM securityName redaction with
+    iterative per-class numbering, independent counter from
+    local-user-name (so a config with 1 local user + 1 v3 user
+    produces ``localuser1`` and ``snmpv3user1``, NOT ``localuser1``
+    and ``snmpv3user2``)."""
+
+    def test_v3_user_name_redacted_to_snmpv3user1(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                community="",
+                v3_users=[CanonicalSNMPv3User(name="ops")],
+            )
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.snmp.v3_users[0].name == "snmpv3user1"
+        assert any(
+            s.category == "snmpv3-user-name" and s.original == "ops"
+            for s in subs
+        )
+
+    def test_multiple_v3_users_iteratively_numbered(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                community="",
+                v3_users=[
+                    CanonicalSNMPv3User(name="alice"),
+                    CanonicalSNMPv3User(name="bob"),
+                ],
+            )
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.snmp.v3_users[0].name == "snmpv3user1"
+        assert sanitized.snmp.v3_users[1].name == "snmpv3user2"
+
+    def test_per_class_counters_are_independent(self):
+        """A config with 1 local user + 1 v3 user must produce
+        ``localuser1`` + ``snmpv3user1`` (each starts at 1) — NOT a
+        session-wide counter that would have given ``snmpv3user2``."""
+        intent = CanonicalIntent(
+            local_users=[CanonicalLocalUser(name="root")],
+            snmp=CanonicalSNMP(
+                community="",
+                v3_users=[CanonicalSNMPv3User(name="monitor")],
+            ),
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.local_users[0].name == "localuser1"
+        assert sanitized.snmp.v3_users[0].name == "snmpv3user1"
+
+
 class TestSNMPRedaction:
     def test_community_redacted(self):
         intent = CanonicalIntent(snmp=CanonicalSNMP(community="SuperSecret"))

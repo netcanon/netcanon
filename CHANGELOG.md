@@ -21,6 +21,102 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 6.1: username redaction + safety note
+
+Defect surfaced by user during Round 6 visual verification.  The
+sanitize library redacted password hashes (`local-user-hash`,
+`snmpv3-auth`, `snmpv3-priv`) but left the **usernames themselves**
+verbatim — including in the user's own test where the local user
+`user12` (the operator's actual Windows login name, visible in their
+working directory path) was passed through unredacted.  In a public
+bug-report context that's an operator-correlation vector: "the
+operator at this org uses the same login on their workstation and
+their network gear → cross-reference with public social profiles".
+
+User's diagnostic question — *"can we not make usernames within the
+same class (iosuser1/2/3, snmpv3user1/2/3, etc) mapping to fields
+iteratively with proper prefixing?"* — was exactly right.  The
+existing `_SubstitutionTable` already does cross-reference-stable
+per-class numbering for hashes (`fake-hash-0001`, `fake-hash-0002`,
+…) and IPs (RFC-5737 docs ranges cycled across three /24s); usernames
+are a clean extension of the same pattern.
+
+#### Library — `netcanon.tools.sanitize`
+
+Two new categories in the dispatch table + two new methods on
+`_SubstitutionTable`:
+
+* **`local-user-name`** — `CanonicalLocalUser.name` redacted to
+  `localuser1`, `localuser2`, …  Applies across all CLI vendors
+  with local-user accounts (Cisco IOS-XE, IOS, Junos, FortiOS,
+  Aruba AOS-S, MikroTik, Arista EOS, OPNsense).  Per-class counter
+  starts at 1 each session.
+* **`snmpv3-user-name`** — `CanonicalSNMPv3User.name` (USM
+  securityName) redacted to `snmpv3user1`, `snmpv3user2`, …
+  Independent counter from local-user-name (a config with one of
+  each produces `localuser1` + `snmpv3user1`, NOT `localuser1` +
+  `snmpv3user2`).
+
+**Cross-reference stability via dict-keyed cache** — same input
+name always maps to the same placeholder across the whole config.
+If a local user is referenced from another stanza (AAA, sudo, role
+assignment, SNMPv3 trap-target group membership), the rename
+applies consistently.  Test `test_duplicate_input_names_collapse_to_same_placeholder`
+pins this.
+
+#### UI — `netcanon/templates/sanitize.html`
+
+* **Operator-facing safety note** added below the page intro
+  paragraph: *"For sharing only. Placeholders (`device-1`,
+  `localuser1`, `fake-hash-0001`, etc.) are intentionally
+  non-functional — pasting the sanitized output back onto a live
+  device would set real passwords / usernames to literal placeholder
+  strings."*  Carries `data-testid="sanitize-safety-note"` so
+  Round-7+ tests can pin its presence.  Addresses the
+  secret-type-0-placeholder hazard surfaced during Round 6 (a
+  sanitized `secret 0 fake-hash-0001` line would be interpreted by
+  Cisco as a cleartext password of literally `fake-hash-0001`).
+
+* **`CATEGORY_LABELS` mapping extended** with operator-readable
+  labels for the two new categories ("Local user names",
+  "SNMPv3 user names").  Lookup is per-class so the counters
+  strip + audit table render the new categories naturally.
+
+#### Tests
+
+`tests/unit/tools/test_sanitize.py` — 8 new tests:
+
+* `TestLocalUserNameRedaction` (5 tests): single-user → `localuser1`,
+  multiple-users iteratively numbered, duplicate names collapse to
+  same placeholder (cross-reference stability), empty name not
+  redacted (no spurious substitution row), name + hash substitutions
+  independent.
+* `TestSNMPv3UserNameRedaction` (3 tests): single-v3-user →
+  `snmpv3user1`, multiple v3 users iteratively numbered, per-class
+  counters independent of local-user-name counter.
+
+Zero existing sanitize tests broken — all 29 prior assertions
+continue to pass (none pinned "name stays unchanged" since
+pre-R6.1 the library never touched the name field at all).
+
+Full unit + integration suite green (3453 passed, 57 skipped — up
+8 from 3445 post-R6 baseline thanks to the 8 new tests).
+
+#### What's still NOT redacted (deliberate scope decision)
+
+* **Interface names** (e.g. `GigabitEthernet1/0/1`, `Vlan10`) —
+  operator-meaningful for verifying the round-trip; redacting them
+  would break config structure intelligibility.  Not PII.
+* **VLAN numbers, port-channel numbers, AS numbers** — non-PII
+  structural constants.
+* **VRF names** — usually generic (`Mgmt-vrf`).  Could carry
+  operator identity in rare cases (`CompanyName-Mgmt`); deferred
+  pending real-world feedback.
+* **DHCP pool names** — usually generic (`LAN`, `GUEST`).  Same.
+
+These are noted in the module docstring's "Limitations" section as
+known carry-throughs.
+
 ### Phase 3 — Polish pass, Round 6: Sanitize UI page
 
 The Phase-3 audit flagged **sanitize-has-no-UI** as a HIGH-severity

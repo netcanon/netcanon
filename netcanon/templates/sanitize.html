@@ -44,13 +44,25 @@
 
 <h1>Sanitize</h1>
 <p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
-  Strip identifying details — hostnames, public IPs, password hashes,
-  SNMP communities, RADIUS shared secrets — from a network config
-  before sharing it in a bug report or support ticket.  Pick the
-  source vendor, paste or select a stored config, and Netcanon redacts
-  at the canonical-model level — the output is in the same vendor's
-  format with every cross-reference rewritten consistently.
+  Strip identifying details — hostnames, usernames, public IPs,
+  password hashes, SNMP communities, RADIUS shared secrets — from a
+  network config before sharing it in a bug report or support ticket.
+  Pick the source vendor, paste or select a stored config, and
+  Netcanon redacts at the canonical-model level — the output is in
+  the same vendor's format with every cross-reference rewritten
+  consistently.
 </p>
+
+<div class="san-banner-info" data-testid="sanitize-safety-note"
+     style="font-size:.82rem;margin:.5rem 0 1rem">
+  <strong>For sharing only.</strong>  Placeholders
+  (<code>device-1</code>, <code>localuser1</code>,
+  <code>fake-hash-0001</code>, etc.) are intentionally non-functional
+  — pasting the sanitized output back onto a live device would set
+  real passwords / usernames to literal placeholder strings.
+  Treat the output as evidence to attach to a ticket, never as a
+  config to redeploy.
+</div>
 
 <form id="san-form" class="san-form" data-testid="sanitize-form">
   <div class="san-pair-row">
@@ -175,8 +187,10 @@
     'domain':                'Domain names',
     'ipv4-public':           'Public IPv4 addresses',
     'interface-description': 'Interface descriptions',
+    'local-user-name':       'Local user names',
     'local-user-hash':       'Local user password hashes',
     'snmp-community':        'SNMP communities',
+    'snmpv3-user-name':      'SNMPv3 user names',
     'snmpv3-auth':           'SNMPv3 auth passphrases',
     'snmpv3-priv':           'SNMPv3 priv passphrases',
     'radius-shared-secret':  'RADIUS shared secrets',
