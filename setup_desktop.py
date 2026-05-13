@@ -17,13 +17,35 @@ Requirements::
 
 See https://cx-freeze.readthedocs.io/en/stable/setup_script.html for full
 option documentation.
+
+Versioning
+----------
+
+The Windows MSI ``ProductVersion`` field has a strict ``M.m.b[.r]`` format
+that does NOT accept the rc / alpha / beta suffixes the rest of the project
+uses (e.g. ``0.1.0rc7``).  Two paths are supported:
+
+* **Local builds**: the default ``MSI_VERSION`` constant below is used —
+  bump it manually if you care about the in-installer version.
+* **CI builds**: the ``desktop-msi-publish.yml`` workflow derives the
+  version from the triggering git tag (stripping the rc-suffix) and
+  passes it via the ``NETCANON_MSI_VERSION`` env var.  This script
+  honours that override when set so CI doesn't have to edit this file.
 """
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
 from cx_Freeze import Executable, setup
+
+# Default MSI version used when no env override is supplied (i.e. local
+# manual builds).  Bump this manually between releases — Windows MSI
+# format constraints mean we can't reuse the setuptools_scm rc-suffixed
+# version directly.  CI sets NETCANON_MSI_VERSION from the tag.
+MSI_VERSION_DEFAULT = "0.1.0"
+MSI_VERSION = os.environ.get("NETCANON_MSI_VERSION", MSI_VERSION_DEFAULT)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -160,7 +182,7 @@ executables = [
 
 setup(
     name="Netcanon",
-    version="0.1.0",
+    version=MSI_VERSION,
     description="Netcanon — Network Configuration Collector",
     author="Netcanon contributors",
     options={

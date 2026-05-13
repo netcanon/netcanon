@@ -1,0 +1,151 @@
+name: Desktop — build MSI + attach to Release
+
+# Builds the Windows desktop MSI installer for every released RC and
+# final tag, attaches it to the GitHub Release for that tag (creating
+# the release if necessary).  Operators can download the MSI from the
+# Release page rather than building from source.
+#
+# Trigger surfaces:
+#   * Tag push matching `v*.*.*` or `v*.*.*-*` (covers final + pre-release
+#     tags, same pattern as pypi-publish.yml / docker-publish.yml).
+#   * Manual `workflow_dispatch` — lets the maintainer backfill a missed
+#     tag (e.g. retroactively build the MSI for a tag pushed before this
+#     workflow existed) or rebuild a corrupted artefact.
+#
+# Output:
+#   * `Netcanon-<version>-win64.msi` attached to the GitHub Release for
+#     the triggering tag.  Also kept for 30 days as a workflow artefact
+#     for diagnostic purposes.
+#
+# What it does NOT do (yet):
+#   * No code signing.  The MSI is unsigned; Windows SmartScreen will
+#     show a warning on first install.  Future work: integrate SignPath
+#     (free for OSS projects) or a purchased EV cert.
+#   * No Mac / Linux desktop installers — only Windows.  cx_Freeze
+#     supports them but they're not currently wired.
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build MSI for (e.g. v0.1.0-rc7)"
+        required: true
+        type: string
+
+# Need write access to the Releases API so the action can create the
+# release page + upload the MSI as a release asset.
+permissions:
+  contents: write
+
+# Prevent two simultaneous MSI builds for the same ref from racing
+# the release-upload step.  Within a single ref, we let the second
+# wait (rather than cancel) so a maintainer who re-triggers a build
+# doesn't lose the queued one.
+concurrency:
+  group: msi-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
+  # forced cutover.  Same pragma as the other workflows.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  build-msi:
+    name: Build Windows MSI
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout (full history for setuptools_scm)
+        uses: actions/checkout@v6
+        with:
+          # When triggered by workflow_dispatch the user supplies a tag
+          # name as `inputs.tag`; checkout's `ref` accepts either a tag
+          # name (`v0.1.0-rc7`) or a full ref (`refs/tags/...`).  On
+          # tag-push triggers, github.ref already has the full ref form.
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Compute MSI version from tag
+        shell: bash
+        run: |
+          # On workflow_dispatch the tag is inputs.tag.  On tag-push it's
+          # github.ref_name (the tag name without the refs/tags/ prefix).
+          tag="${{ inputs.tag || github.ref_name }}"
+          # Strip leading 'v' if present.
+          tag="${tag#v}"            # e.g. 0.1.0-rc7
+          # Drop the rc/alpha/beta suffix (everything after the first '-')
+          # because Windows MSI ProductVersion format is M.m.b[.r] only.
+          msi_version="${tag%%-*}"  # e.g. 0.1.0
+          echo "NETCANON_MSI_VERSION=$msi_version" >> "$GITHUB_ENV"
+          echo "Building MSI with ProductVersion: $msi_version (source tag: $tag)"
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          # The [desktop-build] extra pulls in PySide6 + pystray +
+          # Pillow + cx_Freeze.  Editable install so setup_desktop.py
+          # can find the source tree.
+          pip install -e ".[desktop-build]"
+
+      - name: Build MSI via cx_Freeze
+        # cx_Freeze auto-downloads WiX on first use (Windows runners
+        # have the .NET Framework runtime needed for it).
+        run: python setup_desktop.py bdist_msi
+
+      - name: Sanity-check MSI exists + reasonable size
+        shell: bash
+        run: |
+          msi=$(ls dist/*.msi 2>/dev/null | head -1)
+          if [ -z "$msi" ]; then
+            echo "FAIL: no MSI produced under dist/"
+            ls -la dist/ || true
+            exit 1
+          fi
+          # PySide6 + Chromium WebEngine + Python interpreter should
+          # produce ~200-300 MB.  Anything under 50 MB suggests
+          # cx_Freeze silently dropped a major package.
+          size=$(stat -c%s "$msi" 2>/dev/null || wc -c <"$msi")
+          printf "MSI: %s\nSize: %s bytes\n" "$msi" "$size"
+          if [ "$size" -lt 52428800 ]; then
+            echo "FAIL: MSI suspiciously small ($size < 50MB).  cx_Freeze probably skipped a critical package."
+            exit 1
+          fi
+
+      - name: Upload MSI as workflow artefact
+        # Diagnostic copy — survives 30 days regardless of whether the
+        # release-asset upload below succeeds.
+        uses: actions/upload-artifact@v7
+        with:
+          name: msi
+          path: dist/*.msi
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach MSI to GitHub Release
+        # softprops/action-gh-release creates the release page if it
+        # doesn't yet exist (handy for tags pushed before this workflow
+        # existed) and otherwise appends the MSI to the existing one.
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: dist/*.msi
+          fail_on_unmatched_files: true
+          # When the release page is auto-created here (e.g. backfill
+          # via workflow_dispatch on a tag with no release page yet),
+          # populate it with the auto-generated PR / commit changelog.
+          generate_release_notes: true
+          # Mark pre-release tags (e.g. v0.1.0-rc7) as "Pre-release" so
+          # the GitHub Releases page sorts them correctly and the
+          # "latest release" link skips over them.
+          prerelease: ${{ contains(inputs.tag || github.ref_name, '-rc') || contains(inputs.tag || github.ref_name, '-alpha') || contains(inputs.tag || github.ref_name, '-beta') }}
