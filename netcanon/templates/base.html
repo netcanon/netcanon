@@ -198,10 +198,11 @@
        nav items) to the far right, visually separating them from
        the page-nav cluster on the left. */
     nav .spacer { flex: 1 1 auto; }
-    /* Theme toggle: icon-only button, always visible on the top
-       bar.  Sun/moon symbol flips via CSS based on
-       [data-theme].  Transparent background, hover lightens. */
-    #nav-theme-toggle {
+    /* Right-rail icon-only nav buttons (theme toggle + keyboard
+       cheatsheet trigger).  Transparent background, hover lightens.
+       Sun/moon and "?" glyphs swap inside via inner spans. */
+    #nav-theme-toggle,
+    #nav-kbd-cheatsheet {
       background: transparent;
       color: var(--nav-fg);
       border: 1px solid transparent;
@@ -215,7 +216,9 @@
                   border-color .12s ease;
     }
     #nav-theme-toggle:hover,
-    #nav-theme-toggle:focus-visible {
+    #nav-theme-toggle:focus-visible,
+    #nav-kbd-cheatsheet:hover,
+    #nav-kbd-cheatsheet:focus-visible {
       background: rgba(255,255,255,.08);
       color: var(--nav-fg-hover);
       border-color: rgba(255,255,255,.18);
@@ -295,6 +298,51 @@
     /* Search highlighting */
     #_config-viewer-pre mark         { background:#665a00; color:#fff3b0; border-radius:2px; padding:0 1px; }
     #_config-viewer-pre mark.current { background:#d4a017; color:#1e1e1e; outline:1px solid #ffe066; }
+
+    /* Keyboard shortcut cheatsheet modal.  Mirrors the _config-viewer
+       shell — same backdrop, same surface, same dark-navy header — but
+       narrower (no horizontal pre to host) and re-themes the body to
+       use surface tokens so the shortcut table inherits dark mode.
+       Opened by the global `?` keypress or the nav-bar "?" button.  */
+    #_kbd-cheatsheet { display:none; position:fixed; inset:0;
+                       background:rgba(0,0,0,.55); z-index:10000;
+                       align-items:center; justify-content:center; }
+    #_kbd-cheatsheet-box { background:var(--surface); border-radius:8px;
+                           box-shadow:var(--shadow-modal);
+                           width:min(560px,94vw); max-height:80vh;
+                           display:flex; flex-direction:column;
+                           overflow:hidden; color:var(--text-primary); }
+    #_kbd-cheatsheet-header { display:flex; align-items:center;
+                              padding:.5rem 1rem; background:#1a1a2e;
+                              color:#eee; gap:.5rem; }
+    #_kbd-cheatsheet-title { flex:1; font-size:.95rem; font-weight:600; }
+    #_kbd-cheatsheet-body { flex:1; overflow:auto; padding:1rem 1.25rem;
+                            font-size:.88rem; }
+    #_kbd-cheatsheet-body h3 { font-size:.78rem;
+                               text-transform:uppercase;
+                               letter-spacing:.06em;
+                               color:var(--text-muted);
+                               margin:1rem 0 .35rem;
+                               font-weight:700; }
+    #_kbd-cheatsheet-body h3:first-child { margin-top:0; }
+    #_kbd-cheatsheet-body dl { display:grid;
+                               grid-template-columns:auto 1fr;
+                               gap:.35rem .9rem;
+                               margin:0; }
+    #_kbd-cheatsheet-body dt { display:flex; gap:.25rem;
+                               align-items:center; }
+    #_kbd-cheatsheet-body dd { margin:0; color:var(--text-primary);
+                               align-self:center; }
+    .kbd {
+      display:inline-block; min-width:1.4rem;
+      padding:.05rem .45rem; font-family:monospace;
+      font-size:.78rem; font-weight:600;
+      background:var(--surface-elev); color:var(--text-primary);
+      border:1px solid var(--border-strong); border-radius:3px;
+      text-align:center; line-height:1.4;
+    }
+    .kbd-sep { color:var(--text-faint); font-size:.75rem;
+               padding:0 .1rem; }
   </style>
 </head>
 <body>
@@ -310,6 +358,14 @@
     <a href="/sanitize"    data-testid="nav-sanitize"    {% if active_page == 'sanitize' %}class="active" aria-current="page"{% endif %}>Sanitize</a>
     <a href="/docs"        data-testid="nav-api-docs">API Docs</a>
     <span class="spacer" aria-hidden="true"></span>
+    <button type="button"
+            id="nav-kbd-cheatsheet"
+            data-testid="kbd-cheatsheet-open-btn"
+            aria-label="Show keyboard shortcuts"
+            title="Keyboard shortcuts (?)"
+            onclick="openKbdCheatsheet()">
+      <span aria-hidden="true">?</span>
+    </button>
     <button type="button"
             id="nav-theme-toggle"
             data-testid="nav-theme-toggle"
@@ -352,6 +408,56 @@
                 style="font-size:1.1rem">&#10005;</button>
       </div>
       <pre id="_config-viewer-pre" data-testid="config-viewer-content">Loading&#8230;</pre>
+    </div>
+  </div>
+
+  <!-- Keyboard shortcut cheatsheet modal -->
+  <div id="_kbd-cheatsheet" data-testid="kbd-cheatsheet"
+       role="dialog" aria-labelledby="_kbd-cheatsheet-title" aria-modal="true"
+       onclick="if(event.target===this)closeKbdCheatsheet()">
+    <div id="_kbd-cheatsheet-box">
+      <div id="_kbd-cheatsheet-header">
+        <span id="_kbd-cheatsheet-title"
+              data-testid="kbd-cheatsheet-title">Keyboard shortcuts</span>
+        <button type="button" class="cv-nav-btn"
+                data-testid="kbd-cheatsheet-close"
+                onclick="closeKbdCheatsheet()" aria-label="Close"
+                style="font-size:1.1rem">&#10005;</button>
+      </div>
+      <div id="_kbd-cheatsheet-body"
+           data-testid="kbd-cheatsheet-body">
+        <h3 data-testid="kbd-cheatsheet-section-global">Global</h3>
+        <dl>
+          <dt><span class="kbd">?</span></dt>
+          <dd>Open this cheatsheet</dd>
+          <dt><span class="kbd">Esc</span></dt>
+          <dd>Close any open modal or picker</dd>
+        </dl>
+
+        <h3 data-testid="kbd-cheatsheet-section-config-viewer">Config viewer (search box)</h3>
+        <dl>
+          <dt><span class="kbd">Enter</span></dt>
+          <dd>Jump to the next search match</dd>
+          <dt><span class="kbd">Shift</span><span class="kbd-sep">+</span><span class="kbd">Enter</span></dt>
+          <dd>Jump to the previous search match</dd>
+          <dt><span class="kbd">Esc</span></dt>
+          <dd>Clear the search; press again to close the viewer</dd>
+        </dl>
+
+        <h3 data-testid="kbd-cheatsheet-section-diff">Diff page (focused collapsed marker)</h3>
+        <dl>
+          <dt><span class="kbd">Enter</span></dt>
+          <dd>Expand the focused block of unchanged lines</dd>
+          <dt><span class="kbd">Space</span></dt>
+          <dd>Expand the focused block of unchanged lines</dd>
+        </dl>
+
+        <h3 data-testid="kbd-cheatsheet-section-configs">Configs page</h3>
+        <dl>
+          <dt><span class="kbd">Esc</span></dt>
+          <dd>Close the compare-target picker</dd>
+        </dl>
+      </div>
     </div>
   </div>
 
@@ -517,6 +623,10 @@
 
   /* ── Theme toggle (extracted to _partials/theme-toggle.js) ── */
   {% include "_partials/theme-toggle.js" %}
+
+
+  /* ── Keyboard cheatsheet (extracted to _partials/kbd-cheatsheet.js) ── */
+  {% include "_partials/kbd-cheatsheet.js" %}
 
   /* ── Config downloader (WebView-safe blob approach) ── */
   async function downloadConfig(filename) {
