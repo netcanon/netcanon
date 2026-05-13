@@ -305,9 +305,11 @@
 
 <h1>Migrate</h1>
 <p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
-  Parse a source config through one adapter, validate it against a target
-  adapter's capability matrix, and render the result.  Backed by
-  <code>POST /api/v1/migration/plan</code>.
+  Pick a source vendor (or paste your config and let auto-detect
+  suggest one), pick a target, and Netcanon translates the canonical
+  config across vendors.  Capability gaps and Tier-3 sections (ACLs,
+  NAT, QoS, route-maps, IPsec) are surfaced inline after translation
+  so you can apply them manually on the target device.
 </p>
 
 <form id="mig-form" class="mig-form" data-testid="migrate-form">
@@ -643,7 +645,11 @@
         <div id="mig-rename-vlans-empty"
              data-testid="migrate-rename-vlans-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
-          No VLANs found in the source config.
+          Source config has no VLAN definitions — nothing to rename
+          in this pane.  If you expected VLANs, confirm the source
+          codec matches the device family (check the auto-detect
+          banner above) or that the source switch's VLAN database
+          is included in this config dump.
         </div>
         <div id="mig-rename-vlans-sections"
              data-testid="migrate-rename-vlans-sections"></div>
@@ -675,7 +681,11 @@
         <div id="mig-rename-local-users-empty"
              data-testid="migrate-rename-local-users-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
-          No local users found in the source config.
+          Source config has no local user accounts — nothing to rename
+          in this pane.  Devices that authenticate only via TACACS+ /
+          RADIUS legitimately have no local users; if you expected
+          some, verify they aren't in a separate AAA / credentials
+          file.
         </div>
         <div id="mig-rename-local-users-sections"
              data-testid="migrate-rename-local-users-sections"></div>
@@ -701,7 +711,11 @@
         <div id="mig-rename-snmp-empty"
              data-testid="migrate-rename-snmp-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
-          No SNMP block found in the source config.
+          Source config has no SNMP community configured — nothing to
+          rename in this pane.  If the device uses SNMPv3 instead of
+          v1 / v2c, switch to the SNMPv3 users pane.  If you expected
+          v2c, check whether SNMP lives in a separate
+          management-stanza file.
         </div>
         <div id="mig-rename-snmp-sections"
              data-testid="migrate-rename-snmp-sections"></div>
@@ -725,7 +739,11 @@
         <div id="mig-rename-snmpv3-empty"
              data-testid="migrate-rename-snmpv3-empty"
              style="display:none;color:#888;font-size:.85rem;padding:1rem">
-          No SNMPv3 users found in the source config.
+          Source config has no SNMPv3 users — nothing to rename in
+          this pane.  Devices using SNMP v1 / v2c community-string
+          auth legitimately have no v3 users; check the SNMP
+          community pane instead.  Cross-vendor v3 migrations also
+          typically require re-keying on the target device.
         </div>
         <div id="mig-rename-snmpv3-sections"
              data-testid="migrate-rename-snmpv3-sections"></div>
@@ -1198,12 +1216,116 @@
       // Feed the rename modal so the "Interface rename" button can
       // open against this job without re-fetching.
       captureJobForRename(body, job);
+      // When /plan returns a parse failure, ask /detect what codec
+      // the input actually looks like.  Common case: operator pastes
+      // an OPNsense XML into the Cisco-IOS-XE CLI codec; without this
+      // enrichment the operator sees only the raw parse error and has
+      // to guess which codec is the right one.  Best-effort, silent
+      // failure — see helper for the gating logic.
+      if (job.status === 'failed'
+          && typeof job.error === 'string'
+          && job.error.indexOf('parse failed') === 0) {
+        enrichParseFailureBanner(body, job);
+      }
     } catch (err) {
       showToast('Network error: ' + err.message, 'error');
     } finally {
       submitBtn.disabled = false;
       submitBtn.textContent = origText;
     }
+  }
+
+  /** When /plan reports `parse failed`, call /detect with the same input
+   *  and surface a "Did you mean: <vendor>?" suggestion inline with the
+   *  error banner.  Best-effort enrichment — silent on detect failure or
+   *  empty candidates (operator still sees the original parse-error
+   *  banner unchanged, never sees a worse experience than pre-Round-4).
+   *
+   *  Gating:
+   *    - Only suggests when the top candidate's codec differs from the
+   *      source the operator just submitted (no point suggesting the
+   *      codec they already picked).
+   *    - Min confidence 40 — matches the input-side runAutoDetect()
+   *      threshold for consistency.
+   *    - The "Switch source and retry" button auto-submits the form
+   *      after swapping the dropdown, so the operator hits one click
+   *      instead of two (pick new codec → click Translate).
+   */
+  async function enrichParseFailureBanner(planBody, job) {
+    // Build a /detect body from the same input the user just submitted.
+    // /detect uses the same XOR contract (raw_text OR source_filename).
+    var detectBody;
+    if (planBody.raw_text) {
+      detectBody = { raw_text: planBody.raw_text, min_confidence: 40 };
+    } else if (planBody.source_filename) {
+      detectBody = {
+        source_filename: planBody.source_filename,
+        min_confidence: 40,
+      };
+    } else {
+      return;  // Neither field set — nothing to detect against.
+    }
+    var resp;
+    try {
+      resp = await fetch('/api/v1/migration/detect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(detectBody),
+      });
+    } catch (_) {
+      return;  // Network blip — leave the original banner alone.
+    }
+    if (!resp.ok) return;
+    var candidates;
+    try {
+      candidates = await resp.json();
+    } catch (_) {
+      return;
+    }
+    if (!Array.isArray(candidates) || candidates.length === 0) return;
+    var top = candidates[0];
+    // No suggestion when the top candidate matches what the operator
+    // already picked — they have a different (real) problem.
+    if (top.codec === planBody.source) return;
+    var suggestedAdapter = adapterEntry(top.codec);
+    var suggestedLabel = suggestedAdapter
+      ? (suggestedAdapter.vendor_display_name || suggestedAdapter.name)
+      : top.codec;
+    // Append the suggestion to the existing red banner.  Inline append
+    // keeps the parse-error context visible above the suggestion — the
+    // operator can still see what went wrong AND what to try next.
+    var suggestEl = document.createElement('div');
+    suggestEl.style.marginTop = '.6rem';
+    suggestEl.style.paddingTop = '.5rem';
+    suggestEl.style.borderTop = '1px solid rgba(0,0,0,.12)';
+    suggestEl.style.fontSize = '.88rem';
+    suggestEl.innerHTML =
+      '<strong>Did you mean:</strong> '
+      + escapeHtml(suggestedLabel)
+      + ' <span class="mig-chip" style="margin-left:.35rem">'
+      + top.confidence + '% confidence</span>'
+      + '<div style="margin-top:.25rem;opacity:.85;font-size:.82rem">'
+      + escapeHtml(top.reason) + '</div>';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn-secondary';
+    btn.setAttribute('data-testid', 'migrate-parse-failure-detect-suggest');
+    btn.setAttribute('data-suggested-codec', top.codec);
+    btn.style.marginTop = '.5rem';
+    btn.style.fontSize = '.85rem';
+    btn.textContent = 'Switch source to '
+                    + suggestedLabel + ' and retry';
+    btn.addEventListener('click', function() {
+      sourceSel.value = top.codec;
+      // Dispatch change so adapter-info / target-compat side effects
+      // run (mirrors the operator-driven dropdown change).
+      sourceSel.dispatchEvent(new Event('change'));
+      // requestSubmit triggers form validation + the submit handler,
+      // same path as clicking the Translate button.
+      form.requestSubmit();
+    });
+    suggestEl.appendChild(btn);
+    banner.appendChild(suggestEl);
   }
 
   /** Populate every result panel from a MigrationJob payload. */

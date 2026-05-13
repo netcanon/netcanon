@@ -493,6 +493,7 @@ diff page's banner severity palette (`diff-banner-*` / `mig-banner-*`).
 | `migrate-result`                      | `<div>`    | Hidden container for everything below; revealed after first result |
 | `migrate-status-summary`              | `<div>`    | "Job {id}… — status: completed/partial/failed" |
 | `migrate-compatibility-banner`        | `<div>`    | Severity-coloured banner mirroring `ValidationReport.severity` |
+| `migrate-parse-failure-detect-suggest` | `<button>` | Appended to the compatibility banner ONLY when `/plan` returned `parse failed` AND `/detect` (auto-called as a follow-up) returned a top candidate whose codec differs from the source the operator just submitted.  Carries `data-suggested-codec` with the auto-detected codec name.  Click swaps the source dropdown to the suggestion + re-submits the form (one-click recovery). Silent absence when detect returns empty / errors / matches the already-picked codec. |
 | `migrate-tier3-banner`                | `<div>`    | Notification banner — visible iff `MigrationJob.dropped_tier3_sections` is non-empty.  Surfaces source-side stanza headers the parser deliberately drops (ACLs, NAT, QoS, route-maps, IPsec, etc).  See `netcanon/migration/_tier3_detection.py` |
 | `migrate-tier3-count`                 | `<strong>` | Detected-section count rendered inside the Tier-3 banner |
 | `migrate-tier3-section-N`             | `<li>`     | One row per detected stanza header, indexed `N=0..len-1`.  Children are `<code>` elements with the literal label |
