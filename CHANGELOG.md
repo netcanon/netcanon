@@ -21,6 +21,106 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 Round 9: runtime checks — load + memory smoke + browser-compat
+
+The pre-launch checklist round.  Two parts: lightweight load + memory
+smoke tests covering the "10 devices × 100KB × concurrent backups"
+scenario, and a manual browser-compat sweep across the in-app UI
+post-R7/R7.1/R7.2/R8 work.
+
+Single PR (`r9-runtime-checks`).  Deliberately lightweight: no
+Docker dependency (the original scope mentioned containerised
+browser-compat checks but Docker Desktop has been flaky on the host
+machine; covered via native browser testing instead).  Real load
+testing belongs in a separate ``tools/`` script not run as part of
+the test suite — these are smoke tests that pin properties + catch
+gross regressions.
+
+#### Load + memory tests
+
+``tests/integration/test_load_and_memory.py`` (new, **6 tests**)
+covers the runtime properties that pre-launch operators care about:
+
+* **Sustained load**: 50 sequential backups (each with a 100KB
+  synthetic Cisco-shaped config) against a cap-10 registry.
+  Verifies the registry's LRU eviction holds end-to-end through
+  the real API surface (not just direct registry inserts, which
+  the R8 unit tests covered).  Confirms: memory cap holds, disk
+  has all 50, every job is queryable by ID (transparent disk
+  fallback for evicted ones).
+* **Eviction + persistence**: submit one job, flood-evict it,
+  GET it back from disk.  Pins the R8 contract that completion
+  state survives memory eviction (the ``FileJobStore.save`` call
+  in ``_run_backup_job`` is what makes this true).
+* **Concurrent backups (single-device)**: 20 parallel POSTs via
+  ``ThreadPoolExecutor(max_workers=10)``.  Verifies every
+  request returns 202, every job ID is unique, every job
+  persists.  Catches races in the registry's ``__setitem__`` or
+  the BackgroundTask pipeline.
+* **The operator-flagged scenario**: 3 concurrent jobs each with
+  10 devices (so 30 devices × 100KB ≈ 3 MB of synthetic config
+  text flowing through the pipeline simultaneously).  Verifies
+  all 3 jobs complete with 10 successful results each.
+* **BackupJob instance count bounded**: ``gc.get_objects()``
+  walks live ``BackupJob`` instances during a 30-job burst
+  against a cap-5 registry.  Delta-from-baseline check (other
+  tests in the suite pollute the count via Pydantic's cycle
+  structures; delta is what matters).  Pre-R8 this delta would
+  have been ~30; post-R8 the cap bounds it.
+* **Tracemalloc peak under load**: stdlib ``tracemalloc``
+  snapshot before vs after a 20-job burst.  Asserts peak Python-
+  managed memory delta < 5 MB (a 10× regression ceiling).
+  Best-effort — flaky in CI envs with varying allocator state;
+  the primary guard is the ``gc.get_objects`` test above.
+
+All 6 tests complete in <3 seconds — fast enough to stay in the
+regular test sweep rather than a separate marker.
+
+#### Browser-compat sweep
+
+Manual visual + functional check in **Chrome** and **Firefox**
+(natively installed on the host; Docker-containerised Safari /
+Edge deferred to v0.2.0 pending host-env improvements).  The
+following surfaces were verified working in both browsers:
+
+* Every page loads (`/`, `/devices`, `/jobs`, `/schedules`,
+  `/configs`, `/definitions`, `/migrate`, `/sanitize`, `/docs`)
+  with no console errors.
+* Theme toggle flips correctly + persists across navigation +
+  paints with no FOUC.
+* `?` cheatsheet opens via keypress and nav-button + closes via
+  Esc, second `?`, and click-outside.
+* Forms surface validation errors as readable strings (not
+  `[object Object]`).
+* Modal flows end-to-end (compare-picker → diff page; sanitize
+  page submit with dry-run + result rendering; migrate
+  translate flow).
+* `/docs` Swagger UI re-themes in both modes including the
+  schema explorer chrome.
+
+**Acknowledged-as-intentional**: the config viewer modal
+(``#_config-viewer``) renders with its always-dark VS Code "Dark+"
+palette regardless of the document theme.  Same pattern as
+``pre.diff-body``, ``pre.mig-output``, the syntax-highlight
+``.tok-*`` token classes, and the sanitize page's
+``.san-output``.  Code surfaces are conventionally always-dark in
+the IDE world — matching that convention is more familiar to
+operators than re-theming.  Flagged here so future visual
+reviewers know it's deliberate.
+
+#### Deferred to v0.2.0
+
+* Safari + Edge browser-compat (requires Docker or VMs).
+* WebKit Playwright tests in CI (currently chromium-only).
+* Memory-under-load benchmarks targeting 1,000+ concurrent jobs
+  (the 6 smoke tests cover up to ~30; larger benchmarks
+  appropriate for a ``tools/`` script not a unit test).
+
+#### Verification
+
+Full test suite green (exit 0, **+6 new tests**, total ~3556).
+Operator-confirmed manual browser-compat in Chrome + Firefox.
+
 ### Phase 3 Round 8: backup-job registry — bounded memory + disk lazy-load
 
 Pre-R8 ``app.state.jobs`` was an unbounded ``dict[str, BackupJob]``
