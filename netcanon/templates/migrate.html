@@ -3,15 +3,17 @@
 
 {% block content %}
 <style>
-  /* Reuse the diff page's banner palette so the UI reads as one family. */
+  /* Reuse the diff page's banner palette so the UI reads as one
+     family.  Banner colour pairs flow through --badge-* / --alert-*
+     tokens so dark mode re-themes them automatically. */
   .mig-banner {
     padding:.65rem 1rem; border-radius:6px; font-size:.88rem;
     margin-top:1rem; display:flex; align-items:flex-start; gap:.75rem;
   }
-  .mig-banner-ok     { background:#d4edda; color:#155724; }
-  .mig-banner-warn   { background:#ffeaa7; color:#7a5d00; }
-  .mig-banner-block  { background:#f8d7da; color:#721c24; }
-  .mig-banner-info   { background:#d1ecf1; color:#0c5460; }
+  .mig-banner-ok     { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  .mig-banner-warn   { background:var(--badge-partial-bg);   color:var(--badge-partial-fg); }
+  .mig-banner-block  { background:var(--badge-failed-bg);    color:var(--badge-failed-fg); }
+  .mig-banner-info   { background:var(--alert-info-bg);      color:var(--alert-info-fg); }
   .mig-banner ul     { margin:.25rem 0 0 1.25rem; padding:0; }
   .mig-chip {
     display:inline-block; padding:.08rem .5rem; border-radius:3px;
@@ -27,31 +29,33 @@
   .mig-chip.class-access_point    { background:#44085a; }
   .mig-chip.class-waf             { background:#6a1f0b; }
 
-  .mig-form { background:#fff; padding:1.25rem; border-radius:6px;
-              box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  .mig-form { background:var(--surface); padding:1.25rem; border-radius:6px;
+              box-shadow:var(--shadow-card); color:var(--text-primary); }
   .mig-pair-row { display:grid; grid-template-columns:1fr auto 1fr; gap:1rem;
                   align-items:center; margin-bottom:.75rem; }
-  .mig-arrow { color:#7eb8f7; font-size:1.4rem; font-weight:700;
+  .mig-arrow { color:var(--accent); font-size:1.4rem; font-weight:700;
                text-align:center; user-select:none; }
 
   .mig-input-mode { display:flex; gap:1rem; margin:1rem 0 .5rem; }
   .mig-input-mode label { font-weight:600; font-size:.88rem; cursor:pointer; }
 
+  /* textarea.mig-raw inherits background / color / border from the
+     base.html `input, select, textarea` rule (theme-token backed).
+     Only resize behaviour + font + min-height are page-specific. */
   textarea.mig-raw {
     width:100%; min-height:180px; font-family:monospace; font-size:.82rem;
-    padding:.5rem .75rem; border:1px solid #ccc; border-radius:4px;
+    padding:.5rem .75rem; border-radius:4px;
     resize:vertical;
   }
-  textarea.mig-raw:focus { outline:2px solid #7eb8f7; border-color:transparent; }
 
   #mig-result { margin-top:1rem; }
   #mig-result.hidden { display:none; }
   .mig-result-section {
-    background:#fff; padding:1rem 1.25rem; border-radius:6px;
-    box-shadow:0 1px 3px rgba(0,0,0,.1); margin-top:.75rem;
+    background:var(--surface); padding:1rem 1.25rem; border-radius:6px;
+    box-shadow:var(--shadow-card); margin-top:.75rem; color:var(--text-primary);
   }
-  .mig-stats { font-family:monospace; font-size:.85rem; color:#555; }
-  .mig-stats .mig-stat-label { color:#888; }
+  .mig-stats { font-family:monospace; font-size:.85rem; color:var(--text-muted); }
+  .mig-stats .mig-stat-label { color:var(--text-faint); }
 
   pre.mig-output {
     background:#1e1e1e; color:#d4d4d4; padding:.75rem; border-radius:6px;
@@ -70,8 +74,9 @@
   pre.mig-output .tok-attr    { color:#9cdcfe; }
 
   .mig-path-list { font-family:monospace; font-size:.78rem; max-height:16vh;
-                   overflow:auto; border:1px solid #eee; border-radius:4px;
-                   padding:.35rem .5rem; background:#fafafa; }
+                   overflow:auto; border:1px solid var(--border); border-radius:4px;
+                   padding:.35rem .5rem; background:var(--surface-alt);
+                   color:var(--text-primary); }
   .mig-path-list code { background:transparent; }
 
   /* ──────────────────────────────────────────────────────────────────
@@ -82,11 +87,12 @@
   #mig-rename-modal {
     display:none; position:fixed; top:10vh; left:50%;
     width:min(1100px, 94vw); max-height:80vh; z-index:9500;
-    background:#fff; border-radius:8px;
-    box-shadow:0 10px 40px rgba(0,0,0,.35);
-    border:1px solid #d0d4e0;
+    background:var(--surface); border-radius:8px;
+    box-shadow:var(--shadow-modal);
+    border:1px solid var(--border-strong);
     transform:translateX(-50%);
     display:none; flex-direction:column; overflow:hidden;
+    color:var(--text-primary);
   }
   #mig-rename-modal.open { display:flex; }
   #mig-rename-modal-header {
@@ -105,21 +111,21 @@
   }
   #mig-rename-modal-header button:hover { background:#333; }
   #mig-rename-modal-toolbar {
-    padding:.5rem .8rem; background:#f5f5f8;
-    border-bottom:1px solid #e0e0e8;
+    padding:.5rem .8rem; background:var(--surface-alt);
+    border-bottom:1px solid var(--border);
     display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
     flex:0 0 auto;
   }
   #mig-rename-modal-toolbar label { font-size:.8rem; font-weight:600;
-                                    color:#555; }
+                                    color:var(--text-muted); }
   #mig-rename-modal-toolbar select {
     padding:.25rem .4rem; font-size:.82rem;
-    border:1px solid #ccc; border-radius:3px;
+    border-radius:3px;
   }
-  #mig-rename-modal-toolbar .summary { font-size:.78rem; color:#666;
+  #mig-rename-modal-toolbar .summary { font-size:.78rem; color:var(--text-muted);
                                        font-family:monospace; margin-left:auto; }
-  .mig-rename-summary-warn { color:#7a5d00; font-weight:700; }
-  .mig-rename-summary-collision { color:#721c24; font-weight:700; }
+  .mig-rename-summary-warn { color:var(--badge-partial-fg); font-weight:700; }
+  .mig-rename-summary-collision { color:var(--badge-failed-fg); font-weight:700; }
 
   /* Hardware fit-check banner — source-vs-target port counts,
      grouped by kind.  Visible only when a target profile is
@@ -128,12 +134,14 @@
      uplinks.  Always compact — never dominates the modal. */
   #mig-rename-fitcheck {
     padding:.4rem .8rem; font-size:.78rem;
-    border-bottom:1px solid #e0e0e8;
+    border-bottom:1px solid var(--border);
     font-family:monospace;
   }
-  #mig-rename-fitcheck.fit-ok    { background:#eef8ee; color:#1a5928; }
-  #mig-rename-fitcheck.fit-warn  { background:#fff6e0; color:#7a5d00; }
-  #mig-rename-fitcheck.fit-block { background:#fde5e5; color:#721c24; }
+  /* Fit-check banner colour pairs flow through --badge-* tokens for
+     dark-mode coverage; semantic colour cues preserved across themes. */
+  #mig-rename-fitcheck.fit-ok    { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  #mig-rename-fitcheck.fit-warn  { background:var(--badge-partial-bg);   color:var(--badge-partial-fg); }
+  #mig-rename-fitcheck.fit-block { background:var(--badge-failed-bg);    color:var(--badge-failed-fg); }
   #mig-rename-fitcheck .mig-fitcheck-kind {
     display:inline-block; margin-right:1rem;
   }
@@ -141,10 +149,10 @@
     font-weight:700; margin-right:.25rem;
   }
   #mig-rename-fitcheck .mig-fitcheck-over {
-    color:#721c24; font-weight:700;
+    color:var(--badge-failed-fg); font-weight:700;
   }
   #mig-rename-fitcheck .mig-fitcheck-note {
-    color:#555; font-style:italic; margin-left:.5rem;
+    color:var(--text-muted); font-style:italic; margin-left:.5rem;
   }
 
   #mig-rename-modal-body {
@@ -157,20 +165,22 @@
      flip between categories without losing context. */
   #mig-rename-rail {
     flex:0 0 auto; width:140px; overflow-y:auto;
-    border-right:1px solid #e0e0e8;
-    background:#fafafc; padding:.4rem .25rem;
+    border-right:1px solid var(--border);
+    background:var(--surface-alt); padding:.4rem .25rem;
     display:flex; flex-direction:column; gap:.2rem;
   }
   .mig-rename-rail-btn {
     display:flex; align-items:center; justify-content:space-between;
     padding:.4rem .55rem; border:1px solid transparent;
     background:transparent; border-radius:4px; cursor:pointer;
-    font-size:.82rem; color:#333; text-align:left;
+    font-size:.82rem; color:var(--text-primary); text-align:left;
     font-family:inherit;
   }
   .mig-rename-rail-btn:hover {
-    background:#eef;
+    background:var(--surface-hover);
   }
+  /* Active rail button intentionally keeps the always-dark nav navy —
+     mirrors the nav-bar / config-viewer-header convention. */
   .mig-rename-rail-btn.active {
     background:#1a1a2e; color:#eee; border-color:#1a1a2e;
     font-weight:700;
@@ -189,7 +199,7 @@
     font-size:.68rem; font-family:monospace;
   }
   #mig-rename-table-pane {
-    flex:1.1; overflow:auto; padding:.6rem .8rem; border-right:1px solid #e0e0e8;
+    flex:1.1; overflow:auto; padding:.6rem .8rem; border-right:1px solid var(--border);
     min-width:400px;
   }
   /* Category panes live inside the table pane and swap visibility
@@ -207,7 +217,7 @@
     white-space:pre;
   }
   #mig-rename-preview-pane .preview-label {
-    font-size:.7rem; color:#888; font-family:monospace;
+    font-size:.7rem; color:var(--text-faint); font-family:monospace;
     text-transform:uppercase; letter-spacing:.08em;
     margin-bottom:.4rem; display:block;
   }
@@ -215,7 +225,8 @@
   .mig-rename-kind-section { margin-bottom:.65rem; }
   .mig-rename-kind-section summary {
     cursor:pointer; font-weight:600; font-size:.84rem;
-    padding:.3rem .4rem; background:#eef;  border-radius:3px;
+    padding:.3rem .4rem; background:var(--surface-elev);
+    color:var(--text-primary); border-radius:3px;
     list-style:none;
   }
   .mig-rename-kind-section summary::-webkit-details-marker { display:none; }
@@ -224,10 +235,10 @@
     transition:transform .15s;
   }
   .mig-rename-kind-section[open] summary::before { transform:rotate(90deg); }
-  .mig-rename-kind-section .count { color:#666; font-weight:normal;
+  .mig-rename-kind-section .count { color:var(--text-muted); font-weight:normal;
                                     font-family:monospace; font-size:.78rem;
                                     margin-left:.4rem; }
-  .mig-rename-kind-section .warn-count { color:#7a5d00; font-weight:700; }
+  .mig-rename-kind-section .warn-count { color:var(--badge-partial-fg); font-weight:700; }
 
   table.mig-rename-table {
     width:100%; border-collapse:collapse; font-size:.8rem;
@@ -235,55 +246,56 @@
   }
   table.mig-rename-table th {
     text-align:left; padding:.3rem .4rem; font-size:.72rem;
-    color:#666; border-bottom:1px solid #e0e0e8;
-    background:#fafafa;
+    color:var(--text-muted); border-bottom:1px solid var(--border);
+    background:var(--surface-alt);
   }
   table.mig-rename-table td {
     padding:.25rem .4rem; vertical-align:top; font-family:monospace;
-    font-size:.78rem; border-bottom:1px dashed #eee;
+    font-size:.78rem; border-bottom:1px dashed var(--border);
   }
-  table.mig-rename-table tr.has-warning td { background:#fffbe6; }
-  table.mig-rename-table tr.has-collision td { background:#fde5e5; }
-  table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:#0c5460; }
+  /* Row-state highlights re-themed via --badge-* token pairs. */
+  table.mig-rename-table tr.has-warning td { background:var(--badge-partial-bg); }
+  table.mig-rename-table tr.has-collision td { background:var(--badge-failed-bg); }
+  table.mig-rename-table tr.has-override td.mig-rename-target { font-weight:700; color:var(--alert-info-fg); }
   /* Drop (don't-render) rows: dim row, strike source name, grey the
      override cell so it's unambiguous this interface will be omitted
      from the rendered output. */
-  table.mig-rename-table tr.has-drop td { background:#f0f0f0; color:#888; }
+  table.mig-rename-table tr.has-drop td { background:var(--surface-alt); color:var(--text-faint); }
   table.mig-rename-table tr.has-drop td:first-child {
-    text-decoration:line-through; color:#888;
+    text-decoration:line-through; color:var(--text-faint);
   }
   table.mig-rename-table tr.has-drop select,
-  table.mig-rename-table tr.has-drop input { color:#888; }
+  table.mig-rename-table tr.has-drop input { color:var(--text-faint); }
   table.mig-rename-table td.mig-rename-no-auto {
-    color:#aaa; font-style:italic; font-family:system-ui, sans-serif;
+    color:var(--text-faint); font-style:italic; font-family:system-ui, sans-serif;
     font-size:.72rem;
   }
   .mig-rename-drop-link {
-    font-size:.7rem; color:#721c24; text-decoration:underline;
+    font-size:.7rem; color:var(--badge-failed-fg); text-decoration:underline;
     cursor:pointer; margin-left:.3rem; user-select:none;
     white-space:nowrap;
   }
-  .mig-rename-drop-link:hover { color:#a02030; }
-  .mig-rename-summary-drop { color:#555; font-weight:700; }
+  .mig-rename-drop-link:hover { opacity:.8; }
+  .mig-rename-summary-drop { color:var(--text-muted); font-weight:700; }
   table.mig-rename-table select, table.mig-rename-table input {
     font-family:monospace; font-size:.78rem;
-    padding:.15rem .3rem; border:1px solid #ccc; border-radius:3px;
+    padding:.15rem .3rem; border-radius:3px;
     width:100%;
   }
   table.mig-rename-table tr.has-collision input,
-  table.mig-rename-table tr.has-collision select { border-color:#721c24; }
+  table.mig-rename-table tr.has-collision select { border-color:var(--badge-failed-fg); }
   .mig-rename-warn-icon {
-    color:#7a5d00; font-size:.95rem; cursor:help;
+    color:var(--badge-partial-fg); font-size:.95rem; cursor:help;
     user-select:none;
   }
   .mig-rename-collision-icon {
-    color:#721c24; font-size:.95rem; cursor:help;
+    color:var(--badge-failed-fg); font-size:.95rem; cursor:help;
     user-select:none;
   }
 
   #mig-rename-modal-footer {
-    padding:.5rem .8rem; background:#f5f5f8;
-    border-top:1px solid #e0e0e8;
+    padding:.5rem .8rem; background:var(--surface-alt);
+    border-top:1px solid var(--border);
     display:flex; gap:.5rem; align-items:center; flex:0 0 auto;
   }
   #mig-rename-modal-footer button {
@@ -304,7 +316,7 @@
 </style>
 
 <h1>Migrate</h1>
-<p style="color:#555;font-size:.9rem;margin:.25rem 0 1rem">
+<p style="color:var(--text-muted);font-size:.9rem;margin:.25rem 0 1rem">
   Pick a source vendor (or paste your config and let auto-detect
   suggest one), pick a target, and Netcanon translates the canonical
   config across vendors.  Capability gaps and Tier-3 sections (ACLs,
@@ -331,7 +343,7 @@
 
   <div data-testid="migrate-adapter-info"
        id="mig-adapter-info"
-       style="display:none; font-size:.78rem; color:#555;
+       style="display:none; font-size:.78rem; color:var(--text-muted);
               margin-bottom:.75rem; display:flex; gap:1.5rem;
               flex-wrap:wrap"></div>
 
@@ -368,7 +380,7 @@
               style="font-size:.75rem;padding:.2rem .6rem">
         Load sample for source adapter
       </button>
-      <span style="font-size:.72rem;color:#888;align-self:center">
+      <span style="font-size:.72rem;color:var(--text-faint);align-self:center">
         overwrites the textarea
       </span>
     </div>
@@ -397,7 +409,7 @@
   </div>
 
   <div class="form-row" style="margin-top:1rem;align-items:center;gap:1rem">
-    <label style="font-size:.82rem;color:#555;display:flex;align-items:center;gap:.35rem">
+    <label style="font-size:.82rem;color:var(--text-muted);display:flex;align-items:center;gap:.35rem">
       <input type="checkbox" id="mig-force" name="force"
              data-testid="migrate-force-checkbox">
       <span title="Skip the device-class guard (NOT recommended)">Force cross-class</span>
@@ -621,7 +633,7 @@
            data-testid="migrate-rename-ports-pane">
         <div id="mig-rename-table-empty"
              data-testid="migrate-rename-table-empty"
-             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+             style="display:none;color:var(--text-faint);font-size:.85rem;padding:1rem">
           No port names recognised in the translated output.
         </div>
         <!-- Kind sections rendered here by renderRenameTable() -->
@@ -646,7 +658,7 @@
              style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-vlans-empty"
              data-testid="migrate-rename-vlans-empty"
-             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+             style="display:none;color:var(--text-faint);font-size:.85rem;padding:1rem">
           Source config has no VLAN definitions — nothing to rename
           in this pane.  If you expected VLANs, confirm the source
           codec matches the device family (check the auto-detect
@@ -682,7 +694,7 @@
              style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-local-users-empty"
              data-testid="migrate-rename-local-users-empty"
-             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+             style="display:none;color:var(--text-faint);font-size:.85rem;padding:1rem">
           Source config has no local user accounts — nothing to rename
           in this pane.  Devices that authenticate only via TACACS+ /
           RADIUS legitimately have no local users; if you expected
@@ -712,7 +724,7 @@
              style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-snmp-empty"
              data-testid="migrate-rename-snmp-empty"
-             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+             style="display:none;color:var(--text-faint);font-size:.85rem;padding:1rem">
           Source config has no SNMP community configured — nothing to
           rename in this pane.  If the device uses SNMPv3 instead of
           v1 / v2c, switch to the SNMPv3 users pane.  If you expected
@@ -740,7 +752,7 @@
              style="display:none;margin:.6rem;font-size:.82rem"></div>
         <div id="mig-rename-snmpv3-empty"
              data-testid="migrate-rename-snmpv3-empty"
-             style="display:none;color:#888;font-size:.85rem;padding:1rem">
+             style="display:none;color:var(--text-faint);font-size:.85rem;padding:1rem">
           Source config has no SNMPv3 users — nothing to rename in
           this pane.  Devices using SNMP v1 / v2c community-string
           auth legitimately have no v3 users; check the SNMP
@@ -759,7 +771,7 @@
   </div>
 
   <div id="mig-rename-modal-footer">
-    <span style="font-size:.75rem;color:#888"
+    <span style="font-size:.75rem;color:var(--text-faint)"
           id="mig-rename-status"
           data-testid="migrate-rename-status"></span>
     <span class="spacer"></span>
@@ -938,7 +950,7 @@
     }).join(' ');
     return '<div><strong>' + label + ':</strong> '
          + chips + '&nbsp; '
-         + '<span style="color:#888">'
+         + '<span style="color:var(--text-faint)">'
          + a.supported_count + ' supported, '
          + a.lossy_count + ' lossy, '
          + a.unsupported_count + ' unsupported'
@@ -952,7 +964,7 @@
     });
     if (common.length > 0) return '';
     return '<div data-testid="migrate-class-hint" '
-         + 'style="color:#721c24;font-weight:600">'
+         + 'style="color:var(--badge-failed-fg);font-weight:600">'
          + '⚠ No shared device class — guard will block unless '
          + '"Force cross-class" is ticked.</div>';
   }
@@ -1562,7 +1574,7 @@
     var count = document.querySelector('[data-testid="' + countTestid + '"]');
     count.textContent = String(items.length);
     if (items.length === 0) {
-      list.innerHTML = '<em style="color:#888">(none)</em>';
+      list.innerHTML = '<em style="color:var(--text-faint)">(none)</em>';
       return;
     }
     // Coalesce by (path, reason, severity) in discovery order.
@@ -1585,7 +1597,7 @@
     list.innerHTML = order.map(function(it) {
       var line = '<code>' + escapeHtml(it.path || '') + '</code>';
       if (it.reason) {
-        line += ' <span style="color:#888">— ' + escapeHtml(it.reason) + '</span>';
+        line += ' <span style="color:var(--text-faint)">— ' + escapeHtml(it.reason) + '</span>';
       }
       if (it.severity) {
         line += ' <span class="mig-chip">' + escapeHtml(it.severity) + '</span>';

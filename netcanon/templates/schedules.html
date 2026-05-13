@@ -3,14 +3,17 @@
 
 {% block content %}
 <style>
+  /* Schedule chrome — enabled/disabled badges reuse the existing
+     --badge-* tokens (semantic colour preserved across themes); muted
+     text columns flow through --text-muted / --text-faint. */
   .sched-form { margin-bottom:2rem; }
   .interval-row { display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap; }
   .sched-table td { vertical-align:middle; }
-  .enabled-badge  { background:#d4edda; color:#155724; }
-  .disabled-badge { background:#e2e3e5; color:#383d41; }
-  .next-run { font-size:.82rem; color:#555; }
-  .last-run { font-size:.82rem; color:#888; }
-  .no-run   { color:#bbb; }
+  .enabled-badge  { background:var(--badge-completed-bg); color:var(--badge-completed-fg); }
+  .disabled-badge { background:var(--badge-pending-bg); color:var(--badge-pending-fg); }
+  .next-run { font-size:.82rem; color:var(--text-muted); }
+  .last-run { font-size:.82rem; color:var(--text-muted); }
+  .no-run   { color:var(--text-faint); }
 </style>
 
 <h1>Schedules</h1>
@@ -44,20 +47,20 @@
                    placeholder="minutes" style="width:90px"
                    data-testid="sched-custom-interval-input"
                    title="Minutes between runs (1 to 43,200 = 30 days). Schedule fires as soon as the interval elapses after the previous run.">
-            <span style="font-size:.85rem;color:#666">min</span>
+            <span style="font-size:.85rem;color:var(--text-muted)">min</span>
           </div>
         </div>
       </div>
     </div>
 
     <!-- ── Target by device type ─────────────────────────────────── -->
-    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333"
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:var(--text-primary)"
         title="Match-by-vendor: every saved Device Profile whose Device Type is checked here runs when the schedule fires. Unioned with 'Target Specific Devices' below.">
       Target by Device Type
-      <span style="font-size:.8rem;font-weight:normal;color:#888">— back up all profiles of these types</span>
+      <span style="font-size:.8rem;font-weight:normal;color:var(--text-faint)">— back up all profiles of these types</span>
     </h3>
     <div id="sched-type-keys" data-testid="sched-type-keys-section"
-         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:#f8f8f8;border-radius:4px;margin-bottom:.75rem">
+         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:var(--surface-alt);border-radius:4px;margin-bottom:.75rem">
       {% for key, def in definitions.items() | sort %}
       <label style="display:flex;align-items:center;gap:.3rem;font-size:.85rem;font-weight:normal;cursor:pointer">
         <input type="checkbox" name="target_type_keys" value="{{ key }}"
@@ -68,25 +71,25 @@
     </div>
 
     <!-- ── Target specific devices ──────────────────────────────────── -->
-    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:#333"
+    <h3 style="font-size:.95rem;font-weight:600;margin:.9rem 0 .5rem;color:var(--text-primary)"
         title="Match-by-profile: explicitly listed profiles always run. Use for one-offs or to single out a device from a type-wide schedule.">
       Target Specific Devices
-      <span style="font-size:.8rem;font-weight:normal;color:#888">— include individual profiles regardless of type</span>
+      <span style="font-size:.8rem;font-weight:normal;color:var(--text-faint)">— include individual profiles regardless of type</span>
     </h3>
     <div id="sched-devices" data-testid="sched-devices-section"
-         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:#f8f8f8;border-radius:4px;margin-bottom:.75rem">
+         style="display:flex;gap:.5rem;flex-wrap:wrap;padding:.5rem;background:var(--surface-alt);border-radius:4px;margin-bottom:.75rem">
       {% if device_profiles %}
         {% for profile in device_profiles %}
         <label style="display:flex;align-items:center;gap:.3rem;font-size:.85rem;font-weight:normal;cursor:pointer">
           <input type="checkbox" name="target_device_ids" value="{{ profile.id }}"
                  data-testid="sched-device-checkbox">
-          <span class="badge" style="font-size:.75rem;background:#e8e8f0;color:#333">{{ profile.type_key }}</span>
+          <span class="badge" style="font-size:.75rem;background:var(--surface-elev);color:var(--text-primary)">{{ profile.type_key }}</span>
           {{ profile.name }}
-          <span style="color:#aaa;font-size:.75rem">{{ profile.host }}</span>
+          <span style="color:var(--text-faint);font-size:.75rem">{{ profile.host }}</span>
         </label>
         {% endfor %}
       {% else %}
-      <p data-testid="no-profiles-for-sched-msg" style="color:#888;font-style:italic;font-size:.85rem;margin:0">
+      <p data-testid="no-profiles-for-sched-msg" style="color:var(--text-faint);font-style:italic;font-size:.85rem;margin:0">
         No device profiles saved yet. <a href="/devices">Add a device profile</a> first.
       </p>
       {% endif %}
@@ -124,7 +127,7 @@
     {% for sched in schedules %}
     <tr data-testid="schedule-row" data-schedule-id="{{ sched.id }}">
       <td data-testid="schedule-name"><strong>{{ sched.name }}</strong>
-        <div style="font-size:.75rem;color:#aaa;font-family:monospace">{{ sched.id[:8] }}&hellip;</div>
+        <div style="font-size:.75rem;color:var(--text-faint);font-family:monospace">{{ sched.id[:8] }}&hellip;</div>
       </td>
       <td data-testid="schedule-interval">{{ format_interval(sched.interval_minutes) }}</td>
       <td>

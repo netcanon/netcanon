@@ -65,14 +65,14 @@
         </div>
         <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
         <details class="port-details" style="align-self:flex-end">
-          <summary style="font-size:.8rem;font-weight:600;color:#7eb8f7;cursor:pointer;
+          <summary style="font-size:.8rem;font-weight:600;color:var(--accent);cursor:pointer;
                           user-select:none;list-style:none;padding-bottom:.25rem">&#9881; Port</summary>
           <input name="port" type="number" value="22" min="1" max="65535"
                  style="width:72px;margin-top:.25rem" data-testid="device-port-input"
                  title="TCP port for SSH. Defaults to 22. Change only if the device runs SSH on a non-standard port.">
         </details>
         <div class="form-group profile-name-group">
-          <label>Save as device profile <span style="color:#aaa;font-weight:normal">(optional)</span></label>
+          <label>Save as device profile <span style="color:var(--text-faint);font-weight:normal">(optional)</span></label>
           <input name="profile_name" type="text" placeholder="e.g. Office Cisco"
                  data-testid="device-profile-name-input"
                  title="Optional friendly name. When set, the entry is persisted to /devices and pre-selectable in the Device Profile dropdown above for future backups.">
