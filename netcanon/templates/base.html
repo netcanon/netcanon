@@ -477,6 +477,35 @@
     clearTimeout(toast._t);
     toast._t = setTimeout(function() { toast.style.display = 'none'; }, 4000);
   }
+
+  /* ── Format an API error payload for operator display ───────────────
+   * FastAPI returns errors in two shapes:
+   *   - HTTPException → {detail: "string"}
+   *   - Pydantic 422  → {detail: [{loc, msg, type, input, ctx}, ...]}
+   * Previously every form's error handler did
+   *   showToast('Error: ' + (err.detail || res.statusText), 'error')
+   * which renders the Pydantic-422 array as the JavaScript default
+   * "[object Object]" — silently swallowing every actionable validation
+   * message in the app.  This helper normalises both shapes to a
+   * single short operator-readable line.  Pass it the parsed JSON
+   * payload + the response.statusText as a fallback.                 */
+  function formatApiError(payload, statusText) {
+    if (payload && typeof payload.detail === 'string') {
+      return payload.detail;
+    }
+    if (payload && Array.isArray(payload.detail)) {
+      return payload.detail.map(function(e) {
+        // loc is ["body", "host"] — last segment is the field name.
+        var loc = Array.isArray(e.loc) ? e.loc : [];
+        var field = loc.length > 0 ? String(loc[loc.length - 1]) : '';
+        // Pydantic prefixes "Value error, " on raised ValueErrors —
+        // strip for cleaner UI; the field name carries the locator.
+        var msg = String(e.msg || '').replace(/^Value error,\s*/, '');
+        return field ? field + ': ' + msg : msg;
+      }).join('; ');
+    }
+    return statusText || 'Request failed';
+  }
   /* ── Config viewer (extracted to _partials/config-viewer.js) ── */
   {% include "_partials/config-viewer.js" %}
 

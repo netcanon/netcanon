@@ -254,7 +254,7 @@ form.addEventListener('submit', async function(e) {
           });
           if (!pr.ok) {
             var perr = await pr.json().catch(function() { return {}; });
-            showToast('Could not save profile \u201c' + profileName.value + '\u201d: ' + (perr.detail || pr.statusText), 'error');
+            showToast('Could not save profile \u201c' + profileName.value + '\u201d: ' + formatApiError(perr, pr.statusText), 'error');
             submitBtn.disabled = false;
             submitBtn.textContent = 'Start Backup';
             return;
@@ -292,7 +292,7 @@ form.addEventListener('submit', async function(e) {
     });
     if (!res.ok) {
       var err = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(err, res.statusText), 'error');
       return;
     }
     job = await res.json();

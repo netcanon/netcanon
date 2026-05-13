@@ -116,3 +116,86 @@ class TestReloadDefinitions:
         client.post("/api/v1/definitions/reload")
         second = client.get("/api/v1/definitions/").json()
         assert [d["type_key"] for d in first] == [d["type_key"] for d in second]
+
+    def test_reload_rotates_definition_loader_reference(self, client):
+        """Reload must rotate ``app.state.definition_loader`` so the
+        /definitions page's overlays section reads from the fresh
+        loader's ``_variants`` list.
+
+        Regression guard: pre-fix the reload route only updated
+        ``state.definitions`` (the family-base map) and left
+        ``state.definition_loader`` pointing at the original loader
+        instance.  Operators who dropped a new overlay YAML and
+        clicked "Reload from disk" saw the toast succeed + the
+        backup flow pick up the new bases — but the /definitions
+        page's overlays section silently kept the pre-reload set
+        until a full process restart.  This test pins the rotation
+        contract so the bug can't regress.
+        """
+        before = client.app.state.definition_loader
+        client.post("/api/v1/definitions/reload")
+        after = client.app.state.definition_loader
+        assert after is not before, (
+            "reload did not rotate state.definition_loader; the "
+            "/definitions page would render stale overlays"
+        )
+
+    def test_reload_picks_up_new_overlay_on_disk(
+        self,
+        sample_definitions_dir,
+        test_settings,
+    ):
+        """End-to-end: drop a version-pin overlay YAML next to an
+        existing family base, hit reload, assert the new loader
+        sees it.
+
+        Pairs with :meth:`test_reload_rotates_definition_loader_reference`
+        above — that test pins the rotation; this test pins the
+        observable effect of the rotation.
+        """
+        import yaml as _yaml
+        from fastapi.testclient import TestClient
+
+        from netcanon.main import create_app
+
+        app = create_app(test_settings)
+        with TestClient(app) as tc:
+            # Baseline — no overlays in the fixture's definitions dir.
+            loader_before = tc.app.state.definition_loader
+            overlays_before = [
+                d for d in getattr(loader_before, "_variants", [])
+                if d.os_version is not None or d.model is not None
+            ]
+            assert overlays_before == []
+
+            # Drop a fresh overlay YAML on disk.
+            overlay = _yaml.safe_dump({
+                "type_key": "Cisco",
+                "vendor": "Cisco",
+                "os": "IOS-XE",
+                "os_version": "17.12",
+                "priority": 5,
+                "file_extension": "cfg",
+                "connection": {"needs_enable": True},
+                "collector": {
+                    "strategy": "netmiko",
+                    "netmiko_device_type": "cisco_xe",
+                },
+                "commands": {"config": "show running-config"},
+                "notes": "regression overlay for reload-refresh test",
+            })
+            (sample_definitions_dir / "cisco" / "17_12.yaml").write_text(
+                overlay, encoding="utf-8",
+            )
+
+            # Hit reload; assert the fresh loader sees the overlay.
+            tc.post("/api/v1/definitions/reload")
+            loader_after = tc.app.state.definition_loader
+            assert loader_after is not loader_before
+            overlays_after = [
+                d for d in getattr(loader_after, "_variants", [])
+                if d.os_version is not None or d.model is not None
+            ]
+            assert len(overlays_after) == 1
+            assert overlays_after[0].type_key == "Cisco"
+            assert overlays_after[0].os_version == "17.12"

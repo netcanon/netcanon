@@ -1190,10 +1190,7 @@
       // the job body); HTTP 4xx means a REQUEST shape problem.
       if (!resp.ok) {
         var err = await resp.json().catch(function() { return {}; });
-        var detail = typeof err.detail === 'string'
-          ? err.detail
-          : JSON.stringify(err.detail || err);
-        showToast('Request rejected: ' + detail, 'error');
+        showToast('Request rejected: ' + formatApiError(err, resp.statusText), 'error');
         return;
       }
       var job = await resp.json();

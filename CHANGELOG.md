@@ -21,6 +21,83 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Phase 3 — Polish pass, Round 1.5: defects from visual sanity check
+
+Two defects surfaced during a manual eyeballing of Rounds 1 + 2.
+Bundled here as a small follow-up before continuing into Round 3
+because one of them silently swallowed all helpful Pydantic validation
+text across every form in the app — actionable error copy in
+subsequent rounds would still render as `[object Object]` until this
+JS surfacing layer is fixed.
+
+#### Form errors no longer render as `[object Object]`
+
+FastAPI returns validation errors in two shapes:
+
+* `HTTPException` → `{"detail": "string"}`
+* Pydantic 422  → `{"detail": [{"loc": [...], "msg": "...", "type": ...}, ...]}`
+
+Every form's error handler did
+`showToast('Error: ' + (err.detail || res.statusText), 'error')` —
+which silently collapsed the Pydantic-422 array to JavaScript's
+default `[object Object]` rendering.  Operators submitting a form
+that triggered Pydantic validation (host validation, schedule
+constraints, device-profile uniqueness, etc.) saw a literal
+`Error: [object Object]` toast and had to read server logs to find
+out what was actually wrong.
+
+Discovered by submitting the New Device Profile form with
+`not!a!valid!host` in the Host / IP field during the post-Round-2
+visual sanity check — the just-improved host-validation error
+("Invalid host '...': must be a valid IPv4 address, IPv6 address, or
+RFC-1123 hostname.  Example: ...") never reached the toast because of
+this stringification gap.
+
+New helper `formatApiError(payload, statusText)` in `base.html`
+detects both response shapes and normalises to a short
+operator-readable line:
+
+* String detail → use verbatim
+* Pydantic 422 array → `<field>: <msg>; <field>: <msg>; ...` with
+  the noisy `Value error, ` prefix stripped
+* Empty / unknown → fall back to `statusText`
+
+Updated all 12 affected call sites across `devices.html` (×4),
+`schedules.html` (×3), `index.html` (×2), `configs.html`, `jobs.html`,
+`migrate.html`, and `_partials/rename-apply.js` to call the helper
+instead of doing the broken inline concat.  Two of those sites
+(`migrate.html`, `rename-apply.js`) had a less-broken `JSON.stringify`
+fallback that produced ugly-but-readable JSON; they now produce the
+same clean output as the rest.
+
+#### Definitions reload now refreshes the overlay registry
+
+`POST /api/v1/definitions/reload` rebuilt `state.definitions` (the
+family-base map consumed by backups) but did **not** rotate
+`state.definition_loader` — the loader reference that the
+`/definitions` page reads `_variants` from when rendering the
+Version / Model Overlays section.
+
+Operator-visible effect (verified manually during the visual sanity
+check by moving an overlay YAML out of `definitions/` and clicking
+"Reload from disk"): the toast said "Loaded N definitions" + the
+backup flow correctly used the new bases, but the overlays section
+on `/definitions` silently kept the *pre-reload* overlay set until
+a full process restart.
+
+Fix is a single line in `netcanon/api/routes/definitions.py` —
+assign the freshly constructed loader to `state.definition_loader`
+alongside the existing `state.definitions` assignment.
+
+Two regression tests pin the fix:
+
+* `test_reload_rotates_definition_loader_reference` — asserts the
+  loader reference identity changes after reload (`after is not
+  before`).  Cheap contract test.
+* `test_reload_picks_up_new_overlay_on_disk` — end-to-end: drops a
+  fresh overlay YAML, hits reload, asserts the new loader's
+  `_variants` sees the overlay.
+
 ### Phase 3 — Polish pass, Round 2: vocabulary discipline
 
 Driven by a Round-1 audit-followup mapping pass: catalogue every term

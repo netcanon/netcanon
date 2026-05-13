@@ -380,7 +380,7 @@ deviceForm.addEventListener('submit', async function(e) {
     });
     if (!res.ok) {
       var err = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(err, res.statusText), 'error');
       return;
     }
     showToast('Device profile saved \u2014 reloading\u2026', 'success');
@@ -429,7 +429,7 @@ async function runDeviceBackup(profileId) {
       showToast('Backup started \u2014 job ' + job.id.slice(0, 8) + '\u2026', 'success');
     } else {
       var d = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(d, res.statusText), 'error');
     }
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');
@@ -468,7 +468,7 @@ async function saveEditDevice(e, profileId) {
       setTimeout(function() { window.location.reload(); }, 600);
     } else {
       var d = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(d, res.statusText), 'error');
     }
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');
@@ -499,7 +499,7 @@ async function confirmDeleteDevice(profileId) {
       }
     } else {
       var d = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(d, res.statusText), 'error');
     }
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');

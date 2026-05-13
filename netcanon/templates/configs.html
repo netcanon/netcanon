@@ -293,7 +293,7 @@ function attachOpenListener(btn) {
         showToast('Opened \u201c' + fn + '\u201d in your default editor.', 'success');
       } else {
         var err = await res.json().catch(function() { return {}; });
-        showToast('Could not open file: ' + (err.detail || res.statusText), 'error');
+        showToast('Could not open file: ' + formatApiError(err, res.statusText), 'error');
       }
     } catch (err) {
       showToast('Network error: ' + err.message, 'error');

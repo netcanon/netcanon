@@ -232,7 +232,7 @@ schedForm.addEventListener('submit', async function(e) {
     });
     if (!res.ok) {
       var err = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (err.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(err, res.statusText), 'error');
       return;
     }
     showToast('Schedule created \u2014 reloading\u2026', 'success');
@@ -251,7 +251,7 @@ async function toggleSchedule(schedId) {
     var res = await fetch('/api/v1/schedules/' + schedId + '/toggle', { method: 'POST' });
     if (!res.ok) {
       var d = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(d, res.statusText), 'error');
       return;
     }
     window.location.reload();
@@ -284,7 +284,7 @@ async function confirmDeleteSchedule(schedId) {
       if (tbody && !tbody.querySelector('tr')) window.location.reload();
     } else {
       var d = await res.json().catch(function() { return {}; });
-      showToast('Error: ' + (d.detail || res.statusText), 'error');
+      showToast('Error: ' + formatApiError(d, res.statusText), 'error');
     }
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');
