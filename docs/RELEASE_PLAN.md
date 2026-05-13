@@ -51,38 +51,38 @@ that file.
   browser / desktop polish, operator-facing copy quality) and
   produced a punch list; each round closes a thematic cluster.
   Shipped so far:
-  - **Round 1** (PR #15): actionable editor-endpoint errors +
+  - **Round 1**: actionable editor-endpoint errors +
     visible overlays empty state on `/definitions`.
-  - **Round 2** (PR #16): vocabulary discipline pass — one
+  - **Round 2**: vocabulary discipline pass — one
     canonical term per concept across UI labels and error
     messages (e.g. "Device Type", "Device Profile").
-  - **Round 1.5** (PR #17): defects surfaced during the post-R2
+  - **Round 1.5**: defects surfaced during the post-R2
     visual sanity check — Pydantic 422 errors no longer render
     as `[object Object]`; `/api/v1/definitions/reload` now also
     refreshes the overlay registry.
-  - **Round 3** (PR #18): operator-error translator at
+  - **Round 3**: operator-error translator at
     `netcanon.api._errors` — humanizes 13 specific exception types
     + typed fallback on the backup-execute surface.
-  - **Round 3.1** (PR #19): Netmiko `__context__`-peek hotfix —
+  - **Round 3.1**: Netmiko `__context__`-peek hotfix —
     DNS / refused / unreachable failures now produce distinct
     operator messages instead of three identical timeouts.
-  - **Round 4** (PR #20): migrate-page UX cluster —
+  - **Round 4**: migrate-page UX cluster —
     detect-suggest-on-parse-failure JS helper + four empty-state
     banner rewrites in Tier-3 voice + operator-facing header
     rewrite.
-  - **Round 4.1** (PR #21): detect-suggest button now flips
+  - **Round 4.1**: detect-suggest button now flips
     target too when the operator's original setup was round-trip.
-  - **Round 4.2** (PR #22): shared
+  - **Round 4.2**: shared
     `_input_shape.detect_input_shape()` helper across all 6 CLI
     codecs — tolerates leading shell-echo / banner framing on
     real captures (previously a permissive XML guard silently
     accepted wrong-vendor input).
-  - **Round 5** (PR #23): 21 `title=` tooltips on form-heavy
+  - **Round 5**: 21 `title=` tooltips on form-heavy
     pages — backup / devices / schedules / migrate.
-  - **Round 6** (PR #24): new `/sanitize` UI page mirroring
+  - **Round 6**: new `/sanitize` UI page mirroring
     `/migrate` idioms (paste raw / pick stored), with dual-fetch
     on submit for audit + sanitized text together.
-  - **Round 6.1** (PR #25): username redaction
+  - **Round 6.1**: username redaction
     (`local-user-name`, `snmpv3-user-name` categories with
     iterative per-class numbering) + operator-facing safety note
     about non-functional placeholders.
