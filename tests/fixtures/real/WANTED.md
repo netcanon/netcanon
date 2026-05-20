@@ -119,14 +119,64 @@ parser regression fixture once the codec ships.
 
 | Platform | Why it's missing | Highest-value capture source |
 |---|---|---|
-| Cisco NX-OS | Data center switches with completely distinct grammar from IOS-XE | `datacenter/nxos-examples` (Apache 2.0) or operator Nexus 9000/3000 captures |
+| Cisco NX-OS | Data center switches with completely distinct grammar from IOS-XE | **Concrete seed corpus available** in [batfish/lab-validation](https://github.com/batfish/lab-validation) under Apache-2.0: `snapshots/nxos_hsrp/configs/{nxos1,nxos2}` (HSRP on SVI, the classic L3 redundancy pattern), `snapshots/nxos_evpn_l3vni/configs/{NX-1,NX-2}` (EVPN L3VNI with VRF + nve1 VTEP — distinct from IOS-XE's `interface nveN / member vni`), `snapshots/nxos_evpn_l2vni/configs/{NX-1,NX-2}` (L2VNI variant), plus `nxos_hsrp` + `nxos_ebgp_loop_prevention` + several others.  Together would cover hostname / vlan / vrf-context / interface Vlan SVI / nve1 VTEP / hsrp / fabric forwarding / router bgp address-family l2vpn evpn. |
 | Cisco IOS classic | Pre-IOS-XE; still in production at SMB | NTC-templates `tests/cisco_ios/`, NAPALM IOS fixtures |
 | Juniper SRX | Security platform; distinct from EX/QFX/MX grammar | Juniper Day One Books PDFs (CC-BY), Junos Genius |
 | Aruba AOS-CX | Modern Aruba replacing AOS-S | `arubanetworks/` GitHub org, NAPALM AOS-CX |
-| Cisco IOS-XR | Service provider routing | NAPALM IOS-XR fixtures, containerlab `clab-topo` repos |
+| Cisco IOS-XR | Service provider routing | **Concrete seed corpus available** in [batfish/lab-validation](https://github.com/batfish/lab-validation) under Apache-2.0: `snapshots/cisco_xr_ios_vpnv4/configs/` (XR-XE VPNv4 interop), `snapshots/iosxr_ebgp_basic/configs/`, `snapshots/iosxr_ibgp_rr_over_ospf/configs/`.  Together exercise the IOS-XR `router bgp address-family vpnv4 unicast` + `route-policy in/out` + `vrf` grammar that differs sharply from IOS-XE. |
 | VyOS | OSS Vyatta successor (LGPL caveat — careful licensing) | `vyos/vyos-build` examples |
 | pfSense | BSD-similar to OPNsense; could share codec layer | pfSense forum captures |
 
 If you're a maintainer at any of these vendors and would like to
 collaborate on bringing your platform into Netcanon's matrix, open
 an issue and we'll work the details.
+
+---
+
+## Cross-vendor canonical-model enrichment (v0.2.0+)
+
+These aren't fixture gaps — they're **canonical-model gaps** in the
+existing codecs.  A real capture exercising the surface already
+exists in the corpus (or is one of the Tier-D batfish snapshots
+above), but the canonical intent tree has no place to put the
+parsed value, so it parses-and-ignores today.
+
+### VRRP / HSRP / anycast-gateway (highest leverage)
+
+The universal Layer-3 redundancy primitive.  Every shipped codec
+has a vendor-native grammar for it.  **Currently modeled by none.**
+
+| Vendor | Grammar | Where in corpus |
+|---|---|---|
+| Cisco IOS-XE | `interface ... / vrrp N ip X / vrrp N priority P` | `batfish_iosxe_basic_vrrp.txt` |
+| Cisco NX-OS | `interface Vlan10 / hsrp N { preempt; ip X }` | (Tier-D — see above) |
+| Arista EOS | `interface Vlan10 / ip address virtual X/Y` (VARP) | indirectly in `batfish_labval_dc1_leaf2a_eos4230.txt` |
+| Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` (anycast) **or** `vrrp-group N virtual-address X` (classic) | `ksator_labmgmt_qfx10k2_junos173.set` (anycast form) |
+| Aruba AOS-S | `ip vrrp vrid N / virtual-ip-address X / enable` | not in corpus |
+| FortiGate | `config router vrrp / edit N / set vrip X` | not in corpus |
+| MikroTik | `/ip address vrrp` (older) or `/ip vrrp` | not in corpus |
+
+Proposed canonical surface: `CanonicalVRRPGroup` (or
+`CanonicalHSRPGroup` — naming TBD) bound to a `CanonicalInterface`
+with fields `(group_id, virtual_ip, virtual_ipv6, priority,
+preempt, mode)` where `mode` discriminates classic VRRP vs anycast
+(`virtual-gateway-address` / `ip address virtual` / fabric DAG).
+Wire to all 7 bidirectional codecs.  Rough scope: ~400-600 LOC
+plus a CAPABILITIES.md table row per codec.
+
+### Anycast gateway (Tier-2 enrichment, after VRRP/HSRP)
+
+Distinct from VRRP in semantics — anycast-gateway has no group ID,
+just a stable IP that's present on every leaf and never moves on
+host migration.  The DC-fabric audience cares most.
+
+| Vendor | Grammar |
+|---|---|
+| Arista EOS | `ip address virtual X/Y` (VARP) |
+| Juniper Junos | `family inet address X virtual-gateway-address Y` + `virtual-gateway-v4-mac Z` |
+| Cisco NX-OS | `fabric forwarding anycast-gateway-mac X` (system) + per-SVI `ip address X anycast` + `fabric forwarding mode anycast-gateway` |
+| Cisco IOS-XE | `fabric forwarding mode anycast-gateway` (SD-Access) |
+
+Could share the canonical surface with VRRP (a `mode="anycast"`
+field) or be modeled as a separate `CanonicalAnycastGateway` —
+worth deciding once VRRP is in.
