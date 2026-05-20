@@ -12,8 +12,15 @@ Handles hostname, interfaces (physical / SVI / Loopback / Port-channel /
 Tunnel), VLANs (top-level + SVI-synthesised), static routes,
 ``ip default-gateway``, SNMP (community / location / contact / trap-host
 / v3 USM), local users, DHCP pools, RADIUS servers (modern named
-stanza + legacy one-liner), and LAGs (``Port-channelN`` declarations +
-per-member ``channel-group N mode M`` lines).
+stanza + legacy one-liner), LAGs (``Port-channelN`` declarations +
+per-member ``channel-group N mode M`` lines), classic single-line
+**VRRP groups** (``vrrp N ip X / priority / preempt / description /
+timers / track / authentication``) on interface stanzas, and
+**SD-Access anycast-gateway** (top-level ``fabric forwarding
+anycast-gateway-mac MAC`` populating
+:attr:`CanonicalIntent.anycast_gateway_mac` + per-SVI
+``fabric forwarding mode anycast-gateway`` mirroring the primary
+IP into ``virtual_gateway_address``).
 
 Extracted verbatim from ``codec.py`` during the parse/render split;
 behaviour is identical to the prior in-class implementation.  The

@@ -11,9 +11,14 @@ Coverage spans every Tier-1 + Tier-2 canonical surface this codec
 also parses on the source side: hostname / domain / DNS / NTP /
 syslog / interfaces (physical, SVI, Loopback, Port-channel, Tunnel) /
 VLANs / static routes / DHCP pools / SNMP (v1/v2c + v3) / local users
-/ RADIUS / VRFs.  Anything outside the canonical surface (firewall
-ACLs, QoS policies, BGP/OSPF, IKEv2) falls through silently — same
-convention as every other codec.
+/ RADIUS / VRFs / **classic VRRP groups** (single-line ``vrrp N
+ip X / priority / preempt / track / description / timers /
+authentication``; modern address-family form is lossy) /
+**SD-Access anycast-gateway** (per-SVI ``fabric forwarding mode
+anycast-gateway`` + system-wide ``fabric forwarding
+anycast-gateway-mac`` in dotted-triplet wire form).  Anything outside
+the canonical surface (firewall ACLs, QoS policies, BGP/OSPF, IKEv2)
+falls through silently — same convention as every other codec.
 
 Output format mirrors the Cisco wire form an operator would paste
 into a console: ``!``-delimited stanzas, dotted-decimal netmasks,

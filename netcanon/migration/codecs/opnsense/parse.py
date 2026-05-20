@@ -13,6 +13,24 @@ Public surface (consumed by codec.py's ``parse()`` method):
   populated :class:`CanonicalIntent` out.  Performs the bounded
   envelope-trim before delegating to ``xml.etree.ElementTree``.
 
+Wave B adds **CARP groups** (``mode="carp"`` discriminator on
+:class:`CanonicalVRRPGroup`) parsed from the ``<virtualip><vip>``
+collection.  Only ``<mode>carp</mode>`` entries are promoted —
+``<mode>ipalias</mode>``, ``<mode>proxyarp</mode>``, and
+``<mode>vrrp</mode>`` entries are silently skipped (only CARP is
+HA-group-shaped on OPNsense; the others are aliasing primitives).
+Field mapping: ``<vhid>N</vhid>`` → ``group_id``,
+``<subnet>X</subnet>`` + ``<subnet_bits>N</subnet_bits>`` →
+``virtual_ips`` (or ``virtual_ipv6s`` if the subnet contains a
+``:``), ``<advskew>N</advskew>`` → ``priority`` via the
+inverted-CARP normalisation ``254 - advskew``,
+``<advbase>N</advbase>`` → ``advertisement_interval``,
+``<password>X</password>`` → ``authentication = "carp-key:X"``.
+Groups attach to the canonical interface matching the
+``<interface>`` zone tag via an alias map; orphan VIPs whose
+``<interface>`` does not resolve are silently dropped (no
+phantom-interface creation).
+
 Envelope-trim helpers (still importable from
 ``netcanon.migration.codecs.opnsense.codec`` for tests that pin
 the parser's structural contract):

@@ -14,7 +14,13 @@ surface (consumed by codec.py's ``render()`` method):
 
 The canonical render emits blocks in a stable order so re-imports
 (and textual diffs) stay friendly: ``<system>`` → ``<interfaces>``
-→ ``<vlans>`` → ``<dhcpd>`` → ``<laggs>`` → ``<snmpd>``.
+→ ``<vlans>`` → ``<dhcpd>`` → ``<laggs>`` → ``<snmpd>`` →
+``<virtualip>`` (only when at least one :class:`CanonicalVRRPGroup`
+has ``mode="carp"``; non-CARP modes emit XML comments and skip
+the ``<vip>`` element entirely — OPNsense has no native VRRP /
+HSRP wire grammar).  CARP advskew is the inverted normalisation
+of canonical priority (``advskew = 254 - priority``) reflecting
+CARP's lower-wins election semantics.
 
 Output is the OPNsense convention: no ``<?xml ...?>`` declaration,
 just the top-level ``<opnsense>`` element pretty-printed with

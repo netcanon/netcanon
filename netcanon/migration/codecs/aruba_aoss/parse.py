@@ -19,7 +19,13 @@ location / contact / trap-host / v3 USM users with separate
 ``snmpv3 user`` and ``snmpv3 group`` lines), local users, RADIUS
 servers, VLANs (with absorbed SVI L3), physical interfaces
 (IPv4 + IPv6 with global / link-local scope discriminator), LAG
-trunk membership, and static routes / default-gateway.
+trunk membership, static routes / default-gateway, and **VRRP
+groups** (``ip vrrp vrid N`` sub-block inside ``vlan N`` stanza
+with virtual-ip-address / priority / preempt / enable /
+authentication mode plaintext-password).  VRRP groups attach to
+the synthesised ``VlanN`` :class:`CanonicalInterface` via the
+existing SVI-absorption path; an SVI is defensively synthesised
+when a VLAN has VRRP but no IP.
 
 Internal helpers re-exported from ``codec.py`` for tests that pin the
 parser's structural contract (``_parse_port_list``,

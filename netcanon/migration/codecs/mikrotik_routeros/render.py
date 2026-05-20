@@ -11,10 +11,17 @@ Extracted from ``codec.py`` during the parse/render split per the
 Emission order mirrors what ``/export`` itself puts on the wire so a
 re-applied script matches device round-trips cleanly: ``/system
 identity``, ``/interface ethernet`` (port tweaks), ``/interface bridge``,
-``/interface bonding``, ``/interface vlan``, ``/ip address``, ``/ipv6
-address`` (GAP-EVPN-3), ``/ip route``, ``/snmp`` (+ ``/snmp community``
-for v1/v2c + SNMPv3 USM), ``/radius``, ``/ip pool`` + ``/ip dhcp-server
-network``, ``/user``, ``/system dns``, ``/system ntp client``.
+``/interface bonding``, ``/interface vlan``, ``/interface vrrp`` (one
+``add`` per group with ``interface=<parent> vrid=N priority
+v3-protocol preemption-mode interval`` + ``authentication=ah|simple
+password=...`` when set), ``/ip address`` (including the VIP rows
+``add address=X interface=vrrp<N>`` that bind anycast/virtual IPs
+back to their group's pseudo-interface), ``/ipv6 address`` (GAP-EVPN-3,
+same VIP-row pattern for ``v3-protocol=ipv6`` groups), ``/ip route``,
+``/snmp`` (+ ``/snmp community`` for v1/v2c + SNMPv3 USM),
+``/radius``, ``/ip pool`` + ``/ip dhcp-server network``, ``/user``,
+``/system dns``, ``/system ntp client``.  Non-``vrrp`` modes (HSRP /
+CARP / anycast) surface as ``# review:`` comments and skip.
 
 Shared name/type helpers (``_is_ethernet_name``, ``_is_vlan_name``)
 live in :mod:`.parse` and are imported here — the README's split-codec

@@ -38,6 +38,98 @@ Netcanon translates the shared-network-function subset.
   **SNMPv3 is Tier-3** for OPNsense (raw `snmpd.conf` snippet
   carry-through; no canonical model)
 
+## L3 redundancy: CARP (no VRRP, no anycast)
+
+**New in v0.2.0** (Wave B — BSD CARP wire-up).
+
+OPNsense's HA primitive is BSD CARP (Common Address Redundancy
+Protocol) — wire-incompatible with VRRP but semantically equivalent
+from the operator's standpoint.  The canonical model collapses
+CARP / VRRP / HSRP onto one `CanonicalVRRPGroup` shape via the
+`mode` discriminator (`mode="carp"` for OPNsense).
+
+### Grammar
+
+CARP VIPs live under `<virtualip>` → `<vip>` envelopes in
+`config.xml`.  The `<interface>` child carries a LOGICAL zone alias
+(`lan` / `wan` / `opt2`) that the parser resolves through the
+`<interfaces>` alias map to the canonical iface name.
+
+```xml
+<virtualip version="1.0.1" persisted_at="..." description="...">
+  <vip>
+    <mode>carp</mode>
+    <interface>lan</interface>
+    <vhid>10</vhid>
+    <advskew>0</advskew>
+    <advbase>1</advbase>
+    <password>secret-passphrase</password>
+    <subnet>10.0.10.254</subnet>
+    <subnet_bits>24</subnet_bits>
+    <descr>HA pair management VIP</descr>
+  </vip>
+</virtualip>
+```
+
+XML element mapping:
+
+- `<mode>carp</mode>` → `mode="carp"` (other modes — `ipalias`,
+  `proxyarp`, `other` — are NOT promoted to redundancy groups).
+- `<vhid>N` → `group_id=N` (CARP VHID; same numeric range as VRRP
+  VRID).
+- `<subnet>` / `<subnet_bits>` → split by literal family — `:` and
+  no `.` routes to `virtual_ipv6s`; otherwise `virtual_ips`.
+- `<advskew>S` + `<advbase>B` → `priority=254-S`,
+  `advertisement_interval=B`.  See "Known limitations" below for
+  the inversion-lossiness caveat.
+- `<password>HASH` → `authentication="carp-key:HASH"` (opaque,
+  passed through; cross-vendor renders into VRRP devices surface a
+  review comment).
+- `<descr>` → `description`.
+- `<interface>NAME` → back-pointer to `CanonicalInterface.name` via
+  the OPNsense zone alias map.
+
+### Known limitations
+
+- **advskew↔priority inversion is declared lossy.**  CARP election
+  uses advertisement-interval offsets (lower advskew wins;
+  effective interval = advbase + advskew/256); VRRP priority is an
+  advisory weight (higher wins).  The mapping `priority = 254 -
+  advskew` preserves relative HA-pair ordering for same-vendor
+  round-trip but NOT exact election timing.  Cross-protocol
+  migration to / from VRRP devices loses the timing semantics —
+  declared lossy on the codec capability matrix.
+- **CARP-only on render.**  Canonical records with `mode="vrrp"`
+  or `mode="hsrp"` are SKIPPED on OPNsense render — the codec
+  doesn't emit pure-VRRP `<virtualip>` envelopes in v0.2.0 (rare in
+  practice).  Only `mode="carp"` round-trips.
+- **One VIP per VHID.**  Each `<vip>` carries one `<subnet>`.
+  Multi-VIP canonical groups (Junos, IOS-XE secondaries) would need
+  multiple VHIDs on render — same constraint as Aruba AOS-S.
+- **Password is mandatory and bcrypt-opaque.**  Real CARP
+  deployments always have a password; cross-vendor migration into
+  VRRP targets surfaces a review comment because the bcrypt hash
+  isn't a VRRP authentication-key.
+- **No anycast-gateway grammar.**  OPNsense is a firewall codec
+  without fabric primitives; all three anycast canonical paths
+  parse-and-ignore as `unsupported`.
+- **Orphan `<vip>` records skip silently.**  A `<vip>` whose
+  `<interface>` doesn't match any parsed zone is dropped — we don't
+  invent phantom `CanonicalInterface` records.
+- **`<vip><mode>other</mode></vip>`** (`ipalias`, `proxyarp`, etc.)
+  are NOT redundancy groups — they're additional IPs or ARP
+  responders.  Parser excludes them from `vrrp_groups`.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP/CARP unified canonical model (`mode` discriminator
+  rationale).  See `02-per-vendor-grammar.md` § "OPNsense" for the
+  advskew↔priority inversion derivation.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (OPNsense out of scope — firewall
+  platform without fabric grammar).
+
 ## Lossy paths
 
 - See per-codec `CapabilityMatrix.lossy` declarations in the codec

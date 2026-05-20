@@ -43,6 +43,100 @@ translatable with caveats:
 - Local users with hashed passwords — `$5$` / `$6$` / `$8$` / `$9$`
   form-preserving cross-vendor migration
 
+## L3 redundancy: VRRP + SD-Access anycast-gateway
+
+**New in v0.2.0** (Waves B + C — VRRP and SD-Access anycast-gateway
+wire-up).  `cisco_iosxe_cli` only — the NETCONF codec leaves these
+paths `unsupported` (matrix-only declaration; matches the existing
+`/snmp/v3-user` / `/vxlan-vnis/vni` Phase-0.5 stub pattern).
+
+### Classic VRRP
+
+Single-line per-attribute form, the broadly-supported surface across
+every IOS-XE release from 15.x onward.  This is the form real
+captures emit (see `tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt`).
+
+```text
+interface GigabitEthernet0/2
+ ip address 192.168.1.1 255.255.255.0
+ vrrp 12 ip 192.168.1.254
+ vrrp 12 priority 110
+ vrrp 12 preempt
+ vrrp 12 description Edge VRRP
+ vrrp 12 timers advertise 3
+ vrrp 12 authentication md5 key-string SECRET
+ vrrp 12 track 100 decrement 20
+!
+```
+
+Sub-commands handled: `vrrp N ip X` / `vrrp N ipv6 X` (VRRPv3),
+`priority`, `preempt` (+ `no` form), `description`, `timers advertise
+<S>`, `authentication text <key>` (→ `plain:<key>`),
+`authentication md5 key-string <key>` (→ `md5:<key>`), `track <obj>
+decrement <D>` (the object name surfaces; decrement is lossy).
+Multiple VRIDs on the same interface produce multiple records.
+
+### SD-Access anycast-gateway
+
+Catalyst 9000 fabric-mode anycast: per-SVI marker plus a chassis-wide
+MAC declaration.
+
+```text
+fabric forwarding anycast-gateway-mac 0001.c73a.0000
+!
+interface Vlan100
+ ip address 10.1.100.1 255.255.255.0
+ fabric forwarding mode anycast-gateway
+!
+```
+
+Canonical mapping:
+
+- Top-level `fabric forwarding anycast-gateway-mac AABB.CCDD.EEFF`
+  lands on `CanonicalIntent.anycast_gateway_mac` (converted from
+  Cisco's dotted-triplet to canonical colon-hex; renders back to
+  dotted-triplet).
+- Per-SVI `fabric forwarding mode anycast-gateway` mirrors the
+  primary IP as the anycast: `virtual_gateway_address = ip` on every
+  IPv4 address record.  Order-independent (works whether the marker
+  precedes or follows `ip address`).
+- The discriminator gate is structural — a plain SVI with no
+  `fabric forwarding mode anycast-gateway` line parses with
+  `virtual_gateway_address=""`.
+
+### Known limitations
+
+- **Modern address-family VRRP form is lossy.**  IOS-XE 17.12+ adds
+  the nested `vrrp N address-family ipv4` block with indented
+  `address` / `priority` / `preempt` sub-commands.  The parser
+  detects the surface (so the lossiness is visible) but does NOT
+  deep-populate the nested attributes; render always emits the
+  classic single-line per-attribute form.  A config that uses ONLY
+  the modern AF form round-trips as an empty group shell —
+  intentional and operator-visible.
+- **Track decrement value drops.**  `vrrp N track 100 decrement 20`
+  preserves only the track-object name on the canonical
+  `track_interfaces` field; the priority-decrement value is lossy
+  across every codec that supports it.
+- **IPv6 SD-Access anycast is unsupported.**  IPv4 SD-Access anycast
+  is fully wired; IPv6 (`fabric forwarding ipv6 mode
+  anycast-gateway`) is rare in production captures and stays
+  declared `unsupported` until demand arrives.
+- **Cross-vendor `virtual_gateway_address` divergent from primary.**
+  When a Junos / Arista VARP source carries a virtual IP DIFFERENT
+  from the SVI's primary IP, IOS-XE SD-Access has no equivalent
+  expression — render emits a `! review:` comment line rather than
+  silently dropping the discrepancy, and suppresses the SD-Access
+  marker.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model + the modern-AF lossy rationale.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway canonical model; see `01-canonical-model.md`
+  § "NX-OS shape" for the IP-mirror semantic shared with SD-Access.
+
 ## Lossy paths
 
 - **`/routing-instances/instance`** — VRFs translate, but per-VRF

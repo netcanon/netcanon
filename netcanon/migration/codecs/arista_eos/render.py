@@ -7,13 +7,18 @@ in, EOS CLI text out.
 Emits the same surfaces the parse path consumes: hostname, DNS, NTP,
 SNMP (community / location / contact / trap-host / v3 user), local
 users, RADIUS servers, VRF instances, VLANs, interfaces (with
-IPv4/IPv6 incl. link-local scope, VRF binding, switchport mode, LAG
-membership, MTU, shutdown), LAG stub stanzas, DHCP server pools
-(``ip dhcp pool`` family — Cluster E.1-A), ``interface Vxlan1``
-(with ``vxlan source-interface`` + ``vxlan udp-port`` + per-VNI
-mappings + L3-VNI mappings for VRF Type-5), ``router bgp <asn>``
-blocks (for L3 VRF RD/RT and EVPN MAC-VRF per-VLAN bindings), and
-static routes.
+IPv4/IPv6 incl. link-local scope + ``secondary`` trailer, VRF
+binding, switchport mode, LAG membership, MTU, shutdown), LAG stub
+stanzas, DHCP server pools (``ip dhcp pool`` family — Cluster E.1-A),
+``interface Vxlan1`` (with ``vxlan source-interface`` + ``vxlan
+udp-port`` + per-VNI mappings + L3-VNI mappings for VRF Type-5),
+``router bgp <asn>`` blocks (for L3 VRF RD/RT and EVPN MAC-VRF per-
+VLAN bindings), static routes, **classic VRRP groups** (multi-line
+form), and **VARP anycast-gateway** (per-SVI ``ip address virtual
+X/Y [secondary]`` + ``ipv6 address virtual`` + system-wide
+``ip virtual-router mac-address``).  Cross-vendor ``mode="carp"``
+(OPNsense BSD CARP) or ``mode="hsrp"`` (NX-OS) groups surface as
+``! review:`` comments — EOS only natively renders ``mode="vrrp"``.
 
 Extracted verbatim from ``codec.py`` during the parse/render
 split; behaviour is identical to the prior in-class

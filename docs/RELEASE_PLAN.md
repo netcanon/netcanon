@@ -141,6 +141,88 @@ that file.
 
 ---
 
+## v0.2.0 — VRRP / HSRP / CARP + anycast-gateway (in flight)
+
+Cross-vendor L3-redundancy enrichment.  Closes the
+canonical-model gap surfaced in
+[`tests/fixtures/real/WANTED.md`](../tests/fixtures/real/WANTED.md)
+§ "Cross-vendor canonical-model enrichment".  Five commits since
+v0.1.0:
+
+* **Fixture + planning seed** — `8adaefd`.  2 batfish samples
+  (IOS VRRP + EOS VLAN-based EVPN) + the v0.2.0+ VRRP enrichment
+  proposal documented inline in `WANTED.md`.  +6 auto-discovered
+  fixture-harness tests.
+* **Planning round** — `5adee9b`.  4-agent parallel research pass
+  produces `docs/v0.2.0-planning/` (28 design artifacts +
+  top-level synthesis README; ~13,700 lines).  Pure
+  documentation; no production source modified.  Resolves the T1
+  vs T2 architectural conflict as **HYBRID** (classic FHRP gets
+  `CanonicalVRRPGroup` with `mode in {vrrp,hsrp,carp}`; anycast
+  gets per-address `virtual_gateway_address` fields and a
+  system-wide `anycast_gateway_mac`).
+* **Wave A schema** — `c5da044`.  Ship-before-wire canonical
+  schema landing: `CanonicalVRRPGroup` model,
+  `CanonicalInterface.vrrp_groups`,
+  `CanonicalIPv4Address.virtual_gateway_address` /
+  `virtual_gateway_mac`, IPv6 siblings,
+  `CanonicalIntent.anycast_gateway_mac`,
+  `CanonicalStaticRoute.vrf`, plus `is_secondary` on address
+  records.  Every codec matrix declares the 5 new paths
+  `unsupported` until per-codec wire-up lands.  +31 schema
+  tests.
+* **IOS-XE password round-trip bugfix** (side-quest) — `b85c39c`.
+  Sub-task spawned during the planning round: `password 0 X` was
+  being captured as `hashed_password = "0 X"` then double-prefixed
+  on render.  Fix strips the type-0 plaintext prefix on parse;
+  the IOS VRRP fixture restored to upstream verbatim form.
+  +8 tests.
+* **Waves B + C codec wire-up** — `e542b49`.  Seven parallel agents
+  in isolated worktrees wire VRRP / HSRP / CARP across 7 bidi
+  codecs (Wave B) and anycast-gateway across 3 codecs (Wave C).
+  Per-codec deltas: aruba_aoss (+17), fortigate_cli (+17),
+  mikrotik_routeros (+20), opnsense CARP (+21), juniper_junos
+  (+23), arista_eos (+24), cisco_iosxe_cli (+27) = +149 tests
+  across the 7 codec test files.  Unified
+  `_WIRED_UP_BY_CODEC` map (graduated paths per codec) reconciled
+  from 4 agent variants; two-sided invariant (graduated MUST NOT
+  be `unsupported`; un-graduated MUST be `unsupported`).
+  29 files modified, 6079 insertions.
+
+**Cumulative impact**: +180 tests (31 schema + 149 codec), 6800+
+LOC of design docs landed in `docs/v0.2.0-planning/`, 6300+ LOC of
+implementation across Wave A + Waves B/C.  Full unit suite: 3341
+passed / 56 skipped / 0 failed.
+
+**Planning-folder closure**: design subfolders 1 + 2 (VRRP +
+anycast) marked Shipped via `IMPLEMENTED.md` stubs pointing at
+the merge commits.  Subfolders 3 + 4 (NX-OS + IOS-XR codecs)
+remain Design complete pending v0.3.0+ implementation.
+
+**Open / queued for v0.3.0+**:
+
+* **T3 NX-OS bidirectional codec** — design ready
+  (`docs/v0.2.0-planning/03-nxos-codec/`); ~2,400-3,200 codec LOC
+  + ~1,800-2,400 test LOC across 4 phases.  Phase 2 (L2 + HSRP)
+  consumes the Wave A `CanonicalVRRPGroup`; Phase 4 (EVPN-VXLAN
+  + DAG) consumes the Wave A anycast surface.
+* **T4 IOS-XR bidirectional codec** — design ready
+  (`docs/v0.2.0-planning/04-iosxr-codec/`); ~1,900-2,700 codec
+  LOC + ~1,200-1,700 test LOC across 4 phases.  Agent
+  recommendation: defer until T3 lands (enterprise reach > SP
+  audience for the same review-budget cost).
+* **Cisco IOS-XE NETCONF stub (`cisco_iosxe`)** VRRP / anycast
+  wire-up — currently `unsupported` per its Phase-0.5 stub
+  policy.
+* **Modern Arista + IOS-XE VRRP address-family multi-line form**
+  with full per-AF priority / preempt round-trip — declared
+  `lossy` for now (group-ID-only shell parses, AF body drops).
+* **Junos `/routing/static-route/vrf`** — declared `lossy`;
+  routing-instances dispatcher needs per-VRF static-route harvest
+  in a separate scope.
+
+---
+
 ## Post-launch roadmap notes
 
 These don't gate v0.1.0 but are tracked so they don't get lost
