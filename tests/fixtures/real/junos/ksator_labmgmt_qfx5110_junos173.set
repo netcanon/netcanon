@@ -1,0 +1,53 @@
+set version 17.3R1-S2.1
+set groups POC_Lab system host-name QFX5110-169
+set groups POC_Lab system backup-router 172.25.90.1
+set groups POC_Lab system authentication-order radius
+set groups POC_Lab system authentication-order password
+set groups POC_Lab system root-authentication encrypted-password "$1$NM9CZjGT$GiVwiPH9ZOVSbF1D8A7md/"
+set groups POC_Lab system name-server 172.29.131.60
+set groups POC_Lab system login message "\n \n System is in use for a customer POC testing \n \n *** Please do not make changes before contacting the Herndon POC admins *** \n\n"
+set groups POC_Lab system login user lab uid 2000
+set groups POC_Lab system login user lab class super-user
+set groups POC_Lab system login user lab authentication encrypted-password "$1$bi7hLrLa$O/fnQq9lyyD7HIwhKtOjF."
+set groups POC_Lab system services ftp
+set groups POC_Lab system services ssh protocol-version v2
+set groups POC_Lab system services telnet
+set groups POC_Lab system services xnm-clear-text
+set groups POC_Lab system services netconf ssh
+set groups POC_Lab system syslog host 172.25.45.6 authorization any
+set groups POC_Lab system ntp server 66.129.255.62 prefer
+set groups POC_Lab interfaces em0 unit 0 family inet address 172.25.90.169/24
+set groups POC_Lab snmp community public
+set groups POC_Lab routing-options static route 0.0.0.0/0 next-hop 172.25.90.1
+set apply-groups POC_Lab
+set system root-authentication encrypted-password "$1$DBwh/7ma$FgJVx.7.uZW15cX9kM1EC/"
+set system services extension-service request-response grpc clear-text port 50051
+set system services extension-service request-response grpc skip-authentication
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set system services netconf ssh
+set chassis aggregated-devices ethernet device-count 2
+set interfaces xe-0/0/0 unit 0 family ethernet-switching interface-mode trunk
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2021
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2022
+set interfaces xe-0/0/0 unit 0 family ethernet-switching vlan members V2023
+set interfaces et-0/0/48 ether-options 802.3ad ae1
+set interfaces et-0/0/49 disable
+set interfaces et-0/0/49 ether-options 802.3ad ae1
+set interfaces ae1 description "ESI 55:55 to DC2 Spine"
+set interfaces ae1 mtu 9216
+set interfaces ae1 aggregated-ether-options lacp active
+set interfaces ae1 aggregated-ether-options lacp periodic fast
+set interfaces ae1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2021
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2022
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2023
+set interfaces lo0 unit 0 family inet address 191.168.100.3/32
+set interfaces lo0 unit 0 family iso address 49.0001.1911.6810.0003.00
+set routing-options static route 10.160.0.0/16 next-hop 172.25.90.1
+set routing-options forwarding-table export load-balance
+set protocols igmp interface ae1.0
+set protocols lldp interface all
+set policy-options policy-statement load-balance then load-balance per-packet
+set vlans V2021 vlan-id 2021
+set vlans V2022 vlan-id 2022
+set vlans V2023 vlan-id 2023

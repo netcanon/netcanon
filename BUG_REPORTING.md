@@ -198,6 +198,11 @@ a real-world config that exercises grammar / a vendor-pair we don't
 yet test."  These are the highest-impact contributions to the
 project.
 
+**Before submitting, check
+[`tests/fixtures/real/WANTED.md`](tests/fixtures/real/WANTED.md)** —
+it lists the specific OS-version / platform-class gaps in the current
+corpus so you can prioritise high-impact additions over duplicates.
+
 | Field | What to provide |
 |---|---|
 | Vendor + OS version | `Cisco IOS-XE 17.6.4` |
