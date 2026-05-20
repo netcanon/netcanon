@@ -21,6 +21,63 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-05-19
+
+First post-rc release.  Skips a `v0.1.0` final tag because the
+previous rc cycle (`v0.1.0-rc1` through `v0.1.0-rc9`) already
+shipped to PyPI / GHCR / Docker Hub / GitHub Releases under the
+`0.1.0rc*` version namespace; tagging `v0.1.0` final on top would
+have asymmetric semantics across the channels.  `v0.1.1` is
+strictly semver-cleaner.
+
+What's in this release on top of `v0.1.0-rc9`:
+
+* **Junos channelized sub-interface render fix** + `QFX10K2-174`
+  real-capture fixture (`f52489c`).
+* **Cisco IOS-XE `username password 0 X` round-trip bugfix**
+  (`b85c39c`).
+* **v0.2.0 Wave A schema** — `CanonicalVRRPGroup` + new fields on
+  address / static-route / intent records (`c5da044`).  Pure
+  schema, ship-before-wire: every codec declares the new paths
+  `unsupported` until per-codec wire-up.
+* **v0.2.0 Wave B + C wire-up across 7 codecs** — VRRP / HSRP /
+  CARP groups on all bidirectional codecs; anycast-gateway on
+  3 codecs (Junos / Arista EOS / Cisco IOS-XE SD-Access)
+  (`e542b49`).
+* **Documentation pass** — `docs/CAPABILITIES.md` rewrite, 7
+  per-vendor pages (`docs/vendors/*.md`), planning-folder
+  closures (`docs/v0.2.0-planning/{01,02}/IMPLEMENTED.md`),
+  WANTED.md + RELEASE_PLAN.md updates (`4ce0cb9`).
+
+Cumulative test delta vs `v0.1.0-rc9`: +180 tests
+(2,499 → 3,341 unit; +31 schema + +149 codec).
+
+Honest known gaps in this release (documented for operators):
+
+* Real-capture VRRP fixtures only exist for IOS-XE and Junos
+  (`batfish_iosxe_basic_vrrp.txt`,
+  `ksator_labmgmt_qfx10k2_junos173.set`).  Aruba / FortiGate /
+  MikroTik / OPNsense VRRP coverage is synthetic-only.
+* Cross-vendor migration matrix doesn't yet exercise the full
+  new VRRP / anycast surface end-to-end.  Per-codec parse +
+  render are tested; integration coverage follows in `v0.1.2`
+  or `v0.2.0`.
+* No UI verification this release — the `/migrate` page may
+  need template updates to render
+  `CanonicalInterface.vrrp_groups` data visually.
+* IPv6 anycast on IOS-XE SD-Access is `unsupported` (no fixture
+  coverage).
+* Cisco IOS-XE NETCONF stub (`cisco_iosxe` codec) still declares
+  every new path `unsupported`; matches its Phase-0.5 stub
+  policy.
+* Junos per-VRF static routes are `lossy` (parses, doesn't
+  harvest from routing-instances dispatcher — separate scope).
+* Modern Arista + IOS-XE multi-line VRRP address-family form is
+  `lossy` (classic single-line form is supported).
+
+Tier-D codecs (Cisco NX-OS, Cisco IOS-XR) remain queued for
+`v0.3.0+` per `docs/v0.2.0-planning/{03,04}/README.md`.
+
 ### v0.2.0 Wave A + B + C: VRRP / HSRP / CARP + anycast-gateway across 7 codecs
 
 The headline v0.2.0 enrichment.  Closes the universal-but-unmodelled
