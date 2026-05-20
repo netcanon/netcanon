@@ -1220,6 +1220,78 @@ class TestPerUnitVlanTagging:
         assert parent is not None
         assert parent.access_vlan == 42
 
+    def test_render_channelized_subiface_splits_correctly(self):
+        """Regression: channelized port names contain ``:<N>`` (the
+        break-out channel index — ``xe-0/0/6:2`` is channel 2 of
+        physical 6).  Before the ``_SUBIFACE_RE`` fix, the render
+        regex required ``parent`` to match
+        ``[A-Za-z]+-\\d+/\\d+/\\d+`` exactly with no trailing
+        ``:N``, so ``xe-0/0/6:2.10`` fell through to the top-level
+        branch and emitted the malformed double-suffix form
+        (``set interfaces xe-0/0/6:2.10 unit 0 family inet ...``).
+        Correct emission: ``set interfaces xe-0/0/6:2 unit 10
+        vlan-id 10`` + ``set interfaces xe-0/0/6:2 unit 10 family
+        inet address ...``.  QFX 10K / 100G break-out fixtures
+        exercise this surface.
+        """
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="xe-0/0/6:2.10",
+                    access_vlan=10,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.10.20.1", prefix_length=31,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "set interfaces xe-0/0/6:2 unit 10 vlan-id 10" in out
+        assert (
+            "set interfaces xe-0/0/6:2 unit 10 family inet "
+            "address 10.10.20.1/31" in out
+        )
+        # Must NOT emit the pre-fix malformed double-suffix line.
+        assert "set interfaces xe-0/0/6:2.10 unit 0" not in out
+
+    def test_channelized_subiface_round_trip(self):
+        """End-to-end round-trip for a channelized sub-interface —
+        parses cleanly, renders the native ``unit N`` grammar, and
+        re-parses to a canonical-stable tree.  This was the failure
+        mode that initially held the QFX10K2-174 real-capture fixture
+        out of the corpus.
+        """
+        raw = (
+            "set interfaces xe-0/0/6:2 vlan-tagging\n"
+            "set interfaces xe-0/0/6:2 unit 10 vlan-id 10\n"
+            "set interfaces xe-0/0/6:2 unit 10 family inet "
+            "address 10.10.20.1/31\n"
+            "set interfaces xe-0/0/6:2 unit 100 vlan-id 100\n"
+            "set interfaces xe-0/0/6:2 unit 100 family inet "
+            "address 10.10.20.101/31\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Both sub-interfaces should materialise with the same access_vlan
+        # after the round-trip (the regression had second-parse showing
+        # access_vlan=None because render emitted the malformed form).
+        for first_iface in first.interfaces:
+            second_iface = next(
+                (i for i in second.interfaces if i.name == first_iface.name),
+                None,
+            )
+            assert second_iface is not None, (
+                f"{first_iface.name} disappeared on round-trip"
+            )
+            assert first_iface.access_vlan == second_iface.access_vlan, (
+                f"{first_iface.name} access_vlan unstable: "
+                f"{first_iface.access_vlan} -> {second_iface.access_vlan}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # GAP 9a: block-form (curly-brace hierarchical) parse

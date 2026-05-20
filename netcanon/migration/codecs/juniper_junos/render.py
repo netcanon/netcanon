@@ -1102,7 +1102,19 @@ _IS_JUNOS_PHYSICAL_PORT_RE = re.compile(
 # ``<parent>.<unit>`` — e.g. ``ge-0/0/0.100``.  ``parent`` must
 # contain a slash (``ge-0/0/0``) to distinguish from normal names
 # like ``irb.10`` where the dot is part of the base port name.
-_SUBIFACE_RE = re.compile(r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+)\.(?P<unit>\d+)$")
+#
+# Optional ``:<channel>`` segment after the port index covers
+# channelized (break-out) ports — ``xe-0/0/6:2`` is channel 2 of
+# physical 6, and ``xe-0/0/6:2.10`` is its unit 10.  QFX 10K /
+# 100G platforms expose split-out interfaces this way; without
+# the colon in the regex the render fell through to the top-
+# level branch and emitted the malformed double-suffix form
+# (``set interfaces xe-0/0/6:2.10 unit 0 ...``) instead of the
+# native (``set interfaces xe-0/0/6:2 unit 10 ...``), breaking
+# round-trip on any config with channelized sub-interfaces.
+_SUBIFACE_RE = re.compile(
+    r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+(?::\d+)?)\.(?P<unit>\d+)$"
+)
 
 
 # Logical SVI names where the trailing ``.<N>`` IS the Junos unit

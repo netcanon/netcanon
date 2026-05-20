@@ -21,6 +21,103 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### Junos codec: channelized sub-interface render fix + QFX10K2 fixture
+
+Drive-by codec fix that closes a real round-trip stability bug surfaced
+during fixture research and pulls the held-out **QFX10002-72Q** capture
+back into the real-capture corpus.
+
+#### The bug
+
+The Junos render path uses ``_SUBIFACE_RE`` to decompose canonical
+sub-interface names like ``ge-0/0/0.100`` back into
+``parent / unit`` so it can emit native ``set interfaces <parent>
+unit <N> ...`` grammar.  The regex required ``parent`` to match
+``[A-Za-z]+-\d+/\d+/\d+`` exactly — but **channelized (break-out)
+port** names carry an extra ``:<channel>`` segment (e.g.
+``xe-0/0/6:2`` is channel 2 of physical port 6, common on QFX
+10K / 100G break-out platforms).  Such names didn't match, so
+``_split_subiface_name("xe-0/0/6:2.10")`` returned ``(None,
+None)``, and the render fell through to the top-level branch
+which emitted the malformed double-suffix form:
+
+```
+set interfaces xe-0/0/6:2.10 unit 0 family inet address ...
+```
+
+instead of the native:
+
+```
+set interfaces xe-0/0/6:2 unit 10 vlan-id 10
+set interfaces xe-0/0/6:2 unit 10 family inet address ...
+```
+
+The first-pass parse captured ``access_vlan`` on the materialised
+``xe-0/0/6:2.10`` CanonicalInterface; the rendered output didn't
+preserve it (no ``unit N vlan-id N`` line); the re-parse yielded
+``access_vlan=None`` → round-trip stability test failed.
+
+#### The fix
+
+One-line regex change in
+``netcanon/migration/codecs/juniper_junos/render.py`` (the
+``_SUBIFACE_RE`` constant):
+
+```python
+# before
+_SUBIFACE_RE = re.compile(r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+)\.(?P<unit>\d+)$")
+# after
+_SUBIFACE_RE = re.compile(
+    r"^(?P<parent>[A-Za-z]+-\d+/\d+/\d+(?::\d+)?)\.(?P<unit>\d+)$"
+)
+```
+
+Existing non-channelized cases (``ge-0/0/0.100`` / ``xe-0/0/6.10`` /
+``et-0/0/48.0``) continue to match the same way; channelized cases
+(``xe-0/0/6:2.10`` / ``xe-0/0/6:2.100``) now decompose correctly;
+logical-SVI cases (``irb.10`` / ``ae1.0``) still don't match (correct
+— those have a separate render branch).  No other code paths
+duplicate the regex pattern.
+
+#### Tests
+
+* ``tests/unit/migration/test_juniper_junos.py``
+  ``TestPerUnitVlanTagging`` — 2 new tests:
+  - ``test_render_channelized_subiface_splits_correctly`` —
+    asserts the render emits the native ``unit N`` form for a
+    channelized sub-interface + does NOT emit the pre-fix
+    malformed double-suffix form
+  - ``test_channelized_subiface_round_trip`` — end-to-end
+    parse → render → parse for a channelized port with two
+    sub-interfaces, asserting ``access_vlan`` is preserved on
+    both
+* ``tests/unit/migration/test_real_captures.py`` — auto-picks
+  up the new ``ksator_labmgmt_qfx10k2_junos173.set`` fixture
+  via ``_discover_fixtures``; all 3 invariants
+  (parse / determinism / round-trip) pass.
+
+Full migration suite (``tests/unit/migration/``): 2485 passed,
+56 skipped (pre-existing), 0 failed.
+
+#### Fixture
+
+``tests/fixtures/real/junos/ksator_labmgmt_qfx10k2_junos173.set``
+(new — 391 lines, MIT / Copyright Juniper Networks 2018) — pulled
+from
+https://github.com/ksator/lab_management/blob/master/backup/QFX10K2-174_config.2017-12-19@15%3A28%3A23.
+This is the densest Junos fixture in the corpus: channelized
+break-out sub-interfaces, EVPN-multihoming LAG grammar (ESI
+identifiers + LACP system-id override — parse-and-ignore per the
+existing ``/groups`` Lossy declaration), 7 ``irb.<vid>`` SVIs with
+VRRP + family inet6, 6 VLAN-to-VNI VXLAN mappings, 3 VRF
+routing-instances with sub-interface bindings.  Surfaced the
+channelized-render bug; held out of the corpus pre-fix per the
+hold-out note in NOTICE.md.
+
+NOTICE.md hold-out note removed; replaced with a full provenance
+row crediting the upstream capture + documenting which grammar the
+fixture exercises.
+
 ### Phase 3 Round 9: runtime checks — load + memory smoke + browser-compat
 
 The pre-launch checklist round.  Two parts: lightweight load + memory
