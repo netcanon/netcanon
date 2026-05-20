@@ -1,0 +1,392 @@
+set version 17.3R1-S2.1
+set groups POC_Lab system host-name QFX10K2-182
+set groups POC_Lab system backup-router 172.25.90.1
+set groups POC_Lab system authentication-order radius
+set groups POC_Lab system authentication-order password
+set groups POC_Lab system root-authentication encrypted-password "$1$sQLo8BZS$TS53zGHrfgZIv58G3PQjN1"
+set groups POC_Lab system name-server 172.29.131.60
+set groups POC_Lab system login message "\n \n System is in use for a customer POC testing \n \n *** Please do not make changes before contacting the Herndon POC admins *** \n\n"
+set groups POC_Lab system login user lab uid 2002
+set groups POC_Lab system login user lab class super-user
+set groups POC_Lab system login user lab authentication encrypted-password "$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T."
+set groups POC_Lab system services ftp
+set groups POC_Lab system services ssh protocol-version v2
+set groups POC_Lab system services telnet
+set groups POC_Lab system services xnm-clear-text
+set groups POC_Lab system services netconf ssh
+set groups POC_Lab system syslog host 172.25.45.6 authorization any
+set groups POC_Lab system ntp server 66.129.255.62 prefer
+set groups POC_Lab chassis fpc 0 pic 0 port 3 channel-speed 10g
+set groups POC_Lab interfaces em0 unit 0 family inet address 172.25.90.174/24
+set groups POC_Lab snmp community public
+set groups POC_Lab routing-options static route 10.255.255.0/24 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 10.255.255.0/24 retain
+set groups POC_Lab routing-options static route 10.255.255.0/24 no-readvertise
+set groups POC_Lab routing-options static route 10.161.0.0/16 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 10.161.0.0/16 retain
+set groups POC_Lab routing-options static route 10.161.0.0/16 no-readvertise
+set groups POC_Lab routing-options static route 172.16.0.0/12 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 172.16.0.0/12 retain
+set groups POC_Lab routing-options static route 172.16.0.0/12 no-readvertise
+set groups POC_Lab routing-options static route 192.168.0.0/16 next-hop 172.25.90.1
+set groups POC_Lab routing-options static route 192.168.0.0/16 retain
+set groups POC_Lab routing-options static route 192.168.0.0/16 no-readvertise
+set apply-groups POC_Lab
+set system root-authentication encrypted-password "$1$DBwh/7ma$FgJVx.7.uZW15cX9kM1EC/"
+set system services extension-service request-response grpc clear-text port 50051
+set system services extension-service request-response grpc skip-authentication
+set system services extension-service notification allow-clients address 0.0.0.0/0
+set system syslog host 172.25.90.135 any any
+set system syslog host 172.25.90.135 match UI_COMMIT_COMPLETED
+set system syslog host 172.25.90.135 port 516
+set chassis aggregated-devices ethernet device-count 4
+set chassis fpc 0 pic 0 port 6 channel-speed 10g
+set interfaces et-0/0/0 mtu 9216
+set interfaces et-0/0/0 unit 0 family inet address 10.0.1.9/31
+set interfaces et-0/0/0 unit 0 family iso
+set interfaces et-0/0/1 ether-options 802.3ad ae1
+set interfaces et-0/0/2 ether-options 802.3ad ae2
+set interfaces xe-0/0/6:2 vlan-tagging
+set interfaces xe-0/0/6:2 mtu 9216
+set interfaces xe-0/0/6:2 unit 10 vlan-id 10
+set interfaces xe-0/0/6:2 unit 10 family inet address 10.10.20.1/31
+set interfaces xe-0/0/6:2 unit 10 family iso
+set interfaces xe-0/0/6:2 unit 10 family inet6
+set interfaces xe-0/0/6:2 unit 30 vlan-id 30
+set interfaces xe-0/0/6:2 unit 30 family inet address 10.10.20.3/31
+set interfaces xe-0/0/6:2 unit 30 family iso
+set interfaces xe-0/0/6:2 unit 30 family inet6
+set interfaces xe-0/0/6:2 unit 100 vlan-id 100
+set interfaces xe-0/0/6:2 unit 100 family inet address 10.10.20.101/31
+set interfaces xe-0/0/6:2 unit 100 family iso
+set interfaces xe-0/0/6:2 unit 100 family inet6
+set interfaces et-0/0/12 mtu 9216
+set interfaces et-0/0/12 unit 0 family inet address 10.254.254.0/31
+set interfaces et-0/0/13 mtu 9216
+set interfaces et-0/0/13 unit 0 family inet address 10.254.254.2/31
+set interfaces et-0/0/24 mtu 9216
+set interfaces et-0/0/24 unit 0 family inet address 10.0.1.12/31
+set interfaces et-0/0/24 unit 0 family iso
+set interfaces et-0/0/30 mtu 9216
+set interfaces et-0/0/30 unit 0 family inet address 10.0.1.14/31
+set interfaces et-0/0/30 unit 0 family iso
+set interfaces ae1 description "ESI 22:22 to 5110-169"
+set interfaces ae1 mtu 9216
+set interfaces ae1 esi 00:55:55:55:55:55:55:55:55:55
+set interfaces ae1 esi all-active
+set interfaces ae1 aggregated-ether-options lacp active
+set interfaces ae1 aggregated-ether-options lacp periodic fast
+set interfaces ae1 aggregated-ether-options lacp system-id 05:05:05:05:05:05
+set interfaces ae1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2021
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2022
+set interfaces ae1 unit 0 family ethernet-switching vlan members V2023
+set interfaces ae2 description "ESI 22:22 to 5110-170"
+set interfaces ae2 mtu 9216
+set interfaces ae2 esi 00:66:66:66:66:66:66:66:66:66
+set interfaces ae2 esi all-active
+set interfaces ae2 aggregated-ether-options lacp active
+set interfaces ae2 aggregated-ether-options lacp periodic fast
+set interfaces ae2 aggregated-ether-options lacp system-id 06:06:06:06:06:06
+set interfaces ae2 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae2 unit 0 family ethernet-switching vlan members V2024
+set interfaces ae2 unit 0 family ethernet-switching vlan members V2025
+set interfaces ae2 unit 0 family ethernet-switching vlan members V2031
+set interfaces irb unit 2021 family inet address 10.221.0.5/16 virtual-gateway-address 10.221.0.1
+set interfaces irb unit 2021 family inet6 address fd20:2021::5/64 virtual-gateway-address fd20:2021::1
+set interfaces irb unit 2021 family inet6 address fe80:2021::1/64
+set interfaces irb unit 2021 virtual-gateway-v4-mac 02:00:21:00:00:01
+set interfaces irb unit 2021 virtual-gateway-v6-mac 02:00:21:06:00:01
+set interfaces irb unit 2022 proxy-macip-advertisement
+set interfaces irb unit 2022 family inet address 10.222.0.5/16 virtual-gateway-address 10.222.0.1
+set interfaces irb unit 2022 family inet6 address fd20:2022::5/64 virtual-gateway-address fd20:2022::1
+set interfaces irb unit 2022 family inet6 address fe80:2022::1/64
+set interfaces irb unit 2022 virtual-gateway-v4-mac 02:00:22:00:00:01
+set interfaces irb unit 2022 virtual-gateway-v6-mac 02:00:22:06:00:01
+set interfaces irb unit 2023 proxy-macip-advertisement
+set interfaces irb unit 2023 family inet address 10.223.0.5/16 virtual-gateway-address 10.223.0.1
+set interfaces irb unit 2023 family inet6 address fd20:2023::5/64 virtual-gateway-address fd20:2023::1
+set interfaces irb unit 2023 family inet6 address fe80:2023::1/64
+set interfaces irb unit 2023 virtual-gateway-v4-mac 02:00:23:00:00:01
+set interfaces irb unit 2023 virtual-gateway-v6-mac 02:00:23:06:00:01
+set interfaces irb unit 2024 proxy-macip-advertisement
+set interfaces irb unit 2024 family inet address 10.224.0.5/16 virtual-gateway-address 10.224.0.1
+set interfaces irb unit 2024 family inet6 address fd20:2024::5/64 virtual-gateway-address fd20:2024::1
+set interfaces irb unit 2024 family inet6 address fe80:2024::1/64
+set interfaces irb unit 2024 virtual-gateway-v4-mac 02:00:24:00:00:01
+set interfaces irb unit 2024 virtual-gateway-v6-mac 02:00:24:06:00:01
+set interfaces irb unit 2025 proxy-macip-advertisement
+set interfaces irb unit 2025 family inet address 10.225.0.5/16 virtual-gateway-address 10.225.0.1
+set interfaces irb unit 2025 family inet6 address fd20:2025::5/64 virtual-gateway-address fd20:2025::1
+set interfaces irb unit 2025 family inet6 address fe80:2025::1/64
+set interfaces irb unit 2025 virtual-gateway-v4-mac 02:00:25:00:00:01
+set interfaces irb unit 2025 virtual-gateway-v6-mac 02:00:25:06:00:01
+set interfaces irb unit 2031 family inet address 10.231.0.7/16 virtual-gateway-address 10.231.0.1
+set interfaces irb unit 2031 family inet6 address fe80:2031::1/64
+set interfaces irb unit 2031 family inet6 address fd20:2031::7/64 virtual-gateway-address fd20:2031::1
+set interfaces irb unit 2031 virtual-gateway-v4-mac 02:00:31:00:00:01
+set interfaces irb unit 2031 virtual-gateway-v6-mac 02:00:31:06:00:01
+set interfaces lo0 unit 0 family inet address 191.168.100.1/32
+set interfaces lo0 unit 0 family iso address 49.0001.1911.6810.0001.00
+set interfaces lo0 unit 2 family inet address 10.254.21.5/32
+set interfaces lo0 unit 2 family iso address 49.0001.0102.5402.1005.00
+set interfaces lo0 unit 2 family inet6 address fd20:10:254:21::5/128
+set interfaces lo0 unit 3 family inet address 10.254.31.5/32
+set interfaces lo0 unit 3 family iso address 49.0001.0102.5402.3005.00
+set interfaces lo0 unit 3 family inet6 address fd20:10:254:31::5/128
+set interfaces lo0 unit 100 family inet address 10.254.20.100/32
+set interfaces lo0 unit 100 family iso address 49.0001.0102.5402.0100.00
+set interfaces lo0 unit 100 family inet6 address fd20:2222::2100/128
+set routing-options aggregate route 191.168.100.0/24
+set routing-options router-id 191.168.100.1
+set routing-options autonomous-system 2201
+set routing-options forwarding-table export load-balance
+set protocols bgp group EBGP-DCI-EVPN type external
+set protocols bgp group EBGP-DCI-EVPN multihop no-nexthop-change
+set protocols bgp group EBGP-DCI-EVPN local-address 191.168.100.1
+set protocols bgp group EBGP-DCI-EVPN family evpn signaling
+set protocols bgp group EBGP-DCI-EVPN local-as 65100
+set protocols bgp group EBGP-DCI-EVPN bfd-liveness-detection minimum-interval 300
+set protocols bgp group EBGP-DCI-EVPN bfd-liveness-detection multiplier 3
+set protocols bgp group EBGP-DCI-EVPN multipath multiple-as
+set protocols bgp group EBGP-DCI-EVPN neighbor 191.168.101.3 peer-as 65101
+set protocols bgp group EBGP-DCI-EVPN neighbor 191.168.101.4 peer-as 65101
+set protocols bgp group EBGP-DCI type external
+set protocols bgp group EBGP-DCI export export_lo0
+set protocols bgp group EBGP-DCI local-as 2201
+set protocols bgp group EBGP-DCI bfd-liveness-detection minimum-interval 300
+set protocols bgp group EBGP-DCI bfd-liveness-detection multiplier 3
+set protocols bgp group EBGP-DCI multipath multiple-as
+set protocols bgp group EBGP-DCI neighbor 10.254.254.1 peer-as 301
+set protocols bgp group EBGP-DCI neighbor 10.254.254.3 peer-as 302
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH type external
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH multihop no-nexthop-change
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH local-as 65100
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH bfd-liveness-detection minimum-interval 300
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH bfd-liveness-detection multiplier 3
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH multipath multiple-as
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH neighbor 191.168.102.1 peer-as 65101
+set protocols bgp group EBGP-DCI-EVPN-L2-STRETCH neighbor 191.168.102.2 peer-as 65101
+set protocols evpn vni-options vni 22031 vrf-target export target:1:22031
+set protocols evpn vni-options vni 22031 vrf-target target:1:22031
+set protocols evpn encapsulation vxlan
+set protocols evpn extended-vni-list all
+set protocols l2-learning global-mac-table-aging-time 2400
+set protocols lldp interface all
+set policy-options prefix-list evpn-routes 10.221.0.0/16
+set policy-options prefix-list evpn-routes 10.222.0.0/16
+set policy-options prefix-list evpn-routes 10.223.0.0/16
+set policy-options prefix-list evpn-routes 10.224.0.0/16
+set policy-options prefix-list evpn-routes 10.225.0.0/16
+set policy-options policy-statement DCI-VRF_Block_Default term 1 from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement DCI-VRF_Block_Default term 1 then reject
+set policy-options policy-statement DCI-VRF_Block_Default term 100 then accept
+set policy-options policy-statement EVPN-IMPORT term import_leaf_esi from community comm-leaf_esi
+set policy-options policy-statement EVPN-IMPORT term import_leaf_esi then accept
+set policy-options policy-statement EVPN-IMPORT term import_vni22031 from community vni22031
+set policy-options policy-statement EVPN-IMPORT term import_vni22031 then accept
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT from protocol direct
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT then accept
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT_v6 from family inet6
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT_v6 from protocol direct
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement EVPN-T5-EXPORT term DIRECT_v6 then accept
+set policy-options policy-statement EVPN-T5-EXPORT term ISIS from protocol isis
+set policy-options policy-statement EVPN-T5-EXPORT term ISIS from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement EVPN-T5-EXPORT term ISIS from route-filter 0.0.0.0/0 prefix-length-range /0-/0
+set policy-options policy-statement EVPN-T5-EXPORT term ISIS then accept
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-16 from protocol evpn
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-16 from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-16 from route-filter 0.0.0.0/0 prefix-length-range /0-/0
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-16 then accept
+set policy-options policy-statement INTERNET-ISIS-EXPORT term DENY-LOOPBACK from protocol direct
+set policy-options policy-statement INTERNET-ISIS-EXPORT term DENY-LOOPBACK from route-filter 0.0.0.0/0 prefix-length-range /32-/32
+set policy-options policy-statement INTERNET-ISIS-EXPORT term DENY-LOOPBACK then accept
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT_v6 from protocol evpn
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT_v6 then accept
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-DEFAULT from protocol bgp
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-DEFAULT from route-filter 0.0.0.0/0 exact
+set policy-options policy-statement INTERNET-ISIS-EXPORT term EXPORT-DEFAULT then accept
+set policy-options policy-statement ISIS-EXPORT term EXPORT-16 from protocol evpn
+set policy-options policy-statement ISIS-EXPORT term EXPORT-16 from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement ISIS-EXPORT term EXPORT-16 from route-filter 0.0.0.0/0 prefix-length-range /0-/0
+set policy-options policy-statement ISIS-EXPORT term EXPORT-16 then accept
+set policy-options policy-statement ISIS-EXPORT term DENY-LOOPBACK from protocol direct
+set policy-options policy-statement ISIS-EXPORT term DENY-LOOPBACK from route-filter 0.0.0.0/0 prefix-length-range /32-/32
+set policy-options policy-statement ISIS-EXPORT term DENY-LOOPBACK then accept
+set policy-options policy-statement ISIS-EXPORT term EXPORT_v6 from protocol evpn
+set policy-options policy-statement ISIS-EXPORT term EXPORT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement ISIS-EXPORT term EXPORT_v6 then accept
+set policy-options policy-statement bgp-ip-clos-out term loopback from protocol direct
+set policy-options policy-statement bgp-ip-clos-out term loopback then next-hop self
+set policy-options policy-statement bgp-ip-clos-out term loopback then accept
+set policy-options policy-statement bgp-ip-clos-out term loopbacks from route-filter 191.168.0.0/16 orlonger
+set policy-options policy-statement bgp-ip-clos-out term loopbacks then accept
+set policy-options policy-statement export_DC2_to_WAN term 1 from protocol isis
+set policy-options policy-statement export_DC2_to_WAN term 1 from prefix-list evpn-routes
+set policy-options policy-statement export_DC2_to_WAN term 1 then accept
+set policy-options policy-statement export_DC2_to_WAN term 100 then reject
+set policy-options policy-statement export_lo0 term lo0 from route-filter 191.168.100.0/24 orlonger
+set policy-options policy-statement export_lo0 term lo0 then accept
+set policy-options policy-statement load-balance then load-balance per-packet
+set policy-options policy-statement reject_type5 term 1 from family evpn
+set policy-options policy-statement reject_type5 term 1 from nlri-route-type 5
+set policy-options policy-statement reject_type5 term 1 then reject
+set policy-options policy-statement reject_type5 term 2 then accept
+set policy-options policy-statement vni20004-EXPORT term DIRECT from protocol direct
+set policy-options policy-statement vni20004-EXPORT term DIRECT from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement vni20004-EXPORT term DIRECT then community add vni20004
+set policy-options policy-statement vni20004-EXPORT term DIRECT then accept
+set policy-options policy-statement vni20004-EXPORT term DIRECT_v6 from family inet6
+set policy-options policy-statement vni20004-EXPORT term DIRECT_v6 from protocol direct
+set policy-options policy-statement vni20004-EXPORT term DIRECT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement vni20004-EXPORT term DIRECT_v6 then community add vni20004
+set policy-options policy-statement vni20004-EXPORT term DIRECT_v6 then accept
+set policy-options policy-statement vni20004-EXPORT term EVPN from rib APP3.evpn.0
+set policy-options policy-statement vni20004-EXPORT term EVPN then community add vni20004
+set policy-options policy-statement vni20004-EXPORT term EVPN then accept
+set policy-options policy-statement vni20004-EXPORT term ISIS from protocol isis
+set policy-options policy-statement vni20004-EXPORT term ISIS from prefix-list evpn-routes
+set policy-options policy-statement vni20004-EXPORT term ISIS then community add vni20004
+set policy-options policy-statement vni20004-EXPORT term ISIS then accept
+set policy-options policy-statement vni20100-EXPORT term DIRECT from protocol direct
+set policy-options policy-statement vni20100-EXPORT term DIRECT from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement vni20100-EXPORT term DIRECT then community add vni20100
+set policy-options policy-statement vni20100-EXPORT term DIRECT then accept
+set policy-options policy-statement vni20100-EXPORT term DIRECT_v6 from family inet6
+set policy-options policy-statement vni20100-EXPORT term DIRECT_v6 from protocol direct
+set policy-options policy-statement vni20100-EXPORT term DIRECT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement vni20100-EXPORT term DIRECT_v6 then community add vni20100
+set policy-options policy-statement vni20100-EXPORT term DIRECT_v6 then accept
+set policy-options policy-statement vni20100-EXPORT term EVPN from rib DCI-VRF.evpn.0
+set policy-options policy-statement vni20100-EXPORT term EVPN then community add vni20100
+set policy-options policy-statement vni20100-EXPORT term EVPN then accept
+set policy-options policy-statement vni20100-EXPORT term ISIS from protocol isis
+set policy-options policy-statement vni20100-EXPORT term ISIS from prefix-list evpn-routes
+set policy-options policy-statement vni20100-EXPORT term ISIS then community add vni20100
+set policy-options policy-statement vni20100-EXPORT term ISIS then accept
+set policy-options policy-statement vni20200-EXPORT term DIRECT from protocol direct
+set policy-options policy-statement vni20200-EXPORT term DIRECT from route-filter 0.0.0.0/0 prefix-length-range /16-/16
+set policy-options policy-statement vni20200-EXPORT term DIRECT then community add vni20200
+set policy-options policy-statement vni20200-EXPORT term DIRECT then accept
+set policy-options policy-statement vni20200-EXPORT term DIRECT_v6 from family inet6
+set policy-options policy-statement vni20200-EXPORT term DIRECT_v6 from protocol direct
+set policy-options policy-statement vni20200-EXPORT term DIRECT_v6 from route-filter 0::0/0 prefix-length-range /64-/64
+set policy-options policy-statement vni20200-EXPORT term DIRECT_v6 then community add vni20200
+set policy-options policy-statement vni20200-EXPORT term DIRECT_v6 then accept
+set policy-options policy-statement vni20200-EXPORT term EVPN from rib INTERNET.evpn.0
+set policy-options policy-statement vni20200-EXPORT term EVPN then community add vni20200
+set policy-options policy-statement vni20200-EXPORT term EVPN then accept
+set policy-options policy-statement vni20200-EXPORT term ISIS from protocol isis
+set policy-options policy-statement vni20200-EXPORT term ISIS from prefix-list evpn-routes
+set policy-options policy-statement vni20200-EXPORT term ISIS then community add vni20200
+set policy-options policy-statement vni20200-EXPORT term ISIS then accept
+set policy-options community comm-leaf_esi members target:1:100
+set policy-options community vni20004 members target:65100:100
+set policy-options community vni20100 members target:65100:1
+set policy-options community vni20200 members target:65100:1000
+set policy-options community vni22011 members target:1:22011
+set policy-options community vni22012 members target:1:22012
+set policy-options community vni22013 members target:1:22013
+set policy-options community vni22014 members target:1:22014
+set policy-options community vni22015 members target:1:22015
+set policy-options community vni22031 members target:1:22031
+set routing-instances APP3 instance-type vrf
+set routing-instances APP3 interface xe-0/0/6:2.10
+set routing-instances APP3 interface irb.2021
+set routing-instances APP3 interface irb.2022
+set routing-instances APP3 interface irb.2023
+set routing-instances APP3 interface irb.2024
+set routing-instances APP3 interface irb.2025
+set routing-instances APP3 interface lo0.2
+set routing-instances APP3 route-distinguisher 191.168.100.1:2
+set routing-instances APP3 vrf-export vni20004-EXPORT
+set routing-instances APP3 vrf-target target:65100:100
+set routing-instances APP3 vrf-table-label
+set routing-instances APP3 routing-options rib APP3.inet6.0 multipath
+set routing-instances APP3 routing-options multipath
+set routing-instances APP3 routing-options auto-export
+set routing-instances APP3 protocols isis export ISIS-EXPORT
+set routing-instances APP3 protocols isis level 1 disable
+set routing-instances APP3 protocols isis level 2 wide-metrics-only
+set routing-instances APP3 protocols isis interface xe-0/0/6:2.10
+set routing-instances APP3 protocols isis interface irb.2021 passive
+set routing-instances APP3 protocols isis interface irb.2022 passive
+set routing-instances APP3 protocols isis interface irb.2023 passive
+set routing-instances APP3 protocols isis interface irb.2024 passive
+set routing-instances APP3 protocols isis interface irb.2025 passive
+set routing-instances APP3 protocols isis interface lo0.2
+set routing-instances APP3 protocols evpn ip-prefix-routes advertise direct-nexthop
+set routing-instances APP3 protocols evpn ip-prefix-routes encapsulation vxlan
+set routing-instances APP3 protocols evpn ip-prefix-routes vni 20004
+set routing-instances APP3 protocols evpn ip-prefix-routes export EVPN-T5-EXPORT
+set routing-instances DCI-VRF instance-type vrf
+set routing-instances DCI-VRF interface xe-0/0/6:2.100
+set routing-instances DCI-VRF interface lo0.100
+set routing-instances DCI-VRF route-distinguisher 191.168.100.1:100
+set routing-instances DCI-VRF vrf-export vni20100-EXPORT
+set routing-instances DCI-VRF vrf-target target:65100:1
+set routing-instances DCI-VRF vrf-table-label
+set routing-instances DCI-VRF routing-options rib DCI-VRF.inet6.0 multipath
+set routing-instances DCI-VRF routing-options multipath
+set routing-instances DCI-VRF routing-options auto-export
+set routing-instances DCI-VRF protocols isis export ISIS-EXPORT
+set routing-instances DCI-VRF protocols isis level 1 disable
+set routing-instances DCI-VRF protocols isis level 2 wide-metrics-only
+set routing-instances DCI-VRF protocols isis interface xe-0/0/6:2.100
+set routing-instances DCI-VRF protocols isis interface lo0.100
+set routing-instances DCI-VRF protocols evpn ip-prefix-routes advertise direct-nexthop
+set routing-instances DCI-VRF protocols evpn ip-prefix-routes encapsulation vxlan
+set routing-instances DCI-VRF protocols evpn ip-prefix-routes vni 20100
+set routing-instances DCI-VRF protocols evpn ip-prefix-routes export DCI-VRF_Block_Default
+set routing-instances INTERNET instance-type vrf
+set routing-instances INTERNET interface xe-0/0/6:2.30
+set routing-instances INTERNET interface et-0/0/24.0
+set routing-instances INTERNET interface et-0/0/30.0
+set routing-instances INTERNET interface lo0.3
+set routing-instances INTERNET route-distinguisher 191.168.100.1:1
+set routing-instances INTERNET vrf-export vni20200-EXPORT
+set routing-instances INTERNET vrf-target target:65100:1000
+set routing-instances INTERNET vrf-table-label
+set routing-instances INTERNET routing-options multipath
+set routing-instances INTERNET routing-options autonomous-system 65100
+set routing-instances INTERNET routing-options auto-export
+set routing-instances INTERNET protocols bgp group Internet type external
+set routing-instances INTERNET protocols bgp group Internet export export_DC2_to_WAN
+set routing-instances INTERNET protocols bgp group Internet peer-as 65200
+set routing-instances INTERNET protocols bgp group Internet multipath multiple-as
+set routing-instances INTERNET protocols bgp group Internet neighbor 10.0.1.13
+set routing-instances INTERNET protocols bgp group Internet neighbor 10.0.1.15
+set routing-instances INTERNET protocols isis export INTERNET-ISIS-EXPORT
+set routing-instances INTERNET protocols isis level 1 disable
+set routing-instances INTERNET protocols isis level 2 wide-metrics-only
+set routing-instances INTERNET protocols isis interface xe-0/0/6:2.30
+set routing-instances INTERNET protocols isis interface lo0.3
+set routing-instances INTERNET protocols evpn ip-prefix-routes advertise direct-nexthop
+set routing-instances INTERNET protocols evpn ip-prefix-routes encapsulation vxlan
+set routing-instances INTERNET protocols evpn ip-prefix-routes vni 20200
+set switch-options vtep-source-interface lo0.0
+set switch-options route-distinguisher 191.168.100.1:65100
+set switch-options vrf-import EVPN-IMPORT
+set switch-options vrf-target target:1:100
+set switch-options vrf-target auto import-as 65101 vni-list 22031
+set vlans V2021 vlan-id 2021
+set vlans V2021 l3-interface irb.2021
+set vlans V2021 vxlan vni 22021
+set vlans V2022 vlan-id 2022
+set vlans V2022 l3-interface irb.2022
+set vlans V2022 vxlan vni 22022
+set vlans V2023 vlan-id 2023
+set vlans V2023 l3-interface irb.2023
+set vlans V2023 vxlan vni 22023
+set vlans V2024 vlan-id 2024
+set vlans V2024 l3-interface irb.2024
+set vlans V2024 vxlan vni 22024
+set vlans V2025 vlan-id 2025
+set vlans V2025 l3-interface irb.2025
+set vlans V2025 vxlan vni 22025
+set vlans V2031 vlan-id 2031
+set vlans V2031 l3-interface irb.2031
+set vlans V2031 vxlan vni 22031
