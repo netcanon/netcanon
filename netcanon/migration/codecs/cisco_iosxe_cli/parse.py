@@ -1302,23 +1302,28 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
         seen_names.add(name)
         privilege_str = m.group(2)
         privilege = int(privilege_str) if privilege_str else 1
-        kw = m.group(3).lower()          # "secret" or "password"
+        # m.group(3) is the "secret" or "password" keyword.  The render
+        # path always normalises to "secret" (IOS-XE-preferred form) on
+        # re-emit, so the canonical model does not distinguish them.
         hash_type = m.group(4) or ""
         hash_payload = m.group(5).strip()
         # Preserve the type digit as part of the opaque hash so the
-        # target codec's render can reconstruct if needed.
-        if hash_type:
+        # target codec's render can reconstruct if needed.  Type 0
+        # ("password 0 X" / "secret 0 X") is Cisco's wire-explicit
+        # spelling of *plaintext* — the device hashes on commit, and
+        # the canonical model already represents plaintext as a bare
+        # value with no leading-digit prefix.  Preserving the "0 "
+        # prefix would (a) confuse classify_hash (it only recognises
+        # 5/7/8/9 as hash markers and treats "0 cisco" as a plaintext
+        # literal whose text happens to start with "0 "), and (b)
+        # cause render._split_cisco_hash to re-emit the prefix on top
+        # of a fresh "secret 0 " marker, producing "secret 0 0 cisco"
+        # and breaking parse↔render symmetry.  Strip it here so type 0
+        # round-trips through the plaintext path.
+        if hash_type and hash_type != "0":
             hashed = f"{hash_type} {hash_payload}"
         else:
             hashed = hash_payload
-        # Annotate reversible-type-7 secrets so downstream codecs can
-        # warn / refuse.  A `password 7 ...` or `secret 7 ...` is
-        # weak and should be flagged.
-        if kw == "password":
-            # `password` keyword implies legacy weak encoding unless
-            # explicitly typed strong.  We just carry it through; the
-            # render side can decide policy.
-            pass
         users.append(CanonicalLocalUser(
             name=name,
             privilege_level=privilege,

@@ -460,6 +460,124 @@ class TestRender:
                (second.snmp.community if second.snmp else "")
 
 
+class TestLocalUserPasswordRoundTrip:
+    """Regression for the ``password 0 X`` round-trip bug.
+
+    The IOS-XE encoding-type prefix on a ``username … {secret|password}
+    <N> X`` line drives how the device interprets ``X``:
+
+      * ``0`` — plaintext (device hashes on commit)
+      * ``5`` — md5crypt
+      * ``7`` — Cisco's reversible XOR (legacy)
+      * ``8`` — PBKDF2-SHA256
+      * ``9`` — scrypt
+
+    The canonical model stores types 5/7/8/9 as ``"<digit> <hash>"``
+    so the render side can reconstruct the original wire form.  Type
+    ``0`` (plaintext) has no canonical tag — the parser strips the
+    ``0 `` prefix so the value sits in the same slot as a bare
+    plaintext literal, and the render emits ``secret 0 X`` whenever
+    plaintext needs to cross the wire.
+
+    Without the parse-side strip, the canonical value carried a
+    leading ``0 `` that the render path re-prefixed under a fresh
+    ``secret 0 ``, producing ``secret 0 0 X``.  Re-parsing then
+    captured the second ``0`` as a hash-type marker, breaking
+    parse↔render symmetry on the very next iteration.
+    """
+
+    def _round_trip(self, line: str) -> tuple[str, str]:
+        """Parse ``line``, render, re-parse, return both hash values."""
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(line + "\n")
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        return (
+            first.local_users[0].hashed_password,
+            second.local_users[0].hashed_password,
+        )
+
+    def test_password_zero_plaintext_strips_prefix_on_parse(self):
+        codec = CiscoIOSXECLICodec()
+        intent = codec.parse(
+            "username cisco privilege 15 password 0 cisco\n"
+        )
+        # Type-0 prefix is plaintext-marker — canonical form drops it
+        # so the value matches a bare plaintext literal exactly.
+        assert intent.local_users[0].hashed_password == "cisco"
+
+    def test_password_zero_round_trips_through_secret_zero(self):
+        first, second = self._round_trip(
+            "username cisco privilege 15 password 0 cisco"
+        )
+        # Idempotent: parse → render → re-parse gives the same value.
+        assert first == "cisco"
+        assert second == "cisco"
+
+    def test_password_zero_render_emits_secret_zero_form(self):
+        """The render path normalises ``password`` to ``secret`` (the
+        IOS-XE-preferred keyword) and re-emits the explicit ``0``
+        encoding-type marker — never a doubled ``0 0 X``."""
+        codec = CiscoIOSXECLICodec()
+        intent = codec.parse(
+            "username cisco privilege 15 password 0 cisco\n"
+        )
+        rendered = codec.render(intent)
+        username_lines = [
+            line for line in rendered.splitlines()
+            if line.startswith("username cisco")
+        ]
+        assert username_lines == [
+            "username cisco privilege 15 secret 0 cisco",
+        ]
+
+    def test_secret_zero_round_trips_through_secret_zero(self):
+        """Explicit ``secret 0 X`` is the documented plaintext form —
+        must round-trip identically to ``password 0 X``."""
+        first, second = self._round_trip(
+            "username admin privilege 15 secret 0 hunter2"
+        )
+        assert first == "hunter2"
+        assert second == "hunter2"
+
+    def test_password_seven_reversible_preserves_prefix(self):
+        """Type-7 (reversible XOR) is a real hash — canonical form
+        preserves the ``7 `` prefix so render can reconstruct it."""
+        first, second = self._round_trip(
+            "username legacy privilege 15 password 7 091C08"
+        )
+        assert first == "7 091C08"
+        assert second == "7 091C08"
+
+    def test_secret_five_md5crypt_preserves_prefix(self):
+        """Type-5 (md5crypt) — canonical form preserves ``5 $1$…``."""
+        first, second = self._round_trip(
+            "username admin privilege 15 "
+            "secret 5 $1$abcd$xyzhashpayloadexample123"
+        )
+        assert first == "5 $1$abcd$xyzhashpayloadexample123"
+        assert second == "5 $1$abcd$xyzhashpayloadexample123"
+
+    def test_secret_nine_scrypt_preserves_prefix(self):
+        """Type-9 (scrypt) — canonical form preserves ``9 $9$…``."""
+        first, second = self._round_trip(
+            "username admin privilege 15 "
+            "secret 9 $9$fakeSalt$fakeHashExampleValue1"
+        )
+        assert first == "9 $9$fakeSalt$fakeHashExampleValue1"
+        assert second == "9 $9$fakeSalt$fakeHashExampleValue1"
+
+    def test_secret_with_no_type_marker_round_trips_as_plaintext(self):
+        """``secret X`` with no leading digit is plaintext too — the
+        device hashes on commit.  Render normalises to ``secret 0 X``
+        (the explicit plaintext form)."""
+        first, second = self._round_trip(
+            "username admin privilege 15 secret hunter2"
+        )
+        assert first == "hunter2"
+        assert second == "hunter2"
+
+
 class TestRenderSynthesisesInterfacesFromVlanMembership:
     """Regression for the Aruba 2930M user-paste bug.
 
