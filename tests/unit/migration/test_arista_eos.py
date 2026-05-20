@@ -15,10 +15,12 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 from netcanon.migration.codecs.arista_eos.port_names import (
@@ -1376,3 +1378,538 @@ class TestVlanNameSanitise:
         out = AristaEOSCodec().render(intent)
         assert "   name USERS" in out
         assert "name _" not in out
+
+
+# ---------------------------------------------------------------------------
+# VRRP groups (v0.2.0 Wave B wire-up)
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPGroups:
+    """Classic VRRP grammar on Arista EOS — multi-line per-group form.
+
+    The codec supports the modern ``vrrp <gid> ipv4 <ip>`` form and
+    the legacy ``vrrp <gid> ip <ip>`` form.  Multiple sub-commands
+    on the same interface converge onto one
+    :class:`CanonicalVRRPGroup` keyed by ``group_id``.
+    """
+
+    def test_vrrp_ipv4_basic_group(self):
+        """``vrrp 10 ipv4 192.168.1.254`` produces a single
+        :class:`CanonicalVRRPGroup` on the SVI."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan10\n"
+            "   ip address 192.168.1.1/24\n"
+            "   vrrp 10 ipv4 192.168.1.254\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan10")
+        assert len(iface.vrrp_groups) == 1
+        g = iface.vrrp_groups[0]
+        assert g.group_id == 10
+        assert g.mode == "vrrp"
+        assert g.virtual_ips == ["192.168.1.254"]
+        # Defaults preserved.
+        assert g.priority == 100
+        assert g.preempt is True
+
+    def test_vrrp_legacy_ip_form(self):
+        """Older EOS / Cisco-derived grammar: ``vrrp 10 ip X``.
+        Same canonical landing as the modern ``ipv4`` form."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan20\n"
+            "   ip address 10.0.0.1/24\n"
+            "   vrrp 10 ip 10.0.0.254\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan20")
+        assert len(iface.vrrp_groups) == 1
+        assert iface.vrrp_groups[0].virtual_ips == ["10.0.0.254"]
+
+    def test_vrrp_priority_preempt_track(self):
+        """Multi-line VRRP grammar: priority, no-preempt, track,
+        timers, description all converge onto the same group."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan30\n"
+            "   ip address 10.0.30.1/24\n"
+            "   vrrp 10 ipv4 10.0.30.254\n"
+            "   vrrp 10 priority 110\n"
+            "   no vrrp 10 preempt\n"
+            "   vrrp 10 track Ethernet1\n"
+            "   vrrp 10 description primary HA pair\n"
+            "   vrrp 10 timers advertise 3\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan30")
+        assert len(iface.vrrp_groups) == 1
+        g = iface.vrrp_groups[0]
+        assert g.priority == 110
+        assert g.preempt is False
+        assert g.track_interfaces == ["Ethernet1"]
+        assert g.description == "primary HA pair"
+        assert g.advertisement_interval == 3
+
+    def test_vrrp_multiple_groups_per_interface(self):
+        """Two groups on the same SVI converge onto two distinct
+        :class:`CanonicalVRRPGroup` records keyed by gid."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan40\n"
+            "   ip address 10.0.40.1/24\n"
+            "   vrrp 10 ipv4 10.0.40.254\n"
+            "   vrrp 10 priority 110\n"
+            "   vrrp 20 ipv4 10.0.40.253\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan40")
+        assert len(iface.vrrp_groups) == 2
+        gids = sorted(g.group_id for g in iface.vrrp_groups)
+        assert gids == [10, 20]
+        g10 = next(g for g in iface.vrrp_groups if g.group_id == 10)
+        assert g10.priority == 110
+
+    def test_vrrp_ipv6_group(self):
+        """``vrrp 10 ipv6 fe80::1`` populates the ``virtual_ipv6s``
+        list (dual-stack v4+v6 designs use this)."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan50\n"
+            "   ipv6 address 2001:db8::1/64\n"
+            "   vrrp 10 ipv6 2001:db8::ff\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan50")
+        assert len(iface.vrrp_groups) == 1
+        assert iface.vrrp_groups[0].virtual_ipv6s == ["2001:db8::ff"]
+
+    def test_vrrp_authentication_md5(self):
+        """``vrrp 10 authentication md5 key-string <key>`` lands as
+        canonical ``md5:<key>``."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan60\n"
+            "   ip address 10.0.60.1/24\n"
+            "   vrrp 10 ipv4 10.0.60.254\n"
+            "   vrrp 10 authentication md5 key-string secret123\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan60")
+        g = iface.vrrp_groups[0]
+        assert g.authentication == "md5:secret123"
+
+    def test_vrrp_authentication_text(self):
+        """``vrrp 10 authentication text <key>`` lands as canonical
+        ``plain:<key>``."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan61\n"
+            "   ip address 10.0.61.1/24\n"
+            "   vrrp 10 ipv4 10.0.61.254\n"
+            "   vrrp 10 authentication text mypass\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan61")
+        g = iface.vrrp_groups[0]
+        assert g.authentication == "plain:mypass"
+
+    def test_vrrp_render_emits_modern_grammar(self):
+        """Render emits the modern ``vrrp <gid> ipv4 <ip>`` form, not
+        the legacy ``vrrp <gid> ip <ip>``."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="192.168.1.1", prefix_length=24),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["192.168.1.254"],
+                            priority=110,
+                            preempt=False,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   vrrp 10 ipv4 192.168.1.254" in out
+        assert "   vrrp 10 priority 110" in out
+        assert "   no vrrp 10 preempt" in out
+
+    def test_vrrp_default_priority_not_emitted(self):
+        """Priority defaults to 100 — render must NOT emit a redundant
+        ``vrrp <gid> priority 100`` line for the default value."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.10.1", prefix_length=24),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.0.10.254"],
+                            priority=100,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "vrrp 10 priority" not in out
+        # And preempt at default should not emit either (EOS default
+        # is preempt-enabled).
+        assert "no vrrp 10 preempt" not in out
+
+    def test_vrrp_round_trip(self):
+        """parse → render → parse stability on a multi-attribute VRRP
+        group."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan10\n"
+            "   ip address 10.0.10.1/24\n"
+            "   vrrp 10 ipv4 10.0.10.254\n"
+            "   vrrp 10 priority 110\n"
+            "   no vrrp 10 preempt\n"
+            "   vrrp 10 description primary\n"
+            "!\n"
+        )
+        codec = AristaEOSCodec()
+        tree1 = codec.parse(raw)
+        rendered = codec.render(tree1)
+        tree2 = codec.parse(rendered)
+        iface1 = next(i for i in tree1.interfaces if i.name == "Vlan10")
+        iface2 = next(i for i in tree2.interfaces if i.name == "Vlan10")
+        assert len(iface1.vrrp_groups) == len(iface2.vrrp_groups) == 1
+        g1, g2 = iface1.vrrp_groups[0], iface2.vrrp_groups[0]
+        assert g1.group_id == g2.group_id
+        assert g1.virtual_ips == g2.virtual_ips
+        assert g1.priority == g2.priority
+        assert g1.preempt == g2.preempt
+        assert g1.description == g2.description
+
+    def test_vrrp_carp_mode_emits_review_comment(self):
+        """Cross-vendor source carrying ``mode="carp"`` (OPNsense) has
+        no EOS equivalent — render emits a review comment so the
+        operator sees the loss rather than silently dropping the
+        intent."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.10.1", prefix_length=24),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10, mode="carp",
+                            virtual_ips=["10.0.10.254"],
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "review:" in out
+        assert "carp" in out
+        # The payload virtual IP MUST NOT have leaked to the wire as a
+        # plain ``vrrp 10 ipv4 ...`` line — protocol mismatch would
+        # silently turn a BSD CARP group into IETF VRRP.
+        assert "vrrp 10 ipv4 10.0.10.254" not in out
+
+    def test_vrrp_groups_capability_supported(self):
+        """Wave B matrix flip: vrrp-groups path declared supported."""
+        caps = AristaEOSCodec().capabilities
+        supported = set(caps.supported)
+        assert "/interfaces/interface/vrrp-groups/group" in supported
+        unsupported = {u.path for u in caps.unsupported}
+        assert "/interfaces/interface/vrrp-groups/group" not in unsupported
+
+
+# ---------------------------------------------------------------------------
+# VARP anycast-gateway (v0.2.0 Wave C wire-up)
+# ---------------------------------------------------------------------------
+
+
+class TestVARPAnycast:
+    """Arista VARP (Virtual ARP) grammar.
+
+    Two surfaces: per-SVI ``ip address virtual X/Y [secondary]`` and
+    the system-wide ``ip virtual-router mac-address <MAC>``.  VARP
+    has NO per-leaf primary — the wire IP IS the virtual one — so
+    canonical records carry ``ip=""`` with
+    ``virtual_gateway_address="<X>"``.  See
+    ``docs/v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md``
+    § "Arista EOS (VARP)" for the design rationale.
+    """
+
+    def test_varp_basic_ipv4(self):
+        """``ip address virtual X/Y`` populates ``virtual_gateway_address``
+        with ``ip=""`` (no per-leaf primary on EOS VARP)."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   ip address virtual 10.1.10.1/24\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan110")
+        assert len(iface.ipv4_addresses) == 1
+        a = iface.ipv4_addresses[0]
+        assert a.ip == ""
+        assert a.virtual_gateway_address == "10.1.10.1"
+        assert a.prefix_length == 24
+        assert a.is_secondary is False
+
+    def test_varp_secondary_trailer(self):
+        """``ip address virtual X/Y secondary`` lands as
+        ``is_secondary=True``.  This is the test for the EOS
+        ``secondary`` trailer preservation — previously the
+        non-VARP ``ip address`` handler silently dropped the
+        trailer."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   ip address virtual 10.1.10.1/24\n"
+            "   ip address virtual 10.1.100.1/24 secondary\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan110")
+        assert len(iface.ipv4_addresses) == 2
+        assert iface.ipv4_addresses[0].is_secondary is False
+        assert iface.ipv4_addresses[0].virtual_gateway_address == "10.1.10.1"
+        assert iface.ipv4_addresses[1].is_secondary is True
+        assert iface.ipv4_addresses[1].virtual_gateway_address == "10.1.100.1"
+
+    def test_varp_multiple_addresses_same_svi(self):
+        """Multiple VARP addresses on the same SVI (per-tenant default
+        gateways) all land on the same canonical interface."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   ip address virtual 10.1.10.1/24\n"
+            "   ip address virtual 10.1.20.1/24 secondary\n"
+            "   ip address virtual 10.1.30.1/24 secondary\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan110")
+        vips = [a.virtual_gateway_address for a in iface.ipv4_addresses]
+        assert vips == ["10.1.10.1", "10.1.20.1", "10.1.30.1"]
+        sec_flags = [a.is_secondary for a in iface.ipv4_addresses]
+        assert sec_flags == [False, True, True]
+
+    def test_varp_source_nat_is_ignored(self):
+        """``ip address virtual source-nat vrf V address Z`` is a
+        DISTINCT feature (VARP source-NAT for VRF-leaked traffic),
+        NOT anycast-gateway.  Parser must NOT route it to the
+        ipv4_addresses VARP path."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   ip address virtual source-nat vrf Tenant_A address 10.255.1.4\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan110")
+        # source-nat line is parse-and-ignored — no VARP address
+        # leaks into ipv4_addresses with a 10.255.x.x VIP.
+        assert all(
+            a.virtual_gateway_address != "10.255.1.4"
+            for a in iface.ipv4_addresses
+        )
+
+    def test_varp_global_mac_parsed(self):
+        """``ip virtual-router mac-address 00:1c:73:00:dc:01`` lands
+        on ``intent.anycast_gateway_mac``."""
+        raw = (
+            "hostname sw1\n"
+            "ip virtual-router mac-address 00:1c:73:00:dc:01\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert intent.anycast_gateway_mac == "00:1c:73:00:dc:01"
+
+    def test_varp_global_mac_rendered(self):
+        """Render emits the top-level ``ip virtual-router mac-address``
+        line when ``intent.anycast_gateway_mac`` is set."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            anycast_gateway_mac="00:1c:73:00:dc:01",
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "ip virtual-router mac-address 00:1c:73:00:dc:01" in out
+
+    def test_varp_render_with_secondary_trailer(self):
+        """Render emits the ``secondary`` trailer for any VARP record
+        flagged ``is_secondary=True``."""
+        intent = CanonicalIntent(
+            hostname="sw1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan110",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="", prefix_length=24,
+                            virtual_gateway_address="10.1.10.1",
+                        ),
+                        CanonicalIPv4Address(
+                            ip="", prefix_length=24,
+                            virtual_gateway_address="10.1.100.1",
+                            is_secondary=True,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = AristaEOSCodec().render(intent)
+        assert "   ip address virtual 10.1.10.1/24" in out
+        assert "   ip address virtual 10.1.100.1/24 secondary" in out
+        # The primary must NOT carry the secondary trailer.
+        assert "   ip address virtual 10.1.10.1/24 secondary" not in out
+
+    def test_varp_round_trip(self):
+        """parse → render → parse stability across the full VARP
+        surface: multiple SVIs, secondary trailers, system-wide MAC."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   description Tenant_A\n"
+            "   ip address virtual 10.1.10.1/24\n"
+            "   ip address virtual 10.1.100.1/24 secondary\n"
+            "!\n"
+            "interface Vlan111\n"
+            "   description Tenant_B\n"
+            "   ip address virtual 10.1.11.1/24\n"
+            "!\n"
+            "ip virtual-router mac-address 00:dc:00:00:00:01\n"
+        )
+        codec = AristaEOSCodec()
+        tree1 = codec.parse(raw)
+        rendered = codec.render(tree1)
+        tree2 = codec.parse(rendered)
+        assert tree1.anycast_gateway_mac == tree2.anycast_gateway_mac
+        # Compare canonical address records on every Vlan SVI.
+        names = ["Vlan110", "Vlan111"]
+        for name in names:
+            i1 = next(i for i in tree1.interfaces if i.name == name)
+            i2 = next(i for i in tree2.interfaces if i.name == name)
+            assert len(i1.ipv4_addresses) == len(i2.ipv4_addresses)
+            for a, b in zip(i1.ipv4_addresses, i2.ipv4_addresses):
+                assert a.virtual_gateway_address == b.virtual_gateway_address
+                assert a.is_secondary == b.is_secondary
+                assert a.prefix_length == b.prefix_length
+
+    def test_varp_ipv6_basic(self):
+        """``ipv6 address virtual X/Y`` (EOS 4.30+) populates
+        IPv6Address.virtual_gateway_address."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan110\n"
+            "   ipv6 address virtual fd20:1::1/64\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "Vlan110")
+        assert len(iface.ipv6_addresses) == 1
+        a = iface.ipv6_addresses[0]
+        assert a.ip == ""
+        assert a.virtual_gateway_address == "fd20:1::1"
+        assert a.prefix_length == 64
+        assert a.scope == "global"
+
+    def test_varp_capability_paths_supported(self):
+        """Wave C matrix flip: the four VARP-adjacent paths are
+        declared supported (or lossy for the per-IP MAC override
+        slot that EOS doesn't have)."""
+        caps = AristaEOSCodec().capabilities
+        supported = set(caps.supported)
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in supported
+        )
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in supported
+        )
+        assert "/anycast-gateway-mac" in supported
+        # Per-IP MAC overrides are lossy (EOS only has system-wide).
+        lossy = {l.path for l in caps.lossy}
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-mac"
+            in lossy
+        )
+
+    def test_varp_real_fixture_round_trip(self):
+        """End-to-end real-capture round-trip on the Batfish EOS
+        EVPN fixture.  Confirms the VARP grammar landing matches the
+        real-world wire form (multi-VRF, multi-SVI, system MAC)."""
+        import pathlib
+        fixture = pathlib.Path(
+            "tests/fixtures/real/arista_eos/"
+            "batfish_eos_evpn_vlan_based_leaf.txt"
+        )
+        raw = fixture.read_text(encoding="utf-8")
+        codec = AristaEOSCodec()
+        tree1 = codec.parse(raw)
+        rendered = codec.render(tree1)
+        tree2 = codec.parse(rendered)
+        # System MAC survives.
+        assert tree1.anycast_gateway_mac == "00:dc:00:00:00:01"
+        assert tree1.anycast_gateway_mac == tree2.anycast_gateway_mac
+        # Both fixtures had a single ``secondary`` VARP on Vlan110.
+        v110_1 = next(i for i in tree1.interfaces if i.name == "Vlan110")
+        v110_2 = next(i for i in tree2.interfaces if i.name == "Vlan110")
+        sec_1 = [a for a in v110_1.ipv4_addresses if a.is_secondary]
+        sec_2 = [a for a in v110_2.ipv4_addresses if a.is_secondary]
+        assert len(sec_1) == 1
+        assert len(sec_2) == 1
+        assert sec_1[0].virtual_gateway_address == sec_2[0].virtual_gateway_address
+
+    def test_varp_with_classic_vrrp_coexist(self):
+        """VARP (anycast) and classic VRRP can co-exist on different
+        SVIs in the same config — they share the
+        :class:`CanonicalInterface` model but populate different
+        fields (VARP on ipv4_addresses, VRRP on vrrp_groups)."""
+        raw = (
+            "hostname sw1\n"
+            "interface Vlan10\n"
+            "   ip address 10.0.10.1/24\n"
+            "   vrrp 10 ipv4 10.0.10.254\n"
+            "!\n"
+            "interface Vlan20\n"
+            "   ip address virtual 10.0.20.1/24\n"
+            "!\n"
+            "ip virtual-router mac-address 00:1c:73:00:dc:01\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        v10 = next(i for i in intent.interfaces if i.name == "Vlan10")
+        v20 = next(i for i in intent.interfaces if i.name == "Vlan20")
+        # Vlan10 has classic VRRP, no VARP.
+        assert len(v10.vrrp_groups) == 1
+        assert v10.vrrp_groups[0].virtual_ips == ["10.0.10.254"]
+        assert all(not a.virtual_gateway_address for a in v10.ipv4_addresses)
+        # Vlan20 has VARP, no classic VRRP.
+        assert v20.vrrp_groups == []
+        assert any(
+            a.virtual_gateway_address == "10.0.20.1"
+            for a in v20.ipv4_addresses
+        )
+        # System MAC.
+        assert intent.anycast_gateway_mac == "00:1c:73:00:dc:01"

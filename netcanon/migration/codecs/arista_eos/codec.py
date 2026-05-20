@@ -131,8 +131,45 @@ class AristaEOSCodec(CodecBase):
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6 demoted
             "/dhcp_servers/pool",                # Cluster E.1-A
+            # -- v0.2.0 Wave B (VRRP) -- per-codec wire-up landed --
+            "/interfaces/interface/vrrp-groups/group",
+            # -- v0.2.0 Wave C (VARP / anycast-gateway) --
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
         ],
         lossy=[
+            # -- v0.2.0 Wave C (VARP) -- per-IP MAC overrides --
+            # EOS only supports a system-wide virtual-router MAC
+            # (``ip virtual-router mac-address`` — see the
+            # ``/anycast-gateway-mac`` supported entry above).
+            # Per-IP MAC overrides (Junos-style ``virtual-gateway-v4-
+            # mac`` / ``-v6-mac`` per-address) have no Arista
+            # equivalent — cross-vendor renders from Junos surface a
+            # review banner on the migrate page.
+            LossyPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "EOS only supports a system-wide virtual-router "
+                    "MAC (``ip virtual-router mac-address``).  Per-IP "
+                    "MAC overrides (Junos-style ``virtual-gateway-"
+                    "v4-mac``) drop on render — cross-vendor sources "
+                    "carrying per-IP MACs surface a review banner so "
+                    "the operator can either consolidate to a single "
+                    "system-wide MAC or pick a vendor target that "
+                    "preserves per-IP overrides."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/ipv6/address/virtual-gateway-mac",
+                reason=(
+                    "Mirror of the IPv4 case.  EOS shares one "
+                    "system-wide virtual-router MAC across IPv4 and "
+                    "IPv6 anycast — no per-IP override grammar."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
@@ -209,42 +246,9 @@ class AristaEOSCodec(CodecBase):
                     "are Tier 3 — see `/access-list/extended`."
                 ),
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
-                reason=(
-                    "Anycast-gateway virtual IPv4 companion parses-and-"
-                    "ignores in v1.  Schema exists on "
-                    "CanonicalIPv4Address; wire-up scheduled for v0.2.0 "
-                    "Wave C (see docs/v0.2.0-planning/02-anycast-gateway/)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
-                reason=(
-                    "IPv6 anycast-gateway virtual IP companion parses-"
-                    "and-ignores in v1.  Schema exists on "
-                    "CanonicalIPv6Address; wire-up scheduled for v0.2.0 "
-                    "Wave C."
-                ),
-            ),
-            UnsupportedPath(
-                path="/anycast-gateway-mac",
-                reason=(
-                    "System-wide anycast-gateway MAC parses-and-ignores "
-                    "in v1.  Schema exists on CanonicalIntent; wire-up "
-                    "scheduled for v0.2.0 Wave C."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- per-VRF static routes --
+            # (VRRP + anycast-gateway flipped to ``supported`` in
+            # Wave B/C — see the supported list above.)
             UnsupportedPath(
                 path="/routing/static-route/vrf",
                 reason=(

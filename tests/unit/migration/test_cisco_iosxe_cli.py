@@ -868,3 +868,525 @@ class TestRegistry:
         codecs = list_codecs()
         assert "cisco_iosxe" in codecs
         assert "cisco_iosxe_cli" in codecs
+
+
+# ---------------------------------------------------------------------------
+# Wave B — classic VRRP grammar (single-line per-attribute form)
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPGroups:
+    """IOS-XE classic VRRP grammar (``vrrp <VRID> <sub-cmd>``).
+
+    The classic single-line per-attribute form is the broadly-supported
+    surface across every IOS-XE release from 15.x onward, and is the
+    form real captures emit (see ``tests/fixtures/real/cisco_iosxe/
+    batfish_iosxe_basic_vrrp.txt``).  Modern 17.12+ address-family
+    form is declared lossy on the capability matrix — covered by the
+    final test below.
+    """
+
+    def _basic_vrrp_config(self, extra_lines: str = "") -> str:
+        """Helper: minimal interface stanza with a VRRP group and
+        optional extra sub-commands."""
+        return (
+            "interface GigabitEthernet0/2\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            " vrrp 12 ip 192.168.1.254\n"
+            + extra_lines
+            + "!\n"
+        )
+
+    def test_basic_vrrp_ip_parses(self):
+        """`vrrp N ip X` populates virtual_ips with one entry."""
+        tree = CiscoIOSXECLICodec().parse(self._basic_vrrp_config())
+        iface = tree.interfaces[0]
+        assert len(iface.vrrp_groups) == 1
+        g = iface.vrrp_groups[0]
+        assert g.group_id == 12
+        assert g.mode == "vrrp"
+        assert g.virtual_ips == ["192.168.1.254"]
+
+    def test_basic_vrrp_round_trips(self):
+        """Parse → render → re-parse keeps the canonical VRRP group
+        identical."""
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(self._basic_vrrp_config())
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert (
+            first.interfaces[0].vrrp_groups
+            == second.interfaces[0].vrrp_groups
+        )
+
+    def test_basic_vrrp_render_emits_classic_form(self):
+        """Render emits the classic ``vrrp N ip X`` form (operator-
+        recognised; broad IOS-XE compatibility)."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config())
+        rendered = codec.render(tree)
+        assert " vrrp 12 ip 192.168.1.254" in rendered
+
+    def test_multiple_groups_per_interface(self):
+        """IOS-XE accepts arbitrary VRIDs on the same port; the
+        canonical model preserves all of them."""
+        raw = (
+            "interface GigabitEthernet0/2\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            " vrrp 10 ip 192.168.1.10\n"
+            " vrrp 20 ip 192.168.1.20\n"
+            " vrrp 30 ip 192.168.1.30\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        groups = tree.interfaces[0].vrrp_groups
+        assert len(groups) == 3
+        assert [g.group_id for g in groups] == [10, 20, 30]
+        assert [g.virtual_ips[0] for g in groups] == [
+            "192.168.1.10", "192.168.1.20", "192.168.1.30",
+        ]
+
+    def test_priority_parses_and_renders(self):
+        """`vrrp N priority P` populates the priority field; render
+        round-trips."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 priority 110\n",
+        ))
+        assert tree.interfaces[0].vrrp_groups[0].priority == 110
+        rendered = codec.render(tree)
+        assert " vrrp 12 priority 110" in rendered
+
+    def test_preempt_default_round_trips(self):
+        """`vrrp N preempt` sets preempt=True; render emits the
+        explicit line (IOS-XE default but operator-visible)."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 preempt\n",
+        ))
+        assert tree.interfaces[0].vrrp_groups[0].preempt is True
+        rendered = codec.render(tree)
+        assert " vrrp 12 preempt" in rendered
+
+    def test_no_preempt_parses_false(self):
+        """`no vrrp N preempt` flips preempt off; render emits the
+        ``no vrrp N preempt`` form."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " no vrrp 12 preempt\n",
+        ))
+        assert tree.interfaces[0].vrrp_groups[0].preempt is False
+        rendered = codec.render(tree)
+        assert " no vrrp 12 preempt" in rendered
+
+    def test_description_parses_and_renders(self):
+        """`vrrp N description X` populates the description field."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 description Edge VRRP\n",
+        ))
+        assert (
+            tree.interfaces[0].vrrp_groups[0].description == "Edge VRRP"
+        )
+        rendered = codec.render(tree)
+        assert " vrrp 12 description Edge VRRP" in rendered
+
+    def test_timers_advertise_parses(self):
+        """`vrrp N timers advertise N` populates advertisement_interval."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 timers advertise 3\n",
+        ))
+        assert (
+            tree.interfaces[0].vrrp_groups[0].advertisement_interval == 3
+        )
+        rendered = codec.render(tree)
+        assert " vrrp 12 timers advertise 3" in rendered
+
+    def test_authentication_text_maps_to_plain_scheme(self):
+        """`vrrp N authentication text X` stores as ``plain:X``."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 authentication text secret-pass\n",
+        ))
+        assert (
+            tree.interfaces[0].vrrp_groups[0].authentication
+            == "plain:secret-pass"
+        )
+        rendered = codec.render(tree)
+        # Round-trip back to the wire form.
+        assert " vrrp 12 authentication text secret-pass" in rendered
+
+    def test_authentication_md5_maps_to_md5_scheme(self):
+        """`vrrp N authentication md5 key-string X` stores as
+        ``md5:X``."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 authentication md5 key-string SECRET\n",
+        ))
+        assert (
+            tree.interfaces[0].vrrp_groups[0].authentication
+            == "md5:SECRET"
+        )
+        rendered = codec.render(tree)
+        assert (
+            " vrrp 12 authentication md5 key-string SECRET" in rendered
+        )
+
+    def test_track_object_parses(self):
+        """`vrrp N track <obj> decrement <D>` appends to
+        track_interfaces.  Decrement is lossy — only the object name
+        survives."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(self._basic_vrrp_config(
+            " vrrp 12 track 100 decrement 20\n",
+        ))
+        assert (
+            tree.interfaces[0].vrrp_groups[0].track_interfaces == ["100"]
+        )
+        rendered = codec.render(tree)
+        assert " vrrp 12 track 100" in rendered
+
+    def test_full_grammar_round_trip_stability(self):
+        """Full grammar kitchen-sink: parse → render → re-parse → re-
+        render produces canonically-identical output the SECOND time
+        through.  Canonical stability is what cross-vendor migration
+        relies on."""
+        raw = (
+            "interface GigabitEthernet0/2\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            " vrrp 12 ip 192.168.1.254\n"
+            " vrrp 12 priority 110\n"
+            " vrrp 12 preempt\n"
+            " vrrp 12 description Edge VRRP\n"
+            " vrrp 12 timers advertise 3\n"
+            " vrrp 12 authentication text secret-pass\n"
+            " vrrp 12 track 100 decrement 20\n"
+            "!\n"
+        )
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(raw)
+        rendered_a = codec.render(first)
+        second = codec.parse(rendered_a)
+        rendered_b = codec.render(second)
+        # Canonical equivalence
+        assert (
+            first.interfaces[0].vrrp_groups
+            == second.interfaces[0].vrrp_groups
+        )
+        # And the second rendering exactly matches the first — wire-
+        # level stability.
+        assert rendered_a == rendered_b
+
+    def test_real_capture_batfish_vrrp_fixture(self):
+        """Confirms the cleanly-shipping VRRP fixture
+        (``batfish_iosxe_basic_vrrp.txt``) parses + round-trips with
+        the wired-up VRRP grammar.  The fixture also exercises the
+        ``password 0 cisco`` round-trip that landed in commit
+        ``b85c39c`` — both surfaces must coexist."""
+        raw = (
+            Path(__file__).resolve().parents[2]
+            / "fixtures" / "real" / "cisco_iosxe"
+            / "batfish_iosxe_basic_vrrp.txt"
+        ).read_text()
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(raw)
+        # Find the Gi0/2 stanza — it carries vrrp 12 ip + priority 110.
+        gi2 = next(
+            i for i in tree.interfaces if i.name == "GigabitEthernet0/2"
+        )
+        assert len(gi2.vrrp_groups) == 1
+        g = gi2.vrrp_groups[0]
+        assert g.group_id == 12
+        assert g.virtual_ips == ["192.168.1.254"]
+        assert g.priority == 110
+        # The cleartext-password fix from b85c39c also lives in this
+        # fixture — sanity check that both surfaces survive.
+        assert tree.local_users[0].name == "cisco"
+        assert tree.local_users[0].hashed_password == "cisco"
+        # Round-trip stability across both surfaces.
+        rendered = codec.render(tree)
+        reparsed = codec.parse(rendered)
+        gi2_round = next(
+            i for i in reparsed.interfaces if i.name == "GigabitEthernet0/2"
+        )
+        assert gi2_round.vrrp_groups == gi2.vrrp_groups
+
+    def test_modern_address_family_form_declared_lossy(self):
+        """IOS-XE 17.12+ ``vrrp N address-family ipv4`` modern form is
+        declared lossy on the capability matrix — every sibling codec
+        must recognise the surface exists even though the parser
+        intentionally does not deep-populate the nested attributes."""
+        codec = CiscoIOSXECLICodec()
+        lossy_paths = {l.path for l in codec.capabilities.lossy}
+        assert (
+            "/interfaces/interface/vrrp-groups/group/address-family"
+            in lossy_paths
+        ), (
+            "Capability matrix must declare the modern address-family "
+            "form as lossy — see codec.py LossyPath."
+        )
+        # Surface acknowledgement: the AF discriminator creates an
+        # empty group shell when no classic sub-commands appear.  The
+        # group ID surfaces even though the nested attributes are
+        # lossy.
+        raw = (
+            "interface GigabitEthernet0/2\n"
+            " ip address 192.168.1.1 255.255.255.0\n"
+            " vrrp 12 address-family ipv4\n"
+            "  address 192.168.1.254 primary\n"
+            "  priority 110\n"
+            " exit-address-family\n"
+            "!\n"
+        )
+        tree = codec.parse(raw)
+        groups = tree.interfaces[0].vrrp_groups
+        # The group ID is captured (lossiness is visible) but the
+        # nested address-family attributes (address / priority) are
+        # NOT populated — declared lossy by the matrix.
+        assert len(groups) == 1
+        assert groups[0].group_id == 12
+
+
+# ---------------------------------------------------------------------------
+# Wave C — SD-Access anycast-gateway
+# ---------------------------------------------------------------------------
+
+
+class TestAnycastGateway:
+    """IOS-XE SD-Access anycast-gateway (Catalyst 9000 fabric mode).
+
+    Two surfaces:
+      * Top-level ``fabric forwarding anycast-gateway-mac <MAC>``
+        declares the chassis-wide anycast MAC (one per device).
+      * Per-SVI ``fabric forwarding mode anycast-gateway`` marks the
+        SVI's primary IP as the anycast gateway.  Canonical mapping
+        mirrors the NX-OS / IOS-XE SD-Access shape: the primary IP IS
+        the virtual IP (``virtual_gateway_address == ip``).
+    """
+
+    def test_top_level_anycast_mac_parses(self):
+        """``fabric forwarding anycast-gateway-mac AABB.CCDD.EEFF``
+        populates ``intent.anycast_gateway_mac`` in canonical colon-
+        hex form."""
+        raw = (
+            "fabric forwarding anycast-gateway-mac 0001.c73a.0000\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        assert tree.anycast_gateway_mac == "00:01:c7:3a:00:00"
+
+    def test_top_level_anycast_mac_renders_dotted_triplet(self):
+        """Canonical colon-hex round-trips back to Cisco dotted-triplet
+        on render."""
+        from netcanon.migration.canonical.intent import CanonicalIntent
+        intent = CanonicalIntent(
+            hostname="fabric-edge",
+            anycast_gateway_mac="00:01:c7:3a:00:00",
+        )
+        rendered = CiscoIOSXECLICodec().render(intent)
+        assert (
+            "fabric forwarding anycast-gateway-mac 0001.c73a.0000"
+            in rendered
+        )
+
+    def test_top_level_anycast_mac_round_trips(self):
+        """Parse → render → re-parse keeps the canonical MAC value
+        intact across the dotted-triplet ↔ colon-hex conversion."""
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(
+            "fabric forwarding anycast-gateway-mac 0001.c73a.0000\n!\n"
+        )
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        assert first.anycast_gateway_mac == second.anycast_gateway_mac
+
+    def test_per_svi_mode_mirrors_primary_ip(self):
+        """``fabric forwarding mode anycast-gateway`` inside an SVI
+        sets ``virtual_gateway_address = ip`` on every IPv4 address
+        (NX-OS / IOS-XE SD-Access mirror semantic)."""
+        raw = (
+            "interface Vlan100\n"
+            " ip address 10.1.100.1 255.255.255.0\n"
+            " fabric forwarding mode anycast-gateway\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan100")
+        assert len(svi.ipv4_addresses) == 1
+        addr = svi.ipv4_addresses[0]
+        # Mirror — primary IP IS the virtual.
+        assert addr.ip == "10.1.100.1"
+        assert addr.virtual_gateway_address == "10.1.100.1"
+
+    def test_anycast_mode_after_ip_address(self):
+        """Order doesn't matter — IOS-XE accepts ``fabric forwarding
+        mode anycast-gateway`` either before or after ``ip address``.
+        Parser must apply the flag at stanza-close time, not at line-
+        time."""
+        raw = (
+            "interface Vlan100\n"
+            " fabric forwarding mode anycast-gateway\n"
+            " ip address 10.1.100.1 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan100")
+        # Mirror semantic still applies regardless of declaration order.
+        assert svi.ipv4_addresses[0].virtual_gateway_address == "10.1.100.1"
+
+    def test_svi_without_anycast_marker_has_empty_virtual_gateway(self):
+        """Discriminator gate: a plain SVI (no ``fabric forwarding mode
+        anycast-gateway`` line) parses with ``virtual_gateway_address``
+        empty.  Same IP, same SVI — only the marker changes the
+        canonical state."""
+        raw = (
+            "interface Vlan100\n"
+            " ip address 10.1.100.1 255.255.255.0\n"
+            "!\n"
+        )
+        tree = CiscoIOSXECLICodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan100")
+        assert svi.ipv4_addresses[0].virtual_gateway_address == ""
+
+    def test_anycast_mode_renders_marker(self):
+        """Per-SVI ``virtual_gateway_address == ip`` triggers the
+        ``fabric forwarding mode anycast-gateway`` line on render."""
+        codec = CiscoIOSXECLICodec()
+        tree = codec.parse(
+            "interface Vlan100\n"
+            " ip address 10.1.100.1 255.255.255.0\n"
+            " fabric forwarding mode anycast-gateway\n"
+            "!\n"
+        )
+        rendered = codec.render(tree)
+        assert " fabric forwarding mode anycast-gateway" in rendered
+
+    def test_anycast_full_round_trip(self):
+        """Full SD-Access fabric edge config — top-level MAC + per-SVI
+        marker — round-trips through parse → render → re-parse with
+        canonical state preserved."""
+        raw = (
+            "hostname fabric-edge\n"
+            "!\n"
+            "fabric forwarding anycast-gateway-mac 0001.c73a.0000\n"
+            "!\n"
+            "interface Vlan100\n"
+            " ip address 10.1.100.1 255.255.255.0\n"
+            " fabric forwarding mode anycast-gateway\n"
+            "!\n"
+            "interface Vlan200\n"
+            " ip address 10.1.200.1 255.255.255.0\n"
+            " fabric forwarding mode anycast-gateway\n"
+            "!\n"
+        )
+        codec = CiscoIOSXECLICodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Top-level MAC.
+        assert (
+            first.anycast_gateway_mac == second.anycast_gateway_mac
+            == "00:01:c7:3a:00:00"
+        )
+        # Both SVIs round-trip with mirror semantics intact.
+        for vid, vip in [(100, "10.1.100.1"), (200, "10.1.200.1")]:
+            svi_a = next(
+                i for i in first.interfaces if i.name == f"Vlan{vid}"
+            )
+            svi_b = next(
+                i for i in second.interfaces if i.name == f"Vlan{vid}"
+            )
+            assert (
+                svi_a.ipv4_addresses[0].virtual_gateway_address
+                == svi_b.ipv4_addresses[0].virtual_gateway_address
+                == vip
+            )
+
+    def test_mac_accepts_colon_hex_input(self):
+        """The MAC normaliser accepts the canonical colon-hex form
+        directly (operator paste from a non-Cisco target)."""
+        tree = CiscoIOSXECLICodec().parse(
+            "fabric forwarding anycast-gateway-mac 00:01:c7:3a:00:00\n!\n"
+        )
+        assert tree.anycast_gateway_mac == "00:01:c7:3a:00:00"
+
+    def test_anycast_mode_emits_only_once_per_interface(self):
+        """Multiple IPv4 addresses on the same SVI (rare in SD-Access,
+        but possible) emit the ``fabric forwarding mode anycast-
+        gateway`` line ONCE — it's a per-interface marker, not per-
+        address."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface, CanonicalIPv4Address,
+        )
+        intent = CanonicalIntent(hostname="sw")
+        intent.interfaces.append(CanonicalInterface(
+            name="Vlan100",
+            interface_type="ianaift:l3ipvlan",
+            ipv4_addresses=[
+                CanonicalIPv4Address(
+                    ip="10.1.100.1", prefix_length=24,
+                    virtual_gateway_address="10.1.100.1",
+                ),
+                CanonicalIPv4Address(
+                    ip="10.1.101.1", prefix_length=24,
+                    virtual_gateway_address="10.1.101.1",
+                ),
+            ],
+        ))
+        rendered = CiscoIOSXECLICodec().render(intent)
+        # Marker appears once even though two addresses carry the flag.
+        assert rendered.count(
+            " fabric forwarding mode anycast-gateway"
+        ) == 1
+
+    def test_anycast_capability_matrix_lists_supported_paths(self):
+        """Capability matrix declares the three new SD-Access paths
+        supported (Wave C) — keeping the IPv6 form unsupported as
+        documented."""
+        codec = CiscoIOSXECLICodec()
+        caps = codec.capabilities
+        supported = set(caps.supported)
+        unsupported = {u.path for u in caps.unsupported}
+        # Wave B + C wire-up.
+        assert "/interfaces/interface/vrrp-groups/group" in supported
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in supported
+        )
+        assert "/anycast-gateway-mac" in supported
+        # IPv6 anycast intentionally unsupported.
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in unsupported
+        )
+        # Per-VRF static-route also remains unsupported (separate work).
+        assert "/routing/static-route/vrf" in unsupported
+
+    def test_cross_vendor_virtual_ip_distinct_from_primary_emits_review(self):
+        """When ``virtual_gateway_address`` differs from the primary
+        IP (Junos / Arista VARP cross-vendor shape), IOS-XE SD-Access
+        has no equivalent — the renderer must emit a ``! review:``
+        comment rather than silently dropping the discrepancy."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent, CanonicalInterface, CanonicalIPv4Address,
+        )
+        intent = CanonicalIntent(hostname="sw")
+        intent.interfaces.append(CanonicalInterface(
+            name="Vlan100",
+            interface_type="ianaift:l3ipvlan",
+            ipv4_addresses=[
+                CanonicalIPv4Address(
+                    ip="10.1.100.1", prefix_length=24,
+                    # Distinct virtual IP — Junos-shape, not SD-Access.
+                    virtual_gateway_address="10.1.100.254",
+                ),
+            ],
+        ))
+        rendered = CiscoIOSXECLICodec().render(intent)
+        assert "! review:" in rendered
+        assert "virtual_gateway_address" in rendered
+        # And the SD-Access marker MUST NOT be emitted for this shape.
+        assert (
+            " fabric forwarding mode anycast-gateway" not in rendered
+        )

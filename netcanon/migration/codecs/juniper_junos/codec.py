@@ -145,6 +145,13 @@ class JunosCodec(CodecBase):
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6
             "/dhcp-servers/pool",                # Cluster E.1-B
+            # -- v0.2.0 Wave B: classic FHRP redundancy groups --
+            "/interfaces/interface/vrrp-groups/group",
+            # -- v0.2.0 Wave C: anycast-gateway companions --
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/interfaces/interface/ipv4/address/virtual-gateway-mac",
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",
+            "/interfaces/interface/ipv6/address/virtual-gateway-mac",
         ],
         lossy=[
             LossyPath(
@@ -197,6 +204,30 @@ class JunosCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- v0.2.0 Wave A: per-VRF static-route binding --
+            LossyPath(
+                path="/routing/static-route/vrf",
+                reason=(
+                    "CanonicalStaticRoute.vrf is parseable from ``set "
+                    "routing-instances <NAME> routing-options static "
+                    "route <dest>/<prefix> next-hop <gw>`` but the "
+                    "current Junos routing-instances dispatcher "
+                    "(``_apply_routing_instances``) only harvests RD "
+                    "/ RT / interface-binding / L3 VNI sub-paths; "
+                    "static routes inside the VRF block parse-and-"
+                    "ignore.  Top-level ``set routing-options static "
+                    "route`` lines round-trip cleanly with vrf=''.  "
+                    "Cross-vendor migration from a source carrying "
+                    "per-VRF static routes (Cisco IOS-XE ``ip route "
+                    "vrf <NAME> ...``, NX-OS ``vrf context <NAME> / "
+                    "ip route ...``) into Junos surfaces these "
+                    "routes at the global level today — operators "
+                    "must manually move them under the matching "
+                    "routing-instance until the dispatcher is "
+                    "widened (follow-up commit)."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -217,49 +248,25 @@ class JunosCodec(CodecBase):
                     "ACL models in other codecs and defers."
                 ),
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
-                reason=(
-                    "Anycast-gateway virtual IPv4 companion parses-and-"
-                    "ignores in v1.  Schema exists on "
-                    "CanonicalIPv4Address; wire-up scheduled for v0.2.0 "
-                    "Wave C (see docs/v0.2.0-planning/02-anycast-gateway/)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
-                reason=(
-                    "IPv6 anycast-gateway virtual IP companion parses-"
-                    "and-ignores in v1.  Schema exists on "
-                    "CanonicalIPv6Address; wire-up scheduled for v0.2.0 "
-                    "Wave C."
-                ),
-            ),
+            # -- v0.2.0 Wave C: anycast-gateway system MAC --
             UnsupportedPath(
                 path="/anycast-gateway-mac",
                 reason=(
-                    "System-wide anycast-gateway MAC parses-and-ignores "
-                    "in v1.  Schema exists on CanonicalIntent; wire-up "
-                    "scheduled for v0.2.0 Wave C."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
+                    "Junos has no system-wide anycast-gateway MAC: "
+                    "per-IRB-unit overrides live on "
+                    "CanonicalIPv4Address.virtual_gateway_mac (the "
+                    "``set interfaces irb unit <vid> virtual-gateway-"
+                    "v4-mac`` / ``-v6-mac`` grammar) and round-trip "
+                    "through the supported per-address surface "
+                    "instead.  The top-level CanonicalIntent."
+                    "anycast_gateway_mac field is silently dropped "
+                    "on render — cross-vendor migration from a "
+                    "source carrying the system-wide MAC (Arista "
+                    "``ip virtual-router mac-address``, NX-OS "
+                    "``fabric forwarding anycast-gateway-mac``) "
+                    "must distribute the value across every IRB "
+                    "unit's per-address MAC on the receiving Junos "
+                    "side."
                 ),
             ),
         ],

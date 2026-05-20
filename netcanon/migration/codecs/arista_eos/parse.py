@@ -40,6 +40,7 @@ from ...canonical.intent import (
     CanonicalLAG,
     CanonicalRADIUSServer,
     CanonicalRoutingInstance,
+    CanonicalVRRPGroup,
     CanonicalVxlan,
     CanonicalLocalUser,
     CanonicalSNMP,
@@ -147,6 +148,38 @@ _RADIUS_KEY_RE = re.compile(r'\bkey\s+(?:"([^"]*)"|(\S+))')
 
 _VRF_INSTANCE_RE = re.compile(r"^vrf\s+instance\s+(\S+)\s*$", re.MULTILINE)
 _INTERFACE_HEADER_RE = re.compile(r"^interface\s+(\S+)\s*$")
+
+# VARP system-wide MAC (Wave C anycast-gateway wire-up).  Form:
+# ``ip virtual-router mac-address 00:1c:73:00:dc:01``.  Top-level
+# (non-indented) line; one per chassis.  EOS only supports a
+# system-wide MAC for VARP — per-IP overrides are NOT a thing on
+# Arista, hence the ``virtual_gateway_mac`` per-address field is
+# declared lossy in the codec's capability matrix.  See
+# ``docs/v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md``
+# § "Arista EOS (VARP)" — edge case 3 documents the top-level
+# placement.
+_GLOBAL_VARP_MAC_RE = re.compile(
+    r"^ip\s+virtual-router\s+mac-address\s+(\S+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _vrrp_group_for(
+    iface: CanonicalInterface, gid: int, mode: str = "vrrp",
+) -> CanonicalVRRPGroup:
+    """Find-or-create a :class:`CanonicalVRRPGroup` on *iface*.
+
+    Multiple ``vrrp <gid> <subcommand>`` lines on the same interface
+    converge onto the same group record by ``group_id``.  The first
+    line seen wins on ``mode`` (caller may pass a non-default mode
+    once and subsequent calls inherit it).
+    """
+    for g in iface.vrrp_groups:
+        if g.group_id == gid:
+            return g
+    g = CanonicalVRRPGroup(group_id=gid, mode=mode)
+    iface.vrrp_groups.append(g)
+    return g
 
 # VLAN stanza: ``vlan <id>`` optionally followed by ``   name <name>``.
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$")
@@ -358,6 +391,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
             gateway=next_hop,
             interface="",
         ))
+
+    # --- VARP system-wide MAC (Wave C) -------------------------------
+    # ``ip virtual-router mac-address 00:1c:73:00:dc:01`` — top-level
+    # one-line directive that anchors EVERY VARP virtual-IP on the
+    # device.  Stored canonical in colon-hex (the Arista/Junos native
+    # form; cross-vendor renderers re-emit as dotted-triplet on
+    # IOS-XE / NX-OS).  Multiple lines collapse to last-write-wins
+    # (the EOS commit-time validator only accepts one anyway).
+    mac_m = _GLOBAL_VARP_MAC_RE.search(raw)
+    if mac_m:
+        intent.anycast_gateway_mac = mac_m.group(1).strip().lower()
 
     # --- SNMP block (single CanonicalSNMP assembled from lines) ---
     snmp = CanonicalSNMP()
@@ -878,6 +922,46 @@ def _apply_iface_subcommand(
             desc = desc[1:-1]
         iface.description = desc
         return
+    if line.startswith("ip address virtual "):
+        # VARP virtual IP (Wave C anycast-gateway wire-up).  Three
+        # shapes:
+        #   ``ip address virtual X/Y``                — primary VARP
+        #   ``ip address virtual X/Y secondary``      — secondary VARP
+        #   ``ip address virtual source-nat vrf V address Z``  — Tier 3
+        #
+        # The source-nat sibling is a DISTINCT feature (VARP source-NAT
+        # for VRF-leaked traffic; not anycast-gateway).  Discriminate
+        # on the first token after ``virtual``: if it's ``source-nat``,
+        # parse-and-ignore.  See
+        # ``docs/v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md``
+        # § "Arista EOS edge case 5".
+        rest = line.split(None, 3)[3].strip()
+        tokens = rest.split()
+        if not tokens:
+            return
+        if tokens[0] == "source-nat":
+            # Tier-3 — parse-and-ignore.
+            return
+        addr_token = tokens[0]
+        is_secondary = len(tokens) >= 2 and tokens[1].lower() == "secondary"
+        if "/" in addr_token:
+            ip_str, prefix_str = addr_token.split("/", 1)
+            try:
+                prefix_int = int(prefix_str)
+            except ValueError:
+                return
+            # EOS VARP has no per-leaf primary — only the virtual IP.
+            # Express that with ``ip=""`` on the canonical record;
+            # ``virtual_gateway_address`` carries the wire-form address.
+            # See ``docs/v0.2.0-planning/02-anycast-gateway/01-canonical-
+            # model.md`` § "EOS shape".
+            iface.ipv4_addresses.append(CanonicalIPv4Address(
+                ip="",
+                prefix_length=prefix_int,
+                is_secondary=is_secondary,
+                virtual_gateway_address=ip_str,
+            ))
+        return
     if line.startswith("ip address "):
         # ``ip address 10.0.0.1/31`` — CIDR form only (EOS).
         rest = line.split(None, 2)[2].strip()
@@ -893,6 +977,29 @@ def _apply_iface_subcommand(
                 ))
             except ValueError:
                 pass
+        return
+    if line.startswith("ipv6 address virtual "):
+        # IPv6 VARP (EOS 4.30+).  Mirror of the v4 path; ``ip=""``
+        # marks the record as VARP-only.
+        rest = line.split(None, 3)[3].strip()
+        tokens = rest.split()
+        if not tokens:
+            return
+        addr_token = tokens[0]
+        is_secondary = len(tokens) >= 2 and tokens[1].lower() == "secondary"
+        if "/" in addr_token:
+            ip_str, prefix_str = addr_token.split("/", 1)
+            try:
+                prefix_int = int(prefix_str)
+            except ValueError:
+                return
+            iface.ipv6_addresses.append(CanonicalIPv6Address(
+                ip="",
+                prefix_length=prefix_int,
+                scope="global",
+                is_secondary=is_secondary,
+                virtual_gateway_address=ip_str,
+            ))
         return
     if line.startswith("ipv6 address "):
         # GAP-EVPN-3: ``ipv6 address 2001:db8::1/64`` (global) or
@@ -1022,6 +1129,124 @@ def _apply_iface_subcommand(
         parts = line.split(None, 1)
         if len(parts) >= 2:
             iface.vrf = parts[1].strip()
+        return
+    # --- Classic VRRP (Wave B) -------------------------------------
+    # Arista EOS multi-line VRRP grammar, both modern (``ipv4`` /
+    # ``ipv6`` family discriminator) and legacy (bare ``ip``) forms.
+    # Every ``vrrp <gid> ...`` sub-command on the same interface
+    # converges onto a single :class:`CanonicalVRRPGroup` keyed by
+    # gid via :func:`_vrrp_group_for`.  See
+    # ``docs/v0.2.0-planning/01-vrrp-canonical/03-parse-render-
+    # touchpoints.md`` § "2. arista_eos" for the field-by-field
+    # mapping.
+    if line.startswith("vrrp ") or line.startswith("no vrrp "):
+        # ``vrrp <gid> ipv4 <ip>`` (modern) or ``vrrp <gid> ip <ip>`` (legacy).
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+(?:ipv4|ip)\s+(\S+)\s*$", line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            g.virtual_ips.append(m.group(2))
+            return
+        # ``vrrp <gid> ipv6 <ip>``
+        m = re.match(r"^vrrp\s+(\d+)\s+ipv6\s+(\S+)\s*$", line)
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            g.virtual_ipv6s.append(m.group(2))
+            return
+        # ``vrrp <gid> priority <N>``  /  ``vrrp <gid> priority-level <N>``
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+priority(?:-level)?\s+(\d+)\s*$", line,
+        )
+        if m:
+            try:
+                pri = int(m.group(2))
+            except ValueError:
+                return
+            # Schema clamps to 1..254; defensively skip out-of-range
+            # values rather than raising at parse-time.
+            if 1 <= pri <= 254:
+                g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+                g.priority = pri
+            return
+        # ``vrrp <gid> preempt`` / ``no vrrp <gid> preempt``
+        m = re.match(
+            r"^(no\s+)?vrrp\s+(\d+)\s+preempt\b.*$", line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(2)), mode="vrrp")
+            g.preempt = not bool(m.group(1))
+            return
+        # ``vrrp <gid> description <text>`` (operator-supplied).
+        m = re.match(
+            r'^vrrp\s+(\d+)\s+description\s+(.+?)\s*$', line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            text = m.group(2).strip()
+            # Bracketing quotes (EOS sometimes quotes descriptions) —
+            # strip them so the canonical value matches the operator
+            # intent rather than the wire spelling.
+            if len(text) >= 2 and text[0] == text[-1] and text[0] in '"\'':
+                text = text[1:-1]
+            g.description = text
+            return
+        # ``vrrp <gid> track <iface> [decrement <N>]`` — the decrement
+        # value drops to Lossy in v0.2.0 (the canonical schema only
+        # carries the interface name).
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+track\s+(\S+)"
+            r"(?:\s+decrement\s+\d+)?\s*$",
+            line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            tracked = m.group(2)
+            if tracked not in g.track_interfaces:
+                g.track_interfaces.append(tracked)
+            return
+        # ``vrrp <gid> timers advertise <N>`` (VRRPv2 seconds form).
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+timers\s+advertise\s+(\d+)\s*$", line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            try:
+                g.advertisement_interval = int(m.group(2))
+            except ValueError:
+                pass
+            return
+        # ``vrrp <gid> mac-address <MAC>`` — per-group MAC override.
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+mac-address\s+(\S+)\s*$", line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            g.virtual_mac = m.group(2).strip().lower()
+            return
+        # ``vrrp <gid> authentication text <key>`` /
+        # ``vrrp <gid> authentication md5 key-string <key>``
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+authentication\s+text\s+(\S+)\s*$", line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            g.authentication = f"plain:{m.group(2)}"
+            return
+        m = re.match(
+            r"^vrrp\s+(\d+)\s+authentication\s+md5\s+key-string\s+"
+            r"(\S+)\s*$",
+            line,
+        )
+        if m:
+            g = _vrrp_group_for(iface, int(m.group(1)), mode="vrrp")
+            g.authentication = f"md5:{m.group(2)}"
+            return
+        # Any other ``vrrp <gid> ...`` sub-command (shutdown, session
+        # description, version, timers-learn, etc.) drops through as
+        # parse-and-ignore — the canonical schema only covers the
+        # cross-vendor-stable surface.  Eat the line so it doesn't
+        # hit the catch-all unrecognised-command tolerance below.
         return
     # GAP 6: Vxlan interface sub-commands — VLAN↔VNI mappings and
     # VRF↔L3-VNI mappings live here.  ``iface.name`` starts with

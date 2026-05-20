@@ -129,6 +129,24 @@ class CiscoIOSXECLICodec(CodecBase):
             "/snmp/contact",
             "/snmp/trap-host",
             "/snmp/v3-user",
+            # Wave B (v0.2.0) — classic VRRP groups.  Parses the
+            # ``vrrp <vrid> ip|ipv6|priority|preempt|description|
+            # authentication|track|timers`` family inside ``interface``
+            # stanzas; renders the classic single-line per-attribute
+            # form (broadest IOS-XE compatibility, 15.x onward).
+            "/interfaces/interface/vrrp-groups/group",
+            # Wave C (v0.2.0) — SD-Access anycast-gateway.  Per-SVI
+            # ``fabric forwarding mode anycast-gateway`` mirrors the
+            # primary IP into ``virtual_gateway_address`` and round-
+            # trips back out on render.  IPv6 form intentionally
+            # unsupported (no fixture coverage today; see UnsupportedPath
+            # below).
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            # Wave C (v0.2.0) — top-level ``fabric forwarding
+            # anycast-gateway-mac <MAC>`` declares the chassis-wide
+            # anycast MAC.  Round-trips between Cisco dotted-triplet
+            # wire form and canonical colon-hex.
+            "/anycast-gateway-mac",
         ],
         lossy=[
             LossyPath(
@@ -152,6 +170,25 @@ class CiscoIOSXECLICodec(CodecBase):
                     "prefix records today — lossy-by-default "
                     "extension point pending future route-map "
                     "parsing."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/address-family",
+                reason=(
+                    "IOS-XE 17.12+ supports the modern multi-line "
+                    "``vrrp <VRID> address-family ipv4`` nested block "
+                    "with indented ``address`` / ``priority`` / "
+                    "``preempt`` sub-commands.  The parser detects the "
+                    "surface (so the lossiness is visible) but does "
+                    "not deep-populate the nested attributes.  Render "
+                    "always emits the classic single-line per-"
+                    "attribute form, which is accepted by every IOS-"
+                    "XE release from 15.x onward and is the form real "
+                    "captures emit.  A config that uses ONLY the "
+                    "modern AF form round-trips as an empty group "
+                    "shell — the lossiness is intentional and "
+                    "operator-visible."
                 ),
                 severity="warn",
             ),
@@ -261,40 +298,18 @@ class CiscoIOSXECLICodec(CodecBase):
                     "policy manually."
                 ),
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
-                reason=(
-                    "Anycast-gateway virtual IPv4 companion parses-and-"
-                    "ignores in v1.  Schema exists on "
-                    "CanonicalIPv4Address; wire-up scheduled for v0.2.0 "
-                    "Wave C (see docs/v0.2.0-planning/02-anycast-gateway/)."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- per-VRF static routes / IPv6 anycast --
             UnsupportedPath(
                 path="/interfaces/interface/ipv6/address/virtual-gateway-address",
                 reason=(
                     "IPv6 anycast-gateway virtual IP companion parses-"
-                    "and-ignores in v1.  Schema exists on "
-                    "CanonicalIPv6Address; wire-up scheduled for v0.2.0 "
-                    "Wave C."
-                ),
-            ),
-            UnsupportedPath(
-                path="/anycast-gateway-mac",
-                reason=(
-                    "System-wide anycast-gateway MAC parses-and-ignores "
-                    "in v1.  Schema exists on CanonicalIntent; wire-up "
-                    "scheduled for v0.2.0 Wave C."
+                    "and-ignores in v1.  IOS-XE SD-Access IPv6 anycast "
+                    "is rare in production captures (the corpus has "
+                    "zero fixtures exercising it); wire-up deferred "
+                    "until demand arrives.  IPv4 SD-Access anycast IS "
+                    "supported (see ``/interfaces/interface/ipv4/"
+                    "address/virtual-gateway-address`` in the "
+                    "``supported`` list)."
                 ),
             ),
             UnsupportedPath(
@@ -510,9 +525,14 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         yield "/interfaces/interface/config/enabled"
         if iface.interface_type:
             yield "/interfaces/interface/config/type"
-        for _ in iface.ipv4_addresses:
+        for addr in iface.ipv4_addresses:
             yield "/interfaces/interface/ipv4/address/ip"
             yield "/interfaces/interface/ipv4/address/prefix-length"
+            if addr.virtual_gateway_address:
+                yield (
+                    "/interfaces/interface/ipv4/address/"
+                    "virtual-gateway-address"
+                )
         for _ in iface.ipv6_addresses:                # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
@@ -520,11 +540,15 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/interfaces/interface/dhcp-client-v6"
         if iface.tunnel_type:
             yield "/interfaces/interface/tunnel-type"
+        for _ in iface.vrrp_groups:
+            yield "/interfaces/interface/vrrp-groups/group"
     for _ in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"
     for _ in intent.static_routes:
         yield "/routing/static-route"
+    if intent.anycast_gateway_mac:
+        yield "/anycast-gateway-mac"
     # Tier 2 — emit only what's populated
     if intent.snmp is not None:
         if intent.snmp.community:

@@ -50,6 +50,7 @@ from ...canonical.intent import (
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -103,6 +104,108 @@ _TUNNEL_MODE_RE = re.compile(
     r"^\s+tunnel\s+mode\s+(gre|ipip|ipsec|vxlan|ipv6ip)\b",
     re.IGNORECASE,
 )
+
+# ── VRRP grammar — classic single-line per-attribute form ──
+# IOS-XE supports two surfaces:
+#   * Classic (v15.x onward): ``vrrp <VRID> <sub-cmd>`` lines under an
+#     ``interface`` stanza.  Each sub-cmd carries one attribute.
+#   * Modern (17.12+): nested ``vrrp <VRID> address-family ipv4`` block
+#     with indented sub-commands.  Declared lossy in the capability
+#     matrix; the parser flags the surface via the ``_VRRP_AF_RE``
+#     match but doesn't deep-populate the address-family branch.
+# See docs/v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md
+# § "Cisco IOS-XE" for the full grammar reference.
+_VRRP_IP_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+ip\s+(?P<ip>\S+)"
+    r"(?P<secondary>\s+secondary)?\s*$",
+    re.IGNORECASE,
+)
+_VRRP_IPV6_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+ipv6\s+(?P<ip>\S+)\s*$",
+    re.IGNORECASE,
+)
+_VRRP_PRIORITY_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+priority\s+(?P<priority>\d+)\s*$",
+    re.IGNORECASE,
+)
+_VRRP_PREEMPT_RE = re.compile(
+    r"^\s+(?P<no>no\s+)?vrrp\s+(?P<group>\d+)\s+preempt\b.*$",
+    re.IGNORECASE,
+)
+_VRRP_DESCRIPTION_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+description\s+(?P<text>.+?)\s*$",
+    re.IGNORECASE,
+)
+_VRRP_AUTH_MD5_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+authentication\s+md5\s+"
+    r"key-string\s+(?P<key>\S+)\s*$",
+    re.IGNORECASE,
+)
+_VRRP_AUTH_TEXT_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+authentication\s+text\s+"
+    r"(?P<key>\S+)\s*$",
+    re.IGNORECASE,
+)
+_VRRP_TRACK_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+track\s+(?P<object>\S+)"
+    r"(?:\s+decrement\s+(?P<dec>\d+))?\s*$",
+    re.IGNORECASE,
+)
+_VRRP_TIMERS_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+timers\s+advertise\s+"
+    r"(?P<msec>msec\s+)?(?P<value>\d+)\s*$",
+    re.IGNORECASE,
+)
+# Modern address-family form discriminator.  IOS-XE 17.12+ wraps VRRP
+# config in a nested ``vrrp <VRID> address-family {ipv4|ipv6}`` block.
+# We DETECT the surface so the capability matrix's lossy declaration is
+# justified, but do not deep-populate the nested attributes — the
+# classic form covers every documented field today and is the form
+# real captures emit.  See LossyPath declaration in codec.py for the
+# rationale.
+_VRRP_AF_RE = re.compile(
+    r"^\s+vrrp\s+(?P<group>\d+)\s+address-family\s+(?P<af>ipv4|ipv6)\s*$",
+    re.IGNORECASE,
+)
+
+# ── SD-Access anycast-gateway grammar ──
+# Top-level: ``fabric forwarding anycast-gateway-mac <MAC>`` declares
+# the chassis-wide anycast MAC.  Per-SVI: ``fabric forwarding mode
+# anycast-gateway`` (inside an ``interface VlanN`` stanza) marks the
+# primary IP as the anycast gateway.  See docs/v0.2.0-planning/
+# 02-anycast-gateway/02-per-vendor-grammar.md § "Cisco IOS-XE SD-Access".
+_FABRIC_AG_MAC_RE = re.compile(
+    r"^fabric\s+forwarding\s+anycast-gateway-mac\s+(?P<mac>\S+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+_FABRIC_AG_MODE_RE = re.compile(
+    r"^\s+fabric\s+forwarding\s+mode\s+anycast-gateway\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalise_mac_to_colon_hex(mac: str) -> str:
+    """Normalise a vendor MAC representation to canonical colon-hex.
+
+    Accepts the three common forms an operator might paste:
+
+    * dotted-triplet (Cisco / NX-OS native): ``0001.c73a.0000``
+    * colon-hex (canonical / Unix): ``00:01:c7:3a:00:00``
+    * dash-hex (Windows / IEEE): ``00-01-C7-3A-00-00``
+
+    Returns the lower-case ``aa:bb:cc:dd:ee:ff`` form.  Returns empty
+    string for input the function can't classify — leaves the caller
+    to skip the canonical population rather than poison the field
+    with malformed data.
+    """
+    if not mac:
+        return ""
+    raw = mac.strip().lower()
+    # Strip every separator and keep only hex digits.
+    hex_only = re.sub(r"[^0-9a-f]", "", raw)
+    if len(hex_only) != 12:
+        return ""
+    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
 
 #: Interface-name prefix → IANA ifType hint.
 _TYPE_HINTS: dict[str, str] = {
@@ -373,6 +476,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # through any other codec drops these fields silently.
     _parse_globals(raw, intent)
 
+    # SD-Access anycast-gateway system-wide MAC.  ``fabric forwarding
+    # anycast-gateway-mac <MAC>`` at top-level declares the chassis-
+    # wide anycast MAC.  Per-SVI anycast-mode marker is handled
+    # inside :func:`_parse_interfaces`.
+    m = _FABRIC_AG_MAC_RE.search(raw)
+    if m:
+        normalised = _normalise_mac_to_colon_hex(m.group("mac"))
+        if normalised:
+            intent.anycast_gateway_mac = normalised
+
     # VRF definitions (``vrf definition <name>`` top-level stanzas).
     # Per-interface ``vrf forwarding <name>`` membership is set by
     # :func:`_parse_interfaces`; this helper harvests the parent
@@ -611,6 +724,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "kind": "",
                 "dhcp_client_v6": "",
                 "tunnel_type": "",
+                # VRRP groups: dict keyed by group_id so multiple sub-
+                # commands on the same VRID converge on the same scratch
+                # record.  Materialised into list[CanonicalVRRPGroup] at
+                # :func:`_build_canonical_interface` time.
+                "vrrp_groups": {},
+                # SD-Access anycast-gateway flag.  ``fabric forwarding
+                # mode anycast-gateway`` inside this interface stanza
+                # sets the flag; at stanza-close time every primary IPv4
+                # address gets ``virtual_gateway_address = ip`` (the
+                # NX-OS / IOS-XE SD-Access mirror semantic).
+                "fabric_forwarding_anycast": False,
             }
             continue
 
@@ -787,23 +911,182 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                     current["kind"] = "mgmt"
             continue
 
+        # ── VRRP dispatch (classic single-line per-attribute form) ──
+        # Each sub-command updates the per-VRID scratch dict on
+        # ``current["vrrp_groups"]``.  The dispatch order MUST stay
+        # specific-first: ``vrrp N ip X`` must lose to ``vrrp N ipv6 X``
+        # only when ipv6 is checked first, and the priority / preempt /
+        # description / auth / track / timers regexes are mutually
+        # exclusive so order between them doesn't matter.
+        if _dispatch_vrrp_line(line, current):
+            continue
+
+        # ── SD-Access anycast-gateway per-SVI discriminator ──
+        # ``fabric forwarding mode anycast-gateway`` marks the SVI's
+        # primary IP as the anycast gateway.  We set the flag here; at
+        # stanza-close time (``_build_canonical_interface``) every
+        # primary IPv4 address gets ``virtual_gateway_address = ip`` to
+        # mirror the NX-OS / IOS-XE SD-Access shape (the primary IP IS
+        # the anycast IP).
+        if _FABRIC_AG_MODE_RE.match(line):
+            current["fabric_forwarding_anycast"] = True
+            continue
+
     if current is not None:
         interfaces.append(_build_canonical_interface(current))
 
     return interfaces
 
 
+def _dispatch_vrrp_line(line: str, current: dict[str, Any]) -> bool:
+    """Try each VRRP sub-command regex against *line*.
+
+    Returns True iff one matched and ``current["vrrp_groups"]`` was
+    updated.  Separates the (relatively bulky) VRRP grammar handling
+    from the main per-interface loop so the loop's other branches stay
+    readable.  ``current`` is the parse-time scratch dict for the
+    current interface stanza; mutation happens in place.
+    """
+    def _group(gid: int) -> dict[str, Any]:
+        """Get-or-create the scratch sub-dict for ``gid``."""
+        return current["vrrp_groups"].setdefault(gid, {
+            "group_id": gid,
+            "mode": "vrrp",
+            "virtual_ips": [],
+            "virtual_ipv6s": [],
+            "virtual_mac": "",
+            "priority": 100,
+            "preempt": True,
+            "advertisement_interval": 1,
+            "authentication": "",
+            "track_interfaces": [],
+            "description": "",
+        })
+
+    # ipv6 first — ``vrrp N ipv6 X`` would otherwise be greedy-matched
+    # by ``vrrp N ip X`` (both regexes anchor on ``\s+ip``).
+    m = _VRRP_IPV6_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["virtual_ipv6s"].append(m.group("ip"))
+        return True
+    m = _VRRP_IP_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["virtual_ips"].append(m.group("ip"))
+        return True
+    m = _VRRP_PRIORITY_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["priority"] = int(m.group("priority"))
+        return True
+    m = _VRRP_PREEMPT_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["preempt"] = not bool(m.group("no"))
+        return True
+    m = _VRRP_DESCRIPTION_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        # Strip surrounding quotes (operator quoting convention).
+        g["description"] = m.group("text").strip().strip('"')
+        return True
+    m = _VRRP_AUTH_MD5_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["authentication"] = f"md5:{m.group('key')}"
+        return True
+    m = _VRRP_AUTH_TEXT_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        g["authentication"] = f"plain:{m.group('key')}"
+        return True
+    m = _VRRP_TRACK_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        # Decrement value (group 'dec') is lossy — canonical model
+        # records the tracked object name only.  See per-vendor-grammar
+        # § "Track-object with decrement".
+        g["track_interfaces"].append(m.group("object"))
+        return True
+    m = _VRRP_TIMERS_RE.match(line)
+    if m:
+        g = _group(int(m.group("group")))
+        # ``timers advertise msec <MS>`` drops to default 1s (lossy
+        # sub-second values).  See per-vendor-grammar § "msec form".
+        if m.group("msec"):
+            g["advertisement_interval"] = 1
+        else:
+            g["advertisement_interval"] = int(m.group("value"))
+        return True
+    # Modern address-family form discriminator.  We acknowledge the
+    # surface so the caller can stop processing it as a generic
+    # sub-command, but don't deep-populate — the capability matrix
+    # declares this form lossy.  Lines inside the AF block use
+    # different indentation; the next non-matching indented line
+    # closes the outer interface stanza naturally.
+    m = _VRRP_AF_RE.match(line)
+    if m:
+        # Touch the group to record its existence even though we drop
+        # the AF-nested attributes.  Without this, a config that uses
+        # ONLY the modern form would silently disappear; flagging the
+        # group ID makes the lossiness visible on the round-trip.
+        _group(int(m.group("group")))
+        return True
+    return False
+
+
 def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
-    """Convert the parse-time dict into a CanonicalInterface."""
+    """Convert the parse-time dict into a CanonicalInterface.
+
+    Final-pass shaping happens here so anything stanza-wide that
+    influences per-address state (SD-Access anycast-gateway mode) is
+    applied AFTER every ``ip address`` line has been collected.  The
+    operator is free to write ``fabric forwarding mode anycast-gateway``
+    either before OR after ``ip address X``; the per-interface flag
+    decouples the two.
+    """
+    # IPv4 addresses — apply SD-Access anycast-gateway flag last so
+    # ordering on the wire doesn't matter.  Per IOS-XE SD-Access
+    # semantics the primary IP IS the anycast gateway, so we mirror
+    # the address into ``virtual_gateway_address``.  Mirrors the
+    # NX-OS DAG shape (see CanonicalIPv4Address docstring).
+    fabric_anycast = raw.get("fabric_forwarding_anycast", False)
+    ipv4_addrs: list[CanonicalIPv4Address] = []
+    for a in raw.get("ipv4", []):
+        vga = a["ip"] if fabric_anycast else ""
+        ipv4_addrs.append(CanonicalIPv4Address(
+            ip=a["ip"],
+            prefix_length=a["prefix_length"],
+            virtual_gateway_address=vga,
+        ))
+
+    # VRRP groups — materialise the per-VRID scratch dicts into the
+    # canonical model.  Sorted by group_id for deterministic ordering
+    # (operator-natural; rendered output is stable across re-runs).
+    vrrp_groups: list[CanonicalVRRPGroup] = []
+    for gid in sorted(raw.get("vrrp_groups", {})):
+        g = raw["vrrp_groups"][gid]
+        vrrp_groups.append(CanonicalVRRPGroup(
+            group_id=g["group_id"],
+            mode=g.get("mode", "vrrp"),
+            virtual_ips=list(g.get("virtual_ips", [])),
+            virtual_ipv6s=list(g.get("virtual_ipv6s", [])),
+            virtual_mac=g.get("virtual_mac", ""),
+            priority=g.get("priority", 100),
+            preempt=g.get("preempt", True),
+            advertisement_interval=g.get("advertisement_interval", 1),
+            authentication=g.get("authentication", ""),
+            track_interfaces=list(g.get("track_interfaces", [])),
+            description=g.get("description", ""),
+        ))
+
     return CanonicalInterface(
         name=raw["name"],
         description=raw.get("description", ""),
         enabled=raw.get("enabled", True),
         interface_type=raw.get("type", ""),
-        ipv4_addresses=[
-            CanonicalIPv4Address(ip=a["ip"], prefix_length=a["prefix_length"])
-            for a in raw.get("ipv4", [])
-        ],
+        ipv4_addresses=ipv4_addrs,
         ipv6_addresses=[
             CanonicalIPv6Address(
                 ip=a["ip"],
@@ -822,6 +1105,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         kind=raw.get("kind", ""),
         dhcp_client_v6=raw.get("dhcp_client_v6", ""),
         tunnel_type=raw.get("tunnel_type", ""),
+        vrrp_groups=vrrp_groups,
     )
 
 

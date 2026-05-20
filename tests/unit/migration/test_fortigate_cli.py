@@ -37,6 +37,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIPv4Address,
     CanonicalInterface,
     CanonicalStaticRoute,
+    CanonicalVRRPGroup,
 )
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
@@ -559,6 +560,382 @@ class TestCrossAdapter:
         assert job.status is MigrationJobStatus.completed
         assert 'set hostname "ios-to-fgt"' in (job.rendered or "")
         assert "config router static" in (job.rendered or "")
+
+
+# ---------------------------------------------------------------------------
+# VRRP groups (Wave B — v0.2.0)
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPGroups:
+    """Coverage for the nested ``config vrrp / edit N`` sub-block
+    inside ``config system interface / edit X``.
+
+    FortiGate is a firewall / edge platform: it has NO anycast-gateway
+    surface, so HA / L3 redundancy is delivered exclusively through
+    VRRP groups.  The codec lives at the ``CanonicalVRRPGroup`` layer
+    (Wave B, see ``docs/v0.2.0-planning/01-vrrp-canonical/``).
+    """
+
+    _BASIC = """\
+config system interface
+    edit "vlan10"
+        set vdom "root"
+        set ip 10.0.10.1 255.255.255.0
+        config vrrp
+            edit 10
+                set vrip 10.0.10.254
+                set priority 110
+                set preempt enable
+                set adv-interval 1
+                set start-time 3
+                set status enable
+            next
+        end
+    next
+end
+"""
+
+    def test_basic_nested_edit_parsed(self):
+        """``config vrrp / edit N`` block attaches a CanonicalVRRPGroup
+        to the enclosing ``CanonicalInterface``."""
+        tree = FortiGateCLICodec().parse(self._BASIC)
+        iface = next(i for i in tree.interfaces if i.name == "vlan10")
+        assert len(iface.vrrp_groups) == 1
+        group = iface.vrrp_groups[0]
+        assert group.group_id == 10
+        assert group.mode == "vrrp"
+        assert group.virtual_ips == ["10.0.10.254"]
+        assert group.priority == 110
+        assert group.preempt is True
+        assert group.advertisement_interval == 1
+
+    def test_preempt_disable_maps_to_false(self):
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 5
+                set vrip 192.0.2.254
+                set preempt disable
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        iface = next(i for i in tree.interfaces if i.name == "port1")
+        assert iface.vrrp_groups[0].preempt is False
+
+    def test_preempt_enable_maps_to_true(self):
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 5
+                set vrip 192.0.2.254
+                set preempt enable
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.interfaces[0].vrrp_groups[0].preempt is True
+
+    def test_status_disable_still_parses_but_is_marker_only(self):
+        """``set status disable`` is a per-edit on/off knob; FortiOS
+        treats absent ``status`` as enabled, and the canonical model
+        has no per-group enabled flag.  Parse should still capture the
+        group rather than dropping it."""
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 7
+                set vrip 192.0.2.7
+                set status disable
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        assert len(tree.interfaces[0].vrrp_groups) == 1
+        assert tree.interfaces[0].vrrp_groups[0].group_id == 7
+
+    def test_multiple_groups_per_interface(self):
+        """Multiple ``edit N`` blocks under a single ``config vrrp``
+        — codec creates one CanonicalVRRPGroup record per edit."""
+        raw = """\
+config system interface
+    edit "vlan10"
+        set ip 10.0.10.1 255.255.255.0
+        config vrrp
+            edit 10
+                set vrip 10.0.10.254
+                set priority 110
+            next
+            edit 11
+                set vrip 10.0.10.253
+                set priority 90
+                set preempt disable
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        iface = next(i for i in tree.interfaces if i.name == "vlan10")
+        assert len(iface.vrrp_groups) == 2
+        gid_to_group = {g.group_id: g for g in iface.vrrp_groups}
+        assert gid_to_group[10].priority == 110
+        assert gid_to_group[10].preempt is True  # FortiOS default
+        assert gid_to_group[11].priority == 90
+        assert gid_to_group[11].preempt is False
+        assert gid_to_group[11].virtual_ips == ["10.0.10.253"]
+
+    def test_missing_vrip_drops_edit(self):
+        """A ``config vrrp / edit N`` block without ``set vrip`` is
+        malformed — FortiOS would reject it on commit.  Parser drops
+        silently rather than constructing a half-populated record."""
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 10
+                set priority 110
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.interfaces[0].vrrp_groups == []
+
+    def test_out_of_range_group_id_drops(self):
+        """VRID is bounded to 1-255 by the IETF VRRP spec — and the
+        ``CanonicalVRRPGroup`` pydantic validator enforces the bound.
+        Edits with out-of-range IDs are silently dropped."""
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 999
+                set vrip 192.0.2.254
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.interfaces[0].vrrp_groups == []
+
+    def test_advertisement_interval_and_authentication_parsed(self):
+        """``set adv-interval N`` → ``advertisement_interval``;
+        ``set authentication T`` → ``authentication="plain:T"``."""
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 1
+                set vrip 192.0.2.254
+                set adv-interval 5
+                set authentication "secretpass"
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        group = tree.interfaces[0].vrrp_groups[0]
+        assert group.advertisement_interval == 5
+        assert group.authentication == "plain:secretpass"
+
+    def test_vrdst_appended_to_track_interfaces(self):
+        """FortiOS ``set vrdst <iface>`` is destination-tracking
+        — the canonical surface is ``track_interfaces`` for
+        cross-vendor consistency."""
+        raw = """\
+config system interface
+    edit "port1"
+        config vrrp
+            edit 1
+                set vrip 192.0.2.254
+                set vrdst port2
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.interfaces[0].vrrp_groups[0].track_interfaces == ["port2"]
+
+    def test_render_basic_group(self):
+        """Render emits the nested ``config vrrp / edit N / set vrip
+        / set priority / set preempt / set status enable / next / end``
+        block inside the interface edit body."""
+        tree = CanonicalIntent(interfaces=[
+            CanonicalInterface(
+                name="vlan10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.10.1", prefix_length=24,
+                )],
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10,
+                    virtual_ips=["10.0.10.254"],
+                    priority=110,
+                    preempt=True,
+                )],
+            ),
+        ])
+        out = FortiGateCLICodec().render(tree)
+        assert "        config vrrp" in out
+        assert "            edit 10" in out
+        assert "                set vrip 10.0.10.254" in out
+        assert "                set priority 110" in out
+        # Preempt at FortiOS default (enable) suppressed — keep render
+        # minimal so it mirrors a fresh export from a real FortiGate.
+        assert "set preempt disable" not in out
+        assert "                set status enable" in out
+        assert "            next" in out
+        assert "        end" in out
+
+    def test_render_preempt_disable_emits_explicit_line(self):
+        """When the canonical diverges from FortiOS's preempt default,
+        the renderer emits ``set preempt disable`` explicitly."""
+        tree = CanonicalIntent(interfaces=[
+            CanonicalInterface(
+                name="port1",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=1,
+                    virtual_ips=["192.0.2.254"],
+                    preempt=False,
+                )],
+            ),
+        ])
+        out = FortiGateCLICodec().render(tree)
+        assert "                set preempt disable" in out
+
+    def test_render_multi_vip_emits_lossy_review_comment(self):
+        """FortiOS ``set vrip`` accepts a single VIP per group.
+        Canonical ``virtual_ips`` with >1 entry emits the first VIP
+        and a ``# review:`` line naming the dropped tail."""
+        tree = CanonicalIntent(interfaces=[
+            CanonicalInterface(
+                name="port1",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=1,
+                    virtual_ips=["192.0.2.254", "192.0.2.253"],
+                )],
+            ),
+        ])
+        out = FortiGateCLICodec().render(tree)
+        assert "                set vrip 192.0.2.254" in out
+        assert "# review:" in out
+        assert "192.0.2.253" in out
+
+    def test_round_trip_stable(self):
+        """``parse(render(parse(raw))) == parse(raw)`` for VRRP
+        groups — every wire-token round-trips on the same vendor."""
+        codec = FortiGateCLICodec()
+        first = codec.parse(self._BASIC)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        iface1 = next(i for i in first.interfaces if i.name == "vlan10")
+        iface2 = next(i for i in second.interfaces if i.name == "vlan10")
+        assert len(iface1.vrrp_groups) == len(iface2.vrrp_groups) == 1
+        g1, g2 = iface1.vrrp_groups[0], iface2.vrrp_groups[0]
+        assert g1.group_id == g2.group_id
+        assert g1.virtual_ips == g2.virtual_ips
+        assert g1.priority == g2.priority
+        assert g1.preempt == g2.preempt
+        assert g1.advertisement_interval == g2.advertisement_interval
+
+    def test_round_trip_multi_group_stable(self):
+        """Multi-group round-trip — order + per-group fields
+        preserved across one parse-render-parse cycle."""
+        raw = """\
+config system interface
+    edit "vlan10"
+        set ip 10.0.10.1 255.255.255.0
+        config vrrp
+            edit 10
+                set vrip 10.0.10.254
+                set priority 110
+            next
+            edit 11
+                set vrip 10.0.10.253
+                set priority 90
+                set preempt disable
+            next
+        end
+    next
+end
+"""
+        codec = FortiGateCLICodec()
+        first = codec.parse(raw)
+        second = codec.parse(codec.render(first))
+        iface1 = next(i for i in first.interfaces if i.name == "vlan10")
+        iface2 = next(i for i in second.interfaces if i.name == "vlan10")
+        gid_first = sorted(g.group_id for g in iface1.vrrp_groups)
+        gid_second = sorted(g.group_id for g in iface2.vrrp_groups)
+        assert gid_first == gid_second == [10, 11]
+        # Priority + preempt survive on both groups.
+        as_dict_first = {g.group_id: g for g in iface1.vrrp_groups}
+        as_dict_second = {g.group_id: g for g in iface2.vrrp_groups}
+        for gid in (10, 11):
+            assert as_dict_first[gid].priority == as_dict_second[gid].priority
+            assert as_dict_first[gid].preempt == as_dict_second[gid].preempt
+
+    def test_render_hsrp_mode_emits_review_not_vrrp(self):
+        """Cross-vendor HSRP source -> FortiGate target: the wire
+        protocol is not interoperable.  Renderer emits a ``review:``
+        comment rather than fabricating a VRRP block."""
+        tree = CanonicalIntent(interfaces=[
+            CanonicalInterface(
+                name="port1",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10,
+                    mode="hsrp",
+                    virtual_ips=["192.0.2.254"],
+                )],
+            ),
+        ])
+        out = FortiGateCLICodec().render(tree)
+        # The config vrrp wrapper still emits (interface had at least
+        # one redundancy group), but the HSRP record collapses to a
+        # comment-form review line.
+        assert "config vrrp" in out
+        assert "# review:" in out
+        assert "hsrp" in out
+        # No ``edit <gid>`` line for the HSRP group.
+        assert "            edit 10" not in out
+
+    def test_capability_matrix_vrrp_supported(self):
+        """Wave B flip: VRRP path lifts from ``unsupported`` to
+        ``supported``."""
+        caps = FortiGateCLICodec().capabilities
+        assert "/interfaces/interface/vrrp-groups/group" in caps.supported
+        unsupported_paths = [u.path for u in caps.unsupported]
+        assert (
+            "/interfaces/interface/vrrp-groups/group" not in unsupported_paths
+        )
+
+    def test_capability_matrix_anycast_still_unsupported(self):
+        """FortiGate is a firewall / edge platform — anycast-gateway
+        remains unsupported.  HA on FortiGate is delivered through
+        VRRP groups, not anycast fabrics."""
+        unsupported = {u.path for u in FortiGateCLICodec().capabilities.unsupported}
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in unsupported
+        )
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in unsupported
+        )
+        assert "/anycast-gateway-mac" in unsupported
 
 
 # ---------------------------------------------------------------------------

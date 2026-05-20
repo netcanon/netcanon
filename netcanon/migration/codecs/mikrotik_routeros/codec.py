@@ -146,6 +146,16 @@ class MikroTikRouterOSCodec(CodecBase):
             "/snmp/contact",
             "/snmp/trap-host",
             "/snmp/v3-user",
+            # v0.2.0 Wave B — VRRP wire-up.  RouterOS exposes the
+            # classic IETF VRRP primitive natively under top-level
+            # ``/interface vrrp``; the codec parses + renders the
+            # full canonical surface (group_id, priority, preempt,
+            # advertisement_interval, IPv4/IPv6 virtual IPs, auth via
+            # the ``authentication=simple|ah`` + ``password=`` pair).
+            # HSRP / CARP / anycast modes have no native RouterOS
+            # equivalent — the renderer surfaces them as review
+            # comments instead of dropping silently.
+            "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
             LossyPath(
@@ -205,16 +215,9 @@ class MikroTikRouterOSCodec(CodecBase):
                 path="/vxlan-vnis/udp-port",
                 reason="VXLAN not modelled (see /vxlan-vnis/vni).",
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- anycast / per-VRF static routes --
+            # VRRP wired in Wave B; anycast (Wave C) + per-VRF static
+            # routes remain unsupported until their respective waves.
             UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(

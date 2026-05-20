@@ -373,7 +373,123 @@ def render_canonical(intent: CanonicalIntent) -> str:
         for host in intent.snmp.trap_hosts:
             ET.SubElement(snmpd, "traphost").text = host
 
+    # <virtualip> block — emit CARP VIPs from CanonicalVRRPGroup.
+    # OPNsense's <virtualip> hosts CARP (and historical pure-VRRP)
+    # virtual-IP records.  We render every group with ``mode="carp"``
+    # (and ``mode="vrrp"`` as a low-volume secondary form) into a
+    # ``<vip>`` child.  Groups in other modes (HSRP, the default
+    # IETF VRRP that's actually OPNsense-incompatible) are SKIPPED —
+    # OPNsense has no native HSRP/VRRP wire-protocol implementation
+    # under <virtualip>, so emitting one would generate XML the
+    # OPNsense GUI refuses to ingest.  The cross-vendor capability
+    # matrix declares this as Lossy on /interfaces/interface/
+    # vrrp-groups/group with a mode-restriction reason.
+    _render_virtualip_block(intent, root)
+
     return _pretty_print(root)
+
+
+def _render_virtualip_block(intent: CanonicalIntent, root: ET.Element) -> None:
+    """Emit ``<virtualip>/<vip>`` children for CARP-mode VRRP groups.
+
+    Walks every :class:`CanonicalInterface` in canonical order and
+    flattens its CARP groups into a single ``<virtualip>`` envelope.
+    Non-CARP groups are dropped silently (declared Lossy in the
+    capability matrix).  No ``<virtualip>`` element is emitted at
+    all when the intent has zero CARP groups — keeps the output
+    minimal for the common "no HA" case.
+
+    Interface back-pointer resolution:
+        OPNsense's ``<interface>`` element names a LOGICAL zone
+        ("lan", "opt1", "vlan10"), not the BSD device.  Render
+        uses the iface's name verbatim — for canonical intents
+        that round-trip from the same vendor this matches the
+        zone tag because :func:`_zone_tag_for` lowercases / passes
+        through known aliases; for foreign intents the operator
+        will need to fix up the back-pointer in the GUI.  See
+        docs/v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md
+        § 8 edge cases.
+
+    advskew round-trip:
+        Render inverts the parse-time mapping (``priority = 254 -
+        advskew``) so ``advskew = 254 - priority``.  Clamped to
+        the 0..254 CARP range.  See :func:`_parse_opnsense_vip`
+        docstring for the inversion rationale.
+    """
+    # Collect CARP groups across all interfaces FIRST so we know
+    # whether to emit the <virtualip> envelope at all.  Other modes
+    # (vrrp / hsrp / future) get dropped here — Lossy declaration
+    # in CapabilityMatrix surfaces the drop at validation time.
+    pairs: list[tuple[Any, Any]] = []
+    for iface in intent.interfaces:
+        for group in iface.vrrp_groups:
+            if group.mode != "carp":
+                # HSRP / pure-VRRP / future modes do NOT round-trip
+                # through OPNsense's <virtualip>.  Lossy declaration
+                # in CapabilityMatrix surfaces the drop to the
+                # operator at validation time.
+                continue
+            pairs.append((iface, group))
+    if not pairs:
+        return
+
+    vip_root = ET.SubElement(root, "virtualip")
+    for iface, group in pairs:
+        vip_el = ET.SubElement(vip_root, "vip")
+        ET.SubElement(vip_el, "mode").text = "carp"
+        # <interface> is the LOGICAL alias.  Use _zone_tag_for to
+        # match the same sanitisation the <interfaces> block applied
+        # so the back-pointer resolves through the alias map on
+        # re-parse.  For canonical names already shaped as zones
+        # ("lan", "opt1", "wan", "vlan10") this is a no-op.
+        ET.SubElement(vip_el, "interface").text = _zone_tag_for(iface.name)
+        ET.SubElement(vip_el, "vhid").text = str(group.group_id)
+        # advskew = 254 - priority (inverse of parse).  Clamp to
+        # the CARP 0..254 range.
+        advskew = 254 - group.priority
+        if advskew < 0:
+            advskew = 0
+        elif advskew > 254:
+            advskew = 254
+        ET.SubElement(vip_el, "advskew").text = str(advskew)
+        ET.SubElement(vip_el, "advbase").text = str(
+            group.advertisement_interval
+        )
+        # CARP authentication — opaque carp-key.  Plain-mode (vrrp
+        # under <virtualip>, rare) doesn't round-trip here because
+        # we skipped it above.
+        if group.authentication.startswith("carp-key:"):
+            ET.SubElement(vip_el, "password").text = (
+                group.authentication[len("carp-key:"):]
+            )
+        # Subnet + bits.  CARP records carry one IP per VHID; we
+        # take the first virtual_ip (IPv4) preferentially.
+        if group.virtual_ips:
+            ET.SubElement(vip_el, "subnet").text = group.virtual_ips[0]
+            # Prefix length: borrow from the parent iface's first
+            # IPv4 address when present (the realistic case — CARP
+            # VIPs live on the same subnet as the iface's real IP).
+            # Fall back to /32 for foreign canonical intents that
+            # didn't carry an address.
+            if iface.ipv4_addresses:
+                prefix = iface.ipv4_addresses[0].prefix_length
+            else:
+                prefix = 32
+            ET.SubElement(vip_el, "subnet_bits").text = str(prefix)
+        elif group.virtual_ipv6s:
+            ET.SubElement(vip_el, "subnet").text = group.virtual_ipv6s[0]
+            if iface.ipv6_addresses:
+                prefix = iface.ipv6_addresses[0].prefix_length
+            else:
+                prefix = 128
+            ET.SubElement(vip_el, "subnet_bits").text = str(prefix)
+        # <type>single</type> is the canonical CARP form — one IP
+        # per VHID.  <type>network</type> is the network-address
+        # variant (Lossy across vendors); we don't reconstruct it
+        # on render — operator will toggle in the GUI if needed.
+        ET.SubElement(vip_el, "type").text = "single"
+        if group.description:
+            ET.SubElement(vip_el, "descr").text = group.description
 
 
 def render_legacy(tree: dict[str, Any]) -> str:

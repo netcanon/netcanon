@@ -459,6 +459,476 @@ class TestCrossAdapter:
 
 
 # ---------------------------------------------------------------------------
+# CARP groups (Wave B — mode="carp" discriminator)
+# ---------------------------------------------------------------------------
+
+
+_CARP_MIN = """<?xml version="1.0"?>
+<opnsense>
+  <system><hostname>fw-ha-a</hostname></system>
+  <interfaces>
+    <lan>
+      <if>ixl0</if>
+      <descr>LAN</descr>
+      <enable/>
+      <ipaddr>10.0.10.2</ipaddr>
+      <subnet>24</subnet>
+    </lan>
+  </interfaces>
+  <virtualip>
+    <vip>
+      <mode>carp</mode>
+      <interface>lan</interface>
+      <vhid>10</vhid>
+      <advskew>0</advskew>
+      <advbase>1</advbase>
+      <password>secret-passphrase</password>
+      <subnet>10.0.10.254</subnet>
+      <subnet_bits>24</subnet_bits>
+      <descr>HA pair management VIP</descr>
+      <type>single</type>
+    </vip>
+  </virtualip>
+</opnsense>
+"""
+
+
+class TestCARPGroups:
+    """Wire-up for OPNsense CARP virtual-IPs under <virtualip>/<vip>.
+
+    Wave B (v0.2.0) — the BSD CARP HA primitive maps to
+    :class:`CanonicalVRRPGroup` with ``mode="carp"``.  Tests cover
+    parse, render, advskew↔priority normalisation, the alias-map
+    interface back-pointer resolution, non-CARP mode filtering, and
+    the Lossy round-trip for foreign mode groups.
+
+    Grammar reference: docs/v0.2.0-planning/01-vrrp-canonical/
+    02-per-vendor-grammar.md § 8 "OPNsense".
+    """
+
+    # ------------------------------------------------------------------
+    # Parse side
+    # ------------------------------------------------------------------
+
+    def test_parse_carp_vip_promotes_to_vrrp_group(self):
+        """Single <vip><mode>carp</mode> entry must surface as a
+        CanonicalVRRPGroup attached to the named interface."""
+        intent = OPNsenseCodec().parse(_CARP_MIN)
+        # Interface "lan" maps to canonical name "ixl0" via the
+        # alias map (<lan><if>ixl0</if>).
+        ifaces = {i.name: i for i in intent.interfaces}
+        assert "ixl0" in ifaces
+        groups = ifaces["ixl0"].vrrp_groups
+        assert len(groups) == 1
+        g = groups[0]
+        assert g.mode == "carp"
+        assert g.group_id == 10
+        assert g.virtual_ips == ["10.0.10.254"]
+        assert g.description == "HA pair management VIP"
+
+    def test_parse_skips_ipalias_mode(self):
+        """<mode>ipalias</mode> is NOT a CARP VIP — additional IP
+        alias on an interface.  Must NOT promote to CanonicalVRRPGroup."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces><lan><if>em0</if><ipaddr>10.0.0.1</ipaddr><subnet>24</subnet></lan></interfaces>
+  <virtualip>
+    <vip>
+      <mode>ipalias</mode>
+      <interface>lan</interface>
+      <vhid>0</vhid>
+      <subnet>10.0.0.5</subnet>
+      <subnet_bits>32</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        assert ifaces["em0"].vrrp_groups == []
+
+    def test_parse_skips_proxyarp_mode(self):
+        """<mode>proxyarp</mode> — ARP responder for off-link hosts.
+        Not an election-based HA primitive; must NOT promote."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces><lan><if>em0</if></lan></interfaces>
+  <virtualip>
+    <vip>
+      <mode>proxyarp</mode>
+      <interface>lan</interface>
+      <subnet>203.0.113.5</subnet>
+      <subnet_bits>32</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        assert ifaces["em0"].vrrp_groups == []
+
+    def test_parse_mixed_modes_only_carp_promoted(self):
+        """When <virtualip> contains both CARP and non-CARP modes,
+        only CARP entries become CanonicalVRRPGroup records."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces><lan><if>em0</if><ipaddr>10.0.0.1</ipaddr><subnet>24</subnet></lan></interfaces>
+  <virtualip>
+    <vip>
+      <mode>ipalias</mode>
+      <interface>lan</interface>
+      <subnet>10.0.0.99</subnet>
+      <subnet_bits>32</subnet_bits>
+    </vip>
+    <vip>
+      <mode>carp</mode>
+      <interface>lan</interface>
+      <vhid>5</vhid>
+      <advskew>50</advskew>
+      <advbase>1</advbase>
+      <password>x</password>
+      <subnet>10.0.0.254</subnet>
+      <subnet_bits>24</subnet_bits>
+    </vip>
+    <vip>
+      <mode>proxyarp</mode>
+      <interface>lan</interface>
+      <subnet>10.0.0.30</subnet>
+      <subnet_bits>32</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        groups = ifaces["em0"].vrrp_groups
+        assert len(groups) == 1
+        assert groups[0].mode == "carp"
+        assert groups[0].group_id == 5
+
+    def test_advskew_to_priority_normalization(self):
+        """OPNsense's election bias inverts canonical priority: lower
+        advskew wins, so priority = 254 - advskew.  Verify the
+        mapping for a few representative values."""
+        # advskew=0 → priority=254 (max-win configuration).
+        raw_0 = _CARP_MIN  # already advskew=0
+        intent_0 = OPNsenseCodec().parse(raw_0)
+        ifaces_0 = {i.name: i for i in intent_0.interfaces}
+        assert ifaces_0["ixl0"].vrrp_groups[0].priority == 254
+        # advskew=100 → priority=154.
+        raw_100 = _CARP_MIN.replace(
+            "<advskew>0</advskew>", "<advskew>100</advskew>",
+        )
+        intent_100 = OPNsenseCodec().parse(raw_100)
+        ifaces_100 = {i.name: i for i in intent_100.interfaces}
+        assert ifaces_100["ixl0"].vrrp_groups[0].priority == 154
+        # advskew=253 → priority=1 (min-win configuration).
+        raw_253 = _CARP_MIN.replace(
+            "<advskew>0</advskew>", "<advskew>253</advskew>",
+        )
+        intent_253 = OPNsenseCodec().parse(raw_253)
+        ifaces_253 = {i.name: i for i in intent_253.interfaces}
+        assert ifaces_253["ixl0"].vrrp_groups[0].priority == 1
+
+    def test_authentication_carp_key_scheme(self):
+        """CARP password must surface as ``carp-key:<value>`` so
+        cross-vendor renders see the scheme tag and can route to a
+        review comment for VRRP targets."""
+        intent = OPNsenseCodec().parse(_CARP_MIN)
+        ifaces = {i.name: i for i in intent.interfaces}
+        auth = ifaces["ixl0"].vrrp_groups[0].authentication
+        assert auth == "carp-key:secret-passphrase"
+
+    def test_advbase_to_advertisement_interval(self):
+        """<advbase> seconds → CanonicalVRRPGroup.advertisement_interval."""
+        raw = _CARP_MIN.replace("<advbase>1</advbase>", "<advbase>3</advbase>")
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        assert ifaces["ixl0"].vrrp_groups[0].advertisement_interval == 3
+
+    def test_parse_interface_alias_resolution(self):
+        """OPNsense's <interface>NAME refers to the LOGICAL zone alias
+        (lan/wan/optN/operator-named).  Canonical iface name comes from
+        the zone's <if> child.  Parser must resolve the alias through
+        the alias map.  Here: <interface>opt2</interface> + zone
+        <opt2><if>vlan0.10</if> → attach to CanonicalInterface name
+        'vlan0.10'."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces>
+    <opt2>
+      <if>vlan0.10</if>
+      <ipaddr>10.10.10.2</ipaddr>
+      <subnet>24</subnet>
+    </opt2>
+  </interfaces>
+  <virtualip>
+    <vip>
+      <mode>carp</mode>
+      <interface>opt2</interface>
+      <vhid>20</vhid>
+      <advskew>0</advskew>
+      <advbase>1</advbase>
+      <password>pw</password>
+      <subnet>10.10.10.1</subnet>
+      <subnet_bits>24</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        # The canonical name is the <if> text, not the zone tag.
+        assert "vlan0.10" in ifaces
+        groups = ifaces["vlan0.10"].vrrp_groups
+        assert len(groups) == 1
+        assert groups[0].group_id == 20
+
+    def test_parse_orphan_vip_does_not_create_iface(self):
+        """A <vip> whose <interface> doesn't match any parsed zone
+        must be SKIPPED — we don't invent a phantom CanonicalInterface
+        to hang the group on.  Operator intent is lost (signaled via
+        the Lossy declaration) but intent.interfaces stays clean."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces><lan><if>em0</if></lan></interfaces>
+  <virtualip>
+    <vip>
+      <mode>carp</mode>
+      <interface>opt99</interface>
+      <vhid>10</vhid>
+      <advskew>0</advskew>
+      <advbase>1</advbase>
+      <password>x</password>
+      <subnet>10.0.99.1</subnet>
+      <subnet_bits>24</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        # Only the originally-declared interface — no phantom opt99.
+        names = sorted(i.name for i in intent.interfaces)
+        assert names == ["em0"]
+        # And no VRRP group attached to em0 (the orphan didn't fall
+        # through to a default attachment).
+        assert intent.interfaces[0].vrrp_groups == []
+
+    def test_parse_empty_virtualip_envelope(self):
+        """The supergate real fixture has <virtualip><vip/></virtualip>
+        (empty self-closing).  Must NOT crash and must yield zero
+        VRRP groups."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces><lan><if>em0</if></lan></interfaces>
+  <virtualip version="1.0.1" persisted_at="0" description="x">
+    <vip/>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        # Just check no exception and no spurious groups.
+        for iface in intent.interfaces:
+            assert iface.vrrp_groups == []
+
+    def test_parse_no_virtualip_block(self):
+        """When the <virtualip> element is entirely absent, parse
+        must produce zero CanonicalVRRPGroup records — no crash,
+        no false-positive."""
+        raw = _MIN  # no <virtualip>
+        intent = OPNsenseCodec().parse(raw)
+        for iface in intent.interfaces:
+            assert iface.vrrp_groups == []
+
+    def test_parse_ipv6_vip_populates_virtual_ipv6s(self):
+        """IPv6 CARP VIPs land in virtual_ipv6s (split by literal
+        family — presence of ':' and absence of '.')."""
+        raw = """<?xml version="1.0"?>
+<opnsense>
+  <interfaces>
+    <lan>
+      <if>em0</if>
+      <ipaddrv6>2001:db8::2</ipaddrv6>
+      <subnetv6>64</subnetv6>
+    </lan>
+  </interfaces>
+  <virtualip>
+    <vip>
+      <mode>carp</mode>
+      <interface>lan</interface>
+      <vhid>10</vhid>
+      <advskew>0</advskew>
+      <advbase>1</advbase>
+      <password>pw</password>
+      <subnet>2001:db8::1</subnet>
+      <subnet_bits>64</subnet_bits>
+    </vip>
+  </virtualip>
+</opnsense>"""
+        intent = OPNsenseCodec().parse(raw)
+        ifaces = {i.name: i for i in intent.interfaces}
+        g = ifaces["em0"].vrrp_groups[0]
+        assert g.virtual_ipv6s == ["2001:db8::1"]
+        assert g.virtual_ips == []
+
+    # ------------------------------------------------------------------
+    # Render side
+    # ------------------------------------------------------------------
+
+    def test_render_emits_virtualip_block(self):
+        """Round-trip render of a CARP group must produce a
+        <virtualip>/<vip><mode>carp</mode> envelope with all the
+        canonical fields restored to OPNsense's XML wire shape."""
+        intent = OPNsenseCodec().parse(_CARP_MIN)
+        out = OPNsenseCodec().render(intent)
+        assert "<virtualip>" in out
+        assert "<mode>carp</mode>" in out
+        assert "<vhid>10</vhid>" in out
+        assert "<subnet>10.0.10.254</subnet>" in out
+        assert "<password>secret-passphrase</password>" in out
+        # advskew=0 (priority=254 round-trips to advskew=254-254=0).
+        assert "<advskew>0</advskew>" in out
+        assert "<advbase>1</advbase>" in out
+
+    def test_render_round_trips(self):
+        """parse(render(parse(_CARP_MIN))) should be stable — the
+        round-trip invariant holds for the CARP wire-up."""
+        a = OPNsenseCodec()
+        first = a.parse(_CARP_MIN)
+        second = a.parse(a.render(first))
+        # CanonicalIntent compares by field; check the VRRP groups
+        # match exactly across the round-trip.
+        first_ifaces = {i.name: i for i in first.interfaces}
+        second_ifaces = {i.name: i for i in second.interfaces}
+        assert first_ifaces.keys() == second_ifaces.keys()
+        for name in first_ifaces:
+            assert (
+                first_ifaces[name].vrrp_groups
+                == second_ifaces[name].vrrp_groups
+            )
+
+    def test_render_skips_non_carp_modes(self):
+        """A CanonicalVRRPGroup with mode='vrrp' (or hsrp) must NOT
+        emit a <vip> entry.  OPNsense has no native VRRP/HSRP under
+        <virtualip>; the Lossy declaration in the capability matrix
+        warns the operator the group will be dropped."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalIPv4Address,
+            CanonicalVRRPGroup,
+        )
+        intent = CanonicalIntent(
+            source_vendor="opnsense",
+            source_format="xml-opnsense",
+            hostname="fw01",
+        )
+        iface = CanonicalInterface(
+            name="lan",
+            enabled=True,
+            ipv4_addresses=[CanonicalIPv4Address(ip="10.0.0.2", prefix_length=24)],
+        )
+        iface.vrrp_groups.append(CanonicalVRRPGroup(
+            group_id=10,
+            mode="vrrp",  # ← classic VRRP, not CARP
+            virtual_ips=["10.0.0.1"],
+            priority=110,
+        ))
+        intent.interfaces.append(iface)
+        out = OPNsenseCodec().render(intent)
+        # No <virtualip> envelope at all (no CARP groups, so block omitted).
+        assert "<virtualip>" not in out
+        assert "<mode>vrrp</mode>" not in out
+        assert "<vhid>" not in out
+
+    def test_render_hsrp_mode_also_skipped(self):
+        """mode='hsrp' (Cisco proprietary) is equally non-emittable
+        on OPNsense.  Same drop behaviour as mode='vrrp'."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalVRRPGroup,
+        )
+        intent = CanonicalIntent()
+        iface = CanonicalInterface(name="em0")
+        iface.vrrp_groups.append(CanonicalVRRPGroup(
+            group_id=1,
+            mode="hsrp",
+            virtual_ips=["192.168.1.1"],
+        ))
+        intent.interfaces.append(iface)
+        out = OPNsenseCodec().render(intent)
+        assert "<virtualip>" not in out
+
+    def test_render_advskew_round_trip(self):
+        """priority=154 → advskew=100 on render (inverse of parse)."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalIPv4Address,
+            CanonicalVRRPGroup,
+        )
+        intent = CanonicalIntent()
+        iface = CanonicalInterface(
+            name="lan",
+            ipv4_addresses=[CanonicalIPv4Address(ip="10.0.0.2", prefix_length=24)],
+        )
+        iface.vrrp_groups.append(CanonicalVRRPGroup(
+            group_id=10,
+            mode="carp",
+            virtual_ips=["10.0.0.1"],
+            priority=154,
+            authentication="carp-key:pw",
+        ))
+        intent.interfaces.append(iface)
+        out = OPNsenseCodec().render(intent)
+        assert "<advskew>100</advskew>" in out
+
+    def test_render_no_groups_omits_virtualip_block(self):
+        """Intent with zero CARP groups must NOT emit an empty
+        <virtualip/> envelope — keep output minimal for the
+        no-HA common case."""
+        intent = OPNsenseCodec().parse(_MIN)  # no virtualip
+        out = OPNsenseCodec().render(intent)
+        assert "<virtualip" not in out
+
+    def test_render_carp_password_strips_scheme_tag(self):
+        """Render must strip the ``carp-key:`` prefix when emitting
+        <password> — OPNsense's element value is the raw passphrase,
+        not the canonical scheme-tagged form."""
+        intent = OPNsenseCodec().parse(_CARP_MIN)
+        out = OPNsenseCodec().render(intent)
+        assert "<password>secret-passphrase</password>" in out
+        # And the scheme tag does not leak into the XML.
+        assert "carp-key:" not in out
+
+    # ------------------------------------------------------------------
+    # Capability matrix wiring
+    # ------------------------------------------------------------------
+
+    def test_capability_matrix_vrrp_now_supported(self):
+        """Wave B promotes /interfaces/interface/vrrp-groups/group
+        from unsupported to supported.  The classify() resolution
+        still flags it as lossy (mode-restriction LossyPath wins
+        over the supported entry per the matrix's strictest-wins
+        rule)."""
+        caps = OPNsenseCodec().capabilities
+        path = "/interfaces/interface/vrrp-groups/group"
+        # Not in unsupported anymore.
+        assert path not in [up.path for up in caps.unsupported]
+        # And IS in supported.
+        assert path in caps.supported
+        # The classify() rule returns "lossy" because the LossyPath
+        # entry has the same path and lossy beats supported.
+        assert caps.classify(path) == "lossy"
+
+    def test_capability_matrix_lossy_explains_carp_only(self):
+        """The LossyPath entry for VRRP groups must explain WHY
+        it's lossy — non-CARP modes drop, advskew↔priority is
+        approximate."""
+        caps = OPNsenseCodec().capabilities
+        lossy_paths = {lp.path: lp for lp in caps.lossy}
+        assert "/interfaces/interface/vrrp-groups/group" in lossy_paths
+        lp = lossy_paths["/interfaces/interface/vrrp-groups/group"]
+        # The reason must mention the mode restriction.
+        assert "carp" in lp.reason.lower()
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 

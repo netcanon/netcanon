@@ -633,6 +633,100 @@ def render_intent(tree: Any) -> str:
                 out.append("        set status up")
             else:
                 out.append("        set status down")
+            # VRRP groups (Wave B) — nested ``config vrrp / edit N ...
+            # next / end`` block lives INSIDE the interface edit, after
+            # the per-iface settings and BEFORE the closing ``next``.
+            # Mirrors FortiOS's own export ordering so a parse-render-
+            # parse round-trip is stable on real captures.  Indentation
+            # is 8 spaces for the ``config vrrp`` line (one level deep
+            # inside the iface body) and 12 spaces for the inner ``edit``
+            # contents — matching the codec's existing 4-space-per-level
+            # convention.
+            #
+            # ``mode`` discriminator handling: only ``"vrrp"`` (IETF
+            # VRRPv2 / VRRPv3) round-trips into FortiOS.  HSRP / CARP
+            # groups from cross-vendor sources surface as a comment-form
+            # ``review:`` line per the shared hash-portability pattern
+            # (``user_secrets.format_review_comment``).  An operator
+            # migrating from Cisco HSRP to FortiGate must reauthor the
+            # group with VRRP semantics — the wire protocols are not
+            # interoperable.
+            #
+            # Multi-IP guard: FortiOS schema accepts a single ``set
+            # vrip``.  Canonical ``virtual_ips`` can hold multiple
+            # entries (IOS-XE repeated ``vrrp N ip X``, Junos
+            # ``virtual-address [X Y Z]``).  We emit the first and
+            # leave a ``! review:`` line naming the dropped tail so the
+            # operator sees the loss explicitly rather than discovering
+            # it at deploy time.
+            if iface.vrrp_groups:
+                out.append("        config vrrp")
+                for group in iface.vrrp_groups:
+                    if group.mode != "vrrp":
+                        out.append(
+                            f"        # review: vrrp_groups[{group.group_id}]"
+                            f" mode={group.mode!r} has no FortiOS "
+                            f"equivalent — VRRP is the only L3 redundancy "
+                            f"protocol on FortiOS"
+                        )
+                        continue
+                    out.append(f"            edit {group.group_id}")
+                    if group.virtual_ips:
+                        out.append(
+                            f"                set vrip {group.virtual_ips[0]}"
+                        )
+                        if len(group.virtual_ips) > 1:
+                            extra = ", ".join(group.virtual_ips[1:])
+                            out.append(
+                                f"                # review: FortiOS "
+                                f"accepts one vrip per group; additional "
+                                f"virtual_ips dropped: {extra}"
+                            )
+                    if group.virtual_ipv6s:
+                        out.append(
+                            f"                set vrip6 "
+                            f"{group.virtual_ipv6s[0]}"
+                        )
+                        # ``set version 3`` is FortiOS's VRRPv3 enabler
+                        # — required when vrip6 is set.  VRRPv2 is IPv4-
+                        # only by spec; presence of vrip6 implies v3.
+                        out.append("                set version 3")
+                    if group.priority != 100:
+                        out.append(
+                            f"                set priority {group.priority}"
+                        )
+                    # FortiOS preempt default is ``enable``; emit only
+                    # when the canonical diverges from the FortiOS default
+                    # so round-trip output stays minimal.
+                    if not group.preempt:
+                        out.append("                set preempt disable")
+                    if group.advertisement_interval != 1:
+                        out.append(
+                            f"                set adv-interval "
+                            f"{group.advertisement_interval}"
+                        )
+                    if group.authentication.startswith("plain:"):
+                        out.append(
+                            f'                set authentication '
+                            f'"{group.authentication[6:]}"'
+                        )
+                    if group.track_interfaces:
+                        # FortiOS ``set vrdst`` is single-valued; emit
+                        # the first and drop the rest with a review note.
+                        out.append(
+                            f"                set vrdst "
+                            f"{group.track_interfaces[0]}"
+                        )
+                        if len(group.track_interfaces) > 1:
+                            extra = ", ".join(group.track_interfaces[1:])
+                            out.append(
+                                f"                # review: FortiOS "
+                                f"accepts one vrdst per group; additional "
+                                f"track_interfaces dropped: {extra}"
+                            )
+                    out.append("                set status enable")
+                    out.append("            next")
+                out.append("        end")
             out.append("    next")
 
         # VLAN child interface emit (Issue #6).

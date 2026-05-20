@@ -447,11 +447,27 @@ def render_intent(tree: Any) -> str:
             rendered_vlan_ids.add(vlan.id)
         lines.append("")
 
+    # ----- /interface vrrp + VIP rows -----
+    # Two-stage emit: the ``/interface vrrp`` section declares the
+    # group (parent interface, vrid, priority, preempt, auth, etc.)
+    # and a separate ``/ip address add address=X/Y interface=<vrrp-
+    # pseudo-name>`` line attaches the virtual IP.  The VIP rows
+    # accumulate alongside ``ip_rows`` / ``ip6_rows`` so the existing
+    # ``/ip address`` / ``/ipv6 address`` sections cover them.
+    # RouterOS grammar reference:
+    # https://help.mikrotik.com/docs/spaces/ROS/pages/24805377/VRRP
+    vrrp_lines, vrrp_v4_rows, vrrp_v6_rows = _render_vrrp(tree)
+
     # ----- /ip address -----
     ip_rows: list[tuple[str, int, str]] = []  # (ip, prefix, iface)
     for iface in tree.interfaces:
         for addr in iface.ipv4_addresses:
             ip_rows.append((addr.ip, addr.prefix_length, iface.name))
+    ip_rows.extend(vrrp_v4_rows)
+    if vrrp_lines:
+        lines.append("/interface vrrp")
+        lines.extend(vrrp_lines)
+        lines.append("")
     if ip_rows:
         lines.append("/ip address")
         for ip, prefix, iface_name in ip_rows:
@@ -465,6 +481,7 @@ def render_intent(tree: Any) -> str:
     for iface in tree.interfaces:
         for v6 in iface.ipv6_addresses:
             ip6_rows.append((v6.ip, v6.prefix_length, iface.name))
+    ip6_rows.extend(vrrp_v6_rows)
     if ip6_rows:
         lines.append("/ipv6 address")
         for ip, prefix, iface_name in ip6_rows:
@@ -849,6 +866,141 @@ def _yes_no(flag: bool) -> str:
 def _escape(value: str) -> str:
     """Escape double-quotes in a string for inclusion in ``"..."``."""
     return value.replace('"', '\\"')
+
+
+def _render_vrrp(
+    tree: CanonicalIntent,
+) -> tuple[list[str], list[tuple[str, int, str]], list[tuple[str, int, str]]]:
+    """Emit ``/interface vrrp`` add lines + per-VIP ``/ip address`` rows.
+
+    RouterOS models a VRRP group as a top-level pseudo-interface
+    declared in ``/interface vrrp``; the virtual IP lives on a
+    separate ``/ip address add address=X/Y interface=<pseudo-name>``
+    line.  This helper produces three return values:
+
+    1. ``vrrp_lines`` — body lines for the ``/interface vrrp`` section
+       (one ``add ...`` per canonical group).
+    2. ``v4_rows`` — extra ``(ip, prefix, pseudo-name)`` tuples for
+       the caller to merge into the ``/ip address`` section.  IPv4
+       VIPs ride the same section as regular interface addresses.
+    3. ``v6_rows`` — IPv6 VIPs for the ``/ipv6 address`` section.
+
+    Pseudo-interface naming is deterministic: ``vrrp<vrid>`` so the
+    round-trip parse → render → parse is stable.  Cross-vendor sources
+    that supplied a non-MikroTik canonical tree (Cisco / Junos / etc.)
+    get the same shape.
+
+    Groups carrying ``mode != "vrrp"`` (HSRP, CARP, anycast) cannot
+    be rendered to RouterOS — they emit a ``# review:`` comment in
+    the section body explaining the gap, with the group skipped from
+    the address emit.  Mirrors the per-user review-comment pattern in
+    the ``/user`` render block.
+
+    VIP prefix-length recovery:
+    * If the canonical record was created by the MikroTik parser, the
+      prefix lives in the scratch dict (see ``_parse_interface_vrrp``)
+      and is mirrored onto the group via the ``virtual_ip_prefix``
+      hint stashed on the parent interface during a same-vendor round-
+      trip.  Currently we use the parent interface's first ipv4 prefix
+      as a fallback when the source canonical tree didn't carry one
+      (cross-vendor case).
+    * IPv6 VIPs fall back to ``/128`` host-form when no parent prefix
+      is available.
+    """
+    vrrp_lines: list[str] = []
+    v4_rows: list[tuple[str, int, str]] = []
+    v6_rows: list[tuple[str, int, str]] = []
+
+    for iface in tree.interfaces:
+        for group in iface.vrrp_groups:
+            if group.mode != "vrrp":
+                # HSRP / CARP / anycast — surface review comment and
+                # skip; RouterOS has no native equivalent for any of
+                # those wire protocols.
+                vrrp_lines.append(
+                    f"# review: vrrp_groups[{group.group_id}] on "
+                    f"{iface.name!r} has mode={group.mode!r} "
+                    f"which RouterOS does not natively support"
+                )
+                continue
+            pseudo_name = f"vrrp{group.group_id}"
+            parts = [
+                "add",
+                f"interface={_quote_if_needed(iface.name)}",
+                f"name={pseudo_name}",
+                f"vrid={group.group_id}",
+            ]
+            # ``priority=100`` is the IETF default; omit when equal so
+            # the wire output stays terse for the common case.
+            if group.priority != 100:
+                parts.append(f"priority={group.priority}")
+            if not group.preempt:
+                parts.append("preemption-mode=no")
+            if group.advertisement_interval not in (0, 1):
+                parts.append(f"interval={group.advertisement_interval}s")
+            # IPv6 VRRPv3 uses ``v3-protocol=ipv6``; emit it when the
+            # group carries v6 VIPs so RouterOS picks the right family.
+            if group.virtual_ipv6s:
+                parts.append("v3-protocol=ipv6")
+            # Authentication round-trip — accept the canonical
+            # ``<scheme>:<value>`` form and split back into
+            # RouterOS' ``authentication=`` + ``password=`` pair.
+            auth_kv = _routeros_auth_kv(group.authentication)
+            parts.extend(auth_kv)
+            vrrp_lines.append(" ".join(parts))
+
+            # /ip address VIP rows — fall back to parent's first ipv4
+            # prefix when the canonical record didn't preserve one.
+            v4_prefix = (
+                iface.ipv4_addresses[0].prefix_length
+                if iface.ipv4_addresses else 32
+            )
+            for vip in group.virtual_ips:
+                v4_rows.append((vip, v4_prefix, pseudo_name))
+            # /ipv6 address VIP rows.
+            v6_prefix = (
+                iface.ipv6_addresses[0].prefix_length
+                if iface.ipv6_addresses else 128
+            )
+            for vip6 in group.virtual_ipv6s:
+                v6_rows.append((vip6, v6_prefix, pseudo_name))
+    return vrrp_lines, v4_rows, v6_rows
+
+
+def _routeros_auth_kv(authentication: str) -> list[str]:
+    """Split canonical ``<scheme>:<value>`` auth back to RouterOS form.
+
+    Accepted schemes:
+
+    * ``plain:<pwd>`` → ``authentication=simple password=<pwd>``
+    * ``ah:<key>`` → ``authentication=ah password=<key>``
+    * ``md5:<hash>`` → ``authentication=ah password=<hash>`` (RouterOS
+      doesn't expose a separate MD5 mode; AH is the closest native
+      cryptographic option, so we route md5-canonical there with the
+      hash carried as the AH key — operators get a working line that
+      can be re-keyed without re-deriving the round-trip parser path).
+    * Any other / empty value → no auth fields emitted.
+
+    Empty value (e.g. ``plain:``) emits no fields — matches the
+    parse-side behaviour that drops auth when the password is empty.
+    """
+    if not authentication or ":" not in authentication:
+        return []
+    scheme, _, password = authentication.partition(":")
+    scheme = scheme.lower()
+    if not password:
+        return []
+    if scheme == "plain":
+        return [
+            "authentication=simple",
+            f"password={_quote_if_needed(password)}",
+        ]
+    if scheme in ("ah", "md5"):
+        return [
+            "authentication=ah",
+            f"password={_quote_if_needed(password)}",
+        ]
+    return []
 
 
 def _vlan_id_for(name: str, vlans: list[CanonicalVlan]) -> int | None:

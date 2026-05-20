@@ -61,6 +61,7 @@ from ...canonical.intent import (
     CanonicalRADIUSServer,
     CanonicalSNMP,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from ..base import ParseError
 
@@ -305,11 +306,61 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # ----- <interfaces> block — flatten into list -----
     iface_parent = root.find("interfaces")
+    # Build the OPNsense logical-name → canonical-iface-name alias map
+    # while walking the zones.  OPNsense's <virtualip>/<vip>/<interface>
+    # element names a LOGICAL zone (e.g. "lan", "opt1", "vlan10"), NOT
+    # the underlying BSD device.  The canonical interface name we hand
+    # to <CanonicalInterface.name> is the <if> child's value (e.g.
+    # "ixl0", "vlan0.10") so any VIP back-pointer must be translated
+    # through this map.  See docs/v0.2.0-planning/01-vrrp-canonical/
+    # 02-per-vendor-grammar.md § 8 "OPNsense" edge cases.
+    iface_alias_to_canonical: dict[str, str] = {}
     if iface_parent is not None:
         for zone_el in iface_parent:
             iface = _parse_interface_zone_canonical(zone_el)
             if iface is not None:
                 intent.interfaces.append(iface)
+                # The zone tag is the logical alias ("lan", "opt1",
+                # "wan", or operator-named zones like "vlan10").  Map
+                # it to the canonical name we settled on (the <if>
+                # text if present, else the zone tag — same rule as
+                # _parse_interface_zone_canonical).
+                iface_alias_to_canonical[zone_el.tag] = iface.name
+
+    # ----- <virtualip> block — CARP / VRRP redundancy groups -----
+    # OPNsense stores CARP VIPs (and pure-VRRP VIPs on supported
+    # interfaces) under <virtualip>.  Other <mode> values are NOT
+    # FHRP: <mode>ipalias</mode> (additional IP on an interface)
+    # and <mode>proxyarp</mode> (ARP responder for off-link hosts)
+    # are L2/L3 helpers without a router-group election and don't
+    # belong on CanonicalVRRPGroup.  We only promote <mode>carp</mode>
+    # (and the rare <mode>vrrp</mode> variant) into the canonical
+    # surface; everything else is silently skipped.  See
+    # docs/v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md
+    # § 8 "OPNsense" for the full grammar.
+    vip_parent = root.find("virtualip")
+    if vip_parent is not None:
+        iface_by_name = {i.name: i for i in intent.interfaces}
+        for vip_el in vip_parent.findall("vip"):
+            group = _parse_opnsense_vip(vip_el, iface_alias_to_canonical)
+            if group is None:
+                continue
+            iface_logical = (vip_el.findtext("interface") or "").strip()
+            # Resolve the back-pointer through the alias map.  Missing
+            # entries fall through to the literal name so foreign
+            # canonical names (e.g. cross-vendor renders) still attach.
+            canonical_iface_name = iface_alias_to_canonical.get(
+                iface_logical, iface_logical,
+            )
+            target_iface = iface_by_name.get(canonical_iface_name)
+            if target_iface is None:
+                # Unattached VIP — the parent interface didn't parse
+                # (orphaned zone, sparse fixture).  Skip rather than
+                # invent a synthetic interface; the operator's intent
+                # is lost either way but at least we don't pollute
+                # intent.interfaces with phantom records.
+                continue
+            target_iface.vrrp_groups.append(group)
 
     # ----- <vlans> block -----
     vlans_el = root.find("vlans")
@@ -613,6 +664,148 @@ def _parse_opnsense_dhcp_zone(zone_el: ET.Element) -> CanonicalDHCPPool | None:
         dns_servers=dns_servers,
         lease_time=lease,
         domain_name=domain,
+    )
+
+
+# ---------------------------------------------------------------------------
+# <virtualip> / <vip> parse — CARP-mode VIPs into CanonicalVRRPGroup
+# ---------------------------------------------------------------------------
+
+
+def _parse_opnsense_vip(
+    vip_el: ET.Element,
+    iface_alias_to_canonical: dict[str, str],
+) -> CanonicalVRRPGroup | None:
+    """Parse one ``<vip>`` element into a :class:`CanonicalVRRPGroup`.
+
+    Returns ``None`` for non-FHRP modes (``ipalias``, ``proxyarp``) and
+    for malformed records (missing ``<vhid>`` or non-integer values).
+    The caller is responsible for attaching the returned group to the
+    correct :class:`CanonicalInterface` via the ``<interface>`` back-
+    pointer + the alias map.
+
+    advskew → priority normalisation (OPNsense CARP election bias):
+        OPNsense's ``<advskew>`` is the *advertisement skew* used by
+        BSD CARP — a LOWER advskew wins the master election (the
+        protocol adds the skew to the advertisement interval, so
+        lower skew = more frequent advertisements = win).  Canonical
+        :attr:`CanonicalVRRPGroup.priority` follows the IETF VRRP
+        convention where HIGHER priority wins.  We invert with
+        ``priority = 254 - advskew`` so canonical higher-wins logic
+        matches CARP lower-wins behaviour.  The constant ``254``
+        keeps the result inside the canonical 1-254 range for the
+        common advskew range (0..254).  Note: the mapping is
+        intentionally lossy across vendors — VRRP priority values
+        are advisory weights, not advertisement skews, so a CARP
+        record migrated to a VRRP target preserves the *relative
+        ordering* of HA pair members but not the exact election
+        timing.  Cross-vendor matrix declares this as Lossy.
+    """
+    mode_el = vip_el.find("mode")
+    if mode_el is None:
+        return None
+    mode = (mode_el.text or "").strip().lower()
+    # OPNsense <virtualip> supports several <mode> values; only CARP
+    # (and the rare pure-VRRP variant) maps to CanonicalVRRPGroup.
+    # ipalias = additional IP on interface (no election).
+    # proxyarp = ARP responder for off-link hosts (no election).
+    # other = future modes; defensively skipped.
+    if mode not in ("carp", "vrrp"):
+        return None
+    vhid_el = vip_el.find("vhid")
+    if vhid_el is None or not (vhid_el.text or "").strip():
+        return None
+    try:
+        vhid = int(vhid_el.text.strip())
+    except ValueError:
+        return None
+    if not (1 <= vhid <= 255):
+        return None
+
+    subnet = (vip_el.findtext("subnet") or "").strip()
+    type_el = vip_el.find("type")
+    vip_type = (type_el.text or "").strip().lower() if type_el is not None else "single"
+
+    # advskew → priority (see docstring for the inversion rationale).
+    advskew_text = (vip_el.findtext("advskew") or "0").strip()
+    try:
+        advskew = int(advskew_text) if advskew_text else 0
+    except ValueError:
+        advskew = 0
+    priority = 254 - advskew
+    # Clamp to canonical 1-254 range — advskew values outside 0..253
+    # are unusual but real-world OPNsense XML files have been seen
+    # with stray values (and the canonical Pydantic model would
+    # reject anything outside the range with a validation error).
+    if priority < 1:
+        priority = 1
+    elif priority > 254:
+        priority = 254
+
+    # advbase → advertisement_interval.  Defaults to 1 second
+    # (the CARP default and the IETF VRRPv2 default).
+    advbase_text = (vip_el.findtext("advbase") or "1").strip()
+    try:
+        advbase = int(advbase_text) if advbase_text else 1
+    except ValueError:
+        advbase = 1
+    if advbase < 1:
+        advbase = 1
+
+    password = (vip_el.findtext("password") or "").strip()
+    descr = (vip_el.findtext("descr") or "").strip()
+
+    # Split IPv4 vs IPv6 virtual IPs by literal form.  OPNsense
+    # uses a single <subnet> element regardless of family; the
+    # presence of a colon (and absence of a dot) is a reliable
+    # cheap dispatch.  type="network" carries the network address
+    # of a CIDR block rather than a host IP — we surface it the
+    # same way (it's still a valid IPv4 literal) but the caller's
+    # cross-vendor renderer may want to inspect ``type`` directly;
+    # for v1 we don't preserve the distinction (Note: this is an
+    # edge case documented in the grammar doc).
+    virtual_ips: list[str] = []
+    virtual_ipv6s: list[str] = []
+    if subnet:
+        if ":" in subnet and "." not in subnet:
+            virtual_ipv6s.append(subnet)
+        else:
+            virtual_ips.append(subnet)
+
+    # Authentication — CARP carries a shared passphrase; VRRP mode
+    # under <virtualip> doesn't (OPNsense lets you set one but
+    # the protocol's authentication semantics differ).  Tag with
+    # the family-specific scheme so cross-vendor render can route
+    # appropriately (carp-key vs plain/md5 for VRRP targets).
+    authentication = ""
+    if password:
+        if mode == "carp":
+            authentication = f"carp-key:{password}"
+        else:
+            # VRRP mode under OPNsense's <virtualip> — surface as
+            # plaintext (operator-supplied) for portability.
+            authentication = f"plain:{password}"
+
+    # <type>network</type> indicates the VIP is the network address
+    # of a CIDR block rather than a single host IP.  Canonical
+    # CanonicalVRRPGroup has no first-class field for this; the
+    # address itself is preserved in virtual_ips so cross-vendor
+    # renderers see the literal.  The single-vs-network distinction
+    # is documented as an edge case in the grammar doc and surfaces
+    # as Lossy in the cross-vendor matrix (type=network won't be
+    # reconstructed on a non-OPNsense target).
+    _ = vip_type  # surface in this scope for the docstring above
+    description = descr
+
+    return CanonicalVRRPGroup(
+        group_id=vhid,
+        mode=mode,
+        virtual_ips=virtual_ips,
+        virtual_ipv6s=virtual_ipv6s,
+        priority=priority,
+        advertisement_interval=advbase,
+        authentication=authentication,
+        description=description,
     )
 
 

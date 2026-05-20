@@ -141,6 +141,16 @@ class FortiGateCLICodec(CodecBase):
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
+            # -- Wave B (v0.2.0) -- VRRP groups (FHRP) --
+            # Nested ``config vrrp / edit N`` block inside ``config
+            # system interface / edit X``.  Parses ``vrip``, ``vrip6``,
+            # ``priority``, ``preempt``, ``adv-interval``,
+            # ``authentication``, ``vrdst`` into :class:`CanonicalVRRPGroup`;
+            # render emits the inverse.  Anycast-gateway companion
+            # paths stay ``unsupported`` — FortiGate is a firewall /
+            # edge platform with no native anycast surface (HA is
+            # delivered via VRRP groups, not anycast-MAC fabrics).
+            "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
             LossyPath(
@@ -167,6 +177,49 @@ class FortiGateCLICodec(CodecBase):
                     "phase1-interface) rather than as encap discriminator "
                     "on a tunnel interface — tunnel_type does not survive "
                     "render-into-FortiGate."
+                ),
+                severity="warn",
+            ),
+            # -- Wave B (v0.2.0) -- VRRP per-group lossy edges --
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ips",
+                reason=(
+                    "FortiOS ``config vrrp / edit N`` accepts a single "
+                    "``set vrip`` line per group.  Multi-IP canonical "
+                    "groups (IOS-XE repeated ``vrrp N ip X`` for "
+                    "secondaries; Junos ``virtual-address [ X Y Z ]``) "
+                    "emit the first VIP and drop the tail with a "
+                    "``# review:`` line — operator must split into "
+                    "multiple groups manually if redundancy on all "
+                    "addresses is required."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-mac",
+                reason=(
+                    "FortiOS uses ``set vrrp-virtual-mac enable/disable`` "
+                    "as an interface-wide toggle (defaults to disable, "
+                    "meaning FortiOS uses its own NPU MAC instead of "
+                    "00:00:5E:00:01:VRID).  The canonical "
+                    "``virtual_mac`` per-group override has no FortiOS "
+                    "equivalent and is silently dropped — cross-vendor "
+                    "renders into FortiGate cannot pin a custom VRID "
+                    "MAC at the group level."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/track-interfaces",
+                reason=(
+                    "FortiOS ``set vrdst <iface>`` accepts a single "
+                    "destination-tracking entry per group.  Multi-track "
+                    "canonical groups (IOS-XE ``track`` objects, Arista "
+                    "``vrrp N track Ethernet1 decrement 10``) emit the "
+                    "first and drop the rest with a ``# review:`` line.  "
+                    "The decrement value is also lossy — FortiOS "
+                    "vrdst is a binary up/down trigger, not a "
+                    "priority-decrement scheme."
                 ),
                 severity="warn",
             ),
@@ -199,16 +252,12 @@ class FortiGateCLICodec(CodecBase):
                 path="/vxlan-vnis/udp-port",
                 reason="VXLAN not modelled (see /vxlan-vnis/vni).",
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- anycast / per-VRF static routes --
+            # VRRP groups WIRED in Wave B (see ``supported`` block).
+            # Anycast paths remain unsupported because FortiGate is a
+            # firewall / edge platform — anycast-gateway is a fabric
+            # primitive on data-centre switches (Arista VARP, NX-OS
+            # DAG, Junos enhanced-IP), not on edge firewalls.
             UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(
