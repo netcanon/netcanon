@@ -130,6 +130,13 @@ class ArubaAOSSCodec(CodecBase):
             "/snmp/contact",
             "/snmp/trap-host",
             "/snmp/v3-user",
+            # Wave B (v0.2.0) — classic VRRP wire-up.  AOS-S nests
+            # ``ip vrrp vrid N`` inside ``vlan N`` stanzas; canonical
+            # attaches the group to the synthesised Vlan<N>
+            # CanonicalInterface (see _svi_absorption.py).  Anycast
+            # / HSRP / CARP paths remain unsupported below — AOS-S
+            # has no native grammar for those.
+            "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
             LossyPath(
@@ -160,6 +167,23 @@ class ArubaAOSSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # Wave B (v0.2.0) — VRRP virtual_ips lossy.  AOS-S
+            # ``virtual-ip-address`` accepts ONE address per vrid;
+            # cross-vendor migration FROM Cisco IOS-XE or Junos
+            # sources with multi-IP groups drops secondary virtuals
+            # with a review comment.  See render.py inside the VRRP
+            # emission block for the per-group comment form.
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ips",
+                reason=(
+                    "AOS-S 'virtual-ip-address' accepts only ONE "
+                    "address per vrid; cross-vendor migration from "
+                    "Cisco IOS-XE secondaries or Junos virtual-"
+                    "address lists drops the tail with a review "
+                    "comment."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             UnsupportedPath(
@@ -181,16 +205,11 @@ class ArubaAOSSCodec(CodecBase):
                 path="/vxlan-vnis/udp-port",
                 reason="VXLAN not modelled (see /vxlan-vnis/vni).",
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- anycast / per-VRF static routes --
+            # VRRP itself moved to ``supported`` above when Wave B
+            # wire-up landed.  Anycast / virtual-gateway-address
+            # paths remain unsupported because AOS-S is a campus
+            # L2/L3 codec with no anycast-gateway grammar.
             UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(

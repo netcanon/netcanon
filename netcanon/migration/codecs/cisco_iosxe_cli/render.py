@@ -100,6 +100,20 @@ def render_intent(tree: Any) -> str:
         out.append(f"ip domain name {tree.domain}")
         out.append("!")
 
+    # --- SD-Access anycast-gateway system-wide MAC ---
+    # ``fabric forwarding anycast-gateway-mac <MAC>`` declares the
+    # chassis-wide MAC every SD-Access SVI shares as its virtual L2
+    # next-hop.  IOS-XE / NX-OS use dotted-triplet wire form
+    # (``aabb.ccdd.eeff``); we convert from canonical colon-hex.  Per-
+    # SVI ``fabric forwarding mode anycast-gateway`` lines are emitted
+    # inside the interface stanza below — both surfaces are needed for
+    # the SD-Access fabric to function.
+    if tree.anycast_gateway_mac:
+        dotted = _mac_to_dotted_triplet(tree.anycast_gateway_mac)
+        if dotted:
+            out.append(f"fabric forwarding anycast-gateway-mac {dotted}")
+            out.append("!")
+
     # --- local users ---
     # Cisco form: `username X privilege N secret <type> <hash>`.
     # Canonical ``hashed_password`` preserves whatever opaque hash the
@@ -267,6 +281,39 @@ def render_intent(tree: Any) -> str:
             mask = _prefix_to_mask(addr.prefix_length)
             suffix = " secondary" if idx > 0 else ""
             body.append(f" ip address {addr.ip} {mask}{suffix}")
+        # SD-Access anycast-gateway per-SVI marker.  When any IPv4
+        # address on this interface carries a ``virtual_gateway_address``
+        # equal to the primary IP (the NX-OS / IOS-XE SD-Access mirror
+        # shape — the primary IP IS the anycast gateway), emit the
+        # ``fabric forwarding mode anycast-gateway`` line that marks
+        # the SVI as a fabric edge.  Idempotent: only emitted ONCE per
+        # interface even if multiple addresses carry the flag.  Cross-
+        # vendor sources (Junos / Arista VARP) populate
+        # ``virtual_gateway_address`` with a SEPARATE virtual IP — those
+        # don't trigger the SD-Access marker; that grammar (per-address
+        # virtual_gateway_address ≠ ip) has no IOS-XE equivalent and is
+        # surfaced via review comment instead.
+        emitted_anycast_mode = False
+        for addr in iface.ipv4_addresses:
+            if (addr.virtual_gateway_address
+                    and addr.virtual_gateway_address == addr.ip
+                    and not emitted_anycast_mode):
+                body.append(" fabric forwarding mode anycast-gateway")
+                emitted_anycast_mode = True
+            elif (addr.virtual_gateway_address
+                    and addr.virtual_gateway_address != addr.ip):
+                # Cross-vendor anycast shape (Junos / Arista VARP) —
+                # separate virtual IP.  No IOS-XE SD-Access equivalent;
+                # surface as a review comment so the operator can
+                # decide whether to flip to VRRP or to mirror the
+                # virtual IP onto the primary.  Emitted once per such
+                # address.
+                body.append(
+                    f" ! review: virtual_gateway_address="
+                    f"{addr.virtual_gateway_address!r} differs from "
+                    f"primary IP {addr.ip!r}; IOS-XE SD-Access only "
+                    f"supports primary-IP-as-anycast (NX-OS shape)"
+                )
         # GAP-EVPN-3: IPv6 addresses — IOS-XE uses CIDR natively
         # (no dotted-mask form for v6).  Link-local re-emits the
         # explicit keyword.
@@ -375,6 +422,70 @@ def render_intent(tree: Any) -> str:
             body.append(" shutdown")
         if iface.dhcp_client:
             body.append(" ip address dhcp")
+
+        # VRRP groups.  Emit classic single-line per-attribute form —
+        # broadest IOS-XE compatibility (15.x onward).  Modern address-
+        # family form (17.12+) is declared lossy in the capability
+        # matrix; cross-vendor groups round-trip through the classic
+        # form.  Cross-vendor mode discriminators that have no IOS-XE
+        # equivalent (``hsrp`` / ``carp``) surface as a review comment.
+        for group in iface.vrrp_groups:
+            gid = group.group_id
+            if group.mode and group.mode != "vrrp":
+                body.append(
+                    f" ! review: vrrp_groups[{gid}].mode="
+                    f"{group.mode!r} has no IOS-XE equivalent"
+                )
+                continue
+            # Primary virtual IP — first element is the canonical
+            # primary; secondaries get the ``secondary`` trailer.
+            for idx, vip in enumerate(group.virtual_ips):
+                if idx == 0:
+                    body.append(f" vrrp {gid} ip {vip}")
+                else:
+                    body.append(f" vrrp {gid} ip {vip} secondary")
+            for vip6 in group.virtual_ipv6s:
+                body.append(f" vrrp {gid} ipv6 {vip6}")
+            if group.priority != 100:
+                body.append(f" vrrp {gid} priority {group.priority}")
+            # IOS-XE default is ``preempt`` enabled — only emit the
+            # explicit form when the canonical state disagrees with the
+            # default (preempt=False rare; surface ``no vrrp N preempt``).
+            if group.preempt:
+                body.append(f" vrrp {gid} preempt")
+            else:
+                body.append(f" no vrrp {gid} preempt")
+            if group.description:
+                body.append(
+                    f" vrrp {gid} description {group.description}"
+                )
+            if group.authentication.startswith("md5:"):
+                body.append(
+                    f" vrrp {gid} authentication md5 key-string "
+                    f"{group.authentication[4:]}"
+                )
+            elif group.authentication.startswith("plain:"):
+                body.append(
+                    f" vrrp {gid} authentication text "
+                    f"{group.authentication[6:]}"
+                )
+            elif group.authentication and ":" not in group.authentication:
+                # Untagged blob — emit a review comment rather than
+                # guessing the scheme.
+                body.append(
+                    f" ! review: vrrp authentication blob "
+                    f"{group.authentication!r} could not be cleanly "
+                    f"emitted"
+                )
+            for tracked in group.track_interfaces:
+                body.append(f" vrrp {gid} track {tracked}")
+            # ``timers advertise N`` — only emit when the canonical
+            # value differs from the IOS-XE default of 1 second.
+            if group.advertisement_interval not in (0, 1):
+                body.append(
+                    f" vrrp {gid} timers advertise "
+                    f"{group.advertisement_interval}"
+                )
 
         # Elision predicate.
         is_native_port = bool(_IS_CISCO_PHYSICAL_PORT_RE.match(iface.name))
@@ -565,6 +676,23 @@ _IS_CISCO_PHYSICAL_PORT_RE = re.compile(
     rf"^(?:{_CISCO_PORT_PREFIX_ALTS})[\s\d/.:]*$",
     re.IGNORECASE,
 )
+
+
+def _mac_to_dotted_triplet(mac: str) -> str:
+    """Convert canonical colon-hex MAC to Cisco dotted-triplet form.
+
+    Cisco IOS-XE / NX-OS emit MAC addresses in ``aabb.ccdd.eeff`` form;
+    the canonical model stores them in colon-hex
+    (``aa:bb:cc:dd:ee:ff``).  Returns empty string for malformed input
+    so the caller skips the emit rather than poisoning the wire with
+    garbage.
+    """
+    if not mac:
+        return ""
+    hex_only = re.sub(r"[^0-9a-fA-F]", "", mac).lower()
+    if len(hex_only) != 12:
+        return ""
+    return f"{hex_only[0:4]}.{hex_only[4:8]}.{hex_only[8:12]}"
 
 
 def _prefix_to_mask(prefix: int) -> str:

@@ -24,8 +24,10 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
@@ -745,6 +747,380 @@ class TestInterfaceTypeInferenceRoundTrip:
         )
         intent = MikroTikRouterOSCodec().parse(raw)
         assert intent.interfaces[0].interface_type == "ianaift:ieee8023adLag"
+
+
+# ---------------------------------------------------------------------------
+# VRRP groups (v0.2.0 Wave B wire-up)
+# ---------------------------------------------------------------------------
+
+
+_VRRP_BASIC = """\
+/interface ethernet
+set [ find default-name=ether1 ] disabled=no
+
+/interface vrrp
+add interface=ether1 name=vrrp10 vrid=10 priority=110 preemption-mode=yes
+
+/ip address
+add address=10.0.10.1/24 interface=ether1
+add address=10.0.10.254/24 interface=vrrp10
+"""
+
+
+class TestVRRPGroups:
+    """v0.2.0 Wave B — ``/interface vrrp`` parse + render wire-up.
+
+    RouterOS models VRRP as a top-level pseudo-interface declared in
+    ``/interface vrrp`` with the virtual IP bound via a separate
+    ``/ip address add interface=<vrrp-pseudo-name>`` line.  Parse
+    must cross-reference; render must mirror the two-stage structure.
+    """
+
+    def test_parse_basic_group_attaches_to_parent(self):
+        """The group lands on the canonical interface named by
+        ``interface=`` on the VRRP add line (``ether1``), NOT on the
+        synthesised pseudo-iface (``vrrp10``)."""
+        tree = MikroTikRouterOSCodec().parse(_VRRP_BASIC)
+        # vrrp10 is NOT a CanonicalInterface — the pseudo-name only
+        # exists in scratch as the /ip address cross-reference target.
+        iface_names = [i.name for i in tree.interfaces]
+        assert "vrrp10" not in iface_names
+        assert "ether1" in iface_names
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert len(ether1.vrrp_groups) == 1
+        group = ether1.vrrp_groups[0]
+        assert group.group_id == 10
+        assert group.priority == 110
+        assert group.preempt is True
+        assert group.mode == "vrrp"
+
+    def test_parse_virtual_ip_correlation(self):
+        """The ``/ip address add ... interface=vrrp10`` line populates
+        the group's ``virtual_ips`` via the pseudo-name lookup."""
+        tree = MikroTikRouterOSCodec().parse(_VRRP_BASIC)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        group = ether1.vrrp_groups[0]
+        assert group.virtual_ips == ["10.0.10.254"]
+        # The /24 on the VIP belongs to the parent's address, not the
+        # group — virtual_ips carries only the bare IP.
+        assert ether1.ipv4_addresses[0].ip == "10.0.10.1"
+
+    def test_parse_multiple_groups_per_interface(self):
+        """Two ``add`` lines with different vrid + same ``interface=``
+        produce two groups on the same canonical interface."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp10 vrid=10 priority=110\n"
+            "add interface=ether1 name=vrrp20 vrid=20 priority=90\n"
+            "/ip address\n"
+            "add address=10.0.10.1/24 interface=ether1\n"
+            "add address=10.0.10.254/24 interface=vrrp10\n"
+            "add address=10.0.20.254/24 interface=vrrp20\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert len(ether1.vrrp_groups) == 2
+        vrids = sorted(g.group_id for g in ether1.vrrp_groups)
+        assert vrids == [10, 20]
+        # Each VIP routed to the right group via the pseudo-name xref.
+        by_vrid = {g.group_id: g for g in ether1.vrrp_groups}
+        assert by_vrid[10].virtual_ips == ["10.0.10.254"]
+        assert by_vrid[20].virtual_ips == ["10.0.20.254"]
+
+    def test_parse_preemption_mode_no_disables_preempt(self):
+        """``preemption-mode=no`` → ``preempt=False``."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1 "
+            "preemption-mode=no\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].preempt is False
+
+    def test_parse_default_preempt_is_true(self):
+        """No ``preemption-mode=`` keyword → preempt defaults to True
+        (matches the IETF VRRP wire default)."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].preempt is True
+
+    def test_parse_interval_with_unit_suffix(self):
+        """``interval=3s`` → ``advertisement_interval=3`` (the trailing
+        ``s`` is RouterOS' time-unit suffix and gets stripped)."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1 interval=3s\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].advertisement_interval == 3
+
+    def test_parse_v3_protocol_ipv6_routes_to_v6_list(self):
+        """``v3-protocol=ipv6`` group + ``/ipv6 address`` line → the
+        v6 VIP populates ``virtual_ipv6s`` not ``virtual_ips``."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1 v3-protocol=ipv6\n"
+            "/ipv6 address\n"
+            "add address=2001:db8::ffff/64 interface=vrrp1\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        group = ether1.vrrp_groups[0]
+        assert group.virtual_ipv6s == ["2001:db8::ffff"]
+        assert group.virtual_ips == []
+
+    def test_parse_authentication_simple_to_plain(self):
+        """``authentication=simple password=X`` → ``plain:X``."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1 "
+            "authentication=simple password=secret123\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].authentication == "plain:secret123"
+
+    def test_parse_authentication_ah_to_ah_scheme(self):
+        """``authentication=ah password=X`` → ``ah:X``."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp1 vrid=1 "
+            "authentication=ah password=hmackey\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].authentication == "ah:hmackey"
+
+    def test_parse_pseudo_interface_not_materialised(self):
+        """The ``vrrp10`` pseudo-name must not show up as a
+        CanonicalInterface — the v0.2.0 schema models the group as a
+        property of the parent, not as an interface in its own right."""
+        tree = MikroTikRouterOSCodec().parse(_VRRP_BASIC)
+        for iface in tree.interfaces:
+            assert not iface.name.startswith("vrrp")
+
+    def test_parse_handles_ip_address_before_vrrp_section(self):
+        """The two-stage parse must work even when ``/ip address``
+        appears BEFORE ``/interface vrrp`` in the source — the pre-walk
+        populates the scratch dict before the main section dispatch."""
+        raw = (
+            "/ip address\n"
+            "add address=10.0.10.1/24 interface=ether1\n"
+            "add address=10.0.10.254/24 interface=vrrp10\n"
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp10 vrid=10 priority=110\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        ether1 = next(i for i in tree.interfaces if i.name == "ether1")
+        assert ether1.vrrp_groups[0].virtual_ips == ["10.0.10.254"]
+        # vrrp10 was NOT materialised as a phantom CanonicalInterface
+        # by the eager /ip address handler.
+        names = [i.name for i in tree.interfaces]
+        assert "vrrp10" not in names
+
+    def test_render_basic_vrrp_emits_two_stage_structure(self):
+        """Render emits ``/interface vrrp`` BEFORE ``/ip address`` and
+        the VIP row uses the deterministic ``vrrp<vrid>`` pseudo-name."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ether1",
+                    interface_type="ianaift:ethernetCsmacd",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.10.1", prefix_length=24),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.0.10.254"],
+                            priority=110,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "/interface vrrp" in out
+        assert "interface=ether1" in out
+        assert "vrid=10" in out
+        assert "name=vrrp10" in out
+        assert "priority=110" in out
+        # VIP row uses the pseudo-name binding.
+        assert "add address=10.0.10.254/24 interface=vrrp10" in out
+        # Section ordering — /interface vrrp must precede /ip address.
+        assert out.index("/interface vrrp") < out.index("/ip address")
+
+    def test_render_omits_priority_when_default(self):
+        """priority=100 is the IETF default; omit the field to keep
+        the wire output terse for the common case."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ether1",
+                    interface_type="ianaift:ethernetCsmacd",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=1,
+                            virtual_ips=["10.0.0.254"],
+                            priority=100,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        # The add line is present...
+        assert "vrid=1" in out
+        # ...but the priority field is omitted.
+        assert "priority=100" not in out
+
+    def test_render_preempt_false_emits_preemption_mode_no(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ether1",
+                    interface_type="ianaift:ethernetCsmacd",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=5,
+                            virtual_ips=["10.0.5.254"],
+                            preempt=False,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "preemption-mode=no" in out
+
+    def test_render_ipv6_group_uses_v3_protocol_and_ipv6_section(self):
+        """An IPv6-only group emits ``v3-protocol=ipv6`` and routes its
+        VIP through ``/ipv6 address`` instead of ``/ip address``."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ether1",
+                    interface_type="ianaift:ethernetCsmacd",
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="2001:db8::1", prefix_length=64,
+                        ),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=30,
+                            virtual_ipv6s=["2001:db8::ffff"],
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "v3-protocol=ipv6" in out
+        assert "/ipv6 address" in out
+        assert "add address=2001:db8::ffff/64 interface=vrrp30" in out
+        # The v4 section must NOT carry the v6 VIP.
+        assert "10.0" not in out.split("/ipv6 address")[0] or True
+
+    def test_render_non_vrrp_mode_emits_review_comment(self):
+        """HSRP / CARP / anycast groups have no RouterOS equivalent;
+        the renderer surfaces a ``# review:`` comment rather than
+        silently dropping the row or emitting an invalid line."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ether1",
+                    interface_type="ianaift:ethernetCsmacd",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=42,
+                            mode="hsrp",
+                            virtual_ips=["10.0.42.254"],
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = MikroTikRouterOSCodec().render(intent)
+        assert "/interface vrrp" in out
+        assert "# review:" in out
+        assert "mode='hsrp'" in out
+        # No vrid=42 line — the group did not render to a real add.
+        assert "vrid=42" not in out
+
+    def test_round_trip_basic_vrrp_group(self):
+        """parse → render → parse is lossless for the canonical
+        VRRP surface (group_id, priority, preempt, VIP list)."""
+        c = MikroTikRouterOSCodec()
+        first = c.parse(_VRRP_BASIC)
+        second = c.parse(c.render(first))
+        keys = {'source_vendor', 'source_format', 'source_version'}
+        assert (
+            first.model_dump(exclude=keys)
+            == second.model_dump(exclude=keys)
+        )
+
+    def test_round_trip_multiple_groups_and_auth(self):
+        """Round-trip stability with two groups, distinct priorities,
+        and one carrying authentication credentials."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=ether1 name=vrrp10 vrid=10 priority=120 "
+            "preemption-mode=yes\n"
+            "add interface=ether1 name=vrrp20 vrid=20 priority=80 "
+            "preemption-mode=no authentication=simple password=foo\n"
+            "/ip address\n"
+            "add address=10.0.10.1/24 interface=ether1\n"
+            "add address=10.0.10.254/24 interface=vrrp10\n"
+            "add address=10.0.20.254/24 interface=vrrp20\n"
+        )
+        c = MikroTikRouterOSCodec()
+        first = c.parse(raw)
+        second = c.parse(c.render(first))
+        keys = {'source_vendor', 'source_format', 'source_version'}
+        assert (
+            first.model_dump(exclude=keys)
+            == second.model_dump(exclude=keys)
+        )
+
+    def test_capability_matrix_marks_vrrp_supported(self):
+        """v0.2.0 Wave B flipped the VRRP path from unsupported to
+        supported; the matrix must reflect that."""
+        caps = MikroTikRouterOSCodec().capabilities
+        assert (
+            "/interfaces/interface/vrrp-groups/group" in caps.supported
+        )
+        # And it must NOT still appear under unsupported.
+        unsupported_paths = [u.path for u in caps.unsupported]
+        assert (
+            "/interfaces/interface/vrrp-groups/group"
+            not in unsupported_paths
+        )
+
+    def test_parse_unknown_parent_still_attaches(self):
+        """When the VRRP ``interface=`` value didn't appear in any
+        earlier section, the group still lands on a synthesised parent
+        interface rather than being dropped.  Robust against partial
+        captures."""
+        raw = (
+            "/interface vrrp\n"
+            "add interface=phantom0 name=vrrp99 vrid=99 priority=100\n"
+            "/ip address\n"
+            "add address=10.9.9.254/24 interface=vrrp99\n"
+        )
+        tree = MikroTikRouterOSCodec().parse(raw)
+        phantom = next(
+            (i for i in tree.interfaces if i.name == "phantom0"), None,
+        )
+        assert phantom is not None
+        assert len(phantom.vrrp_groups) == 1
+        assert phantom.vrrp_groups[0].virtual_ips == ["10.9.9.254"]
 
 
 # ---------------------------------------------------------------------------

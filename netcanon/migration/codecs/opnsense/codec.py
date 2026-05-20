@@ -157,6 +157,12 @@ class OPNsenseCodec(CodecBase):
             "/aaa/authentication/users/user/config/username",
             "/aaa/authentication/users/user/config/password",
             "/aaa/authentication/users/user/config/role",
+            # Wave B (v0.2.0) — CARP groups on /virtualip/vip.
+            # OPNsense's BSD-CARP HA primitive parses + renders
+            # round-trip through CanonicalVRRPGroup with
+            # ``mode="carp"``.  See LossyPath below for the mode-
+            # restriction caveat (non-CARP modes drop on render).
+            "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
             LossyPath(
@@ -175,6 +181,24 @@ class OPNsenseCodec(CodecBase):
                     "encapsulation — tunnel_type is not surfaced on parse "
                     "or render.  Tunnel interfaces (GRE, IPIP, IPSEC) live "
                     "under separate Tier-3 OPNsense sections."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group",
+                reason=(
+                    "OPNsense's <virtualip> hosts CARP-only HA groups in "
+                    "the v1 wire-up.  CanonicalVRRPGroup records with "
+                    "mode='vrrp' or mode='hsrp' are SKIPPED on render — "
+                    "OPNsense has no native HSRP wire protocol, and its "
+                    "pure-VRRP mode under <virtualip> is rarely deployed "
+                    "and not yet emitted by this codec.  Only mode='carp' "
+                    "round-trips.  Additionally, the advskew↔priority "
+                    "mapping (priority = 254 - advskew) preserves "
+                    "relative HA-pair ordering but not exact election "
+                    "timing — VRRP priorities are advisory weights, CARP "
+                    "advskews are advertisement-interval offsets, so "
+                    "cross-protocol migration loses the timing semantics."
                 ),
                 severity="warn",
             ),
@@ -217,16 +241,9 @@ class OPNsenseCodec(CodecBase):
                 path="/vxlan-vnis/udp-port",
                 reason="VXLAN not modelled (see /vxlan-vnis/vni).",
             ),
-            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
-            UnsupportedPath(
-                path="/interfaces/interface/vrrp-groups/group",
-                reason=(
-                    "VRRP / HSRP / CARP redundancy groups parse-and-"
-                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
-                    "wire-up scheduled for v0.2.0 Wave B (see "
-                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
-                ),
-            ),
+            # -- Ship-before-wire (v0.2.0) -- anycast / per-VRF static routes --
+            # (Note: VRRP/HSRP/CARP was here but moved to supported[] with
+            # a LossyPath in Wave B — see CARP wire-up above.)
             UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(

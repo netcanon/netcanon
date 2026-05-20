@@ -50,6 +50,7 @@ from ...canonical.intent import (
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -251,6 +252,41 @@ _IPV6_ADDR_RE = re.compile(
 )
 _IFACE_NAME_RE = re.compile(r'^name\s+"?([^"\n]+)"?', re.IGNORECASE)
 
+# VRRP grammar (Wave B v0.2.0) — nested inside ``vlan N`` stanzas.
+#
+#   vlan 100
+#      ip address 10.0.100.1 255.255.255.0
+#      ip vrrp vrid 10
+#         virtual-ip-address 10.0.100.254
+#         priority 110
+#         preempt
+#         enable
+#         authentication mode plaintext-password "X"
+#         exit
+#      exit
+#
+# Aruba AOS-S only mounts VRRP inside ``vlan N`` blocks (the VLAN
+# IS the SVI on this platform).  The canonical model attaches the
+# group to the synthesised ``Vlan<N>`` :class:`CanonicalInterface`
+# created by the SVI-absorption path — see _svi_absorption.py.
+_VRRP_VRID_HEADER_RE = re.compile(
+    r"^ip\s+vrrp\s+vrid\s+(\d+)\s*$", re.IGNORECASE,
+)
+_VRRP_VIRTUAL_IP_RE = re.compile(
+    r"^virtual-ip-address\s+(\S+)\s*$", re.IGNORECASE,
+)
+_VRRP_PRIORITY_RE = re.compile(
+    r"^priority\s+(\d+)\s*$", re.IGNORECASE,
+)
+# AOS-S grammar for plaintext VRRP authentication:
+#   authentication mode plaintext-password "X"
+# Captured verbatim; stored as ``"plain:X"`` per the
+# :class:`CanonicalVRRPGroup.authentication` opaque-token convention.
+_VRRP_AUTH_PLAINTEXT_RE = re.compile(
+    r'^authentication\s+mode\s+plaintext-password\s+"?([^"\n]+?)"?\s*$',
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Pure helpers
@@ -423,13 +459,22 @@ def _infer_iface_type(name: str) -> str:
 
 def _parse_vlan_stanza(
     lines: list[str], start: int, vlan_id: int,
-) -> tuple[CanonicalVlan, int]:
+) -> tuple[CanonicalVlan, list[CanonicalVRRPGroup], int]:
     """Parse a ``vlan N`` stanza starting at *start* (body line).
 
-    Returns the parsed :class:`CanonicalVlan` and the index of the
-    first line AFTER the stanza's ``exit``.
+    Returns the parsed :class:`CanonicalVlan`, the list of nested
+    :class:`CanonicalVRRPGroup` instances (one per ``ip vrrp vrid N``
+    sub-block), and the index of the first line AFTER the stanza's
+    outer ``exit``.
+
+    VRRP groups parse here (rather than at the top level) because
+    AOS-S nests the ``ip vrrp vrid N`` block INSIDE the ``vlan N``
+    stanza — the VLAN is the SVI on this platform.  Returned groups
+    attach to the synthesised ``Vlan<N>`` :class:`CanonicalInterface`
+    by the caller (the SVI-absorption path in :func:`parse_intent`).
     """
     vlan = CanonicalVlan(id=vlan_id)
+    vrrp_groups: list[CanonicalVRRPGroup] = []
     i = start
     while i < len(lines):
         line = lines[i]
@@ -503,8 +548,115 @@ def _parse_vlan_stanza(
             i += 1
             continue
 
+        # VRRP sub-block — `ip vrrp vrid N` opens a nested stanza
+        # terminated by its own `exit`.  See _parse_vrrp_group_stanza
+        # for the body grammar.  The group attaches to the synthesised
+        # Vlan<N> CanonicalInterface (NOT to the CanonicalVlan itself)
+        # in the caller, matching the cross-vendor canonical surface
+        # which models VRRP as an interface property.
+        vrid_m = _VRRP_VRID_HEADER_RE.match(stripped)
+        if vrid_m:
+            gid = int(vrid_m.group(1))
+            group, next_i = _parse_vrrp_group_stanza(lines, i + 1, gid)
+            vrrp_groups.append(group)
+            i = next_i
+            continue
+
         i += 1
-    return vlan, i
+    return vlan, vrrp_groups, i
+
+
+def _parse_vrrp_group_stanza(
+    lines: list[str], start: int, gid: int,
+) -> tuple[CanonicalVRRPGroup, int]:
+    """Walk the body of ``ip vrrp vrid N`` until the inner ``exit``.
+
+    Returns the parsed :class:`CanonicalVRRPGroup` and the index of
+    the first line AFTER the sub-block's ``exit``.
+
+    Body grammar (AOS-S 16.10 Advanced Traffic Management Guide):
+
+      * ``virtual-ip-address X``    — append to ``virtual_ips``
+      * ``priority N``              — integer 1-254
+      * ``preempt``                 — presence = enabled
+      * ``enable``                  — group is active (implicit on
+                                       canonical; tracked but no field)
+      * ``authentication mode plaintext-password "X"``
+                                    — opaque, stored as ``"plain:X"``
+
+    Default ``preempt`` on AOS-S is False — operators must explicitly
+    add ``preempt`` to opt in.  This DIFFERS from the canonical
+    default of True (which matches Cisco/Arista); we override to
+    False on entry and the parser flips it when ``preempt`` appears.
+    """
+    # AOS-S vendor-default for preempt is False (unlike Cisco's True);
+    # the canonical default is True so we override here.
+    group = CanonicalVRRPGroup(group_id=gid, mode="vrrp", preempt=False)
+    i = start
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+        if not stripped or stripped.startswith(";"):
+            i += 1
+            continue
+        # Inner ``exit`` closes the vrrp vrid sub-block.
+        if stripped == "exit":
+            return group, i + 1
+        # Un-indented line ends the sub-block defensively (paste
+        # without explicit `exit`).
+        if not line[0].isspace():
+            return group, i
+
+        vip = _VRRP_VIRTUAL_IP_RE.match(stripped)
+        if vip:
+            group.virtual_ips.append(vip.group(1))
+            i += 1
+            continue
+
+        pri = _VRRP_PRIORITY_RE.match(stripped)
+        if pri:
+            group.priority = int(pri.group(1))
+            i += 1
+            continue
+
+        if stripped.lower() == "preempt":
+            group.preempt = True
+            i += 1
+            continue
+
+        if stripped.lower() == "no preempt":
+            group.preempt = False
+            i += 1
+            continue
+
+        if stripped.lower() == "enable":
+            # ``enable`` flag is implicit on the canonical model
+            # (groups in the tree are considered active by default).
+            # We don't carry a separate per-group ``enabled`` field;
+            # the absence of a group from the tree IS its disabled
+            # state.  Consume and skip.
+            i += 1
+            continue
+
+        if stripped.lower() == "disable":
+            # Pathological case — explicitly disabled groups still
+            # parse into the tree (so cross-vendor migration sees
+            # them); the renderer is free to emit them without
+            # ``enable`` to mirror.  Consume and skip.
+            i += 1
+            continue
+
+        auth = _VRRP_AUTH_PLAINTEXT_RE.match(stripped)
+        if auth:
+            group.authentication = f"plain:{auth.group(1)}"
+            i += 1
+            continue
+
+        # Unrecognised body line — skip but don't terminate.
+        # AOS-S has additional sub-commands (advertise-interval-centisec,
+        # track-id, etc.) not modelled here; they parse-and-ignore.
+        i += 1
+    return group, i
 
 
 def _parse_interface_stanza(
@@ -929,7 +1081,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
         vm = _VLAN_HEADER_RE.match(stripped_line)
         if vm:
             vlan_id = int(vm.group(1))
-            vlan, next_i = _parse_vlan_stanza(lines, i + 1, vlan_id)
+            vlan, vrrp_groups, next_i = _parse_vlan_stanza(
+                lines, i + 1, vlan_id,
+            )
             # Aruba AOS-S VLAN reassignment semantic: when a port
             # is added to a later VLAN's ``untagged`` list, it is
             # *moved* from any earlier VLAN's ``untagged`` list.
@@ -960,14 +1114,24 @@ def parse_intent(raw: str) -> CanonicalIntent:
             # to a canonical ``Vlan<N>`` CanonicalInterface here
             # so downstream consumers (and renderers of *other*
             # vendors that DO use ``interface Vlan<N>``) see the
-            # L3 record at the canonical location.
-            if vlan.ipv4_addresses:
+            # L3 record at the canonical location.  VRRP groups
+            # parsed from the nested ``ip vrrp vrid N`` blocks
+            # attach to this same Vlan<N> interface — VRRP is an
+            # interface property in the canonical model.
+            #
+            # When the VLAN has VRRP groups but NO L3 address
+            # (pathological AOS-S — a vrid sub-block normally
+            # implies an SVI), we still synthesise the Vlan<N>
+            # interface so the groups have somewhere to attach.
+            # Render path is robust to either input shape.
+            if vlan.ipv4_addresses or vrrp_groups:
                 intent.interfaces.append(CanonicalInterface(
                     name=f"Vlan{vlan_id}",
                     description=vlan.name,
                     enabled=True,
                     interface_type="ianaift:l3ipvlan",
                     ipv4_addresses=list(vlan.ipv4_addresses),
+                    vrrp_groups=list(vrrp_groups),
                 ))
             i = next_i
             continue

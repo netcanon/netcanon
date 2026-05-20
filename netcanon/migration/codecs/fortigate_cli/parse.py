@@ -57,6 +57,7 @@ from ...canonical.intent import (
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
 
@@ -422,6 +423,87 @@ def _apply_system_interface(
                         prev.lag_member_of = name
         else:
             iface.interface_type = _infer_iface_type(name)
+
+        # ── VRRP groups (Wave B) ──────────────────────────────────────
+        # FortiOS nests VRRP groups inside a per-interface ``config vrrp``
+        # sub-block, with one ``edit <vrid> ... next`` entry per group.
+        # The block model parses this as ``_EditBlock.sub_blocks`` on the
+        # interface's edit entry (path == ``vrrp``).  Mirrors the nested-
+        # subtable handling already in use for DHCP ``config ip-range``
+        # in :func:`_apply_system_dhcp_server`.
+        #
+        # Mandatory key: ``set vrip <X>`` (the virtual IP).  Without it
+        # the edit is malformed and we silently skip — real exports
+        # always emit ``vrip`` because FortiOS rejects ``config vrrp``
+        # edits that omit it.
+        #
+        # Optional v3 / opaque keys:
+        #   * ``set vrip6 <X>``        -> appended to ``virtual_ipv6s``
+        #   * ``set priority N``       -> ``priority`` (default 100)
+        #   * ``set preempt enable``   -> ``preempt=True``
+        #   * ``set adv-interval S``   -> ``advertisement_interval``
+        #   * ``set authentication T`` -> ``authentication="plain:T"``
+        #   * ``set vrdst <iface>``    -> appended to ``track_interfaces``
+        #     (FortiOS "destination" tracking — semantically close to
+        #     interface-state tracking on other vendors)
+        #
+        # FortiOS-specific knobs without canonical equivalent (vrgrp,
+        # start-time, vrdst-priority, version, vrrp-virtual-mac) are
+        # silently ignored — captured under the matrix's lossy notes.
+        for sub in edit.sub_blocks:
+            if sub.config_path != "vrrp":
+                continue
+            for vrrp_edit in sub.edits:
+                try:
+                    gid = int(vrrp_edit.edit_id)
+                except ValueError:
+                    continue
+                if not (1 <= gid <= 255):
+                    continue
+                vrip_tokens = vrrp_edit.settings.get("vrip")
+                if not vrip_tokens:
+                    continue
+                priority = 100
+                priority_tokens = vrrp_edit.settings.get("priority")
+                if priority_tokens:
+                    try:
+                        priority = int(priority_tokens[0])
+                    except ValueError:
+                        pass
+                preempt_tokens = vrrp_edit.settings.get("preempt")
+                # FortiOS default for preempt is ``enable`` when the knob
+                # is absent — matches the canonical default (``True``).
+                preempt = (
+                    preempt_tokens[0].lower() == "enable"
+                    if preempt_tokens else True
+                )
+                adv_interval = 1
+                adv_tokens = vrrp_edit.settings.get("adv-interval")
+                if adv_tokens:
+                    try:
+                        adv_interval = int(adv_tokens[0])
+                    except ValueError:
+                        pass
+                group = CanonicalVRRPGroup(
+                    group_id=gid,
+                    mode="vrrp",
+                    virtual_ips=[vrip_tokens[0]],
+                    priority=priority,
+                    preempt=preempt,
+                    advertisement_interval=adv_interval,
+                )
+                vrip6_tokens = vrrp_edit.settings.get("vrip6")
+                if vrip6_tokens:
+                    group.virtual_ipv6s.append(vrip6_tokens[0])
+                auth_tokens = vrrp_edit.settings.get("authentication")
+                if auth_tokens:
+                    group.authentication = f"plain:{auth_tokens[0]}"
+                vrdst_tokens = vrrp_edit.settings.get("vrdst")
+                if vrdst_tokens:
+                    # FortiOS allows a single vrdst per edit; preserve
+                    # verbatim as one entry on ``track_interfaces``.
+                    group.track_interfaces.append(vrdst_tokens[0])
+                iface.vrrp_groups.append(group)
 
         intent.interfaces.append(iface)
 

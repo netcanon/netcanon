@@ -54,6 +54,7 @@ from ...canonical.intent import (
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
     CanonicalVxlan,
 )
 from .._input_shape import detect_input_shape
@@ -362,14 +363,29 @@ def parse_intent(raw: str) -> CanonicalIntent:
             # explicit override stashed by the parser walk wins.
             tunnel_type=state.get("tunnel_type") or _infer_tunnel_type(name),
         )
+        # Wave B/C: per-address anycast-gateway companions + per-unit
+        # MAC overrides.  Junos's ``virtual-gateway-v4-mac`` is per-
+        # unit (one MAC covers every v4 address on that unit); the
+        # per-IP ``virtual-gateway-address`` is per-address.  The MAC
+        # only applies to GLOBAL-scope IPv6 addresses (fe80::/10
+        # link-local stays bare).
+        v4_anycast_map = state.get("ipv4_anycast", {})
+        v4_mac = state.get("v4_mac", "")
         for ip, prefix in state.get("ipv4", []):
             iface.ipv4_addresses.append(
-                CanonicalIPv4Address(ip=ip, prefix_length=prefix)
+                CanonicalIPv4Address(
+                    ip=ip,
+                    prefix_length=prefix,
+                    virtual_gateway_address=v4_anycast_map.get((ip, prefix), ""),
+                    virtual_gateway_mac=v4_mac,
+                )
             )
         # GAP-EVPN-3: IPv6 addresses.  Scope inferred from the
         # fe80::/10 prefix (Junos doesn't keyword-tag link-local).
         # fe80::/10 covers fe80::/16 through febf::/16 (first 10
         # bits are 1111111010 = fe + {8,9,a,b}<rest>).
+        v6_anycast_map = state.get("ipv6_anycast", {})
+        v6_mac = state.get("v6_mac", "")
         for ip, prefix in state.get("ipv6", []):
             lo = ip.lower()
             scope = (
@@ -386,8 +402,23 @@ def parse_intent(raw: str) -> CanonicalIntent:
                     ip=ip,
                     prefix_length=prefix,
                     scope=scope,
+                    virtual_gateway_address=v6_anycast_map.get((ip, prefix), ""),
+                    # Link-local addresses don't carry the per-unit
+                    # MAC override (Junos's virtual-gateway-v6-mac
+                    # only applies to global-scope addresses; fe80::/10
+                    # stays bare to match the QFX10K2 fixture shape).
+                    virtual_gateway_mac=v6_mac if scope == "global" else "",
                 )
             )
+        # Wave B: VRRP / FHRP redundancy groups bound to this unit.
+        # Junos binds ``vrrp-group <gid>`` under a specific
+        # ``family inet address <ip>``; we accumulate per-group state
+        # in ``state["vrrp_groups"]`` (keyed by gid) during dispatch
+        # and materialise here in deterministic group-id order.
+        vrrp_scratch = state.get("vrrp_groups", {})
+        for gid in sorted(vrrp_scratch.keys()):
+            g = vrrp_scratch[gid]
+            iface.vrrp_groups.append(_materialise_vrrp_group(gid, g))
         intent.interfaces.append(iface)
 
     # GAP 6: resolve pending ``routing-instances <name> interface
@@ -562,15 +593,35 @@ def parse_intent(raw: str) -> CanonicalIntent:
             vlan = CanonicalVlan(id=vid, name=stub_name)
             intent.vlans.append(vlan)
         # Source-shape (a): IPs gathered from ``set interfaces irb
-        # unit <vid>`` lines via the irb_state accumulator.
+        # unit <vid>`` lines via the irb_state accumulator.  Wave C:
+        # also carry per-address virtual_gateway_address + per-unit
+        # MAC overrides through the fold so VLAN-centric consumers
+        # (Aruba / OPNsense render paths) see the full anycast
+        # surface.
+        irb_v4_anycast = irb_entry.get("ipv4_anycast", {})
+        irb_v6_anycast = irb_entry.get("ipv6_anycast", {})
+        irb_v4_mac = irb_entry.get("v4_mac", "")
+        irb_v6_mac = irb_entry.get("v6_mac", "")
         for ip, prefix in irb_entry.get("ipv4", []):
             existing_addrs = {
                 (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
             }
             if (ip, prefix) not in existing_addrs:
                 vlan.ipv4_addresses.append(
-                    CanonicalIPv4Address(ip=ip, prefix_length=prefix)
+                    CanonicalIPv4Address(
+                        ip=ip,
+                        prefix_length=prefix,
+                        virtual_gateway_address=irb_v4_anycast.get(
+                            (ip, prefix), "",
+                        ),
+                        virtual_gateway_mac=irb_v4_mac,
+                    )
                 )
+        # Note: CanonicalVlan only carries IPv4 SVI addresses, not
+        # IPv6.  IPv6 SVI addresses live on the explicit
+        # ``CanonicalInterface(name="irb.<vid>")`` instead, which is
+        # preserved as load-bearing when v6 is present (see prune
+        # check above).  No IPv6 fold here.
         # Source-shape (b): IPs that landed on a materialised
         # ``CanonicalInterface(name="irb.<vid>")`` because the source
         # used the dotted-name shorthand instead of the ``unit <vid>``
@@ -583,11 +634,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             for addr in sub_iface.ipv4_addresses:
                 pair = (addr.ip, addr.prefix_length)
                 if pair not in existing_addrs:
-                    vlan.ipv4_addresses.append(
-                        CanonicalIPv4Address(
-                            ip=addr.ip, prefix_length=addr.prefix_length,
-                        )
-                    )
+                    vlan.ipv4_addresses.append(addr.model_copy(deep=True))
                     existing_addrs.add(pair)
         bound_vids.add(vid)
 
@@ -1259,7 +1306,11 @@ def _apply_interfaces(
         else:
             sub_name = f"{name}.{unit_num}"
             target_state = iface_state.setdefault(sub_name, {})
-        # ``unit <N> family inet address <ip>/<prefix>``
+        # ``unit <N> family inet address <ip>/<prefix>`` and the
+        # Wave-B/C extensions on the same line:
+        #   * ``... virtual-gateway-address <vga>`` (Wave C anycast)
+        #   * ``... vrrp-group <gid> <sub-token> <args...>`` (Wave B
+        #     classic FHRP redundancy group bound to the address)
         if (
             len(tokens) >= 7
             and tokens[3] == "family"
@@ -1278,6 +1329,36 @@ def _apply_interfaces(
                     pair = (ip_str, prefix)
                     if pair not in existing:
                         existing.append(pair)
+                    # Wave C: ``family inet address <ip>/<prefix>
+                    # virtual-gateway-address <vga>`` — capture the
+                    # per-address anycast companion.  Multiple address
+                    # lines with different vga's are stored separately
+                    # by the (ip, prefix) key.
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "virtual-gateway-address"
+                    ):
+                        target_state.setdefault(
+                            "ipv4_anycast", {},
+                        )[pair] = tokens[8]
+                    # Wave B: ``family inet address <ip>/<prefix>
+                    # vrrp-group <gid> <sub> <args...>`` — record
+                    # the group keyed by gid and dispatch the
+                    # sub-token onto the per-group scratch dict.
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "vrrp-group"
+                    ):
+                        try:
+                            gid = int(tokens[8])
+                        except ValueError:
+                            gid = None
+                        if gid is not None:
+                            _apply_vrrp_group_sub(
+                                target_state, gid, "vrrp",
+                                tokens[9:],
+                                addr_anchor=pair,
+                            )
                 except ValueError:
                     pass
         # ``unit <N> family inet dhcp`` — parser symmetry for the
@@ -1310,7 +1391,9 @@ def _apply_interfaces(
         # Junos treats global / link-local uniformly here (unlike
         # Cisco / Arista which keyword-tag link-local); we infer the
         # canonical scope from the fe80::/10 prefix at materialisation
-        # time so render-side scope handling is loss-free.
+        # time so render-side scope handling is loss-free.  Wave C:
+        # also detect the ``virtual-gateway-address <vga>`` trailer
+        # for IPv6 anycast SVIs.
         if (
             len(tokens) >= 7
             and tokens[3] == "family"
@@ -1326,6 +1409,15 @@ def _apply_interfaces(
                     pair = (ip_str, prefix)
                     if pair not in existing:
                         existing.append(pair)
+                    # Wave C: ``family inet6 address <ip>/<prefix>
+                    # virtual-gateway-address <vga>``.
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "virtual-gateway-address"
+                    ):
+                        target_state.setdefault(
+                            "ipv6_anycast", {},
+                        )[pair] = tokens[8]
                 except ValueError:
                     pass
         # ``unit <N> description "<desc>"`` — some configs place it here.
@@ -1338,6 +1430,25 @@ def _apply_interfaces(
         # ``unit <N> disable`` — disable on the sub-interface level.
         if len(tokens) >= 4 and tokens[3] == "disable":
             target_state["enabled"] = False
+        # Wave C: ``unit <N> virtual-gateway-v4-mac <MAC>`` /
+        # ``virtual-gateway-v6-mac <MAC>`` — per-unit MAC override for
+        # the anycast gateway.  Applies to EVERY address record on the
+        # same unit (one MAC per family per unit per the Junos
+        # grammar; QFX10K2 fixture lines 98/99 + 104/105 etc).  Order-
+        # independent with respect to address lines (the fixture has
+        # the MAC after the address lines, but a different operator
+        # could write them first; the materialiser stamps records at
+        # build time so either ordering is loss-free).
+        if (
+            len(tokens) >= 5
+            and tokens[3] == "virtual-gateway-v4-mac"
+        ):
+            target_state["v4_mac"] = tokens[4]
+        if (
+            len(tokens) >= 5
+            and tokens[3] == "virtual-gateway-v6-mac"
+        ):
+            target_state["v6_mac"] = tokens[4]
         # GAP 7: ``unit <N> vlan-id <tag>`` — the per-unit 802.1Q tag.
         # Semantically equivalent to Cisco ``encapsulation dot1Q N``
         # on a sub-interface; stores as CanonicalInterface.access_vlan
@@ -1378,6 +1489,8 @@ def _apply_interfaces(
 
         # --- Phase 4 rank-4: IRB SVI L3 ---
         # ``set interfaces irb unit <vid> family inet address <ip>/<prefix>``
+        # — Wave C extension: detect the ``virtual-gateway-address
+        # <vga>`` trailer for the anycast-gateway companion.
         if (
             name == "irb"
             and irb_state is not None
@@ -1395,8 +1508,92 @@ def _apply_interfaces(
                     pair = (ip_str, prefix)
                     if pair not in entry["ipv4"]:
                         entry["ipv4"].append(pair)
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "virtual-gateway-address"
+                    ):
+                        entry.setdefault(
+                            "ipv4_anycast", {},
+                        )[pair] = tokens[8]
+                    # Wave B: classic ``vrrp-group <gid> <sub>`` on
+                    # the IRB address.  Same trailer-token shape as
+                    # the non-IRB branch; we re-use the per-group
+                    # scratch dispatcher.  IRB VRRP groups live on
+                    # the IRB unit's CanonicalInterface (post-fold,
+                    # the bare ``irb`` carrier may be pruned; the
+                    # VLAN gets the addresses but the per-unit IRB
+                    # iface carries the VRRP state until then).
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "vrrp-group"
+                    ):
+                        try:
+                            gid = int(tokens[8])
+                        except ValueError:
+                            gid = None
+                        if gid is not None:
+                            _apply_vrrp_group_sub(
+                                entry, gid, "vrrp",
+                                tokens[9:],
+                                addr_anchor=pair,
+                            )
                 except ValueError:
                     pass
+        # Wave C: ``set interfaces irb unit <vid> family inet6
+        # address <ipv6>/<prefix>`` (plus optional
+        # ``virtual-gateway-address`` trailer).  Symmetric to the
+        # family-inet branch above; routes IPv6 addresses through the
+        # ``irb_state`` accumulator so the VLAN-fold pass picks them
+        # up the same way the v4 addresses do.
+        if (
+            name == "irb"
+            and irb_state is not None
+            and len(tokens) >= 7
+            and tokens[3] == "family"
+            and tokens[4] == "inet6"
+            and tokens[5] == "address"
+        ):
+            addr = tokens[6]
+            if "/" in addr:
+                ip_str, prefix_str = addr.split("/", 1)
+                try:
+                    prefix = int(prefix_str)
+                    entry = irb_state.setdefault(unit_num, {"ipv4": []})
+                    pair = (ip_str, prefix)
+                    existing_v6 = entry.setdefault("ipv6", [])
+                    if pair not in existing_v6:
+                        existing_v6.append(pair)
+                    if (
+                        len(tokens) >= 9
+                        and tokens[7] == "virtual-gateway-address"
+                    ):
+                        entry.setdefault(
+                            "ipv6_anycast", {},
+                        )[pair] = tokens[8]
+                except ValueError:
+                    pass
+        # Wave C: per-IRB-unit MAC overrides.  ``set interfaces irb
+        # unit <vid> virtual-gateway-v4-mac <MAC>`` /
+        # ``virtual-gateway-v6-mac <MAC>`` — applies to every address
+        # on that family for that unit.  Order-independent of address
+        # lines (QFX10K2 fixture has the MACs after the addresses; a
+        # different operator could write them first).
+        if (
+            name == "irb"
+            and irb_state is not None
+            and len(tokens) >= 5
+            and tokens[3] == "virtual-gateway-v4-mac"
+        ):
+            entry = irb_state.setdefault(unit_num, {"ipv4": []})
+            entry["v4_mac"] = tokens[4]
+        if (
+            name == "irb"
+            and irb_state is not None
+            and len(tokens) >= 5
+            and tokens[3] == "virtual-gateway-v6-mac"
+        ):
+            entry = irb_state.setdefault(unit_num, {"ipv4": []})
+            entry["v6_mac"] = tokens[4]
 
 
 def _apply_interface_range(
@@ -2055,6 +2252,143 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _apply_vrrp_group_sub(
+    target_state: dict[str, Any],
+    gid: int,
+    mode: str,
+    rest_tokens: list[str],
+    addr_anchor: tuple[str, int] | None = None,
+) -> None:
+    """Dispatch a single ``vrrp-group <gid> <sub-token> <args...>``
+    sub-line into the per-group scratch dict stored on
+    *target_state* under the ``"vrrp_groups"`` key.
+
+    The scratch dict is keyed by group_id; each entry carries the
+    fields a :class:`CanonicalVRRPGroup` needs.  Address anchor
+    (the ``(ip, prefix)`` of the parent ``family inet address``
+    line) is captured the first time the group is created so the
+    render side knows which address line to nest under.
+
+    Junos sub-tokens recognised:
+
+    * ``virtual-address <vip>`` — append to ``virtual_ips``.
+      Repeated lines accumulate (Junos supports multiple).
+    * ``virtual-inet6-address <vip>`` — append to ``virtual_ipv6s``.
+    * ``priority <N>`` — override the default (100).
+    * ``preempt`` — set ``preempt=True`` (the default).
+    * ``no-preempt`` / ``preempt no`` — set ``preempt=False``.
+    * ``accept-data`` — Junos enable-bit; informational, ignored.
+    * ``advertise-interval <N>`` — heartbeat seconds.
+    * ``track interface <iface>`` — append to ``track_interfaces``;
+      ``priority-cost <N>`` decrement value is per-vendor lossy.
+    * ``authentication-type <scheme>`` + ``authentication-key
+      <val>`` — combined into the canonical
+      ``<scheme>:<value>`` form.
+
+    Unknown sub-tokens parse-and-ignore (Tier-3 tolerance).
+    """
+    groups = target_state.setdefault("vrrp_groups", {})
+    g = groups.setdefault(gid, {
+        "group_id": gid,
+        "mode": mode,
+        "virtual_ips": [],
+        "virtual_ipv6s": [],
+        "virtual_mac": "",
+        "priority": 100,
+        "preempt": True,
+        "advertisement_interval": 1,
+        "authentication": "",
+        "track_interfaces": [],
+        "description": "",
+        "_addr_anchor": addr_anchor,
+    })
+    if not rest_tokens:
+        return
+    sub = rest_tokens[0]
+    if sub == "virtual-address" and len(rest_tokens) >= 2:
+        vip = rest_tokens[1]
+        if vip not in g["virtual_ips"]:
+            g["virtual_ips"].append(vip)
+        return
+    if sub == "virtual-inet6-address" and len(rest_tokens) >= 2:
+        vip = rest_tokens[1]
+        if vip not in g["virtual_ipv6s"]:
+            g["virtual_ipv6s"].append(vip)
+        return
+    if sub == "priority" and len(rest_tokens) >= 2:
+        try:
+            g["priority"] = int(rest_tokens[1])
+        except ValueError:
+            pass
+        return
+    if sub == "preempt":
+        # ``vrrp-group N preempt`` (no further tokens) — the default
+        # is preempt=True; a trailing ``hold-time <N>`` is lossy.
+        g["preempt"] = True
+        return
+    if sub in ("no-preempt", "preempt-disable"):
+        g["preempt"] = False
+        return
+    if sub == "advertise-interval" and len(rest_tokens) >= 2:
+        try:
+            g["advertisement_interval"] = int(rest_tokens[1])
+        except ValueError:
+            pass
+        return
+    if (
+        sub == "track"
+        and len(rest_tokens) >= 3
+        and rest_tokens[1] == "interface"
+    ):
+        track_iface = rest_tokens[2]
+        if track_iface not in g["track_interfaces"]:
+            g["track_interfaces"].append(track_iface)
+        return
+    if sub == "authentication-type" and len(rest_tokens) >= 2:
+        scheme = rest_tokens[1]
+        existing = g.get("authentication", "")
+        existing_value = (
+            existing.split(":", 1)[1] if ":" in existing else ""
+        )
+        g["authentication"] = f"{scheme}:{existing_value}"
+        return
+    if sub == "authentication-key" and len(rest_tokens) >= 2:
+        existing = g.get("authentication", "")
+        scheme = (
+            existing.split(":", 1)[0] if ":" in existing else "simple"
+        )
+        g["authentication"] = f"{scheme}:{rest_tokens[1]}"
+        return
+    if sub == "accept-data":
+        # Enable-bit on the group; no canonical equivalent — drop
+        # silently (informational; parse-and-ignore).
+        return
+    if sub == "description" and len(rest_tokens) >= 2:
+        g["description"] = rest_tokens[1]
+        return
+
+
+def _materialise_vrrp_group(
+    gid: int, scratch: dict[str, Any],
+) -> CanonicalVRRPGroup:
+    """Build a :class:`CanonicalVRRPGroup` from a parse-time scratch
+    dict.  Defensive about missing keys (parse-tolerance).
+    """
+    return CanonicalVRRPGroup(
+        group_id=gid,
+        mode=scratch.get("mode", "vrrp"),
+        virtual_ips=list(scratch.get("virtual_ips", [])),
+        virtual_ipv6s=list(scratch.get("virtual_ipv6s", [])),
+        virtual_mac=scratch.get("virtual_mac", ""),
+        priority=scratch.get("priority", 100),
+        preempt=scratch.get("preempt", True),
+        advertisement_interval=scratch.get("advertisement_interval", 1),
+        authentication=scratch.get("authentication", ""),
+        track_interfaces=list(scratch.get("track_interfaces", [])),
+        description=scratch.get("description", ""),
+    )
 
 
 def _infer_iface_type(name: str) -> str:

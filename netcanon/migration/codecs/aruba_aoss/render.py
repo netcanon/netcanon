@@ -604,8 +604,8 @@ def render_intent(tree: Any) -> str:
             addrs = list(svi_iface.ipv4_addresses)
             if addrs:
                 absorbed_iface_names.add(svi_iface.name)
+        id_match = iface_by_vlan_id.get(vlan.id)
         if not addrs:
-            id_match = iface_by_vlan_id.get(vlan.id)
             if id_match is not None:
                 addrs = list(id_match.ipv4_addresses)
                 if addrs:
@@ -614,6 +614,75 @@ def render_intent(tree: Any) -> str:
             lines.append(
                 f"   ip address {addr.ip}/{addr.prefix_length}"
             )
+        # VRRP groups — emit nested ``ip vrrp vrid N`` sub-blocks
+        # (Wave B v0.2.0).  AOS-S only mounts VRRP inside ``vlan N``
+        # blocks; the canonical model attaches groups to a sibling
+        # ``Vlan<N>`` :class:`CanonicalInterface`.  Source the
+        # group list from whichever sibling interface the address
+        # lookup resolved (Vlan<N> first, then any vlan-id-encoding
+        # iface), so cross-vendor input shapes route through here
+        # identically to native AOS-S round-trip.
+        vrrp_source = svi_iface if svi_iface is not None else id_match
+        if vrrp_source is not None and vrrp_source.vrrp_groups:
+            # Mark the sibling interface as absorbed so the per-iface
+            # emission loop below doesn't emit a duplicate
+            # ``interface Vlan<N>`` stanza.  This handles the case
+            # where the SVI iface carries VRRP but no IP (rare on
+            # AOS-S — the L3 normally lives on the VLAN block, not
+            # the synthesised Vlan<N> interface).
+            absorbed_iface_names.add(vrrp_source.name)
+        if vrrp_source is not None:
+            for group in vrrp_source.vrrp_groups:
+                if group.mode != "vrrp":
+                    # AOS-S supports classic VRRP only — no anycast,
+                    # no HSRP, no CARP grammar exists on the platform.
+                    # Surface a review comment so the operator knows
+                    # to translate manually.
+                    lines.append(
+                        f"   ; review: vrrp_groups[{group.group_id}]"
+                        f".mode={group.mode!r} has no AOS-S equivalent"
+                    )
+                    continue
+                lines.append(
+                    f"   ip vrrp vrid {group.group_id}"
+                )
+                if group.virtual_ips:
+                    # AOS-S accepts only ONE virtual-ip-address per
+                    # vrid; cross-vendor input with multiple IPs (Cisco
+                    # IOS-XE secondaries, Junos virtual-address [ ... ])
+                    # drops the tail with a review comment.  See
+                    # ``LossyPath`` declaration in codec.py.
+                    lines.append(
+                        f"      virtual-ip-address {group.virtual_ips[0]}"
+                    )
+                    for extra in group.virtual_ips[1:]:
+                        lines.append(
+                            f"      ; review: AOS-S supports only one "
+                            f"virtual-ip-address per vrid; secondary "
+                            f"{extra} dropped"
+                        )
+                if group.priority != 100:
+                    lines.append(f"      priority {group.priority}")
+                if group.preempt:
+                    lines.append("      preempt")
+                if group.authentication.startswith("plain:"):
+                    lines.append(
+                        f'      authentication mode plaintext-password '
+                        f'"{group.authentication[6:]}"'
+                    )
+                elif group.authentication:
+                    # md5 / carp-key / unknown scheme — AOS-S doesn't
+                    # consume this format.  Surface as review.
+                    lines.append(
+                        f"      ; review: vrrp authentication "
+                        f"{group.authentication!r} cannot be cleanly "
+                        f"emitted on AOS-S"
+                    )
+                # ``enable`` is the platform-mandatory activation
+                # token — emit it for every group so AOS-S actually
+                # starts the election.
+                lines.append("      enable")
+                lines.append("      exit")
         lines.append("   exit")
 
     # OOBM (out-of-band management) — AOS-S has a top-level `oobm`

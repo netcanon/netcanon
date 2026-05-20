@@ -17,11 +17,13 @@ import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalInterface,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.juniper_junos import JunosCodec
@@ -1535,3 +1537,527 @@ class TestVxlanSwitchOptions:
         assert len(second.vxlan_vnis) == 2
         for rec in second.vxlan_vnis:
             assert rec.source_interface == "lo0.0"
+
+
+# ---------------------------------------------------------------------------
+# Wave B: VRRP / classic FHRP redundancy groups
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPGroups:
+    """v0.2.0 Wave B: classic FHRP redundancy groups land on
+    :class:`CanonicalVRRPGroup` and live under
+    :attr:`CanonicalInterface.vrrp_groups`.  Junos's grammar is
+    distinctive — every ``vrrp-group <gid> <sub>`` sub-command nests
+    under a parent ``family inet address <ip>/<prefix>`` line so the
+    address acts as the binding anchor.  Other vendors (IOS-XE,
+    Arista) bind at the interface level, but the canonical schema
+    is vendor-neutral; only the render path knows about the anchor.
+    """
+
+    def test_parse_vrrp_virtual_address(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(
+            (i for i in intent.interfaces if i.name == "ge-0/0/0"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.vrrp_groups) == 1
+        g = iface.vrrp_groups[0]
+        assert g.group_id == 10
+        assert g.mode == "vrrp"
+        assert g.virtual_ips == ["10.1.1.1"]
+        # Defaults: priority 100, preempt True, no description.
+        assert g.priority == 100
+        assert g.preempt is True
+        assert g.description == ""
+
+    def test_parse_vrrp_priority_preempt_description(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 priority 200\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 no-preempt\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 description "
+            '"core-gw"\n'
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        assert g.priority == 200
+        assert g.preempt is False
+        assert g.description == "core-gw"
+
+    def test_parse_vrrp_track_interface(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        assert g.track_interfaces == ["ge-0/0/1", "ge-0/0/2"]
+
+    def test_parse_vrrp_authentication(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 authentication-type "
+            "simple\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 authentication-key "
+            'secret123\n'
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        g = iface.vrrp_groups[0]
+        # Canonical form is ``<scheme>:<value>`` per the schema.
+        assert g.authentication == "simple:secret123"
+
+    def test_parse_multiple_groups_on_same_address(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 20 virtual-address "
+            "10.1.1.2\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "ge-0/0/0")
+        # Materialised in group-id order (10 then 20).
+        assert [g.group_id for g in iface.vrrp_groups] == [10, 20]
+        assert iface.vrrp_groups[0].virtual_ips == ["10.1.1.1"]
+        assert iface.vrrp_groups[1].virtual_ips == ["10.1.1.2"]
+
+    def test_render_vrrp_minimal(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                        ),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.1.1.1"],
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        # Address line emits first as the anchor.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24" in out
+        )
+        # VRRP set-line nests under the same address path.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1" in out
+        )
+        # Default priority (100) + preempt (True): preempt emits,
+        # priority does NOT.
+        assert (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 preempt" in out
+        )
+        assert "priority 100" not in out
+
+    def test_render_vrrp_priority_no_preempt(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="ge-0/0/0",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                        ),
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["10.1.1.1"],
+                            priority=200,
+                            preempt=False,
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "vrrp-group 10 priority 200" in out
+        )
+        assert (
+            "vrrp-group 10 no-preempt" in out
+        )
+
+    def test_round_trip_vrrp_group(self):
+        raw = (
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 virtual-address "
+            "10.1.1.1\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 priority 150\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 no-preempt\n"
+            "set interfaces ge-0/0/0 unit 0 family inet "
+            "address 10.1.1.5/24 vrrp-group 10 track interface "
+            "ge-0/0/1\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Both ends carry exactly one vrrp_group with the same
+        # fields.
+        assert len(second.interfaces) == 1
+        s_iface = second.interfaces[0]
+        assert len(s_iface.vrrp_groups) == 1
+        s_g = s_iface.vrrp_groups[0]
+        assert s_g.group_id == 10
+        assert s_g.virtual_ips == ["10.1.1.1"]
+        assert s_g.priority == 150
+        assert s_g.preempt is False
+        assert s_g.track_interfaces == ["ge-0/0/1"]
+
+
+# ---------------------------------------------------------------------------
+# Wave C: Anycast-gateway companions (virtual-gateway-address +
+# virtual-gateway-v4-mac / -v6-mac)
+# ---------------------------------------------------------------------------
+
+
+class TestAnycastGateway:
+    """v0.2.0 Wave C: per-IP anycast-gateway companion fields
+    (``CanonicalIPv4Address.virtual_gateway_address``,
+    ``CanonicalIPv4Address.virtual_gateway_mac``, mirror for IPv6).
+
+    Junos's grammar is dense — both halves of the anycast surface
+    land on the same line in native ``set`` form:
+    ``set interfaces irb unit <vid> family inet address <X>/<M>
+    virtual-gateway-address <Y>``.  The per-unit MAC override
+    (``virtual-gateway-v4-mac`` / ``-v6-mac``) is per-unit, not
+    per-address, and applies to every address record on that unit
+    (one MAC per family per unit per the Junos commit-time
+    validator).
+    """
+
+    def test_parse_virtual_gateway_address_v4(self):
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        # The irb.<vid> sub-interface exists in the materialised
+        # iface list with the anycast companion on its v4 record.
+        iface = next(
+            (i for i in intent.interfaces if i.name == "irb.100"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.ipv4_addresses) == 1
+        addr = iface.ipv4_addresses[0]
+        assert addr.ip == "10.1.1.5"
+        assert addr.prefix_length == 24
+        assert addr.virtual_gateway_address == "10.1.1.1"
+
+    def test_parse_virtual_gateway_address_v6(self):
+        raw = (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(
+            (i for i in intent.interfaces if i.name == "irb.100"),
+            None,
+        )
+        assert iface is not None
+        assert len(iface.ipv6_addresses) == 1
+        v6 = iface.ipv6_addresses[0]
+        assert v6.ip == "fd20::5"
+        assert v6.virtual_gateway_address == "fd20::1"
+        # Global-scope (not fe80::/10).
+        assert v6.scope == "global"
+
+    def test_parse_virtual_gateway_v4_mac(self):
+        """``virtual-gateway-v4-mac`` is per-unit and applies to every
+        v4 address on the unit."""
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        addr = iface.ipv4_addresses[0]
+        assert addr.virtual_gateway_mac == "02:00:11:00:00:01"
+
+    def test_parse_virtual_gateway_v6_mac_only_on_global(self):
+        """The IPv6 MAC override applies only to GLOBAL-scope
+        addresses; ``fe80::/10`` link-local stays bare."""
+        raw = (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fe80::1/64\n"
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        v6_global = next(
+            a for a in iface.ipv6_addresses if a.scope == "global"
+        )
+        v6_link_local = next(
+            a for a in iface.ipv6_addresses if a.scope == "link-local"
+        )
+        assert v6_global.virtual_gateway_mac == "02:00:11:06:00:01"
+        # Link-local doesn't carry the per-unit MAC override.
+        assert v6_link_local.virtual_gateway_mac == ""
+
+    def test_parse_mac_before_address_order_independent(self):
+        """Order-independence: the MAC line can come BEFORE the
+        address lines (a different operator's idiom)."""
+        raw = (
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        iface = next(i for i in intent.interfaces if i.name == "irb.100")
+        assert iface.ipv4_addresses[0].virtual_gateway_mac == (
+            "02:00:11:00:00:01"
+        )
+
+    def test_render_virtual_gateway_address_v4(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                            virtual_gateway_address="10.1.1.1",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1"
+            in out
+        )
+
+    def test_render_virtual_gateway_address_v6(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fd20::5", prefix_length=64,
+                            scope="global",
+                            virtual_gateway_address="fd20::1",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1"
+            in out
+        )
+
+    def test_render_virtual_gateway_mac(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(
+                            ip="10.1.1.5", prefix_length=24,
+                            virtual_gateway_address="10.1.1.1",
+                            virtual_gateway_mac="02:00:11:00:00:01",
+                        ),
+                    ],
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fd20::5", prefix_length=64,
+                            scope="global",
+                            virtual_gateway_address="fd20::1",
+                            virtual_gateway_mac="02:00:11:06:00:01",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert (
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01" in out
+        )
+        assert (
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01" in out
+        )
+
+    def test_render_link_local_v6_skips_mac(self):
+        """Render only emits ``virtual-gateway-v6-mac`` for global-
+        scope IPv6 records (mirror of the parse-side filter)."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="irb.100",
+                    ipv6_addresses=[
+                        CanonicalIPv6Address(
+                            ip="fe80::1", prefix_length=64,
+                            scope="link-local",
+                            # Even with a MAC set, the link-local
+                            # scope filter blocks emission.
+                            virtual_gateway_mac="02:00:11:06:00:01",
+                        ),
+                    ],
+                ),
+            ],
+        )
+        out = JunosCodec().render(intent)
+        assert "virtual-gateway-v6-mac" not in out
+
+    def test_round_trip_anycast_full(self):
+        """End-to-end round-trip across the full Junos anycast
+        surface: per-IP v4 + v6 anycast addresses + per-unit MAC
+        overrides on both families.  Matches the QFX10K2 fixture
+        shape (one v4, one global v6, one link-local v6, per-unit
+        MAC for v4 + v6)."""
+        raw = (
+            "set interfaces irb unit 100 family inet "
+            "address 10.1.1.5/24 virtual-gateway-address 10.1.1.1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fd20::5/64 virtual-gateway-address fd20::1\n"
+            "set interfaces irb unit 100 family inet6 "
+            "address fe80::1/64\n"
+            "set interfaces irb unit 100 virtual-gateway-v4-mac "
+            "02:00:11:00:00:01\n"
+            "set interfaces irb unit 100 virtual-gateway-v6-mac "
+            "02:00:11:06:00:01\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Find the irb.100 interface in both trees.
+        f_iface = next(
+            i for i in first.interfaces if i.name == "irb.100"
+        )
+        s_iface = next(
+            i for i in second.interfaces if i.name == "irb.100"
+        )
+        # v4: same address + anycast + MAC.
+        assert s_iface.ipv4_addresses == f_iface.ipv4_addresses
+        # v6: same addresses + scopes + anycast + MAC distribution.
+        assert s_iface.ipv6_addresses == f_iface.ipv6_addresses
+
+    def test_round_trip_qfx10k2_anycast_section(self):
+        """Targeted round-trip for the QFX10K2 fixture's anycast
+        section (lines 95-128).  Confirms the parse + render
+        symmetry on REAL Junos grammar — multiple IRB units, each
+        with a global v6 + link-local v6, per-unit MAC overrides
+        on both families, and the ``proxy-macip-advertisement``
+        line interspersed (Tier-3; parse-and-ignore)."""
+        raw = (
+            "set interfaces irb unit 2021 family inet "
+            "address 10.221.0.5/16 virtual-gateway-address "
+            "10.221.0.1\n"
+            "set interfaces irb unit 2021 family inet6 "
+            "address fd20:2021::5/64 virtual-gateway-address "
+            "fd20:2021::1\n"
+            "set interfaces irb unit 2021 family inet6 "
+            "address fe80:2021::1/64\n"
+            "set interfaces irb unit 2021 virtual-gateway-v4-mac "
+            "02:00:21:00:00:01\n"
+            "set interfaces irb unit 2021 virtual-gateway-v6-mac "
+            "02:00:21:06:00:01\n"
+        )
+        codec = JunosCodec()
+        first = codec.parse(raw)
+        rendered = codec.render(first)
+        second = codec.parse(rendered)
+        # Compare model dumps so any field added to the model is
+        # automatically covered.
+        f_iface = next(
+            i for i in first.interfaces if i.name == "irb.2021"
+        )
+        s_iface = next(
+            i for i in second.interfaces if i.name == "irb.2021"
+        )
+        assert f_iface.model_dump() == s_iface.model_dump()
+
+
+# ---------------------------------------------------------------------------
+# Wave B/C: capability-matrix declarations
+# ---------------------------------------------------------------------------
+
+
+class TestVRRPAnycastCapabilities:
+    """The capability matrix declares the new paths as ``supported``
+    (VRRP + per-IP anycast) and the system-wide MAC as
+    ``unsupported`` (Junos uses per-unit MAC, not chassis-wide).
+    """
+
+    def test_vrrp_groups_supported(self):
+        caps = JunosCodec().capabilities
+        assert (
+            "/interfaces/interface/vrrp-groups/group" in caps.supported
+        )
+
+    def test_virtual_gateway_address_supported(self):
+        caps = JunosCodec().capabilities
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in caps.supported
+        )
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in caps.supported
+        )
+
+    def test_anycast_gateway_mac_unsupported(self):
+        caps = JunosCodec().capabilities
+        unsupported_paths = {u.path for u in caps.unsupported}
+        assert "/anycast-gateway-mac" in unsupported_paths
+
+    def test_routing_static_route_vrf_lossy(self):
+        caps = JunosCodec().capabilities
+        lossy_paths = {p.path for p in caps.lossy}
+        assert "/routing/static-route/vrf" in lossy_paths

@@ -488,6 +488,11 @@ def render_intent(tree: Any) -> str:
             or iface.access_vlan is not None
             or bool(iface.trunk_allowed_vlans)
             or bool(iface.lag_member_of)
+            # Wave B: VRRP groups on a routed SVI / port count as
+            # renderable content; without this the empty-stub eliser
+            # would drop a ``Vlan10`` whose only L3 surface is a
+            # VRRP group, taking the redundancy intent with it.
+            or bool(iface.vrrp_groups)
         )
         is_native_port = bool(
             _IS_ARISTA_PHYSICAL_PORT_RE.match(iface.name)
@@ -547,20 +552,141 @@ def render_intent(tree: Any) -> str:
                     f"   switchport trunk allowed vlan {vlist}"
                 )
         for addr in iface.ipv4_addresses:
-            out.append(
-                f"   ip address {addr.ip}/{addr.prefix_length}"
-            )
+            # Wave C VARP: addresses with a populated
+            # ``virtual_gateway_address`` emit as ``ip address virtual
+            # <vip>/<prefix>``.  EOS VARP has no per-leaf primary so
+            # ``addr.ip`` is empty on canonical records sourced from
+            # ``ip address virtual`` lines.  Cross-vendor renders from
+            # Junos (where the leaf has a distinct primary AND a
+            # virtual companion) preserve the primary alongside the
+            # VARP — both lines emit, in canonical-order: primary IP
+            # first (matches Arista CLI conventions where the operator
+            # may set both, though VARP-only is the typical EOS shape).
+            #
+            # The ``secondary`` trailer survives the round-trip — the
+            # parse path sets ``is_secondary`` on second-and-later
+            # VARP records on the same SVI; the render path emits the
+            # trailer with the same precedence.
+            if addr.virtual_gateway_address:
+                line = (
+                    f"   ip address virtual "
+                    f"{addr.virtual_gateway_address}/{addr.prefix_length}"
+                )
+                if addr.is_secondary:
+                    line += " secondary"
+                out.append(line)
+                # When canonical also carries a real per-leaf primary
+                # (cross-vendor render from a Junos source), emit it
+                # too so the leaf retains its own routable IP.
+                if addr.ip:
+                    primary_line = (
+                        f"   ip address {addr.ip}/{addr.prefix_length}"
+                    )
+                    if addr.is_secondary:
+                        primary_line += " secondary"
+                    out.append(primary_line)
+            else:
+                out.append(
+                    f"   ip address {addr.ip}/{addr.prefix_length}"
+                )
         # GAP-EVPN-3: IPv6 addresses.  Link-local form re-emits
         # the explicit ``link-local`` keyword; global form emits
-        # plain ``ipv6 address X/Y``.
+        # plain ``ipv6 address X/Y``.  Wave C IPv6 VARP (EOS 4.30+)
+        # mirrors the v4 shape — ``virtual_gateway_address``-bearing
+        # records emit ``ipv6 address virtual``.
         for v6 in iface.ipv6_addresses:
-            if v6.scope == "link-local":
+            if v6.virtual_gateway_address:
+                line = (
+                    f"   ipv6 address virtual "
+                    f"{v6.virtual_gateway_address}/{v6.prefix_length}"
+                )
+                if v6.is_secondary:
+                    line += " secondary"
+                out.append(line)
+                if v6.ip:
+                    primary_line = (
+                        f"   ipv6 address {v6.ip}/{v6.prefix_length}"
+                    )
+                    if v6.scope == "link-local":
+                        primary_line += " link-local"
+                    out.append(primary_line)
+            elif v6.scope == "link-local":
                 out.append(
                     f"   ipv6 address {v6.ip}/{v6.prefix_length} link-local"
                 )
             else:
                 out.append(
                     f"   ipv6 address {v6.ip}/{v6.prefix_length}"
+                )
+        # --- Classic VRRP (Wave B) ---------------------------------
+        # Multi-line emission, one ``vrrp <gid> <subcommand>`` line per
+        # canonical attribute.  The per-group ``mode`` is honoured —
+        # only ``mode="vrrp"`` groups emit on EOS; ``hsrp`` / ``carp``
+        # source modes drop to a review comment so a cross-vendor
+        # render doesn't silently lose the redundancy intent.  See
+        # ``docs/v0.2.0-planning/01-vrrp-canonical/03-parse-render-
+        # touchpoints.md`` § "2. arista_eos" for emit-side reference.
+        for group in iface.vrrp_groups:
+            if group.mode != "vrrp":
+                out.append(
+                    f"   ! review: vrrp_groups[{group.group_id}].mode="
+                    f"{group.mode!r} has no Arista EOS equivalent "
+                    f"(EOS supports IETF VRRP only)"
+                )
+                continue
+            for vip in group.virtual_ips:
+                out.append(
+                    f"   vrrp {group.group_id} ipv4 {vip}"
+                )
+            for vip6 in group.virtual_ipv6s:
+                out.append(
+                    f"   vrrp {group.group_id} ipv6 {vip6}"
+                )
+            if group.priority != 100:
+                out.append(
+                    f"   vrrp {group.group_id} priority "
+                    f"{group.priority}"
+                )
+            # Arista's default is ``preempt`` enabled; emit explicit
+            # ``no vrrp <gid> preempt`` only when disabled.
+            if not group.preempt:
+                out.append(
+                    f"   no vrrp {group.group_id} preempt"
+                )
+            if group.description:
+                out.append(
+                    f"   vrrp {group.group_id} description "
+                    f"{group.description}"
+                )
+            for tracked in group.track_interfaces:
+                out.append(
+                    f"   vrrp {group.group_id} track {tracked}"
+                )
+            if group.advertisement_interval not in (0, 1):
+                out.append(
+                    f"   vrrp {group.group_id} timers advertise "
+                    f"{group.advertisement_interval}"
+                )
+            if group.virtual_mac:
+                out.append(
+                    f"   vrrp {group.group_id} mac-address "
+                    f"{group.virtual_mac}"
+                )
+            if group.authentication.startswith("md5:"):
+                out.append(
+                    f"   vrrp {group.group_id} authentication md5 "
+                    f"key-string {group.authentication[4:]}"
+                )
+            elif group.authentication.startswith("plain:"):
+                out.append(
+                    f"   vrrp {group.group_id} authentication text "
+                    f"{group.authentication[6:]}"
+                )
+            elif group.authentication:
+                out.append(
+                    f"   ! review: vrrp authentication blob "
+                    f"{group.authentication!r} could not be cleanly "
+                    f"emitted"
                 )
         # IPv6 dynamic-address mode.  Arista EOS mirrors IOS-XE:
         # ``ipv6 address dhcp`` (stateful client) and ``ipv6
@@ -748,6 +874,22 @@ def render_intent(tree: Any) -> str:
                 # round-trip of a fresh-from-Arista MAC-VRF
                 # continues to advertise locally-learned MACs.
                 out.append("      redistribute learned")
+        out.append("!")
+
+    # --- VARP system-wide MAC (Wave C anycast-gateway) ---
+    # ``ip virtual-router mac-address <MAC>`` — top-level, one per
+    # chassis.  Anchors EVERY VARP virtual-IP emitted from the
+    # interface stanzas above.  Cross-vendor renders from sources
+    # that carry per-IP MAC overrides (Junos) into Arista hoist the
+    # first non-empty ``virtual_gateway_mac`` to the top-level field
+    # at parse-time (NOT done here — render only reads
+    # ``tree.anycast_gateway_mac``).  The order matches the Batfish
+    # real-capture fixture (line ~201 / ~286): after the Vxlan
+    # stanza, before static routes.
+    if tree.anycast_gateway_mac:
+        out.append(
+            f"ip virtual-router mac-address {tree.anycast_gateway_mac}"
+        )
         out.append("!")
 
     # --- Static routes ---

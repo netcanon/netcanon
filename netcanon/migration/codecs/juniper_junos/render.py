@@ -437,20 +437,71 @@ def render_intent(tree: Any) -> str:
                     f"family inet dhcp"
                 )
             for addr in iface.ipv4_addresses:
-                out.append(
+                line = (
                     f"set interfaces {parent} unit {unit_num} "
                     f"family inet address "
                     f"{addr.ip}/{addr.prefix_length}"
+                )
+                # Wave C: per-address anycast companion lives on the
+                # same line in native Junos grammar.
+                if addr.virtual_gateway_address:
+                    line += (
+                        f" virtual-gateway-address "
+                        f"{addr.virtual_gateway_address}"
+                    )
+                out.append(line)
+                # Wave B: classic VRRP groups bound to this address.
+                # Render each group's set-lines immediately after the
+                # parent address so the address ANCHOR is unambiguous.
+                _emit_vrrp_groups_for_address(
+                    out, parent, unit_num, addr, iface.vrrp_groups,
                 )
             # GAP-EVPN-3: IPv6 addresses on sub-interfaces.
             # Junos emits scope-uniformly under family inet6 —
             # the canonical scope discriminator is informational
             # only on this codec.
             for v6 in iface.ipv6_addresses:
-                out.append(
+                line = (
                     f"set interfaces {parent} unit {unit_num} "
                     f"family inet6 address "
                     f"{v6.ip}/{v6.prefix_length}"
+                )
+                if v6.virtual_gateway_address:
+                    line += (
+                        f" virtual-gateway-address "
+                        f"{v6.virtual_gateway_address}"
+                    )
+                out.append(line)
+            # Wave C: per-unit virtual-gateway-v4-mac / v6-mac.  The
+            # Junos grammar is one MAC per family per unit; we pick
+            # the first non-empty MAC across the unit's address
+            # records (the parser stamps every record with the unit
+            # MAC at materialisation time, so all of them carry it).
+            v4_mac = next(
+                (
+                    a.virtual_gateway_mac
+                    for a in iface.ipv4_addresses
+                    if a.virtual_gateway_mac
+                ),
+                "",
+            )
+            if v4_mac:
+                out.append(
+                    f"set interfaces {parent} unit {unit_num} "
+                    f"virtual-gateway-v4-mac {v4_mac}"
+                )
+            v6_mac = next(
+                (
+                    a.virtual_gateway_mac
+                    for a in iface.ipv6_addresses
+                    if a.virtual_gateway_mac and a.scope == "global"
+                ),
+                "",
+            )
+            if v6_mac:
+                out.append(
+                    f"set interfaces {parent} unit {unit_num} "
+                    f"virtual-gateway-v6-mac {v6_mac}"
                 )
             # IPv6 dhcp-client (``dhcp_client_v6 == "dhcp6"``) on
             # sub-interfaces.  Junos has no SLAAC keyword (the
@@ -497,15 +548,61 @@ def render_intent(tree: Any) -> str:
             )
         # IPv4 addresses — emit under unit 0 (v1's convention).
         for addr in iface.ipv4_addresses:
-            out.append(
+            line = (
                 f"set interfaces {name} unit 0 family inet "
                 f"address {addr.ip}/{addr.prefix_length}"
             )
+            if addr.virtual_gateway_address:
+                line += (
+                    f" virtual-gateway-address "
+                    f"{addr.virtual_gateway_address}"
+                )
+            out.append(line)
+            # Wave B: classic VRRP groups bound to this address.
+            _emit_vrrp_groups_for_address(
+                out, name, 0, addr, iface.vrrp_groups,
+            )
         # GAP-EVPN-3: IPv6 addresses also emit under unit 0.
         for v6 in iface.ipv6_addresses:
-            out.append(
+            line = (
                 f"set interfaces {name} unit 0 family inet6 "
                 f"address {v6.ip}/{v6.prefix_length}"
+            )
+            if v6.virtual_gateway_address:
+                line += (
+                    f" virtual-gateway-address "
+                    f"{v6.virtual_gateway_address}"
+                )
+            out.append(line)
+        # Wave C: per-unit MAC overrides for the parent interface
+        # (unit 0).  Pick the first non-empty MAC across the IPv4 /
+        # IPv6 address records — the parser stamps every record with
+        # the unit MAC at materialisation time so all carry it.
+        v4_mac = next(
+            (
+                a.virtual_gateway_mac
+                for a in iface.ipv4_addresses
+                if a.virtual_gateway_mac
+            ),
+            "",
+        )
+        if v4_mac:
+            out.append(
+                f"set interfaces {name} unit 0 virtual-gateway-v4-mac "
+                f"{v4_mac}"
+            )
+        v6_mac = next(
+            (
+                a.virtual_gateway_mac
+                for a in iface.ipv6_addresses
+                if a.virtual_gateway_mac and a.scope == "global"
+            ),
+            "",
+        )
+        if v6_mac:
+            out.append(
+                f"set interfaces {name} unit 0 virtual-gateway-v6-mac "
+                f"{v6_mac}"
             )
         # IPv6 dhcp-client mode.  Junos accepts only the explicit
         # dhcp6 form (no separate SLAAC keyword); slaac falls
@@ -752,9 +849,34 @@ def render_intent(tree: Any) -> str:
         # emit the l3-interface binding here.
         if vlan.ipv4_addresses and vlan.id not in existing_irb_vids:
             for addr in vlan.ipv4_addresses:
-                out.append(
+                line = (
                     f"set interfaces irb unit {vlan.id} family inet "
                     f"address {addr.ip}/{addr.prefix_length}"
+                )
+                if addr.virtual_gateway_address:
+                    line += (
+                        f" virtual-gateway-address "
+                        f"{addr.virtual_gateway_address}"
+                    )
+                out.append(line)
+            # Wave C: per-IRB-unit MAC overrides on the synthesised
+            # SVI.  CanonicalVlan only carries IPv4 (no IPv6 SVI
+            # field on the VLAN model — IPv6 SVI addresses live on
+            # the explicit irb.<vid> CanonicalInterface, which the
+            # iface-emit loop handles separately).  Pick the first
+            # non-empty MAC across the VLAN's v4 records.
+            v4_mac = next(
+                (
+                    a.virtual_gateway_mac
+                    for a in vlan.ipv4_addresses
+                    if a.virtual_gateway_mac
+                ),
+                "",
+            )
+            if v4_mac:
+                out.append(
+                    f"set interfaces irb unit {vlan.id} "
+                    f"virtual-gateway-v4-mac {v4_mac}"
                 )
             out.append(
                 f"set interfaces irb unit {vlan.id} vlan-id {vlan.id}"
@@ -1077,6 +1199,103 @@ def render_intent(tree: Any) -> str:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _emit_vrrp_groups_for_address(
+    out: list[str],
+    parent: str,
+    unit_num: int,
+    addr: Any,
+    vrrp_groups: list[Any],
+) -> None:
+    """Emit Junos ``vrrp-group`` set-lines bound to a specific IPv4
+    address line.
+
+    Junos requires every ``vrrp-group <gid>`` sub-command to nest
+    under a ``family inet address <ip>/<prefix>`` parent — the
+    address acts as the binding anchor.  We render each group's
+    sub-lines (virtual-address, priority, preempt, etc.) prefixed
+    with the full ``set interfaces <parent> unit <N> family inet
+    address <ip>/<prefix> vrrp-group <gid>`` path so the round-trip
+    parse re-binds the same group to the same address.
+
+    Groups with ``mode != "vrrp"`` (e.g. ``"hsrp"`` / ``"carp"``)
+    surface as a review comment — Junos has no native HSRP / CARP
+    primitive.  Groups with no virtual_ips on the IPv4 family also
+    surface a review comment (the operator's intent looks like
+    IPv6-only VRRP, which Junos expresses with
+    ``virtual-inet6-address``; we emit a comment because we don't
+    know which v6 address to anchor under in v0.2.0).
+    """
+    if not vrrp_groups:
+        return
+    addr_str = f"{addr.ip}/{addr.prefix_length}"
+    prefix = (
+        f"set interfaces {parent} unit {unit_num} "
+        f"family inet address {addr_str}"
+    )
+    for group in vrrp_groups:
+        if group.mode != "vrrp":
+            # Tier-3: anycast / HSRP / CARP — surface a review
+            # marker.  Junos's native anycast surface lives on
+            # CanonicalIPv4Address.virtual_gateway_address (handled
+            # elsewhere); this branch only fires for the remaining
+            # non-VRRP modes.
+            continue
+        if not group.virtual_ips:
+            # All-v6 group — out of scope for v0.2.0 (would need a
+            # different anchor address); skip silently.
+            continue
+        for vip in group.virtual_ips:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"virtual-address {vip}"
+            )
+        for vip6 in group.virtual_ipv6s:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"virtual-inet6-address {vip6}"
+            )
+        if group.priority != 100:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"priority {group.priority}"
+            )
+        if group.preempt:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} preempt"
+            )
+        else:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} no-preempt"
+            )
+        if group.advertisement_interval not in (0, 1):
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"advertise-interval {group.advertisement_interval}"
+            )
+        for tracked in group.track_interfaces:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"track interface {tracked}"
+            )
+        if group.authentication and ":" in group.authentication:
+            scheme, _, value = group.authentication.partition(":")
+            if scheme:
+                out.append(
+                    f"{prefix} vrrp-group {group.group_id} "
+                    f"authentication-type {scheme}"
+                )
+            if value:
+                out.append(
+                    f"{prefix} vrrp-group {group.group_id} "
+                    f"authentication-key {value}"
+                )
+        if group.description:
+            out.append(
+                f"{prefix} vrrp-group {group.group_id} "
+                f"description {_quote_always(group.description)}"
+            )
 
 
 _QUOTE_NEEDED_RE = re.compile(r"[\s\"';$`\\]")

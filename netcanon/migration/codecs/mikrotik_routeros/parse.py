@@ -24,7 +24,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
-from typing import Iterable
+from typing import Any, Iterable
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
@@ -38,6 +38,7 @@ from ...canonical.intent import (
     CanonicalSNMP,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -104,6 +105,29 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # first.  Defer /ip pool to a post-pass.
     deferred_ip_pool: list[list[str]] = []
 
+    # VRRP scratch — keyed by the VRRP pseudo-interface name (the
+    # ``name=`` attribute on the ``/interface vrrp add`` line, e.g.
+    # ``vrrp10``).  RouterOS models the VRRP group as a pseudo-
+    # interface declared in ``/interface vrrp`` and then binds the
+    # virtual IP via a separate ``/ip address add ... interface=<X>``
+    # line where ``<X>`` references the pseudo-name.  Parsing is
+    # therefore two-stage: first collect the scratch records, then
+    # post-pass the ``/ip address`` lines to attach virtual IPs by
+    # cross-referencing the pseudo-name.  See ``docs/v0.2.0-planning/
+    # 01-vrrp-canonical/03-parse-render-touchpoints.md`` §6 for the
+    # full design.
+    #
+    # Pre-walk to populate the scratch dict BEFORE the main section
+    # walker runs.  RouterOS ``/export`` typically emits
+    # ``/interface vrrp`` before ``/ip address`` so a single in-order
+    # pass would work for well-formed input, but the pre-walk keeps
+    # the cross-reference robust against hand-edited / reordered
+    # exports where ``/ip address`` precedes ``/interface vrrp``.
+    vrrp_scratch: dict[str, dict[str, Any]] = {}
+    for section, lines in sections:
+        if section == "/interface vrrp":
+            _parse_interface_vrrp(lines, vrrp_scratch)
+
     for section, lines in sections:
         if section == "/system identity":
             _parse_system_identity(lines, intent)
@@ -125,10 +149,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
             _parse_interface_tunnel(lines, iface_by_name, "eoip")
         elif section == "/interface ipip":
             _parse_interface_tunnel(lines, iface_by_name, "ipip")
+        elif section == "/interface vrrp":
+            # Already handled in the pre-walk above.  The branch stays
+            # in the dispatch so unknown ``/interface ...`` sections
+            # don't silently fall through to a default handler.
+            pass
         elif section == "/ip address":
-            _parse_ip_address(lines, iface_by_name)
+            _parse_ip_address(lines, iface_by_name, vrrp_scratch)
         elif section == "/ipv6 address":              # GAP-EVPN-3
-            _parse_ipv6_address(lines, iface_by_name)
+            _parse_ipv6_address(lines, iface_by_name, vrrp_scratch)
         elif section == "/ip route":
             _parse_ip_route(lines, intent)
         elif section == "/snmp":
@@ -147,6 +176,13 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     for pool_lines in deferred_ip_pool:
         _parse_ip_pool(pool_lines, intent)
+
+    # VRRP post-pass — materialise scratch records into
+    # CanonicalVRRPGroup entries on the parent interface.  Iterate in
+    # insertion order so groups land on parents in the same order they
+    # appeared in the source ``/interface vrrp`` section, keeping
+    # render output deterministic.
+    _materialise_vrrp_groups(vrrp_scratch, iface_by_name)
 
     # Order interfaces deterministically: ethernet ports first
     # (by natural-sort name), then bridges, then VLANs, then rest.
@@ -550,11 +586,203 @@ def _parse_interface_tunnel(
             iface.enabled = kv["disabled"].lower() == "no"
 
 
+def _parse_interface_vrrp(
+    lines: list[str],
+    vrrp_scratch: dict[str, dict[str, Any]],
+) -> None:
+    """Parse the ``/interface vrrp`` section into scratch records.
+
+    Each ``add`` line declares one VRRP pseudo-interface that lives at
+    the top level of RouterOS' interface tree.  Sample::
+
+        /interface vrrp
+        add interface=ether1 name=vrrp10 vrid=10 priority=110 \\
+            v3-protocol=ipv4 preemption-mode=yes interval=1s
+        add interface=ether2 name=vrrp20 vrid=20 priority=90 \\
+            preemption-mode=no authentication=simple password=foo
+
+    Recognised attributes (mapped to canonical fields):
+
+    * ``interface=X`` — parent interface that hosts the group; stored
+      in the scratch dict under ``parent`` so the post-pass can attach
+      the materialised CanonicalVRRPGroup to ``iface_by_name[X]``.
+    * ``name=Y`` — pseudo-iface name; used as the scratch dict key and
+      as the ``/ip address`` cross-reference target.
+    * ``vrid=N`` — canonical ``group_id``.
+    * ``priority=P`` — canonical ``priority``; defaults to 100.
+    * ``preemption-mode=yes|no`` — canonical ``preempt``; defaults to
+      ``True`` (the IETF VRRP default).
+    * ``interval=Ns`` — canonical ``advertisement_interval``; the
+      trailing ``s`` is RouterOS' time-unit suffix and stripped before
+      parsing.  Defaults to 1.
+    * ``v3-protocol=ipv4|ipv6`` — discriminator for which canonical
+      virtual-IP list the ``/ip address`` post-pass populates.  Per
+      RouterOS docs, defaults to ``ipv4`` when absent.
+    * ``authentication=ah|simple|none`` + ``password=X`` — combined
+      into the canonical ``authentication`` field in
+      ``<scheme>:<value>`` form (``ah:X``, ``plain:X``).  ``none`` /
+      missing maps to the empty string.
+    * ``disabled=yes|no`` — RouterOS-native enable flag; canonical
+      VRRPGroup has no equivalent (the group's existence implies it
+      is operational), so this is parse-and-ignore.  ``on-backup``
+      script bindings are Tier-3 and likewise dropped.
+    """
+    for line in lines:
+        if not line.startswith("add"):
+            continue
+        kv = _parse_kv(line)
+        parent = kv.get("interface", "")
+        name = kv.get("name", "")
+        if not parent or not name:
+            continue
+        try:
+            vrid = int(kv.get("vrid", "1"))
+        except ValueError:
+            continue
+        try:
+            priority = int(kv.get("priority", "100"))
+        except ValueError:
+            priority = 100
+        # ``interval`` accepts ``1``, ``1s``, ``500ms`` — we only model
+        # whole-second intervals on the canonical surface, so round
+        # millisecond values to the nearest second (min 1).
+        interval_raw = (kv.get("interval", "1") or "1").strip()
+        adv_interval = _parse_routeros_interval_seconds(interval_raw)
+        preempt = kv.get("preemption-mode", "yes").lower() != "no"
+        v3_protocol = kv.get("v3-protocol", "ipv4").lower()
+        # version: RouterOS exposes a separate ``version`` key (2 or 3);
+        # we don't carry it on the canonical surface (VRRPv3 is implied
+        # by v6 VIPs or by explicit ``version=3``) — parse but discard.
+        auth = _build_routeros_auth(kv)
+        vrrp_scratch[name] = {
+            "parent": parent,
+            "group_id": vrid,
+            "priority": priority,
+            "preempt": preempt,
+            "advertisement_interval": adv_interval,
+            "v3_protocol": v3_protocol,
+            "authentication": auth,
+            "virtual_ips": [],
+            "virtual_ipv6s": [],
+            "virtual_ip_prefix": 0,    # populated by /ip address post-pass
+            "virtual_ip6_prefix": 0,   # populated by /ipv6 address post-pass
+        }
+
+
+_TIME_INTERVAL_RE = re.compile(
+    r"^(?P<value>\d+)(?P<unit>ms|s|m|h)?$",
+    re.IGNORECASE,
+)
+
+
+def _parse_routeros_interval_seconds(raw: str) -> int:
+    """Convert a RouterOS time literal into whole seconds (min 1).
+
+    RouterOS interval values look like ``1``, ``1s``, ``500ms``, ``2m``;
+    canonical advertisement_interval is an int seconds field, so this
+    helper normalises.  Sub-second values round up to 1 (the smallest
+    valid canonical value), unknown / unparseable input also falls back
+    to 1.
+    """
+    m = _TIME_INTERVAL_RE.match(raw.strip())
+    if not m:
+        return 1
+    value = int(m.group("value"))
+    unit = (m.group("unit") or "s").lower()
+    if unit == "ms":
+        seconds = max(1, (value + 999) // 1000)
+    elif unit == "s":
+        seconds = max(1, value)
+    elif unit == "m":
+        seconds = max(1, value * 60)
+    elif unit == "h":
+        seconds = max(1, value * 3600)
+    else:
+        seconds = 1
+    return seconds
+
+
+def _build_routeros_auth(kv: dict[str, str]) -> str:
+    """Combine RouterOS ``authentication=`` + ``password=`` into the
+    canonical ``<scheme>:<value>`` token form.
+
+    RouterOS auth modes (per the Manual:Interface/VRRP page):
+
+    * ``none`` (or unset) — no authentication; canonical empty string.
+    * ``simple`` — plaintext shared secret; canonical ``plain:<pwd>``.
+    * ``ah`` — IPsec AH-style HMAC; canonical ``ah:<pwd>``.  RouterOS
+      uses the same ``password=`` field for the AH key.
+
+    Missing or empty passwords collapse to the empty string even when
+    a non-none scheme is declared — operators routinely declare the
+    scheme but defer the key to a secrets manager (the same pattern
+    the local-users wire-up follows).
+    """
+    scheme = (kv.get("authentication") or "none").lower()
+    password = kv.get("password", "")
+    if scheme in ("none", ""):
+        return ""
+    if not password:
+        return ""
+    if scheme == "simple":
+        return f"plain:{password}"
+    if scheme == "ah":
+        return f"ah:{password}"
+    return ""
+
+
+def _materialise_vrrp_groups(
+    vrrp_scratch: dict[str, dict[str, Any]],
+    iface_by_name: dict[str, CanonicalInterface],
+) -> None:
+    """Build :class:`CanonicalVRRPGroup` records from the scratch dict
+    and attach them to their parent interfaces.
+
+    Parents are looked up by name; an unknown parent (the ``interface=``
+    value didn't match anything we've parsed yet) results in a synthetic
+    CanonicalInterface so the group still survives — RouterOS allows
+    binding to any iface name and we'd rather carry a partial canonical
+    record than drop the row.  Insertion order across the scratch dict
+    is preserved so render output is deterministic.
+    """
+    for scratch in vrrp_scratch.values():
+        parent_name = scratch["parent"]
+        parent_iface = iface_by_name.get(parent_name)
+        if parent_iface is None:
+            parent_iface = CanonicalInterface(
+                name=parent_name,
+                interface_type=_infer_iface_type_from_name(parent_name),
+                default_name=(
+                    parent_name if _is_ethernet_name(parent_name) else ""
+                ),
+            )
+            iface_by_name[parent_name] = parent_iface
+        group = CanonicalVRRPGroup(
+            group_id=scratch["group_id"],
+            mode="vrrp",
+            virtual_ips=list(scratch["virtual_ips"]),
+            virtual_ipv6s=list(scratch["virtual_ipv6s"]),
+            priority=scratch["priority"],
+            preempt=scratch["preempt"],
+            advertisement_interval=scratch["advertisement_interval"],
+            authentication=scratch["authentication"],
+        )
+        parent_iface.vrrp_groups.append(group)
+
+
 def _parse_ip_address(
     lines: list[str],
     iface_by_name: dict[str, CanonicalInterface],
+    vrrp_scratch: dict[str, dict[str, Any]] | None = None,
 ) -> None:
-    """Parse ``add address=X/Y interface=Z`` lines and attach to iface."""
+    """Parse ``add address=X/Y interface=Z`` lines and attach to iface.
+
+    When ``Z`` matches a VRRP pseudo-interface name previously seen in
+    ``/interface vrrp``, the address is routed into ``vrrp_scratch[Z]
+    ['virtual_ips']`` (with the prefix tracked separately so the
+    renderer can reconstruct ``X/Y``) rather than minting a phantom
+    ``CanonicalInterface`` for the pseudo-name.
+    """
     for line in lines:
         if not line.startswith("add"):
             continue
@@ -578,6 +806,17 @@ def _parse_ip_address(
                 path=f"/ip address/{iface_name}",
                 snippet=line[:120],
             )
+        # Route VIP rows to the VRRP scratch — don't materialise a
+        # phantom CanonicalInterface for ``vrrpN`` pseudo-names.
+        if vrrp_scratch is not None and iface_name in vrrp_scratch:
+            scratch = vrrp_scratch[iface_name]
+            scratch["virtual_ips"].append(ip_str.strip())
+            # Stash the prefix length so the renderer can rebuild
+            # ``/ip address add address=X/Y`` cleanly.  First non-zero
+            # value wins; subsequent VIPs on the same group reuse it.
+            if not scratch.get("virtual_ip_prefix"):
+                scratch["virtual_ip_prefix"] = prefix_len
+            continue
         iface = iface_by_name.setdefault(
             iface_name,
             CanonicalInterface(
@@ -600,6 +839,7 @@ def _parse_ip_address(
 def _parse_ipv6_address(
     lines: list[str],
     iface_by_name: dict[str, CanonicalInterface],
+    vrrp_scratch: dict[str, dict[str, Any]] | None = None,
 ) -> None:
     """Parse ``/ipv6 address`` section entries (GAP-EVPN-3).
 
@@ -607,6 +847,11 @@ def _parse_ipv6_address(
         /ipv6 address
         add address=2001:db8::1/64 interface=ether1
         add address=fe80::1/64 interface=ether1 advertise=no
+
+    When ``interface`` references a known VRRP pseudo-name (the
+    ``v3-protocol=ipv6`` flavour of an ``/interface vrrp`` group) the
+    v6 address is routed into the scratch record's ``virtual_ipv6s``
+    list rather than minting a phantom CanonicalInterface.
     """
     for line in lines:
         if not line.startswith("add"):
@@ -622,6 +867,16 @@ def _parse_ipv6_address(
         try:
             prefix_len = int(prefix_str)
         except ValueError:
+            continue
+        # Route v6 VIPs into the VRRP scratch when the interface name
+        # matches a known pseudo-iface (v3-protocol=ipv6 group).  The
+        # prefix is stashed under ``virtual_ip6_prefix`` so the
+        # renderer can rebuild the ``/ipv6 address`` line.
+        if vrrp_scratch is not None and iface_name in vrrp_scratch:
+            scratch = vrrp_scratch[iface_name]
+            scratch["virtual_ipv6s"].append(ip_str.strip())
+            if not scratch.get("virtual_ip6_prefix"):
+                scratch["virtual_ip6_prefix"] = prefix_len
             continue
         # Scope inferred from fe80::/10 — RouterOS doesn't keyword-tag
         # link-local addresses on the wire (the ``advertise=no`` flag

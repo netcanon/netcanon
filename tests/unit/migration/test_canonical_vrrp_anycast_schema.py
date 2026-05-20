@@ -270,10 +270,45 @@ class TestAnycastGatewayMacOnIntent:
 
 
 class TestShipBeforeWireUnsupportedDeclarations:
-    """Every shipped codec should declare the new Wave A schema paths
-    as ``unsupported`` until per-codec wire-up lands in Waves B and C.
+    """Wave A ship-before-wire invariant — but now with per-codec
+    wire-up tracking.
+
+    On Wave A, every codec declared the new paths as ``unsupported``
+    (the original ship-before-wire stance — "the schema exists,
+    nothing renders it yet, so report it loud").
+
+    On Waves B + C, each codec progressively GRADUATES individual
+    paths from ``unsupported`` to either ``supported`` (full parse +
+    render wire-up) or ``lossy`` (parses but emits a review comment
+    on cross-vendor render — typical pattern when the codec has the
+    grammar but the cross-vendor mapping is partial).
+
+    This test enforces the invariant in BOTH directions:
+
+    * For paths a codec has NOT yet graduated (still in
+      ``_WIRED_UP_PATHS`` set or its own ``_WIRED_UP_BY_CODEC`` entry
+      missing), the path MUST be in ``unsupported`` — guards against
+      silent removal that would make the migrate-page banner stop
+      firing for the surface.
+    * For paths a codec HAS graduated (listed in
+      ``_WIRED_UP_BY_CODEC[codec]``), the path MUST NOT be in
+      ``unsupported`` — guards against the matrix forgetting to flip
+      its declaration.
+
+    The two-sided invariant means any codec that lists a path in
+    ``_WIRED_UP_BY_CODEC`` but forgets to remove it from
+    ``unsupported`` (or vice versa) gets a loud test failure.
+
+    See ``docs/v0.2.0-planning/`` for the per-wave plan + cross-task
+    synthesis explaining the wire-up sequencing.
     """
 
+    # The five paths Wave A declared as unsupported across every
+    # codec.  Per-IP ``virtual-gateway-mac`` xpaths are NOT in this
+    # list — they're a vendor-specific surface (Junos per-unit MAC
+    # override) and only codecs with that grammar declare them
+    # (Junos supported, Arista lossy).  See per-codec capability
+    # matrix for the per-MAC declarations.
     _NEW_PATHS = (
         "/interfaces/interface/vrrp-groups/group",
         "/interfaces/interface/ipv4/address/virtual-gateway-address",
@@ -281,6 +316,66 @@ class TestShipBeforeWireUnsupportedDeclarations:
         "/anycast-gateway-mac",
         "/routing/static-route/vrf",
     )
+
+    # Per-codec wire-up state.  Each codec's set lists the paths it
+    # has GRADUATED from ``unsupported`` — they now appear under
+    # ``supported`` or ``lossy`` instead.  Paths NOT listed for a
+    # codec must remain ``unsupported``.
+    _WIRED_UP_BY_CODEC: dict[str, set[str]] = {
+        # Wave B + C — see commit feat(cisco_iosxe_cli): wire VRRP
+        # groups + SD-Access anycast-gateway.  IPv6 anycast remains
+        # ``unsupported`` (no fixture coverage); per-VRF static
+        # routes remain ``unsupported`` (separate scope).
+        "cisco_iosxe_cli": {
+            "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
+        },
+        # NETCONF stub — every path still ``unsupported`` (the
+        # codec's matrix declares every canonical surface unsupported
+        # per its Phase-0.5 stub policy).
+        "cisco_iosxe": set(),
+        # Wave B + C — see commit feat(junos): wire VRRP groups +
+        # anycast-gateway.  Per-VRF static route flipped to ``lossy``
+        # (parses but routing-instances dispatcher doesn't yet
+        # harvest per-VRF statics; separate scope).  Anycast MAC stays
+        # ``unsupported`` (Junos uses per-unit MAC, not chassis-wide).
+        "juniper_junos": {
+            "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",
+            "/routing/static-route/vrf",
+        },
+        # Wave B + C — see commit feat(arista_eos): wire VRRP +
+        # VARP.  Per-IP virtual-gateway-mac is ``lossy`` (Arista
+        # only has chassis-wide ``ip virtual-router mac-address``;
+        # per-IP override doesn't exist).
+        "arista_eos": {
+            "/interfaces/interface/vrrp-groups/group",
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
+        },
+        # Wave B — see commit feat(aruba_aoss): wire VRRP groups.
+        # AOS-S has no native anycast grammar; those paths stay
+        # ``unsupported``.
+        "aruba_aoss": {
+            "/interfaces/interface/vrrp-groups/group",
+        },
+        # Wave B — see commit feat(fortigate_cli): wire VRRP groups.
+        "fortigate_cli": {
+            "/interfaces/interface/vrrp-groups/group",
+        },
+        # Wave B — see commit feat(mikrotik_routeros): wire VRRP.
+        "mikrotik_routeros": {
+            "/interfaces/interface/vrrp-groups/group",
+        },
+        # Wave B (CARP variant) — see commit feat(opnsense): wire
+        # CARP groups with mode="carp" discriminator.
+        "opnsense": {
+            "/interfaces/interface/vrrp-groups/group",
+        },
+    }
 
     @pytest.mark.parametrize(
         "codec_name",
@@ -312,9 +407,40 @@ class TestShipBeforeWireUnsupportedDeclarations:
 
         codec = get_codec(codec_name)
         unsupported = {u.path for u in codec.capabilities.unsupported}
+        supported = set(codec.capabilities.supported)
+        lossy = {p.path for p in codec.capabilities.lossy}
+        wired_up = self._WIRED_UP_BY_CODEC.get(codec_name, set())
+
         for path in self._NEW_PATHS:
+            if path in wired_up:
+                # Codec has graduated this path from ``unsupported``
+                # — it must now appear under ``supported`` OR
+                # ``lossy`` (codec's choice based on the cross-vendor
+                # translation completeness).  Must NOT be in
+                # ``unsupported`` any more.
+                assert path in supported or path in lossy, (
+                    f"{codec_name} graduated {path} from "
+                    f"unsupported (per _WIRED_UP_BY_CODEC) but the "
+                    f"capability matrix does not list it under "
+                    f"supported or lossy.  Either flip the matrix "
+                    f"declaration or remove the path from "
+                    f"_WIRED_UP_BY_CODEC."
+                )
+                assert path not in unsupported, (
+                    f"{codec_name} lists {path} as both "
+                    f"{'supported' if path in supported else 'lossy'}"
+                    f" and unsupported in the capability matrix.  "
+                    f"Remove the duplicate ``unsupported`` entry."
+                )
+                continue
+            # Not yet wired up — must still be ``unsupported``.
             assert path in unsupported, (
                 f"{codec_name} missing unsupported declaration for "
-                f"{path}; Wave A ship-before-wire requires all codecs "
-                f"to declare new paths before any wire-up lands."
+                f"{path}.  Ship-before-wire requires un-graduated "
+                f"paths to remain ``unsupported`` so the migrate-"
+                f"page banner fires for the dropped surface.  Either "
+                f"add the UnsupportedPath declaration to the codec "
+                f"matrix, OR if the codec has been wired up, add "
+                f"{path!r} to "
+                f"_WIRED_UP_BY_CODEC[{codec_name!r}]."
             )

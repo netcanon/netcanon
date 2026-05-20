@@ -35,6 +35,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
@@ -635,3 +636,379 @@ class TestRegistry:
             "mikrotik_routeros", "aruba_aoss", "mock",
         ):
             assert expected in codecs
+
+
+# ---------------------------------------------------------------------------
+# VRRP groups (Wave B v0.2.0)
+# ---------------------------------------------------------------------------
+
+
+# Synthetic AOS-S config with a single VRRP group — the smallest
+# input that exercises the parse and render paths end-to-end.
+_VRRP_BASIC = """\
+hostname "vrrp-test"
+vlan 100
+   name "MGMT"
+   ip address 10.0.100.1 255.255.255.0
+   ip vrrp vrid 10
+      virtual-ip-address 10.0.100.254
+      priority 110
+      preempt
+      enable
+      exit
+   exit
+"""
+
+
+# Two VRRP groups on the same VLAN — used to exercise the loop
+# variant of the parser dispatch (one sub-block followed by
+# another, both inside the same ``vlan N`` body).
+_VRRP_MULTI = """\
+hostname "vrrp-multi"
+vlan 200
+   name "USERS"
+   ip address 10.0.200.1/24
+   ip vrrp vrid 20
+      virtual-ip-address 10.0.200.254
+      priority 110
+      preempt
+      enable
+      exit
+   ip vrrp vrid 21
+      virtual-ip-address 10.0.200.253
+      priority 90
+      enable
+      exit
+   exit
+"""
+
+
+class TestVRRPGroups:
+    """Wire-up tests for the v0.2.0 Wave B classic-VRRP path."""
+
+    # ----------------------------- Parse -----------------------------
+
+    def test_parse_basic_group_attaches_to_vlan_interface(self):
+        """A single ``ip vrrp vrid`` block inside a VLAN stanza
+        surfaces as one CanonicalVRRPGroup on the synthesised
+        Vlan<N> CanonicalInterface."""
+        tree = ArubaAOSSCodec().parse(_VRRP_BASIC)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan100")
+        assert len(svi.vrrp_groups) == 1
+        group = svi.vrrp_groups[0]
+        assert group.group_id == 10
+        assert group.mode == "vrrp"
+        assert group.virtual_ips == ["10.0.100.254"]
+        assert group.priority == 110
+        assert group.preempt is True
+
+    def test_parse_preempt_off_when_not_listed(self):
+        """AOS-S vendor default is preempt=False (operators add the
+        ``preempt`` token to opt in).  Differs from the canonical
+        default which is True — parse must override."""
+        raw = (
+            'vlan 50\n'
+            '   ip address 10.0.50.1/24\n'
+            '   ip vrrp vrid 5\n'
+            '      virtual-ip-address 10.0.50.254\n'
+            '      enable\n'
+            '      exit\n'
+            '   exit\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan50")
+        assert svi.vrrp_groups[0].preempt is False
+
+    def test_parse_multiple_groups_in_same_vlan(self):
+        """Two ``ip vrrp vrid`` blocks inside the same VLAN stanza
+        parse into two distinct CanonicalVRRPGroup records on the
+        single Vlan<N> interface, ordered by source appearance."""
+        tree = ArubaAOSSCodec().parse(_VRRP_MULTI)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan200")
+        assert len(svi.vrrp_groups) == 2
+        ids = [g.group_id for g in svi.vrrp_groups]
+        assert ids == [20, 21]
+        # Second group has no preempt token; default-off applies.
+        second = svi.vrrp_groups[1]
+        assert second.priority == 90
+        assert second.preempt is False
+
+    def test_parse_authentication_plaintext_password(self):
+        """``authentication mode plaintext-password "X"`` lands as
+        ``"plain:X"`` on the canonical authentication field."""
+        raw = (
+            'vlan 30\n'
+            '   ip address 10.0.30.1/24\n'
+            '   ip vrrp vrid 3\n'
+            '      virtual-ip-address 10.0.30.254\n'
+            '      authentication mode plaintext-password "SECRET"\n'
+            '      enable\n'
+            '      exit\n'
+            '   exit\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan30")
+        assert svi.vrrp_groups[0].authentication == "plain:SECRET"
+
+    def test_parse_default_priority_when_omitted(self):
+        """Omitting ``priority`` keeps the canonical default of 100."""
+        raw = (
+            'vlan 70\n'
+            '   ip address 10.0.70.1/24\n'
+            '   ip vrrp vrid 7\n'
+            '      virtual-ip-address 10.0.70.254\n'
+            '      enable\n'
+            '      exit\n'
+            '   exit\n'
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan70")
+        assert svi.vrrp_groups[0].priority == 100
+
+    def test_parse_enable_token_consumed_without_field(self):
+        """``enable`` flag is platform-mandatory but has no canonical
+        per-group field.  Parser must consume it without barfing or
+        leaving the group in a half-parsed state."""
+        tree = ArubaAOSSCodec().parse(_VRRP_BASIC)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan100")
+        # The group still parses with virtual_ip + priority; the
+        # ``enable`` line is silently consumed.
+        assert svi.vrrp_groups[0].virtual_ips == ["10.0.100.254"]
+
+    # ----------------------------- Render -----------------------------
+
+    def test_render_emits_nested_vrrp_block(self):
+        """Render emits ``ip vrrp vrid N`` + body + ``exit`` inside
+        the ``vlan N`` stanza."""
+        tree = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=100, name="MGMT",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.100.1", prefix_length=24,
+                )],
+            )],
+            interfaces=[CanonicalInterface(
+                name="Vlan100",
+                interface_type="ianaift:l3ipvlan",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.100.1", prefix_length=24,
+                )],
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10,
+                    virtual_ips=["10.0.100.254"],
+                    priority=110,
+                    preempt=True,
+                )],
+            )],
+        )
+        out = ArubaAOSSCodec().render(tree)
+        # The block must sit INSIDE the vlan stanza.
+        assert "vlan 100" in out
+        assert "   ip vrrp vrid 10" in out
+        assert "      virtual-ip-address 10.0.100.254" in out
+        assert "      priority 110" in out
+        assert "      preempt" in out
+        assert "      enable" in out
+        assert "      exit" in out
+
+    def test_render_omits_priority_when_default(self):
+        """Default priority 100 stays off the wire (terse output)."""
+        tree = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=80,
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.80.1", prefix_length=24,
+                )],
+            )],
+            interfaces=[CanonicalInterface(
+                name="Vlan80",
+                interface_type="ianaift:l3ipvlan",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=8,
+                    virtual_ips=["10.0.80.254"],
+                    priority=100,  # default
+                )],
+            )],
+        )
+        out = ArubaAOSSCodec().render(tree)
+        assert "      priority" not in out
+
+    def test_render_emits_authentication_when_plain(self):
+        tree = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=30,
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.30.1", prefix_length=24,
+                )],
+            )],
+            interfaces=[CanonicalInterface(
+                name="Vlan30",
+                interface_type="ianaift:l3ipvlan",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=3,
+                    virtual_ips=["10.0.30.254"],
+                    authentication="plain:SECRET",
+                )],
+            )],
+        )
+        out = ArubaAOSSCodec().render(tree)
+        assert 'authentication mode plaintext-password "SECRET"' in out
+
+    def test_render_multi_virtual_ip_emits_lossy_review_comment(self):
+        """AOS-S accepts ONE virtual-ip-address per vrid.  Cross-
+        vendor input with multi-IP groups (Cisco IOS-XE secondaries,
+        Junos virtual-address [ ... ]) drops the tail with a
+        ``; review:`` comment."""
+        tree = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=40,
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.40.1", prefix_length=24,
+                )],
+            )],
+            interfaces=[CanonicalInterface(
+                name="Vlan40",
+                interface_type="ianaift:l3ipvlan",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=4,
+                    virtual_ips=[
+                        "10.0.40.254", "10.0.40.253", "10.0.40.252",
+                    ],
+                )],
+            )],
+        )
+        out = ArubaAOSSCodec().render(tree)
+        # First VIP is emitted.
+        assert "      virtual-ip-address 10.0.40.254" in out
+        # Tail VIPs become review comments.
+        assert "10.0.40.253 dropped" in out
+        assert "10.0.40.252 dropped" in out
+        # And NOT as additional non-comment virtual-ip-address lines.
+        active_vip_lines = [
+            line for line in out.splitlines()
+            if "virtual-ip-address" in line
+            and not line.lstrip().startswith(";")
+        ]
+        assert len(active_vip_lines) == 1
+
+    def test_render_anycast_mode_surfaces_review_comment(self):
+        """AOS-S has NO anycast / HSRP / CARP grammar.  Groups with
+        non-``vrrp`` mode emit a review comment and don't produce
+        an ``ip vrrp vrid`` block."""
+        tree = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=60,
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.60.1", prefix_length=24,
+                )],
+            )],
+            interfaces=[CanonicalInterface(
+                name="Vlan60",
+                interface_type="ianaift:l3ipvlan",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=6,
+                    mode="anycast",
+                    virtual_ips=["10.0.60.254"],
+                )],
+            )],
+        )
+        out = ArubaAOSSCodec().render(tree)
+        assert "ip vrrp vrid" not in out
+        assert "review" in out
+        assert "'anycast'" in out
+
+    # ----------------------------- Round-trip -----------------------------
+
+    def test_roundtrip_basic_vrrp(self):
+        """parse(render(tree)) preserves all VRRP fields on a single
+        group with explicit priority + preempt."""
+        codec = ArubaAOSSCodec()
+        tree1 = codec.parse(_VRRP_BASIC)
+        rendered = codec.render(tree1)
+        tree2 = codec.parse(rendered)
+        svi1 = next(i for i in tree1.interfaces if i.name == "Vlan100")
+        svi2 = next(i for i in tree2.interfaces if i.name == "Vlan100")
+        assert len(svi1.vrrp_groups) == len(svi2.vrrp_groups) == 1
+        g1, g2 = svi1.vrrp_groups[0], svi2.vrrp_groups[0]
+        assert g1.group_id == g2.group_id
+        assert g1.virtual_ips == g2.virtual_ips
+        assert g1.priority == g2.priority
+        assert g1.preempt == g2.preempt
+
+    def test_roundtrip_multi_group(self):
+        """Multiple groups on the same VLAN survive round-trip in
+        order with correct per-group state."""
+        codec = ArubaAOSSCodec()
+        tree1 = codec.parse(_VRRP_MULTI)
+        tree2 = codec.parse(codec.render(tree1))
+        svi1 = next(i for i in tree1.interfaces if i.name == "Vlan200")
+        svi2 = next(i for i in tree2.interfaces if i.name == "Vlan200")
+        assert [g.group_id for g in svi1.vrrp_groups] == [
+            g.group_id for g in svi2.vrrp_groups
+        ]
+        assert [g.priority for g in svi1.vrrp_groups] == [
+            g.priority for g in svi2.vrrp_groups
+        ]
+        assert [g.preempt for g in svi1.vrrp_groups] == [
+            g.preempt for g in svi2.vrrp_groups
+        ]
+        assert [g.virtual_ips for g in svi1.vrrp_groups] == [
+            g.virtual_ips for g in svi2.vrrp_groups
+        ]
+
+    def test_roundtrip_authentication_plaintext(self):
+        """Plaintext-password authentication round-trips through the
+        ``plain:`` opaque-token convention."""
+        codec = ArubaAOSSCodec()
+        raw = (
+            'vlan 30\n'
+            '   ip address 10.0.30.1/24\n'
+            '   ip vrrp vrid 3\n'
+            '      virtual-ip-address 10.0.30.254\n'
+            '      authentication mode plaintext-password "SECRET"\n'
+            '      enable\n'
+            '      exit\n'
+            '   exit\n'
+        )
+        tree1 = codec.parse(raw)
+        tree2 = codec.parse(codec.render(tree1))
+        svi = next(i for i in tree2.interfaces if i.name == "Vlan30")
+        assert svi.vrrp_groups[0].authentication == "plain:SECRET"
+
+    # ----------------------------- Capabilities -----------------------------
+
+    def test_capability_vrrp_supported(self):
+        """Wave B flips ``/interfaces/interface/vrrp-groups/group``
+        from unsupported to supported."""
+        caps = ArubaAOSSCodec().capabilities
+        assert "/interfaces/interface/vrrp-groups/group" in caps.supported
+        unsupported_paths = [up.path for up in caps.unsupported]
+        assert (
+            "/interfaces/interface/vrrp-groups/group"
+            not in unsupported_paths
+        )
+
+    def test_capability_anycast_remains_unsupported(self):
+        """AOS-S has no anycast-gateway grammar — these paths stay
+        unsupported even after the VRRP wire-up lands."""
+        unsupported_paths = [
+            up.path for up in ArubaAOSSCodec().capabilities.unsupported
+        ]
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            in unsupported_paths
+        )
+        assert (
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+            in unsupported_paths
+        )
+        assert "/anycast-gateway-mac" in unsupported_paths
+
+    def test_capability_virtual_ips_declared_lossy(self):
+        """Single-IP-per-vrid restriction surfaces as a LossyPath
+        so the migration validator can warn cross-vendor users."""
+        lossy_paths = [lp.path for lp in ArubaAOSSCodec().capabilities.lossy]
+        assert (
+            "/interfaces/interface/vrrp-groups/group/virtual-ips"
+            in lossy_paths
+        )
