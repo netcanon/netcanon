@@ -83,10 +83,48 @@ from pydantic import BaseModel, Field
 
 
 class CanonicalIPv4Address(BaseModel):
-    """A single IPv4 address + prefix on an interface."""
+    """A single IPv4 address + prefix on an interface.
+
+    Attributes:
+        ip: Dotted-quad form (e.g. ``"10.1.1.1"``).
+        prefix_length: Subnet prefix length (0-32).
+        is_secondary: True if this address is a secondary (additional)
+            address on the interface rather than the primary.  Cisco /
+            Arista mark these with a ``secondary`` trailer; Junos
+            permits multiple ``family inet address`` lines per unit.
+            ``False`` for the primary address (the common case).
+            Ship-before-wire (v0.2.0) — codecs that haven't been
+            updated still treat all addresses as primary.
+        virtual_gateway_address: Anycast-gateway virtual IP companion
+            to this address.  Junos ``family inet address X/M
+            virtual-gateway-address Y`` and Arista VARP
+            (``ip address virtual Y/M``) populate this with ``Y``;
+            NX-OS DAG ``ip address X/M anycast`` mirrors the address
+            into this field (``X == virtual_gateway_address``).
+            Empty string means no anycast companion.  Ship-before-
+            wire (v0.2.0) — every codec's ``CapabilityMatrix`` lists
+            ``/interfaces/interface/ipv4/address/virtual-gateway-
+            address`` as ``unsupported`` until the per-codec wire-
+            up lands.  Anycast is a sibling concept to VRRP
+            (:class:`CanonicalVRRPGroup`) and lives on the address
+            record because it is a property of the IP, not a
+            router-group election — see ``docs/v0.2.0-planning/``
+            for the design rationale.
+        virtual_gateway_mac: Optional MAC override for the anycast
+            gateway.  Junos per-unit ``virtual-gateway-v4-mac``
+            populates this; system-wide MAC overrides (Arista
+            ``ip virtual-router mac-address``, NX-OS
+            ``fabric forwarding anycast-gateway-mac``) cascade into
+            every address record on parse and hoist back to the
+            top-level :attr:`CanonicalIntent.anycast_gateway_mac` on
+            render.  Empty string means "use vendor default".
+    """
 
     ip: str
     prefix_length: int = Field(ge=0, le=32)
+    is_secondary: bool = False
+    virtual_gateway_address: str = ""
+    virtual_gateway_mac: str = ""
 
 
 class CanonicalIPv6Address(BaseModel):
@@ -109,11 +147,25 @@ class CanonicalIPv6Address(BaseModel):
             different keywords (Cisco / Arista ``link-local``,
             Junos ``family inet6 address X/Y`` then auto-detect by
             prefix); the canonical model normalises to this enum.
+        is_secondary: True if this address is a secondary address
+            (Cisco / Arista trailer; Junos multi-address per unit).
+            See :attr:`CanonicalIPv4Address.is_secondary`.
+        virtual_gateway_address: IPv6 anycast-gateway companion.
+            Junos ``family inet6 address X/M virtual-gateway-
+            address Y`` populates this.  Empty string = no anycast
+            companion.  Ship-before-wire (v0.2.0).  See
+            :attr:`CanonicalIPv4Address.virtual_gateway_address`.
+        virtual_gateway_mac: Optional MAC override; Junos per-unit
+            ``virtual-gateway-v6-mac`` populates this.  See
+            :attr:`CanonicalIPv4Address.virtual_gateway_mac`.
     """
 
     ip: str
     prefix_length: int = Field(ge=0, le=128)
     scope: str = "global"  # 'global' | 'link-local'
+    is_secondary: bool = False
+    virtual_gateway_address: str = ""
+    virtual_gateway_mac: str = ""
 
 
 class CanonicalInterface(BaseModel):
@@ -239,6 +291,16 @@ class CanonicalInterface(BaseModel):
                                                 # kind=mgmt handling
                                                 # (Aruba ``oobm`` block,
                                                 # Junos management VRF, etc).
+    # ── Ship-before-wire (v0.2.0) ──
+    # Classic FHRP redundancy groups (VRRP / HSRP / CARP) on this
+    # interface.  Anycast-gateway is NOT here — it lives on
+    # CanonicalIPv4Address.virtual_gateway_address (anycast is an IP
+    # property, not a router-group election).  See
+    # :class:`CanonicalVRRPGroup` for full grammar / cross-vendor
+    # mapping.  Codecs without per-codec wire-up still declare
+    # ``/interfaces/interface/vrrp-groups/group`` as ``unsupported``
+    # in their CapabilityMatrix.
+    vrrp_groups: list[CanonicalVRRPGroup] = Field(default_factory=list)
 
 
 class CanonicalVlan(BaseModel):
@@ -259,13 +321,36 @@ class CanonicalVlan(BaseModel):
 
 
 class CanonicalStaticRoute(BaseModel):
-    """A single static route entry."""
+    """A single static route entry.
 
-    destination: str        # CIDR notation: "10.0.0.0/24" or "0.0.0.0/0"
-    gateway: str = ""       # next-hop IP; empty for connected/blackhole
-    interface: str = ""     # outgoing interface name (vendor-native)
+    Attributes:
+        destination: CIDR notation: "10.0.0.0/24" or "0.0.0.0/0".
+        gateway: Next-hop IP; empty for connected/blackhole.
+        interface: Outgoing interface name (vendor-native).
+        metric: Administrative distance / metric.
+        description: Operator-supplied description (Cisco ``ip route
+            ... name X``, Junos ``static route ... description X``).
+        vrf: VRF / routing-instance the route belongs to.  Empty
+            string = global routing table (the common case).
+            Populated by codecs that emit per-VRF static routes
+            (Cisco IOS-XE ``ip route vrf <NAME> ...``, Junos
+            ``set routing-instances <NAME> routing-options static
+            route ...``, NX-OS ``vrf context <NAME> / ip route
+            ...``).  Ship-before-wire (v0.2.0) — codecs without the
+            wire-up still emit all routes with ``vrf=""`` and
+            declare the per-VRF surface ``unsupported`` in their
+            capability matrix until updated.  Adding this field
+            also closes the existing IOS-XE ``/routing-instances/
+            instance`` lossy declaration's per-VRF-static-route
+            sub-surface.
+    """
+
+    destination: str
+    gateway: str = ""
+    interface: str = ""
     metric: int = 0
     description: str = ""
+    vrf: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +485,113 @@ class CanonicalLAG(BaseModel):
     name: str                       # vendor-native name
     members: list[str] = Field(default_factory=list)   # member interface names
     mode: str = "active"            # "active" (LACP) | "passive" | "static"
+
+
+class CanonicalVRRPGroup(BaseModel):
+    """A classic FHRP redundancy group on an interface (VRRP / HSRP / CARP).
+
+    Models the universal L3 redundancy primitive across the shipped
+    bidirectional codecs.  Every vendor has equivalent grammar; the
+    canonical surface stores the shared semantics + a ``mode``
+    discriminator that lets cross-vendor migration translate between
+    wire protocols where the operator's intent ("provide redundancy
+    for this IP") survives even when the underlying protocol differs.
+
+    Distinct from anycast-gateway, which lives on
+    :attr:`CanonicalIPv4Address.virtual_gateway_address` and friends.
+    Classic FHRP is a router-group election (group ID, priority,
+    preempt); anycast is an IP-address property (every leaf has it,
+    no election).  The two surfaces co-exist on the same
+    :class:`CanonicalInterface` for fabrics that combine both.
+
+    Cross-vendor grammar reference (the canonical fields here map
+    to all of these forms):
+
+    * Cisco IOS-XE ``interface X / vrrp 10 ip 192.168.1.254 /
+      vrrp 10 priority 110 / vrrp 10 preempt``.
+    * Arista EOS ``interface VlanN / vrrp 10 ipv4 192.168.1.254 /
+      vrrp 10 priority 110`` (modern multi-line).
+    * Juniper Junos ``set interfaces irb unit N family inet
+      address X vrrp-group 10 virtual-address Y / priority 110 /
+      preempt``.
+    * Aruba AOS-S ``vlan N / ip vrrp vrid 10 / virtual-ip-address
+      Y / priority 110 / preempt / enable``.
+    * FortiGate ``config system interface / edit X / config vrrp /
+      edit 10 / set vrip Y / set priority 110 / set preempt enable
+      / next / end``.
+    * MikroTik RouterOS ``/interface vrrp add interface=ether1
+      vrid=10 priority=110 v3-protocol=ipv4``.
+    * OPNsense (BSD CARP) ``<virtualip><vip><mode>carp</mode>
+      <vhid>10</vhid><advskew>0</advskew><password>...
+      </password><subnet>Y</subnet></vip></virtualip>`` — modelled
+      via ``mode="carp"`` discriminator (semantically related but
+      wire-protocol-distinct from IETF VRRP).
+
+    Attributes:
+        group_id: VRRP VRID (1-255) or CARP VHID (1-255).  Required.
+        mode: Wire-protocol discriminator.  String literal (not enum)
+            so codecs can extend it without a schema change.  Known
+            values: ``"vrrp"`` (default — IETF VRRPv2 / VRRPv3),
+            ``"hsrp"`` (Cisco proprietary, used on NX-OS and IOS
+            classic), ``"carp"`` (BSD Common Address Redundancy
+            Protocol, OPNsense / pfSense).  Anycast is NOT a mode
+            here — see :attr:`CanonicalIPv4Address.
+            virtual_gateway_address` for that surface.
+        virtual_ips: IPv4 virtual addresses (>= 1 required).  Most
+            vendors permit one; IOS-XE permits repeated ``vrrp N
+            ip X`` for secondaries.  Junos accepts ``virtual-address
+            [ X Y Z ]``.  AOS-S takes one IP (codec must surface
+            ``Lossy`` if length > 1).
+        virtual_ipv6s: IPv6 virtual addresses for VRRPv3 / anycast-v6
+            fallback.  Empty list = IPv4-only group (classic VRRPv2).
+        virtual_mac: Optional MAC override for the virtual gateway.
+            Junos ``virtual-gateway-v4-mac`` populates this directly
+            on the group.  Arista's chassis-wide
+            ``ip virtual-router mac-address`` cascades into every
+            group on parse and hoists back to top-level on render.
+            Empty string = vendor-default (``00:00:5E:00:01:<VRID>``
+            for IETF VRRP; ``00:00:0C:07:AC:<group>`` for HSRP).
+        priority: VRRP priority (1-254).  Higher wins the election.
+            Vendor default is 100.
+        preempt: Whether a higher-priority router preempts the
+            current master.  Vendor defaults vary (Cisco: true,
+            Junos: false); the canonical default mirrors the most
+            common operator intent.
+        advertisement_interval: Election heartbeat interval in
+            seconds.  VRRPv2 default is 1; VRRPv3 supports
+            sub-second values which we round to the nearest second.
+        authentication: Opaque authentication token in
+            ``<scheme>:<value>`` form (e.g. ``"plain:secret123"``,
+            ``"md5:hash"``, ``"carp-key:bytes"``).  Empty string =
+            no authentication.  Mirrors the hash-portability policy
+            in :mod:`netcanon.migration.canonical.local_user_names`:
+            same-vendor render passes through, cross-vendor render
+            surfaces a review comment rather than re-deriving.
+        track_interfaces: Vendor-native interface names whose state
+            decrements the priority on failure.  IOS-XE ``track``
+            objects, Junos ``track interface``, Arista
+            ``vrrp N track Ethernet1 decrement 10``.  The
+            priority-decrement value is per-vendor lossy.
+        description: Operator-supplied description.
+
+    Ship-before-wire (v0.2.0): every codec's
+    :class:`CapabilityMatrix` lists ``/interfaces/interface/
+    vrrp-groups/group`` as ``unsupported`` until the per-codec wire-
+    up lands (Wave B of the v0.2.0 plan documented in
+    ``docs/v0.2.0-planning/``).
+    """
+
+    group_id: int = Field(ge=1, le=255)
+    mode: str = "vrrp"  # "vrrp" | "hsrp" | "carp"
+    virtual_ips: list[str] = Field(default_factory=list)
+    virtual_ipv6s: list[str] = Field(default_factory=list)
+    virtual_mac: str = ""
+    priority: int = Field(default=100, ge=1, le=254)
+    preempt: bool = True
+    advertisement_interval: int = 1
+    authentication: str = ""
+    track_interfaces: list[str] = Field(default_factory=list)
+    description: str = ""
 
 
 class CanonicalLocalUser(BaseModel):
@@ -608,6 +800,29 @@ class CanonicalIntent(BaseModel):
     # for the vendor-shape comparison.  Per-interface membership
     # lives on CanonicalInterface.vrf, not a redundant list here.
     routing_instances: list[CanonicalRoutingInstance] = Field(default_factory=list)
+
+    # ── Ship-before-wire (v0.2.0) — anycast-gateway system MAC ──
+    # System-wide anycast-gateway MAC.  Vendors that declare it at
+    # chassis scope populate this from their grammar:
+    #   * Arista EOS: ``ip virtual-router mac-address 00:1c:73:00:dc:01``
+    #   * Cisco NX-OS DAG: ``fabric forwarding anycast-gateway-mac
+    #     0001.c73a.0000``
+    #   * Cisco IOS-XE SD-Access: same as NX-OS form
+    #   * Junos: no system-wide MAC; per-unit MAC overrides live on
+    #     :attr:`CanonicalIPv4Address.virtual_gateway_mac` instead.
+    # Empty string = "use vendor default" (Arista: 00:00:00:00:00:00
+    # implicit until operator sets one; NX-OS / IOS-XE SD-Access:
+    # required by commit-time validator before any SVI can use
+    # anycast).  Stored in colon-hex canonical form
+    # (``00:1c:73:00:dc:01``); per-vendor renderers re-emit in their
+    # native format (NX-OS dotted-quad ``0001.c73a.0000``, etc).
+    # Per-address overrides on
+    # :attr:`CanonicalIPv4Address.virtual_gateway_mac` take precedence
+    # (Junos per-unit override pattern).  Ship-before-wire: every
+    # codec's CapabilityMatrix lists ``/anycast-gateway-mac`` as
+    # ``unsupported`` until the per-codec wire-up lands (Wave C of
+    # the v0.2.0 plan documented in ``docs/v0.2.0-planning/``).
+    anycast_gateway_mac: str = ""
 
     # ── Tier 3 — informational only (never auto-rendered) ──
     raw_sections: dict[str, str] = Field(default_factory=dict)

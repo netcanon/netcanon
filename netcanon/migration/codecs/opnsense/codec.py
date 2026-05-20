@@ -217,6 +217,51 @@ class OPNsenseCodec(CodecBase):
                 path="/vxlan-vnis/udp-port",
                 reason="VXLAN not modelled (see /vxlan-vnis/vni).",
             ),
+            # -- Ship-before-wire (v0.2.0) -- VRRP / anycast / per-VRF static routes --
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group",
+                reason=(
+                    "VRRP / HSRP / CARP redundancy groups parse-and-"
+                    "ignore in v1.  CanonicalVRRPGroup schema exists; "
+                    "wire-up scheduled for v0.2.0 Wave B (see "
+                    "docs/v0.2.0-planning/01-vrrp-canonical/)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "Anycast-gateway virtual IPv4 companion parses-and-"
+                    "ignores in v1.  Schema exists on "
+                    "CanonicalIPv4Address; wire-up scheduled for v0.2.0 "
+                    "Wave C (see docs/v0.2.0-planning/02-anycast-gateway/)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
+                reason=(
+                    "IPv6 anycast-gateway virtual IP companion parses-"
+                    "and-ignores in v1.  Schema exists on "
+                    "CanonicalIPv6Address; wire-up scheduled for v0.2.0 "
+                    "Wave C."
+                ),
+            ),
+            UnsupportedPath(
+                path="/anycast-gateway-mac",
+                reason=(
+                    "System-wide anycast-gateway MAC parses-and-ignores "
+                    "in v1.  Schema exists on CanonicalIntent; wire-up "
+                    "scheduled for v0.2.0 Wave C."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing/static-route/vrf",
+                reason=(
+                    "Per-VRF static-route binding parses-and-ignores in "
+                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
+                    "wire-up scheduled for v0.2.0 (closes existing "
+                    "per-VRF static-route lossy declaration)."
+                ),
+            ),
         ],
     )
 

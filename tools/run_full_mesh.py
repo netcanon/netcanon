@@ -155,6 +155,12 @@ _AUDITED_FIELDS: tuple[str, ...] = (
     "raw_sections",
     "apply_groups",
     "group_content",
+    # v0.2.0 Wave A ship-before-wire — every codec currently declares
+    # ``/anycast-gateway-mac`` ``unsupported`` so the audit cell flags
+    # the drop as expected; per-codec wire-up in Wave C will flip the
+    # capability declaration to ``supported`` for codecs with native
+    # anycast grammar (Junos, Arista EOS, Cisco IOS-XE SD-Access).
+    "anycast_gateway_mac",
 )
 
 
