@@ -47,6 +47,71 @@ future work):
 - `web-management ssl`, `ip authorized-managers` management-plane
   ACLs
 
+## L3 redundancy: VRRP (no anycast)
+
+**New in v0.2.0** (Wave B — classic VRRP wire-up).
+
+AOS-S nests VRRP groups inside the per-VLAN stanza — the VLAN IS the
+SVI on AOS-S, so the redundancy group lives next to the VLAN's IP
+address rather than on a separate routed interface.  Canonical
+attaches the group to the synthesised `Vlan<N>` interface (see the
+codec's `_svi_absorption.py` pattern).
+
+### Grammar
+
+```text
+router vrrp
+;
+vlan 100
+   name "Mgmt"
+   ip address 10.0.100.1/24
+   ip vrrp vrid 10
+      virtual-ip-address 10.0.100.254
+      priority 110
+      preempt
+      enable
+      authentication mode plaintext-password "SECRET"
+      exit
+   exit
+```
+
+Sub-commands handled: `virtual-ip-address`, `priority`, `preempt` (+
+absence ⇒ `preempt=False`), `enable` (mandatory marker; consumed
+without a canonical field — render re-emits it), `authentication mode
+plaintext-password "<key>"` (→ `plain:<key>`).  The top-level `router
+vrrp` enabler line is mandatory and gets re-emitted any time there
+are groups in the canonical tree.
+
+Multiple `ip vrrp vrid` blocks in the same `vlan N` stanza produce
+multiple `CanonicalVRRPGroup` records on the SVI.
+
+### Known limitations
+
+- **Single virtual-ip-address per vrid.**  AOS-S `virtual-ip-address`
+  accepts ONE address per group.  Cross-vendor migration from
+  multi-VIP sources (Cisco IOS-XE `vrrp 10 ip X secondary`, Junos
+  `virtual-address [ X Y Z ]`) emits the first VIP and drops the tail
+  with a `; review:` comment — operator must split into multiple
+  groups manually if redundancy is needed on every address.
+- **No anycast-gateway grammar.**  AOS-S is a campus L2/L3 codec
+  with no equivalent of Arista VARP / Junos virtual-gateway-address /
+  Cisco SD-Access fabric forwarding.  All anycast canonical paths
+  are declared `unsupported` and parse-and-ignore.
+- **No CARP, no HSRP.**  Only IETF VRRP.
+- **AOS-S vendor default is `preempt=False`**, opposite to most
+  other vendors — the parser overrides the canonical default (True)
+  when the `preempt` token is absent from the source.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model design (`CanonicalVRRPGroup`); see
+  `02-per-vendor-grammar.md` § "Aruba AOS-S" for the single-VIP
+  constraint rationale.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (no AOS-S participation; declared
+  unsupported across all three anycast canonical paths).
+
 ## Lossy paths
 
 See per-codec `CapabilityMatrix.lossy` declarations in the codec

@@ -41,6 +41,87 @@ corpus yet — operator captures from EOS 4.27+ are welcome (see
 - Routing instances (`/routing-instances/instance` declared
   supported on Arista — VRF + EVPN paths translate cleanly)
 
+## L3 redundancy: VRRP + VARP anycast-gateway
+
+**New in v0.2.0** (Waves B + C — VRRP and anycast-gateway wire-up).
+
+### Classic VRRP
+
+Multi-line per-group grammar inside an SVI / routed-port stanza.  The
+codec accepts both the modern `ipv4` keyword (EOS 4.21+) and the
+legacy `ip` form on parse; render always emits the modern `ipv4` form.
+
+```text
+interface Vlan30
+   ip address 10.0.30.1/24
+   vrrp 10 ipv4 10.0.30.254
+   vrrp 10 priority 110
+   no vrrp 10 preempt
+   vrrp 10 track Ethernet1
+   vrrp 10 description primary HA pair
+   vrrp 10 timers advertise 3
+!
+```
+
+Sub-commands handled: `ipv4` / `ip` (legacy) / `ipv6` (VRRPv3),
+`priority`, `preempt` (+ `no` form), `description`, `track <iface>`
+(decrement value lossy), `timers advertise <S>`, `mac-address`
+(per-group override), `authentication text` / `authentication md5
+key-string`.  Multiple `vrrp <gid> ...` lines on the same interface
+converge onto one `CanonicalVRRPGroup` keyed by VRID; multiple VRIDs
+on the same SVI surface as multiple records.
+
+### VARP (Virtual ARP) anycast-gateway
+
+DC-fabric anycast — every leaf SVI carries the same virtual IP, no
+per-leaf primary on the wire.  Two surfaces:
+
+```text
+interface Vlan110
+   ip address virtual 10.1.10.1/24
+   ip address virtual 10.1.100.1/24 secondary
+   ipv6 address virtual fd20:1::1/64
+!
+ip virtual-router mac-address 00:1c:73:00:dc:01
+```
+
+Canonical mapping:
+
+- `ip address virtual X/Y [secondary]` lands on
+  `CanonicalIPv4Address` with `ip=""` (no per-leaf primary) and
+  `virtual_gateway_address="X"`; the `secondary` trailer round-trips
+  via `is_secondary=True`.
+- `ipv6 address virtual X/Y` (EOS 4.30+) mirrors the IPv4 path onto
+  `CanonicalIPv6Address.virtual_gateway_address`.
+- Top-level `ip virtual-router mac-address <MAC>` lands on
+  `CanonicalIntent.anycast_gateway_mac` (system-wide; one MAC per
+  device, cascades to every VARP IP).
+- `ip address virtual source-nat vrf <V> address <Z>` is a DISTINCT
+  feature (VARP source-NAT for VRF-leaked traffic, Tier 3) and is
+  parse-and-ignored — does NOT pollute the VARP anycast surface.
+
+### Known limitations
+
+- **Per-IP virtual MAC is lossy.** EOS only supports a system-wide
+  `ip virtual-router mac-address`; per-address MAC overrides (Junos
+  `virtual-gateway-v4-mac` / `-v6-mac`) have no Arista equivalent.
+  Cross-vendor renders from Junos sources surface a review banner on
+  the migrate page.
+- **VARP has no group_id on the wire.**  Discrimination is purely
+  structural — `virtual_gateway_address != ""` on the address record
+  IS the anycast intent.
+- VARP source-NAT (`ip address virtual source-nat ...`) is Tier-3 and
+  not modelled.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model design rationale (`CanonicalVRRPGroup` +
+  `mode="vrrp"` discriminator).
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (per-IP companion fields + system-wide
+  MAC; § "Arista EOS (VARP)" covers the no-primary edge case).
+
 ## Lossy paths
 
 - See per-codec `CapabilityMatrix.lossy` declarations.  Most fields

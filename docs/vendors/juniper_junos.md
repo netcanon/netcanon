@@ -44,6 +44,98 @@ welcome.
   through round-trip (Junos-specific structural primitive)
 - Routing instances + VRFs
 
+## L3 redundancy: VRRP + virtual-gateway-address anycast
+
+**New in v0.2.0** (Waves B + C — VRRP and anycast-gateway wire-up).
+
+Junos's grammar is distinctive: every redundancy sub-command nests
+under a parent `family inet address <X>/<prefix>` line, so the
+address acts as the binding anchor.  The canonical model uses
+interface-scope (`vrrp_groups` on `CanonicalInterface`), so the
+parser records the binding-address anchor for round-trip; render-
+side re-attaches the group to the primary address.  Exercised by the
+QFX10K2 fixture (`ksator_labmgmt_qfx10k2_junos173.set`).
+
+### Classic vrrp-group grammar
+
+```text
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 virtual-address 10.1.1.1
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 priority 200
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 no-preempt
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 description "core-gw"
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 authentication-type simple
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 authentication-key "OPAQUE-KEY"
+set interfaces ge-0/0/0 unit 0 family inet address 10.1.1.5/24 vrrp-group 10 track interface ge-0/0/1
+```
+
+Sub-commands handled: `virtual-address`, `priority`, `preempt` /
+`no-preempt`, `description`, `authentication-type` +
+`authentication-key` (merged into the canonical
+`<scheme>:<value>` form), `track interface` (per-iface `priority-cost`
+decrement is lossy), `fast-interval` (sub-second; drops to lossy as
+canonical `advertisement_interval` is integer-seconds).  Multiple
+groups can attach to the same address.
+
+### Anycast-gateway (virtual-gateway-address)
+
+DC-fabric anycast on the IRB unit — both halves of the surface
+arrive on one `set` line:
+
+```text
+set interfaces irb unit 2021 family inet address 10.221.0.5/16 virtual-gateway-address 10.221.0.1
+set interfaces irb unit 2021 family inet6 address fd20:2021::5/64 virtual-gateway-address fd20:2021::1
+set interfaces irb unit 2021 family inet6 address fe80:2021::1/64
+set interfaces irb unit 2021 virtual-gateway-v4-mac 02:00:21:00:00:01
+set interfaces irb unit 2021 virtual-gateway-v6-mac 02:00:21:06:00:01
+```
+
+Canonical mapping:
+
+- `family inet address X/M virtual-gateway-address Y` populates
+  `CanonicalIPv4Address(ip=X, prefix_length=M,
+  virtual_gateway_address=Y)` — both halves on the same record.
+- `family inet6 address X/M virtual-gateway-address Y` mirrors the
+  IPv4 path onto `CanonicalIPv6Address`.  The auto-emitted
+  `fe80::/10` link-local lives on a SEPARATE record with
+  `scope="link-local"` and no anycast companion.
+- `virtual-gateway-v4-mac <MAC>` / `-v6-mac <MAC>` are per-IRB-unit
+  (one MAC per address-family per unit) and apply to every
+  global-scope address on the unit.  They land on
+  `CanonicalIP{v4,v6}Address.virtual_gateway_mac`; the MAC line can
+  come BEFORE or AFTER the address lines (order-independent parse).
+
+### Known limitations
+
+- **No system-wide anycast-gateway MAC.**  Junos models MAC per IRB
+  unit / per family.  `CanonicalIntent.anycast_gateway_mac`
+  (Arista's `ip virtual-router mac-address` / Cisco's
+  `fabric forwarding anycast-gateway-mac`) is silently dropped on
+  render — operator must distribute the value across every IRB
+  unit's per-address MAC on the receiving Junos side.  The
+  capability matrix declares `/anycast-gateway-mac` `unsupported`
+  on the Junos codec.
+- **Per-address binding round-trip.**  Junos binds the group to the
+  address; the canonical model is interface-scope.  Parser picks
+  the source address as the anchor; render re-attaches to the
+  primary address.  If multiple addresses on the same unit each
+  carry a vrrp-group in the source, the cross-vendor round-trip
+  through interface-scope may consolidate them onto the primary
+  (lossy when both addresses are present).
+- **Track priority-cost decrement is lossy** (mirror of IOS-XE
+  decrement / Arista decrement — only the interface name survives).
+- **Sub-second `fast-interval`** drops to canonical
+  `advertisement_interval=1` (lossy).
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model; see `02-per-vendor-grammar.md` §
+  "Juniper Junos" for the per-address-binding rationale.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (`01-canonical-model.md` covers the
+  decision to keep per-IP virtual_gateway_mac despite no other
+  vendor having it).
+
 ## Lossy paths
 
 - **`/routing-instances/instance`** — VRFs translate cleanly between

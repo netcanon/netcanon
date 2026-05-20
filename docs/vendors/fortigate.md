@@ -51,6 +51,85 @@ firewall translation is your primary need, see
 - Local admin / user accounts — `config system admin` with
   `set password ENC ...` form-preserving migration
 
+## L3 redundancy: VRRP (no anycast)
+
+**New in v0.2.0** (Wave B — classic VRRP wire-up).
+
+FortiGate delivers HA / L3 redundancy exclusively through VRRP
+groups; there's no anycast-gateway surface (anycast is a fabric
+primitive on DC switches, not on edge firewalls).  The codec parses
+the nested `config vrrp / edit N` sub-block inside `config system
+interface`.
+
+### Grammar
+
+```text
+config system interface
+    edit "vlan10"
+        set vdom "root"
+        set ip 10.0.10.1 255.255.255.0
+        config vrrp
+            edit 10
+                set vrip 10.0.10.254
+                set priority 110
+                set preempt enable
+                set adv-interval 1
+                set authentication "secretpass"
+                set vrdst port2
+                set status enable
+            next
+        end
+    next
+end
+```
+
+Sub-commands handled: `set vrip <X>` (IPv4 virtual), `set vrip6 <X>`
+(IPv6 VRRPv3), `set priority`, `set preempt enable|disable`,
+`set adv-interval <S>`, `set authentication "<token>"` (→
+`plain:<token>`), `set vrdst <iface>` (destination-tracking, maps
+to canonical `track_interfaces`).  Multiple `edit N` blocks under
+one `config vrrp` produce multiple `CanonicalVRRPGroup` records.
+
+VRID is bounded to 1-255 (IETF spec + pydantic validator); edits
+with out-of-range IDs or missing `set vrip` are silently dropped on
+parse.
+
+### Known limitations
+
+- **Single VIP per group.**  FortiOS `set vrip` accepts a single
+  address per group.  Cross-vendor migration from multi-IP sources
+  (Cisco IOS-XE secondaries, Junos `virtual-address [ X Y Z ]`)
+  emits the first VIP and drops the tail with a `# review:` line
+  — operator must split into multiple groups manually.
+- **Custom virtual-MAC per group drops.**  FortiOS uses
+  `set vrrp-virtual-mac enable/disable` as an interface-wide toggle
+  (defaults to disable — FortiOS uses its NPU MAC instead of the
+  IETF `00:00:5E:00:01:VRID`).  The canonical `virtual_mac`
+  per-group override has no FortiOS equivalent.
+- **Single `vrdst` per group.**  FortiOS `set vrdst` takes one
+  interface.  Multi-track canonical groups (IOS-XE `track` objects,
+  Arista `vrrp N track ... decrement N`) emit the first and drop
+  the rest with a `# review:` line.  The decrement value is also
+  lossy — `vrdst` is a binary up/down trigger, not a priority-
+  decrement scheme.
+- **`vrgrp`, `vrdst-priority`, `start-time`**, and other FortiOS-
+  specific knobs (group-of-groups synchronisation, alternate-
+  priority for destination unreachable, startup-delay) are not in
+  canonical scope and drop on cross-vendor render.
+- **No anycast-gateway grammar.**  FortiGate is a firewall / edge
+  platform; the three anycast canonical paths
+  (`virtual-gateway-address` v4/v6, `anycast-gateway-mac`) are
+  declared `unsupported` and parse-and-ignore.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model; see `02-per-vendor-grammar.md` §
+  "FortiGate" for the per-knob lossiness rationale.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (FortiGate explicitly out of scope as a
+  firewall/edge platform without fabric primitives).
+
 ## Lossy paths
 
 - **`/system/dns`** with view scoping — view definitions parse-and-

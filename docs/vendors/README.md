@@ -31,13 +31,17 @@ Every page follows the same shape:
 1. **TL;DR** — codec(s) + certification state.
 2. **What translates well** — Tier-1 + Tier-2 surfaces from the
    capability matrix.
-3. **Lossy paths** — declared lossy with cited reasons.
-4. **What we don't do** — Tier-3 boundary (firewall, NAT, VPN, QoS,
+3. **L3 redundancy** (v0.2.0+) — VRRP / HSRP / VARP / virtual-
+   gateway / CARP wire-up status; cross-references the
+   `docs/v0.2.0-planning/01-vrrp-canonical/` and
+   `docs/v0.2.0-planning/02-anycast-gateway/` design docs.
+4. **Lossy paths** — declared lossy with cited reasons.
+5. **What we don't do** — Tier-3 boundary (firewall, NAT, VPN, QoS,
    routing protocols).
-5. **Real-world fixtures** — what's been validated against (links
+6. **Real-world fixtures** — what's been validated against (links
    into `NOTICE.md` provenance).
-6. **Common gotchas** — vendor-specific.
-7. **See also** — capability matrix, certification state, fixture
+7. **Common gotchas** — vendor-specific.
+8. **See also** — capability matrix, certification state, fixture
    provenance, bug-reporting workflow.
 
 ## See also

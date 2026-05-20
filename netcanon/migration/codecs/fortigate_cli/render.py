@@ -10,9 +10,14 @@ surface (consumed by codec.py's ``render()`` method):
 
 The render emits blocks in the same order operator workflows expect
 from a FortiOS export: ``system global`` → ``system dns`` →
-``system ntp`` → ``system interface`` → ``system snmp`` →
+``system ntp`` → ``system interface`` (including nested
+``config vrrp / edit N / set vrip / set priority / set preempt /
+set adv-interval / set authentication / set status / next / end``
+for **VRRP groups** on the interface) → ``system snmp`` →
 ``system admin`` → ``user radius`` → ``system dhcp server`` →
 ``router static``.  Ordering is stable for diff-friendliness.
+Multi-VIP cross-vendor sources and non-``vrrp`` modes (HSRP / CARP)
+surface as ``# review:`` comments inside the interface edit body.
 
 Defaults that FortiOS omits on export (e.g. ``set radius-port 1812``,
 ``set mtu 1500``) are NOT emitted here so our renders round-trip

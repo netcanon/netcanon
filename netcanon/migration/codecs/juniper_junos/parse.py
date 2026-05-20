@@ -17,6 +17,17 @@ scratch attributes during dispatch and back-patching every
 emits these lines in arbitrary order relative to the per-VLAN
 ``vxlan vni`` declarations.
 
+Wave B + C: also handles **VRRP groups** nested under
+``family inet address X vrrp-group N <sub>`` (priority / preempt /
+no-preempt / advertise-interval / track interface /
+authentication-type+key / description / accept-data) and
+**anycast-gateway** (``family inet address X/M virtual-gateway-
+address Y``, ``family inet6 address X/M virtual-gateway-address Y``,
+per-unit ``virtual-gateway-v4-mac`` / ``virtual-gateway-v6-mac``).
+Per-unit scratch carries the new fields onto both
+``iface_state[name]`` and ``irb_state[vid]`` so the IRB-to-VLAN
+fold preserves them on :attr:`CanonicalVlan.ipv4_addresses`.
+
 Stable across Junos 15-21+.
 
 Extracted verbatim from ``codec.py`` during the parse/render split;

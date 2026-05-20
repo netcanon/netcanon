@@ -21,6 +21,502 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+### v0.2.0 Wave A + B + C: VRRP / HSRP / CARP + anycast-gateway across 7 codecs
+
+The headline v0.2.0 enrichment.  Closes the universal-but-unmodelled
+L3-redundancy gap surfaced during the fixture-research arc
+(`f52489c..8adaefd`) by landing a canonical surface for classic FHRP
+(VRRP / HSRP / CARP) plus anycast-gateway, then wiring 7 bidirectional
+codecs against it.  Ships as a single chained release — schema first
+(Wave A), then per-codec wire-up (Wave B + C) — across 3 commits
+(`c5da044`, `b85c39c`, `e542b49`).  Design rationale at
+[`docs/v0.2.0-planning/`](docs/v0.2.0-planning/); per-vendor doc
+pages updated under [`docs/vendors/`](docs/vendors/); capability
+matrix at [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md).
+
+#### Wave A — schema landing (commit `c5da044`)
+
+Pure schema addition.  Every new canonical path is declared
+`unsupported` in every codec's `CapabilityMatrix` at the moment Wave A
+lands — the *ship-before-wire* invariant the project relies on, so
+the migrate-page banner fires loudly for any operator who tries to
+push a fixture that exercises one of the new fields before the
+codec's Wave B / C wire-up has landed.
+
+Schema additions in `netcanon/migration/canonical/intent.py`:
+
+* **`CanonicalVRRPGroup`** — new class modelling the classic FHRP
+  redundancy primitive.  Field set: `group_id` (1-255), `mode`
+  (`"vrrp"` / `"hsrp"` / `"carp"` — free string, not enum, so future
+  codecs can extend without schema churn), `virtual_ips`,
+  `virtual_ipv6s`, `virtual_mac`, `priority` (1-254), `preempt`,
+  `advertisement_interval`, `authentication` (opaque
+  `"<scheme>:<value>"` token), `track_interfaces`, `description`.
+* **`CanonicalInterface.vrrp_groups: list[CanonicalVRRPGroup]`** —
+  attachment point on the interface record.
+* **`CanonicalIPv4Address.virtual_gateway_address: str`** +
+  **`.virtual_gateway_mac: str`** + **`.is_secondary: bool`** —
+  anycast-gateway companion fields on the address record.  The
+  `is_secondary` addition extends beyond strict anycast scope —
+  also unblocks Cisco / Arista `secondary` trailers on classic
+  `ip address X/Y secondary` and Junos multi-address-per-unit
+  semantics.
+* **`CanonicalIPv6Address`** — same three additions for IPv6.
+* **`CanonicalIntent.anycast_gateway_mac: str`** — chassis-wide
+  anycast MAC for vendors that declare it once at the system level
+  (Arista `ip virtual-router mac-address`, NX-OS / IOS-XE-SD-Access
+  `fabric forwarding anycast-gateway-mac`).  Stored in colon-hex
+  canonical form; per-vendor renderers re-emit in their native
+  format.
+* **`CanonicalStaticRoute.vrf: str`** — per-VRF static-route
+  discriminator.  T3 (NX-OS) research surfaced the field; adding it
+  in Wave A also closes the latent IOS-XE per-VRF-static-route
+  surface that had been declared lossy.
+
+Five architectural calls landed alongside the schema (full design
+record in [`docs/v0.2.0-planning/README.md`](docs/v0.2.0-planning/README.md)
+§ "Cross-task synthesis"):
+
+1. **HYBRID resolution** between T1 (VRRP) and T2 (anycast)
+   planning agents.  T1 and T2 reached opposite recommendations on
+   the same architectural question — should anycast share T1's
+   `CanonicalVRRPGroup` (mode discriminator), or be an
+   independent per-address field?  Adopted T2's domain-modelling
+   integrity argument: classic FHRP **is** a router-group election
+   (`group_id` / `priority` / `preempt` are domain primitives);
+   anycast **is** an IP property (every leaf has it; no election).
+   Forcing one merged discriminator would have synthesised fake
+   `group_id` / `priority` / `preempt` fields with no source token
+   and no target render — exactly the "kitchen-sink discriminator"
+   anti-pattern.  Precedent: the canonical model already separates
+   `CanonicalVxlan` from `CanonicalEvpnType5Route` even though both
+   are EVPN-overlay primitives.
+2. **`mode` values: `vrrp` / `hsrp` / `carp` only** — no
+   `"anycast"` mode.  Falls directly out of the HYBRID resolution.
+3. **`virtual_mac` per-group**, with codec-side cascade for vendors
+   that declare the MAC once chassis-wide (Arista's `ip
+   virtual-router mac-address` cascades into every group on parse;
+   render hoists back).
+4. **`is_secondary` on address records** beyond strict anycast
+   scope — also unblocks EOS VARP secondary virtual IPs and EOS
+   classic `ip address X/Y secondary` round-trip handling on the
+   existing fixture corpus.
+5. **`virtual-gateway-mac` per-IP is a vendor-specific surface**
+   (Junos per-unit MAC override; Arista lossy declaration) and
+   does NOT participate in the cross-codec ship-before-wire
+   declaration — only codecs with the grammar declare the path.
+
+Tests in `tests/unit/migration/test_canonical_vrrp_anycast_schema.py`
+(**31 new tests**, 7 classes):
+
+* `TestCanonicalVRRPGroupDefaults` — minimal + full construction,
+  mode discriminator, free-string forward-compat.
+* `TestCanonicalVRRPGroupValidation` — VRID range (1-255),
+  priority range (1-254), boundary conditions.
+* `TestVRRPGroupsOnInterface` — default empty list, multiple
+  groups, `model_dump` round-trip.
+* `TestIPv4AnycastFields` / `TestIPv6AnycastFields` — defaults,
+  set-companion, secondary flag, link-local-with-anycast.
+* `TestStaticRouteVrfField` — default global, per-VRF route.
+* `TestAnycastGatewayMacOnIntent` — default empty, system MAC set.
+* `TestShipBeforeWireUnsupportedDeclarations` — parametrised
+  across all 8 codecs; asserts every codec declares the 5 new
+  paths `unsupported`.  Guards against accidental partial wire-up
+  landing the schema without the matrix declarations.
+
+Audit-runner update: `tools/run_full_mesh.py` gains
+`anycast_gateway_mac` in `_AUDITED_FIELDS` so the cross-mesh audit
+covers the new field — the audit-coverage drift guard at
+`tests/unit/audit/test_run_full_mesh.py::
+test_audited_fields_cover_every_canonical_top_level` fired
+immediately on the schema landing and surfaced the omission, exactly
+the self-healing-test invariant the project relies on.
+
+Wave A test status: 3192 passed, 56 skipped, 0 failed (was 3161
+before; **+31 schema tests**).
+
+#### IOS-XE password round-trip bugfix (commit `b85c39c`)
+
+Sub-task between Wave A and Wave B+C.  The IOS-VRRP fixture landed
+in `8adaefd` was sanitised away from upstream verbatim specifically
+to dodge a latent IOS-XE codec round-trip bug surfaced during that
+fixture's ingestion.  This commit fixes the bug, then restores the
+fixture to upstream verbatim form.
+
+**The bug.**  Cisco IOS-XE annotates `username … {secret|password}
+<N> X` with an encoding-type digit `N`:
+
+* `0` — plaintext (device hashes on commit)
+* `5` — md5crypt
+* `7` — Cisco's reversible XOR (legacy)
+* `8` — PBKDF2-SHA256
+* `9` — scrypt
+
+The canonical model carries types 5/7/8/9 as `"<digit> <hash>"` so
+the render side can reconstruct the original wire form.  Type `0`
+is the wire-explicit spelling of *plaintext* and had been carrying
+its `"0 "` prefix through the canonical model verbatim — which
+the render path then re-prefixed under a fresh `secret 0 `,
+producing `secret 0 0 X`.  Re-parsing that line captured the second
+`0` as a hash-type marker, breaking parse↔render symmetry.
+
+**The fix.**  In
+`netcanon/migration/codecs/cisco_iosxe_cli/parse.py` —
+`_parse_local_users` strips the `"0 "` prefix on parse when
+`hash_type == "0"` and stores the bare value as
+`hashed_password`.  The render side's existing path already
+prepends `secret 0 ` when plaintext needs to cross the wire, so
+the round-trip becomes idempotent.  The keyword normalises
+`password` → `secret` (the IOS-XE-preferred form) on re-emit but
+the encoding-type digit and payload round-trip exactly.  Types
+5/7/8/9 are unchanged.
+
+**Tests.**  `TestLocalUserPasswordRoundTrip` (**8 new tests**) in
+`tests/unit/migration/test_cisco_iosxe_cli.py` covers plaintext
+prefix strip on parse, idempotent type-0 round-trip, render emits
+`secret 0 X` (never `secret 0 0 X`), types 5/7/8/9 round-trip
+unchanged, `secret 0 X` source form parses to the same canonical
+representation as `password 0 X`, mixed-type users round-trip
+independently.
+
+**Fixture restored.**
+`tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt` now
+holds the upstream-verbatim `username cisco privilege 15 password
+0 cisco` line (deliberately-cleartext lab credential material from
+a Batfish parser test snapshot — RFC 5737-class test data, not a
+real device secret).  `NOTICE.md` updated to reflect "retained
+verbatim" provenance.
+
+#### Wave B + C — 7-codec wire-up (commit `e542b49`)
+
+The big merge.  Seven parallel `general-purpose` agents working in
+isolated worktrees each wired one codec against the Wave A schema,
+flipping the relevant `CapabilityMatrix` paths from `unsupported`
+to `supported` (or `lossy` where the cross-vendor mapping is
+partial) and adding parse + render + tests for the per-vendor
+grammar.  Per-codec branch attribution preserved on origin under
+`worktree-agent-*` branches.
+
+Per-codec contributions:
+
+| Codec               | Worktree commit | New tests | Wave  |
+|---------------------|-----------------|----------:|-------|
+| `aruba_aoss`        | `2d60a80`       |      +17  | B     |
+| `fortigate_cli`     | `4062430`       |      +17  | B     |
+| `mikrotik_routeros` | `374d825`       |      +20  | B     |
+| `opnsense` (CARP)   | `ded4e31`       |      +21  | B     |
+| `juniper_junos`     | `7f760e2`       |      +23  | B + C |
+| `arista_eos`        | `31302bd`       |      +24  | B + C |
+| `cisco_iosxe_cli`   | `2162435`       |      +27  | B + C |
+
+**+149 codec tests total**, plus the unified schema test
+(`test_canonical_vrrp_anycast_schema.py`) reconciled from 7 agent
+variants into a single `_WIRED_UP_BY_CODEC` map tracking per-codec
+wire-up state with a **two-sided invariant**:
+
+* Graduated paths (listed under a codec's set in
+  `_WIRED_UP_BY_CODEC`) MUST appear in `supported` or `lossy` and
+  MUST NOT remain in `unsupported`.
+* Un-graduated paths (NOT listed for a codec) MUST remain in
+  `unsupported`.
+
+Either side firing means a partial wire-up.  Loud test failure.
+
+##### Capability matrix wire-up state
+
+| Codec               | VRRP | v4 anycast | v6 anycast | system MAC | per-VRF SR |
+|---------------------|------|------------|------------|------------|------------|
+| `cisco_iosxe_cli`   |  *   |     *      |     -      |     *      |     -      |
+| `cisco_iosxe`       |  -   |     -      |     -      |     -      |     -      |
+| `juniper_junos`     |  *   |     *      |     *      |     -      |   lossy    |
+| `arista_eos`        |  *   |     *      |     *      |     *      |     -      |
+| `aruba_aoss`        |  *   |     -      |     -      |     -      |     -      |
+| `fortigate_cli`     |  *   |     -      |     -      |     -      |     -      |
+| `mikrotik_routeros` |  *   |     -      |     -      |     -      |     -      |
+| `opnsense` (CARP)   |  *   |     -      |     -      |     -      |     -      |
+
+(`*` = supported, `lossy` = parses but cross-vendor incomplete,
+`-` = still `unsupported`)
+
+##### Per-codec scope highlights
+
+**`juniper_junos`** (Wave B + C):
+
+* VRRP: `set interfaces ... unit N family inet address X
+  vrrp-group M virtual-address Y / priority / preempt / no-preempt
+  / advertise-interval / track interface / authentication-type+key
+  / description / accept-data`.
+* Anycast: `family inet address X/M virtual-gateway-address Y`,
+  `family inet6 address X/M virtual-gateway-address Y`, per-unit
+  `virtual-gateway-v4-mac` / `virtual-gateway-v6-mac` overrides.
+* IRB-to-VLAN fold preserves new fields onto
+  `CanonicalVlan.ipv4_addresses`.
+* **QFX10K2 fixture now round-trips anycast data PRESERVED** — was
+  silently dropped before this round.
+* `/anycast-gateway-mac` kept `unsupported` (Junos has no
+  chassis-wide MAC; per-unit override only).
+* `/routing/static-route/vrf` flipped to `lossy` (routing-instances
+  dispatcher needs per-VRF static harvest — separate scope).
+
+**`arista_eos`** (Wave B + C):
+
+* VRRP: classic + modern multi-line, priority / preempt / track /
+  timers / description / mac-address / auth-md5 / auth-text.
+* VARP: `ip address virtual X/Y [secondary]`, `ipv6 address
+  virtual`, system-wide `ip virtual-router mac-address`.
+* VARP-only records carry `ip=""` — EOS has no per-leaf primary;
+  virtual IS the only IP.
+* `source-nat` discriminator on `ip address virtual` is Tier-3
+  parse-and-ignore (VRF-leaked traffic).
+* `secondary` trailer preservation closes a pre-existing EOS
+  parser gap.
+* Per-IP `virtual-gateway-mac` is **`lossy`** — EOS only has the
+  chassis-wide MAC; per-IP override does not exist in the grammar.
+  Cross-vendor sources from Junos that populate per-IP MAC fields
+  surface a review banner on Arista render — operator-visible
+  signal of the cross-vendor mapping gap.
+
+**`cisco_iosxe_cli`** (Wave B + C):
+
+* VRRP: classic single-line per-attribute grammar.
+* Modern address-family form parses to group-ID-only shell with
+  `lossy` declaration documenting the gap.
+* SD-Access anycast: per-SVI `fabric forwarding mode
+  anycast-gateway` (mirror semantics — primary IP IS the virtual),
+  system `fabric forwarding anycast-gateway-mac`.
+* MAC parser accepts all 3 vendor forms (dotted-triplet, colon-hex,
+  dash-hex); renderer always emits dotted-triplet.
+* IPv6 anycast kept `unsupported` (no fixture coverage today —
+  see "What's deferred" below).
+
+**`aruba_aoss`** (Wave B only):
+
+* VRRP nested inside `vlan N` stanza.
+* Groups attach to the synthesised `VlanN` `CanonicalInterface`
+  via the existing SVI-absorption rules.
+* AOS-S `preempt` vendor-default is `False` (unlike Cisco `True`).
+
+**`fortigate_cli`** (Wave B only):
+
+* VRRP nested `config vrrp / edit N / set vrip X` inside `config
+  system interface / edit X`.
+* `set vrip6` triggers implicit `set version 3` on render.
+
+**`mikrotik_routeros`** (Wave B only):
+
+* Two-stage parse correlation: `/interface vrrp` declarations
+  collected in scratch; `/ip address` lines binding to `vrrp<N>`
+  pseudo-interfaces route into the corresponding group's
+  `virtual_ips`.
+* `v3-protocol=ipv6` discriminator routes to `virtual_ipv6s`.
+
+**`opnsense`** (Wave B; CARP variant):
+
+* Walks `<virtualip><vip>` children, filters by
+  `<mode>carp</mode>` (silently skipping `ipalias` / `proxyarp` /
+  `vrrp` modes).
+* Inverted **`advskew`→`priority` normalisation**: `priority =
+  254 - advskew` (CARP is lower-wins; canonical is higher-wins).
+  Declared `lossy` because the inversion is symmetric in canonical
+  form but not in every cross-vendor source.
+* Authentication `<password>X</password>` stores as `carp-key:X`
+  canonical form.
+
+##### Architectural notes on the agent consolidation
+
+The unified `_WIRED_UP_BY_CODEC` map design (final form: per-codec
+set of graduated paths, two-sided invariant) was selected from
+**4 independent agent variants**.  The IOS-XE agent's design was
+closest to the final form; the `_NEW_PATHS` tuple was pruned from
+7 paths back to the 5 paths Wave A actually declared.  Per-IP MAC
+paths are vendor-specific surfaces (Junos per-unit MAC override,
+Arista lossy declaration) and are not required to be declared
+across all 8 codecs.
+
+The Arista agent's design call to declare per-IP
+`virtual-gateway-mac` as `lossy` (rather than the planning doc's
+proposed cascade pattern) is preserved on this merge — surfacing
+a review banner on Arista render when cross-vendor sources from
+Junos populate per-IP MAC fields is more useful operator-facing
+signal than silently losing the data.
+
+#### Cumulative impact
+
+* **+180 new tests** (31 Wave A schema + 149 codec wire-up + 8
+  IOS-XE password round-trip regression = **188**, of which 180
+  ride the v0.2.0 enrichment scope and 8 are the latent-bugfix
+  side-task).
+* **Migration unit suite**: 2530 → 2679 passing (Wave A landed at
+  2530 baseline post-3192 unit suite; Wave B+C ended at 2679).
+* **Full unit suite**: 3192 → 3341 passing, 56 skipped, 0 failed.
+* **~6,800 LOC** of new production codec implementation across
+  the three commits (Wave A schema + IOS-XE bugfix + 7-codec
+  wire-up), against **~13,700 LOC of design documentation**
+  authored ahead of any production code (the agent-driven
+  planning pass at `docs/v0.2.0-planning/`).
+
+#### What's deferred
+
+* **Cisco IOS-XE NETCONF stub (`cisco_iosxe`)** — every new
+  canonical path remains `unsupported`.  The codec is a
+  Phase-0.5 NETCONF skeleton that declares every canonical
+  surface `unsupported` per its stub policy; full wire-up is
+  out of scope until a v0.x.x NETCONF push lands.
+* **IPv6 anycast on IOS-XE** — no fixture coverage in the
+  current corpus.  The codec has the grammar for IPv4
+  SD-Access anycast but the IPv6 path stays `unsupported`
+  pending a Catalyst SD-Access IPv6 capture.  P1 gap tracked
+  in `docs/v0.2.0-planning/02-anycast-gateway/06-fixture-
+  targets.md`.
+* **Per-VRF static routes on `juniper_junos`** — declared
+  `lossy` rather than `supported`.  The routing-instances
+  dispatcher needs a per-VRF static-route harvest pass that is
+  scoped separately from this round (planning at
+  `docs/v0.2.0-planning/03-nxos-codec/03-canonical-mapping.md`
+  notes the touchpoints).
+* **NX-OS codec (T3)** + **IOS-XR codec (T4)** — design
+  artifacts shipped in the v0.2.0 planning pass but the codec
+  implementations themselves slip to **v0.3.0+**.  Aggregate
+  budget for the two codecs is ~4,300-5,900 LOC + ~3,000-4,100
+  test LOC combined — too large for a single maintainer's
+  v0.2.0 review budget.  T3 ships first per the planning
+  synthesis (enterprise reach > SP audience at equal cost);
+  T4 explicitly recommends deferral until T3 is in flight.
+
+#### Verification
+
+Full unit suite green (exit 0, **+180 tests** across the
+v0.2.0 enrichment + **+8 tests** for the IOS-XE password
+round-trip bugfix, total **3341 passing**, 56 skipped,
+0 failed).  Per-vendor doc pages updated under
+[`docs/vendors/`](docs/vendors/) for each codec that
+graduated paths.  Capability matrix at
+[`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) reflects the
+new per-codec state.
+
+### v0.2.0 design + planning: 4-track enrichment artifacts
+
+Preparatory work for the v0.2.0 enrichment cycle.  Two commits
+(`8adaefd` + `5adee9b`) seed the fixture corpus and ship a full
+design-artifact set for four parallel enrichment tracks.  No
+production source code is modified by either commit — every file
+is either a fixture under `tests/fixtures/real/` or markdown
+under `docs/v0.2.0-planning/`.
+
+#### Fixtures (commit `8adaefd`)
+
+Two carefully-chosen real captures from `batfish/lab-validation`
+that surface cross-vendor grammar gaps not yet modelled in
+netcanon's canonical intent tree:
+
+* **`tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt`**
+  (153 lines, Apache-2.0).  First dedicated **VRRP fixture in the
+  corpus** — `vrrp 12 ip 192.168.1.254` + `vrrp 12 priority 110`
+  on GigabitEthernet0/2.  Landed sanitised in `8adaefd` because
+  the upstream `username … password 0 …` line tripped a latent
+  IOS-XE codec round-trip bug; restored to upstream verbatim in
+  `b85c39c` once the bug shipped.
+* **`tests/fixtures/real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt`**
+  (330 lines, Apache-2.0).  Fifth Arista fixture and sibling to
+  `batfish_labval_dc1_leaf2a_eos4230.txt` — the two variants
+  share topology + node naming but encode EVPN differently (this
+  one uses L2VNIs + centralised L3 gateway; the sibling is the
+  symmetric-IRB variant on the same EOS train).  Different
+  `router bgp / vlan-aware-bundle` shape, different `interface
+  Vxlan1` block layout.
+
+`tests/fixtures/real/WANTED.md` expanded with the cross-vendor
+canonical-model enrichment plan — VRRP / HSRP / anycast-gateway
+grammar matrix per vendor + proposed `CanonicalVRRPGroup` surface
++ anycast-gateway Tier-2 follow-up grammar inventory.  Tier-D
+NX-OS + IOS-XR entries upgraded with concrete
+`batfish/lab-validation` snapshot pointers (ready-to-pull seed
+corpus once those codecs ship).
+
+#### Planning artifacts (commit `5adee9b`)
+
+`docs/v0.2.0-planning/` — **~13,700 lines / 29 markdown files**
+authored by **4 parallel `general-purpose` agents**, each given
+the same hard constraint (write only into the assigned subfolder,
+never modify production code).  Total agent runtime ~21 minutes
+wall-clock (parallel) / ~84 minutes CPU-time.
+
+Four enrichment tracks:
+
+| # | Subfolder | Topic | Target |
+|---|---|---|---|
+| T1 | [`01-vrrp-canonical/`](docs/v0.2.0-planning/01-vrrp-canonical/) | `CanonicalVRRPGroup` model + wiring plan for 7 bidi codecs | v0.2.0 (shipped this cycle) |
+| T2 | [`02-anycast-gateway/`](docs/v0.2.0-planning/02-anycast-gateway/) | Per-address `virtual_gateway_address` + system MAC | v0.2.0 (shipped this cycle) |
+| T3 | [`03-nxos-codec/`](docs/v0.2.0-planning/03-nxos-codec/) | Full new Cisco NX-OS bidirectional codec | v0.3.0+ |
+| T4 | [`04-iosxr-codec/`](docs/v0.2.0-planning/04-iosxr-codec/) | Full new Cisco IOS-XR bidirectional codec | v0.3.0+ (defer until after T3) |
+
+Per-task artifact set (~7 files per subfolder, mirroring across
+all 4 tasks): `README.md` (executive summary + scope) +
+`01-canonical-model.md` / `01-grammar-survey.md` +
+`02-per-vendor-grammar.md` / `02-codec-architecture.md` +
+`03-parse-render-touchpoints.md` / `03-canonical-mapping.md` +
+`04-test-plan.md` + `05-capabilities-matrix-updates.md` /
+`06-capabilities-matrix.md` + `05-/06-fixture-targets.md`.
+
+#### Cross-task synthesis (the load-bearing decision)
+
+The **top-level synthesis README** at
+[`docs/v0.2.0-planning/README.md`](docs/v0.2.0-planning/README.md)
+cross-references all four tasks and resolves the headline
+architectural conflict surfaced during the planning pass: T1 and
+T2 agents reached **opposite recommendations** on whether anycast
+should share T1's `CanonicalVRRPGroup` (mode discriminator) or be
+an independent per-address field.
+
+**Resolution: HYBRID** — classic FHRP (VRRP / HSRP / CARP) as a
+record type (`CanonicalVRRPGroup` with `mode` discriminator,
+group_id + priority + preempt as domain primitives); anycast as
+an IP-address property (`virtual_gateway_address` /
+`virtual_gateway_mac` fields directly on `CanonicalIPv4Address`
+and `CanonicalIPv6Address`, plus a system-wide
+`CanonicalIntent.anycast_gateway_mac`).  Full rationale + the
+four reasons T2's argument was stronger documented at
+[`docs/v0.2.0-planning/README.md`](docs/v0.2.0-planning/README.md)
+§ "The headline conflict".
+
+The HYBRID resolution lights up Wave A's schema shape (commit
+`c5da044`) verbatim.
+
+#### Schema-extension cascade documented
+
+The 4 planning passes surfaced **5 canonical-model extensions**
+needed for v0.2.0 across the cascade (every extension reused by
+≥2 tasks), plus a 6th that's a side-benefit (`CanonicalStaticRoute.vrf`
+also closes a pre-existing IOS-XE per-VRF-static-route lossy
+declaration).  All 5 ship together in Wave A so per-codec wiring
+can land incrementally.
+
+Aggregate budget per the planning synthesis: v0.2.0 ships Waves
+A + B + C (**~1,185 production LOC + ~450 test LOC** —
+re-graded to ~6,800 LOC actual on landing once full codec
+parse + render paths were written out).  v0.3.0+ ships Waves D
+(NX-OS) + E (IOS-XR) — combined ~4,300-5,900 production LOC +
+~3,000-4,100 test LOC.
+
+#### Open questions flagged for maintainer arbitration
+
+10 open questions flagged for arbitration ahead of Wave A landing
+— 4 architectural (which surface shape), 5 per-task scope, 1
+audience/sequencing.  All 4 architectural questions were
+arbitrated into Wave A's schema landing (HYBRID; mode discriminator
+keeps `"carp"`; `virtual_mac` per-group with codec-side cascade;
+`is_secondary` bundled into T2 scope).
+
+#### Implementation status at commit time
+
+Nothing in either commit changes runtime behaviour.  The fixtures
+auto-discover into `tests/unit/migration/test_real_captures.py`
+(parse / determinism / round-trip invariants); the planning
+artifacts are review-ready design briefs that the Wave A / B / C
+implementations cite by relative path in their commit messages.
+Per-task `IMPLEMENTED.md` stubs pointing at the v0.2.0 merge
+commits will land alongside the v0.2.0 tag.
+
 ### Junos codec: channelized sub-interface render fix + QFX10K2 fixture
 
 Drive-by codec fix that closes a real round-trip stability bug surfaced

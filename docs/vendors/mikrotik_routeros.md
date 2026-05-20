@@ -42,6 +42,69 @@ provisioning-script, and CRS310 + Proxmox-cluster fixtures.
 - Wireless config — `/interface wireless` (parse-tolerant; carry-
   through for cross-vendor scenarios where wireless isn't shared)
 
+## L3 redundancy: VRRP (no anycast)
+
+**New in v0.2.0** (Wave B — classic VRRP wire-up).
+
+RouterOS models VRRP as a top-level pseudo-interface declared in
+`/interface vrrp`, with the virtual IP bound via a separate
+`/ip address` line that references the synthetic pseudo-name.  The
+codec does a two-stage cross-reference: parse walks both sections
+and stitches the VIP onto the parent interface; render emits the
+two-stage structure with a deterministic `vrrp<vrid>` pseudo-name.
+
+### Grammar
+
+```text
+/interface vrrp
+add interface=ether1 name=vrrp10 vrid=10 priority=110 \
+    preemption-mode=yes interval=3s \
+    authentication=ah password=hmackey
+/ip address
+add address=10.0.10.254/24 interface=vrrp10
+```
+
+Keywords handled (on `/interface vrrp add ...`): `interface=` (the
+parent — the group lands here, NOT on the pseudo-name), `vrid`,
+`priority`, `preemption-mode=yes|no`, `interval=Ns` (the trailing
+`s` time-unit suffix is stripped), `v3-protocol=ipv4|ipv6` (an IPv6
+discriminator — when `ipv6`, the cross-referenced `/ipv6 address`
+populates `virtual_ipv6s`), `authentication=simple|ah` +
+`password=<token>` (merged into `<scheme>:<token>` canonical form).
+
+The pseudo-name (`vrrp10`) is NOT materialised as a
+`CanonicalInterface` — the v0.2.0 schema models the group as a
+property of the parent.  Pre-walk ordering is tolerant: `/ip address`
+can appear BEFORE `/interface vrrp` in the source.
+
+### Known limitations
+
+- **No description / track surface.**  RouterOS `/interface vrrp`
+  has no description field and no native interface-track grammar
+  (priority adjustments come from `on-master` / `on-backup` scripts).
+  Canonical `description` and `track_interfaces` round-trip empty
+  when RouterOS is the target.
+- **`on-master` / `on-backup` scripts are Tier-3** and drop with
+  a review comment.
+- **No anycast-gateway grammar.**  All three anycast canonical
+  paths (`virtual-gateway-address` v4/v6, `anycast-gateway-mac`)
+  are declared `unsupported` — RouterOS targets a SOHO / SMB
+  router niche without fabric-anycast primitives.
+- **HSRP / CARP / anycast modes** on incoming canonical records
+  (e.g. cross-vendor migration FROM an Arista VARP or OPNsense
+  CARP source) surface as `# review:` comments on render instead of
+  silently dropping.
+
+### Cross-references
+
+- [`../v0.2.0-planning/01-vrrp-canonical/`](../v0.2.0-planning/01-vrrp-canonical/)
+  — VRRP canonical model; see `02-per-vendor-grammar.md` §
+  "MikroTik RouterOS" for the pseudo-interface cross-reference
+  pattern.
+- [`../v0.2.0-planning/02-anycast-gateway/`](../v0.2.0-planning/02-anycast-gateway/)
+  — anycast-gateway design (RouterOS out of scope; SOHO/SMB
+  platform without fabric grammar).
+
 ## Lossy paths
 
 - **`/queue tree`** — QoS queue tree carry-through; cross-vendor QoS

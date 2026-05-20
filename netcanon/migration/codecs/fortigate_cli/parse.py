@@ -12,6 +12,13 @@ Public surface (consumed by codec.py's ``parse()`` method):
 * :func:`parse_intent` — one-shot parse entry: raw text in, fully-
   populated :class:`CanonicalIntent` out.
 
+Wave B: also handles **VRRP groups** nested as ``config vrrp /
+edit N / set vrip X / set priority / set preempt / set adv-interval
+/ set status / set authentication / next / end`` inside the
+per-interface ``config system interface / edit <name>`` body.
+Each ``edit <vrid>`` materialises a :class:`CanonicalVRRPGroup`
+attached to the parent :class:`CanonicalInterface`.
+
 Internal block model (still importable as ``_parse_blocks`` /
 ``_prefix_to_mask`` / ``_mask_to_prefix`` for tests that pin the
 parser's structural contract):

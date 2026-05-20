@@ -143,40 +143,54 @@ parsed value, so it parses-and-ignores today.
 
 ### VRRP / HSRP / anycast-gateway (highest leverage)
 
+**Shipped in v0.2.0: commits `c5da044` (Wave A schema) + `e542b49`
+(Waves B + C, 7-codec wire-up).**  See
+[`docs/v0.2.0-planning/01-vrrp-canonical/IMPLEMENTED.md`](../../../docs/v0.2.0-planning/01-vrrp-canonical/IMPLEMENTED.md)
+and [`docs/v0.2.0-planning/02-anycast-gateway/IMPLEMENTED.md`](../../../docs/v0.2.0-planning/02-anycast-gateway/IMPLEMENTED.md)
+for the closure stubs + deferral notes.  The per-vendor grammar
+tables below remain useful reference for future codec additions
+(NX-OS HSRP / IOS-XR VRRP land alongside their codecs in v0.3.0+).
+
 The universal Layer-3 redundancy primitive.  Every shipped codec
-has a vendor-native grammar for it.  **Currently modeled by none.**
+has a vendor-native grammar for it.
 
-| Vendor | Grammar | Where in corpus |
-|---|---|---|
-| Cisco IOS-XE | `interface ... / vrrp N ip X / vrrp N priority P` | `batfish_iosxe_basic_vrrp.txt` |
-| Cisco NX-OS | `interface Vlan10 / hsrp N { preempt; ip X }` | (Tier-D — see above) |
-| Arista EOS | `interface Vlan10 / ip address virtual X/Y` (VARP) | indirectly in `batfish_labval_dc1_leaf2a_eos4230.txt` |
-| Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` (anycast) **or** `vrrp-group N virtual-address X` (classic) | `ksator_labmgmt_qfx10k2_junos173.set` (anycast form) |
-| Aruba AOS-S | `ip vrrp vrid N / virtual-ip-address X / enable` | not in corpus |
-| FortiGate | `config router vrrp / edit N / set vrip X` | not in corpus |
-| MikroTik | `/ip address vrrp` (older) or `/ip vrrp` | not in corpus |
+| Vendor | Grammar | Where in corpus | Wire-up state |
+|---|---|---|---|
+| Cisco IOS-XE | `interface ... / vrrp N ip X / vrrp N priority P` | `batfish_iosxe_basic_vrrp.txt` | shipped (classic + modern AF group-id shell, lossy on AF priority) |
+| Cisco NX-OS | `interface Vlan10 / hsrp N { preempt; ip X }` | (Tier-D — see above) | queued (lands with NX-OS codec, v0.3.0) |
+| Arista EOS | `interface Vlan10 / ip address virtual X/Y` (VARP) | indirectly in `batfish_labval_dc1_leaf2a_eos4230.txt` + `batfish_eos_evpn_vlan_based_leaf.txt` | shipped (classic + modern multi-line + VARP) |
+| Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` (anycast) **or** `vrrp-group N virtual-address X` (classic) | `ksator_labmgmt_qfx10k2_junos173.set` (anycast form) | shipped (classic + anycast + per-unit MAC overrides) |
+| Aruba AOS-S | `ip vrrp vrid N / virtual-ip-address X / enable` | not in corpus | shipped (parse + render; fixture still wanted) |
+| FortiGate | `config router vrrp / edit N / set vrip X` | not in corpus | shipped (parse + render with implicit `set version 3` on vrip6; fixture still wanted) |
+| MikroTik | `/ip address vrrp` (older) or `/ip vrrp` | not in corpus | shipped (two-stage `/interface vrrp` + `/ip address` correlation; fixture still wanted) |
+| OPNsense (CARP) | `<virtualip><vip><mode>carp</mode>...` | not in corpus | shipped (CARP variant via `mode="carp"` discriminator; fixture still wanted) |
 
-Proposed canonical surface: `CanonicalVRRPGroup` (or
-`CanonicalHSRPGroup` — naming TBD) bound to a `CanonicalInterface`
-with fields `(group_id, virtual_ip, virtual_ipv6, priority,
-preempt, mode)` where `mode` discriminates classic VRRP vs anycast
-(`virtual-gateway-address` / `ip address virtual` / fabric DAG).
-Wire to all 7 bidirectional codecs.  Rough scope: ~400-600 LOC
-plus a CAPABILITIES.md table row per codec.
+Canonical surface as shipped: **HYBRID resolution** (per
+`docs/v0.2.0-planning/README.md` § "Cross-task synthesis").  Classic
+FHRP lives on `CanonicalInterface.vrrp_groups: list[CanonicalVRRPGroup]`
+with `mode in {"vrrp", "hsrp", "carp"}` discriminator; anycast lives
+on `CanonicalIPv4Address.virtual_gateway_address` /
+`CanonicalIPv6Address.virtual_gateway_address` per-IP plus a
+chassis-wide `CanonicalIntent.anycast_gateway_mac` — NOT merged into
+the VRRP group.  Total: 6079 insertions, +180 tests across Wave A
+schema (31) + Waves B+C codec wire-up (149).
 
 ### Anycast gateway (Tier-2 enrichment, after VRRP/HSRP)
 
-Distinct from VRRP in semantics — anycast-gateway has no group ID,
-just a stable IP that's present on every leaf and never moves on
-host migration.  The DC-fabric audience cares most.
+**Shipped in v0.2.0 across 3 codecs: commit `e542b49`.**  Distinct
+from VRRP in semantics — anycast-gateway has no group ID, just a
+stable IP that's present on every leaf and never moves on host
+migration.  The DC-fabric audience cares most.
 
-| Vendor | Grammar |
-|---|---|
-| Arista EOS | `ip address virtual X/Y` (VARP) |
-| Juniper Junos | `family inet address X virtual-gateway-address Y` + `virtual-gateway-v4-mac Z` |
-| Cisco NX-OS | `fabric forwarding anycast-gateway-mac X` (system) + per-SVI `ip address X anycast` + `fabric forwarding mode anycast-gateway` |
-| Cisco IOS-XE | `fabric forwarding mode anycast-gateway` (SD-Access) |
+| Vendor | Grammar | Wire-up state |
+|---|---|---|
+| Arista EOS | `ip address virtual X/Y` (VARP) | shipped (system MAC + IPv4/IPv6 VARP + `secondary` trailer) |
+| Juniper Junos | `family inet address X virtual-gateway-address Y` + `virtual-gateway-v4-mac Z` | shipped (per-unit MAC overrides, IRB-to-VLAN fold preserves new fields) |
+| Cisco NX-OS | `fabric forwarding anycast-gateway-mac X` (system) + per-SVI `ip address X anycast` + `fabric forwarding mode anycast-gateway` | queued (lands with NX-OS codec, v0.3.0) |
+| Cisco IOS-XE | `fabric forwarding mode anycast-gateway` (SD-Access) | shipped (per-SVI mirror semantics + system anycast-gateway-mac in 3 MAC formats) |
 
-Could share the canonical surface with VRRP (a `mode="anycast"`
-field) or be modeled as a separate `CanonicalAnycastGateway` —
-worth deciding once VRRP is in.
+Resolution: independent per-address fields (NOT merged with VRRP)
+— see `docs/v0.2.0-planning/02-anycast-gateway/IMPLEMENTED.md`.
+The remaining 4 codecs (cisco_iosxe NETCONF stub, aruba_aoss,
+fortigate_cli, mikrotik_routeros, opnsense) declare anycast
+`unsupported` — their grammar doesn't model anycast natively.

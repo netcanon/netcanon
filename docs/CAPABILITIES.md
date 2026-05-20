@@ -61,8 +61,17 @@ Fully modelled; every shipped bidirectional codec parses and renders:
   IPSEC / VXLAN encap discriminator)
 * `vlans` — `id`, `name`, `tagged_ports`, `untagged_ports`, SVI L3
   (via VLAN-centric projection)
-* `static_routes`
+* `static_routes` — `destination`, `gateway`, `interface`, `metric`,
+  `description`; plus per-VRF `vrf` discriminator (v0.2.0 Wave A —
+  see Tier 2 ship-before-wire note below)
 * `dns_servers`, `ntp_servers`, `syslog_servers`, `timezone`
+* `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
+  redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
+  across all seven bidirectional codecs.  See
+  [`v0.2.0-planning/01-vrrp-canonical/`](v0.2.0-planning/01-vrrp-canonical/)
+  for the design rationale and the
+  [Cross-vendor L3-redundancy grammar reference](#cross-vendor-l3-redundancy-grammar-reference)
+  section below for the per-vendor mapping table.
 
 ### Tier 2 — translatable with caveats
 
@@ -85,6 +94,25 @@ lossy where vendors disagree on representation.
   until the per-vendor wiring lands)
 * `routing_instances` + per-interface `vrf` (cross-vendor VRF
   primitive — same ship-before-wire pattern)
+* `static_routes[].vrf` (v0.2.0 Wave A — per-VRF route
+  discriminator; wired as `lossy` on Junos, `unsupported`
+  elsewhere pending dispatch-side widening)
+* `interfaces[].ipv4_addresses[].virtual_gateway_address` /
+  `virtual_gateway_mac` / `is_secondary` and the matching IPv6
+  fields (v0.2.0 Wave C — anycast-gateway companion to the primary
+  IP).  Distinct from VRRP: anycast is an IP-address property, not
+  a router-group election.  Wired as `supported` on Junos
+  (`virtual-gateway-address`), Arista EOS (VARP `ip address
+  virtual`), and Cisco IOS-XE CLI (SD-Access `fabric forwarding
+  mode anycast-gateway`, IPv4 only).  IPv6 anycast on IOS-XE
+  remains `unsupported` (parses-and-ignores; no fixture coverage
+  today).  See
+  [`v0.2.0-planning/02-anycast-gateway/`](v0.2.0-planning/02-anycast-gateway/)
+* `anycast_gateway_mac` (v0.2.0 Wave C — chassis-wide system MAC
+  for Arista `ip virtual-router mac-address`, Cisco SD-Access
+  `fabric forwarding anycast-gateway-mac`).  Junos `unsupported`
+  by design (per-IRB-unit MAC overrides flow through the per-
+  address `virtual_gateway_mac` field instead).
 * `apply_groups` + `group_content` (Junos-specific; preserved
   byte-for-byte through round-trip)
 
@@ -132,6 +160,12 @@ enumerates every `UnsupportedPath` and `LossyPath` declared today.
 
 | Path | Class | Reason summary |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses the `vrrp <vrid> ip|ipv6|priority|preempt|description|authentication|track|timers` family inside `interface` stanzas; renders the classic single-line per-attribute form (broadest IOS-XE compatibility, 15.x onward). |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | SD-Access anycast-gateway: per-SVI `fabric forwarding mode anycast-gateway` mirrors the primary IP into `virtual_gateway_address` and round-trips back out on render. |
+| `/anycast-gateway-mac` | Supported (Wave C) | Top-level `fabric forwarding anycast-gateway-mac <MAC>` round-trips between Cisco dotted-triplet wire form (`0001.c73a.0000`) and canonical colon-hex. |
+| `/interfaces/interface/vrrp-groups/group/address-family` | Lossy (Wave B) | IOS-XE 17.12+ modern multi-line `vrrp <VRID> address-family ipv4` nested block is detected (so lossiness is visible) but not deep-populated; render always emits the classic single-line form (accepted by every IOS-XE 15.x+).  A config that uses ONLY the modern AF form round-trips as an empty group shell — the lossiness is intentional and operator-visible. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv6 SD-Access anycast parses-and-ignores in v1.  Corpus has zero fixtures exercising it; wire-up deferred until demand arrives.  IPv4 SD-Access anycast IS supported (row above). |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1.  Schema exists on `CanonicalStaticRoute.vrf`; wire-up scheduled for v0.2.0 (closes the existing per-VRF static-route lossy declaration). |
 | `/interfaces/interface/config/type` | Lossy | CLI parser infers IANA type from name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback) but cannot detect all IANA types. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix EVPN Type-5 records are a VRF property; no codec populates them today (lossy-by-default extension point). |
 | `/interfaces/interface/subinterfaces/subinterface/ipv6` | Unsupported | Phase 0.5 scope — IPv4 only. |
@@ -154,10 +188,15 @@ matrix flags the gap honestly rather than masquerading as drift.
 | `/system/{hostname,dns-server,ntp-server}` | Unsupported |
 | `/vlans/vlan/{id,name}` | Unsupported |
 | `/routing/static-route` | Unsupported |
+| `/routing/static-route/vrf` | Unsupported (ship-before-wire v0.2.0; schema present but stub renders interfaces only) |
 | `/snmp/{community,location,contact,trap-host,v3-user}` | Unsupported |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported |
 | `/routing-instances/instance` | Unsupported |
 | `/evpn-type5/route` | Unsupported |
+| `/interfaces/interface/vrrp-groups/group` | Unsupported (ship-before-wire v0.2.0 Wave B; stub renders interfaces only) |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
+| `/anycast-gateway-mac` | Unsupported (ship-before-wire v0.2.0 Wave C) |
 | `/access-list`, `/firewall` | Unsupported (Tier 3) |
 
 Top-level field markers (`/hostname`, `/domain`, `/dns_servers`,
@@ -173,6 +212,13 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Classic VRRP parses `vrrp <N> ipv4 <VIP>` + multi-line modern `vrrp <N> { ip address, priority, preempt, advertisement-interval }` and renders the multi-line modern form. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | VARP: `ip address virtual X/M` populates the address record's `virtual_gateway_address`; secondary trailer preserved via `is_secondary` flag. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 VARP: `ipv6 address virtual` parses to the IPv6 address record. |
+| `/anycast-gateway-mac` | Supported (Wave C) | Chassis-wide `ip virtual-router mac-address <MAC>` round-trips to `CanonicalIntent.anycast_gateway_mac`. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Lossy (Wave C) | EOS only supports one chassis-wide virtual-router MAC; per-IP MAC overrides (Junos `virtual-gateway-v4-mac`) drop on render — cross-vendor sources carrying per-IP MACs surface a review banner so the operator can either consolidate to a single system-wide MAC or pick a vendor target that preserves per-IP overrides. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Lossy (Wave C) | Mirror of the IPv4 case — EOS shares one system-wide MAC across IPv4 and IPv6 anycast. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1; schema exists on `CanonicalStaticRoute.vrf`. |
 | `/interfaces/interface/config/type` | Lossy | EOS interface names don't encode speed; parser defaults `Ethernet<N>` to a `gig` speed-hint and target codecs that care about speed (e.g. Cisco's GigabitEthernet vs TenGigabitEthernet distinction) may emit less-specific prefixes. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records are a lossy-by-default extension point — no codec populates them today (would require route-map / policy-statement parsing). |
 | `/routing/bgp` | Unsupported | BGP neighbour tables / redistribution / address-families parse-and-ignore in v1. |
@@ -183,6 +229,12 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders `ip vrrp vrid <N> / virtual-ip-address <Y> / priority / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). |
+| `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | AOS-S has no chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | AOS-S does not declare IANA `ifType`; codec infers type from interface-name shape (bare number → ethernet, `Trk` → port-channel, `Vlan` → l3ipvlan). |
 | `/filter/rule` | Unsupported | AOS-S access-lists are Tier 3 (informational) and not yet auto-rendered. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — AOS-S is a campus L2/L3 codec. |
@@ -191,6 +243,13 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders `set interfaces irb unit N family inet address X vrrp-group <N> { virtual-address Y, priority, preempt }`.  Both classic IPv4 and IPv6 (`vrrp-inet6-group`) wire-up landed. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Supported (Wave C) | One-line `set interfaces irb unit N family inet address X virtual-gateway-address Y` stores both pieces on the same `CanonicalIPv4Address` record. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-mac` | Supported (Wave C) | Per-IRB-unit `virtual-gateway-v4-mac M` populates the per-address MAC override. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Supported (Wave C) | IPv6 form: `family inet6 address X virtual-gateway-address Y`. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Supported (Wave C) | `virtual-gateway-v6-mac M`. |
+| `/routing/static-route/vrf` | Lossy (Wave A) | `set routing-instances <NAME> routing-options static route` lines are syntactically parseable but the current routing-instances dispatcher (`_apply_routing_instances`) only harvests RD / RT / interface-binding / L3 VNI — per-VRF static routes inside the VRF block parse-and-ignore.  Top-level `set routing-options static route` lines round-trip cleanly with `vrf=""`.  Cross-vendor migration from Cisco IOS-XE `ip route vrf <NAME>` or NX-OS `vrf context <NAME>` surfaces routes at the global level today; operators must manually move them under the matching routing-instance until the dispatcher is widened. |
+| `/anycast-gateway-mac` | Unsupported | Junos has no chassis-wide anycast-gateway MAC; per-IRB-unit overrides live on `CanonicalIPv4Address.virtual_gateway_mac` (the `virtual-gateway-v4-mac` / `-v6-mac` grammar) and round-trip through the supported per-address surface instead.  Cross-vendor migration from a source carrying a system-wide MAC (Arista, NX-OS) must distribute the value across every IRB unit's per-address MAC on the receiving Junos side. |
 | `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, but per-unit VLAN tagging (`unit N vlan-id 100`) parses-and-ignores pending a canonical tagged-subinterface model. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
@@ -201,6 +260,14 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Nested-edit form: `config system interface / edit X / config vrrp / edit <N> / set vrip Y / set priority / set preempt enable / set vrdst <iface>`. |
+| `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | FortiOS `config vrrp / edit N` accepts a single `set vrip` per group.  Multi-IP canonical groups (IOS-XE repeated `vrrp N ip X`, Junos `virtual-address [ X Y Z ]`) emit the first VIP and drop the tail with a `# review:` line — operator must split into multiple groups manually. |
+| `/interfaces/interface/vrrp-groups/group/virtual-mac` | Lossy (Wave B) | FortiOS uses `set vrrp-virtual-mac enable/disable` as an interface-wide toggle (defaults to disable, meaning FortiOS uses its own NPU MAC instead of `00:00:5E:00:01:VRID`).  The canonical `virtual_mac` per-group override has no FortiOS equivalent and is silently dropped — cross-vendor renders into FortiGate cannot pin a custom VRID MAC at the group level. |
+| `/interfaces/interface/vrrp-groups/group/track-interfaces` | Lossy (Wave B) | FortiOS `set vrdst <iface>` accepts a single destination-tracking entry per group.  Multi-track canonical groups (IOS-XE `track` objects, Arista `vrrp N track Ethernet1 decrement 10`) emit the first and drop the rest.  The decrement value is also lossy — FortiOS vrdst is a binary up/down trigger, not a priority-decrement scheme. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | FortiGate is an edge firewall with no native anycast surface (HA is delivered via VRRP groups, not anycast-MAC fabrics).  **Cross-vendor consequence:** Junos→FortiGate anycast translation DROPS the data with a review banner. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — FortiGate has no anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/description` | Lossy | FortiOS limits the interface alias to 25 characters; longer descriptions from other vendors are truncated. |
 | `/interfaces/interface/config/type` | Lossy | FortiOS has no IANA `ifType`; inferred from `type vlan` sub-setting or name shape. |
 | `/filter/rule` | Unsupported | `config firewall policy` is Tier 3 — session-based, zone-aware, UTM-enabled semantics don't translate cleanly. |
@@ -211,6 +278,11 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Top-level section dispatcher: `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` + `/ip address add address=Y/24 interface=vrrp10`.  Cross-vendor tracking and authentication surfaces emit review comments rather than dropping silently. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | RouterOS has no anycast-gateway grammar. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
@@ -221,6 +293,12 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B, CARP variant) | Hosts CARP-only HA groups via `<virtualip><vip><mode>carp</mode><vhid>N</vhid>…</vip></virtualip>` with `mode="carp"` discriminator on the canonical record. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy (Wave B) | OPNsense `<virtualip>` hosts CARP-only HA groups in the v1 wire-up.  `CanonicalVRRPGroup` records with `mode="vrrp"` or `mode="hsrp"` are SKIPPED on render — OPNsense has no native HSRP wire protocol, and its pure-VRRP mode under `<virtualip>` is rarely deployed and not yet emitted.  Only `mode="carp"` round-trips.  Additionally, the `advskew`↔`priority` mapping (`priority = 254 - advskew`) preserves relative HA-pair ordering but not exact election timing. |
+| `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | OPNsense uses CARP for HA (distinct semantics); no anycast-gateway grammar. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
+| `/anycast-gateway-mac` | Unsupported | No chassis-wide anycast MAC concept. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/description` | Lossy | OPNsense imposes no length limit on description text; other vendors (Cisco 240 chars, Juniper 900) may truncate on render. |
 | `/filter/rule` | Unsupported | `<filter>` is Tier 3. |
 | `/nat/outbound` | Unsupported | `<nat>` is Tier 3. |
@@ -420,6 +498,80 @@ matter; the matrix is honest about both.
 
 ---
 
+## Cross-vendor L3-redundancy grammar reference
+
+Classic FHRP and anycast-gateway are sibling surfaces in canonical —
+operators searching for "where does my vendor's X land?" use this
+table to find the corresponding canonical field.  Full per-vendor
+grammar deep-dive lives in
+[`v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md`](v0.2.0-planning/01-vrrp-canonical/02-per-vendor-grammar.md)
+and
+[`v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md`](v0.2.0-planning/02-anycast-gateway/02-per-vendor-grammar.md).
+
+### Classic FHRP (VRRP / HSRP / CARP) — `CanonicalVRRPGroup`
+
+Wire-protocol discriminator lives in `CanonicalVRRPGroup.mode`
+(`"vrrp"` default, `"hsrp"`, `"carp"`).  Same canonical record;
+different bytes on the wire.
+
+| Vendor | Native grammar (canonical mapping) | Canonical `mode` |
+|---|---|---|
+| Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (HSRP via `standby` grammar parses but renders as VRRP) |
+| Arista EOS | `interface VlanN / vrrp 10 ipv4 192.168.1.254 / vrrp 10 priority 110` (modern multi-line) | `vrrp` |
+| Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv6 via `vrrp-inet6-group`) |
+| Aruba AOS-S | `vlan N / ip vrrp vrid 10 / virtual-ip-address Y / priority 110 / preempt / enable` | `vrrp` |
+| FortiGate | `config system interface / edit X / config vrrp / edit 10 / set vrip Y / set priority 110 / set preempt enable / next / end` | `vrrp` |
+| MikroTik RouterOS | `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` | `vrrp` |
+| OPNsense (BSD CARP) | `<virtualip><vip><mode>carp</mode><vhid>10</vhid><advskew>0</advskew><password>…</password><subnet>Y</subnet></vip></virtualip>` | `carp` (priority ↔ `254 − advskew`) |
+
+### Anycast-gateway — IP-address property, not a group election
+
+Lives on `CanonicalIPv4Address.virtual_gateway_address` /
+`virtual_gateway_mac` (and the IPv6 mirror).  Chassis-wide MAC lives
+on `CanonicalIntent.anycast_gateway_mac`.
+
+| Vendor | Per-SVI virtual IP grammar | System-wide MAC grammar | Per-SVI MAC override |
+|---|---|---|---|
+| Arista EOS (VARP) | `interface VlanN / ip address virtual X/M` (`secondary` trailer permitted) | `ip virtual-router mac-address MAC` | none (chassis-wide only) |
+| Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` | none (per-unit only) | `set interfaces irb unit N virtual-gateway-v4-mac M` / `-v6-mac M` |
+| Cisco IOS-XE SD-Access | `interface VlanN / fabric forwarding mode anycast-gateway` (binds the SVI's primary IP) | `fabric forwarding anycast-gateway-mac MAC` | none |
+| Aruba AOS-S / FortiGate / MikroTik / OPNsense | **none native** (declare `unsupported`) | — | — |
+
+### Cross-vendor migration consequences
+
+The cross-vendor story is asymmetric.  Some examples operators run
+into routinely:
+
+* **Junos → Arista anycast.**  Translates cleanly: Junos
+  `virtual-gateway-address` populates the canonical record, Arista
+  renders `ip address virtual`.  Junos per-unit
+  `virtual-gateway-v4-mac` collapses to Arista's chassis-wide
+  `ip virtual-router mac-address` (review banner if multiple
+  distinct per-unit MACs appear in the source).
+* **Junos → FortiGate anycast.**  DROPS the data with a review
+  banner.  FortiGate has no anycast grammar; the canonical
+  `virtual_gateway_address` field is declared `unsupported` on
+  `fortigate_cli`, so the migrate-page Unsupported panel fires for
+  every IRB unit carrying a virtual gateway address.  Operator must
+  rebuild HA via VRRP on the FortiGate side.
+* **Arista VARP → IOS-XE.**  IPv4 translates via SD-Access
+  (`fabric forwarding mode anycast-gateway`); IPv6 VARP DROPS
+  because `/interfaces/interface/ipv6/address/virtual-gateway-address`
+  is `unsupported` on `cisco_iosxe_cli` (no fixture coverage today).
+* **IOS-XE HSRP → any non-Cisco target.**  The IOS-XE parser folds
+  HSRP grammar into the canonical record; targets render VRRP.
+  Election timing is operator-equivalent but the wire protocol
+  flips — operator must verify both ends agree on VRID / virtual-IP
+  on a per-VLAN basis before deploy.
+* **OPNsense CARP ↔ VRRP devices.**  The `mode="carp"`
+  discriminator carries through.  OPNsense as target renders only
+  `mode="carp"` records (`mode="vrrp"` / `"hsrp"` records are
+  SKIPPED with a review banner).  Cross-vendor migration *toward*
+  OPNsense from VRRP devices currently requires the operator to
+  flip `mode` manually, or accept the silent skip.
+
+---
+
 ## What is auto-tested
 
 The cross-mesh fidelity audit harness
@@ -481,3 +633,5 @@ When reporting a translation bug, include:
 - [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md) — per-codec certification state (live)
 - [`../tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md) — cross-mesh audit matrix (live)
 - [`./glossary.md`](./glossary.md) — project vocabulary (Tier 1/2/3, TRIVIAL_EMPTY, ship-before-wire, etc.)
+- [`./v0.2.0-planning/01-vrrp-canonical/`](./v0.2.0-planning/01-vrrp-canonical/) — VRRP / HSRP / CARP canonical-model design (Wave B)
+- [`./v0.2.0-planning/02-anycast-gateway/`](./v0.2.0-planning/02-anycast-gateway/) — anycast-gateway canonical-surface design (Wave C)

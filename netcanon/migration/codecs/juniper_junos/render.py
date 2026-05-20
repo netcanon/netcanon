@@ -15,8 +15,15 @@ interfaces sharing a (mtu, description, enabled) tuple, VLANs
 routing-instances (instance-type, RD/RT, interface bindings, L3
 VNI for EVPN Type-5), routing-options static routes, SNMP
 (community / location / contact / trap-group / v3 USM users +
-VACM groups), and apply-groups + group-content for round-trip
-fidelity (GAP 9b).
+VACM groups), apply-groups + group-content for round-trip
+fidelity (GAP 9b), **VRRP groups** (nested under ``family inet
+address X vrrp-group N`` with priority / preempt / track / auth /
+timers), and **anycast-gateway** (``family inet address X/M
+virtual-gateway-address Y`` and the IPv6 sibling form, plus
+per-unit ``virtual-gateway-v4-mac`` / ``virtual-gateway-v6-mac``
+overrides emitted after the address block).  Cross-vendor
+``mode="hsrp"`` / ``mode="carp"`` groups silently skip — Junos
+has no native HSRP or CARP grammar.
 
 Strings with whitespace or shell-special characters are double-
 quoted via :func:`_quote_if_needed`; free-text fields use

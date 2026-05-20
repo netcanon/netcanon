@@ -7,11 +7,19 @@ Public function: :func:`parse_intent` — raw text in,
 Handles standard interfaces, VLANs, VRFs (``vrf instance`` form),
 EVPN MAC-VRFs (``router bgp / vlan N`` form), VXLAN (interface
 ``Vxlan1`` with ``source-interface`` + ``udp-port`` + vlan/vrf VNIs),
-IPv4 + IPv6 addresses (with global / link-local scope classification),
-DHCP server pools (``ip dhcp pool`` family), RADIUS servers
-(``radius-server host`` one-liner with ``auth-port`` / ``acct-port`` /
-``key`` modifiers), SNMP (community / location / contact / trap-host /
-v3 USM users), local users, and static routes.
+IPv4 + IPv6 addresses (with global / link-local scope classification +
+``secondary`` trailer preservation), DHCP server pools (``ip dhcp
+pool`` family), RADIUS servers (``radius-server host`` one-liner with
+``auth-port`` / ``acct-port`` / ``key`` modifiers), SNMP (community /
+location / contact / trap-host / v3 USM users), local users, static
+routes, **classic VRRP groups** (modern multi-line + legacy single-
+line forms; ``ipv4 / priority / preempt / track / timers / description
+/ mac-address / authentication-md5 / authentication-text``), and
+**VARP anycast-gateway** (``ip address virtual X/Y [secondary]`` and
+``ipv6 address virtual``; system-wide ``ip virtual-router
+mac-address`` populates :attr:`CanonicalIntent.anycast_gateway_mac`).
+``ip address virtual source-nat ...`` is parse-and-ignore (Tier-3,
+VRF-leaked traffic).
 
 Extracted verbatim from ``codec.py`` during the parse/render split;
 behaviour is identical to the prior in-class implementation.  The

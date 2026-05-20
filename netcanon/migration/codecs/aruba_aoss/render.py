@@ -11,8 +11,13 @@ Extracted from ``codec.py`` during the parse/render split per the
 Emission order mirrors what AOS-S's own ``show running-config`` puts
 on the wire so device round-trips diff cleanly: hostname, DNS, SNTP,
 SNMP, RADIUS, DHCP-relay-comment-block, local users, LAG trunks,
-VLAN stanzas (with absorbed SVI L3), physical interface stanzas,
-static routes / default-gateway.
+VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** —
+``ip vrrp vrid N / virtual-ip-address X / priority / preempt /
+enable / exit`` emitted inside the VLAN stanza after the SVI IP),
+physical interface stanzas, static routes / default-gateway.
+Multi-VIP cross-vendor sources drop secondaries with ``; review:``
+comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
+modes (HSRP / CARP) emit review comments and skip.
 
 Internal helper re-exported from ``codec.py`` for tests that pin the
 renderer's port-range compression contract:

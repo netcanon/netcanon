@@ -6,12 +6,24 @@ opportunities surfaced during fixture research on commits
 `f52489c..8adaefd` (Junos channelized fix + 2 batfish samples + VRRP
 enrichment plan).
 
-> **Read-only research.** Everything in this directory is design
-> documentation. No production source code was modified by the agents
-> that authored these files. When the implementations land, they will
-> cite the design docs by relative path in their commit messages, and
-> the corresponding subfolder will get an `IMPLEMENTED.md` stub
-> pointing at the merge commit.
+> **Status: T1 + T2 shipped in v0.2.0; T3 + T4 queued for v0.3.0+.**
+> The two v0.2.0 enrichment tasks (`01-vrrp-canonical/` and
+> `02-anycast-gateway/`) landed across Wave A (schema, `c5da044`) +
+> Waves B + C (codec wire-up across 7 + 3 codecs, `e542b49`).  Each
+> has an `IMPLEMENTED.md` stub pointing at the merge commits and
+> documenting the deferred sub-surfaces.  The two v0.3.0+ tasks
+> (`03-nxos-codec/` and `04-iosxr-codec/`) remain design-complete /
+> implementation-queued — both consume the v0.2.0 schema directly
+> (NX-OS Phase 2 HSRP and Phase 4 DAG; IOS-XR Phase 2 VRRP), so the
+> Wave A landing unblocks them.
+
+> **Read-only research at the time of authoring.** When the agents
+> originally wrote these docs no production source code was modified.
+> The HYBRID synthesis recommended in § "Cross-task synthesis" was
+> adopted verbatim by the Wave A landing; implementation notes that
+> diverged from the per-task design docs (e.g. Arista per-IP
+> virtual-gateway-mac shipped `lossy` not `cascade`) are tracked in
+> the per-task `IMPLEMENTED.md` stubs.
 
 ---
 
@@ -22,10 +34,10 @@ documents (~28 markdown files total, ~13,700 lines of design):
 
 | # | Subfolder | Topic | Tier | Status |
 |---|---|---|---|---|
-| 1 | [`01-vrrp-canonical/`](01-vrrp-canonical/) | `CanonicalVRRPGroup` model + wire to all 7 bidi codecs | v0.2.0 | Design complete |
-| 2 | [`02-anycast-gateway/`](02-anycast-gateway/) | `virtual_gateway_address` field / anycast surface | v0.2.0 | Design complete |
-| 3 | [`03-nxos-codec/`](03-nxos-codec/) | Full new NX-OS bidirectional codec | v0.3.0 | Design complete |
-| 4 | [`04-iosxr-codec/`](04-iosxr-codec/) | Full new IOS-XR bidirectional codec | v0.3.0+ | Design complete (defer until after T3) |
+| 1 | [`01-vrrp-canonical/`](01-vrrp-canonical/) | `CanonicalVRRPGroup` model + wire to all 7 bidi codecs | v0.2.0 | **Shipped (e542b49)** — see [`01-vrrp-canonical/IMPLEMENTED.md`](01-vrrp-canonical/IMPLEMENTED.md) |
+| 2 | [`02-anycast-gateway/`](02-anycast-gateway/) | `virtual_gateway_address` field / anycast surface | v0.2.0 | **Shipped (e542b49)** — see [`02-anycast-gateway/IMPLEMENTED.md`](02-anycast-gateway/IMPLEMENTED.md) |
+| 3 | [`03-nxos-codec/`](03-nxos-codec/) | Full new NX-OS bidirectional codec | v0.3.0 | Design complete (implementation queued for v0.3.0) |
+| 4 | [`04-iosxr-codec/`](04-iosxr-codec/) | Full new IOS-XR bidirectional codec | v0.3.0+ | Design complete (implementation queued for v0.3.0+; defer until after T3) |
 
 Per-task artifact set (numbered files inside each subfolder):
 

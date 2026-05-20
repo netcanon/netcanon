@@ -13,6 +13,17 @@ parser dispatches on the leading path (``/ip address``,
 ``/interface ethernet``, ``/ipv6 address``, etc.).  Stable across
 RouterOS 6-7.
 
+Wave B adds **VRRP groups** under ``/interface vrrp`` (top-level
+section, two-stage parse correlation): each declaration carries
+``interface=<parent> vrid=N priority preemption-mode v3-protocol
+authentication+password interval``, and the separate
+``/ip address add address=X interface=<vrrp-name>`` line that
+populates the virtual IP is correlated via a pseudo-name scratch
+map.  ``v3-protocol=ipv6`` routes the VIP into ``virtual_ipv6s``
+instead of ``virtual_ips``.  Groups attach to the parent
+:class:`CanonicalInterface` (named by the ``interface=`` attribute),
+not to the virtual ``vrrp<N>`` pseudo-interface.
+
 Shared helpers (``_is_ethernet_name``, ``_is_vlan_name``,
 ``_infer_iface_type_from_name``, ``_sort_interfaces``) live here and
 are imported by :mod:`.render` — one directional edge, no circular
