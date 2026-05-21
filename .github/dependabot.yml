@@ -12,6 +12,12 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    # Wait 7 days after a release before opening the update PR.  Lets
+    # upstream yank / hotfix windows close before we adopt; mitigates
+    # the rare case of a compromised release tag being noticed and
+    # patched within hours.  Closes zizmor dependabot-cooldown #36.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     groups:
       python-minor-and-patch:
@@ -26,6 +32,10 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+    # Actions release infrequently; 3-day cooldown is sufficient.
+    # Closes zizmor dependabot-cooldown #37.
+    cooldown:
+      default-days: 3
     open-pull-requests-limit: 3
     groups:
       actions-all:
@@ -39,6 +49,11 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    # Base-image stability -- wait 7 days for upstream Debian
+    # backports to land + Trivy to scan.  Closes zizmor
+    # dependabot-cooldown #38.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 2
     labels:
       - "dependencies"
