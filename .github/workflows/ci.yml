@@ -16,6 +16,14 @@ env:
   # incompatibility now rather than at the cutover deadline.
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
+# Default-deny GITHUB_TOKEN scope.  All ci.yml jobs are read-only:
+# pytest, sdist+wheel build (artefacts stay on the runner), and a
+# Docker build smoke test (image stays on the runner).  None push
+# to registries, write to the repo, or upload to releases.  Child
+# jobs inherit; no per-job override needed.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: Tests (Python ${{ matrix.python-version }})
