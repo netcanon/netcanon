@@ -81,12 +81,22 @@ jobs:
 
       - name: Compute MSI version from tag
         shell: bash
+        env:
+          # Pass the resolved tag in via env-var rather than `${{ }}`
+          # template expansion inside the run: block.  GHA expands
+          # `${{ }}` BEFORE the shell parses the line, so a tag containing
+          # shell metacharacters (`;`, backticks, `$(...)`) would execute
+          # arbitrary code with access to DOCKERHUB_TOKEN / GITHUB_TOKEN /
+          # signing keys.  Via env-var, the value enters shell context
+          # as a literal -- injection is impossible.  See
+          # docs/security-triage/2026-05-21/99-synthesis.md Group V
+          # (closes zizmor/template-injection alerts #52, #53).
+          TAG_RAW: ${{ inputs.tag || github.ref_name }}
         run: |
           # On workflow_dispatch the tag is inputs.tag.  On tag-push it's
           # github.ref_name (the tag name without the refs/tags/ prefix).
-          tag="${{ inputs.tag || github.ref_name }}"
           # Strip leading 'v' if present.
-          tag="${tag#v}"            # e.g. 0.1.0-rc7
+          tag="${TAG_RAW#v}"        # e.g. 0.1.0-rc7
           # Drop the rc/alpha/beta suffix (everything after the first '-')
           # because Windows MSI ProductVersion format is M.m.b[.r] only.
           msi_version="${tag%%-*}"  # e.g. 0.1.0
