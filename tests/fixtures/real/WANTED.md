@@ -24,7 +24,7 @@ grammar.
 | **fortigate** | 3 | FortiOS 7.2.13 / 7.6.6 | 6.4.x (still common); 7.0.x / 7.4.x bridge versions; SD-WAN multi-link with health-check |
 | **junos** | 7 | 15.1 / 17.3 / 18.4 / 25.4 | 19.x / 20.x / 21.x / 22.x bridge; SRX security platform; vJunos / cMX from CML |
 | **mikrotik** | 4 | RouterOS 6.48.1 / 6.48.6 / 7.18.2 | RouterOS 7.0-7.10 (early v7); CHR (cloud-hosted router); CCR variants |
-| **opnsense** | 5 | OPNsense 25.x | 22.x / 23.x / 24.x branches; high-availability (CARP) deployment |
+| **opnsense** | 7 | OPNsense 25.x + config-schema 11.2 CARP HA pair | 22.x / 23.x / 24.x branches (HA-pair gap closed in commit 4686198 via `opnsense/docs` CARP examples; production-deployed HA pairs still welcome) |
 
 ---
 
