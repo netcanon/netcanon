@@ -38,7 +38,10 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
-          cache: "pip"
+          # No `cache: "pip"` -- this is a single-shot publish job
+          # (runs once per release tag with a cold dep tree); the
+          # cache buys nothing and would otherwise expand the
+          # cache-poisoning attack surface flagged by zizmor #77.
 
       - name: Install build tooling
         run: |
