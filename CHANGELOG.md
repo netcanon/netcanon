@@ -21,6 +21,155 @@ much of the work below evolves.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-05-21
+
+Security-hardening release.  No canonical-model or codec-grammar
+changes; all changes are defense-in-depth for the supply chain
+(CI / workflows / image build) and for operator-uploaded XML parsing.
+Translation behaviour, capability matrix, and fixture corpus are
+identical to `v0.1.1` — operators in the middle of a migration can
+upgrade safely without re-validating any prior translations.
+
+### Security fixes
+
+* **XML entity-bomb mitigation** on operator-uploaded XML parse paths
+  (`4e37a70`).  `xml.etree.ElementTree.fromstring` expands internal
+  entities by default on Python 3.x — verified empirically on
+  3.14.4 — so a billion-laughs payload could hang the FastAPI
+  worker.  Swapped to `defusedxml.ElementTree.fromstring` at the two
+  operator-input parse sites (`opnsense/parse.py:169` +
+  `cisco_iosxe/codec.py:543`) with an explicit `DefusedXmlException`
+  clause wrapping the rejection into the codec's `ParseError`.
+  XML *generation* paths (`ET.Element`, `ET.SubElement`, `tostring`,
+  `register_namespace`) stay on stdlib — they don't consume
+  untrusted input.  Adds `defusedxml>=0.7.1` to dependencies.
+  Closes CodeQL `py/xml-bomb` alerts.
+* **Template-injection hardening** in the MSI-publish workflow
+  (`dbee8f8`).  `desktop-msi-publish.yml:84` interpolated
+  `${{ inputs.tag || github.ref_name }}` directly into a shell
+  `run:` block — a workflow_dispatch caller supplying a tag-name
+  with shell metacharacters could execute arbitrary code with
+  access to `DOCKERHUB_TOKEN`, signing keys, and the build env.
+  Refactored to env-var indirection (`env: TAG_RAW: ${{ ... }}`)
+  so the value enters shell context as a literal.  Closes zizmor
+  `template-injection` alerts.
+
+### Dependency-side security bumps
+
+* **Python base image `3.14-slim-bookworm` → `3.14.5-slim-bookworm`**
+  (`538f9e1`, Dependabot PR #6).  Clears 6 HIGH/CRITICAL CVEs in
+  `libgnutls30` flagged by local Trivy scan against the `v0.1.1`
+  image; the patched `libgnutls30 3.7.9-2+deb12u7` lands in the
+  3.14.5 base layer.  No code change required.
+* **`aquasecurity/trivy-action 0.24.0` → `v0.36.0`** (`1f68713`).
+  Clears Dependabot critical alert CVE-2026-33634 ("Trivy ecosystem
+  supply chain was briefly compromised"); vulnerable range was
+  `< 0.35.0`.  Also fixed the original `@0.24.0` reference which
+  failed to resolve at runtime (no such tag — the trivy-action repo
+  publishes only `v`-prefixed tags).
+* **`github/codeql-action/upload-sarif v3` → `v4.35.4`** + **`sigstore/cosign-installer v3` → `v4.1.2`** (`d193573`, Dependabot PR #7, actions-all group bump).  Major-version bumps; no breaking-change impact on our usage.
+
+### CI / workflow hardening
+
+* **`ci.yml` workflow-level `permissions: contents: read`**
+  (`69f7259`).  All 3 ci.yml jobs (test, build-distribution,
+  docker-build-smoke) are read-only; default-deny `GITHUB_TOKEN`
+  scope at workflow scope.  Closes CodeQL
+  `actions/missing-workflow-permissions` (×3) + zizmor
+  `excessive-permissions` (×4) — single edit clears 7 alerts.
+* **`persist-credentials: false` on all 6 `actions/checkout@v6`
+  calls** (`619a353`).  No netcanon workflow performs a git push,
+  fetch, tag, or config write that requires the persisted credential
+  helper; registry logins use explicit secrets, OIDC, or
+  action-internal auth.  Closes zizmor `artipacked` ×6.
+* **SHA-pinned 11 third-party action references** (`5882fbe`):
+  `softprops/action-gh-release`, `docker/setup-buildx-action`,
+  `docker/login-action` (×2), `docker/metadata-action`,
+  `docker/build-push-action`, `aquasecurity/trivy-action`,
+  `sigstore/cosign-installer`, `anchore/sbom-action`,
+  `pypa/gh-action-pypi-publish`, `zizmorcore/zizmor-action`.
+  Convention: SHA pin with trailing tag comment
+  (`@<sha>  # <tag>`) so Dependabot can still propose bumps.
+  `actions/*` and `github/*` references retain tag-pins per the
+  hybrid policy (GitHub-controlled repos with force-push
+  protection).
+* **New `.github/zizmor.yml` site-config** (`5882fbe`).  Implements
+  the hybrid action-pinning policy via the `unpinned-uses` rule:
+  `ref-pin` allowed for `actions/*` + `github/*`; `hash-pin`
+  required for everything else.  Prevents the rule from re-firing
+  noisily on every `actions/checkout` call.
+* **Dropped `cache: "pip"` from publish workflows** (`7c231c4`).
+  Single-shot publish jobs run once per release with a cold dep
+  tree; cache buys nothing and expands the cache-poisoning attack
+  surface.  CI's pip caches remain enabled (multi-shot benefit).
+  Closes zizmor `cache-poisoning` ×2.
+* **Dependabot cooldown blocks** (`eb3a046` + `6f36ff8`).  Added
+  per-ecosystem `cooldown: { default-days: 7 }` to all 3 ecosystems
+  (pip / github-actions / docker).  Github-actions was initially
+  set to 3 per Stage 1C's brief but zizmor's rule has an internal
+  minimum of 7; bumped to 7 for uniformity.  Closes zizmor
+  `dependabot-cooldown` ×3.
+* **`zizmor.yml on.push.paths` covers `dependabot.yml` + `zizmor.yml`**
+  (`ef1b7d3`).  Original `paths:` filter only matched
+  `.github/workflows/**`, so a cooldown-only commit on main did
+  not re-trigger zizmor.  Future config-file edits now re-scan.
+
+### New scanner enablement (no operator-visible behaviour change)
+
+The following scanners were enabled during this cycle.  None gate
+releases; all are informational; all surface in **Security → Code
+scanning** for unified triage:
+
+* **Private vulnerability reporting** — researchers can report
+  privately via GitHub's UI.
+* **Secret scanning + push protection** — scans repo history +
+  blocks credential pushes at commit time.
+* **CodeQL default setup** — Python + GitHub Actions +
+  JavaScript/TypeScript surfaces.
+* **zizmor workflow security scanning** — uploads SARIF to Code
+  Scanning on every workflow-file or dependabot.yml change.
+* **Trivy Docker image scanning** — wired into `docker-publish.yml`;
+  fires on next `v*.*.*` tag push (i.e. this release).  Will scan
+  the `0.1.2` image and surface OS-package + Python-package CVEs.
+
+### New process scaffolding
+
+* **`docs/security-triage/`** (`d5d1099` + `051db83`) — durable
+  evidence-trail folder for triaging Code Scanning / Dependabot /
+  secret-scanning alert waves.  Process: snapshot → cluster →
+  parallel read-only Stage 1 agents → orchestrator synthesis →
+  dismissals via `gh api` with written reasons → Stage 2 fixes.
+  The 2026-05-21 worked example covers the initial scanner-
+  enablement wave (79 alerts → 33 REAL fixed + 46 dismissed with
+  reasons).  Bidirectional cross-references from `AGENTS.md`,
+  `SECURITY.md`, `BUG_REPORTING.md`.
+* **`AGENTS.md` Documentation Sync Checklist row** for "alert wave
+  arrives" — defines trigger conditions + process pointer.
+
+### What didn't change
+
+* Canonical model — no changes to `intent.py`.
+* Codec grammar — no parse/render logic changes.
+* Capability matrix — no `supported` / `lossy` / `unsupported`
+  transitions on any codec.
+* Real-capture fixture corpus — no additions / removals.
+* Public HTTP API surface — unchanged.
+* CLI surface — unchanged.
+
+### v0.1.1 honest-gaps update
+
+Of the gaps documented in v0.1.1's CHANGELOG:
+
+* **No UI verification** — STILL OPEN.  Claude in Chrome / Preview
+  tools now available in-session; deferred to a separate cycle.
+* **No cross-vendor VRRP integration tests** — STILL OPEN.
+* **IPv6 anycast on IOS-XE SD-Access unsupported** — STILL OPEN
+  (no fixture available).
+* **Cisco IOS-XE NETCONF stub anycast unsupported** — STILL OPEN
+  (Phase-0.5 stub policy unchanged).
+* **Junos per-VRF static routes lossy** — STILL OPEN.
+* **Modern Arista/IOS-XE multi-line VRRP form lossy** — STILL OPEN.
+
 ## [0.1.1] - 2026-05-19
 
 First post-rc release.  Skips a `v0.1.0` final tag because the
