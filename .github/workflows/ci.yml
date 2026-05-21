@@ -41,6 +41,9 @@ jobs:
           # would make `pip install -e .` fail with "no tags found" or
           # produce a `0.0.0` fallback version that misleads operators.
           fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -71,6 +74,9 @@ jobs:
           # would make `pip install -e .` fail with "no tags found" or
           # produce a `0.0.0` fallback version that misleads operators.
           fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6
@@ -105,6 +111,9 @@ jobs:
           # would make `pip install -e .` fail with "no tags found" or
           # produce a `0.0.0` fallback version that misleads operators.
           fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
 
       - name: Build image
         run: docker build -t netcanon-smoke:pr .

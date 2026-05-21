@@ -69,6 +69,9 @@ jobs:
           # tag-push triggers, github.ref already has the full ref form.
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
+          # softprops/action-gh-release uses its own GITHUB_TOKEN env
+          # (not git config); no git push from this job either.
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v6

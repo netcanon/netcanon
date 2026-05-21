@@ -34,6 +34,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Registry logins use explicit secrets passed to
+          # docker/login-action; cosign uses keyless OIDC; no git push
+          # from this job.  Clear the token-in-.git/config default.
+          persist-credentials: false
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
