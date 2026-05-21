@@ -20,7 +20,7 @@ grammar.
 |---|---|---|---|
 | **cisco_iosxe** | 12 | 15.x (IOSv) / 16.9 / 17.3 / 17.9 / 17.12 | 17.13+ branch; tag-VLAN trunk on physical with sub-interfaces |
 | **arista_eos** | 4 | 4.21 / 4.22 / 4.23 / 4.26 | 4.27+ / 4.30+ (current GA train); MLAG + EVPN VxLAN-multihoming |
-| **aruba_aoss** | 6 | WB.16.08 / WC.16.07-11 / KB.15.15 | YA / RA software branches; 8400 chassis class |
+| **aruba_aoss** | 6 | WB.16.08 / WC.16.07-11 / KB.15.15 | YA branch (2530), RA branch (2620), YC branch (2540); KA branch (3800 / 5400zl gen-1) |
 | **fortigate** | 3 | FortiOS 7.2.13 / 7.6.6 | 6.4.x (still common); 7.0.x / 7.4.x bridge versions; SD-WAN multi-link with health-check |
 | **junos** | 7 | 15.1 / 17.3 / 18.4 / 25.4 | 19.x / 20.x / 21.x / 22.x bridge; SRX security platform; vJunos / cMX from CML |
 | **mikrotik** | 4 | RouterOS 6.48.1 / 6.48.6 / 7.18.2 | RouterOS 7.0-7.10 (early v7); CHR (cloud-hosted router); CCR variants |
@@ -79,9 +79,6 @@ behaviours the current codec hasn't been tested against.
 * **OPNsense 24.x or 23.x `config.xml`** with VLAN tagging on parent
   interfaces (not 802.1Q sub-interfaces).  We have grammar for VLANs
   but no real-capture for that exact form.
-* **Aruba 8400 chassis class** AOS-S running-config.  Current corpus
-  is 2920 / 2930F / 2930M / 5406Rzl2 — all stackable / modular but
-  not the larger 8400 chassis platforms.
 * **FortiGate physical-appliance VPN/IPsec heavy config** from any
   OS version.  Current FortiGate fixtures are SD-WAN / firewall
   focussed; an IPsec-heavy capture (multiple phase1-interface /
@@ -121,11 +118,11 @@ parser regression fixture once the codec ships.
 |---|---|---|
 | Cisco NX-OS | Data center switches with completely distinct grammar from IOS-XE | **Concrete seed corpus available** in [batfish/lab-validation](https://github.com/batfish/lab-validation) under Apache-2.0: `snapshots/nxos_hsrp/configs/{nxos1,nxos2}` (HSRP on SVI, the classic L3 redundancy pattern), `snapshots/nxos_evpn_l3vni/configs/{NX-1,NX-2}` (EVPN L3VNI with VRF + nve1 VTEP — distinct from IOS-XE's `interface nveN / member vni`), `snapshots/nxos_evpn_l2vni/configs/{NX-1,NX-2}` (L2VNI variant), plus `nxos_hsrp` + `nxos_ebgp_loop_prevention` + several others.  Together would cover hostname / vlan / vrf-context / interface Vlan SVI / nve1 VTEP / hsrp / fabric forwarding / router bgp address-family l2vpn evpn. |
 | Cisco IOS classic | Pre-IOS-XE; still in production at SMB | NTC-templates `tests/cisco_ios/`, NAPALM IOS fixtures |
-| Juniper SRX | Security platform; distinct from EX/QFX/MX grammar | Juniper Day One Books PDFs (CC-BY), Junos Genius |
-| Aruba AOS-CX | Modern Aruba replacing AOS-S | `arubanetworks/` GitHub org, NAPALM AOS-CX |
-| Cisco IOS-XR | Service provider routing | **Concrete seed corpus available** in [batfish/lab-validation](https://github.com/batfish/lab-validation) under Apache-2.0: `snapshots/cisco_xr_ios_vpnv4/configs/` (XR-XE VPNv4 interop), `snapshots/iosxr_ebgp_basic/configs/`, `snapshots/iosxr_ibgp_rr_over_ospf/configs/`.  Together exercise the IOS-XR `router bgp address-family vpnv4 unicast` + `route-policy in/out` + `vrf` grammar that differs sharply from IOS-XE. |
+| Juniper SRX | Security platform; distinct from EX/QFX/MX grammar | Juniper Day One Books PDFs (© Juniper, free download — discovery-only, not direct-import), Junos Genius |
+| Aruba AOS-CX | Modern Aruba replacing AOS-S; includes the 8400 chassis class (AOS-CX-only — never shipped AOS-S) | `arubanetworks/` GitHub org, NAPALM AOS-CX |
+| Cisco IOS-XR | Service provider routing | **Concrete seed corpus available** in [batfish/lab-validation](https://github.com/batfish/lab-validation) under Apache-2.0: `snapshots/cisco_xr_ios_vpnv4/configs/` (XR-XE VPNv4 interop), `snapshots/iosxr_ebgp_basic/configs/`, `snapshots/iosxr_ibgp_rr_over_ospf/configs/`.  Together exercise the IOS-XR `router bgp address-family vpnv4 unicast` + `route-policy in/out` + `vrf` grammar that differs sharply from IOS-XE.  **Additional high-leverage pull-target**: [`ios-xr/xrd-tools`](https://github.com/ios-xr/xrd-tools) (Apache-2.0, official Cisco GitHub org) — `samples/xr_compose_topos/` contains 5 multi-node topologies (`simple-bgp`, `ospf-bgp-rr`, `isis-ipfrr`, `segment-routing` 8-node, `srv6-l3vpn`) with full startup configs covering IS-IS + SR-MPLS + flex-algo + SRv6 grammar surfaces not in batfish. |
 | VyOS | OSS Vyatta successor (LGPL caveat — careful licensing) | `vyos/vyos-build` examples |
-| pfSense | BSD-similar to OPNsense; could share codec layer | pfSense forum captures |
+| pfSense | Apache-2.0 (per `pfsense/pfsense` repo); structurally similar to OPNsense `config.xml`, could share codec layer | `sheridans/pfopn-convert` fixtures (BSD-2), `pfsense/pfsense` factory default, pfSense forum captures |
 
 If you're a maintainer at any of these vendors and would like to
 collaborate on bringing your platform into Netcanon's matrix, open

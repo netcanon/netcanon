@@ -41,8 +41,10 @@ Almost all major-vendor docs publish under permissive licenses
   embedded in Cisco Press books (some examples free; others
   paywalled).  CCO documentation typically OK to excerpt with
   attribution.
-* **Juniper TechLibrary** — Day One Books (CC-BY), Junos Genius
-  workbooks, "Configuration Examples" portal.
+* **Juniper TechLibrary** — Day One Books (© Juniper Networks,
+  free to download but **not** CC-BY-licensed — discovery-only,
+  treat as inspiration rather than direct-import source), Junos
+  Genius workbooks, "Configuration Examples" portal.
 * **Arista Networks** — TOI (Theory of Operation) docs, EOS Central
   blog, Configlets repository.
 * **HPE Aruba** — Aruba Networks docs (mostly CC-BY for examples).
@@ -52,7 +54,11 @@ Almost all major-vendor docs publish under permissive licenses
   no explicit license but published as reference material.
 * **OPNsense / pfSense** — documentation under Apache 2 (OPNsense)
   or partially BSD (pfSense); example configs in admin guides.
-* **VyOS** — official docs at `docs.vyos.io` (CC-BY-NC-SA).
+* **VyOS** — official docs at `docs.vyos.io`.  The `copyright.html`
+  page reads as a GNU-FDL-style "verbatim-preservation" notice and
+  the upstream `vyos/vyos-documentation` GitHub repo has **no
+  LICENSE file at all** — treat as discovery-only with a
+  license-ambiguity flag, not direct-import source.
 
 ### 1.3  Permissively-licensed network lab platforms
 
