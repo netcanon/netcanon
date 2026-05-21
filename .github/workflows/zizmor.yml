@@ -48,7 +48,11 @@ jobs:
           persist-credentials: false
 
       - name: Run zizmor
-        uses: zizmorcore/zizmor-action@v0
+        # zizmor-action does not publish a `v0` major-version alias —
+        # only specific `v0.x.y` tags.  Pin to a concrete tag; bump
+        # manually (Dependabot can manage this on the github-actions
+        # ecosystem).
+        uses: zizmorcore/zizmor-action@v0.5.6
         with:
           # `medium` is the conservative starting baseline.  Drop to
           # `low` once the initial finding wave is triaged to surface
