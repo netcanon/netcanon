@@ -10,7 +10,8 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write     # cosign keyless signing via Sigstore + GitHub OIDC
+  id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
+  security-events: write   # Trivy SARIF upload to Code Scanning
 
 env:
   # GHCR is the primary, signed, SBOM-attested registry.
@@ -100,6 +101,37 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           sbom: false   # we generate via syft below for richer SPDX output
+
+      # Trivy scans the published image for CVEs in OS-package layers
+      # (Debian/Alpine under python:3.x-slim), the installed Python
+      # wheel set, and any secrets accidentally baked into image
+      # layers.  CodeQL scans source; this scans the artifact we ship.
+      # Results upload as SARIF to Security → Code scanning under the
+      # `trivy-image` category (distinct from CodeQL findings).
+      #
+      # `exit-code: 0` makes findings informational — they don't fail
+      # the publish.  Triage via the Security tab.  Flip to `1` with
+      # an explicit severity list to gate releases on CRITICAL CVEs.
+      #
+      # `ignore-unfixed: true` filters out CVEs with no upstream patch
+      # available — they'd just be noise we can't act on until the
+      # base image (or upstream maintainer) ships a fix.
+      - name: Scan published image with Trivy
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-image.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: '0'
+
+      - name: Upload Trivy SARIF to Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()      # upload even if Trivy failed, so partial findings still surface
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
