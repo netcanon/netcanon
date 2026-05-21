@@ -1,0 +1,119 @@
+[
+  {
+    "line": 35,
+    "message": "runtime artifacts potentially vulnerable to a cache poisoning attack: this step",
+    "number": 77,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/cache-poisoning",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 74,
+    "message": "runtime artifacts potentially vulnerable to a cache poisoning attack: this step",
+    "number": 58,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/cache-poisoning",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 86,
+    "message": "The string pool.ntp.org may be at an arbitrary position in the sanitized URL.",
+    "number": 16,
+    "path": "tests/unit/migration/test_synthetic_mikrotik_routeros_kitchen_sink.py",
+    "rule": "py/incomplete-url-substring-sanitization",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 169,
+    "message": "XML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.",
+    "number": 15,
+    "path": "netcanon/migration/codecs/opnsense/parse.py",
+    "rule": "py/xml-bomb",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 543,
+    "message": "XML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.\nXML parsing depends on a user-provided value without guarding against uncontrolled entity expansion.",
+    "number": 14,
+    "path": "netcanon/migration/codecs/cisco_iosxe/codec.py",
+    "rule": "py/xml-bomb",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 1195,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 11,
+    "path": "netcanon/migration/codecs/juniper_junos/render.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 1201,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 10,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 574,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 9,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 793,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 8,
+    "path": "netcanon/migration/codecs/juniper_junos/parse.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 945,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 7,
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 582,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (secret) as clear text.\nThis expression logs sensitive data (secret) as clear text.\nThis expression logs sensitive data (secret) as clear text.",
+    "number": 6,
+    "path": "netcanon/migration/codecs/arista_eos/parse.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 227,
+    "message": "This expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.\nThis expression logs sensitive data (password) as clear text.",
+    "number": 5,
+    "path": "tools/demo.py",
+    "rule": "py/clear-text-logging-sensitive-data",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 877,
+    "message": "DOM text is reinterpreted as HTML without escaping meta-characters.",
+    "number": 4,
+    "path": "netcanon/templates/definitions.html",
+    "rule": "js/xss-through-dom",
+    "severity": "high",
+    "tool": "CodeQL"
+  }
+]

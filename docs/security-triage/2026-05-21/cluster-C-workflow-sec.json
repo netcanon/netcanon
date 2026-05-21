@@ -1,0 +1,155 @@
+[
+  {
+    "line": 26,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 71,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 36,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 60,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 139,
+    "message": "action functionality is already included by the runner: use `gh release` in a script step",
+    "number": 59,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/superfluous-actions",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 63,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 51,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 84,
+    "message": "overly broad permissions: default permissions used due to no permissions: block",
+    "number": 45,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/excessive-permissions",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 54,
+    "message": "overly broad permissions: default permissions used due to no permissions: block",
+    "number": 44,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/excessive-permissions",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 20,
+    "message": "overly broad permissions: default permissions used due to no permissions: block",
+    "number": 43,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/excessive-permissions",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 1,
+    "message": "overly broad permissions: default permissions used due to no permissions: block",
+    "number": 42,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/excessive-permissions",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 93,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 41,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 59,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 40,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 29,
+    "message": "credential persistence through GitHub Actions artifacts: does not set persist-credentials: false",
+    "number": 39,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/artipacked",
+    "severity": "note",
+    "tool": "zizmor"
+  },
+  {
+    "line": 38,
+    "message": "insufficient cooldown in Dependabot updates: missing cooldown configuration",
+    "number": 38,
+    "path": ".github/dependabot.yml",
+    "rule": "zizmor/dependabot-cooldown",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 24,
+    "message": "insufficient cooldown in Dependabot updates: missing cooldown configuration",
+    "number": 37,
+    "path": ".github/dependabot.yml",
+    "rule": "zizmor/dependabot-cooldown",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 10,
+    "message": "insufficient cooldown in Dependabot updates: missing cooldown configuration",
+    "number": 36,
+    "path": ".github/dependabot.yml",
+    "rule": "zizmor/dependabot-cooldown",
+    "severity": "warning",
+    "tool": "zizmor"
+  },
+  {
+    "line": 85,
+    "message": "Actions job or workflow does not limit the permissions of the GITHUB_TOKEN. Consider setting an explicit permissions block, using the following as a minimal starting point: {{contents: read}}",
+    "number": 3,
+    "path": ".github/workflows/ci.yml",
+    "rule": "actions/missing-workflow-permissions",
+    "severity": "medium",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 55,
+    "message": "Actions job or workflow does not limit the permissions of the GITHUB_TOKEN. Consider setting an explicit permissions block, using the following as a minimal starting point: {{contents: read}}",
+    "number": 2,
+    "path": ".github/workflows/ci.yml",
+    "rule": "actions/missing-workflow-permissions",
+    "severity": "medium",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 21,
+    "message": "Actions job or workflow does not limit the permissions of the GITHUB_TOKEN. Consider setting an explicit permissions block, using the following as a minimal starting point: {{contents: read}}",
+    "number": 1,
+    "path": ".github/workflows/ci.yml",
+    "rule": "actions/missing-workflow-permissions",
+    "severity": "medium",
+    "tool": "CodeQL"
+  }
+]
