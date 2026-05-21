@@ -406,3 +406,7 @@ This file must be updated when any of the following change:
 - [`AGENTS.md`](AGENTS.md) — contributor directives, including the
   "never commit real credentials" hard rule and the
   "PII review before any push to an online repo" hard rule
+- [`docs/security-triage/`](docs/security-triage/) — process + per-run
+  evidence trail for triaging Code Scanning / Dependabot / secret-
+  scanning alert waves; the operational complement to the controls
+  documented above
