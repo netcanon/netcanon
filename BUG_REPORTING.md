@@ -301,3 +301,7 @@ See [`SECURITY.md`](SECURITY.md) for the full policy.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — broader contribution
   guide (codec authors, canonical-field additions)
 - [`SECURITY.md`](SECURITY.md) — security disclosure flow
+- [`docs/security-triage/`](docs/security-triage/) — internal process
+  for triaging Code Scanning / Dependabot alert waves; Stage 1 agents
+  apply this file's sanitiser pattern when their investigation touches
+  operator-supplied fixtures
