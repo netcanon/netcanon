@@ -1,0 +1,56 @@
+name: zizmor — GHA workflow security scan
+
+# zizmor audits .github/workflows/*.yml for GitHub-Actions-specific
+# supply-chain anti-patterns that CodeQL doesn't model (template
+# injection via `${{ github.event.* }}` in `run:` blocks, excessive
+# `permissions:` grants, untrusted-checkout patterns, secrets leaking
+# to forks via `pull_request_target`, etc.).
+#
+# Findings land in Security → Code scanning alongside CodeQL alerts.
+# A red CI run here is informational, not blocking — review the
+# Security tab.  Bump `advisory-level` to `low` or add an explicit
+# `exit-code` if you want hard CI gating later.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '.github/dependabot.yml'
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/**'
+      - '.github/actions/**'
+  schedule:
+    # Weekly run catches drift from new rule releases — zizmor adds
+    # new checks frequently and a workflow clean last month may have
+    # a new finding today.  Monday early-UTC to land before the
+    # weekly Dependabot Monday cadence.
+    - cron: '17 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write   # SARIF upload to Code Scanning
+  actions: read            # zizmor reads workflow files via the API
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
+jobs:
+  zizmor:
+    name: zizmor scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@v0
+        with:
+          # `medium` is the conservative starting baseline.  Drop to
+          # `low` once the initial finding wave is triaged to surface
+          # the long-tail style issues.
+          advisory-level: medium
