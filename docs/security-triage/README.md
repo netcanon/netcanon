@@ -100,6 +100,26 @@ investigation file for the long-form analysis (e.g.
 that proved fittable: ~200-235 chars typical; ~270 chars with
 detail-pointer URL is the practical upper bound.
 
+**Post-fix re-scan can fire new alert IDs for the same finding.**
+When a fix shifts file content (e.g. SHA pin replaces `@v3` with
+`@<sha>  # v3`), zizmor re-fires rules that anchor on the new line
+position — a fresh alert ID at a slightly different line.  Watch
+the post-push re-scan for this; re-dismiss with a one-line comment
+pointing at the prior alert ID (`Re-fire of dismissed #N after
+commit X shifted line N → M`).  Pattern observed on #82
+(superfluous-actions) after commit `5882fbe`'s SHA pin shifted line
+139 → 155.
+
+**Rule-author thresholds may differ from the cluster-brief
+recommendations.**  zizmor's `dependabot-cooldown` rule has an
+internal minimum of **7 days** — values below trigger
+"insufficient default-days configured (less than 7)" even if the
+ecosystem's release cadence makes shorter cooldowns operationally
+fine.  The Stage 1C agent's brief recommended 3 days for
+`github-actions`; zizmor disagreed, so we standardised on 7 across
+all ecosystems for uniformity.  Pattern observed on #81 after the
+initial cooldown landing commit `eb3a046`.
+
 ## Dispatch sizing
 
 * **3 agents max in Stage 1** — matches the cluster count.  More
