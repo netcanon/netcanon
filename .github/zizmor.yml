@@ -1,0 +1,21 @@
+# zizmor site config — netcanon hybrid action-pinning policy.
+#
+# Per the 2026-05-21 triage decision (docs/security-triage/2026-05-21/
+# 99-synthesis.md), unpinned-uses fires only on third-party action
+# publishers.  First-party publishers (`actions/*`, `github/*`) are
+# permitted to use tag-pins because GitHub controls those repos and
+# force-push protections apply.  Third-party publishers (`docker/*`,
+# `aquasecurity/*`, `pypa/*`, `softprops/*`, `sigstore/*`, `anchore/*`,
+# `zizmorcore/*`, etc.) must SHA-pin since a hijacked tag in those
+# orgs is a real (if low-probability) supply-chain compromise vector.
+#
+# Without this config the rule re-fires on every `actions/checkout@v6`
+# call on every scan, drowning real third-party findings in noise.
+
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        "actions/*": ref-pin   # GitHub-owned, force-push protected
+        "github/*": ref-pin    # GitHub-owned
+        "*": hash-pin          # third-party publishers: SHA required
