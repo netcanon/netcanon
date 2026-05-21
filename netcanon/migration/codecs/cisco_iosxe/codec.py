@@ -87,6 +87,19 @@ import logging
 from typing import Any, ClassVar, Iterable
 from xml.etree import ElementTree as ET
 
+# Safe XML parsing for operator-uploaded NETCONF/OpenConfig input.
+# `defusedxml.ElementTree.fromstring` is an exact API drop-in for
+# `ET.fromstring` that rejects entity-bomb / quadratic-blowup payloads
+# (billion-laughs class) and external-entity references (XXE).  Stdlib
+# `ET.fromstring` expands internal entities by default — empirically
+# verified on Python 3.14.4 — so an operator uploading a tampered
+# config could hang the FastAPI worker.  Generation-side uses of ET
+# (Element, SubElement, tostring, register_namespace below) stay on
+# stdlib since they don't consume untrusted input.  See
+# docs/security-triage/2026-05-21/01-investigation-A.md alerts #14/#15.
+from defusedxml.ElementTree import fromstring as _safe_fromstring
+from defusedxml.common import DefusedXmlException
+
 from ....models.migration import (
     CapabilityMatrix,
     DeviceClass,
@@ -540,7 +553,13 @@ class CiscoIOSXECodec(CodecBase):
             CanonicalInterface,
         )
         try:
-            root = ET.fromstring(raw)
+            root = _safe_fromstring(raw)
+        except DefusedXmlException as exc:
+            raise ParseError(
+                f"cisco_iosxe: refusing potentially-malicious XML "
+                f"(entity-bomb / XXE attempt): {exc}",
+                snippet=raw[:120],
+            ) from exc
         except ET.ParseError as exc:
             raise ParseError(
                 f"cisco_iosxe: malformed XML: {exc}",

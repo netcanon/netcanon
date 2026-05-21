@@ -62,6 +62,13 @@ dependencies = [
     "apscheduler>=3.10.4",
     "cryptography>=41.0.0",
     "keyring>=24.0.0",
+    # XML parsing of operator-uploaded configs (OPNsense config.xml +
+    # Cisco IOS-XE NETCONF) must reject entity-bomb / XXE payloads.
+    # Stdlib xml.etree.ElementTree expands internal entities by default
+    # (verified on Python 3.14.4); defusedxml provides a drop-in
+    # `fromstring` that rejects them.  See docs/security-triage/
+    # 2026-05-21/01-investigation-A.md alerts #14/#15.
+    "defusedxml>=0.7.1",
 ]
 
 [project.optional-dependencies]

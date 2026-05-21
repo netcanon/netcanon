@@ -68,6 +68,17 @@ import logging
 from typing import Any
 from xml.etree import ElementTree as ET
 
+# Safe XML parsing for operator-uploaded input.  `defusedxml.ElementTree.
+# fromstring` is an exact API drop-in for `ET.fromstring` that rejects
+# entity-bomb / quadratic-blowup payloads (billion-laughs class) and
+# external-entity references (XXE).  Stdlib `ET.fromstring` expands
+# internal entities by default — empirically verified on Python 3.14.4 —
+# so an operator uploading a tampered `config.xml` could hang the
+# FastAPI worker on a 5-line billion-laughs payload.  See
+# docs/security-triage/2026-05-21/01-investigation-A.md alerts #14/#15.
+from defusedxml.ElementTree import fromstring as _safe_fromstring
+from defusedxml.common import DefusedXmlException
+
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
@@ -166,7 +177,13 @@ def parse_intent(raw: str) -> CanonicalIntent:
     """
     raw = _trim_xml_envelope(raw)
     try:
-        root = ET.fromstring(raw)
+        root = _safe_fromstring(raw)
+    except DefusedXmlException as exc:
+        raise ParseError(
+            f"opnsense: refusing potentially-malicious XML "
+            f"(entity-bomb / XXE attempt): {exc}",
+            snippet=raw[:120],
+        ) from exc
     except ET.ParseError as exc:
         raise ParseError(
             f"opnsense: malformed XML: {exc}",
