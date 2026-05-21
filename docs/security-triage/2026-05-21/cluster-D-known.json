@@ -1,0 +1,20 @@
+[
+  {
+    "line": 84,
+    "message": "code injection via template expansion: may expand into attacker-controllable code",
+    "number": 53,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/template-injection",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 84,
+    "message": "code injection via template expansion: may expand into attacker-controllable code",
+    "number": 52,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/template-injection",
+    "severity": "error",
+    "tool": "zizmor"
+  }
+]

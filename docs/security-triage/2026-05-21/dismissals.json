@@ -1,0 +1,324 @@
+[
+  {
+    "alert_id": 5,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "tools/demo.py:227",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 6,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/arista_eos/parse.py:582",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 7,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py:945",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 8,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/juniper_junos/parse.py:793",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 9,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:574",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 10,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:1201",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 11,
+    "rule": "py/clear-text-logging-sensitive-data",
+    "path": "netcanon/migration/codecs/juniper_junos/render.py:1195",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Closing-summary logger.debug at codec parse/render end. Formatter consumes only .hostname (str) + len() counts; no credential reaches the call. Dataflow detail: docs/security-triage/2026-05-21/01-investigation-A.md class 1."
+  },
+  {
+    "alert_id": 16,
+    "rule": "py/incomplete-url-substring-sanitization",
+    "path": "tests/unit/migration/test_synthetic_mikrotik_routeros_kitchen_sink.py:86",
+    "dismissed_reason": "used in tests",
+    "dismissed_comment": "pytest assertion verifying parsed canonical NTP-server list membership; not a URL trust check. The `in` operator is list-membership semantics, not URL substring sanitisation."
+  },
+  {
+    "alert_id": 4,
+    "rule": "js/xss-through-dom",
+    "path": "netcanon/templates/definitions.html:877",
+    "dismissed_reason": "false positive",
+    "dismissed_comment": "Every interpolation in renderBucket() goes through local escapeHtml() helper (lines 843-848). Data source is server-side compiled CapabilityMatrix, not operator input. See docs/security-triage/2026-05-21/01-investigation-A.md alert #4."
+  },
+  {
+    "alert_id": 17,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py:237",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 18,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py:243",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 19,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py:249",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 20,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:428",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 21,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:429",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 22,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:505",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 23,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:517",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 24,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:614",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 25,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:682",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 26,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:655",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 27,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:995",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 28,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:817",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 29,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:825",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 30,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:946",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 31,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:979",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 32,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py:1003",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 33,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:1437",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 34,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:1634",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 35,
+    "rule": "py/polynomial-redos",
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py:1635",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Codec grammar regex; polynomial pattern shape, per-line splitlines() bound, 50MB file-upload cap (MAX_CONFIG_SIZE). Backtracking risk theoretical not exploitable. Triage: docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 12,
+    "rule": "py/paramiko-missing-host-key-validation",
+    "path": "netcanon/collectors/paramiko_collector.py:147",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Operator-initiated SSH to ad-hoc device IPs from DeviceTarget.host. AutoAddPolicy matches threat model where operator (not netcanon) is trust anchor. See docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 13,
+    "rule": "py/paramiko-missing-host-key-validation",
+    "path": "netcanon/collectors/paramiko_collector.py:237",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Operator-initiated SSH to ad-hoc device IPs from DeviceTarget.host. AutoAddPolicy matches threat model where operator (not netcanon) is trust anchor. See docs/security-triage/2026-05-21/01-investigation-B.md."
+  },
+  {
+    "alert_id": 46,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/ci.yml:29",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 47,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/ci.yml:38",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 48,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/ci.yml:59",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 49,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/ci.yml:68",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 50,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/ci.yml:93",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 54,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/desktop-msi-publish.yml:64",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 55,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/desktop-msi-publish.yml:74",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 56,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/desktop-msi-publish.yml:128",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 61,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/docker-publish.yml:36",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 68,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/docker-publish.yml:137",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 72,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/pypi-publish.yml:26",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 73,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/pypi-publish.yml:35",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 74,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/pypi-publish.yml:52",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 75,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/pypi-publish.yml:73",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 78,
+    "rule": "zizmor/unpinned-uses",
+    "path": ".github/workflows/zizmor.yml:46",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "Accepted-risk per netcanon hybrid action-pinning policy (2026-05-21): tag-pin allowed for actions/* + github/* (GitHub-controlled, force-push protected); SHA-pin required for third-parties only. Suppression in .github/zizmor.yml."
+  },
+  {
+    "alert_id": 59,
+    "rule": "zizmor/superfluous-actions",
+    "path": ".github/workflows/desktop-msi-publish.yml:139",
+    "dismissed_reason": "won't fix",
+    "dismissed_comment": "softprops/action-gh-release@v3 provides auto-create-if-missing, generate_release_notes, structured prerelease detection, fail_on_unmatched_files. Swap cost > security gain. See docs/security-triage/2026-05-21/99-synthesis.md class 7."
+  }
+]

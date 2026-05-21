@@ -1,0 +1,425 @@
+[
+  {
+    "line": 127,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 80,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 55,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 79,
+    "path": ".github/workflows/zizmor.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 46,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 78,
+    "path": ".github/workflows/zizmor.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 79,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 76,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 73,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 75,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 52,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 74,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 35,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 73,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 26,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 72,
+    "path": ".github/workflows/pypi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 169,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 70,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 144,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 69,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 137,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 68,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 86,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 66,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 56,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 65,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 49,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 64,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 42,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 63,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 39,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 62,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 36,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 61,
+    "path": ".github/workflows/docker-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 139,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 57,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 128,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 56,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 74,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 55,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 64,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 54,
+    "path": ".github/workflows/desktop-msi-publish.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 93,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 50,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 68,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 49,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 59,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 48,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 38,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 47,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 29,
+    "message": "unpinned action reference: action is not pinned to a hash (required by blanket policy)",
+    "number": 46,
+    "path": ".github/workflows/ci.yml",
+    "rule": "zizmor/unpinned-uses",
+    "severity": "error",
+    "tool": "zizmor"
+  },
+  {
+    "line": 1635,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.",
+    "number": 35,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 1634,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.",
+    "number": 34,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 1437,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' dns-server ' and with many repetitions of '  '.",
+    "number": 33,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 1003,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server key ' and with many repetitions of ' '.",
+    "number": 32,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 979,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of ' '.",
+    "number": 31,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 946,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'radius-server host 9.9.9.9' and with many repetitions of ' '.",
+    "number": 30,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 825,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server contact ' and with many repetitions of '  '.",
+    "number": 29,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 817,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'snmp-server location ' and with many repetitions of '  '.",
+    "number": 28,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 995,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' vrrp 9 description a' and with many repetitions of ' '.",
+    "number": 27,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 655,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'authentication mode plaintext-password !' and with many repetitions of '  '.",
+    "number": 26,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 682,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with ' description ' and with many repetitions of '  '.",
+    "number": 25,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 614,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'ip name-server ' and with many repetitions of '  '.",
+    "number": 24,
+    "path": "netcanon/migration/codecs/cisco_iosxe_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 517,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'tagged ' and with many repetitions of '  '.",
+    "number": 23,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 505,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'untagged ' and with many repetitions of '  '.",
+    "number": 22,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 429,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.",
+    "number": 21,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 428,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.\nThis regular expression that depends on a user-provided value may run slow on strings with many repetitions of '9'.",
+    "number": 20,
+    "path": "netcanon/migration/codecs/aruba_aoss/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 249,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'set !' and with many repetitions of ' '.",
+    "number": 19,
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 243,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'edit a' and with many repetitions of ' '.",
+    "number": 18,
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 237,
+    "message": "This regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config ' and with many repetitions of '  '.\nThis regular expression that depends on a user-provided value may run slow on strings starting with 'config a' and with many repetitions of ' '.",
+    "number": 17,
+    "path": "netcanon/migration/codecs/fortigate_cli/parse.py",
+    "rule": "py/polynomial-redos",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 237,
+    "message": "Setting missing host key policy to AutoAddPolicy may be unsafe.",
+    "number": 13,
+    "path": "netcanon/collectors/paramiko_collector.py",
+    "rule": "py/paramiko-missing-host-key-validation",
+    "severity": "high",
+    "tool": "CodeQL"
+  },
+  {
+    "line": 147,
+    "message": "Setting missing host key policy to AutoAddPolicy may be unsafe.",
+    "number": 12,
+    "path": "netcanon/collectors/paramiko_collector.py",
+    "rule": "py/paramiko-missing-host-key-validation",
+    "severity": "high",
+    "tool": "CodeQL"
+  }
+]
