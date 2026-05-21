@@ -32,10 +32,14 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    # Actions release infrequently; 3-day cooldown is sufficient.
-    # Closes zizmor dependabot-cooldown #37.
+    # Wait 7 days after release.  Stage 1C's initial suggestion was
+    # 3 days (actions release infrequently), but zizmor's rule has
+    # an internal minimum of 7 -- re-fires alert #81 at default-days
+    # < 7.  Bumping to 7 for uniformity across all 3 ecosystems is
+    # cheaper than dismissal-with-justification.  Closes zizmor
+    # dependabot-cooldown #37, #81.
     cooldown:
-      default-days: 3
+      default-days: 7
     open-pull-requests-limit: 3
     groups:
       actions-all:
