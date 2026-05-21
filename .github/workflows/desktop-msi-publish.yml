@@ -139,7 +139,7 @@ jobs:
         # softprops/action-gh-release creates the release page if it
         # doesn't yet exist (handy for tags pushed before this workflow
         # existed) and otherwise appends the MSI to the existing one.
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*.msi

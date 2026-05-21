@@ -52,7 +52,7 @@ jobs:
         # only specific `v0.x.y` tags.  Pin to a concrete tag; bump
         # manually (Dependabot can manage this on the github-actions
         # ecosystem).
-        uses: zizmorcore/zizmor-action@v0.5.6
+        uses: zizmorcore/zizmor-action@5f14fd08f7cf1cb1609c1e344975f152c7ee938d  # v0.5.6
         with:
           # `medium` is the conservative starting baseline.  Drop to
           # `low` once the initial finding wave is triaged to surface

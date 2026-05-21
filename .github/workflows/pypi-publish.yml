@@ -79,6 +79,6 @@ jobs:
           path: dist/
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b  # release/v1 (branch ref; Dependabot will not auto-bump — manual SHA refresh required)
         # No `with:` block needed — Trusted Publishing infers everything
         # from the OIDC token + the environment configured on PyPI.
