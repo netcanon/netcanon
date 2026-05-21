@@ -22,6 +22,15 @@ on:
     paths:
       - '.github/workflows/**'
       - '.github/actions/**'
+      # Also re-scan when the Dependabot config or the zizmor site
+      # config itself changes — zizmor's `dependabot-cooldown` rule
+      # reads dependabot.yml, and the `.github/zizmor.yml` config
+      # changes the rule policies.  Without these, edits to either
+      # only re-trigger on the weekly cron (or via PR).  Discovered
+      # 2026-05-21 when a cooldown-only commit didn't re-scan and
+      # alert #81 stayed visibly-open for hours.
+      - '.github/dependabot.yml'
+      - '.github/zizmor.yml'
   schedule:
     # Weekly run catches drift from new rule releases — zizmor adds
     # new checks frequently and a workflow clean last month may have
