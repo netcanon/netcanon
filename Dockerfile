@@ -6,7 +6,7 @@
 # ===========================================================================
 # Stage 1 — wheel builder
 # ===========================================================================
-FROM python:3.14-slim-bookworm AS builder
+FROM python:3.14.5-slim-bookworm AS builder
 
 # build-essential lets cryptography / paramiko / pyyaml fall back to source
 # if the wheel index lacks a Python 3.13 / linux/amd64 prebuilt.  The runtime
@@ -45,7 +45,7 @@ RUN pip install --no-cache-dir --upgrade pip wheel \
 # ===========================================================================
 # Stage 2 — runtime
 # ===========================================================================
-FROM python:3.14-slim-bookworm AS runtime
+FROM python:3.14.5-slim-bookworm AS runtime
 
 # curl is the only runtime addition — used by HEALTHCHECK.  No build tools.
 RUN apt-get update && apt-get install -y --no-install-recommends \
