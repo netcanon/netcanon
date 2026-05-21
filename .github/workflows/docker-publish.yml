@@ -117,7 +117,7 @@ jobs:
       # available — they'd just be noise we can't act on until the
       # base image (or upstream maintainer) ships a fix.
       - name: Scan published image with Trivy
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
           format: sarif
