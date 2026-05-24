@@ -15,9 +15,10 @@ Translation pipeline entries:
         → everything-at-once entry.  Accepts a MigrationPlanRequest
           with any combination of per-category override maps
           (``port_rename_map``, ``vlan_rename_map``,
-          ``local_user_rename_map``, ``snmp_community_rename_map``);
-          engages the rename-aware pipeline when any is present or
-          when a target_profile is selected.
+          ``local_user_rename_map``, ``snmp_community_rename_map``,
+          ``snmpv3_user_rename_map``); engages the rename-aware
+          pipeline when any is present or when a target_profile is
+          selected.
 
     POST /api/v1/migration/plan/ports
         → per-pane override endpoint for port-name rewrites
@@ -266,10 +267,10 @@ def plan_migration_ports(
 
     First concrete per-pane override endpoint.  Establishes the
     pattern that subsequent category endpoints (``/plan/vlans``,
-    ``/plan/snmp``, ``/plan/local-users``) will follow: each accepts
-    the same :class:`MigrationPlanRequest` body and dispatches to
-    :func:`run_plan_with_overrides` with only its category's
-    override map populated.
+    ``/plan/snmp``, ``/plan/local_users``, ``/plan/snmpv3_users``)
+    will follow: each accepts the same :class:`MigrationPlanRequest`
+    body and dispatches to :func:`run_plan_with_overrides` with only
+    its category's override map populated.
 
     Semantically equivalent to ``POST /plan`` when the request body
     carries a ``port_rename_map``.  The distinction is purely
