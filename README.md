@@ -273,7 +273,7 @@ real-capture validation harness lives here as a unit subset),
 integration (TestClient + mocked SSH at the `get_collector`
 factory), e2e (Playwright against a live Uvicorn), and desktop
 (PySide6 + pystray mocked).  CI runs the full matrix on Python
-3.11 / 3.12 / 3.13 against Ubuntu.  CI output is the source of
+3.11 / 3.12 / 3.13 / 3.14 against Ubuntu.  CI output is the source of
 truth for pass counts.
 
 ### Layout

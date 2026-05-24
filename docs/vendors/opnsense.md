@@ -178,6 +178,13 @@ Provenance in
   `cat /conf/config.xml\r\r\n` preamble before the `<?xml`
   prolog, breaking ET.fromstring; codec now tolerates leading
   noise via `_trim_xml_prologue`)
+- **`opnsense_docs_carp_ha_master.xml`** — upstream
+  `opnsense/docs` CARP HA tutorial master config (BSD-2-Clause).
+  Two-router CARP pair MASTER side; Wave-B CARP-group wire-up
+  reference fixture
+- **`opnsense_docs_carp_ha_backup.xml`** — paired BACKUP side of
+  the same CARP HA tutorial (BSD-2-Clause).  Together with the
+  master fixture closes the headline CARP HA documentation gap
 
 ## Common gotchas
 

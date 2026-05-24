@@ -7,10 +7,10 @@ does for you, this is the page.
 
 Two codecs ship for the IOS-XE family:
 
-- **`cisco_iosxe_cli`** — `show running-config` text **parse-only**
-  (Cisco serves as a translation *source*; render lands on the
-  target codec).  **Certification: certified.**  Recommended for
-  cross-vendor translation when Cisco is the source.
+- **`cisco_iosxe_cli`** — `show running-config` text **bidirectional**
+  (parse AND render).  Cisco IOS-XE CLI is used as both a translation
+  *source* and a *target* throughout the walkthrough corpus and
+  `tools/demo.py`.  **Certification: certified.**
 - **`cisco_iosxe`** — NETCONF / OpenConfig XML.  **Certification:
   best_effort** (Phase 0.5 stub render — parses richly, renders the
   subset Netcanon's NETCONF stub knows how to emit).  Use only when
@@ -182,6 +182,14 @@ Provenance + per-fixture detail in
   exercising `spanning-tree pathcost method long` etc.
 - **`cml_basic_forwarding_iosv_r1_ospf.txt`** — IOSv 15.x with OSPF
   + dot1Q sub-interfaces
+- **`batfish_iosxe_basic_vrrp.txt`** — Batfish public corpus VRRP
+  basic grammar (Apache-2.0).  Two-router HA pair with VRRP
+  groups on GigabitEthernet — exercises the classic single-line
+  VRRP form used by Wave-B VRRP wire-up
+- **`ntc_carrier_interfaces.txt`** — Network To Code public corpus
+  (Apache-2.0).  Carrier IOS grammar: VRFs, dot1Q Q-in-Q
+  subinterfaces, QoS, ACL groups, uRPF.  Validates parse-tolerance
+  for grammar outside the Cat9k campus surface
 
 ## Common gotchas
 

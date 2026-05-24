@@ -175,10 +175,18 @@ Provenance in
   EVPN Type-5 lab snapshot (4 IRB sub-interfaces, VRRP, VXLAN VNIs)
 - **`batfish_l3vpn_pe1_junos2541.set`** — Junos 25.4R1.12 MPLS L3VPN
   PE (VRF + iBGP `family inet-vpn unicast` + LDP)
+- **`ksator_labmgmt_qfx5110_junos173.set`** — Junos 17.3 on
+  QFX5110 (DC leaf grammar; complements the QFX5100 fixture above)
+- **`ksator_labmgmt_qfx10k2_junos173.set`** — Junos 17.3 on
+  QFX10K2; **7 IRB units (2021-2025, 2031)** with v4 + v6
+  anycast + per-unit v4/v6 MAC overrides.  Wave-C anycast-gateway
+  reference fixture; closes the channelized-subinterface render
+  bug fix from commit `f52489c`
 
-Five real captures covering four distinct Junos majors: 15.1, 17.3,
-18.4, 25.4 (the 25.4 captures are two scenario-distinct EVPN-Type-5
-and MPLS L3VPN snapshots).
+Seven real captures covering four distinct Junos majors: 15.1, 17.3,
+18.4, 25.4 (the 17.3 captures span EX4550 / QFX5100 / QFX5110 /
+QFX10K2 hardware; the 25.4 captures are two scenario-distinct
+EVPN-Type-5 and MPLS L3VPN snapshots).
 
 ## Common gotchas
 

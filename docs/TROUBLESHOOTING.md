@@ -109,7 +109,7 @@ fixtures regularly find new CODEC_BUGs.
 If you've worked through Step 1 and Step 2 and concluded it's a
 real bug:
 
-1. **Sanitize your config.**  Use the Phase 4.5 sanitiser:
+1. **Sanitize your config.**  Use `netcanon sanitize`:
    ```
    netcanon sanitize -i my-config.txt -o sanitised.txt \
        --source-vendor cisco_iosxe_cli --dry-run

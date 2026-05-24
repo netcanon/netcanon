@@ -613,14 +613,28 @@ Strategic:
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |
 |---|---:|---:|---:|---|---|
-| **cisco_iosxe_cli** | **12** (6 grammar-test + 6 real) | **4 LTS + IOSv 15.x** (16.9 + 17.3 + 17.9 + 17.12 + IOSv) | 1 (LAG member dedup) | **certified** ✅ | — |
-| **opnsense** | **5** (3 upstream + 1 real user-deployed + 1 paramiko-shell regression fixture) | 2 sources | 2 (render dropped VLANs; paramiko-shell command-echo broke parse) | **certified** ✅ | — |
+| **cisco_iosxe_cli** | **13** (6 grammar-test + 7 real) | **4 LTS + IOSv 15.x** (16.9 + 17.3 + 17.9 + 17.12 + IOSv) | 1 (LAG member dedup) | **certified** ✅ | — |
+| **opnsense** | **7** (3 upstream + 1 real user-deployed + 1 paramiko-shell regression fixture + 2 upstream CARP HA pair) | 2 sources | 2 (render dropped VLANs; paramiko-shell command-echo broke parse) | **certified** ✅ | — |
 | **mikrotik_routeros** | **4** | **3** (6.48.1 + 6.48.6 + 7.18.2) | 6 | **certified** ✅ | — |
 | **fortigate_cli** | **3** | **2** (7.2.13 + 7.6.6) | 2 (implicit VLAN typing; radius-port 0) | **certified** ✅ | — |
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
-| **arista_eos** | **4** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
-| **juniper_junos** | **5** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
-| **TOTAL** | **39** | — | **17** | — | — |
+| **arista_eos** | **5** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
+| **juniper_junos** | **7** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
+| **TOTAL** | **45** | — | **17** | — | — |
+
+> **Note (2026-05-21 docs-audit):** the per-codec **Coverage matrix
+> tables above** in this file are pending a row-level refresh for 5
+> fixtures that landed after the v0.1.1 documentation pass:
+> `cisco_iosxe/batfish_iosxe_basic_vrrp.txt` (commit `8adaefd`/`b85c39c`),
+> `arista_eos/batfish_eos_evpn_vlan_based_leaf.txt` (commit `8adaefd`),
+> `junos/ksator_labmgmt_qfx5110_junos173.set` (commit `3858dd3`),
+> `junos/ksator_labmgmt_qfx10k2_junos173.set` (commit `f52489c`),
+> `opnsense/opnsense_docs_carp_ha_master.xml` + `_backup.xml`
+> (commit `4686198`).  Each has a NOTICE.md provenance row; the
+> Summary table above is refreshed; the per-codec matrices land in a
+> follow-up commit because the per-field cell counts (interfaces,
+> vlans, users etc.) need a parse pass to fill accurately rather
+> than estimation.  Tracked under docs-audit cluster F finding F3.
 
 10 total bugs surfaced by the real-capture harness across all five
 codecs.  Every one would have survived arbitrarily long against our

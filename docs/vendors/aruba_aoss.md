@@ -159,8 +159,10 @@ Provenance in
   modular-chassis fixture); `module A type j9534a` + `module B
   type j9537a` line-card declarations
 
-Spans WB / WC / KB software branches and 2530 / 2920 / 2930F /
-2930M / 5400R hardware classes.
+Spans WB / WC / KB software branches and 2920 / 2930F / 2930M /
+5400R hardware classes (the body above hedges "other generations
+including 2530 / YA branch parse + render through the same
+pipeline — they just aren't pinned by a fixture yet").
 
 ## Common gotchas
 
