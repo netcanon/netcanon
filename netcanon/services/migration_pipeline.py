@@ -8,7 +8,13 @@ here.  API routes (``netcanon.api.routes.migration``), the desktop
 UI's preview/plan endpoints, integration tests, and dozens of unit
 tests all bind directly to these signatures.
 
-Public surface (frozen signatures — see Hard Rules below):
+Public surface (frozen signatures — see Hard Rules below).
+The three entries differ only in how much per-pane override
+plumbing they pre-compose ahead of caller-supplied transforms;
+the capture-first transform installed by
+:func:`run_plan_with_overrides` (described further down) lets the
+UI's rename modal pre-populate source-side enumerations even
+before any rename engages.
 
   * :func:`run_plan` — minimal pipeline: parse → caller-supplied
     transforms → validate → render.  No per-pane override knowledge;
@@ -320,12 +326,11 @@ def run_plan_with_overrides(
       * ``snmpv3_user_rename_map`` — see
         :func:`netcanon.migration.canonical.snmpv3_user_names.build_snmpv3_user_rename_transform`.
 
-    Planned future-commit categories:
-      * ``snmp_trap_host_rename_map`` — trap-host list rename
-      * ``ntp_server_rename_map`` — NTP peer IP / hostname rewrites
-      * ``dns_server_rename_map`` — DNS resolver IP rewrites
-      * ``syslog_server_rename_map`` — syslog collector IP rewrites
-      * ``radius_override_map`` — RADIUS host / key rewrites
+    Planned future-commit categories: see
+    `docs/v0.2.0-planning/` for the active backlog of additional
+    per-pane override surfaces (NTP / DNS / syslog / RADIUS / SNMP
+    trap-host).  Listing inline here drifts every release; the
+    planning folder is the canonical source.
 
     Cross-device-class guard + validate stage are unchanged from
     :func:`run_plan`; this function composes the override transforms
