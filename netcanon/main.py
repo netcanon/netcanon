@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version as _pkg_version
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -209,13 +210,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         scheduler.shutdown(wait=False)
         logger.info("Scheduler stopped")
 
+    # Resolve the package version from installed metadata so the
+    # OpenAPI doc / Swagger UI tracks the actual release rather than
+    # a hard-coded string that rots on every tag.  Falls back to a
+    # sentinel when the package isn't installed (e.g. running from a
+    # raw source tree without `pip install -e .`); this only affects
+    # the `/docs` banner, never request handling.
+    try:
+        _app_version = _pkg_version("netcanon")
+    except PackageNotFoundError:  # pragma: no cover - dev-only fallback
+        _app_version = "0.0.0+unknown"
+
     app = FastAPI(
         title="Netcanon",
         description=(
             "Multi-vendor network configuration backup and translation engine. "
             "See /docs for the interactive API reference."
         ),
-        version="0.1.0",
+        version=_app_version,
         lifespan=lifespan,
         docs_url=None,                      # we serve a nav-wrapped version at /docs
         redoc_url=None,                     # not surfaced in the UI

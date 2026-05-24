@@ -32,7 +32,7 @@ Field-typed rules (counter-per-session):
   rationale as local-user-name above)
 * ``CanonicalSNMPv3User.auth_passphrase`` → ``REDACTED-AUTH-N``
 * ``CanonicalSNMPv3User.priv_passphrase`` → ``REDACTED-PRIV-N``
-* ``CanonicalRADIUSServer.shared_secret`` → ``REDACTED-RADIUS-N``
+* ``CanonicalRADIUSServer.key`` → ``REDACTED-RADIUS-N``
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalStaticRoute.gateway`` (public) → docs range

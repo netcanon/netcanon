@@ -8,6 +8,9 @@ netcanon.models          Domain models: DeviceTarget, BackupJob, ConfigRecord, e
 netcanon.definitions     YAML definition loader and Pydantic schema.
 netcanon.storage         Pluggable config storage (file-based v1).
 netcanon.collectors      SSH collection strategies (Netmiko, Paramiko shell).
+netcanon.migration       Canonical IR + per-vendor codecs + pipeline orchestrator.
+netcanon.services        Cross-router business logic (migration pipeline, scheduler).
+netcanon.tools           Operator-facing utilities (sanitiser, demo runner).
 netcanon.api             FastAPI router modules.
 netcanon.main            Application factory (create_app).
 
