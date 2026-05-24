@@ -5,7 +5,7 @@ hasn't seen yet.  This page documents the **specific gaps** in the
 real-fixture corpus so contributors can target high-value additions
 rather than re-submitting things we already cover.
 
-Before submitting, read [`BUG_REPORTING.md`](../../BUG_REPORTING.md)
+Before submitting, read [`BUG_REPORTING.md`](../../../BUG_REPORTING.md)
 for the sanitization workflow and license requirements.  Every file
 here ships under a permissive license (Apache / MIT / BSD / CC0) with
 documented provenance in [`NOTICE.md`](NOTICE.md).  Submissions
@@ -89,7 +89,7 @@ behaviours the current codec hasn't been tested against.
 ## How to submit
 
 * **Sanitize first.**  Use `netcanon sanitize` (CLI or web UI) per
-  [`BUG_REPORTING.md`](../../BUG_REPORTING.md).  Real WAN IPs,
+  [`BUG_REPORTING.md`](../../../BUG_REPORTING.md).  Real WAN IPs,
   password hashes, RADIUS secrets, hostnames, and personal-identifier
   usernames must be replaced.
 * **Confirm license.**  Permissive (Apache / MIT / BSD) or CC0 for

@@ -23,7 +23,7 @@ real internal hostnames, usernames, and personally-identifying
 information.  **Never paste raw configs into a public issue.**
 Netcanon ships a sanitiser specifically for this workflow, accessible
 three ways — all share the same shared library at
-[`netcanon.tools.sanitize`](../netcanon/tools/sanitize.py), so the
+[`netcanon.tools.sanitize`](netcanon/tools/sanitize.py), so the
 output is identical regardless of invocation path:
 
 * **Option A — Browser UI** (`/sanitize` page).  Easiest if the
@@ -121,7 +121,7 @@ curl -X POST http://localhost:8000/api/v1/sanitize \
 ```
 
 All three paths (Browser UI, CLI, HTTP API) call the same shared
-library ([`netcanon.tools.sanitize`](../netcanon/tools/sanitize.py))
+library ([`netcanon.tools.sanitize`](netcanon/tools/sanitize.py))
 — output is byte-identical regardless of invocation.
 
 ### What gets sanitised
@@ -148,7 +148,7 @@ the same redacted value all 5 times).
 | Tier-3 sections (firewall, NAT, VPN) | Stripped entirely |
 
 Full rules and limitations in the sanitiser's module docstring at
-[`netcanon/tools/sanitize.py`](../netcanon/tools/sanitize.py).
+[`netcanon/tools/sanitize.py`](netcanon/tools/sanitize.py).
 
 ### Limitations of the sanitiser
 

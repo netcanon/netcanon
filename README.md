@@ -257,7 +257,6 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 | Ship a feature across web + desktop | [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) |
 | See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |
 | Check codec certification tiers | [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) |
-| Manually exercise recent changes | [`HUMAN_TESTING.md`](HUMAN_TESTING.md) |
 | Write tests | [`tests/README.md`](tests/README.md) |
 | Review the security model | [`SECURITY.md`](SECURITY.md) |
 

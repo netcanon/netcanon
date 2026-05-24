@@ -131,9 +131,9 @@ Per-target metadata captured for each entry:
   — operator-facing fixture-submission gap list
 * [`BUG_REPORTING.md`](../../BUG_REPORTING.md) — sanitisation +
   fixture-submission workflow
-* [`docs/v0.2.0-planning/03-nxos-codec/06-fixture-targets.md`](../v0.2.0-planning/03-nxos-codec/06-fixture-targets.md)
+* [`docs/v0.2.0-planning/03-nxos-codec/05-fixture-targets.md`](../v0.2.0-planning/03-nxos-codec/05-fixture-targets.md)
   — concrete batfish NX-OS pull list (intersect with this folder's
   Cisco NX-OS catalogue)
-* [`docs/v0.2.0-planning/04-iosxr-codec/06-fixture-targets.md`](../v0.2.0-planning/04-iosxr-codec/06-fixture-targets.md)
+* [`docs/v0.2.0-planning/04-iosxr-codec/05-fixture-targets.md`](../v0.2.0-planning/04-iosxr-codec/05-fixture-targets.md)
   — concrete batfish IOS-XR pull list (intersect with this folder's
   Cisco IOS-XR catalogue)
