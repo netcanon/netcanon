@@ -7,21 +7,11 @@ Parses / renders FortiOS CLI text.  FortiOS uses a recursive
 ``config/edit/set/next/end`` grammar — 5 keywords, arbitrary nesting
 up to 3 levels in practice (``config > edit > config-subtable > edit``).
 
-Supported blocks (Tier 1 + Tier 2):
-    * ``config system global`` — hostname, timezone
-    * ``config system dns`` — primary + secondary DNS
-    * ``config system ntp`` — ntpserver sub-table
-    * ``config system interface`` — physical + VLAN + LAG interfaces,
-      including ``ip`` (``A.B.C.D MASK`` form), ``alias``,
-      ``status enable/disable``, ``type vlan`` / ``type aggregate``
-    * ``config router static`` — static routes with dst + gateway
-    * ``config system snmp sysinfo`` + ``config system snmp community``
-      — Tier-2 SNMP v1/v2c (community / location / contact /
-      trap-hosts).  SNMPv3 users are NOT modelled.
-    * ``config system admin`` — local admin users (hashed password +
-      accprofile → CanonicalLocalUser)
-    * ``config user radius`` — RADIUS servers (Tier 2)
-    * ``config system dhcp server`` — DHCP pools (Tier 2)
+Supported / lossy / unsupported xpaths: see ``_CAPS`` on
+:class:`.codec.FortiGateCLICodec`.  Top-level coverage spans
+``config system {global,dns,ntp,interface,snmp,admin,dhcp}`` plus
+``config router static`` and ``config user radius``.  SNMPv3 users
+are NOT modelled — the codec declares ``unsupported`` for that xpath.
 
 Structural quirks handled:
     * ``#config-version=`` banner on export (strong probe signal)

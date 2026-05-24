@@ -23,21 +23,14 @@ warrant a distinct codec rather than folding into ``cisco_iosxe_cli``:
       Cisco IOS-XE the L2/L3 default varies by platform and the
       explicit mode setting is always present.
 
-Supported blocks (Tier 1 + Tier 2):
-    * hostname, dns domain, ip name-server, ntp server
-    * interface Ethernet / Management / Loopback / Vlan /
-      Port-Channel, including L3 IP (CIDR), description (quoted),
-      shutdown, no switchport, channel-group
-    * vlan <N> stanzas with ``name``
-    * ip route <dest>/<prefix> <gateway>
-    * snmp-server community <name> <ro|rw>, snmp-server host
-    * username <name> role <role> {nopassword | secret <alg> <hash>}
+Supported / lossy / unsupported xpaths: see ``_CAPS`` on
+:class:`.codec.AristaEOSCodec`.  Tier-3 parse-tolerant stanzas
+(BGP/OSPF, MLAG/VXLAN/VRF, eAPI, STP, AAA, TerminAttr) are
+detected and routed to ``CanonicalIntent.dropped_tier3_sections``
+for the migrate-page banner.
 
-Silently ignored (Tier 3 — parse-tolerant):
-    * router bgp / router ospf — neighbour tables, redistribution
-    * mlag / vxlan / vrf / ip vrf forwarding
-    * management api http-commands — eAPI enable
-    * spanning-tree mode / aaa authentication / daemon TerminAttr
+Direction: ``bidirectional``.
+Certainty: ``certified``.
 
 Module layout:
     * codec.py — ``AristaEOSCodec`` class (metadata, delegation,
