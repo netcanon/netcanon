@@ -16,15 +16,11 @@ This is the model the :class:`CanonicalVlan` tagged_ports /
 untagged_ports design was built around, so Aruba is the first codec
 where those fields round-trip without a transpose.
 
-Current scope (Tier 1):
-    * hostname
-    * VLANs: id, name, ``untagged``/``tagged`` port lists,
-      ``ip address A.B.C.D M.M.M.M`` and ``ip address A.B.C.D/N`` SVI
-    * Interfaces (ports): name, ``enable``/``disable``, ``routing``
-      (routed port), per-port ``ip address``
-    * Static routes: ``ip route``, ``ip default-gateway``
-    * SNMP community (``snmp-server community``)
-    * NTP server (``timesync sntp`` / ``sntp server``)
+Supported / lossy / unsupported xpaths: see ``_CAPS`` on
+:class:`.codec.ArubaAOSSCodec`.  Tier 1 coverage spans hostname,
+VLAN-centric stanzas (id / name / ``untagged`` + ``tagged`` port
+lists / SVI), interfaces, static routes, SNMP community + SNMPv3
+users + groups, NTP, local users, RADIUS, LAG trunks.
 
 Structural quirks handled:
     * ``;`` is the comment character (not ``!``)
@@ -36,17 +32,10 @@ Structural quirks handled:
     * VLAN port lists: ``untagged 1-24``, ``untagged 1,3,5``,
       ``tagged 25-26,A1``
 
-Out of scope (future):
+Out of scope (declared unsupported in matrix):
     * STP per-port (``spanning-tree 1-24 priority 4``)
     * 802.1X, MAC auth (RADIUS-bind/AAA policy)
     * ACLs (``access-list``)
-
-Tier 2 (shipped — `parse` + `render` round-trip):
-    * RADIUS servers (``radius-server host`` cumulative-update
-      grammar; see :mod:`.parse` and :mod:`.render`)
-    * Local users (``aaa authentication local-user``)
-    * SNMPv3 users + groups
-    * LAG trunks (``trunk A1-A2 trk1 lacp``)
 
 Module layout (post-split per the codecs/README.md split-codec
 convention):

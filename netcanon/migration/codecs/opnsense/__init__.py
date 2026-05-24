@@ -12,15 +12,14 @@ firewall rules and pf-specific bits as unsupported on the iosxe side,
 so a real migration attempt surfaces the gaps via the
 ValidationReport (not the class guard).  That's the intended layering.
 
-Scope (Phase 1):
-    * Hostname / system section.
-    * Interface list — name, IP, subnet.
-    * LAN/WAN zone membership.
-
-Deliberately NOT in scope (Phase 2+):
-    * Firewall rules, NAT, gateways (need the netcanon-ext YANG augment).
-    * FRR BGP/OSPF packages (plugin-dependent, out of base config.xml).
-    * Aliases, dashboards, dashboard widgets.
+Supported / lossy / unsupported xpaths: see ``_CAPS`` on
+:class:`.codec.OPNsenseCodec`.  Coverage spans hostname / system
+section, interface list (name + IP + subnet), LAN/WAN zone
+membership, SNMPv3 (parser-side; see
+``unsupported_rename_categories``).  Firewall rules / NAT /
+gateways / FRR BGP-OSPF packages / aliases / dashboards are
+declared unsupported (Tier 3 — would need the netcanon-ext YANG
+augment).
 
 Module layout:
     * ``codec.py``       — ``OPNsenseCodec`` class (metadata, delegation,

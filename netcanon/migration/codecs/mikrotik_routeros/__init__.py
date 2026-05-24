@@ -9,19 +9,11 @@ commands operate on that section.  The codec parses the Tier 1
 canonical-intent surface (hostname, interfaces, VLANs, static routes,
 DNS/NTP servers) and renders it back for cross-vendor translation.
 
-Scope (current):
-    * System identity (hostname).
-    * Ethernet-port tweaks (description via ``comment``, enable flag).
-    * VLAN interfaces on a parent (id, name, parent).
-    * IPv4 addresses bound to interfaces.
-    * Static routes (``/ip route``).
-    * DNS and NTP servers (``/system dns``, ``/system ntp client``).
-
-Out of scope (future):
-    * Bridge VLAN filtering (VLAN-centric port membership).
-    * Firewall filter/NAT rules (Tier 3 — informational only).
-    * Wireless, CAPsMAN, MPLS, routing protocols.
-    * ``set [ find ... ]`` predicates richer than ``default-name``.
+Supported / lossy / unsupported xpaths: see ``_CAPS`` on
+:class:`.codec.MikroTikRouterOSCodec`.  Coverage spans Tier 1
+(hostname, interfaces, VLANs, static routes, DNS/NTP) with bridge
+VLAN filtering, firewall, wireless / CAPsMAN / MPLS / routing
+protocols declared unsupported.
 
 Module layout (post-split per the codecs/README.md split-codec
 convention):
