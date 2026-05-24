@@ -73,7 +73,7 @@ corrected:
 * "Phase 2 will add a resolver" docstrings: comments referencing
   unshipped future work that becomes a lie the instant Phase 2 ships.
   AGENTS.md's documentation sync checklist
-  ([`AGENTS.md` lines 110-134](../AGENTS.md)) explicitly enumerates
+  ([`AGENTS.md` § Documentation Sync Checklist](../AGENTS.md#documentation-sync-checklist)) explicitly enumerates
   module-docstring inventories as a row that must be touched in the
   same commit as the addition.
 
@@ -121,7 +121,7 @@ until a future contributor wastes a day on a stale claim.
 
 The disciplinary mechanism in Netcanon is a concrete *Documentation
 Sync Checklist*: a table mapping "if you change X, then touch Y."
-See [`AGENTS.md` lines 102-138](../AGENTS.md).  The table is
+See [`AGENTS.md` § Documentation Sync Checklist](../AGENTS.md#documentation-sync-checklist).  The table is
 intentionally exhaustive rather than illustrative — every row in it
 exists because someone forgot the corresponding doc and shipped
 drift, then went back and audited what they should have updated.
@@ -145,11 +145,11 @@ unsupported = [
 ]
 ```
 
-See [`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
+See [`cisco_iosxe_cli/codec.py` `_CAPS` ClassVar](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 for the canonical authoring shape.  Each declaration has a citation
 to the specific drift it acknowledges.  These declarations surface to
 operators directly via the UI's Validation panel
-([`docs/CAPABILITIES.md` lines 124-229](CAPABILITIES.md)) and gate
+([`docs/CAPABILITIES.md` § Notification mechanisms operators see](CAPABILITIES.md#notification-mechanisms-operators-see)) and gate
 the cross-vendor audit-harness's per-cell variance class.
 
 ### No active lies in operator-facing messages
@@ -163,7 +163,7 @@ messages destroy trust faster than missing features.
 
 Netcanon's notification mechanisms (Section B "Tier-3 sections
 detected banner" + Section C "Render-time review comments" of
-[`docs/CAPABILITIES.md` lines 230-318](CAPABILITIES.md)) are the
+[`docs/CAPABILITIES.md` § Notification mechanisms operators see](CAPABILITIES.md#notification-mechanisms-operators-see)) are the
 direct manifestation of this principle: rather than silently
 dropping content the tool can't translate, the tool emits a
 review comment in the target's native syntax citing exactly what
@@ -222,13 +222,13 @@ Classify every translatable surface by stability tier:
   doesn't try to translate them.
 
 Worked example: Netcanon's `CanonicalIntent` model classifies every
-field by tier (see [`intent.py` lines 31-49](../netcanon/migration/canonical/intent.py)).
+field by tier (see [`intent.py` module docstring](../netcanon/migration/canonical/intent.py)).
 Firewall rules, NAT rules, VPN configuration, and routing-protocol
 state are explicitly Tier 3 with a documented architectural rationale
 ("zone-pair vs interface ACL vs table-driven rule sets — semantics
 don't translate cleanly").  This is an architectural decision, not
 a backlog item, and it is communicated as such to operators in
-[`docs/CAPABILITIES.md` lines 91-114](CAPABILITIES.md).
+[`docs/CAPABILITIES.md` § Translation tiers](CAPABILITIES.md#translation-tiers).
 
 The pattern generalises to any tool with capability boundaries: pick
 a small number of tiers, write the criteria for each, and classify
@@ -240,7 +240,7 @@ drift into the codebase by accident.
 The triad: every supported xpath listed; every lossy declaration
 cites the specific drift; every unsupported declaration cites the
 rationale.  No silent unsupported.  See
-[`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
+[`cisco_iosxe_cli/codec.py` `_CAPS` ClassVar](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 for the canonical declaration shape.  Each `LossyPath` carries a
 multiline reason explaining the exact drift; each `UnsupportedPath`
 carries a multiline reason explaining either the architectural
@@ -260,11 +260,11 @@ verifiable cross-format honesty:
 * **Phase 1 (mechanical drift).**  For each (source, target,
   fixture) cell, parse → render → re-parse → field-by-field
   compare → record drift.  Output: a per-cell drift JSON.  See
-  [`tools/run_full_mesh.py` lines 1-70](../tools/run_full_mesh.py).
+  [`tools/run_full_mesh.py` module docstring](../tools/run_full_mesh.py).
 * **Phase 4 (reconciliation).**  Classify each drift cell against
   per-pair expectation declarations.  Output: a variance class per
   cell with severity tier.  See
-  [`tools/run_phase4_reconciliation.py` lines 1-95](../tools/run_phase4_reconciliation.py).
+  [`tools/run_phase4_reconciliation.py` module docstring](../tools/run_phase4_reconciliation.py).
 
 The variance class taxonomy is the load-bearing piece.  Netcanon's
 eight classes:
@@ -286,7 +286,7 @@ eight classes:
 * `TRIVIAL_EMPTY` — both sides empty/zero on this field; cell
   trivially aligns by absence of data.
 
-See [`tools/run_phase4_reconciliation.py` lines 13-66](../tools/run_phase4_reconciliation.py)
+See [`tools/run_phase4_reconciliation.py` variance-class definitions](../tools/run_phase4_reconciliation.py)
 for the authoritative class definitions.  Three of these classes
 (`STRUCTURAL_ONLY`, `TRIVIAL_EMPTY`, plus the per-source-vendor
 sub-field cascade in Wave 10γ) were added when the audit's signal-
@@ -299,11 +299,11 @@ it evolves to match the surface area the harness exercises.
 Every doc has a "See also" footer pointing at 2-3 closest peers.  A
 contributor landing on one doc is one hop from the others.  When you
 add a new sibling doc, add the reciprocal link in each existing peer
-in the same commit.  See [`AGENTS.md` lines 142-159](../AGENTS.md)
+in the same commit.  See [`AGENTS.md` § Cross-reference discipline](../AGENTS.md#cross-reference-discipline)
 for the project's explicit statement of this discipline; every doc
 in `docs/` ends with a "See also" footer, e.g.
-[`docs/CAPABILITIES.md` lines 476-483](CAPABILITIES.md) and
-[`ARCHITECTURE.md` lines 837-848](../ARCHITECTURE.md).
+[`docs/CAPABILITIES.md` § See also](CAPABILITIES.md#see-also) and
+[`ARCHITECTURE.md` § See also](../ARCHITECTURE.md#see-also).
 
 The reason this matters: one-way references rot faster than numbers
 do.  A doc that's no longer linked to from its peers might as well
@@ -320,7 +320,7 @@ contributor who reads "Never author a `type_key` containing `_` or
 grammar uses these characters as separators, and underscores or dots
 inside a `type_key` make the filename parse mathematically ambiguous.
 
-Worked example: see [`AGENTS.md` lines 191-200](../AGENTS.md) for
+Worked example: see [`AGENTS.md` § Hard Rules — `type_key` ban](../AGENTS.md#hard-rules-never-break) for
 the `type_key` filename-safety rule.  The rule lives in AGENTS.md
 because the failure mode was independently rediscovered by two
 separate contributors before the validator existed; once it became
@@ -383,7 +383,7 @@ produces docs that are simultaneously too long and too vague.
   block for in-flight; promote to versioned cuts at release.
   Archival; entries are timestamps, not current-state claims, so
   the no-hard-coded-counts rule does not apply (see
-  [`AGENTS.md` lines 209-219](../AGENTS.md)).  *Not* forward-
+  [`AGENTS.md` § Hard Rules (Never Break) — no hard-coded counts](../AGENTS.md#hard-rules-never-break)).  *Not* forward-
   looking.
 * **`docs/CAPABILITIES.md`** — operator-facing capabilities + known
   limitations.  Tier 1/2/3 enumeration + capability matrix tables +
@@ -420,7 +420,7 @@ For each: what it looks like, why it's bad, how to detect it.
   is the disciplinary defence.
 * **Hard-coded counts in prose without CI guards.**  "The 50+
   hardware models we support."  Detect via the no-hard-coded-counts
-  hard rule ([`AGENTS.md` lines 209-219](../AGENTS.md)).  Acceptable
+  hard rule ([`AGENTS.md` § Hard Rules (Never Break) — no hard-coded counts](../AGENTS.md#hard-rules-never-break)).  Acceptable
   in CHANGELOG (timestamps) and test assertions (fail loudly when
   the number drifts).  Unacceptable in current-state prose, where
   the number rots silently.
@@ -429,7 +429,7 @@ For each: what it looks like, why it's bad, how to detect it.
   it, returns a "successful" parse.  Detect via cross-referencing
   parser dispatch tables + capability matrix + UI banner coverage.
   Netcanon's Wave 11
-  ([`CHANGELOG.md` lines 81-130](../CHANGELOG.md)) closed exactly
+  ([`CHANGELOG.md` Wave 11 entries](../CHANGELOG.md)) closed exactly
   this gap by adding parser-level Tier-3 stanza detection +
   population of `CanonicalIntent.dropped_tier3_sections` + a UI
   banner enumerating what was dropped.
@@ -438,7 +438,7 @@ For each: what it looks like, why it's bad, how to detect it.
   the validation cross-reference audit — checking every
   `UnsupportedPath` reason against actual codec code paths.  See
   the Wave 11-A → Wave-11-Validation-Cleanup arc
-  ([`CHANGELOG.md` lines 14-69](../CHANGELOG.md)) for the worked
+  ([`CHANGELOG.md` Wave 11-A → Wave-11-Validation-Cleanup arc](../CHANGELOG.md)) for the worked
   example.
 * **"Deferred" comments that mask shipped work.**  Same as the
   preceding row — a `TODO: implement X` comment surviving the
@@ -458,20 +458,20 @@ This section is for the reader who wants to see each pattern as a
 real artefact rather than an abstract claim.
 
 > **Pattern:** Cross-reference discipline.
-> **Live example:** [`AGENTS.md` lines 142-159](../AGENTS.md) (the
+> **Live example:** [`AGENTS.md` § Cross-reference discipline](../AGENTS.md#cross-reference-discipline) (the
 > discipline statement); every doc in `docs/` has a "See also"
-> footer (e.g. [`docs/CAPABILITIES.md` lines 476-483](CAPABILITIES.md);
-> [`ARCHITECTURE.md` lines 837-848](../ARCHITECTURE.md)).
+> footer (e.g. [`docs/CAPABILITIES.md` § See also](CAPABILITIES.md#see-also);
+> [`ARCHITECTURE.md` § See also](../ARCHITECTURE.md#see-also)).
 
 > **Pattern:** Hard-rule structure with rationale.
-> **Live example:** [`AGENTS.md` lines 183-234](../AGENTS.md) — the
+> **Live example:** [`AGENTS.md` § Hard Rules (Never Break)](../AGENTS.md#hard-rules-never-break) — the
 > "Hard Rules" section.  Each rule has a one-line rationale; the
-> `type_key` rule (lines 191-200) explicitly cites the two
+> `type_key` rule explicitly cites the two
 > independent rediscoveries that motivated promoting it from
 > implicit-knowledge to hard-rule.
 
 > **Pattern:** Capability matrix declarations.
-> **Live example:** [`cisco_iosxe_cli/codec.py` lines 132-260](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
+> **Live example:** [`cisco_iosxe_cli/codec.py` `_CAPS` ClassVar](../netcanon/migration/codecs/cisco_iosxe_cli/codec.py)
 > — every `LossyPath` and `UnsupportedPath` carries a multiline
 > reason citing the specific drift or rationale; the
 > `/routing-instances/instance` declaration explicitly cites the
@@ -490,15 +490,15 @@ real artefact rather than an abstract claim.
 
 > **Pattern:** Tier-based classification.
 > **Live example:**
-> [`netcanon/migration/canonical/intent.py` lines 31-49](../netcanon/migration/canonical/intent.py)
+> [`netcanon/migration/canonical/intent.py` module docstring](../netcanon/migration/canonical/intent.py)
 > — the docstring enumerates Tier 1 / 2 / 3 explicitly with
 > per-field assignment;
-> [`docs/CAPABILITIES.md` lines 47-114](CAPABILITIES.md) translates
+> [`docs/CAPABILITIES.md` § Translation tiers](CAPABILITIES.md#translation-tiers) translates
 > the same tiering into operator-facing prose.
 
 > **Pattern:** Doc-sync in same commit.
 > **Live example:**
-> [`AGENTS.md` lines 102-138](../AGENTS.md) — the explicit row-by-row
+> [`AGENTS.md` § Documentation Sync Checklist](../AGENTS.md#documentation-sync-checklist) — the explicit row-by-row
 > mapping of "if you change X, then touch Y."
 
 > **Pattern:** Forensic discipline (reproduction test FIRST).
