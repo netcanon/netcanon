@@ -42,8 +42,6 @@ Limitations:
       emitted on render — out of canonical scope.
     * Subnet mask → prefix-length conversion handles standard
       contiguous masks only (``255.255.255.0`` → ``/24``).
-    * ``secondary`` IP addresses are ignored on parse (first
-      address only).
 """
 
 from __future__ import annotations

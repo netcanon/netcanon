@@ -621,8 +621,14 @@ class CiscoIOSXECodec(CodecBase):
     # Render
     # -----------------------------------------------------------------
 
-    def render(self, tree: dict[str, Any]) -> str:
+    def render(self, tree: dict[str, Any] | CanonicalIntent) -> str:
         """Render *tree* as OpenConfig NETCONF XML.
+
+        Accepts either a :class:`CanonicalIntent` (the modern canonical
+        shape used by the migration pipeline) or a legacy dict with
+        ``{"interfaces": {"interface": [...]}}`` top-level shape (the
+        pre-canonical shape retained for backward compatibility with
+        Phase 1 callers).
 
         Output shape: bare ``<interfaces>`` root with the openconfig
         namespace declared.  Callers wrapping this in a NETCONF
