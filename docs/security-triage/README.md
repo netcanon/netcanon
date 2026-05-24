@@ -142,3 +142,7 @@ initial cooldown landing commit `eb3a046`.
 * [`BUG_REPORTING.md`](../../BUG_REPORTING.md) — sanitiser pattern
   Stage 1 agents apply when their cluster touches operator-supplied
   fixtures
+* [`docs/docs-audit/`](../docs-audit/) — sister process applying the
+  same scaffolding shape to documentation hygiene rather than
+  security alerts; cluster taxonomy + Stage 1/2 pattern transfer
+  directly
