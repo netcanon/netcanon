@@ -75,7 +75,17 @@ logger = logging.getLogger(__name__)
 
 
 def parse_intent(raw: str) -> CanonicalIntent:
-    """Parse Junos ``set``-form (or block-form) text to CanonicalIntent."""
+    """Parse Junos ``set``-form (or block-form) text into a
+    :class:`CanonicalIntent`.
+
+    Block-form input is converted to set-form via
+    :func:`_blockform_to_setform` before the set-form parser runs.
+
+    Raises:
+        ParseError: On empty input, XML input, JSON-shaped input that
+            starts with ``{`` but isn't recognisable block-form, or a
+            block-form conversion failure.
+    """
     if not raw.strip():
         raise ParseError(
             "juniper_junos: empty input", snippet="",

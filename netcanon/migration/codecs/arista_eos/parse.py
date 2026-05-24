@@ -349,7 +349,13 @@ def _mask_to_prefix(mask_str: str) -> int:
 
 
 def parse_intent(raw: str) -> CanonicalIntent:
-    """Parse Arista EOS ``show running-config`` text into a canonical tree."""
+    """Parse Arista EOS ``show running-config`` text into a
+    :class:`CanonicalIntent`.
+
+    Raises:
+        ParseError: On empty input or input that clearly isn't EOS CLI
+            (XML or JSON).
+    """
     if not raw.strip():
         raise ParseError(
             "arista_eos: empty input", snippet="",

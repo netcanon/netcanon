@@ -758,7 +758,12 @@ def _parse_interface_stanza(
 
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse AOS-S ``show running-config`` text into a
-    :class:`CanonicalIntent`."""
+    :class:`CanonicalIntent`.
+
+    Raises:
+        ParseError: On empty input or input that clearly isn't AOS-S
+            CLI (XML or JSON).
+    """
     if not raw.strip():
         raise ParseError(
             "aruba_aoss: empty input",

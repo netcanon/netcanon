@@ -97,6 +97,9 @@ def render_intent(tree: Any) -> str:
     Strings with spaces or shell-special chars are double-quoted;
     bare tokens stay unquoted.  Hashes tagged ``junos:<hash>`` get
     their prefix stripped so parse(render(tree)) round-trips.
+
+    Raises:
+        TypeError: If *tree* is not a :class:`CanonicalIntent`.
     """
     if not isinstance(tree, CanonicalIntent):
         raise TypeError(

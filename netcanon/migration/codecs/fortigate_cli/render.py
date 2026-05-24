@@ -413,8 +413,9 @@ def _is_fortigate_native_name(name: str) -> bool:
 def render_intent(tree: Any) -> str:
     """Render a :class:`CanonicalIntent` tree to FortiOS CLI text.
 
-    Raises :class:`RenderError` when *tree* is not a
-    :class:`CanonicalIntent` (mock adapters produce other shapes).
+    Raises:
+        RenderError: If *tree* is not a :class:`CanonicalIntent` (mock
+            adapters produce other shapes).
     """
     if not isinstance(tree, CanonicalIntent):
         raise RenderError(
