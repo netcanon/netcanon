@@ -85,11 +85,12 @@ the per-field assessment against.
 
 ## See also
 
-- `tests/fixtures/cross_vendor_expectations/README.md` — schema spec
-  for the per-pair YAML files this directory backs.
-- `tests/fixtures/real/CROSS_MESH_RESULTS.md` — Phase 1 mechanical
-  fidelity matrix that motivates the per-pair grounding.
-- `tools/run_phase4_reconciliation.py` — the Phase 4a reconciler that
-  joins the Phase 1 drift JSON with the per-pair expectation YAMLs
-  this directory backs to bucket each cell into ALIGNED / CODEC_BUG /
-  EXPECTED_LOSSY / etc.
+- [`tests/fixtures/cross_vendor_expectations/README.md`](../../tests/fixtures/cross_vendor_expectations/README.md)
+  — schema spec for the per-pair YAML files this directory backs.
+- [`tests/fixtures/real/CROSS_MESH_RESULTS.md`](../../tests/fixtures/real/CROSS_MESH_RESULTS.md)
+  — Phase 1 mechanical fidelity matrix that motivates the per-pair
+  grounding.
+- [`tools/run_phase4_reconciliation.py`](../../tools/run_phase4_reconciliation.py)
+  — the Phase 4a reconciler that joins the Phase 1 drift JSON with the
+  per-pair expectation YAMLs this directory backs to bucket each cell
+  into ALIGNED / CODEC_BUG / EXPECTED_LOSSY / etc.
