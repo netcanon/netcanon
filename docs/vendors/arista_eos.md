@@ -165,6 +165,10 @@ Provenance in
 - **`karneliuk_a_eos1_eos4260.txt`** — vEOS on EOS-4.26.0.1F; full
   EVPN/VXLAN kitchen-sink (route-maps, BGP EVPN address-family,
   VLAN VNI mappings)
+- **`batfish_eos_evpn_vlan_based_leaf.txt`** — Batfish public
+  corpus VLAN-based EVPN leaf reference (Apache-2.0).  6 SVIs
+  including a VARP secondary on Vlan110 + system-wide MAC.  Wave-C
+  reference for Arista VARP wire-up
 
 Spans 4 distinct EOS majors (4.21 + 4.22 + 4.23 + 4.26).
 

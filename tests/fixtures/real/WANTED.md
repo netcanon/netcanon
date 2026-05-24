@@ -18,8 +18,8 @@ grammar.
 
 | Codec | Fixtures | OS versions covered | Notable gaps |
 |---|---|---|---|
-| **cisco_iosxe** | 12 | 15.x (IOSv) / 16.9 / 17.3 / 17.9 / 17.12 | 17.13+ branch; tag-VLAN trunk on physical with sub-interfaces |
-| **arista_eos** | 4 | 4.21 / 4.22 / 4.23 / 4.26 | 4.27+ / 4.30+ (current GA train); MLAG + EVPN VxLAN-multihoming |
+| **cisco_iosxe** | 13 | 15.x (IOSv) / 16.9 / 17.3 / 17.9 / 17.12 | 17.13+ branch; tag-VLAN trunk on physical with sub-interfaces |
+| **arista_eos** | 5 | 4.21 / 4.22 / 4.23 / 4.26 | 4.27+ / 4.30+ (current GA train); MLAG + EVPN VxLAN-multihoming |
 | **aruba_aoss** | 6 | WB.16.08 / WC.16.07-11 / KB.15.15 | YA branch (2530), RA branch (2620), YC branch (2540); KA branch (3800 / 5400zl gen-1) |
 | **fortigate** | 3 | FortiOS 7.2.13 / 7.6.6 | 6.4.x (still common); 7.0.x / 7.4.x bridge versions; SD-WAN multi-link with health-check |
 | **junos** | 7 | 15.1 / 17.3 / 18.4 / 25.4 | 19.x / 20.x / 21.x / 22.x bridge; SRX security platform; vJunos / cMX from CML |
