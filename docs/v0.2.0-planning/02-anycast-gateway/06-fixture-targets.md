@@ -14,7 +14,7 @@ Mirrors the format in
 | **Juniper Junos** | yes | `tests/fixtures/real/junos/ksator_labmgmt_qfx10k2_junos173.set` — 7 IRB units (2021-2025, 2031) × v4 + v6 anycast + per-unit v4/v6 MAC overrides. Comprehensive for Junos. **No fixture work needed.** |
 | **Arista EOS** | partial | Two Batfish fixtures cover VARP: `tests/fixtures/real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt` (6 SVIs, incl. secondary trailer on Vlan110, + system-wide MAC) and `tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt` (8 SVIs + system-wide MAC). **Missing: IPv6 VARP** (`ipv6 address virtual` is EOS 4.30+ grammar; no fixture exercises it). |
 | **Cisco IOS-XE CLI** | none | No SD-Access fabric-mode fixture in the corpus. The 12 existing IOS-XE fixtures are all classic non-fabric configs. **Highest-value gap.** |
-| **Cisco NX-OS DAG** | none (Tier-D) | Covered under sibling task [`03-nxos-codec/06-fixture-targets.md`](../03-nxos-codec/06-fixture-targets.md) (the NX-OS codec doesn't exist yet — fixtures land with the codec). |
+| **Cisco NX-OS DAG** | none (Tier-D) | Covered under sibling task [`03-nxos-codec/05-fixture-targets.md`](../03-nxos-codec/05-fixture-targets.md) (the NX-OS codec doesn't exist yet — fixtures land with the codec). |
 | **Aruba AOS-CX** | none (Tier-D) | Codec doesn't exist; fixtures land with the codec. |
 | **FortiGate / MikroTik / OPNsense** | n/a | No native grammar — no fixture needed. |
 
@@ -141,7 +141,7 @@ documentation prefix; fake hashes; `public` community string).
 ### Cisco NX-OS DAG seed (Tier-D — depends on NX-OS codec landing)
 
 Covered in sibling task
-[`../03-nxos-codec/06-fixture-targets.md`](../03-nxos-codec/06-fixture-targets.md);
+[`../03-nxos-codec/05-fixture-targets.md`](../03-nxos-codec/05-fixture-targets.md);
 the seed corpus is the Batfish
 [`snapshots/nxos_evpn_l3vni/configs/`](https://github.com/batfish/lab-validation/tree/master/snapshots/nxos_evpn_l3vni/configs)
 config pair (Apache-2.0 licensed). When the NX-OS codec lands, the

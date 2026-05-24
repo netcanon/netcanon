@@ -30,9 +30,11 @@ inner layers.
 | `configs.py` | `/api/v1/configs` | Stored config CRUD + plain-text viewer + open-in-editor (desktop only) |
 | `definitions.py` | `/api/v1/definitions` | Vendor definition browsing + `POST /reload` |
 | `device_profiles.py` | `/api/v1/devices` | Device-class metadata (saved connection profiles) |
+| `health.py` | `/health` (no `/api/v1` prefix) | Liveness/readiness probe — returns `{status, version, ...}` for orchestrators (Docker / K8s / uptime monitors) |
 | `migration.py` | `/api/v1/migration` | Translation orchestration + per-pane plan endpoints + adapter introspection |
+| `sanitize.py` | `/api/v1/sanitize` | `POST` — operator-supplied config text → sanitised + per-category replacement counts (programmatic complement to the browser UI at `/sanitize` and the `netcanon sanitize` CLI) |
 | `schedules.py` | `/api/v1/schedules` | Recurring (APScheduler) backup jobs |
-| `ui.py` | (root) | Server-rendered Jinja2 pages (`/`, `/configs`, `/migrate`, `/definitions`, `/jobs`, `/docs`) — `include_in_schema=False` |
+| `ui.py` | (root) | Server-rendered Jinja2 pages (`/`, `/configs`, `/migrate`, `/definitions`, `/jobs`, `/sanitize`, `/docs`) — `include_in_schema=False` |
 
 The mount prefixes above are the effective paths after
 `netcanon/main.py` adds its `/api/v1` prefix on top of each router's

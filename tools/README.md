@@ -4,6 +4,17 @@ Operator-facing scripts that aren't part of the FastAPI app or the test
 suite.  Standalone executables — invoke directly with `python tools/<name>.py`
 from the repo root.
 
+## Scripts overview
+
+| Script | Purpose |
+|---|---|
+| `run_full_mesh.py` | Cross-mesh translation fidelity audit — every fixture × every bidirectional codec.  Emits a per-cell JSON record + (with `--matrix`) the human-readable `CROSS_MESH_RESULTS.md`. |
+| `run_phase4_reconciliation.py` | Phase 4 8-class variance taxonomy reconciliation.  Consumes the run_full_mesh JSON, classifies each variance, emits `PHASE4_RECONCILIATION.md`.  See `docs/HOW_WE_TEST.md` for the variance-class taxonomy. |
+| `demo.py` | Operator-facing scenario runner — translates 4 pre-bundled synthetic configs (Cisco↔Junos, FortiGate↔MikroTik, Aruba↔Arista, OPNsense↔Junos) so the `docker run … python tools/demo.py …` quickstart shows real translation output without operator-supplied input.  Paired 1:1 with `docs/walkthroughs/<source>_to_<target>.md`. |
+| `load_cross_vendor_expectations.py` | Phase 3 lint utility — loads every YAML under `tests/fixtures/cross_vendor_expectations/` and validates against the Pydantic expectation schema.  Used as a pre-commit guard to catch malformed expectation files before they break the cross-mesh audit. |
+
+Detailed sections below cover the primary cross-mesh tooling.
+
 ## `run_full_mesh.py` — cross-mesh translation fidelity audit
 
 Walks every committed fixture (real-world captures under
