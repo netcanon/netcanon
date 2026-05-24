@@ -97,6 +97,11 @@ class BackupJob(BaseModel):
         created_at: UTC time of job creation.
         completed_at: UTC time all devices finished; ``None`` while running.
         total_devices: Total device count (used for progress reporting).
+        schedule_id: UUID of the schedule that triggered this job;
+            ``None`` for manually triggered jobs.
+        schedule_name: Snapshot of the schedule's name at run time
+            (preserved even if the schedule is later renamed or
+            deleted); ``None`` for manually triggered jobs.
     """
 
     id: str
@@ -105,5 +110,5 @@ class BackupJob(BaseModel):
     created_at: datetime
     completed_at: datetime | None = None
     total_devices: int = 0
-    schedule_id: str | None = None    # None for manually triggered jobs
-    schedule_name: str | None = None  # snapshot of schedule name at run time
+    schedule_id: str | None = None
+    schedule_name: str | None = None

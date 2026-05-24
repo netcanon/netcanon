@@ -161,7 +161,15 @@ class CapabilityMatrix(BaseModel):
 
     Attributes:
         adapter: Adapter name (matches ``CodecBase.name``).
+        vendor_id: Vendor identifier (e.g. ``"cisco_iosxe"``,
+            ``"opnsense"``) — links to vendor YAML loaded at startup.
+            Empty for codecs that don't yet declare a vendor binding.
         version_range: PEP 440 / SemVer range this matrix applies to.
+        device_classes: Device categories this codec targets.  Used
+            for cross-class guard — see
+            :func:`netcanon.services.migration_validate.check_class_compat`.
+            Declaring zero classes means "uncommitted" and produces
+            a warn-level banner rather than a block.
         supported: xpath patterns the adapter round-trips cleanly.
         lossy: xpath patterns that survive with known caveats.
         unsupported: xpath patterns the adapter cannot emit.
@@ -327,6 +335,128 @@ class MigrationJob(BaseModel):
         validation: Populated after the validate stage completes.
         rendered: Populated after the render stage completes.
         error: Human-readable error summary on terminal-fail states.
+        warnings: Non-fatal advisories from the pipeline.  Populated
+            by ``run_plan_with_rename`` when the cross-vendor port-
+            name translator leaves interfaces unmapped or surfaces
+            complexity-cases (breakout / hw-aggregate / loopback-in-
+            AOS-S-style scenarios).  Empty on a fully clean run.
+        port_renames: Source→target port-name rewrites applied during
+            :func:`run_plan_with_rename`.  Surfaced in the UI's
+            "Interface translation" panel so operators can see exactly
+            which names changed (and, in Tier 3, override them).
+            Keys are source names; values are target names.
+            Unchanged names are not included.
+        port_drops: Source names the operator explicitly marked
+            "don't render" via the Tier 3 rename modal.  Every
+            reference to these names was stripped from the canonical
+            tree before render; the rendered output does not contain
+            the corresponding interface stanzas.  Populated by
+            ``run_plan_with_rename`` from entries in
+            :attr:`MigrationPlanRequest.port_rename_map` whose value
+            was ``None``.
+        vlan_renames: Source VLAN ID → target VLAN ID rewrites
+            applied during :func:`run_plan_with_overrides` when the
+            caller supplied a ``vlan_rename_map``.  Parallels
+            :attr:`port_renames` for the VLAN-mapping per-pane
+            override in the Tier-3 modal.  Keys and values are both
+            integers 1-4094.  Unchanged VLAN IDs are not included —
+            only actual rewrites.  Empty dict when the caller didn't
+            pass a ``vlan_rename_map`` at all.
+        vlan_drops: VLAN IDs the operator explicitly marked "don't
+            render" via ``None`` values in the rename map.  The
+            canonical tree had every reference to these IDs stripped
+            before render — :class:`CanonicalVlan` entry removed,
+            ``access_vlan`` detached, ``trunk_allowed_vlans``
+            entries removed, ``trunk_native_vlan`` / ``voice_vlan``
+            cleared on affected interfaces.
+        source_vlans: Source-tree VLAN IDs captured post-parse, pre-
+            transform.  Lets the Tier-3 rename modal's VLAN pane
+            enumerate every VLAN the operator could rewrite or drop —
+            without this field the UI has no way to surface VLANs
+            that the operator hasn't already touched.  Populated by
+            :func:`run_plan_with_overrides` via a capture transform
+            that runs ahead of any user-supplied overrides; empty on
+            legacy :func:`run_plan` calls that bypass the overrides
+            engine.
+        source_hostname: Canonical hostname captured post-parse.
+            Feeds the Tier-3 rename modal's localStorage persistence
+            key so a given (source_codec, target_codec, hostname)
+            triple has its own override memory — moving between
+            devices doesn't clobber saved overrides for the previous
+            one.  Empty when the source config didn't declare a
+            hostname.
+        local_user_renames: Source→target local-user-name rewrites
+            applied during :func:`run_plan_with_overrides` when the
+            caller supplied a ``local_user_rename_map``.  Third per-
+            pane category after ``port_renames`` + ``vlan_renames``.
+            Keys are source usernames; values are target usernames.
+            Unchanged names are not included — only actual rewrites.
+        local_user_drops: Local-user names the operator explicitly
+            marked "don't render" via ``None`` values in the rename
+            map.  The :class:`CanonicalLocalUser` entry was removed
+            from ``intent.local_users`` before render.
+        source_local_users: Source-tree local-user names captured
+            post-parse, pre-transform.  Lets the Tier-3 rename
+            modal's local-users pane enumerate every user the
+            operator could rename or drop — parallel to
+            ``source_vlans`` for the VLAN pane.  Populated by
+            :func:`run_plan_with_overrides` via the same capture
+            transform.  Empty on legacy :func:`run_plan` calls.
+        snmp_community_renames: Source→target SNMP community-name
+            rewrites applied during :func:`run_plan_with_overrides`
+            when the caller supplied a ``snmp_community_rename_map``.
+            Fourth per-pane category after ``port_renames`` /
+            ``vlan_renames`` / ``local_user_renames``.  Effectively
+            single-entry (the canonical tree holds one community
+            string) but uses the dict shape for symmetry with the
+            sibling fields.  Unchanged community → empty dict.
+            :class:`CanonicalSNMP` models v1/v2c only; SNMPv3 users
+            are NOT in scope for this map (see
+            :mod:`netcanon.migration.canonical.snmp_names`).
+        snmp_community_drops: SNMP community names the operator
+            explicitly cleared via a ``None`` value in the rename
+            map.  Effectively single-entry list.  Render paths treat
+            an empty :attr:`CanonicalSNMP.community` as "don't emit
+            the SNMP block".
+        source_snmp_community: Source-tree SNMP community string
+            captured post-parse, pre-transform.  Lets the Tier-3
+            rename modal's SNMP pane show the current community
+            value so the operator can rewrite knowingly.  Empty
+            when the source config had no SNMP block or a bare
+            SNMP block without a community configured.
+        snmpv3_user_renames: Source→target SNMPv3 user-name rewrites
+            applied during :func:`run_plan_with_overrides` when the
+            caller supplied a ``snmpv3_user_rename_map``.  Fifth per-
+            pane category after ``port_renames`` / ``vlan_renames`` /
+            ``local_user_renames`` / ``snmp_community_renames``.
+            Rename is by USM securityName identity — auth / priv
+            keys + group / engine_id follow the renamed record.
+            Keys are source usernames; values are target usernames.
+            Unchanged names are not included.
+        snmpv3_user_drops: SNMPv3 user names the operator explicitly
+            marked "don't render" via ``None`` values in the rename
+            map.  The corresponding :class:`CanonicalSNMPv3User`
+            records were removed from ``intent.snmp.v3_users``
+            before render.
+        source_snmpv3_users: Source-tree SNMPv3 user names captured
+            post-parse, pre-transform.  Lets the Tier-3 rename
+            modal's SNMPv3 pane enumerate every v3 user the operator
+            could rename or drop — parallel to
+            ``source_local_users`` for the local-admin pane.
+            Populated by :func:`run_plan_with_overrides` via the
+            capture transform.  Empty list when source config had
+            v1/v2c only.
+        dropped_tier3_sections: Tier-3 stanza headers detected in
+            the source bytes that the codec parser deliberately
+            drops (firewall rules, NAT, QoS, route-maps, IPsec,
+            etc.).  Surfaced from
+            :attr:`CanonicalIntent.dropped_tier3_sections` post-
+            parse so the migrate page can render a "Detected in
+            source but not translated" banner.  Notification surface
+            only — never read by any render-side code or transform.
+            Populated by every codec's ``parse()``; see
+            :mod:`netcanon.migration._tier3_detection` for the per-
+            vendor detectors.
     """
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

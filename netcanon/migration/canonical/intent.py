@@ -83,7 +83,7 @@ from pydantic import BaseModel, Field
 
 
 class CanonicalIPv4Address(BaseModel):
-    """A single IPv4 address + prefix on an interface.
+    """A single IPv4 address + prefix on an interface (Tier 1 — auto-translatable IP primitive).
 
     Attributes:
         ip: Dotted-quad form (e.g. ``"10.1.1.1"``).
@@ -128,7 +128,7 @@ class CanonicalIPv4Address(BaseModel):
 
 
 class CanonicalIPv6Address(BaseModel):
-    """Single IPv6 address declaration on a CanonicalInterface.
+    """Single IPv6 address declaration on a CanonicalInterface (Tier 1 — auto-translatable IP primitive).
 
     Mirrors the :class:`CanonicalIPv4Address` shape; differs only in
     the address type (RFC 4291 colon-hex form rather than dotted-quad)
@@ -169,142 +169,121 @@ class CanonicalIPv6Address(BaseModel):
 
 
 class CanonicalInterface(BaseModel):
-    """A network interface — physical, VLAN SVI, LAG, loopback, tunnel."""
+    """A network interface — physical, VLAN SVI, LAG, loopback, tunnel (Tier 1 — auto-translatable cross-vendor primitive).
 
-    name: str                                   # vendor-native name (opaque);
-                                                # for renamed MikroTik ports
-                                                # this is the renamed name
-                                                # (e.g. "Access Point"), not
-                                                # the factory default (ether2)
-    default_name: str = ""                      # MikroTik: factory default-name
-                                                # (ether1, sfp-sfpplus1) — used
-                                                # by the renderer to emit the
-                                                # `set [ find default-name=X ]`
-                                                # lookup.  Empty for vendors/
-                                                # interface types where the
-                                                # concept doesn't apply.
+    Attributes:
+        name: Vendor-native name (opaque).  For renamed MikroTik ports
+            this is the renamed name (e.g. ``"Access Point"``), not the
+            factory default (``ether2``).
+        default_name: MikroTik factory default-name (``ether1``,
+            ``sfp-sfpplus1``) — used by the renderer to emit the
+            ``set [ find default-name=X ]`` lookup.  Empty for vendors
+            / interface types where the concept doesn't apply.
+        description: Free-text interface description.
+        enabled: ``True`` if the interface is administratively up.
+        interface_type: IANA-ifType discriminator (e.g.
+            ``"ethernetCsmacd"``, ``"softwareLoopback"``).
+        mtu: Interface MTU in bytes; ``None`` = use vendor default.
+        ipv4_addresses: IPv4 address records on this interface.
+        ipv6_addresses: IPv6 address records on this interface.
+        switchport_mode: Switchport state.  ``"access"`` | ``"trunk"`` |
+            ``None`` (means "not a switchport" — routed port).
+        access_vlan: VLAN ID for access mode.
+        trunk_allowed_vlans: VLAN IDs allowed on trunk.
+        trunk_native_vlan: Native (untagged) VLAN ID on trunk.
+        voice_vlan: Voice VLAN ID for IP phone traffic.
+        lag_member_of: LAG / port-channel name if this interface is
+            bundled, otherwise ``None``.
+        dhcp_client: ``True`` if the interface acquires its IPv4 via
+            DHCP rather than static configuration.
+        dhcp_client_v6: IPv6 dynamic-address mode.  ``""`` = static /
+            unset; otherwise one of:
+
+            * ``"dhcp6"`` — stateful DHCPv6
+            * ``"slaac"`` — router-advert autoconfiguration
+            * ``"track6"`` — OPNsense ``track interface``
+            * ``"6rd"`` — RFC 5969 6rd tunnel
+            * ``"6to4"`` — RFC 3056 6to4 tunnel
+
+            OPNsense surfaces every value via ``<ipaddrv6>``; Cisco
+            IOS-XE / Arista EOS populate ``"dhcp6"`` from ``ipv6
+            address dhcp`` and ``"slaac"`` from ``ipv6 address
+            autoconfig``; Junos populates ``"dhcp6"`` from ``family
+            inet6 dhcpv6-client``; FortiGate populates from ``set
+            ip6-mode``; MikroTik RouterOS populates from ``/ipv6
+            dhcp-client``.  String literal (not enum) to keep the
+            schema simple and round-trip-safe; valid values are
+            documented here.
+        tunnel_type: Tunnel encapsulation discriminator for vendor-
+            specific tunnel sub-types.  ``""`` = unset (renderers
+            fall back to a sensible default, typically GRE);
+            otherwise one of:
+
+            * ``"gre"`` — RFC 2784 GRE
+            * ``"eoip"`` — MikroTik Ethernet-over-IP
+            * ``"ipip"`` — RFC 2003 IP-in-IP
+            * ``"ipsec"`` — transport-mode IPsec tunnel
+            * ``"vxlan"`` — RFC 7348
+
+            Disambiguates which RouterOS section the MikroTik render
+            emits (``/interface gre`` vs ``/interface eoip`` vs
+            ``/interface ipip``); Cisco IOS-XE / Arista populate
+            from ``tunnel mode {gre ip|ipip|ipsec|vxlan}``; Junos
+            populates from interface-name prefix (``gr-`` → gre,
+            ``ip-`` → ipip, ``st0`` → ipsec).  Only meaningful when
+            ``interface_type == 'ianaift:tunnel'``.
+        vrf: VRF / routing-instance membership; empty = global /
+            default VRF.  Matches a
+            :attr:`CanonicalRoutingInstance.name` declared at the
+            top level.
+        kind: Logical role override.  ``""`` (default) means "infer
+            from name via the codec's ``classify_port_name``"; any
+            other value (matches :data:`PortKind`) overrides the
+            inferred kind during cross-vendor port-name translation.
+            Used when the source vendor encodes the role in CONTEXT
+            rather than in the interface name — e.g. Cisco IOS-XE
+            ``GigabitEthernet0/0`` with ``vrf forwarding Mgmt-vrf``
+            is semantically a mgmt port, but the name alone
+            classifies as ``physical``.  The parser sets
+            ``kind="mgmt"`` so the rename mesh can cascade to every
+            target's existing kind=mgmt handling (Aruba ``oobm``
+            block, Junos management VRF, etc).
+        vrrp_groups: Ship-before-wire (v0.2.0).  Classic FHRP
+            redundancy groups (VRRP / HSRP / CARP) on this
+            interface.  Anycast-gateway is NOT here — it lives on
+            :attr:`CanonicalIPv4Address.virtual_gateway_address`
+            (anycast is an IP property, not a router-group
+            election).  See :class:`CanonicalVRRPGroup` for full
+            grammar / cross-vendor mapping.  Codecs without per-
+            codec wire-up still declare ``/interfaces/interface/
+            vrrp-groups/group`` as ``unsupported`` in their
+            CapabilityMatrix.
+    """
+
+    name: str
+    default_name: str = ""
     description: str = ""
     enabled: bool = True
-    interface_type: str = ""                    # e.g. "ethernetCsmacd", "softwareLoopback"
+    interface_type: str = ""
     mtu: int | None = None
     ipv4_addresses: list[CanonicalIPv4Address] = Field(default_factory=list)
     ipv6_addresses: list[CanonicalIPv6Address] = Field(default_factory=list)
-    # Switchport state — None means "not a switchport" (routed port).
-    switchport_mode: str | None = None          # "access" | "trunk" | None
-    access_vlan: int | None = None              # for access mode
+    switchport_mode: str | None = None
+    access_vlan: int | None = None
     trunk_allowed_vlans: list[int] = Field(default_factory=list)
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None
-    lag_member_of: str | None = None            # LAG/port-channel name if bundled
+    lag_member_of: str | None = None
     dhcp_client: bool = False
-    dhcp_client_v6: str = ""                    # IPv6 dynamic-address mode.
-                                                # "" = static / unset; otherwise
-                                                # one of:
-                                                #   "dhcp6"   (stateful DHCPv6)
-                                                #   "slaac"   (router-advert
-                                                #              autoconfiguration)
-                                                #   "track6"  (OPNsense
-                                                #              "track interface")
-                                                #   "6rd"     (RFC 5969 6rd
-                                                #              tunnel)
-                                                #   "6to4"    (RFC 3056 6to4
-                                                #              tunnel)
-                                                # OPNsense surfaces every
-                                                # value via ``<ipaddrv6>``;
-                                                # Cisco IOS-XE / Arista EOS
-                                                # populate "dhcp6" from
-                                                # ``ipv6 address dhcp`` and
-                                                # "slaac" from ``ipv6 address
-                                                # autoconfig``; Junos
-                                                # populates "dhcp6" from
-                                                # ``family inet6 dhcpv6-
-                                                # client``; FortiGate
-                                                # populates from
-                                                # ``set ip6-mode``;
-                                                # MikroTik RouterOS
-                                                # populates from
-                                                # ``/ipv6 dhcp-client``.
-                                                # String literal (not enum)
-                                                # to keep the schema simple
-                                                # and round-trip-safe; valid
-                                                # values are documented here.
-    tunnel_type: str = ""                       # Tunnel encapsulation
-                                                # discriminator for vendor-
-                                                # specific tunnel sub-types.
-                                                # "" = unset (renderers fall
-                                                # back to a sensible default,
-                                                # typically GRE); otherwise
-                                                # one of:
-                                                #   "gre"     (RFC 2784 GRE)
-                                                #   "eoip"    (MikroTik
-                                                #              Ethernet-over-IP)
-                                                #   "ipip"    (RFC 2003 IP-in-
-                                                #              IP)
-                                                #   "ipsec"   (transport-mode
-                                                #              IPsec tunnel)
-                                                #   "vxlan"   (RFC 7348)
-                                                # Disambiguates which
-                                                # RouterOS section the
-                                                # MikroTik render emits
-                                                # (``/interface gre`` vs
-                                                # ``/interface eoip`` vs
-                                                # ``/interface ipip``);
-                                                # Cisco IOS-XE / Arista
-                                                # populate from
-                                                # ``tunnel mode {gre ip|
-                                                # ipip|ipsec|vxlan}``;
-                                                # Junos populates from
-                                                # interface-name prefix
-                                                # (``gr-`` → gre,
-                                                # ``ip-`` → ipip,
-                                                # ``st0`` → ipsec).
-                                                # Only meaningful when
-                                                # ``interface_type ==
-                                                # 'ianaift:tunnel'``.
-    vrf: str = ""                               # VRF / routing-instance membership;
-                                                # empty = global / default VRF.
-                                                # Matches a
-                                                # ``CanonicalRoutingInstance.name``
-                                                # declared at the top level.
-    kind: str = ""                              # Logical role override: ``""``
-                                                # (default) means "infer from
-                                                # name via the codec's
-                                                # ``classify_port_name``";
-                                                # any other value (matches
-                                                # :data:`PortKind`) overrides
-                                                # the inferred kind during
-                                                # cross-vendor port-name
-                                                # translation.  Used when the
-                                                # source vendor encodes the
-                                                # role in CONTEXT rather than
-                                                # in the interface name —
-                                                # e.g. Cisco IOS-XE
-                                                # ``GigabitEthernet0/0`` with
-                                                # ``vrf forwarding Mgmt-vrf``
-                                                # is semantically a mgmt
-                                                # port, but the name alone
-                                                # classifies as
-                                                # ``physical``.  The parser
-                                                # sets ``kind="mgmt"`` so the
-                                                # rename mesh can cascade to
-                                                # every target's existing
-                                                # kind=mgmt handling
-                                                # (Aruba ``oobm`` block,
-                                                # Junos management VRF, etc).
-    # ── Ship-before-wire (v0.2.0) ──
-    # Classic FHRP redundancy groups (VRRP / HSRP / CARP) on this
-    # interface.  Anycast-gateway is NOT here — it lives on
-    # CanonicalIPv4Address.virtual_gateway_address (anycast is an IP
-    # property, not a router-group election).  See
-    # :class:`CanonicalVRRPGroup` for full grammar / cross-vendor
-    # mapping.  Codecs without per-codec wire-up still declare
-    # ``/interfaces/interface/vrrp-groups/group`` as ``unsupported``
-    # in their CapabilityMatrix.
+    dhcp_client_v6: str = ""
+    tunnel_type: str = ""
+    vrf: str = ""
+    kind: str = ""
     vrrp_groups: list[CanonicalVRRPGroup] = Field(default_factory=list)
 
 
 class CanonicalVlan(BaseModel):
-    """A VLAN definition with membership.
+    """A VLAN definition with membership (Tier 1 — auto-translatable L2 primitive).
 
     Membership is VLAN-centric (which ports are in this VLAN) per the
     canonical convention — see module docstring.
@@ -321,7 +300,7 @@ class CanonicalVlan(BaseModel):
 
 
 class CanonicalStaticRoute(BaseModel):
-    """A single static route entry.
+    """A single static route entry (Tier 1 — auto-translatable routing primitive).
 
     Attributes:
         destination: CIDR notation: "10.0.0.0/24" or "0.0.0.0/0".
@@ -359,20 +338,32 @@ class CanonicalStaticRoute(BaseModel):
 
 
 class CanonicalDHCPPool(BaseModel):
-    """A DHCP server pool."""
+    """A DHCP server pool (Tier 2 — translate-with-review; cross-vendor option grammar diverges).
 
-    interface: str = ""             # interface serving this pool
-    network: str = ""               # e.g. "192.168.10.0/24"
+    Attributes:
+        interface: Interface serving this pool.
+        network: Subnet served, in CIDR form (e.g.
+            ``"192.168.10.0/24"``).
+        start_ip: First IP in the dynamic range.
+        end_ip: Last IP in the dynamic range.
+        gateway: Default gateway advertised to clients.
+        dns_servers: DNS resolvers advertised to clients.
+        lease_time: Lease duration in seconds (default 86400 = 1 day).
+        domain_name: DNS search domain advertised to clients.
+    """
+
+    interface: str = ""
+    network: str = ""
     start_ip: str = ""
     end_ip: str = ""
     gateway: str = ""
     dns_servers: list[str] = Field(default_factory=list)
-    lease_time: int = 86400         # seconds
+    lease_time: int = 86400
     domain_name: str = ""
 
 
 class CanonicalSNMPv3User(BaseModel):
-    """An SNMPv3 User-based Security Model (USM) user.
+    """An SNMPv3 User-based Security Model (USM) user (Tier 2 — translate-with-review; per-vendor hash + key grammar diverges).
 
     The v3 identity unit — where SNMPv1/v2c identity is a shared
     community string, v3 identity is a named user with per-user
@@ -456,7 +447,7 @@ class CanonicalSNMPv3User(BaseModel):
 
 
 class CanonicalSNMP(BaseModel):
-    """SNMP configuration.
+    """SNMP configuration (Tier 2 — translate-with-review; v3 USM key grammar diverges).
 
     Models both SNMPv1/v2c (the ``community`` string surface) and
     SNMPv3 (the :attr:`v3_users` USM list).  The two are
@@ -480,15 +471,24 @@ class CanonicalSNMP(BaseModel):
 
 
 class CanonicalLAG(BaseModel):
-    """A LAG / port-channel / trunk / bonding group."""
+    """A LAG / port-channel / trunk / bonding group (Tier 2 — translate-with-review; LACP mode + naming diverge).
 
-    name: str                       # vendor-native name
-    members: list[str] = Field(default_factory=list)   # member interface names
-    mode: str = "active"            # "active" (LACP) | "passive" | "static"
+    Attributes:
+        name: Vendor-native LAG name (e.g. ``Port-Channel1``,
+            ``ae0``, ``bond0``, ``Trk1``).
+        members: Member interface names, vendor-native.
+        mode: LACP negotiation mode.  ``"active"`` (default — LACP
+            active), ``"passive"`` (LACP passive), or ``"static"``
+            (no LACP, manual aggregation).
+    """
+
+    name: str
+    members: list[str] = Field(default_factory=list)
+    mode: str = "active"
 
 
 class CanonicalVRRPGroup(BaseModel):
-    """A classic FHRP redundancy group on an interface (VRRP / HSRP / CARP).
+    """A classic FHRP redundancy group on an interface — VRRP / HSRP / CARP (Tier 2 — FHRP redundancy; cross-vendor grammar diverges).
 
     Models the universal L3 redundancy primitive across the shipped
     bidirectional codecs.  Every vendor has equivalent grammar; the
@@ -595,25 +595,48 @@ class CanonicalVRRPGroup(BaseModel):
 
 
 class CanonicalLocalUser(BaseModel):
-    """A local user account."""
+    """A local user account (Tier 2 — translate-with-review; password hash format is vendor-specific).
+
+    Attributes:
+        name: Username (opaque identity string).
+        privilege_level: Vendor-specific privilege number.  ``15`` =
+            admin on Cisco IOS / IOS-XE / NX-OS; default ``1`` =
+            read-only on those platforms.  Other vendors map this
+            into their native role model.
+        hashed_password: Opaque pre-hashed / encrypted password from
+            the source config.  Never plaintext — operators inject
+            secrets via their credentials manager, not via the
+            migration tree.
+        role: Role/group name in the vendor's native authorisation
+            model (e.g. ``"manager"``, ``"operator"``, ``"admin"``,
+            ``"super-user"``).
+    """
 
     name: str
-    privilege_level: int = 1        # vendor-specific; 15 = admin on Cisco
-    hashed_password: str = ""       # opaque hash, never plaintext
-    role: str = ""                  # "manager" / "operator" / "admin" etc.
+    privilege_level: int = 1
+    hashed_password: str = ""
+    role: str = ""
 
 
 class CanonicalRADIUSServer(BaseModel):
-    """A RADIUS server definition."""
+    """A RADIUS server definition (Tier 2 — translate-with-review; key hash format is vendor-specific).
+
+    Attributes:
+        host: RADIUS server IP address or hostname.
+        key: Shared secret (opaque) — pre-hashed / encrypted by the
+            source vendor's storage format; never plaintext.
+        auth_port: Authentication UDP port (RFC 2865 default 1812).
+        acct_port: Accounting UDP port (RFC 2866 default 1813).
+    """
 
     host: str
-    key: str = ""                   # shared secret (opaque)
+    key: str = ""
     auth_port: int = 1812
     acct_port: int = 1813
 
 
 class CanonicalVxlan(BaseModel):
-    """A VLAN-to-VNI mapping for an EVPN-VXLAN overlay.
+    """A VLAN-to-VNI mapping for an EVPN-VXLAN overlay (Tier 2 — ship-before-wire; cross-vendor VTEP grammar diverges).
 
     Models the association between a Layer-2 VLAN and the VXLAN Network
     Identifier (VNI) that carries its broadcast/unknown-unicast/multicast
@@ -667,7 +690,7 @@ class CanonicalVxlan(BaseModel):
 
 
 class CanonicalRoutingInstance(BaseModel):
-    """A VRF / routing-instance declaration.
+    """A VRF / routing-instance declaration (Tier 2 — ship-before-wire; per-vendor RD/RT grammar diverges).
 
     Cross-vendor model for the L3 isolation primitive that every
     enterprise router + DC switch carries under a different name:
@@ -717,7 +740,7 @@ class CanonicalRoutingInstance(BaseModel):
 
 
 class CanonicalEvpnType5Route(BaseModel):
-    """An EVPN Type-5 (IP Prefix) advertisement.
+    """An EVPN Type-5 (IP Prefix) advertisement (Tier 2 — ship-before-wire; per-vendor BGP grammar diverges).
 
     Type-5 routes carry L3 prefix advertisements across an EVPN fabric
     and are the cross-vendor primitive for "advertise this VRF's subnets
@@ -762,7 +785,7 @@ class CanonicalEvpnType5Route(BaseModel):
 
 
 class CanonicalIntent(BaseModel):
-    """The complete canonical intent tree.
+    """The complete canonical intent tree (root container — translation tiers apply to its child surfaces).
 
     This is what every codec's ``parse()`` returns and every codec's
     ``render()`` consumes.  The pydantic model validates the shape at
@@ -771,6 +794,96 @@ class CanonicalIntent(BaseModel):
     Tier 3 (informational) data lives in ``raw_sections`` — a dict of
     section-name → raw text that the pipeline carries through for
     display but never auto-renders.
+
+    Attributes:
+        hostname: Tier 1 — device hostname.
+        domain: Tier 1 — DNS domain name.
+        dns_servers: Tier 1 — DNS resolver IPs in operator-stated
+            order.
+        ntp_servers: Tier 1 — NTP peer IPs / hostnames.
+        timezone: Tier 1 — operator-stated timezone string (vendor-
+            specific format; e.g. ``"PST -8"``, ``"Europe/London"``).
+        syslog_servers: Tier 1 — syslog destination IPs / hostnames.
+        interfaces: Tier 1 — per-interface configuration records.
+        vlans: Tier 1 — VLAN definitions with port membership.
+        static_routes: Tier 1 — static route entries.
+        dhcp_servers: Tier 2 — DHCP server pool definitions.
+        snmp: Tier 2 — SNMPv1/v2c + v3 USM configuration.  ``None``
+            when source config had no SNMP block.
+        lags: Tier 2 — LAG / port-channel definitions.
+        local_users: Tier 2 — local user accounts.
+        radius_servers: Tier 2 — RADIUS server definitions.
+        vxlan_vnis: Tier 2 (ship-before-wire) — VLAN-to-VNI mappings
+            for EVPN-VXLAN overlay.  No codec populates these in v1;
+            each codec's CapabilityMatrix lists them under
+            ``unsupported`` until wired up per-vendor.
+        evpn_type5_routes: Tier 2 (ship-before-wire) — EVPN Type-5
+            IP-prefix advertisements.  Same wire-up status as
+            ``vxlan_vnis``.
+        routing_instances: Tier 2 (ship-before-wire) — cross-vendor
+            VRF model; see :class:`CanonicalRoutingInstance`
+            docstring for the vendor-shape comparison.  Per-interface
+            membership lives on :attr:`CanonicalInterface.vrf`, not
+            a redundant list here.
+        anycast_gateway_mac: Ship-before-wire (v0.2.0) — system-wide
+            anycast-gateway MAC.  Vendors that declare it at chassis
+            scope populate this from their grammar:
+
+            * Arista EOS: ``ip virtual-router mac-address
+              00:1c:73:00:dc:01``
+            * Cisco NX-OS DAG: ``fabric forwarding anycast-gateway-
+              mac 0001.c73a.0000``
+            * Cisco IOS-XE SD-Access: same as NX-OS form
+            * Junos: no system-wide MAC; per-unit MAC overrides live
+              on :attr:`CanonicalIPv4Address.virtual_gateway_mac`
+              instead.
+
+            Empty string = "use vendor default" (Arista:
+            ``00:00:00:00:00:00`` implicit until operator sets one;
+            NX-OS / IOS-XE SD-Access: required by commit-time
+            validator before any SVI can use anycast).  Stored in
+            colon-hex canonical form (``00:1c:73:00:dc:01``); per-
+            vendor renderers re-emit in their native format (NX-OS
+            dotted-quad ``0001.c73a.0000``, etc).  Per-address
+            overrides on
+            :attr:`CanonicalIPv4Address.virtual_gateway_mac` take
+            precedence (Junos per-unit override pattern).  Ship-
+            before-wire: every codec's CapabilityMatrix lists
+            ``/anycast-gateway-mac`` as ``unsupported`` until the
+            per-codec wire-up lands (Wave C of the v0.2.0 plan
+            documented in ``docs/v0.2.0-planning/``).
+        raw_sections: Tier 3 — informational-only stanzas
+            (section-name → raw text).  Carried through for display
+            but never auto-rendered.
+        dropped_tier3_sections: Tier-3 stanza HEADERS detected in
+            source but not modelled by the canonical schema.
+            Populated by every codec's ``parse()`` via the per-
+            vendor detector in
+            :mod:`netcanon.migration._tier3_detection`.  Surfaced to
+            the operator via the migrate page's "Detected in source
+            but not translated" banner so the silent-drop is
+            visible.  Empty list means the parser saw nothing
+            Tier-3 in the input.  This is a NOTIFICATION-ONLY
+            surface — render-side code MUST NOT read it.
+        source_vendor: ``vendor_id`` of the codec that produced this
+            tree (metadata, populated by parse).
+        source_format: ``input_format`` of the source codec
+            (metadata).
+        source_version: OS version hint from the parser (metadata;
+            empty when undetectable).
+        apply_groups: Vendor-provenance hint (ship-before-wire for
+            most codecs).  GAP 9b (Junos): preserve the apply-groups
+            STATEMENT on parse so render emits an equivalent
+            structure to what the operator originally wrote.
+        group_content: Vendor-provenance hint paired with
+            :attr:`apply_groups`.  GAP 9b (Junos): preserve the
+            GROUP CONTENT on parse so render emits an equivalent
+            structure.  Content is flattened into the canonical
+            tree by GAP 8's two-pass parse AND stored here as the
+            original group-scoped set-line tails; render uses the
+            content-bucket to emit ``set groups <G> ...`` and
+            suppresses the top-level emission of the same data to
+            avoid duplicate semantics on re-parse.
     """
 
     # ── Tier 1 — auto-translatable ──
@@ -791,65 +904,23 @@ class CanonicalIntent(BaseModel):
     local_users: list[CanonicalLocalUser] = Field(default_factory=list)
     radius_servers: list[CanonicalRADIUSServer] = Field(default_factory=list)
     # ── Tier 2 (ship-before-wire) — EVPN-VXLAN fabric schema ──
-    # No codec populates these in v1; each codec's CapabilityMatrix
-    # lists them under ``unsupported`` until wired up per-vendor.
     vxlan_vnis: list[CanonicalVxlan] = Field(default_factory=list)
     evpn_type5_routes: list[CanonicalEvpnType5Route] = Field(default_factory=list)
     # ── Tier 2 (ship-before-wire) — VRF / routing-instance schema ──
-    # Cross-vendor VRF model; see CanonicalRoutingInstance docstring
-    # for the vendor-shape comparison.  Per-interface membership
-    # lives on CanonicalInterface.vrf, not a redundant list here.
     routing_instances: list[CanonicalRoutingInstance] = Field(default_factory=list)
 
     # ── Ship-before-wire (v0.2.0) — anycast-gateway system MAC ──
-    # System-wide anycast-gateway MAC.  Vendors that declare it at
-    # chassis scope populate this from their grammar:
-    #   * Arista EOS: ``ip virtual-router mac-address 00:1c:73:00:dc:01``
-    #   * Cisco NX-OS DAG: ``fabric forwarding anycast-gateway-mac
-    #     0001.c73a.0000``
-    #   * Cisco IOS-XE SD-Access: same as NX-OS form
-    #   * Junos: no system-wide MAC; per-unit MAC overrides live on
-    #     :attr:`CanonicalIPv4Address.virtual_gateway_mac` instead.
-    # Empty string = "use vendor default" (Arista: 00:00:00:00:00:00
-    # implicit until operator sets one; NX-OS / IOS-XE SD-Access:
-    # required by commit-time validator before any SVI can use
-    # anycast).  Stored in colon-hex canonical form
-    # (``00:1c:73:00:dc:01``); per-vendor renderers re-emit in their
-    # native format (NX-OS dotted-quad ``0001.c73a.0000``, etc).
-    # Per-address overrides on
-    # :attr:`CanonicalIPv4Address.virtual_gateway_mac` take precedence
-    # (Junos per-unit override pattern).  Ship-before-wire: every
-    # codec's CapabilityMatrix lists ``/anycast-gateway-mac`` as
-    # ``unsupported`` until the per-codec wire-up lands (Wave C of
-    # the v0.2.0 plan documented in ``docs/v0.2.0-planning/``).
     anycast_gateway_mac: str = ""
 
     # ── Tier 3 — informational only (never auto-rendered) ──
     raw_sections: dict[str, str] = Field(default_factory=dict)
-
-    # Tier-3 stanza HEADERS detected in source but not modelled by the
-    # canonical schema.  Populated by every codec's ``parse()`` via the
-    # per-vendor detector in
-    # :mod:`netcanon.migration._tier3_detection`.  Surfaced to the
-    # operator via the migrate page's "Detected in source but not
-    # translated" banner so the silent-drop is visible.  Empty list
-    # means the parser saw nothing Tier-3 in the input.  This is a
-    # NOTIFICATION-ONLY surface — render-side code MUST NOT read it.
     dropped_tier3_sections: list[str] = Field(default_factory=list)
 
     # ── Metadata ──
-    source_vendor: str = ""         # vendor_id of the codec that produced this
-    source_format: str = ""         # input_format of the codec
-    source_version: str = ""        # OS version hint from the parser
+    source_vendor: str = ""
+    source_format: str = ""
+    source_version: str = ""
 
     # ── Vendor-provenance hints (ship-before-wire for most codecs) ──
-    # GAP 9b (Junos): preserve both the apply-groups STATEMENT and
-    # the GROUP CONTENT on parse so render emits an equivalent
-    # structure to what the operator originally wrote.  Content is
-    # flattened into the canonical tree by GAP 8's two-pass parse
-    # AND stored here as the original group-scoped set-line tails;
-    # render uses the content-bucket to emit `set groups <G> ...`
-    # and suppresses the top-level emission of the same data to
-    # avoid duplicate semantics on re-parse.
     apply_groups: list[str] = Field(default_factory=list)
     group_content: dict[str, list[list[str]]] = Field(default_factory=dict)
