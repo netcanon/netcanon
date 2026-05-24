@@ -149,13 +149,18 @@ Concrete checklist:
    `../../services/migration_pipeline.py` and import the new factory
    alongside the existing five.  Update the module's top-of-file
    docstring "Per-pane override categories" listing.
-4. **Cross-mesh test coverage.**  Extend `_SOURCE_CAPABLE` /
-   `_TARGET_CAPABLE` lists in
-   `tests/unit/migration/test_cross_mesh_overrides.py` to include
-   every codec that supports the new category (parse + render).
-   Codecs that don't yet round-trip the new field declare it in
-   their `unsupported_rename_categories` ClassVar so the UI shows
-   the amber compatibility banner.
+4. **Cross-mesh test coverage.**  Add a new per-category
+   `_<CATEGORY>_TARGET_CAPABLE` list in
+   `tests/unit/migration/test_cross_mesh_overrides.py` enumerating
+   every codec that round-trips the new field (parse + render),
+   following the established `_LOCAL_USER_TARGET_CAPABLE` /
+   `_SNMP_TARGET_CAPABLE` / `_SNMPV3_TARGET_CAPABLE` /
+   `_IPV6_TARGET_CAPABLE` shape.  The general `_SOURCE_CAPABLE` /
+   `_TARGET_CAPABLE` lists at the top of the file cover the
+   port-rename mesh only — new categories get their own scoped
+   list.  Codecs that don't yet round-trip the new field declare
+   it in their `unsupported_rename_categories` ClassVar so the UI
+   shows the amber compatibility banner.
 5. **UI surface.**  Add a rename rail in `netcanon/templates/migrate.html`
    and a per-pane endpoint in `netcanon/api/routes/migration.py`
    (`POST /api/v1/migration/plan/<category>`).  Every interactive

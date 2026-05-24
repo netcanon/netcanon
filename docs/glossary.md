@@ -24,9 +24,17 @@ by concern and listed alphabetically within each section.
 - **Sentinel semantics** — convention for per-pane override maps.
   `None` = don't engage the rename rail; `{}` = auto-heuristic;
   `{src: tgt}` = explicit rename; `{src: None}` = drop the entity.
+- **dropped_tier3_sections** — `list[str]` field on `CanonicalIntent`
+  populated by parsers when they detect Tier-3 surfaces (firewall,
+  NAT, VPN, QoS, routing protocols, PKI) and deliberately don't
+  attempt cross-vendor translation. Surfaces to the migrate page's
+  Tier-3 banner so operators see what was deliberately skipped.
+  See [`CAPABILITIES.md`](CAPABILITIES.md) "Tier 3 — opaque carry".
 - **Ship-before-wire** — design pattern in which the canonical schema
   gains a field before any codec parses or renders it. Lets UI and
   pipeline plumbing advance independently of vendor-support breadth.
+  The cross-codec invariant is enforced by `_WIRED_UP_BY_CODEC` maps
+  in the matching schema-test guard files.
 - **Tier 1 / Tier 2 / Tier 3** — canonical-field categorisation.
   Tier 1 = cross-vendor stable, auto-translatable (hostname,
   interfaces, vlans, static_routes, DNS/NTP/syslog).  Tier 2 =
@@ -41,6 +49,15 @@ by concern and listed alphabetically within each section.
 
 - **Bidirectional codec** — codec that implements both `parse()` and
   `render()`, allowing it to act as either source or target.
+- **Capability matrix** — per-codec `CapabilityMatrix` ClassVar listing
+  three triads: `supported_paths` (xpaths that round-trip cleanly),
+  `lossy_paths` (with per-entry `LossyPath(reason, severity)`),
+  `unsupported_paths` (with per-entry `UnsupportedPath(reason)`).
+  No silent unsupported — every gap is declared with rationale.
+  Drives the migrate-page Validation panel + Phase 4 reconciliation.
+  Reference `netcanon/migration/canonical/intent.py` for the
+  `CapabilityMatrix` model itself; each codec's `codec.py` declares
+  its instance.
 - **Direction** — codec ClassVar declaring its capability; one of
   `bidirectional`, `parse_only`, or `render_only`.
 - **INPUT_FORMATS** — codec ClassVar string family (e.g. `cli`,
@@ -49,6 +66,13 @@ by concern and listed alphabetically within each section.
 - **Probe** — `classmethod probe(raw_prefix) -> (confidence, reason) | None`.
   Each codec votes on a candidate input; the orchestrator picks the
   highest-confidence match for source detection.
+- **unsupported_rename_categories** — codec ClassVar (`frozenset[str]`)
+  enumerating per-pane-override categories where the codec parses or
+  renders but doesn't round-trip the entity end-to-end. Drives the
+  amber compatibility banner on the rename rail when the codec is
+  selected as target. Every bidirectional codec declares it as empty
+  EXCEPT OPNsense + Cisco IOS-XE NETCONF, which declare `{"snmpv3"}`
+  (post-Option-A v0.1.1).
 - **Wire format** — the operator-paste form of a config: CLI
   `show run`, NETCONF XML, OPNsense `config.xml`, MikroTik `/export`,
   and similar.
@@ -64,6 +88,11 @@ by concern and listed alphabetically within each section.
 - **Real-capture fixture** — third-party operator config under
   `tests/fixtures/real/<vendor>/`. Source of truth for round-trip
   stability assertions.
+- **WANTED.md** — `tests/fixtures/real/WANTED.md`; operator-facing
+  catalogue of fixtures we'd like to receive (per-vendor gaps,
+  feature surfaces, OS versions). Pairs with `RESULTS.md` (what we
+  have + certification state) and `NOTICE.md` (provenance +
+  attribution).
 - **Round-trip stability** — invariant where
   `parse(raw) -> render(intent) -> parse(rendered)` yields a
   canonically-equal intent. Per-fixture certification state lives in
@@ -96,6 +125,16 @@ by concern and listed alphabetically within each section.
 - **Target profile** — hardware-shape definition under
   `definitions/target_profiles/<vendor>/<model>.yaml`. Drives port
   rename and VLAN/user fit-checks in the UI.
+- **MODULE_VARIANT_PROFILES** — allowlist (`tests/fixtures/module_variants.py`)
+  of `{vendor}/{model}` keys whose target profiles ship `modules:`
+  declarations. Both unit + integration test tiers import from this
+  shared module; the `test_module_variant_allowlist_shared_with_integration_tier`
+  CI guard enforces single-source-of-truth across the test pyramid.
+- **effective_ports** — `TargetProfile.effective_ports(module_sku)`
+  method returning the base `ports` list plus the module's ports
+  (if the target profile is module-variant-shaped). The migrate
+  page's fit-check uses this to enumerate the operator-selected
+  chassis + module combination.
 
 ## Phase 4 reconciliation
 

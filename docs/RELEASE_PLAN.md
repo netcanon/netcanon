@@ -124,20 +124,35 @@ that file.
   Every Phase 3 PR squash-merged + green on the 4-Python-version
   CI matrix.
 
-**Next:**
+**Shipped (post-v0.1.0):**
 
-* **Public flip + tag v0.1.0 final** — convert repo from private
-  to public visibility, push v0.1.0 final tag, set GitHub Topics +
-  extended description per [`IDENTITY.md`](IDENTITY.md).
-  Prerequisites: `DOCKERHUB_TOKEN` + `DOCKERHUB_USERNAME` re-added
-  as repo secrets (these stayed on the old repo post-rename);
-  PyPI Trusted Publisher re-linked to the new repo slug.
+* **v0.1.0 final** — repo public-flipped, tag pushed, GitHub
+  Topics + extended description set per [`IDENTITY.md`](IDENTITY.md).
+  `DOCKERHUB_TOKEN` + `DOCKERHUB_USERNAME` re-added; PyPI Trusted
+  Publisher re-linked to the new repo slug.
+* **v0.1.1** (2026-05-20) — VRRP / HSRP / CARP + anycast-gateway
+  canonical surfaces.  HYBRID resolution: `CanonicalVRRPGroup`
+  unified for FHRP + `virtual_gateway_address` field on
+  `CanonicalIPv4/6Address` for anycast.  Ship-before-wire
+  declarations across all codecs; per-codec wire-ups follow.
+  See [`docs/v0.2.0-planning/README.md`](v0.2.0-planning/README.md)
+  § "Cross-task synthesis".
+* **v0.1.2** (2026-05-21) — security-hardening release.  No
+  canonical-model or codec-grammar changes.  defusedxml swap on
+  OPNsense + Cisco IOS-XE NETCONF parsers (XXE mitigation),
+  workflow-level `permissions: contents: read` + SHA-pinned
+  third-party actions, zizmor + Trivy enabled, Dependabot
+  cooldown blocks.  Triage trail at
+  [`docs/security-triage/2026-05-21/`](security-triage/).
 
-**Optional:**
+**Next (in flight):**
 
-* **Phase 8 — private beta** with trusted-tester exposure before
-  fully public flip.  Skippable if confident the v0.1.0-rc cycle
-  surfaced enough.
+* **v0.2.0 overlay-authoring + fixture corpus expansion** —
+  Wave A landing: 12 per-version overlay files +  8 new
+  real-capture fixtures.  Tracked in
+  [`docs/fixture-research-2015/README.md`](fixture-research-2015/README.md).
+* **v0.3.0+ Tier-D codecs** — NX-OS first, then IOS-XR.  Initial
+  scope at [`docs/v0.2.0-planning/03-nxos-codec/`](v0.2.0-planning/03-nxos-codec/).
 
 ---
 

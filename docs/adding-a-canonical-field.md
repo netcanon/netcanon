@@ -243,16 +243,6 @@ section for single fields, Tier 2 Remaining section for bigger
 features).  Include the regression-test count and which real
 fixtures now surface the data.
 
-### 8. Add a HUMAN_TESTING.md entry
-
-A one-line paste-this-and-check prompt for manual validation in
-the UI:
-
-```markdown
-- [ ] **MTU** (Cisco -> OPNsense): paste `interface Gi1/0/1 / mtu 9000`;
-      target should emit `<mtu>9000</mtu>` in the interface zone.
-```
-
 ---
 
 ## Commit shape
@@ -264,7 +254,7 @@ One commit per canonical field, touching:
   single-file codecs) — except where a vendor genuinely can't carry
   the field
 - `tests/unit/migration/test_<feature>_wire_through.py` (NEW)
-- Possibly `translator-plans.txt` + `HUMAN_TESTING.md`
+- Possibly `translator-plans.txt`
 
 Commit message format — `git log --grep="wire-through"` lists
 in-tree examples (IPv6 addresses, SNMPv3 USM, etc.).  Key points to
