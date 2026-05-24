@@ -38,9 +38,15 @@ Structural quirks handled:
 
 Out of scope (future):
     * STP per-port (``spanning-tree 1-24 priority 4``)
-    * 802.1X, RADIUS, MAC auth
-    * LACP / trunk (``trunk A1-A2 trk1 lacp``)
+    * 802.1X, MAC auth (RADIUS-bind/AAA policy)
     * ACLs (``access-list``)
+
+Tier 2 (shipped — `parse` + `render` round-trip):
+    * RADIUS servers (``radius-server host`` cumulative-update
+      grammar; see :mod:`.parse` and :mod:`.render`)
+    * Local users (``aaa authentication local-user``)
+    * SNMPv3 users + groups
+    * LAG trunks (``trunk A1-A2 trk1 lacp``)
 
 Module layout (post-split per the codecs/README.md split-codec
 convention):

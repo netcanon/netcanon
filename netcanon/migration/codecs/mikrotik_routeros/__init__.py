@@ -33,9 +33,11 @@ convention):
     * ``render.py``     — canonical tree → RouterOS ``/export`` text
     * ``port_names.py`` — cross-vendor port-name identity bridge
 
-Certainty: ``best_effort`` — validated against synthetic fixtures; not
-yet tested against a real device capture (RouterOS emits a lot of
-default-value boilerplate via ``verbose`` that we filter out).
+Certainty: ``certified`` — validated against real-capture fixtures
+under ``tests/fixtures/real/mikrotik_routeros/``; the codec ships
+filters for the default-value boilerplate RouterOS emits via
+``/export verbose`` so the canonical round-trip is stable.  See
+``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import MikroTikRouterOSCodec

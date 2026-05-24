@@ -83,11 +83,12 @@ class JunosCodec(CodecBase):
     certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
-        "Paste Junos `set`-form configuration text — the output of "
+        "Paste Junos configuration text — either `set`-form (output of "
         "`show configuration | display set` on any Junos EX/QFX/MX/SRX "
-        "device.  Block-form (hierarchical curly-brace) input is NOT "
-        "parsed in v1; run `| display set` on your Junos device to "
-        "produce compatible input."
+        "device) or block-form (hierarchical curly-brace) directly.  "
+        "Block-form is auto-detected and converted to set-form ahead "
+        "of the normal parser, so operators with block-form exports "
+        "from `show configuration` need no preprocessing."
     )
     sample_input: ClassVar[str] = (
         "set version 23.2R1.14\n"
