@@ -56,13 +56,16 @@ def render_intent(tree: Any) -> str:
     """Render a :class:`CanonicalIntent` (or legacy dict) to OPNsense
     ``config.xml`` text.
 
-    Accepts both shapes for back-compat:
+    Args:
+        tree: Either a :class:`CanonicalIntent` (the modern path used
+            by all production callers, dispatched to
+            :func:`render_canonical`) or a ``dict`` (the legacy
+            nested-dict shape preserved for older tests that haven't
+            been migrated, dispatched to :func:`render_legacy`).
 
-    * :class:`CanonicalIntent` — the modern path used by all
-      production callers.  Goes through :func:`render_canonical`.
-    * ``dict`` — the legacy nested-dict shape preserved for older
-      tests that haven't been migrated.  Goes through
-      :func:`render_legacy`.
+    Raises:
+        RenderError: If *tree* is neither a :class:`CanonicalIntent`
+            nor a ``dict``.
     """
     if isinstance(tree, CanonicalIntent):
         return render_canonical(tree)

@@ -881,11 +881,13 @@ _DISPATCH: ClassVar[dict[str, object]] = {
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse a FortiOS CLI export into :class:`CanonicalIntent`.
 
-    Raises :class:`ParseError` when the input is empty or looks like
-    a different format (XML / JSON).  Unrecognised ``config`` paths
-    fall through as silent drops; if you need tolerant-mode guarantees
-    for a new path, add it to the ``_DISPATCH`` table with an
-    ``_apply_<path>`` function.
+    Unrecognised ``config`` paths fall through as silent drops; if you
+    need tolerant-mode guarantees for a new path, add it to the
+    ``_DISPATCH`` table with an ``_apply_<path>`` function.
+
+    Raises:
+        ParseError: On empty input or input that looks like a different
+            format (XML / JSON).
     """
     if not raw.strip():
         raise ParseError(

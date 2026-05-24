@@ -146,7 +146,11 @@ def _normalise_lag_name_to_arista(name: str) -> str | None:
 
 
 def render_intent(tree: Any) -> str:
-    """Render a :class:`CanonicalIntent` as Arista EOS CLI text."""
+    """Render a :class:`CanonicalIntent` as Arista EOS CLI text.
+
+    Raises:
+        RenderError: If *tree* is not a :class:`CanonicalIntent`.
+    """
     if not isinstance(tree, CanonicalIntent):
         raise RenderError(
             "arista_eos: tree must be a CanonicalIntent.",
