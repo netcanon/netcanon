@@ -17,6 +17,11 @@ See also: [`README.md`](README.md) for project orientation;
 [`ARCHITECTURE.md`](ARCHITECTURE.md) for the four-layer design that
 much of the work below evolves.
 
+**Date convention:** entries below use the maintainer's local
+authoring date (UTC-7 / Pacific).  Git tag commits may land on the
+following UTC day; cross-check `git log <tag>` for the exact UTC
+timestamp if your timezone matters for an audit.
+
 ---
 
 ## [Unreleased]
@@ -152,7 +157,11 @@ scanning** for unified triage:
 * Codec grammar — no parse/render logic changes.
 * Capability matrix — no `supported` / `lossy` / `unsupported`
   transitions on any codec.
-* Real-capture fixture corpus — no additions / removals.
+* Real-capture fixture corpus — no additions / removals as part
+  of the v0.1.2 security-cycle commits proper.  Note: 2 CARP HA
+  fixtures (master + backup) landed in commit `4686198` between
+  the v0.1.1 tag and the v0.1.2 cycle; they predate this release
+  block but are reflected in v0.1.2's RESULTS.md totals.
 * Public HTTP API surface — unchanged.
 * CLI surface — unchanged.
 
@@ -198,8 +207,11 @@ What's in this release on top of `v0.1.0-rc9`:
   closures (`docs/v0.2.0-planning/{01,02}/IMPLEMENTED.md`),
   WANTED.md + RELEASE_PLAN.md updates (`4ce0cb9`).
 
-Cumulative test delta vs `v0.1.0-rc9`: +180 tests
-(2,499 → 3,341 unit; +31 schema + +149 codec).
+Cumulative test growth vs `v0.1.0-rc9`: the schema + codec wave
+landed ~180 new unit tests (+31 schema, +149 codec).  Absolute
+counts vary by Python-version matrix slice — run
+`py -m pytest tests/unit --collect-only -q | tail -1` against
+the tag for the exact figure on your interpreter.
 
 Honest known gaps in this release (documented for operators):
 

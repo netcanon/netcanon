@@ -345,17 +345,16 @@ The page exposes four sections — one `section-*` testid per container.
 | `sched-name-input`             | `<input>` | Schedule name |
 | `sched-interval-select`        | `<select>` | Preset interval: 1h / 6h / 12h / 24h (default) / 7d / Custom |
 | `sched-custom-interval-input`  | `<input type="number">` | Custom interval in minutes; shown only when "Custom…" is selected |
-| `sched-device-list`            | `<div>` | Container for all schedule device rows |
-| `sched-device-entry`           | `<div>` | One device row (cloned on add) |
-| `sched-device-type-select`     | `<select>` | Device type dropdown; options carry `data-needs-enable` |
-| `sched-device-host-input`      | `<input>` | Host / IP field |
-| `sched-device-username-input`  | `<input>` | Username field |
-| `sched-device-password-input`  | `<input type="password">` | Password field |
-| `sched-device-enable-input`    | `<input type="password">` | Enable password; hidden when `data-needs-enable="false"` |
-| `sched-device-port-input`      | `<input type="number">` | SSH port (inside collapsed `<details>`; default 22) |
-| `sched-remove-device-btn`      | `<button>` | Remove device row; hidden when only one row exists |
-| `sched-add-device-btn`         | `<button>` | Add a new device row |
 | `sched-submit-btn`             | `<button type="submit">` | Create schedule; disabled while request is in flight |
+
+> **Inline-device-list subsection removed** — the `sched-device-*`
+> rows (`sched-device-list`, `sched-device-entry`,
+> `sched-device-{type,host,username,password,enable,port}-input`,
+> `sched-remove-device-btn`, `sched-add-device-btn`) documented an
+> earlier schedule-form shape that included an inline device-entry
+> list.  The current schedule form picks devices via the target
+> grids documented under "Target pickers" below, not an inline list.
+> Removed 2026-05-21 (docs-audit Stage 2 Commit 16).
 
 ### Target pickers (device-type × specific-profile)
 
@@ -717,6 +716,7 @@ is `sanitize-` everywhere.
 | `data-testid`                       | Element     | Notes |
 |-------------------------------------|-------------|-------|
 | `nav-sanitize`                      | `<a>`       | Top-nav link, `active` when on `/sanitize` |
+| `sanitize-safety-note`              | `<div>`     | Static safety-banner note rendered above the form; explains that the sanitiser strips PII before the payload is composed for a bug report.  Class `san-banner-info` |
 | `sanitize-form`                     | `<form>`    | Outer form; submit triggers the dual-fetch flow described above |
 | `sanitize-source-select`            | `<select>`  | Source vendor; populated client-side via `GET /api/v1/migration/adapters` (shared with migrate page) |
 | `sanitize-input-mode`               | `<div>`     | Radio-group container |
