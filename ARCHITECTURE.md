@@ -327,14 +327,21 @@ where rename overrides apply to the canonical tree but vanish
 from rendered output.
 
 **Current state:** every shipped bidirectional codec has the
-attribute empty (post-Option-A).  Earlier `OPNsenseCodec` and
-`FortiGateCLICodec` declared `{"local_users"}` under an incorrect
-assumption that those codecs kept user blocks in `raw_sections`;
-verified otherwise (both round-trip `CanonicalLocalUser` end-to-end
-and always did — see `test_local_users_wire_through.py`).  The
-attribute stays wired as an extension point — the next codec
-that genuinely ships without a Tier-2 round-trip for a category
-declares it and gets the banner for free.
+attribute empty EXCEPT `OpnSenseCodec` and `CiscoIOSXECodec` (the
+NETCONF Phase-0.5 stub), which both declare `frozenset({"snmpv3"})`
+because their parse + render paths don't yet round-trip SNMPv3 USM
+(operators renaming SNMPv3 users on either of those codecs as the
+target see the surfaced banner immediately).  Earlier `OPNsenseCodec`
+and `FortiGateCLICodec` also declared `{"local_users"}` under an
+incorrect assumption that those codecs kept user blocks in
+`raw_sections`; verified otherwise (both round-trip
+`CanonicalLocalUser` end-to-end and always did — see
+`test_local_users_wire_through.py`) and that entry was removed.
+The attribute remains wired as an extension point — the next codec
+that ships without a Tier-2 round-trip for a category declares it
+and gets the banner for free.  Adding an entry triggers an
+[`AGENTS.md`](AGENTS.md) doc-sync row obligation to update this
+section + the codec's own docstring.
 
 **Per-pane capacity fit-checks:** each pane renders its own
 fit-check banner (separate from the ports fit-check in
@@ -602,6 +609,10 @@ the source of truth):
 * **job-progress.js** — floating job-status widget, mounted
   globally from base.html; survives page navigation via
   localStorage.
+* **kbd-cheatsheet.js** — global keyboard-shortcut modal mounted
+  from base.html; opens on `?` keypress (or via the nav button).
+  Lists the application-wide shortcuts in a single overlay; no
+  per-page wiring needed.
 * **rename-apply.js** — rename-modal Apply-button flow + drag
   handlers + vendor/model/module selector wiring.
 * **rename-panel.js** — rename-modal preview + summary renderer.
@@ -815,6 +826,24 @@ that have shipped:
 - **R6/7** — real-capture validation harness + fixture corpus
 - **Tier 2 wire-throughs** — SNMP + SNMPv3, LAGs, local_users, DHCP pools,
   RADIUS, MTU, IPv6 addresses, VRFs, VXLAN/EVPN
+- **v0.1.1 (v0.2.0 Wave A+B+C)** — `CanonicalVRRPGroup` canonical
+  primitive shipped as a ship-before-wire schema (every codec declares
+  the new xpaths as `unsupported` first), then Waves B + C wired the
+  VRRP / HSRP / CARP grammar across all 7 bidirectional codecs.
+  Anycast-gateway wired on 3 codecs (Junos `virtual-gateway-address`,
+  Arista EOS VARP, Cisco IOS-XE SD-Access).  See
+  [`docs/v0.2.0-planning/01-vrrp-canonical/IMPLEMENTED.md`](docs/v0.2.0-planning/01-vrrp-canonical/IMPLEMENTED.md)
+  + [`docs/v0.2.0-planning/02-anycast-gateway/IMPLEMENTED.md`](docs/v0.2.0-planning/02-anycast-gateway/IMPLEMENTED.md).
+- **v0.1.2 — Security-hardening release** — defusedxml swap on the
+  two operator-XML parse sites (OPNsense + Cisco IOS-XE NETCONF);
+  workflow-level supply-chain hardening (zizmor + Trivy + SHA-pinned
+  third-party actions + workflow permissions + Dependabot cooldowns).
+  Translation behaviour unchanged.  See [`SECURITY.md`](SECURITY.md)
+  § "Supply-Chain Integrity" → "v0.1.2 supply-chain hardening".
+- **2026-05 — fixture-research catalogue** — 14-OS fixture-source
+  catalogue + overlay-priority synthesis for v0.2.0+ overlay
+  authoring backlog.  See
+  [`docs/fixture-research-2015/`](docs/fixture-research-2015/).
 
 What's queued:
 - Opportunistic grammar-diversity fixtures (FortiGate multi-VDOM,
@@ -847,3 +876,5 @@ What's queued:
 - [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) — worked example: SNMPv3 USM landing across canonical + codec + pipeline + UI + tests + docs
 - [`translator-plans.txt`](translator-plans.txt) — active roadmap and backlog
 - [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) — per-codec certification state
+- [`docs/security-triage/`](docs/security-triage/) — read-only-Stage-1-agents + orchestrator-applied-dismissals process for Code Scanning / Dependabot alert waves
+- [`docs/docs-audit/`](docs/docs-audit/) — sister process applied to documentation hygiene; recurring cycle that catches drift between docs and code (Evolution roadmap above was last refreshed by the 2026-05-21 audit cycle)
