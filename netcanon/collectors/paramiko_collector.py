@@ -13,6 +13,21 @@ The implementation replicates the proven PowerShell script logic:
 * Stream output from the config command, stopping after a configurable
   idle window.
 * Send post-commands (e.g. ``exit`` to return to the menu).
+
+Security model
+--------------
+Netcanon is operator-trust-anchor by design: the operator who registers
+a backup target in the UI is asserting that the target's IP + port pair
+is the device they intend to reach.  Netcanon does not maintain a
+``known_hosts`` file or surface a host-key prompt — both the
+:class:`ParamikoShellCollector.collect` and ``.probe`` paths install
+``paramiko.AutoAddPolicy`` on the SSH client (lines 147 + 237).  This
+trades strict-TOFU for operator UX; the threat model assumes a trusted
+management VLAN between Netcanon and the devices it backs up.
+
+A host-key store was scoped during the 2026-05-21 security-triage cycle
+and deferred — see ``docs/security-triage/2026-05-21/`` for the
+trade-off discussion and the AutoAddPolicy dismissal rationale.
 """
 
 from __future__ import annotations
@@ -144,6 +159,10 @@ class ParamikoShellCollector(BaseCollector):
                 ``_MAX_SECONDS``.
         """
         client = paramiko.SSHClient()
+        # AutoAddPolicy = trust-on-first-use without persistence.  Netcanon's
+        # threat model assumes a trusted management VLAN; operators register
+        # the target IP themselves.  See module docstring "Security model"
+        # + docs/security-triage/2026-05-21/ for the dismissal rationale.
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         logger.info("Connecting (Paramiko shell) to %s:%d", device.host, device.port)
@@ -234,6 +253,8 @@ class ParamikoShellCollector(BaseCollector):
             return {}
 
         client = paramiko.SSHClient()
+        # Same trust anchor as collect() — see module docstring
+        # "Security model" and docs/security-triage/2026-05-21/.
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
         logger.info(

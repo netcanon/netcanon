@@ -1,17 +1,18 @@
 """
 Netmiko-based SSH collector.
 
-Uses Netmiko's ``ConnectHandler`` for vendors with native support:
-Cisco IOS-XE, Fortigate FortiOS, and MikroTik RouterOS.  Netmiko
-handles SSH quirks (prompt detection, enable mode, ``--More--`` paging)
-internally for these platforms, so definition pre/post commands are
-the main extension point rather than custom stream logic.
+Uses Netmiko's ``ConnectHandler`` for vendors with native support.
+Netmiko handles SSH quirks (prompt detection, enable mode,
+``--More--`` paging) internally for these platforms, so definition
+pre/post commands are the main extension point rather than custom
+stream logic.
 
-Supported netmiko_device_type values
--------------------------------------
-``cisco_xe``           Cisco IOS-XE
-``fortinet``           Fortigate FortiOS
-``mikrotik_routeros``  MikroTik RouterOS
+Supported ``netmiko_device_type`` values are the per-definition
+``netmiko_device_type`` keys under ``definitions/<vendor>/<os>/<ver>.yaml``
+collector blocks — see those files for the authoritative inventory.
+``cisco_xe`` / ``fortinet`` / ``mikrotik_routeros`` are the
+current first-class set; adding a vendor entails adding a definition
+file rather than touching this collector.
 """
 
 from __future__ import annotations
