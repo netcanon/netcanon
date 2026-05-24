@@ -259,6 +259,7 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 | Check codec certification tiers | [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) |
 | Write tests | [`tests/README.md`](tests/README.md) |
 | Review the security model | [`SECURITY.md`](SECURITY.md) |
+| Community / participation norms | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) — Contributor Covenant + enforcement contact |
 
 ### Run the test suite
 
@@ -303,6 +304,22 @@ tests/e2e/              Playwright browser tests
 tests/desktop/          PySide6/pystray-mocked desktop shell tests
 tests/fixtures/real/    Real-capture validation corpus (see RESULTS.md)
 ```
+
+---
+
+## See also
+
+* [`ARCHITECTURE.md`](ARCHITECTURE.md) — the four-layer model + canonical
+  bridge + codec types
+* [`AGENTS.md`](AGENTS.md) — contributor directives, hard rules, doc-sync
+  checklist
+* [`tests/README.md`](tests/README.md) — test-tier layout + how to run
+* [`docs/CAPABILITIES.md`](docs/CAPABILITIES.md) — per-codec capability matrix
+* [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — operator-facing
+  diagnostic flowchart
+* [`SECURITY.md`](SECURITY.md) — security model, sanitiser, supply-chain
+  integrity controls
+* [`CHANGELOG.md`](CHANGELOG.md) — release log
 
 ---
 

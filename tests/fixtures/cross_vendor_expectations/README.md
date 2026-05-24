@@ -124,8 +124,9 @@ omitted, so the coverage gap is explicit.
 
 ## See also
 
-- `docs/vendor-references/README.md` — citation cache layout.
-- `tests/fixtures/real/CROSS_MESH_RESULTS.md` — the mechanical
-  drift matrix these YAMLs interpret.
-- `netcanon/migration/canonical/intent.py` — the canonical schema
-  whose top-level fields drive the YAML key list.
+- [`docs/vendor-references/README.md`](../../../docs/vendor-references/README.md)
+  — citation cache layout.
+- [`tests/fixtures/real/CROSS_MESH_RESULTS.md`](../real/CROSS_MESH_RESULTS.md)
+  — the mechanical drift matrix these YAMLs interpret.
+- [`netcanon/migration/canonical/intent.py`](../../../netcanon/migration/canonical/intent.py)
+  — the canonical schema whose top-level fields drive the YAML key list.

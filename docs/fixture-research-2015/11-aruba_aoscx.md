@@ -360,7 +360,7 @@ operator-authored synthetic examples)
 
 ## See also
 
-* [`WANTED.md` Tier-D entry](../../tests/fixtures/real/WANTED.md#tier-d-—-entirely-new-codec-opportunities)
+* [`WANTED.md` Tier-D entry](../../tests/fixtures/real/WANTED.md#tier-d--entirely-new-codec-opportunities)
   — Aruba AOS-CX listed as "Modern Aruba replacing AOS-S".
 * [`04-aruba_aoss.md`](04-aruba_aoss.md) — the legacy ProVision
   catalogue.  Useful contrast: AOS-S share-precedent on HPE
