@@ -85,6 +85,15 @@ _FILENAME_RE = re.compile(
 )
 _TS_FORMAT = "%Y%m%d_%H%M%S"
 
+#: Upper bound on the byte length of a single saved configuration file.
+#: 50 MB is well above the largest real-capture in the corpus (FortiGate
+#: physical FG-100E at ~35K lines / ~1 MB) but small enough to flag a
+#: paste of a memory dump or other accidental over-large input as an
+#: error rather than letting it consume disk silently.  Matches the
+#: module-level constant pattern established by
+#: ``netcanon/config.py:MAX_BACKUP_CONCURRENCY``.
+MAX_CONFIG_SIZE = 50 * 1024 * 1024  # 50 MB
+
 
 class FileConfigStore(BaseConfigStore):
     """Stores configuration files in a local directory tree.
@@ -99,6 +108,11 @@ class FileConfigStore(BaseConfigStore):
     """
 
     def __init__(self, storage_dir: Path) -> None:
+        # On first use the constructor walks ``storage_dir`` and moves any
+        # flat ``{device_type}_{host}_{ts}.{ext}`` files left by pre-Phase-2
+        # versions into the current ``{device_type}/{safe_host}/`` layout
+        # via :meth:`_migrate_flat_files`.  Idempotent: subsequent calls
+        # find no flat files and do nothing.
         self._dir = Path(storage_dir)
         self._dir.mkdir(parents=True, exist_ok=True)
         self._migrate_flat_files()
@@ -127,10 +141,14 @@ class FileConfigStore(BaseConfigStore):
         If *device_profile_id* is not ``None``, a sidecar
         ``{filename}.meta.json`` is written alongside the config file
         containing ``{"device_profile_id": "..."}``.
+
+        Raises:
+            ValueError: If *content* exceeds :data:`MAX_CONFIG_SIZE`
+                (50 MB) — sized to flag accidental memory-dump pastes
+                without rejecting genuine large captures.
         """
         # Encode dots as single hyphens, colons (IPv6) as double hyphens
         # so the reconstruction in _parse_filename is lossless.
-        MAX_CONFIG_SIZE = 50 * 1024 * 1024  # 50 MB
         if len(content) > MAX_CONFIG_SIZE:
             raise ValueError(
                 f"Config content exceeds max size "
