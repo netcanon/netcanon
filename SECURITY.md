@@ -215,6 +215,42 @@ Covered by `tests/integration/test_configs_api.py` → `TestOpenConfig`.
 
 ---
 
+## Input Validation — Operator-Uploaded XML
+
+**Files:** `netcanon/migration/codecs/opnsense/parse.py` (line 169) +
+`netcanon/migration/codecs/cisco_iosxe/codec.py` (line 543)
+
+Both codecs parse operator-uploaded XML — OPNsense `config.xml` files
+and Cisco IOS-XE NETCONF outputs.  Until v0.1.2, both used Python's
+stdlib `xml.etree.ElementTree.fromstring`, which expands internal
+entities by default — verified empirically on Python 3.14.4.  A
+five-line billion-laughs payload (`<!ENTITY lol "lol">` + `<!ENTITY
+lol1 "&lol;&lol;&lol;">` + `&lol1;`) would return the expanded text
+rather than raising, hanging the FastAPI worker on memory exhaustion.
+External entities (XXE `SYSTEM "file:///etc/passwd"`) are already
+blocked since Python 3.7.1, but the entity-bomb / quadratic-blowup
+DoS class was live.
+
+v0.1.2 swapped both parse sites to `defusedxml.ElementTree.fromstring`,
+which is an exact API drop-in that rejects entity-bomb / external-
+entity payloads while preserving full compatibility with normal
+config XML.  Generation-side ET use (`ET.Element`, `ET.SubElement`,
+`tostring`, `register_namespace`) stays on stdlib — those don't
+consume untrusted input.
+
+Each call site wraps the rejection in an explicit `DefusedXmlException`
+clause so malicious-payload rejection produces a clean operator-facing
+`ParseError` (`opnsense: refusing potentially-malicious XML
+(entity-bomb / XXE attempt)`) rather than a 500 stack trace.
+
+Triage detail: [`docs/security-triage/2026-05-21/`](docs/security-triage/2026-05-21/)
+investigations A § alerts #14/#15.
+
+Covered by the normal codec round-trip test suites; a bomb-payload
+unit test is on the v0.1.x follow-up backlog.
+
+---
+
 ## Input Validation — Host Field
 
 **Files:** `netcanon/models/device.py`, `netcanon/models/device_profile.py`
@@ -311,8 +347,12 @@ Key dependencies and their security relevance:
 | `pyyaml` | Definition file parsing | Uses `safe_load()` exclusively |
 | `fastapi` | Web framework | Actively maintained |
 | `pydantic` | Input validation | v2; strict validation model |
+| `defusedxml` | Safe XML parsing for operator-uploaded input | Added v0.1.2. Drop-in replacement for `xml.etree.ElementTree.fromstring` at the OPNsense + Cisco IOS-XE NETCONF parse sites; rejects entity-bomb / billion-laughs / quadratic-blowup payloads.  Stdlib ET expands internal entities by default on Python 3.x (verified empirically on 3.14.4) — `defusedxml` closes that DoS class without altering legitimate-config behaviour |
 
 Run `pip-audit` or `safety check` regularly to detect known CVEs.
+Dependabot is also configured (`.github/dependabot.yml`) with a 7-day
+cooldown across all 3 ecosystems (pip / github-actions / docker) to
+let upstream yank windows close before bumps land automatically.
 
 ---
 
@@ -343,6 +383,75 @@ provenance can verify each:
   environment.  No long-lived API tokens; OIDC-based publish.
 - **Non-root container runtime.**  The image runs as `app` (uid=1000);
   bind-mounted volumes are the only writable surface.
+
+### v0.1.2 supply-chain hardening
+
+The v0.1.2 release added a second layer of supply-chain integrity
+controls focused on the CI/workflow surface and the artifact-scan
+surface.  Triage scaffolding for handling alerts these controls
+surface lives at [`docs/security-triage/`](docs/security-triage/);
+the worked example is the 2026-05-21 cycle that produced this
+hardening.
+
+- **GitHub Code Scanning enabled.**  CodeQL default setup covers
+  Python + JavaScript/TypeScript + GitHub Actions surfaces.  Findings
+  surface in the repo's Security → Code scanning view with
+  Copilot Autofix suggestions.
+- **`zizmor` workflow security scanning.**
+  `.github/workflows/zizmor.yml` runs on every workflow-file or
+  Dependabot-config change + a weekly cron.  SARIF results upload to
+  Code scanning under the `zizmor` category.  Site config at
+  `.github/zizmor.yml` implements the hybrid action-pinning policy
+  (tag-pin allowed for `actions/*` + `github/*` first-party
+  publishers; SHA-pin required for third-party publishers).
+- **Trivy Docker image scanning.**  Runs after `Build and push` in
+  `.github/workflows/docker-publish.yml`; scans the just-built image
+  for OS-package + Python-package CVEs at HIGH+CRITICAL severity
+  (`ignore-unfixed: true` filters noise).  Results upload to Code
+  scanning under the `trivy-image` category.  Fires on every release
+  tag push (`v*.*.*`).
+- **SHA-pinned third-party actions.**  All 11 third-party action
+  references in the workflow corpus
+  (`softprops/action-gh-release`, `docker/setup-buildx-action`,
+  `docker/login-action`, `docker/metadata-action`,
+  `docker/build-push-action`, `aquasecurity/trivy-action`,
+  `sigstore/cosign-installer`, `anchore/sbom-action`,
+  `pypa/gh-action-pypi-publish`, `zizmorcore/zizmor-action`) are
+  pinned to full commit SHAs with trailing tag comments
+  (`@<sha>  # <tag>`) so Dependabot can still propose bumps.  GitHub
+  first-party actions (`actions/*`, `github/*`) retain tag-pins per
+  the hybrid policy — GitHub controls those repos with force-push
+  protection.
+- **Workflow-level `permissions: contents: read` on `ci.yml`.**
+  Default-deny `GITHUB_TOKEN` scope at workflow level; all three
+  ci.yml jobs are read-only.  Other workflow files (`docker-publish`,
+  `pypi-publish`, `desktop-msi-publish`, `zizmor`) declare narrower
+  per-job scopes where write access is required (`packages: write` /
+  `id-token: write` for publish jobs; `security-events: write` for
+  SARIF upload).
+- **`persist-credentials: false` on all `actions/checkout` calls.**
+  Closes the default behaviour of `actions/checkout@v6` writing
+  `GITHUB_TOKEN` into `.git/config` for later steps.  No netcanon
+  workflow performs a git push / fetch / tag / config write that
+  needs the persisted credential helper; registry logins use
+  explicit secrets, OIDC, or action-internal auth.
+- **Template-injection hardening on `desktop-msi-publish.yml`.**
+  Replaced inline `${{ inputs.tag || github.ref_name }}` shell
+  interpolation with `env:`-mediated indirection so a tag name with
+  shell metacharacters can't execute arbitrary code with access to
+  `DOCKERHUB_TOKEN` / signing keys.
+- **Dependabot cooldown blocks.**  All 3 ecosystems (pip /
+  github-actions / docker) wait 7 days after upstream release before
+  opening a bump PR.  Closes the rare-but-real window where a
+  briefly-hijacked release tag gets picked up automatically before
+  the upstream maintainer notices.
+- **Private vulnerability reporting + secret scanning + push
+  protection + Dependabot malware alerts.**  All enabled at the repo
+  level via GitHub's Advanced Security settings.  Researchers can
+  privately disclose at
+  `https://github.com/netcanon/netcanon/security/advisories/new`;
+  secret scanning runs on history + blocks credential pushes at
+  commit time.
 
 ### Distribution channels and what each provides
 
@@ -410,3 +519,8 @@ This file must be updated when any of the following change:
   evidence trail for triaging Code Scanning / Dependabot / secret-
   scanning alert waves; the operational complement to the controls
   documented above
+- [`docs/docs-audit/`](docs/docs-audit/) — sister process applying the
+  same cluster-scaffolded read-only-agents-then-orchestrator-fixes
+  pattern to documentation hygiene; recurring cycle that catches
+  drift between docs and code (the v0.1.2 SECURITY.md update wave
+  documented above was produced by the 2026-05-21 audit cycle)
