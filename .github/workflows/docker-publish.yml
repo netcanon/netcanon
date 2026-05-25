@@ -139,7 +139,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.35.4
+        uses: github/codeql-action/upload-sarif@v4.35.5
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
           sarif_file: trivy-image.sarif
