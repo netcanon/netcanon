@@ -34,7 +34,7 @@ jobs:
         python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           # Full history + tags needed for setuptools_scm to derive the
           # package version.  Default is shallow (depth=1, no tags) which
@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           # Full history + tags needed for setuptools_scm to derive the
           # package version.  Default is shallow (depth=1, no tags) which
@@ -104,7 +104,7 @@ jobs:
     # (base image bumps, COPY mistakes, entrypoint breakage) on PRs
     # rather than at tag-time when docker-publish.yml fires.
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.2
         with:
           # Full history + tags needed for setuptools_scm to derive the
           # package version.  Default is shallow (depth=1, no tags) which
