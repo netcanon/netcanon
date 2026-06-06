@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for setuptools_scm)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v6.0.2
         with:
           # When triggered by workflow_dispatch the user supplies a tag
           # name as `inputs.tag`; checkout's `ref` accepts either a tag
