@@ -311,6 +311,7 @@ on the canonical model:
 | SNMP communities | `public_redacted_N` |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
+| VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
 

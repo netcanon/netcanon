@@ -20,9 +20,12 @@ Covers:
 
 from __future__ import annotations
 
+import re
+import typing
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
@@ -34,6 +37,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
+    CanonicalVRRPGroup,
 )
 from netcanon.tools.sanitize import (
     SanitizationResult,
@@ -395,6 +399,109 @@ class TestRADIUSRedaction:
         assert sanitized.radius_servers[0].key == "REDACTED-RADIUS-1"
 
 
+class TestVRRPAuthenticationRedaction:
+    """Regression guard for the VRRP/CARP auth secret-leak (project
+    review 2026-06-06, finding R-01 / CF-01).
+
+    ``vrrp_groups[].authentication`` is cleartext-bearing: ``plain:``
+    and ``carp-key:`` hold the literal secret and the renderers emit it
+    back verbatim.  The sanitiser must replace the secret value while
+    preserving the ``<scheme>:`` prefix (each renderer slices a
+    scheme-width prefix and branches on ``startswith`` — the prefix
+    must survive or render output becomes malformed).
+    """
+
+    @staticmethod
+    def _iface_with_auth(auth: str) -> CanonicalIntent:
+        return CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(group_id=10, authentication=auth)
+                    ],
+                )
+            ]
+        )
+
+    def test_plain_scheme_value_redacted_prefix_preserved(self):
+        sanitized, subs = sanitize_intent(self._iface_with_auth("plain:SuperSecret123"))
+        out = sanitized.interfaces[0].vrrp_groups[0].authentication
+        assert out.startswith("plain:")          # scheme survives for the renderer
+        assert "SuperSecret123" not in out         # secret value gone
+        assert out == "plain:REDACTED-VRRP-AUTH-1"
+        assert any(
+            s.category == "vrrp-authentication"
+            and s.original == "plain:SuperSecret123"
+            for s in subs
+        )
+
+    def test_carp_key_scheme_value_redacted_prefix_preserved(self):
+        sanitized, _ = sanitize_intent(self._iface_with_auth("carp-key:b1nary-CARP-pw"))
+        out = sanitized.interfaces[0].vrrp_groups[0].authentication
+        assert out.startswith("carp-key:")
+        assert "b1nary-CARP-pw" not in out
+        assert out == "carp-key:REDACTED-VRRP-AUTH-1"
+
+    def test_md5_scheme_value_redacted_prefix_preserved(self):
+        sanitized, _ = sanitize_intent(self._iface_with_auth("md5:keystring-or-hash"))
+        out = sanitized.interfaces[0].vrrp_groups[0].authentication
+        assert out.startswith("md5:")
+        assert "keystring-or-hash" not in out
+
+    def test_empty_authentication_no_substitution(self):
+        sanitized, subs = sanitize_intent(self._iface_with_auth(""))
+        assert sanitized.interfaces[0].vrrp_groups[0].authentication == ""
+        assert not any(s.category == "vrrp-authentication" for s in subs)
+
+    def test_multiple_groups_each_redacted(self):
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(group_id=10, authentication="plain:secret-a"),
+                        CanonicalVRRPGroup(group_id=20, authentication="plain:secret-b"),
+                    ],
+                )
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        joined = "".join(g.authentication for g in sanitized.interfaces[0].vrrp_groups)
+        assert "secret-a" not in joined
+        assert "secret-b" not in joined
+        assert len([s for s in subs if s.category == "vrrp-authentication"]) == 2
+
+    def test_rendered_output_omits_secret(self):
+        """The real attack scenario: sanitize_intent → render must not
+        emit the cleartext secret.  Exercises the cisco_iosxe_cli render
+        path that previously leaked it (`authentication text <secret>`)."""
+        from netcanon.migration.codecs.registry import get_codec
+
+        intent = CanonicalIntent(
+            hostname="r1",
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="192.168.1.2", prefix_length=24)
+                    ],
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            virtual_ips=["192.168.1.254"],
+                            authentication="plain:MyVrrpSecret",
+                        )
+                    ],
+                )
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        rendered = get_codec("cisco_iosxe_cli").render(sanitized)
+        assert "MyVrrpSecret" not in rendered          # the leak is closed
+        assert "REDACTED-VRRP-AUTH-1" in rendered        # render path was exercised
+
+
 class TestStaticRouteRedaction:
     def test_public_gateway_redacted_private_preserved(self):
         intent = CanonicalIntent(
@@ -514,3 +621,142 @@ class TestResultContract:
     def test_result_default_substitutions_empty(self):
         r = SanitizationResult(sanitized_text="x")
         assert r.substitutions == []
+
+
+# ---------------------------------------------------------------------------
+# Structural guard — every secret-bearing canonical field is redacted
+#
+# Turns the documented invariant ("the sanitiser redacts every secret")
+# into a mechanical, two-sided check (mirrors the ``_WIRED_UP_BY_CODEC``
+# matrix-honesty pattern).  Recommended by the 2026-06-06 project review
+# as the durable fix for the CF-01 class: a future secret field cannot
+# be added to the canonical model without either a redaction rule or a
+# conscious update here.
+# ---------------------------------------------------------------------------
+
+
+# (ClassName, field_name) for every canonical field that carries a
+# secret/credential and MUST be redacted by ``sanitize_intent``.  Keep
+# in lockstep with the sanitiser — both directions are enforced below.
+_REGISTERED_SECRET_FIELDS = {
+    ("CanonicalLocalUser", "hashed_password"),
+    ("CanonicalSNMP", "community"),
+    ("CanonicalSNMPv3User", "auth_passphrase"),
+    ("CanonicalSNMPv3User", "priv_passphrase"),
+    ("CanonicalRADIUSServer", "key"),
+    ("CanonicalVRRPGroup", "authentication"),
+}
+
+# A field name that looks like it holds a credential.
+_SECRET_NAME_RE = re.compile(
+    r"passphrase|password|secret|community|^authentication$|(^|_)key$",
+    re.IGNORECASE,
+)
+
+
+def _flatten_annotation(ann):
+    """Yield ``ann`` and every nested type argument (unwraps
+    ``list[...]`` / ``Optional[...]`` / ``dict[...]`` / unions)."""
+    args = typing.get_args(ann)
+    if not args:
+        yield ann
+        return
+    for a in args:
+        yield from _flatten_annotation(a)
+
+
+def _reachable_canonical_models(root_cls, acc=None):
+    """All ``BaseModel`` subclasses reachable from ``root_cls`` via its
+    (possibly nested) field annotations."""
+    if acc is None:
+        acc = set()
+    if root_cls in acc:
+        return acc
+    acc.add(root_cls)
+    for fld in root_cls.model_fields.values():
+        for t in _flatten_annotation(fld.annotation):
+            if isinstance(t, type) and issubclass(t, BaseModel):
+                _reachable_canonical_models(t, acc)
+    return acc
+
+
+class TestSecretRedactionCoverage:
+    """Two-sided structural guard for sanitiser secret coverage."""
+
+    def test_forward_no_registered_secret_survives(self):
+        """Populate every registered secret field with a unique
+        sentinel, sanitise, and assert no sentinel survives into the
+        canonical output.  Fails on the CF-01 class — a secret field
+        present on the model but skipped by the sanitiser walk."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    vrrp_groups=[
+                        CanonicalVRRPGroup(
+                            group_id=10,
+                            authentication="plain:SENTINEL-vrrp-auth",
+                        )
+                    ],
+                )
+            ],
+            local_users=[
+                CanonicalLocalUser(
+                    name="admin", hashed_password="$9$SENTINEL-hash"
+                )
+            ],
+            snmp=CanonicalSNMP(
+                community="SENTINEL-community",
+                v3_users=[
+                    CanonicalSNMPv3User(
+                        name="ops",
+                        auth_passphrase="SENTINEL-auth-pass",
+                        priv_passphrase="SENTINEL-priv-pass",
+                    )
+                ],
+            ),
+            radius_servers=[
+                CanonicalRADIUSServer(host="10.0.0.9", key="SENTINEL-radius-key")
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        blob = sanitized.model_dump_json()
+        leaked = [
+            tok
+            for tok in (
+                "SENTINEL-vrrp-auth",
+                "SENTINEL-hash",
+                "SENTINEL-community",
+                "SENTINEL-auth-pass",
+                "SENTINEL-priv-pass",
+                "SENTINEL-radius-key",
+            )
+            if tok in blob
+        ]
+        assert not leaked, f"secret sentinels survived sanitisation: {leaked}"
+
+    def test_reverse_no_unregistered_secret_field(self):
+        """Introspect every secret-named string field reachable from
+        ``CanonicalIntent`` and assert it is registered above.  A NEW
+        secret field added to the model without a redaction rule (and
+        registration) fails here, forcing the author to wire the
+        sanitiser."""
+        found = set()
+        for model in _reachable_canonical_models(CanonicalIntent):
+            for fname, fld in model.model_fields.items():
+                if not _SECRET_NAME_RE.search(fname):
+                    continue
+                if str in _flatten_annotation(fld.annotation):
+                    found.add((model.__name__, fname))
+
+        unregistered = found - _REGISTERED_SECRET_FIELDS
+        stale = _REGISTERED_SECRET_FIELDS - found
+        assert not unregistered, (
+            "Secret-bearing canonical field(s) with no known redaction "
+            "rule — add redaction in sanitize_intent AND register in "
+            f"_REGISTERED_SECRET_FIELDS: {sorted(unregistered)}"
+        )
+        assert not stale, (
+            "Registered secret field(s) no longer on the model — remove "
+            f"from _REGISTERED_SECRET_FIELDS: {sorted(stale)}"
+        )
