@@ -256,10 +256,10 @@ class TestRoundTrip:
         probe = codec.probe(rendered)
         assert probe is not None and probe[0] >= 90
 
-    def test_render_emits_l2_skips_phase2bc_surfaces(self, codec):
+    def test_render_emits_l2_snmp_skips_hsrp(self, codec):
         """A cross-vendor tree renders the Phase-2a L2 surface (switchport
-        / LAG) but still omits the Phase-2b/2c surfaces (SNMP, VRRP/HSRP)
-        — no crash, and the deferred surfaces don't leak into output."""
+        / LAG) + the Phase-2b SNMP surface, but still omits the Phase-2c
+        surface (VRRP/HSRP groups) — no crash, no deferred-surface leak."""
         tree = CanonicalIntent(hostname="X", source_vendor="arista_eos")
         tree.interfaces = [
             CanonicalInterface(
@@ -286,13 +286,13 @@ class TestRoundTrip:
             CanonicalRoutingInstance(name="MGMT", route_distinguisher="65000:1"),
         ]
         out = codec.render(tree)
-        # Phase-2a L2 surface IS rendered.
+        # Phase-2a L2 + Phase-2b SNMP surfaces ARE rendered.
         assert "switchport access vlan 10" in out
         assert "no switchport" in out                 # Ethernet2 routed
         assert "channel-group 1 mode active" in out
         assert "vrf context MGMT" in out
-        # Phase-2b/2c surfaces must NOT appear.
-        assert "snmp-server" not in out
+        assert "snmp-server community public" in out  # Phase 2b
+        # Phase-2c surface (HSRP / VRRP groups) must NOT appear yet.
         assert "vrrp" not in out and "hsrp" not in out
         # And it must re-parse without error.
         assert codec.parse(out).hostname == "X"
@@ -330,15 +330,14 @@ class TestCapabilityMatrix:
         ``test_l2_paths_graduated_to_supported``.)"""
         caps = codec.capabilities
         for path in [
-            "/snmp/community",                              # Phase 2b
-            "/snmp/v3-user",                                # Phase 2b
-            "/local-users/user",                            # Phase 2b
             "/routing-instances/instance/route-distinguisher",  # Phase 3
             "/routing-instances/instance/rt-imports",       # Phase 3
             "/routing/static-route/vrf",                    # Phase 3
+            "/routing-instances/instance/l3-vni",           # Phase 4
             "/vxlan-vnis/vni",                              # Phase 4
             "/anycast-gateway",                             # Phase 4
             "/routing-protocols/bgp",                       # Tier-3
+            "/access-list/extended",                        # Tier-3
         ]:
             assert caps.classify(path) == "unsupported", path
 
@@ -485,3 +484,95 @@ class TestPhase2L2:
         lags1 = {lag.name: (sorted(lag.members), lag.mode) for lag in tree.lags}
         lags2 = {lag.name: (sorted(lag.members), lag.mode) for lag in second.lags}
         assert lags1 == lags2
+
+
+# ---------------------------------------------------------------------------
+# Phase 2b — SNMP (v2c + v3 USM) + local users
+# ---------------------------------------------------------------------------
+
+
+_SNMP_USERS_CONFIG = """\
+!Command: show running-config
+hostname AAA
+username admin password 5 $5$Ab$adminhash role network-admin
+username noc password 5 $5$Nc$nochash role custom-readonly
+snmp-server community public-ro
+snmp-server location DC1-RackB
+snmp-server contact netops@example.net
+snmp-server host 192.0.2.50
+snmp-server user admin network-admin auth md5 0x1a2b3c4d priv aes-128 0xff00ee11 localizedkey
+snmp-server user mon network-operator auth sha 0xdeadbeef localizedkey engineID 128:0:0:9:3:1:2:3
+"""
+
+
+class TestPhase2bSNMPUsers:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_SNMP_USERS_CONFIG)
+
+    def test_local_users(self, tree):
+        users = {u.name: u for u in tree.local_users}
+        assert users["admin"].role == "network-admin"
+        assert users["admin"].privilege_level == 15
+        assert users["admin"].hashed_password == "5 $5$Ab$adminhash"
+        # Non-admin / custom role → privilege 1 (lossy), role preserved verbatim.
+        assert users["noc"].role == "custom-readonly"
+        assert users["noc"].privilege_level == 1
+
+    def test_snmp_v2c(self, tree):
+        assert tree.snmp.community == "public-ro"
+        assert tree.snmp.location == "DC1-RackB"
+        assert tree.snmp.contact == "netops@example.net"
+        assert tree.snmp.trap_hosts == ["192.0.2.50"]
+
+    def test_snmp_v3_authpriv_user(self, tree):
+        admin = next(u for u in tree.snmp.v3_users if u.name == "admin")
+        assert admin.group == "network-admin"
+        assert admin.auth_protocol == "md5"
+        assert admin.auth_passphrase == "0x1a2b3c4d"
+        assert admin.priv_protocol == "aes128"         # normalised from aes-128
+        assert admin.priv_passphrase == "0xff00ee11"
+
+    def test_snmp_v3_authnopriv_user_with_engine_id(self, tree):
+        mon = next(u for u in tree.snmp.v3_users if u.name == "mon")
+        assert mon.auth_protocol == "sha"
+        assert mon.priv_protocol == ""                  # auth-no-priv
+        assert mon.engine_id == "128:0:0:9:3:1:2:3"
+
+    def test_render_round_trips(self, codec, tree):
+        rendered = codec.render(tree)
+        assert (
+            "username admin password 5 $5$Ab$adminhash role network-admin"
+            in rendered
+        )
+        assert (
+            "snmp-server user admin network-admin auth md5 0x1a2b3c4d "
+            "priv aes-128 0xff00ee11 localizedkey" in rendered
+        )
+        second = codec.parse(rendered)
+        u1 = {
+            u.name: (u.role, u.privilege_level, u.hashed_password)
+            for u in tree.local_users
+        }
+        u2 = {
+            u.name: (u.role, u.privilege_level, u.hashed_password)
+            for u in second.local_users
+        }
+        assert u1 == u2
+        assert tree.snmp.model_dump() == second.snmp.model_dump()
+
+    def test_snmp_users_matrix_graduated(self, codec):
+        caps = codec.capabilities
+        for path in [
+            "/snmp/community", "/snmp/location", "/snmp/contact",
+            "/snmp/trap-host", "/snmp/v3-user",
+            "/local-users/user/name", "/local-users/user/role",
+            "/local-users/user/hashed-password",
+        ]:
+            assert caps.classify(path) == "supported", path
+        for path in [
+            "/local-users/user/privilege-level",
+            "/snmp/v3-user/auth-passphrase",
+            "/snmp/v3-user/engine-id",
+        ]:
+            assert caps.classify(path) == "lossy", path

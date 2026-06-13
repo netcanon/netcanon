@@ -51,7 +51,10 @@ from ...canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalRoutingInstance,
+    CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -121,6 +124,56 @@ _CHANNEL_GROUP_RE = re.compile(
     r"^\s+channel-group\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
 )
 _NXOS_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
+
+# ── SNMP + local users (Phase 2b) ──
+_SNMP_COMMUNITY_RE = re.compile(
+    r"^snmp-server\s+community\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_LOCATION_RE = re.compile(
+    r"^snmp-server\s+location\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_CONTACT_RE = re.compile(
+    r"^snmp-server\s+contact\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_HOST_RE = re.compile(
+    r"^snmp-server\s+host\s+(\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+# NX-OS SNMPv3 USM user:
+#   snmp-server user <name> [<group>] auth <proto> <key>
+#       [priv <proto> <key>] [localized[V2]key] [engineID <id>]
+# Keys are 0x-prefixed localized digests on the wire — preserved
+# verbatim.  ``priv`` is optional (auth-no-priv users); ``localizedV2key``
+# (NX-OS 10.x digest) is detected but not modelled — render always emits
+# the older ``localizedkey`` form (declared lossy).
+_SNMP_V3_USER_RE = re.compile(
+    r"^snmp-server\s+user\s+(\S+)(?:\s+(\S+))?"
+    r"\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+)"
+    r"(?:\s+priv\s+(\S+)\s+(\S+))?"
+    r"(?:\s+localized(V2)?key)?"
+    r"(?:\s+engineID\s+(\S+))?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+# ``username <name> password <type> <hash> role <role>``.  NX-OS uses a
+# named ``role`` (network-admin / network-operator / custom) rather than
+# a numeric privilege level.
+_USERNAME_RE = re.compile(
+    r"^username\s+(\S+)\s+password\s+(\d+)\s+(\S+)\s+role\s+(\S+)",
+    re.IGNORECASE,
+)
+#: NX-OS roles that map to the cross-vendor admin privilege (15).
+_NXOS_ADMIN_ROLES = {"network-admin", "vdc-admin"}
+
+
+def _normalise_priv_proto(proto: str | None) -> str:
+    """NX-OS privacy-cipher token -> canonical short form.
+
+    ``aes-128`` -> ``aes128`` (strip the hyphen); ``des`` / ``3des``
+    pass through lower-cased.  Empty for auth-no-priv users.
+    """
+    if not proto:
+        return ""
+    return proto.lower().replace("-", "")
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
@@ -233,6 +286,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # LAGs (Phase 2) — both the ``interface port-channelN`` declaration
     # and per-member ``channel-group N mode M`` lines contribute.
     intent.lags = _parse_lags(raw)
+
+    # SNMP (Phase 2b) — v2c community + v3 USM users.
+    intent.snmp = _parse_snmp(raw)
+
+    # Local users (Phase 2b) — ``username ... role <role>``.
+    intent.local_users = _parse_local_users(raw)
 
     # Shared switchport→VLAN projection: mirror per-port switchport state
     # into the VLAN-centric tagged/untagged lists so VLAN-centric
@@ -723,3 +782,80 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             metric=metric,
         ))
     return routes
+
+
+def _parse_snmp(raw: str) -> CanonicalSNMP | None:
+    """Extract SNMP config from NX-OS text (v2c community + v3 USM).
+
+    Returns ``None`` when no ``snmp-server`` lines are present so the
+    tree doesn't carry an empty stub.  Mirrors cisco_iosxe_cli
+    conventions: privacy cipher normalised to the canonical short form,
+    opaque keys preserved verbatim, location / contact quote-stripped.
+    The ``engineID`` (NX-OS colon-decimal) is preserved verbatim for the
+    same-vendor round-trip; it is declared lossy cross-vendor.
+    """
+    community_m = _SNMP_COMMUNITY_RE.search(raw)
+    location_m = _SNMP_LOCATION_RE.search(raw)
+    contact_m = _SNMP_CONTACT_RE.search(raw)
+    hosts = _SNMP_HOST_RE.findall(raw)
+    v3_matches = list(_SNMP_V3_USER_RE.finditer(raw))
+    if not (community_m or location_m or contact_m or hosts or v3_matches):
+        return None
+    snmp = CanonicalSNMP()
+    if community_m:
+        snmp.community = community_m.group(1).strip()
+    if location_m:
+        snmp.location = location_m.group(1).strip().strip('"')
+    if contact_m:
+        snmp.contact = contact_m.group(1).strip().strip('"')
+    snmp.trap_hosts = list(hosts)
+    for m in v3_matches:
+        name, group, auth_p, auth_pw, priv_p, priv_pw, _v2, eng = m.groups()
+        snmp.v3_users.append(CanonicalSNMPv3User(
+            name=name,
+            group=group or "",
+            auth_protocol=(auth_p or "").lower(),
+            auth_passphrase=auth_pw or "",
+            priv_protocol=_normalise_priv_proto(priv_p),
+            priv_passphrase=priv_pw or "",
+            engine_id=eng or "",
+        ))
+    return snmp
+
+
+def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
+    """Extract ``username <name> password <type> <hash> role <role>``.
+
+    NX-OS uses a named ``role`` rather than a numeric privilege; we map
+    ``network-admin`` / ``vdc-admin`` -> 15 and everything else -> 1
+    (lossy — cross-vendor renderers expecting numeric privilege
+    round-trip non-admin roles as 1).  The hash is preserved with its
+    type-digit prefix (``5 $5$...``) so a same-vendor round-trip
+    reconstructs the line; type 0 (the plaintext marker) is stored bare,
+    mirroring cisco_iosxe_cli to avoid the ``password 0 0 X``
+    double-prefix bug.
+    """
+    users: list[CanonicalLocalUser] = []
+    seen: set[str] = set()
+    for line in raw.splitlines():
+        m = _USERNAME_RE.match(line)
+        if not m:
+            continue
+        name = m.group(1)
+        if name in seen:
+            continue
+        seen.add(name)
+        hash_type = m.group(2)
+        payload = m.group(3)
+        role = m.group(4)
+        if hash_type and hash_type != "0":
+            hashed = f"{hash_type} {payload}"
+        else:
+            hashed = payload
+        users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=15 if role.lower() in _NXOS_ADMIN_ROLES else 1,
+            hashed_password=hashed,
+            role=role,
+        ))
+    return users

@@ -28,6 +28,21 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco NX-OS codec — Phase 2b (SNMP + local users).**  Graduates the
+  management surfaces: SNMPv2c `community` + `location` / `contact` /
+  trap-`host`, and SNMPv3 USM users (`snmp-server user <name> <group>
+  auth <proto> <key> [priv <proto> <key>] localizedkey [engineID …]` —
+  privacy cipher normalised `aes-128` ↔ `aes128`, opaque `0x` keys +
+  colon-decimal engineID preserved verbatim), plus local users
+  (`username <name> password <type> <hash> role <role>`; the NX-OS
+  named `role` → numeric privilege is lossy: network-admin / vdc-admin →
+  15, everything else → 1, role preserved verbatim same-vendor).
+  Capability matrix now 34 supported / 6 lossy / 20 unsupported (new
+  lossy: `/local-users/user/privilege-level`,
+  `/snmp/v3-user/auth-passphrase` [10.x `localizedV2key` normalised to
+  `localizedkey`], `/snmp/v3-user/engine-id` [colon-decimal vs hex]).
+  `certainty` stays `experimental` until HSRP (Phase 2c) completes
+  Phase 2.  Cross-mesh + phase-4 regenerated; CODEC_BUG held flat at 5.
 * **Cisco NX-OS codec — Phase 2a (L2 switchport + LAG).**  Graduates the
   Layer-2 surface from `unsupported` to `supported`: switchport mode
   (access / trunk), access-vlan, trunk allowed + native VLANs, the NX-OS
