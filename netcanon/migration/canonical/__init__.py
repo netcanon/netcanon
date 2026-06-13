@@ -1,8 +1,11 @@
 """
-Canonical YANG intent tree — loader, schema, and validation helpers.
+Canonical intent tree — the shared vendor-neutral model every codec
+parses into and renders from.
 
-Phase 0 ships only this stub.  The real libyang context loader arrives
-in Phase 0.5; Phase 0 code treats the "tree" as an opaque
-adapter-internal type and the mock adapter round-trips via plain
-``dict[str, str]``.
+The tree is a Pydantic model hierarchy rooted at
+:class:`.intent.CanonicalIntent` (interfaces, VLANs, VRRP groups, SNMP,
+users, static routes, …).  The originally-planned libyang-backed loader
+was not adopted — ``loader.py`` remains an unused stub kept for a stable
+import path — so validation is the model's own Pydantic constraints,
+not external YANG-schema validation.
 """
