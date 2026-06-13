@@ -28,6 +28,21 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco NX-OS codec — `certified` (real-capture corpus).**  Flips
+  `certainty` `best_effort` → `certified` and lands a 6-config
+  `batfish/lab-validation` real-capture corpus (Apache-2.0) under
+  `tests/fixtures/real/cisco_nxos/`, spanning four distinct NX-OS 9.2(3)
+  scenarios: HSRP (`nxos_hsrp` ×2 — FHRP + LAG), EVPN L3VNI
+  (`nxos_evpn_l3vni` ×2 — VRF + `nve1` VTEP + symmetric-IRB L3VNI), EVPN
+  L2VNI (`nxos_evpn_l2vni` — VLAN↔VNI), and BGP-redistribute
+  (`nxos_bgp_redist_connected`).  All six parse, are deterministic, and
+  round-trip cleanly through `test_real_captures.py` (wired via
+  `_DIR_TO_CODEC_NAME` in the harness + `tools/run_full_mesh.py`, which
+  now exercises NX-OS as a cross-vendor source).  > 3× the `base.py`
+  "≥3 real captures" bar; the single-version (9.2(3)) corpus is noted in
+  `WANTED.md` with a newer-major fixture as a welcomed nice-to-have.
+  Cross-mesh + phase-4 regenerated; high-severity CODEC_BUG held flat
+  at 5.
 * **Cisco NX-OS codec — IPv4 Distributed Anycast Gateway (DAG).**  Parses
   + renders the per-SVI `fabric forwarding mode anycast-gateway` marker
   (which mirrors the SVI's primary IP into

@@ -121,6 +121,7 @@ MATRIX_PATH = REAL_FIXTURES_ROOT / "CROSS_MESH_RESULTS.md"
 _DIR_TO_CODEC_NAME: dict[str, str] = {
     "cisco_iosxe":  "cisco_iosxe_cli",
     "cisco_iosxr":  "cisco_iosxr",
+    "cisco_nxos":   "cisco_nxos",
     "aruba_aoss":   "aruba_aoss",
     "fortigate":    "fortigate_cli",
     "opnsense":     "opnsense",
