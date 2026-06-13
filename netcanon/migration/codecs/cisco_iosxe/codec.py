@@ -172,14 +172,22 @@ class CiscoIOSXECodec(CodecBase):
     certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
 
-    # The NETCONF/OpenConfig codec is a Phase-0.5 stub — no SNMPv3
-    # wire-up (would require Cisco-IOS-XE-snmp native YANG bridging
-    # that hasn't landed).  Declaring ``"snmpv3"`` here surfaces the
-    # amber pane-compat banner when operators select this codec as
-    # target, matching the capability-matrix ``/snmp/v3-user``
-    # ``Unsupported`` declaration below.
+    # The NETCONF/OpenConfig codec is a Phase-0.5 stub — two categories
+    # are unsupported as rename targets:
+    #
+    # ``"snmpv3"`` — no SNMPv3 wire-up (would require Cisco-IOS-XE-snmp
+    #   native YANG bridging that hasn't landed).  Matches the
+    #   capability-matrix ``/snmp/v3-user`` ``Unsupported`` declaration.
+    #
+    # ``"ports"`` — classify_port_name + format_port_identity are
+    #   inherited no-ops (CodecBase defaults).  Without this declaration,
+    #   using this codec as a migration TARGET generates N per-port
+    #   "no native representation" warnings instead of one up-front
+    #   amber banner.  Remove when the stub grows real port-name
+    #   translation.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset({
         "snmpv3",
+        "ports",
     })
 
     #: Declared capability matrix.  Paths are canonical schema paths

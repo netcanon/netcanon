@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–9)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–10)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -91,6 +91,33 @@ canonical-model or codec-grammar changes.
   `arista_eos → arista_eos`).  Additive on the common IP-address path;
   +6 round-trip tests.
 
+* **FortiGate per-interface MTU declared `supported` in the capability
+  matrix** (finding R-06).  The codec has parsed and rendered `set mtu N`
+  (gated by `set mtu-override enable`) since the MTU wire-through, but
+  `_CAPS` never declared `/interfaces/interface/config/mtu` — a
+  matrix-silent gap where the declaration had drifted from behaviour.
+  Added it to `supported` (matrix-inert: the validation walker doesn't
+  emit the xpath, so zero cell changes) with a guard test pinning the
+  declaration.  Corrected two docs that contradicted the code:
+  `docs/vendors/fortigate.md` claimed MTU was "not emitted when FortiGate
+  is the target" (false — render emits it), and `CAPABILITIES.md`'s
+  Tier-1 "every codec parses and renders" blanket now points to the
+  honest per-codec tables and names the known exceptions (FortiGate
+  `tunnel_type` lossy, Aruba `mtu` unsupported).
+
+* **NETCONF (`cisco_iosxe`) port-rename now shows one UI banner instead
+  of N per-port warning rows** (finding R-21).  The Phase-0.5 NETCONF
+  stub inherits no-op `classify_port_name` / `format_port_identity`, so
+  migrating *to* it produced a "no native representation" warning per
+  interface that flooded the migrate UI's ports pane.  Declared `"ports"`
+  in the codec's `unsupported_rename_categories` (joining `"snmpv3"`),
+  which drives the existing single amber pane-compat banner — the same
+  declarative mechanism the codec already uses for SNMPv3.  Explicit
+  operator rename maps still apply unchanged.  (Collapsing the warnings
+  at the pipeline/API level too was evaluated and deferred — it
+  entangles with explicit-rename precedence + `strip_unmappable`
+  semantics, beyond this P3's scope.)  +new guard test.
+
 ### Internal
 
 * **Frozen-signature guard test for the migration pipeline** (finding
@@ -120,6 +147,19 @@ canonical-model or codec-grammar changes.
   eight thin HTML page handlers; the location-agnostic 24-method
   `test_swagger_docs_page.py` contract test stays green, plus a new
   guard pins that the constants actually moved.
+
+* **Refreshed the cross-mesh + Phase-4 reconciliation artifacts to the
+  current 45-fixture corpus** (finding R-08).  `CROSS_MESH_RESULTS.md`
+  and `PHASE4_RECONCILIATION.md` were pinned to a stale 39-fixture
+  snapshot (2026-05-05); regenerated both (424 cells) via
+  `tools/run_full_mesh.py --matrix` + `tools/run_phase4_reconciliation.py`.
+  Also corrected a factually-wrong `lossy` reason in
+  `fortigate_cli__cisco_iosxe.yaml` that blamed a nonexistent FortiGate
+  MTU parse gap — the real cause is the `cisco_iosxe` NETCONF target stub
+  not emitting `<config><mtu>` (the old reason contradicted the code, the
+  green MTU test, and sibling YAMLs).  The larger corpus surfaces 13
+  `CODEC_BUG` cells — honest signal flagged for separate triage, not
+  introduced here.
 
 ### Documentation
 

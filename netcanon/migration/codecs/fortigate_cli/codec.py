@@ -123,6 +123,16 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
+            # Per-interface MTU — parse (`set mtu N` →
+            # CanonicalInterface.mtu) + render (`set mtu-override enable`
+            # + `set mtu N`) both wired; see
+            # tests/unit/migration/test_mtu_wire_through.py
+            # ::TestFortiGateMTUParseRender and the MTU worked example in
+            # docs/adding-a-canonical-field.md.  The `mtu-override enable`
+            # gate is a FortiOS render-side quirk, not a lossiness — full
+            # round-trip parity, so `supported` (matches cisco_iosxe_cli /
+            # arista_eos / juniper_junos, which carry mtu implicitly).
+            "/interfaces/interface/config/mtu",
             "/interfaces/interface/dhcp-client-v6",          # set ip6-mode dhcp
             "/vlans/vlan/id",
             "/vlans/vlan/name",
