@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–10)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–11)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -158,8 +158,26 @@ canonical-model or codec-grammar changes.
   MTU parse gap — the real cause is the `cisco_iosxe` NETCONF target stub
   not emitting `<config><mtu>` (the old reason contradicted the code, the
   green MTU test, and sibling YAMLs).  The larger corpus surfaces 13
-  `CODEC_BUG` cells — honest signal flagged for separate triage, not
-  introduced here.
+  `CODEC_BUG` cells — triaged in the reconciler-honesty entry below
+  (zero real defects; 8 were the un-wired anycast surface).
+
+* **Phase-4 reconciler is now capability-aware for the anycast surface**
+  (follow-up to R-08's corpus refresh).  Triage of those 13 `CODEC_BUG`
+  cells found **zero real codec defects**: 8 were the v0.2.0 Wave-C anycast
+  surface — arista VARP / junos anycast-gateway SVIs translated to targets
+  (`cisco_iosxe` NETCONF, `opnsense`) that declare `virtual-gateway-address`
+  unsupported — false-flagged only because a per-pair expectation YAML's
+  field-level `good` can't express "supported EXCEPT the anycast
+  sub-attribute".  `tools/run_phase4_reconciliation.py` now consults the
+  **target codec's capability matrix** (the source of truth) and
+  reclassifies anycast-companion-only drift to an anycast-unsupported target
+  as `EXPECTED_UNSUPPORTED`, per address family (so `cisco_iosxe_cli`'s
+  *supported* IPv4 SD-Access anycast still flags genuine drift).  Drops the
+  high-severity count 13 → 5; the 5 residuals are documented benign
+  structural artifacts in
+  `tests/fixtures/real/phase4_findings_residuals.md`.  +5 guard tests;
+  reconciliation artifacts regenerated.  Dev-tooling only — no
+  shipped-package behaviour change.
 
 ### Documentation
 
