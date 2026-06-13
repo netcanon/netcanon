@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco IOS-XR codec — Phase 4 (`certified`), completing the codec.**
+  Flips `certainty` `best_effort` → `certified` and adds a second,
+  independent real-capture source so the certification doesn't rest on a
+  single upstream's grammar conventions: 3 `ios-xr/xrd-tools`
+  `xr_compose_topos` configs (Apache-2.0, official Cisco GitHub org) —
+  `xrdtools_srv6_pe1.cfg` (SRv6 L3VPN — VRF + IS-IS core + segment-routing
+  srv6), `xrdtools_sr_xrd1.cfg` (SR-MPLS — IS-IS + BGP + `extcommunity-set`),
+  and `xrdtools_isis_r1.cfg` (IS-IS IP-FRR).  These exercise the IS-IS /
+  SR-MPLS / SRv6 grammar the batfish corpus lacks; all three parse, are
+  deterministic, and round-trip cleanly.  The real-capture corpus is now
+  **10 configs from two sources**, > 3× the `base.py` "≥3 real captures"
+  `certified` bar.  Tenth migration codec, fourth `certified` Cisco
+  surface.  Cross-mesh + phase-4 regenerated; high-severity CODEC_BUG held
+  flat at 5.  (Design dossier: `docs/v0.2.0-planning/04-iosxr-codec/`.)
 * **Cisco IOS-XR codec — Phase 3 (SP-routing parse-and-display + real
   batfish corpus; certainty → `best_effort`).**  Lands the 7-config
   `batfish/lab-validation` real-capture corpus (Apache-2.0) under
