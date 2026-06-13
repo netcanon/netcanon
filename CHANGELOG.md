@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-06-13
+
 ### Added
 
 * **Cisco IOS-XR codec — Phase 4 (`certified`), completing the codec.**
