@@ -72,7 +72,8 @@ logger = logging.getLogger(__name__)
 _IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _IP_RE = re.compile(
-    r"^\s+ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)",
+    r"^\s+ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)"
+    r"(?:\s+(secondary))?",
     re.IGNORECASE,
 )
 # GAP-EVPN-3: ``ipv6 address 2001:db8::1/64`` (global) or
@@ -785,14 +786,21 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             prefix_len = _mask_to_prefix(mask_str)
             # IOS-XE accepts one primary + multiple secondary addresses
             # per interface (``ip address X.X.X.X MASK [secondary]``).
-            # The render-side companion in :mod:`.render` emits the
-            # ``secondary`` keyword for index>=1.  Trailing ``secondary``
-            # is captured but not stored — the canonical model represents
-            # the address list ordering as primary-first; the keyword is
-            # recoverable on re-render.  Per Cisco IP Addressing Services
-            # Configuration Guide, IOS-XE 17.x.
+            # The render-side companion in :mod:`.render` re-derives the
+            # ``secondary`` keyword *positionally* (index>=1), so cisco
+            # self-round-trips are unaffected by the flag below.  We DO
+            # capture ``is_secondary`` into the canonical model now (R-13)
+            # so the fact survives a cross-vendor hop to a codec whose
+            # render honours the flag explicitly (e.g. arista_eos's plain
+            # ``ip address`` branch).  Per Cisco IP Addressing Services
+            # Configuration Guide, IOS-XE 17.x — ``ip address ip-address
+            # mask [secondary [vrf vrf-name]]``.
             current["ipv4"].append(
-                {"ip": ip_str, "prefix_length": prefix_len},
+                {
+                    "ip": ip_str,
+                    "prefix_length": prefix_len,
+                    "is_secondary": im.group(3) is not None,
+                },
             )
             continue
 
@@ -1069,6 +1077,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         ipv4_addrs.append(CanonicalIPv4Address(
             ip=a["ip"],
             prefix_length=a["prefix_length"],
+            is_secondary=a.get("is_secondary", False),
             virtual_gateway_address=vga,
         ))
 

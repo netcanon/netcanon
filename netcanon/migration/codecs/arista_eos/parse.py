@@ -978,16 +978,22 @@ def _apply_iface_subcommand(
         return
     if line.startswith("ip address "):
         # ``ip address 10.0.0.1/31`` — CIDR form only (EOS).
+        # ``ip address 10.0.0.1/31 secondary`` — secondary address.
         rest = line.split(None, 2)[2].strip()
-        # Some ``ip address`` lines have ``secondary`` trailer —
-        # ignore the trailer, first address wins.
-        addr = rest.split()[0]
+        tokens = rest.split()
+        addr = tokens[0]
+        # Mirror the VARP branch: a ``secondary`` keyword after the
+        # address marks an additional (non-primary) address.  Captured
+        # into ``is_secondary`` (R-13) so the fact survives the round-
+        # trip and cross-vendor hops, instead of being silently dropped.
+        is_secondary = len(tokens) >= 2 and tokens[1].lower() == "secondary"
         if "/" in addr:
             ip, prefix = addr.split("/", 1)
             try:
                 iface.ipv4_addresses.append(CanonicalIPv4Address(
                     ip=ip,
                     prefix_length=int(prefix),
+                    is_secondary=is_secondary,
                 ))
             except ValueError:
                 pass
