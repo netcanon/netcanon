@@ -309,8 +309,11 @@ on the canonical model:
 | Public IPv4 | RFC 5737 docs ranges |
 | Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
 | SNMP communities | `public_redacted_N` |
+| SNMP contact / location (operator PII) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
+| RADIUS server / SNMP trap-target / DHCP-gateway hosts (public IPv4) | RFC 5737 docs ranges |
+| VLAN-SVI IPv4 addresses (public) | RFC 5737 docs ranges |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
@@ -322,8 +325,9 @@ substitution table for operator review before writing output.
 
 Known limitations are listed in
 [`BUG_REPORTING.md`](BUG_REPORTING.md) — notably IPv6-public redaction
-is IPv4-only at v0.1.0; banner / comment text is parse-and-ignored
-rather than redacted.
+is IPv4-only at v0.1.0; host fields given as DNS names (a RADIUS / trap
+target like `nms.corp.example`) pass through; banner / comment text is
+parse-and-ignored rather than redacted.
 
 ---
 

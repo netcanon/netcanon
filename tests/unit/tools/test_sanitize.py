@@ -37,6 +37,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
+    CanonicalVlan,
     CanonicalVRRPGroup,
 )
 from netcanon.tools.sanitize import (
@@ -760,3 +761,218 @@ class TestSecretRedactionCoverage:
             "Registered secret field(s) no longer on the model — remove "
             f"from _REGISTERED_SECRET_FIELDS: {sorted(stale)}"
         )
+
+
+# ---------------------------------------------------------------------------
+# R-16 / CF-04 — PII / network tail redaction
+#
+# Non-secret-but-identifying fields the sanitiser previously left
+# untouched: SNMP contact/location (operator PII), SNMP trap-target +
+# RADIUS server + DHCP-gateway hosts (public IPv4), and VLAN-SVI IPv4
+# (a SEPARATE canonical field from interfaces[].ipv4_addresses).
+#
+# These are PII/network, not secrets, so they are intentionally NOT in
+# _REGISTERED_SECRET_FIELDS and do NOT trip TestSecretRedactionCoverage
+# (that guard introspects secret-NAMED fields only).  This forward
+# block is the durable "these PII fields don't survive" check.
+# ---------------------------------------------------------------------------
+
+
+class TestSNMPContactLocationRedaction:
+    """SNMP contact (email/name) + location (site/address) are operator
+    PII.  Free-text → opaque placeholder, not an IP redaction."""
+
+    def test_contact_redacted_to_placeholder(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(community="", contact="admin@corp.example")
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.snmp.contact == "<contact redacted>"
+        assert "admin@corp.example" not in sanitized.snmp.contact
+        assert any(
+            s.category == "snmp-contact" and s.original == "admin@corp.example"
+            for s in subs
+        )
+
+    def test_location_redacted_to_placeholder(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(community="", location="Rack 7, 12 Real Street")
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.snmp.location == "<location redacted>"
+        assert any(s.category == "snmp-location" for s in subs)
+
+    def test_empty_contact_and_location_no_substitution(self):
+        intent = CanonicalIntent(snmp=CanonicalSNMP(community="x"))
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.snmp.contact == ""
+        assert sanitized.snmp.location == ""
+        assert not any(s.category == "snmp-contact" for s in subs)
+        assert not any(s.category == "snmp-location" for s in subs)
+
+
+class TestSNMPTrapHostRedaction:
+    """SNMP trap-target hosts: public IPv4 → docs range, private
+    preserved, hostname preserved."""
+
+    def test_public_trap_host_redacted_private_preserved(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                community="",
+                trap_hosts=["8.8.8.8", "192.168.50.5"],
+            )
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.snmp.trap_hosts[0] != "8.8.8.8"
+        assert sanitized.snmp.trap_hosts[0].startswith(
+            ("192.0.2.", "198.51.100.", "203.0.113.")
+        )
+        assert sanitized.snmp.trap_hosts[1] == "192.168.50.5"  # private kept
+        assert len([s for s in subs if s.category == "ipv4-public"]) == 1
+
+    def test_hostname_trap_target_preserved(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(community="", trap_hosts=["nms.corp.example"])
+        )
+        sanitized, _ = sanitize_intent(intent)
+        # Documented residual: name-form hosts pass through.
+        assert sanitized.snmp.trap_hosts[0] == "nms.corp.example"
+
+
+class TestRADIUSHostRedaction:
+    """RADIUS server host: public IPv4 → docs range, private preserved.
+    Complements the existing key-redaction test."""
+
+    def test_public_host_redacted(self):
+        intent = CanonicalIntent(
+            radius_servers=[
+                CanonicalRADIUSServer(host="203.0.113.200", key="s"),
+                CanonicalRADIUSServer(host="9.9.9.9", key="s2"),
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        # 203.0.113.x is already a docs range -> preserved as-is.
+        assert sanitized.radius_servers[0].host == "203.0.113.200"
+        # 9.9.9.9 is public -> redacted.
+        assert sanitized.radius_servers[1].host != "9.9.9.9"
+        assert sanitized.radius_servers[1].host.startswith(
+            ("192.0.2.", "198.51.100.", "203.0.113.")
+        )
+        assert any(
+            s.category == "ipv4-public"
+            and s.field == "radius_servers[1].host"
+            for s in subs
+        )
+
+    def test_private_host_preserved(self):
+        intent = CanonicalIntent(
+            radius_servers=[CanonicalRADIUSServer(host="10.0.0.5", key="s")]
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.radius_servers[0].host == "10.0.0.5"
+
+
+class TestDHCPGatewayRedaction:
+    """DHCP pool gateway: sibling of the already-redacted static-route
+    gateway.  Public IPv4 → docs range; private (the common case)
+    preserved."""
+
+    def test_public_gateway_redacted_private_preserved(self):
+        intent = CanonicalIntent(
+            dhcp_servers=[
+                CanonicalDHCPPool(network="10.0.0.0/24", gateway="1.1.1.1"),
+                CanonicalDHCPPool(network="10.1.0.0/24", gateway="10.1.0.1"),
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.dhcp_servers[0].gateway != "1.1.1.1"
+        assert sanitized.dhcp_servers[1].gateway == "10.1.0.1"  # private kept
+        assert any(
+            s.field == "dhcp_servers[0].gateway" for s in subs
+        )
+
+
+class TestVlanSviIPv4Redaction:
+    """The material R-16 leak: SVI L3 addresses live on
+    CanonicalVlan.ipv4_addresses — a SEPARATE field the interface walk
+    never reaches.  On Aruba / Junos these render straight off the VLAN
+    record, so a public SVI IP previously survived sanitisation."""
+
+    def test_public_svi_ip_redacted_private_preserved(self):
+        intent = CanonicalIntent(
+            vlans=[
+                CanonicalVlan(
+                    id=10,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="8.8.4.4", prefix_length=24),
+                        CanonicalIPv4Address(ip="192.168.10.1", prefix_length=24),
+                    ],
+                )
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        svi = sanitized.vlans[0].ipv4_addresses
+        assert svi[0].ip != "8.8.4.4"
+        assert svi[0].ip.startswith(("192.0.2.", "198.51.100.", "203.0.113."))
+        assert svi[1].ip == "192.168.10.1"  # private SVI gateway preserved
+        assert any(
+            s.category == "ipv4-public"
+            and s.field == "vlans[0].ipv4_addresses[0].ip"
+            for s in subs
+        )
+
+    def test_svi_copy_matches_interface_copy_cross_reference(self):
+        """Cisco/Arista keep an independent synthesised vlan copy of the
+        SVI interface address.  Because redact_ipv4 is cache-keyed by IP
+        string, the same public IP on both the interface and the vlan
+        record resolves to the SAME docs-range substitute."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan10",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="11.22.33.44", prefix_length=24)
+                    ],
+                )
+            ],
+            vlans=[
+                CanonicalVlan(
+                    id=10,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="11.22.33.44", prefix_length=24)
+                    ],
+                )
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        iface_ip = sanitized.interfaces[0].ipv4_addresses[0].ip
+        vlan_ip = sanitized.vlans[0].ipv4_addresses[0].ip
+        assert iface_ip != "11.22.33.44"
+        assert vlan_ip == iface_ip  # cross-reference stable
+
+
+class TestPiiTailRenderedOutputClean:
+    """End-to-end: sanitize_intent -> render must not emit the original
+    PII.  Exercises the Aruba SVI-on-VLAN render path (the field that
+    leaked) plus SNMP contact."""
+
+    def test_aruba_svi_and_contact_absent_from_render(self):
+        from netcanon.migration.codecs.registry import get_codec
+
+        intent = CanonicalIntent(
+            hostname="r1",
+            vlans=[
+                CanonicalVlan(
+                    id=10,
+                    name="USERS",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="9.9.9.9", prefix_length=24)
+                    ],
+                )
+            ],
+            snmp=CanonicalSNMP(community="", contact="admin@corp.example"),
+        )
+        sanitized, _ = sanitize_intent(intent)
+        rendered = get_codec("aruba_aoss").render(sanitized)
+        assert "9.9.9.9" not in rendered            # SVI leak closed
+        assert "admin@corp.example" not in rendered   # contact leak closed
