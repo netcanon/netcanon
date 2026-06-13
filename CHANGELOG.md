@@ -105,16 +105,18 @@ canonical-model or codec-grammar changes.
   honest per-codec tables and names the known exceptions (FortiGate
   `tunnel_type` lossy, Aruba `mtu` unsupported).
 
-* **NETCONF (`cisco_iosxe`) target now surfaces one port-rename banner
-  instead of N per-port warnings** (finding R-21).  The Phase-0.5 NETCONF
+* **NETCONF (`cisco_iosxe`) port-rename now shows one UI banner instead
+  of N per-port warning rows** (finding R-21).  The Phase-0.5 NETCONF
   stub inherits no-op `classify_port_name` / `format_port_identity`, so
-  migrating *to* it emitted a "no native representation" warning per
-  interface, flooding `job.warnings` and the migrate UI.  Declared
-  `"ports"` in the codec's `unsupported_rename_categories` (joining
-  `"snmpv3"`) so the UI shows a single amber pane banner, and added an
-  early-exit in `translate_port_names` that emits ONE banner-level
-  warning instead of the per-port cascade.  Gated on the declaration, so
-  codecs that implement port translation are unaffected; +new guard test.
+  migrating *to* it produced a "no native representation" warning per
+  interface that flooded the migrate UI's ports pane.  Declared `"ports"`
+  in the codec's `unsupported_rename_categories` (joining `"snmpv3"`),
+  which drives the existing single amber pane-compat banner — the same
+  declarative mechanism the codec already uses for SNMPv3.  Explicit
+  operator rename maps still apply unchanged.  (Collapsing the warnings
+  at the pipeline/API level too was evaluated and deferred — it
+  entangles with explicit-rename precedence + `strip_unmappable`
+  semantics, beyond this P3's scope.)  +new guard test.
 
 ### Internal
 
