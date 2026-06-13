@@ -51,6 +51,19 @@ secrets) — no sanitization required.
 | `batfish_ibgp_rr.txt` | `snapshots/iosxr_ibgp_rr_over_ospf/configs/RR/show_running-config.txt` | Apache-2.0 | Route reflector — **2× Bundle-Ether** with member `bundle id N mode active`, OSPF underlay, BGP RR neighbor-group, MTU 9216. |
 | `batfish_ibgp_border01.txt` | `snapshots/iosxr_ibgp_rr_over_ospf/configs/border01/show_running-config.txt` | Apache-2.0 | iBGP client — Bundle-Ether members, default `router static`, network/aggregate statements, `route-policy ADD-PATH`. |
 
+The three configs below are from [ios-xr/xrd-tools](https://github.com/ios-xr/xrd-tools)
+(Apache-2.0, the official Cisco GitHub org) `samples/xr_compose_topos/`
+— a **second, independent source** added in Phase 4 so the `certified`
+corpus isn't single-origin.  They cover grammar the batfish corpus
+lacks (IS-IS, SR-MPLS, SRv6-L3VPN).  Same 3-line attribution header;
+the configs carry no local users / secrets (lab startup configs).
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `xrdtools_srv6_pe1.cfg` | `samples/xr_compose_topos/srv6-l3vpn/pe1.cfg` | Apache-2.0 | **SRv6 L3VPN** PE — VRF + IS-IS `core` underlay + `segment-routing srv6` + `router bgp` vpnv4 + `route-policy PASS`.  The most modern XR surface in the corpus. |
+| `xrdtools_sr_xrd1.cfg` | `samples/xr_compose_topos/segment-routing/xrd-1-startup.cfg` | Apache-2.0 | **SR-MPLS** node — IS-IS + segment-routing MPLS, `router bgp 100`, `route-policy`, `extcommunity-set`, 5 interfaces, 1 VRF, default static. |
+| `xrdtools_isis_r1.cfg` | `samples/xr_compose_topos/isis-ipfrr/r1.cfg` | Apache-2.0 | **IS-IS IP-FRR** router — minimal `router isis LAB` config, 3 interfaces.  Exercises the IS-IS surface absent from batfish. |
+
 ## opnsense/
 
 | File | Origin | License | Notes |
