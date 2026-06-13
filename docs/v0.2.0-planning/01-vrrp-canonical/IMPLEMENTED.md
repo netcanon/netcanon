@@ -87,6 +87,10 @@ counted under v0.2.0 cumulative even though it isn't VRRP-specific.
 * **Junos per-VRF static-route harvest** — flipped to `lossy`
   rather than `supported` because the routing-instances
   dispatcher doesn't yet harvest per-VRF statics.  Separate scope.
+  (The `cisco_iosxe_cli` side of this surface — `ip route vrf
+  <NAME>` — graduated `unsupported` → `supported` in a later
+  v0.2.0 PR; Junos remains the open follow-up on the per-VRF
+  static-route surface.)
 * **NX-OS HSRP wire-up** — gated on the NX-OS codec landing
   (Tier-D in `tests/fixtures/real/WANTED.md`; design in sibling
   task `03-nxos-codec/`).  Phase 2 of that codec consumes this

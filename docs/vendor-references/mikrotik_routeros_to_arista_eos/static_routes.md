@@ -82,9 +82,12 @@ RouterOS -> Arista round-trip:
 Lossy bits:
 
 * **Per-VRF routes:** RouterOS's `routing-table=TENANT_A` drops
-  to default VRF on render because the canonical model lacks a
-  vrf field on `CanonicalStaticRoute` (deferred — lands
-  alongside VRF wire-up in both codecs).
+  to default VRF because the `mikrotik_routeros` source codec does
+  not parse the per-VRF form and the `arista_eos` target codec does
+  not render `ip route vrf X` (both declare
+  `/routing/static-route/vrf` `unsupported`); `CanonicalStaticRoute.vrf`
+  itself exists (deferred — lands alongside VRF wire-up in both
+  codecs).
 
 * **Blackhole:** RouterOS's `type=blackhole` flag has no
   canonical surface — the codec encodes it via the `Null0`

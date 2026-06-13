@@ -324,12 +324,15 @@ class TestShipBeforeWireUnsupportedDeclarations:
     _WIRED_UP_BY_CODEC: dict[str, set[str]] = {
         # Wave B + C — see commit feat(cisco_iosxe_cli): wire VRRP
         # groups + SD-Access anycast-gateway.  IPv6 anycast remains
-        # ``unsupported`` (no fixture coverage); per-VRF static
-        # routes remain ``unsupported`` (separate scope).
+        # ``unsupported`` (no fixture coverage).  Per-VRF static
+        # routes graduated to ``supported`` in v0.2.0 — ``ip route
+        # vrf <NAME> <dest> <mask> <gw>`` round-trips through parse +
+        # render.
         "cisco_iosxe_cli": {
             "/interfaces/interface/vrrp-groups/group",
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/anycast-gateway-mac",
+            "/routing/static-route/vrf",
         },
         # NETCONF stub — every path still ``unsupported`` (the
         # codec's matrix declares every canonical surface unsupported

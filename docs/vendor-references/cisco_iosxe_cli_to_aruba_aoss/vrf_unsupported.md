@@ -54,8 +54,11 @@ Cross-pair disposition:
 * `interfaces[].vrf` — **unsupported**.  Same as above; the field
   stays empty on both sides.
 * Per-VRF static routes — **lossy**.  Cisco source carries them
-  via the `ip route vrf X ...` directive (the codec's static-route
-  parser currently lacks a vrf field on `CanonicalStaticRoute`).
-  The route is dropped on Cisco -> Aruba migration.
+  via the `ip route vrf X ...` directive; the Cisco codec parses
+  the VRF into `CanonicalStaticRoute.vrf` and round-trips it
+  (`/routing/static-route/vrf` is `supported`).  Aruba has no VRF
+  concept (the `aruba_aoss` codec declares
+  `/routing/static-route/vrf` `unsupported`), so the route is
+  dropped to the global table on Cisco -> Aruba migration.
 
 Disposition: **unsupported** for the entire VRF surface.

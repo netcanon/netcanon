@@ -37,7 +37,7 @@ their CLI lineage from Cisco IOS.
 | `vlans.md` | Arista port-centric `switchport access vlan N` + `interface Vlan<N>` -> Aruba VLAN-centric `untagged 1-24 / ip address X/N`.  CIDR preserved. |
 | `port_naming.md` | Arista `Ethernet1` (no speed) -> Aruba bare-numeric `1`; `Port-Channel<N>` (capital 'C') -> Aruba `Trk<N>`. |
 | `ip_addressing.md` | CIDR preserved both ways; `mtu` not parsed by Aruba codec. |
-| `static_routes.md` | CIDR preserved; per-VRF `ip route vrf X` drops on canonical (no VRF field on `CanonicalStaticRoute`); IPv6 routes drop on Aruba (codec gap). |
+| `static_routes.md` | CIDR preserved; per-VRF `ip route vrf X` drops on canonical (Arista codec does not yet parse the per-VRF form into `CanonicalStaticRoute.vrf`; Aruba has no VRF concept); IPv6 routes drop on Aruba (codec gap). |
 | `snmp.md` | v1/v2c clean (community / location / contact / trap_hosts); v3 USM SHA-256+ / AES-192+ collapses to Aruba's narrower SHA-1 + AES-128 + engineID re-key required. |
 | `local_users.md` | Arista `privilege + role + secret sha512` -> Aruba two-role + `sha1 / bcrypt`; SHA-512 dominant case requires re-keying. |
 | `lags.md` | Arista `Port-Channel<N>` (capital 'C') -> Aruba `Trk<N>`; MLAG drops; LACP active/passive/static round-trip. |

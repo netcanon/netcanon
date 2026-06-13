@@ -26,8 +26,31 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–12)
-— sequenced in that dossier's `recommended-remediation-plan.md`.  No
+### Added
+
+* **Per-VRF static routes on `cisco_iosxe_cli`** (v0.2.0 — graduates a
+  ship-before-wire surface).  `ip route vrf <NAME> <dest> <mask> <gw>`
+  now round-trips: the parser populates `CanonicalStaticRoute.vrf`
+  (previously the `vrf` qualifier failed the static-route regex and
+  was silently dropped) and the renderer re-emits the qualifier.  This
+  flips `/routing/static-route/vrf` from `unsupported` to `supported`
+  on the codec — the two-sided ship-before-wire guard
+  (`test_canonical_vrrp_anycast_schema.py::_WIRED_UP_BY_CODEC`) tracks
+  the graduation.  Trailing route-leak / administrative-distance /
+  `name` tokens (e.g. the `global` next-hop-leak keyword) are not
+  modelled and parse-and-ignore, same as the global-table form.
+  Cross-vendor migration toward a target with no per-VRF static-route
+  grammar (Arista / FortiGate / MikroTik / OPNsense / Aruba — each
+  declares the path `unsupported`) still drops the VRF binding; the
+  phase-4 reconciler classifies that drop as `EXPECTED_UNSUPPORTED`,
+  not a false `CODEC_BUG`.  Junos stays `lossy` on this surface (its
+  routing-instances dispatcher does not yet harvest per-VRF statics —
+  separate scope).  Cross-mesh + phase-4 artifacts regenerated;
+  high-severity CODEC_BUG count unchanged at 5 (documented residuals).
+
+The remainder of [Unreleased] below is P2 + documentation remediation
+from the 2026-06-06 review (Batches 2–12), sequenced in that dossier's
+`recommended-remediation-plan.md`.  Those batches made no
 canonical-model or codec-grammar changes.
 
 ### Security

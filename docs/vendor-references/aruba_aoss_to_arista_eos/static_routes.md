@@ -40,9 +40,10 @@ by the EOS codec).
 ## Cross-vendor mapping
 
 The canonical surface is `CanonicalStaticRoute(destination,
-gateway, interface, metric, description)` — destination is a CIDR
-string, gateway is a next-hop IP, no VRF field on the record (a
-known canonical-model gap).
+gateway, interface, metric, description, vrf)` — destination is a
+CIDR string, gateway is a next-hop IP.  The `vrf` field carries the
+per-route discriminator, but it is irrelevant on this direction:
+Aruba has no VRF concept, so Aruba-source routes never populate it.
 
 Aruba -> Arista round-trip:
 

@@ -96,9 +96,12 @@ Cisco -> OPNsense considerations:
   descriptions.
 
 Per-VRF static routes (Cisco ``ip route vrf X ...``) are
-**unsupported** on the cross-pair: the canonical model
-(``CanonicalStaticRoute``) lacks a ``vrf`` field, and OPNsense has no
-canonical-portable VRF model.
+**unsupported** on the cross-pair: the Cisco source parses the VRF
+into ``CanonicalStaticRoute.vrf`` and round-trips it
+(``/routing/static-route/vrf`` is ``supported`` on the Cisco codec),
+but OPNsense has no canonical-portable VRF model and the OPNsense
+codec declares ``/routing/static-route/vrf`` ``unsupported``, so the
+VRF is dropped on render.
 
 Disposition: **lossy** at the field level.  At the WIRE-UP level, the
 OPNsense codec's capability matrix does not currently advertise any

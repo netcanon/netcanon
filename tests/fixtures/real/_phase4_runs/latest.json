@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-13T07:06:12+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T054519Z.json",
-  "mesh_run_started_utc": "2026-06-13T05:45:16+00:00",
+  "started_utc": "2026-06-13T07:58:56+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T075844Z.json",
+  "mesh_run_started_utc": "2026-06-13T07:58:41+00:00",
   "cells_total": 424,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -275,17 +275,17 @@
   "aggregate": {
     "ALIGNED": 1467,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1115,
+    "EXPECTED_LOSSY": 1117,
     "EXPECTED_UNSUPPORTED": 660,
-    "METHODOLOGY_ISSUE_under": 873,
+    "METHODOLOGY_ISSUE_under": 871,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 952,
     "TRIVIAL_EMPTY": 8721,
     "fields_total": 13818,
     "severity_high": 5,
     "severity_medium": 103,
-    "severity_low": 1747,
-    "severity_ok": 11963
+    "severity_low": 1745,
+    "severity_ok": 11965
   },
   "severity_matrix": {
     "arista_eos": {
@@ -9078,11 +9078,6 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -9091,8 +9086,15 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel5",
+                "name": "Port-Channel3",
                 "members": [],
+                "mode": "active"
+              },
+              {
+                "name": "Port-channel5",
+                "members": [
+                  "Ethernet5"
+                ],
                 "mode": "active"
               },
               "... and 3 more"
@@ -18239,10 +18241,8 @@
                 "mode": "active"
               },
               {
-                "name": "Port-channel6",
-                "members": [
-                  "Ethernet6"
-                ],
+                "name": "Port-Channel6",
+                "members": [],
                 "mode": "active"
               },
               "... and 7 more"

@@ -58,10 +58,16 @@ ipv6 route 2001:db8:1::/64 2001:db8:0::1
   `CanonicalStaticRoute.metric` field is the operator-visible
   metric, not preference/AD; cross-vendor migration drops the
   preference/AD value unless the operator explicitly preserves it.
-- **Per-VRF.** Both vendors model per-VRF static routes; the
-  canonical model lacks a VRF discriminator on
-  `CanonicalStaticRoute` in v1, so per-VRF static routes are
-  parse-and-ignore on both codecs pending schema extension.
+- **Per-VRF.** Both vendors model per-VRF static routes, and the
+  canonical `CanonicalStaticRoute.vrf` field carries the
+  discriminator.  The `cisco_iosxe_cli` target codec parses
+  `ip route vrf X` into it and renders it back out
+  (`/routing/static-route/vrf` is `supported`).  The
+  `juniper_junos` source codec, however, does not yet harvest
+  per-VRF statics — its routing-instances dispatcher does not
+  descend into `routing-options static` — so Junos-source per-VRF
+  routes are `lossy` on this direction, flattening to the master
+  instance.
 - **Qualified-next-hop.** Junos's `qualified-next-hop` (multiple
   next-hops with per-NH metrics) has no clean Cisco equivalent;
   Cisco models the same intent through multiple parallel
@@ -69,6 +75,8 @@ ipv6 route 2001:db8:1::/64 2001:db8:0::1
   one `gateway` + `metric` per route entry; the qualified-NH
   detail flattens to one or more separate canonical entries.
 
-Disposition: **lossy** on per-VRF routes (deferred), **good** on
-default-VRF IPv4 / IPv6 static routes; **lossy** on
-qualified-next-hop preservation.
+Disposition: **lossy** on per-VRF routes (the Junos source codec
+does not yet harvest per-VRF statics, so the VRF never reaches
+canonical on this direction; the Cisco target would render
+`ip route vrf X` if it did), **good** on default-VRF IPv4 / IPv6
+static routes; **lossy** on qualified-next-hop preservation.

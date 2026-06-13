@@ -306,7 +306,8 @@ _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _STATIC_ROUTE_RE = re.compile(
-    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)",
+    r"^ip\s+route\s+(?:vrf\s+(\S+)\s+)?"
+    r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)",
     re.IGNORECASE,
 )
 # ``ip default-gateway X`` is the L2-switch form of a default route.
@@ -1312,14 +1313,25 @@ def _lag_sort_key(name: str) -> tuple[str, int, str]:
 
 
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
-    """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text."""
+    """Extract ``ip route`` and ``ip default-gateway`` lines from IOS config text.
+
+    Handles the optional ``vrf <NAME>`` qualifier
+    (``ip route vrf <NAME> <dest> <mask> <gw>``).  The VRF name lands on
+    :attr:`CanonicalStaticRoute.vrf` and round-trips through render
+    (v0.2.0 — graduated the per-VRF static-route surface from
+    ``unsupported`` to ``supported`` on this codec).  Trailing tokens
+    (administrative distance, ``name <X>``, the ``global`` next-hop-leak
+    keyword) are not modelled and parse-and-ignore — same as the
+    global-table form.
+    """
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
         m = _STATIC_ROUTE_RE.match(line)
         if m:
-            dest_ip = m.group(1)
-            mask = m.group(2)
-            gw_or_iface = m.group(3)
+            vrf = m.group(1) or ""
+            dest_ip = m.group(2)
+            mask = m.group(3)
+            gw_or_iface = m.group(4)
             prefix_len = _mask_to_prefix(mask)
             dest = f"{dest_ip}/{prefix_len}"
             # Gateway could be an IP or an interface name.
@@ -1334,6 +1346,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                 destination=dest,
                 gateway=gateway,
                 interface=iface,
+                vrf=vrf,
             ))
             continue
         m = _DEFAULT_GATEWAY_RE.match(line)
