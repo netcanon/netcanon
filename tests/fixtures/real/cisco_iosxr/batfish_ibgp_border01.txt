@@ -1,0 +1,158 @@
+! Source: https://github.com/batfish/lab-validation
+! License: Apache-2.0
+! Snapshot: iosxr_ibgp_rr_over_ospf/configs/border01
+Building configuration...
+!! IOS XR Configuration version = 6.2.2
+!! Last configuration change at Wed Apr  7 22:26:03 2021 by cisco
+!
+hostname border01
+domain name test.com
+username cisco
+ group root-lr
+ group cisco-support
+ secret 5 $1$Joxi$FOgljf610R6off2td9BC.1
+!
+line default
+ transport input ssh
+!
+call-home
+ service active
+ contact smart-licensing
+ profile CiscoTAC-1
+  active
+  destination transport-method http
+ !
+!
+interface Bundle-Ether23
+ description To_RR
+ mtu 9216
+ ipv4 address 10.188.248.17 255.255.255.252
+ bundle minimum-active links 2
+!
+interface Bundle-Ether45
+ description To_BORDER02
+ mtu 9216
+ ipv4 address 10.188.248.21 255.255.255.252
+ bundle minimum-active links 2
+!
+interface Loopback0
+ description Loopback for Routing
+ ipv4 address 10.188.62.3 255.255.255.255
+!
+interface Loopback100
+ ipv4 address 10.10.10.100 255.255.255.255
+!
+interface Loopback123
+ ipv4 address 192.168.123.2 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/1
+ shutdown
+!
+interface GigabitEthernet0/0/0/2
+ description To_RR
+ bundle id 23 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/3
+ description To_RR
+ bundle id 23 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/4
+ description To_BORDER02
+ bundle id 45 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/5
+ description To_BORDER02
+ bundle id 45 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/6
+ shutdown
+!
+interface GigabitEthernet0/0/0/7
+ shutdown
+!
+interface GigabitEthernet0/0/0/8
+ shutdown
+!
+interface GigabitEthernet0/0/0/9
+ shutdown
+!
+interface GigabitEthernet0/0/0/10
+ shutdown
+!
+prefix-set IBGP-OUT
+  10.0.0.0/8 le 32,
+  192.168.123.2/32
+end-set
+!
+route-policy ADD-PATH
+  set path-selection backup 1 install
+end-policy
+!
+route-policy IBGP-OUT
+  if destination in IBGP-OUT then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+router static
+ address-family ipv4 unicast
+  192.0.2.1/32 Null0
+ !
+!
+router ospf 65200
+ log adjacency changes detail
+ router-id 10.188.62.3
+ network point-to-point
+ auto-cost reference-bandwidth 4000000
+ max-metric router-lsa on-startup wait-for-bgp include-stub summary-lsa external-lsa
+ area 0
+  interface Bundle-Ether23
+   cost 35000
+   network point-to-point
+  !
+  interface Bundle-Ether45
+   cost 2
+  !
+  interface Loopback0
+   passive enable
+  !
+ !
+!
+router bgp 65100
+ bgp router-id 10.188.62.3
+ bgp log neighbor changes detail
+ address-family ipv4 unicast
+  additional-paths receive
+  additional-paths send
+  additional-paths selection route-policy ADD-PATH
+  network 10.10.10.100/32
+  network 192.168.123.2/32
+  aggregate-address 10.0.0.0/8 summary-only
+ !
+ neighbor-group RR
+  remote-as 65100
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-policy IBGP-OUT out
+   next-hop-self
+   soft-reconfiguration inbound always
+  !
+ !
+ neighbor 10.169.6.152
+  use neighbor-group RR
+ !
+!
+ssh server v2
+end

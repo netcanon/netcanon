@@ -41,8 +41,13 @@ records.  Shipped ``bidirectional`` (not the dossier's transient
 codec (``TestNoOrphanedParseOnlyCliCodec``) — same call the NX-OS codec
 made.  SNMP (out of v1 XR scope) plus the SP-routing / ``route-policy``
 / MPLS / ``l2vpn`` Tier-3 stanzas remain ``unsupported`` in the matrix
-below.  ``certainty`` is ``experimental``; it reaches ``certified`` once
-a real-capture corpus across two OS versions lands (Phase 4).
+below — Phase 3 surfaces them on ``dropped_tier3_sections`` (the
+``detect_tier3_sections_iosxr`` notification banner) rather than
+translating them.  ``certainty`` is ``best_effort`` (Phase 3 — the 7
+``batfish/lab-validation`` real captures in
+``tests/fixtures/real/cisco_iosxr/`` all parse + round-trip cleanly);
+it reaches ``certified`` once 1-2 grammar-diverse non-batfish captures
+land (Phase 4).
 """
 
 from __future__ import annotations
@@ -73,7 +78,7 @@ class CiscoIOSXRCodec(CodecBase):
     version_hint: ClassVar[str | None] = "6.x / 7.x"
     input_format: ClassVar[str] = "cli-iosxr"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from a Cisco IOS-XR "

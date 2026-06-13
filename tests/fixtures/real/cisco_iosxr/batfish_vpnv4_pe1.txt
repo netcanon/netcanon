@@ -1,0 +1,158 @@
+! Source: https://github.com/batfish/lab-validation
+! License: Apache-2.0
+! Snapshot: cisco_xr_ios_vpnv4/configs/PE1
+Building configuration...
+!! IOS XR Configuration 6.6.2
+!! Last configuration change at Tue Mar  8 23:55:55 2022 by cisco
+!
+hostname PE1
+domain name test.lab
+username cisco
+ group root-lr
+ group cisco-support
+ password 7 030752180500
+!
+vrf red
+ address-family ipv4 unicast
+  import route-target
+   65102:2
+   65102:4
+  !
+  export route-target
+   65102:2
+   65102:4
+  !
+ !
+!
+vrf blue
+ address-family ipv4 unicast
+  import route-target
+   65101:1
+   65101:3
+  !
+  export route-target
+   65101:1
+   65101:3
+  !
+ !
+!
+vrf management
+ address-family ipv4 unicast
+ !
+!
+line default
+ transport input ssh
+!
+call-home
+ service active
+ contact smart-licensing
+ profile CiscoTAC-1
+  active
+  destination transport-method http
+ !
+!
+interface Loopback0
+ ipv4 address 10.254.1.1 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ vrf management
+ ipv4 address 10.150.0.195 255.255.0.0
+!
+interface GigabitEthernet0/0/0/0
+ description RR1
+ ipv4 address 10.1.1.1 255.255.255.252
+!
+interface GigabitEthernet0/0/0/1
+ description RR2
+ ipv4 address 10.1.1.5 255.255.255.252
+!
+interface GigabitEthernet0/0/0/2
+ description CE1
+ vrf blue
+ ipv4 address 11.1.1.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0/3
+ description CE4
+ vrf red
+ ipv4 address 11.1.1.1 255.255.255.0
+!
+route-policy PASS_ALL
+  pass
+end-policy
+!
+router static
+ vrf blue
+  address-family ipv4 unicast
+   11.0.0.0/8 GigabitEthernet0/0/0/2 11.1.1.2
+  !
+ !
+!
+router ospf 1
+ router-id 10.254.1.1
+ network point-to-point
+ address-family ipv4 unicast
+ area 0
+  interface Loopback0
+  !
+  interface GigabitEthernet0/0/0/0
+  !
+  interface GigabitEthernet0/0/0/1
+  !
+ !
+!
+router bgp 65001
+ bgp router-id 10.254.1.1
+ address-family ipv4 unicast
+  redistribute static
+ !
+ address-family vpnv4 unicast
+  additional-paths receive
+  additional-paths send
+ !
+ neighbor-group RRs
+  remote-as 65001
+  update-source Loopback0
+  address-family vpnv4 unicast
+  !
+ !
+ neighbor 10.254.1.2
+  use neighbor-group RRs
+  description RR1
+ !
+ neighbor 10.254.1.5
+  use neighbor-group RRs
+  description RR2
+ !
+ vrf red
+  rd 10.254.1.1:65102
+  address-family ipv4 unicast
+   label mode per-vrf
+   redistribute connected route-policy PASS_ALL
+  !
+  neighbor 11.1.1.2
+   remote-as 65102
+   address-family ipv4 unicast
+    send-community-ebgp
+    route-policy PASS_ALL in
+    route-policy PASS_ALL out
+    soft-reconfiguration inbound always
+   !
+  !
+ !
+ vrf blue
+  rd 10.254.1.1:65101
+  address-family ipv4 unicast
+   label mode per-vrf
+   redistribute connected route-policy PASS_ALL
+   redistribute static route-policy PASS_ALL
+  !
+ !
+!
+mpls ldp
+ igp sync delay on-session-up 5
+ interface GigabitEthernet0/0/0/0
+ !
+!
+ssh server v2
+ssh server vrf management
+end
