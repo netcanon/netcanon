@@ -1,7 +1,9 @@
 """
-MikroTik RouterOS codec — third real adapter (Session 2 of vendor-config-
-research).
+MikroTik RouterOS codec — 3rd shipped codec; section-oriented CLI
+(``/export verbose`` format).
 
+Scope
+-----
 RouterOS stores its configuration as a line-oriented command script
 produced by ``/export verbose``.  Structure is section-oriented: a
 ``/section path`` line sets the context, and subsequent ``add``/``set``
@@ -25,11 +27,12 @@ convention):
     * ``render.py``     — canonical tree → RouterOS ``/export`` text
     * ``port_names.py`` — cross-vendor port-name identity bridge
 
+Direction: ``bidirectional``.
 Certainty: ``certified`` — validated against real-capture fixtures
-under ``tests/fixtures/real/mikrotik_routeros/``; the codec ships
-filters for the default-value boilerplate RouterOS emits via
-``/export verbose`` so the canonical round-trip is stable.  See
-``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
+    under ``tests/fixtures/real/mikrotik_routeros/``; the codec ships
+    filters for the default-value boilerplate RouterOS emits via
+    ``/export verbose`` so the canonical round-trip is stable.  See
+    ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import MikroTikRouterOSCodec

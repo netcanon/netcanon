@@ -131,7 +131,8 @@ see read-only in the device edit panel so they can reconcile their
 pins against what the device actually reports.
 
 See [`definitions/README.md`](definitions/README.md) for the full
-authoring guide.
+authoring guide; [`netcanon/definitions/README.md`](netcanon/definitions/README.md)
+for the loader implementation and Pydantic schema reference.
 
 ### Layer 2 — Format Codec
 
@@ -161,6 +162,19 @@ certainty:        enum     # certified | best_effort | experimental
   `netcanon/migration/codecs/`, decorate the class with `@register`,
   and `pkgutil` auto-discovery at app startup picks it up — no manual
   wiring.
+* **Codec-contract types live in `models/migration.py`, not in
+  `codecs/`.** `CapabilityMatrix`, `LossyPath`, and `UnsupportedPath`
+  are defined in `netcanon/models/migration.py` alongside the other
+  platform DTOs (`ValidationReport`, `MigrationJob`, `CodecInfo`).
+  This is intentional: `CapabilityMatrix` is returned verbatim over
+  HTTP (`GET /api/v1/migration/adapters/{name}/capabilities`), so it
+  belongs in the shared models layer that the API routes, the validate
+  service, and the codecs all import from a common leaf.  The
+  dependency direction is strictly downward — `codecs/` imports
+  `models/`; `models/` imports nothing from `codecs/`.  The four-dot
+  relative import each codec uses (`from ....models.migration import
+  CapabilityMatrix`) is a function of directory nesting, not of an
+  incorrect layering.
 
 For authoring instructions see
 [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md).
@@ -768,12 +782,13 @@ or `paramiko.SSHClient` directly** (see AGENTS.md hard rule).
 ### Cross-mesh fidelity audit harness
 
 Beyond the test layers above, a separate audit harness lives at
-`tools/run_full_mesh.py` (Phase 1: mechanical drift) +
-`tools/run_phase4_reconciliation.py` (Phase 4: classify drift
+[`tools/run_full_mesh.py`](tools/run_full_mesh.py) (Phase 1: mechanical drift) +
+[`tools/run_phase4_reconciliation.py`](tools/run_phase4_reconciliation.py) (Phase 4: classify drift
 against per-pair Phase-3 expectation YAMLs in
 `tests/fixtures/cross_vendor_expectations/`).  Output committed as
 `tests/fixtures/real/CROSS_MESH_RESULTS.md` and
 `tests/fixtures/real/PHASE4_RECONCILIATION.md`.
+See [`tools/README.md`](tools/README.md) for full usage notes and cell-status legend.
 
 Phase 4 classifies every `(source_codec, target_codec, fixture,
 field)` cell into one of eight variance classes:
