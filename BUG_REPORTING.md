@@ -141,9 +141,12 @@ the same redacted value all 5 times).
 | Local user names | `localuserN` (iterative per-class numbering, cross-reference-stable so AAA / sudo / role references resolve to the same placeholder) |
 | Local user hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
 | SNMP communities | `public_redacted_N` |
+| SNMP contact / location (operator PII — email / name / site) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 user names (USM securityName) | `snmpv3userN` (independent counter from local-user-name) |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
+| RADIUS server / SNMP trap-target / DHCP-gateway hosts | Public IPv4 → docs ranges; private / hostname preserved |
+| VLAN-SVI IPv4 addresses (the VLAN interface's L3 config) | Public IPv4 → docs ranges; private preserved |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall, NAT, VPN) | Stripped entirely |
@@ -164,6 +167,10 @@ Full rules and limitations in the sanitiser's module docstring at
 - **IPv6-public redaction is IPv4-only at v0.1.0.**  IPv6 addresses
   pass through verbatim.  If your config has public IPv6 addresses,
   hand-redact those before submitting.
+- **Host fields given as DNS names pass through.**  IP-typed
+  redaction (RADIUS server, SNMP trap target, DHCP gateway) acts on
+  bare IPv4 only; a target written as a hostname (`nms.corp.example`)
+  is preserved.  Hand-edit name-form hosts if they are identifying.
 
 ---
 

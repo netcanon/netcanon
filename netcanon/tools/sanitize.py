@@ -28,11 +28,17 @@ Field-typed rules (counter-per-session):
   preserved; Cisco type-7 hex preserved; Linux ``$5$`` / ``$6$`` /
   bcrypt ``$2y$`` shapes preserved)
 * ``CanonicalSNMP.community`` → ``public_redacted_N``
+* ``CanonicalSNMP.contact`` → ``<contact redacted>`` (operator PII —
+  email / name)
+* ``CanonicalSNMP.location`` → ``<location redacted>`` (operator PII —
+  site / address)
+* ``CanonicalSNMP.trap_hosts`` (public entries) → docs range
 * ``CanonicalSNMPv3User.name`` → ``snmpv3userN`` (Phase-3 R6.1 — same
   rationale as local-user-name above)
 * ``CanonicalSNMPv3User.auth_passphrase`` → ``REDACTED-AUTH-N``
 * ``CanonicalSNMPv3User.priv_passphrase`` → ``REDACTED-PRIV-N``
 * ``CanonicalRADIUSServer.key`` → ``REDACTED-RADIUS-N``
+* ``CanonicalRADIUSServer.host`` (public) → docs range
 * ``CanonicalVRRPGroup.authentication`` → ``<scheme>:REDACTED-VRRP-AUTH-N``
   — the ``<scheme>:`` prefix (``plain:`` / ``md5:`` / ``carp-key:``) is
   metadata and is preserved so the renderer still emits valid syntax;
@@ -40,6 +46,10 @@ Field-typed rules (counter-per-session):
   key-string for ``md5:``) is replaced
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
+* ``CanonicalDHCPPool.gateway`` (public) → docs range
+* ``CanonicalVlan.ipv4_addresses`` (public SVI L3 addresses) → docs
+  range — SEPARATE field from ``interfaces[].ipv4_addresses``; the
+  Aruba / Junos SVI-on-VLAN model renders these directly
 * ``CanonicalStaticRoute.gateway`` (public) → docs range
 * ``CanonicalIntent.dropped_tier3_sections`` → stripped entirely
   (Tier-3 carry-through may contain anything; never share)
@@ -51,6 +61,10 @@ Limitations:
   Tier-3 stanzas in the source bytes are not field-typed redacted —
   Tier-3 content is dropped on parse, banners are typically
   parse-and-ignore.
+* IP-typed redaction (interface / SVI / DHCP / RADIUS / trap-target
+  addresses) acts on IPv4 only.  IPv6 addresses and host fields given
+  as DNS NAMES (e.g. a RADIUS / trap target of ``nms.corp.example``)
+  pass through verbatim — hand-edit those before sharing.
 * Round-trip is sub-lossless: parse drops Tier-3 content, and render
   emits only what the codec models.  Operators sharing a sanitized
   config get the supported subset, not a byte-identical-shape
@@ -258,6 +272,29 @@ def sanitize_intent(
                 ))
                 group.authentication = new_auth
 
+    # ---- VLAN SVI IPv4 addresses ----
+    # R-16 / CF-04: SVI L3 addressing lives on ``CanonicalVlan.
+    # ipv4_addresses`` (intent.py), a SEPARATE field from
+    # ``interfaces[].ipv4_addresses``.  The interface walk above does
+    # NOT reach it.  On Aruba AOS-S the SVI is a property of the VLAN
+    # (no sibling interface) and renders straight off this list, so a
+    # public SVI IP would otherwise survive sanitisation verbatim;
+    # Junos IRB folds here too, and Cisco/Arista keep an independent
+    # synthesised copy.  ``redact_ipv4`` is cache-keyed by IP string,
+    # so a copy that mirrors an interface address resolves to the SAME
+    # docs-range substitute (cross-reference stable).
+    for i, vlan in enumerate(sanitized.vlans):
+        for j, addr in enumerate(vlan.ipv4_addresses):
+            new_ip = table.redact_ipv4(addr.ip)
+            if new_ip != addr.ip:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"vlans[{i}].ipv4_addresses[{j}].ip",
+                    original=addr.ip,
+                    redacted=new_ip,
+                ))
+                addr.ip = new_ip
+
     # ---- local users (usernames + hashed passwords) ----
     # Phase-3 R6.1: redact the username too.  Operator-chosen
     # usernames (`alice`, `john.smith`, or the Windows-login-mirror
@@ -299,6 +336,48 @@ def sanitize_intent(
             ))
             sanitized.snmp.community = new_value
 
+        # R-16 / CF-04: SNMP contact + location are operator PII.
+        # ``contact`` commonly carries an email / name
+        # (``admin@corp.example``, ``"Jane Doe x4012"``); ``location``
+        # carries a physical site / street address.  Free-text →
+        # opaque placeholder (mirrors the ``description redacted``
+        # pattern), NOT an IP redaction.
+        if sanitized.snmp.contact:
+            redacted_contact = "<contact redacted>"
+            subs.append(Substitution(
+                category="snmp-contact",
+                field="snmp.contact",
+                original=sanitized.snmp.contact,
+                redacted=redacted_contact,
+            ))
+            sanitized.snmp.contact = redacted_contact
+
+        if sanitized.snmp.location:
+            redacted_location = "<location redacted>"
+            subs.append(Substitution(
+                category="snmp-location",
+                field="snmp.location",
+                original=sanitized.snmp.location,
+                redacted=redacted_location,
+            ))
+            sanitized.snmp.location = redacted_location
+
+        # R-16 / CF-04: SNMP trap-target hosts.  Public IPv4 → docs
+        # range; private / loopback / hostname forms preserved (same
+        # policy as every other IP field).
+        new_traps: list[str] = []
+        for j, host in enumerate(sanitized.snmp.trap_hosts):
+            new_host = table.redact_ip_string(host)
+            if new_host != host:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"snmp.trap_hosts[{j}]",
+                    original=host,
+                    redacted=new_host,
+                ))
+            new_traps.append(new_host)
+        sanitized.snmp.trap_hosts = new_traps
+
         for j, v3user in enumerate(sanitized.snmp.v3_users):
             # Phase-3 R6.1: redact the SNMPv3 username too (same
             # rationale as local-user-name above — USM securityName
@@ -331,8 +410,21 @@ def sanitize_intent(
                 ))
                 v3user.priv_passphrase = new_value
 
-    # ---- RADIUS shared secrets (canonical field name: ``key``) ----
+    # ---- RADIUS server host + shared secret (field name: ``key``) ----
     for i, server in enumerate(sanitized.radius_servers):
+        # R-16 / CF-04: the RADIUS server address is network-
+        # identifying.  Public IPv4 → docs range; private / hostname
+        # preserved (same IP policy as everywhere else).
+        if server.host:
+            new_host = table.redact_ip_string(server.host)
+            if new_host != server.host:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"radius_servers[{i}].host",
+                    original=server.host,
+                    redacted=new_host,
+                ))
+                server.host = new_host
         if server.key:
             new_value = table.redact_secret("RADIUS")
             subs.append(Substitution(
@@ -343,7 +435,7 @@ def sanitize_intent(
             ))
             server.key = new_value
 
-    # ---- DHCP pool DNS servers ----
+    # ---- DHCP pool DNS servers + gateway ----
     for i, pool in enumerate(sanitized.dhcp_servers):
         new_dns = []
         for j, ip in enumerate(pool.dns_servers):
@@ -357,6 +449,20 @@ def sanitize_intent(
                 ))
             new_dns.append(new_ip)
         pool.dns_servers = new_dns
+
+        # R-16 / CF-04: pool gateway (sibling of the already-redacted
+        # static-route gateway).  Public IPv4 → docs range; private
+        # preserved (the common case for a LAN default-gateway).
+        if pool.gateway:
+            new_gw = table.redact_ip_string(pool.gateway)
+            if new_gw != pool.gateway:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"dhcp_servers[{i}].gateway",
+                    original=pool.gateway,
+                    redacted=new_gw,
+                ))
+                pool.gateway = new_gw
 
     # ---- static-route gateways ----
     for i, route in enumerate(sanitized.static_routes):
