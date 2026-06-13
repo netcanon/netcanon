@@ -25,14 +25,14 @@ yields exactly the right set.
 This codec lands in four phases (see
 ``docs/v0.2.0-planning/03-nxos-codec/``).  Shipped so far: **Phase 1**
 (hostname, basic-L3 interfaces, VLANs, ``vrf context`` name+description,
-default-VRF static routes) and **Phase 2a** (L2 switchport with the
-NX-OS default-flip, VLAN-centric port projection, and LAG /
-``channel-group`` membership).  SNMP + local-users (Phase 2b), HSRP
-(Phase 2c), per-VRF static + VRF RD-RT (Phase 3), and VXLAN-EVPN
-(Phase 4) remain ``unsupported`` in the matrix below so the
-migrate-page banner surfaces the gap.  ``certainty`` stays
-``experimental`` until the rest of the L2/L3 surface and a real-capture
-corpus land.
+default-VRF static routes), **Phase 2a** (L2 switchport with the NX-OS
+default-flip, VLAN-centric port projection, LAG / ``channel-group``
+membership), and **Phase 2b** (SNMPv2c community + v3 USM users +
+local-users).  HSRP (Phase 2c), per-VRF static + VRF RD-RT (Phase 3),
+and VXLAN-EVPN (Phase 4) remain ``unsupported`` in the matrix below so
+the migrate-page banner surfaces the gap.  ``certainty`` stays
+``experimental`` until HSRP completes Phase 2 and a real-capture corpus
+lands.
 """
 
 from __future__ import annotations
@@ -137,6 +137,16 @@ class CiscoNXOSCodec(CodecBase):
             "/lags/lag/name",
             "/lags/lag/members",
             "/lags/lag/mode",
+            # SNMP (Phase 2b) — v2c community + v3 USM
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/trap-host",
+            "/snmp/v3-user",
+            # Local users (Phase 2b)
+            "/local-users/user/name",
+            "/local-users/user/role",
+            "/local-users/user/hashed-password",
             # VRF (basic — name + description)
             "/routing-instances/instance/name",
             "/routing-instances/instance/description",
@@ -181,21 +191,44 @@ class CiscoNXOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/local-users/user/privilege-level",
+                reason=(
+                    "NX-OS uses a named `role` (network-admin / "
+                    "network-operator / custom) instead of a numeric "
+                    "privilege.  The codec maps network-admin / vdc-admin "
+                    "-> 15 and everything else -> 1, so cross-vendor "
+                    "renderers expecting numeric privilege round-trip "
+                    "non-admin roles as privilege 1.  The named role "
+                    "round-trips losslessly same-vendor."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "NX-OS 10.x introduced the `localizedV2key` digest "
+                    "format; the v1 codec normalises to the older "
+                    "`localizedkey` form on render.  Operators migrating "
+                    "between OS versions or vendors must re-key SNMPv3 "
+                    "users on the target device."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/engine-id",
+                reason=(
+                    "NX-OS emits engineID in colon-decimal "
+                    "(`128:0:0:9:...`); cross-vendor sources typically "
+                    "use hex.  Preserved verbatim same-vendor; "
+                    "cross-vendor render may emit a syntactically-valid "
+                    "but functionally-incorrect engineID requiring "
+                    "re-keying."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
-            # ── Phase 2b surfaces — SNMP / local users ──
-            UnsupportedPath(
-                path="/snmp/community",
-                reason="SNMP parse + render lands in Phase 2b.",
-            ),
-            UnsupportedPath(
-                path="/snmp/v3-user",
-                reason="SNMPv3 USM lands in Phase 2b.",
-            ),
-            UnsupportedPath(
-                path="/local-users/user",
-                reason="Local-user parse + render lands in Phase 2b.",
-            ),
             # ── Phase 3 surfaces — VRF RD/RT + per-VRF static ──
             UnsupportedPath(
                 path="/routing-instances/instance/route-distinguisher",
