@@ -1,6 +1,8 @@
 """
-OPNsense adapter — second real adapter, Phase 1.
+OPNsense adapter — 2nd shipped codec; XML config.xml wire format.
 
+Scope
+-----
 OPNsense stores its running config in a single ``config.xml`` file
 whose hierarchy is already tree-shaped, so the parse/render work is
 straightforward XML-to-dict-and-back.  What's interesting is the
@@ -27,9 +29,13 @@ Module layout:
     * ``parse.py``       — ``config.xml`` to ``CanonicalIntent``; owns
                            the bounded envelope-trim helper that rescues
                            legacy paramiko-shell backups
-    * ``render.py``      — ``CanonicalIntent`` (or legacy dict) to
-                           ``config.xml`` text
-    * ``port_names.py``  — cross-vendor port-name identity bridge
+    * ``render.py``     — ``CanonicalIntent`` (or legacy dict) to
+                          ``config.xml`` text
+    * ``port_names.py`` — cross-vendor port-name identity bridge
+
+Direction: ``bidirectional``.
+Certainty: ``certified`` — validated against real-capture fixtures;
+    see ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import OPNsenseCodec

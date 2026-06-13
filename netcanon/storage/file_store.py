@@ -27,7 +27,10 @@ are the established convention.
 Dots and colons in host addresses are replaced with hyphens so filenames are
 safe on all platforms.  The metadata fields (device type, host, timestamp) are
 recovered by parsing the filename, making the directory self-describing without
-a sidecar database.
+a sidecar database.  **Host reconstruction is best-effort**: hostnames
+containing literal hyphens (e.g. ``router-1.example.com``) decode with those
+hyphens turned into dots — a display-only inaccuracy, since lookups key on
+the verbatim filename rather than the reconstructed host.
 
 **Startup migration**: any files found directly in ``storage_dir`` (flat layout
 from older versions) are automatically moved into the appropriate subdirectory
@@ -342,8 +345,14 @@ class FileConfigStore(BaseConfigStore):
         except ValueError:
             return None
         safe_host = m.group("safe_host")
-            # Best-effort host reconstruction: dots were encoded as single
-        # hyphens and colons (IPv6) as double hyphens.
+        # Best-effort host reconstruction.  Encode: dots → "-", colons → "--".
+        # Decode is LOSSY for hostnames that contain literal hyphens
+        # (e.g. "router-1.example.com" encodes to "router-1-example-com" which
+        # decodes to "router.1.example.com").  This affects display only —
+        # file lookup, deletion, and collision safety all key on the verbatim
+        # filename, so no file is ever mislocated due to this ambiguity.
+        # Changing the on-disk filename format would break existing stored
+        # files; the display inaccuracy is the accepted trade-off.
         host = safe_host.replace("--", ":").replace("-", ".")
         return ConfigRecord(
             device_type=m.group("device_type"),

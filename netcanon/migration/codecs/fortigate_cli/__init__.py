@@ -1,5 +1,5 @@
 """
-FortiGate CLI codec — 5th real codec.
+FortiGate CLI codec — 5th shipped codec; firewall + edge router.
 
 Scope
 -----
@@ -37,13 +37,14 @@ Module layout:
     * ``parse.py``            — block-model tokeniser + per-stanza
                                 dispatchers (``_apply_<path>``)
     * ``render.py``           — canonical tree → FortiOS CLI text
-    * ``vlan_heuristics.py``  — ifType inference + VLAN-naming helpers
-    * ``port_names.py``       — cross-vendor port-name identity bridge
+    * ``vlan_heuristics.py`` — ifType inference + VLAN-naming helpers
+    * ``port_names.py``      — cross-vendor port-name identity bridge
 
+Direction: ``bidirectional``.
 Certainty: ``certified`` — three real captures across FortiOS 7.2.13
-(physical FG-100E, ~35K lines) and 7.6.6 (FGT-70G branch + FGT-VM hub,
-26K+ combined) all round-trip clean after the implicit-VLAN-typing +
-radius-port-0 grammar fixes.  See ``tests/fixtures/real/RESULTS.md``.
+    (physical FG-100E, ~35K lines) and 7.6.6 (FGT-70G branch +
+    FGT-VM hub, 26K+ combined) all round-trip clean; see
+    ``tests/fixtures/real/RESULTS.md``.
 """
 
 from .codec import FortiGateCLICodec

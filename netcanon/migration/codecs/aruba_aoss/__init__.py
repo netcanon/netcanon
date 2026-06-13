@@ -1,6 +1,5 @@
 """
-Aruba AOS-S codec — 4th real vendor, Session C of the
-vendor-config-research plan.
+Aruba AOS-S codec — 4th shipped codec; campus L2/L3 switching.
 
 Scope
 -----
@@ -49,10 +48,11 @@ convention):
     * ``_svi_absorption.py`` — SVI-into-VLAN absorption flag (single
                                source of truth for ``absorbs_svi_into_vlan``)
 
+Direction: ``bidirectional``.
 Certainty: ``certified`` — validated against real-capture fixtures
-under ``tests/fixtures/real/aruba_aoss/`` (HPE community captures
-spanning WC.16.07 / WB.16.08 / WC.16.10 / WC.16.11 / KB.15.15); see
-``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
+    under ``tests/fixtures/real/aruba_aoss/`` (HPE community captures
+    spanning WC.16.07 / WB.16.08 / WC.16.10 / WC.16.11 / KB.15.15);
+    see ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import ArubaAOSSCodec

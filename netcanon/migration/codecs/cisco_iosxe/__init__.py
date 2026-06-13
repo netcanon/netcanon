@@ -1,6 +1,8 @@
 """
-Cisco IOS-XE NETCONF adapter — first real adapter.
+Cisco IOS-XE NETCONF adapter — 1st shipped codec; OpenConfig wire format.
 
+Scope
+-----
 Operates against captured OpenConfig NETCONF ``<get-config>`` responses
 (and produces ``<edit-config>``-ready output).  Live ncclient transport
 is the embedded server's responsibility — the same split as the backup
@@ -20,9 +22,18 @@ Declares ``unsupported_rename_categories = {'snmpv3'}`` — Tier-2
 SNMPv3 round-trip is parser-side only; render emits no SNMPv3
 container, so the rename rail flips amber for this category.
 
+Module layout:
+    * codec.py — ``CiscoIOSXECodec`` class (metadata, delegation,
+                 probe, iter_xpaths) + inline parse + render helpers.
+                 Parse/render are kept inline (not split to sibling
+                 modules) because the XML-tree traversal differs
+                 enough from the CLI-text codec pattern that a split
+                 offered no clarity win; see ``codecs/README.md``.
+
 Direction: ``bidirectional``.
-Certainty: ``best_effort`` — NETCONF stub; see
-``tests/fixtures/real/RESULTS.md`` for the under-development matrix.
+Certainty: ``best_effort`` — Phase-0.5 NETCONF stub; render covers
+    the ``openconfig-interfaces`` subtree only.  See
+    ``tests/fixtures/real/RESULTS.md`` for the under-development matrix.
 """
 
 from .codec import CiscoIOSXECodec
