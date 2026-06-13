@@ -474,10 +474,9 @@ Mirror the existing codecs:
 pytestmark = pytest.mark.unit
 ```
 
-For long-running cross-vendor round-trip tests:
-```python
-@pytest.mark.slow
-```
+Long-running cross-vendor round-trip tests use **no** dedicated marker
+— the `slow` marker was removed in v0.1.2 and `--strict-markers` would
+reject it, so they simply run as part of the normal `unit` suite.
 
 For T1 / T2 gated tests:
 ```python

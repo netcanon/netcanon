@@ -49,8 +49,10 @@ convention):
     * ``_svi_absorption.py`` — SVI-into-VLAN absorption flag (single
                                source of truth for ``absorbs_svi_into_vlan``)
 
-Certainty: ``best_effort`` — validated against synthetic fixtures
-modelled on Aruba docs + community configs.
+Certainty: ``certified`` — validated against real-capture fixtures
+under ``tests/fixtures/real/aruba_aoss/`` (HPE community captures
+spanning WC.16.07 / WB.16.08 / WC.16.10 / WC.16.11 / KB.15.15); see
+``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import ArubaAOSSCodec
