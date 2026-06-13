@@ -15,9 +15,11 @@ Module layout (mirrors ``cisco_iosxe_cli`` post-split):
     * port_names.py — cross-vendor port-name bridge.
 
 Direction: ``bidirectional``.
-Certainty: ``experimental`` — Phase 1 of a four-phase build (hostname /
-    basic-L3 interfaces / VLANs / vrf-context / default-VRF static).  See
-    ``docs/v0.2.0-planning/03-nxos-codec/`` for the phase plan.
+Certainty: ``best_effort`` — Phase 2 of a four-phase build is complete
+    (L1/L3 basics + L2 switchport/LAG + SNMP/users + HSRP).  Per-VRF
+    static + VRF RD-RT (Phase 3) and VXLAN-EVPN (Phase 4) are still
+    declared unsupported.  See ``docs/v0.2.0-planning/03-nxos-codec/``
+    for the phase plan.
 """
 
 from .codec import CiscoNXOSCodec

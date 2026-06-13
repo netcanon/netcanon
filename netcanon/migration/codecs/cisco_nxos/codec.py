@@ -23,16 +23,17 @@ introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
 This codec lands in four phases (see
-``docs/v0.2.0-planning/03-nxos-codec/``).  Shipped so far: **Phase 1**
-(hostname, basic-L3 interfaces, VLANs, ``vrf context`` name+description,
-default-VRF static routes), **Phase 2a** (L2 switchport with the NX-OS
-default-flip, VLAN-centric port projection, LAG / ``channel-group``
-membership), and **Phase 2b** (SNMPv2c community + v3 USM users +
-local-users).  HSRP (Phase 2c), per-VRF static + VRF RD-RT (Phase 3),
-and VXLAN-EVPN (Phase 4) remain ``unsupported`` in the matrix below so
-the migrate-page banner surfaces the gap.  ``certainty`` stays
-``experimental`` until HSRP completes Phase 2 and a real-capture corpus
-lands.
+``docs/v0.2.0-planning/03-nxos-codec/``).  **Phase 2 is complete**:
+Phase 1 (hostname, basic-L3 interfaces, VLANs, ``vrf context``
+name+description, default-VRF static routes), Phase 2a (L2 switchport
+with the NX-OS default-flip, VLAN-centric port projection, LAG /
+``channel-group`` membership), Phase 2b (SNMPv2c community + v3 USM
+users + local-users), and Phase 2c (HSRP via
+``CanonicalVRRPGroup(mode="hsrp")``).  Per-VRF static + VRF RD-RT
+(Phase 3) and VXLAN-EVPN (Phase 4) remain ``unsupported`` in the matrix
+below so the migrate-page banner surfaces the gap.  ``certainty`` is
+``best_effort`` (Phase 2 ship); it reaches ``certified`` once a
+real-capture corpus across two OS versions lands.
 """
 
 from __future__ import annotations
@@ -67,7 +68,7 @@ class CiscoNXOSCodec(CodecBase):
     version_hint: ClassVar[str | None] = "9.x / 10.x"
     input_format: ClassVar[str] = "cli-nxos"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from a Cisco Nexus "
@@ -224,6 +225,22 @@ class CiscoNXOSCodec(CodecBase):
                     "cross-vendor render may emit a syntactically-valid "
                     "but functionally-incorrect engineID requiring "
                     "re-keying."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group",
+                reason=(
+                    "NX-OS expresses FHRP as HSRP (`interface VlanN / "
+                    "hsrp N / ip <vip> / priority / preempt`).  The codec "
+                    "renders EVERY CanonicalVRRPGroup as an `hsrp` block "
+                    "regardless of the source `mode` discriminator, so a "
+                    "cross-vendor VRRP / CARP group normalises to HSRP on "
+                    "NX-OS — the operator's redundancy intent for the "
+                    "virtual IP survives, but the wire protocol changes.  "
+                    "Same-vendor HSRP round-trips losslessly.  Sub-second "
+                    "timers, virtual-MAC, and track objects are not "
+                    "modelled in v1."
                 ),
                 severity="warn",
             ),

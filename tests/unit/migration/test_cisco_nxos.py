@@ -256,24 +256,27 @@ class TestRoundTrip:
         probe = codec.probe(rendered)
         assert probe is not None and probe[0] >= 90
 
-    def test_render_emits_l2_snmp_skips_hsrp(self, codec):
-        """A cross-vendor tree renders the Phase-2a L2 surface (switchport
-        / LAG) + the Phase-2b SNMP surface, but still omits the Phase-2c
-        surface (VRRP/HSRP groups) — no crash, no deferred-surface leak."""
+    def test_render_emits_full_phase2_surface(self, codec):
+        """A cross-vendor tree renders the full Phase-2 surface (L2
+        switchport / LAG / SNMP / HSRP) — every FHRP group normalises to
+        an `hsrp` block — without crashing or leaking unknown stanzas."""
         tree = CanonicalIntent(hostname="X", source_vendor="arista_eos")
         tree.interfaces = [
             CanonicalInterface(
                 name="Ethernet1",
                 switchport_mode="access",
                 access_vlan=10,
-                vrrp_groups=[
-                    CanonicalVRRPGroup(group_id=5, virtual_ips=["1.1.1.254"]),
-                ],
             ),
             CanonicalInterface(
                 name="Ethernet2",
                 ipv4_addresses=[
                     CanonicalIPv4Address(ip="1.1.1.1", prefix_length=24),
+                ],
+                vrrp_groups=[
+                    CanonicalVRRPGroup(
+                        group_id=5, mode="vrrp", virtual_ips=["1.1.1.254"],
+                        priority=120, preempt=True,
+                    ),
                 ],
             ),
             CanonicalInterface(name="Ethernet3", lag_member_of="port-channel1"),
@@ -286,14 +289,15 @@ class TestRoundTrip:
             CanonicalRoutingInstance(name="MGMT", route_distinguisher="65000:1"),
         ]
         out = codec.render(tree)
-        # Phase-2a L2 + Phase-2b SNMP surfaces ARE rendered.
-        assert "switchport access vlan 10" in out
-        assert "no switchport" in out                 # Ethernet2 routed
-        assert "channel-group 1 mode active" in out
+        assert "switchport access vlan 10" in out          # 2a
+        assert "no switchport" in out                      # 2a routed
+        assert "channel-group 1 mode active" in out        # 2a LAG
+        assert "snmp-server community public" in out       # 2b
+        # 2c: the source VRRP group normalises to an NX-OS HSRP block.
+        assert "hsrp 5" in out
+        assert "    ip 1.1.1.254" in out
+        assert "feature hsrp" in out
         assert "vrf context MGMT" in out
-        assert "snmp-server community public" in out  # Phase 2b
-        # Phase-2c surface (HSRP / VRRP groups) must NOT appear yet.
-        assert "vrrp" not in out and "hsrp" not in out
         # And it must re-parse without error.
         assert codec.parse(out).hostname == "X"
 
@@ -366,7 +370,7 @@ class TestCapabilityMatrix:
         assert codec.name == "cisco_nxos"
         assert codec.input_format == "cli-nxos"
         assert codec.direction == "bidirectional"
-        assert codec.certainty == "experimental"
+        assert codec.certainty == "best_effort"   # Phase 2 complete
         assert codec.capabilities.vendor_id == "cisco_nxos"
 
     def test_l2_paths_graduated_to_supported(self, codec):
@@ -576,3 +580,84 @@ class TestPhase2bSNMPUsers:
             "/snmp/v3-user/engine-id",
         ]:
             assert caps.classify(path) == "lossy", path
+
+
+# ---------------------------------------------------------------------------
+# Phase 2c — HSRP (CanonicalVRRPGroup mode="hsrp")
+# ---------------------------------------------------------------------------
+
+
+_HSRP_CONFIG = """\
+!Command: show running-config
+hostname FHRP
+feature interface-vlan
+feature hsrp
+vlan 1,10,20
+interface Vlan10
+  no shutdown
+  ip address 10.10.10.2/24
+  hsrp version 2
+  hsrp 10
+    ip 10.10.10.1
+    priority 110
+    preempt
+    authentication md5 key-string 0xKEY01
+interface Vlan20
+  no shutdown
+  ip address 10.20.20.2/24
+  hsrp 20
+    ip 10.20.20.1
+"""
+
+
+class TestPhase2cHSRP:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_HSRP_CONFIG)
+
+    def test_hsrp_group_parsed(self, tree):
+        v10 = next(i for i in tree.interfaces if i.name == "Vlan10")
+        assert len(v10.vrrp_groups) == 1
+        g = v10.vrrp_groups[0]
+        assert g.group_id == 10
+        assert g.mode == "hsrp"
+        assert g.virtual_ips == ["10.10.10.1"]
+        assert g.priority == 110
+        assert g.preempt is True
+        assert g.authentication == "md5:0xKEY01"
+
+    def test_hsrp_defaults(self, tree):
+        # Vlan20's `hsrp 20` has no priority/preempt → NX-OS defaults
+        # (priority 100, preempt disabled).
+        v20 = next(i for i in tree.interfaces if i.name == "Vlan20")
+        g = v20.vrrp_groups[0]
+        assert g.group_id == 20
+        assert g.priority == 100
+        assert g.preempt is False
+
+    def test_render_round_trips(self, codec, tree):
+        rendered = codec.render(tree)
+        assert "  hsrp 10" in rendered
+        assert "    ip 10.10.10.1" in rendered
+        assert "    priority 110" in rendered
+        assert "    preempt" in rendered
+        assert "    authentication md5 key-string 0xKEY01" in rendered
+        assert "feature hsrp" in rendered
+
+        def groups(t):
+            return {
+                i.name: [
+                    (g.group_id, tuple(g.virtual_ips), g.priority,
+                     g.preempt, g.authentication)
+                    for g in i.vrrp_groups
+                ]
+                for i in t.interfaces if i.vrrp_groups
+            }
+        assert groups(tree) == groups(codec.parse(rendered))
+
+    def test_vrrp_groups_declared_lossy(self, codec):
+        # FHRP normalises to HSRP on NX-OS render → the mode discriminator
+        # is lossy cross-vendor.
+        assert codec.capabilities.classify(
+            "/interfaces/interface/vrrp-groups/group"
+        ) == "lossy"

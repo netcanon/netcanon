@@ -28,6 +28,19 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco NX-OS codec — Phase 2c (HSRP), completing Phase 2.**  Parses the
+  nested NX-OS HSRP block (`interface VlanN / hsrp N / ip <vip> /
+  priority / preempt / authentication md5|text`) into
+  `CanonicalVRRPGroup(mode="hsrp")` (indent-aware nested-block parse;
+  NX-OS preempt-disabled-by-default honoured).  Render emits every FHRP
+  group as an `hsrp` block, so a cross-vendor VRRP / CARP group
+  normalises to HSRP on NX-OS — the virtual-IP redundancy intent
+  survives but the wire protocol changes, so
+  `/interfaces/interface/vrrp-groups/group` is declared **lossy**.
+  `feature hsrp` is render-derived.  **With Phase 2 complete, the codec
+  graduates `certainty` `experimental` → `best_effort`** (matrix now
+  34 supported / 7 lossy / 20 unsupported).  Cross-mesh + phase-4
+  regenerated; high-severity CODEC_BUG held flat at 5.
 * **Cisco NX-OS codec — Phase 2b (SNMP + local users).**  Graduates the
   management surfaces: SNMPv2c `community` + `location` / `contact` /
   trap-`host`, and SNMPv3 USM users (`snmp-server user <name> <group>
