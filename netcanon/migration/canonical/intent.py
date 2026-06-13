@@ -101,11 +101,10 @@ class CanonicalIPv4Address(BaseModel):
             (``ip address virtual Y/M``) populate this with ``Y``;
             NX-OS DAG ``ip address X/M anycast`` mirrors the address
             into this field (``X == virtual_gateway_address``).
-            Empty string means no anycast companion.  Ship-before-
-            wire (v0.2.0) — every codec's ``CapabilityMatrix`` lists
-            ``/interfaces/interface/ipv4/address/virtual-gateway-
-            address`` as ``unsupported`` until the per-codec wire-
-            up lands.  Anycast is a sibling concept to VRRP
+            Empty string means no anycast companion.  Wired in v0.2.0
+            (Wave B/C): Arista VARP, Cisco IOS-XE CLI, and Junos declare
+            this xpath ``supported`` and populate it; codecs without an
+            anycast grammar declare it ``unsupported``.  Anycast is a sibling concept to VRRP
             (:class:`CanonicalVRRPGroup`) and lives on the address
             record because it is a property of the IP, not a
             router-group election — see ``docs/v0.2.0-planning/``
@@ -574,11 +573,11 @@ class CanonicalVRRPGroup(BaseModel):
             priority-decrement value is per-vendor lossy.
         description: Operator-supplied description.
 
-    Ship-before-wire (v0.2.0): every codec's
-    :class:`CapabilityMatrix` lists ``/interfaces/interface/
-    vrrp-groups/group`` as ``unsupported`` until the per-codec wire-
-    up lands (Wave B of the v0.2.0 plan documented in
-    ``docs/v0.2.0-planning/``).
+    Wired in v0.2.0 (Wave B/C): the seven bidirectional codecs declare
+    ``/interfaces/interface/vrrp-groups/group`` ``supported``/``lossy``
+    and round-trip it; the Cisco IOS-XE NETCONF stub declares it
+    ``unsupported``.  (Wave B of the v0.2.0 plan, documented in
+    ``docs/v0.2.0-planning/``.)
     """
 
     group_id: int = Field(ge=1, le=255)
@@ -825,7 +824,7 @@ class CanonicalIntent(BaseModel):
             docstring for the vendor-shape comparison.  Per-interface
             membership lives on :attr:`CanonicalInterface.vrf`, not
             a redundant list here.
-        anycast_gateway_mac: Ship-before-wire (v0.2.0) — system-wide
+        anycast_gateway_mac: Wired in v0.2.0 (Wave B/C) — system-wide
             anycast-gateway MAC.  Vendors that declare it at chassis
             scope populate this from their grammar:
 

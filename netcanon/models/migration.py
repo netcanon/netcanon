@@ -1,9 +1,11 @@
 """
 Pydantic models for the translator / migration engine.
 
-Phase 0 scope: types used by the adapter contract, capability matrix,
-validation report, and the ``MigrationJob`` lifecycle.  No I/O; no
-schema work (libyang comes in Phase 0.5).
+Types used by the adapter contract, capability matrix, validation
+report, and the ``MigrationJob`` lifecycle.  No I/O.  (The
+originally-planned libyang schema layer was not adopted — the canonical
+tree is the Pydantic model in
+``netcanon/migration/canonical/intent.py``.)
 
 All severity fields use the same three-step convention introduced by
 ``CompatibilityReport`` in ``netcanon.models.diff``:

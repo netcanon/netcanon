@@ -47,6 +47,33 @@ authoring notes.
 
 ---
 
+## Credential security (encryption at rest)
+
+Device credentials (passwords, enable passwords) used by the backup
+collectors are encrypted at rest under
+[`netcanon/security/`](netcanon/security/):
+
+- **`credentials.py`** — Fernet symmetric encryption.  The key is
+  resolved first-hit-wins across three tiers: (1) the
+  `NETCANON_FERNET_KEY` environment variable (operator-explicit;
+  recommended for container / production), (2) the OS keyring (Windows
+  Credential Manager / macOS Keychain / Linux SecretService; best fit
+  for desktop installs), (3) a file fallback at
+  `$NETCANON_DATA_DIR/.fernet_key` (zero-config bootstrap for headless
+  deployments, auto-generated on first use).  In-memory model objects
+  always hold **plaintext** — encryption is a storage-layer concern
+  applied on write and reversed on read.
+- **`migration.py`** — `migrate_credential_fields(data, fields)`, the
+  shared legacy-plaintext upgrade helper.  Both `FileDeviceProfileStore`
+  and `FileScheduleStore` call it on first load: a field that fails to
+  decrypt (`InvalidToken`) is treated as a pre-encryption plaintext
+  value, returned as-is, and flagged for re-save with encryption.
+
+Operator-facing key-management guidance lives in
+[`SECURITY.md`](SECURITY.md); this section is the architectural pointer.
+
+---
+
 ## Migration — four-layer model
 
 The migration pipeline decouples four concerns that tend to get
@@ -414,6 +441,17 @@ paths: Aruba `oobm` block, FortiGate `mgmt1` port, OPNsense
 `opt_mgmt` zone, Junos routing-instance binding.  Honours the
 canonical `kind` field; never emit a regular physical port for
 mgmt-classified interfaces.
+
+**Tier-3 drop detection** (`netcanon/migration/_tier3_detection.py`).
+Tier-3 stanzas (firewall / NAT / VPN / routing-protocols) have no
+canonical surface, so codec parsers silently skip them.  Each parser
+calls its per-vendor `detect_tier3_sections_<vendor>(raw)` before
+returning, populating `CanonicalIntent.dropped_tier3_sections` with
+human-readable labels that the migrate page surfaces as a "Detected in
+source but not translated" banner.  Output-only — a notification
+surface, never fed to the renderer or any transform — so the
+deliberate drop is surfaced honestly (the silent-drop-honesty
+discipline `docs/METHODOLOGY.md` treats as flagship).
 
 When adding a new codec, audit each policy and decide whether to
 opt in.  Most cases: opt in.  Re-implementing the policy locally is

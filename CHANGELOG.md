@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–3)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–4)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -73,6 +73,20 @@ canonical-model or codec-grammar changes.
   `SECURITY.md (line 385)` reference for a durable section anchor (R-10);
   and removed a dangling `@pytest.mark.slow` snippet from the NX-OS codec
   test-plan (the `slow` marker was removed in v0.1.2 — R-28).
+
+* **Docstrings + `ARCHITECTURE.md` brought in line with the shipped
+  architecture** (findings R-09, R-14, R-15).  `ARCHITECTURE.md` now
+  documents the `netcanon/security/` credential-encryption package
+  (Fernet + 3-tier key resolution) and the `_tier3_detection.py`
+  silent-drop-honesty policy — closing the gap `AGENTS.md` already
+  claimed was closed.  The VRRP / anycast docstrings in
+  `canonical/intent.py` now read "wired in v0.2.0 (Wave B/C)" instead of
+  the stale "ship-before-wire / every codec lists this unsupported".
+  And the "Phase 0 / libyang-in-Phase-0.5 / opaque `dict[str,str]`"
+  framing in `migration/__init__.py`, `canonical/__init__.py`, and
+  `models/migration.py` is replaced with present-tense reality (the
+  Pydantic canonical IR shipped; `canonical/loader.py` remains a
+  deliberately-unused libyang stub).
 
 ## [0.1.3] - 2026-06-06
 
