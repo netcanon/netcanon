@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-13T19:27:22+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T192717Z.json",
-  "mesh_run_started_utc": "2026-06-13T19:27:13+00:00",
-  "cells_total": 550,
+  "started_utc": "2026-06-13T21:32:25+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T213224Z.json",
+  "mesh_run_started_utc": "2026-06-13T21:32:17+00:00",
+  "cells_total": 620,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -124,6 +124,41 @@
       "fixture": "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt",
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf",
@@ -521,6 +556,321 @@
       "fixture": "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt",
       "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ebgp_border02.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_border01.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_ibgp_rr.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe1.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe2.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/batfish_vpnv4_pe3.txt",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
     },
     {
       "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf",
@@ -9709,6 +10059,11 @@
             ],
             "target": [
               {
+                "name": "Port-Channel3",
+                "members": [],
+                "mode": "active"
+              },
+              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -9717,15 +10072,8 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel3",
+                "name": "Port-Channel5",
                 "members": [],
-                "mode": "active"
-              },
-              {
-                "name": "Port-channel5",
-                "members": [
-                  "Ethernet5"
-                ],
                 "mode": "active"
               },
               "... and 3 more"
@@ -18872,10 +19220,8 @@
                 "mode": "active"
               },
               {
-                "name": "Port-channel6",
-                "members": [
-                  "Ethernet6"
-                ],
+                "name": "Port-Channel6",
+                "members": [],
                 "mode": "active"
               },
               "... and 7 more"
@@ -22053,6 +22399,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 550
+    "cells_total_in_run": 620
   }
 }

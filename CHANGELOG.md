@@ -28,6 +28,28 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco IOS-XR codec — Phase 3 (SP-routing parse-and-display + real
+  batfish corpus; certainty → `best_effort`).**  Lands the 7-config
+  `batfish/lab-validation` real-capture corpus (Apache-2.0) under
+  `tests/fixtures/real/cisco_iosxr/`: the `cisco_xr_ios_vpnv4` XR-XE
+  VPNv4 PEs (3 VRFs + RD-from-`router bgp` + MPLS-LDP + OSPF), the
+  `iosxr_ebgp_basic` borders (`encapsulation dot1q` subinterface +
+  prefix-set + route-policy), and the `iosxr_ibgp_rr_over_ospf` RR +
+  client (2× Bundle-Ether with member `bundle id N mode active`).  All
+  7 parse, are deterministic, and round-trip cleanly through
+  `test_real_captures.py` (wired via `_DIR_TO_CODEC_NAME`).  The
+  SP-routing / policy stanzas the codec deliberately drops (`router
+  bgp`, `router ospf`, `mpls ldp`, `route-policy`, `prefix-set`) are
+  surfaced on `dropped_tier3_sections` via the
+  `detect_tier3_sections_iosxr` notification banner — parse-and-display,
+  not translation (no `CanonicalBgpNeighbor` surface exists).  The
+  Phase-2 RD-from-`router bgp` harvest is validated against the real
+  vpnv4 PEs (IP-based RDs like `10.254.1.1:65102` round-trip).  No
+  capability-matrix change — the unsupported declarations stand; the
+  operator-facing banner improves.  Certainty bumped
+  `experimental` → `best_effort`.  Cross-mesh + phase-4 regenerated;
+  high-severity CODEC_BUG held flat at 5.  Phase 4 (≥1-2 grammar-diverse
+  non-batfish captures + the `certified` flip) remains.
 * **Cisco IOS-XR codec — Phase 2 (VRF + RD-from-`router bgp` + LAGs +
   local users + dot1q VLAN synth).**  Top-level `vrf <name>` stanzas with
   nested `import|export route-target` blocks → `CanonicalRoutingInstance`

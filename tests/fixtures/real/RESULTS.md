@@ -158,6 +158,64 @@ Cisco surface and is `certified`.
 
 ---
 
+## cisco_iosxr
+
+**Codec:** `netcanon.migration.codecs.cisco_iosxr.CiscoIOSXRCodec`
+**Direction:** `bidirectional`
+**Certainty:** `best_effort` ⚠️
+
+### Status
+
+Phases 1-3 shipped.  Corpus is the full 7-config `batfish/lab-validation`
+trio (Apache-2.0): the `cisco_xr_ios_vpnv4` XR-XE VPNv4 PEs, the
+`iosxr_ebgp_basic` borders, and the `iosxr_ibgp_rr_over_ospf` RR +
+client.  All 7 parse, are deterministic, and round-trip cleanly.  The
+SP-routing / policy stanzas (`router bgp`, `router ospf`, `mpls ldp`,
+`route-policy`, `prefix-set`) are surfaced via `dropped_tier3_sections`
+(Phase 3 parse-and-display) rather than translated.
+
+### Coverage matrix
+
+| Fixture | Lines | iface | vrf | other | Tier-3 surfaced |
+|---|---:|---:|---:|---|---|
+| `batfish_vpnv4_pe1.txt` | 158 | 6 | 3 | 1 static (per-VRF), 1 user, RD-from-BGP | bgp, ospf, mpls-ldp, route-policy |
+| `batfish_vpnv4_pe2.txt` | 138 | 6 | 3 | 2 users | bgp, ospf, mpls-ldp, route-policy |
+| `batfish_vpnv4_pe3.txt` | 137 | 6 | 3 | 2 users | bgp, ospf, mpls-ldp, route-policy |
+| `batfish_ebgp_border01.txt` | 155 | 15 | 1 | 1 VLAN (dot1q `.35`), 1 user | bgp, route-policy ×3, prefix-set ×4 |
+| `batfish_ebgp_border02.txt` | 116 | 15 | 1 | 1 VLAN, 1 static, 1 user | bgp |
+| `batfish_ibgp_rr.txt` | 140 | 16 | — | 2 LAGs (Bundle-Ether), 1 user | bgp, ospf, route-policy ×2 |
+| `batfish_ibgp_border01.txt` | 158 | 17 | — | 2 LAGs, 1 static, 1 user | bgp, ospf, route-policy, prefix-set |
+
+Collectively the corpus exercises 4-segment ports, Bundle-Ether LAGs
+(member `bundle id N mode active`), MgmtEth, Loopback, the top-level
+`vrf` stanza with RT import/export blocks, RD harvested from `router
+bgp / vrf / rd`, per-interface `vrf` membership, per-VRF + default
+`router static`, the `username` block, and the `.35` dot1q
+subinterface → synthesised VLAN.
+
+### Findings
+
+- **RD-from-BGP harvest validated on real configs** — the vpnv4 PEs
+  carry IP-based RDs (`10.254.1.1:65102`) under `router bgp / vrf /
+  rd`; harvested + round-tripped onto `CanonicalRoutingInstance.
+  route_distinguisher`.  (The re-rendered `router bgp` RD-carrier's
+  ASN falls back to the synthetic default for IP-based RDs since no
+  ASN administrator is present — cosmetic; the RD value itself
+  round-trips, and `dropped_tier3_sections` is excluded from the
+  round-trip comparison.)
+- **No silent SP-routing drop** — every fixture surfaces its routing
+  / policy stanzas on the migrate banner.
+
+### Certification decision
+
+`best_effort` at Phase 3.  The "≥3 real captures round-trip cleanly"
+bar for `certified` is already met by the 7 batfish configs, but
+Phase 4 adds 1-2 grammar-diverse non-batfish captures (e.g.
+`ios-xr/xrd-tools` SR / IS-IS topologies, Apache-2.0) before the
+`certified` flip so the corpus isn't single-source.
+
+---
+
 ## opnsense
 
 **Codec:** `netcanon.migration.codecs.opnsense.OPNsenseCodec`
