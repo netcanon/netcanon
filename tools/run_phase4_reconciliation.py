@@ -21,7 +21,15 @@ classifies the (actual, expected) tuple into one of:
 * ``ALIGNED``                — preserved, expected good (the boring case)
 * ``CODEC_BUG``              — drifted, expected good (high severity)
 * ``EXPECTED_LOSSY``         — drifted, expected lossy (matches docs)
-* ``EXPECTED_UNSUPPORTED``   — drifted, expected unsupported (matches docs)
+* ``EXPECTED_UNSUPPORTED``   — drifted, expected unsupported (matches docs).
+                              ALSO assigned when a drifted address field's
+                              drift is confined to the anycast-gateway
+                              companion (``virtual_gateway_*``) and the
+                              TARGET codec's capability matrix declares the
+                              anycast path unsupported — the matrix is the
+                              source of truth; the per-pair YAML can't say
+                              "good EXCEPT the anycast sub-attribute".  See
+                              :func:`_target_anycast_declaration`.
 * ``METHODOLOGY_ISSUE_under``— preserved against {lossy/unsupported/N-A}
                               expectation (codec doing more than docs claim,
                               OR Phase 1 false-positive: source had no
@@ -100,6 +108,7 @@ import re
 import sys
 from collections import Counter
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from collections.abc import Callable
 from typing import Any
@@ -314,6 +323,110 @@ def derive_variance(
         return VAR_EXPECTED_UNSUPPORTED, "ok"
     # not_applicable
     return VAR_METHODOLOGY_OVER, "low"
+
+
+# ---------------------------------------------------------------------------
+# Capability-aware reclassification — v0.2.0 anycast / VARP surface
+# ---------------------------------------------------------------------------
+#
+# A drifted address field whose drift is confined to the anycast-gateway
+# companion attributes (``virtual_gateway_address`` / ``virtual_gateway_mac``)
+# is NOT a codec bug when the TARGET codec declares the matching
+# capability-matrix path ``unsupported`` / ``lossy``.  Arista VARP and Junos
+# anycast-gateway SOURCES populate these companions; TARGETS that haven't
+# wired the v0.2.0 Wave-C anycast surface (and honestly declare it
+# unsupported in their ``_CAPS``) drop them on render.  Before this check,
+# such cells false-flagged CODEC_BUG only because the per-pair expectation
+# YAML's field-level ``good`` disposition can't express "supported EXCEPT
+# the anycast sub-attribute".  The codec capability matrix IS the source of
+# truth, so we consult it directly rather than patching N per-pair YAMLs.
+_ANYCAST_ADDR_ATTRS: tuple[str, ...] = (
+    "virtual_gateway_address",
+    "virtual_gateway_mac",
+)
+
+
+@lru_cache(maxsize=None)
+def _target_anycast_declaration(target_codec: str, family: str) -> str | None:
+    """Return ``"unsupported"`` / ``"lossy"`` if *target_codec*'s capability
+    matrix declares the per-family anycast-gateway virtual-address path
+    (``/interfaces/interface/<family>/address/virtual-gateway-address``,
+    *family* = ``"ipv4"`` / ``"ipv6"``) at that level, else ``None`` (the
+    codec supports that family's anycast, or its matrix can't be loaded).
+
+    Per-FAMILY because codecs differ by family: ``cisco_iosxe_cli`` renders
+    IPv4 SD-Access anycast (``supported``) but declares the IPv6 companion
+    ``unsupported`` — so an IPv4 anycast drift to ``cisco_iosxe_cli`` is a
+    real bug, while the same drift to ``opnsense`` / ``cisco_iosxe``
+    (NETCONF), which declare IPv4 anycast unsupported, is EXPECTED.
+
+    Reads the live codec ``_CAPS`` (the authoritative record of what each
+    codec renders) rather than the coarser per-pair expectation YAML.  The
+    import is lazy + cached so the reconciler stays importable and the
+    importlib-loaded building-block unit tests don't pay the codec-registry
+    import unless a real anycast cell exercises it.
+    """
+    path = f"/interfaces/interface/{family}/address/virtual-gateway-address"
+    try:
+        from netcanon.migration.codecs.registry import get_codec
+
+        caps = get_codec(target_codec).capabilities
+    except Exception:
+        return None
+    if path in {
+        getattr(u, "path", None) for u in getattr(caps, "unsupported", [])
+    }:
+        return "unsupported"
+    if path in {getattr(l, "path", None) for l in getattr(caps, "lossy", [])}:
+        return "lossy"
+    return None
+
+
+def _addr_list_without_anycast(addr_list: Any) -> list[Any] | None:
+    """Reconstruct the address list a target WITHOUT anycast support would
+    legitimately render from *addr_list*: blank the anycast companion
+    attributes on every record, then drop records that thereby become
+    content-free (no real ``ip``).  Returns ``None`` if the input isn't a
+    list (caller treats that as "can't explain → leave as drift").
+    """
+    if not isinstance(addr_list, list):
+        return None
+    out: list[Any] = []
+    for addr in addr_list:
+        if not isinstance(addr, dict):
+            out.append(addr)
+            continue
+        stripped = {
+            k: ("" if k in _ANYCAST_ADDR_ATTRS else v)
+            for k, v in addr.items()
+        }
+        if stripped.get("ip"):
+            out.append(stripped)
+        # else: a pure-anycast / content-free SVI placeholder — a target
+        # without anycast support has nothing to render for it, so it is
+        # legitimately omitted (not dropped data).
+    return out
+
+
+def _drift_is_anycast_companion_only(drift_detail: dict[str, Any]) -> bool:
+    """True iff every per-record address drift in *drift_detail* is fully
+    explained by the target blanking the anycast companion attributes and
+    dropping the resulting content-free placeholder records.
+
+    Any residual drift on a substantive attribute (``ip`` /
+    ``prefix_length`` / ``is_secondary``) makes this ``False`` — so a real
+    address change is never masked behind the anycast reclassification.
+    """
+    per_record = drift_detail.get("per_record")
+    if not isinstance(per_record, dict) or not per_record:
+        return False
+    for slice_ in per_record.values():
+        if not isinstance(slice_, dict):
+            return False
+        expected = _addr_list_without_anycast(slice_.get("source"))
+        if expected is None or expected != slice_.get("target"):
+            return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -772,6 +885,44 @@ def reconcile_cell(
                 )
             else:
                 structural_parent_claimed[parent_name] = yaml_field_key
+
+        # Capability-aware reclassification (v0.2.0 anycast / VARP surface).
+        # A CODEC_BUG on an address field whose per-record drift is confined
+        # to the anycast-gateway companion attributes is EXPECTED when the
+        # TARGET codec's capability matrix declares the anycast path
+        # unsupported / lossy.  The matrix is the source of truth; this
+        # corrects the per-pair YAML's inability to say "good EXCEPT the
+        # anycast sub-attribute".  Never fires on the wholesale structural
+        # drift string (which has no ``per_record``), nor on real ip /
+        # prefix / secondary drift (which fails the companion-only check).
+        if (
+            variance == VAR_CODEC_BUG
+            and "[]." in yaml_field_key
+            and yaml_field_key.split("[].", 1)[1]
+            in ("ipv4_addresses", "ipv6_addresses")
+            and isinstance(drift_detail, dict)
+            and _drift_is_anycast_companion_only(drift_detail)
+        ):
+            family = (
+                "ipv4"
+                if yaml_field_key.endswith("ipv4_addresses")
+                else "ipv6"
+            )
+            anycast_decl = _target_anycast_declaration(tgt, family)
+            if anycast_decl in ("unsupported", "lossy"):
+                variance = (
+                    VAR_EXPECTED_UNSUPPORTED
+                    if anycast_decl == "unsupported"
+                    else VAR_EXPECTED_LOSSY
+                )
+                severity = "ok"
+                drift_detail = dict(drift_detail)
+                drift_detail["reclassified_from"] = VAR_CODEC_BUG
+                drift_detail["reclassified_reason"] = (
+                    f"drift confined to anycast-gateway companion "
+                    f"(virtual_gateway_*); target {tgt!r} declares the "
+                    f"anycast capability path {anycast_decl}"
+                )
 
         record: dict[str, Any] = {
             "actual": actual,

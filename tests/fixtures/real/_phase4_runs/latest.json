@@ -1,5 +1,5 @@
 {
-  "started_utc": "2026-06-13T05:45:20+00:00",
+  "started_utc": "2026-06-13T06:43:30+00:00",
   "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T054519Z.json",
   "mesh_run_started_utc": "2026-06-13T05:45:16+00:00",
   "cells_total": 424,
@@ -274,28 +274,24 @@
   "cells_without_expectation_yaml": [],
   "aggregate": {
     "ALIGNED": 1467,
-    "CODEC_BUG": 13,
+    "CODEC_BUG": 5,
     "EXPECTED_LOSSY": 1115,
-    "EXPECTED_UNSUPPORTED": 652,
+    "EXPECTED_UNSUPPORTED": 660,
     "METHODOLOGY_ISSUE_under": 873,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 952,
     "TRIVIAL_EMPTY": 8721,
     "fields_total": 13818,
-    "severity_high": 13,
+    "severity_high": 5,
     "severity_medium": 103,
     "severity_low": 1747,
-    "severity_ok": 11955
+    "severity_ok": 11963
   },
   "severity_matrix": {
     "arista_eos": {
-      "cisco_iosxe": 2,
-      "cisco_iosxe_cli": 2,
-      "opnsense": 2
+      "cisco_iosxe_cli": 2
     },
     "juniper_junos": {
-      "cisco_iosxe": 2,
-      "opnsense": 2,
       "aruba_aoss": 1,
       "fortigate_cli": 1
     },
@@ -306,27 +302,7 @@
   "pair_codec_bug_counts": [
     {
       "source_codec": "arista_eos",
-      "target_codec": "cisco_iosxe",
-      "codec_bug_count": 2
-    },
-    {
-      "source_codec": "arista_eos",
       "target_codec": "cisco_iosxe_cli",
-      "codec_bug_count": 2
-    },
-    {
-      "source_codec": "arista_eos",
-      "target_codec": "opnsense",
-      "codec_bug_count": 2
-    },
-    {
-      "source_codec": "juniper_junos",
-      "target_codec": "cisco_iosxe",
-      "codec_bug_count": 2
-    },
-    {
-      "source_codec": "juniper_junos",
-      "target_codec": "opnsense",
       "codec_bug_count": 2
     },
     {
@@ -12568,8 +12544,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -12652,7 +12628,9 @@
                 ],
                 "target": []
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'cisco_iosxe' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -13447,19 +13425,19 @@
       },
       "summary": {
         "ALIGNED": 2,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 1,
-        "EXPECTED_UNSUPPORTED": 14,
+        "EXPECTED_UNSUPPORTED": 15,
         "METHODOLOGY_ISSUE_under": 3,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 11,
         "TRIVIAL_EMPTY": 21,
         "fields_total": 53,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 1,
         "severity_low": 13,
-        "severity_ok": 38
+        "severity_ok": 39
       }
     },
     {
@@ -37721,8 +37699,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -37805,7 +37783,9 @@
                 ],
                 "target": []
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'opnsense' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -38610,19 +38590,19 @@
       },
       "summary": {
         "ALIGNED": 4,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 6,
-        "EXPECTED_UNSUPPORTED": 6,
+        "EXPECTED_UNSUPPORTED": 7,
         "METHODOLOGY_ISSUE_under": 6,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 18,
         "fields_total": 41,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 0,
         "severity_low": 6,
-        "severity_ok": 34
+        "severity_ok": 35
       }
     },
     {
@@ -48163,8 +48143,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -48264,7 +48244,9 @@
                 ],
                 "target": []
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'cisco_iosxe' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -48990,19 +48972,19 @@
       },
       "summary": {
         "ALIGNED": 2,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 1,
-        "EXPECTED_UNSUPPORTED": 15,
+        "EXPECTED_UNSUPPORTED": 16,
         "METHODOLOGY_ISSUE_under": 3,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 11,
         "TRIVIAL_EMPTY": 20,
         "fields_total": 53,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 1,
         "severity_low": 13,
-        "severity_ok": 38
+        "severity_ok": 39
       }
     },
     {
@@ -73701,8 +73683,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -73802,7 +73784,9 @@
                 ],
                 "target": []
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'opnsense' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -74948,19 +74932,19 @@
       },
       "summary": {
         "ALIGNED": 4,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 6,
-        "EXPECTED_UNSUPPORTED": 8,
+        "EXPECTED_UNSUPPORTED": 9,
         "METHODOLOGY_ISSUE_under": 6,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 0,
         "TRIVIAL_EMPTY": 16,
         "fields_total": 41,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 0,
         "severity_low": 6,
-        "severity_ok": 34
+        "severity_ok": 35
       }
     },
     {
@@ -157026,8 +157010,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -157111,7 +157095,9 @@
                   }
                 ]
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'cisco_iosxe' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -157651,19 +157637,19 @@
       },
       "summary": {
         "ALIGNED": 3,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 1,
-        "EXPECTED_UNSUPPORTED": 10,
+        "EXPECTED_UNSUPPORTED": 11,
         "METHODOLOGY_ISSUE_under": 3,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 16,
         "TRIVIAL_EMPTY": 25,
         "fields_total": 59,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 1,
         "severity_low": 18,
-        "severity_ok": 39
+        "severity_ok": 40
       }
     },
     {
@@ -159811,8 +159797,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -159896,7 +159882,9 @@
                   }
                 ]
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'opnsense' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -160380,19 +160368,19 @@
       },
       "summary": {
         "ALIGNED": 5,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 2,
-        "EXPECTED_UNSUPPORTED": 5,
+        "EXPECTED_UNSUPPORTED": 6,
         "METHODOLOGY_ISSUE_under": 4,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 11,
         "TRIVIAL_EMPTY": 28,
         "fields_total": 56,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 0,
         "severity_low": 15,
-        "severity_ok": 40
+        "severity_ok": 41
       }
     },
     {
@@ -174299,8 +174287,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -174424,7 +174412,9 @@
                   }
                 ]
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'cisco_iosxe' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -175618,19 +175608,19 @@
       },
       "summary": {
         "ALIGNED": 3,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 2,
-        "EXPECTED_UNSUPPORTED": 23,
+        "EXPECTED_UNSUPPORTED": 24,
         "METHODOLOGY_ISSUE_under": 6,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 16,
         "TRIVIAL_EMPTY": 8,
         "fields_total": 59,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 5,
         "severity_low": 17,
-        "severity_ok": 36
+        "severity_ok": 37
       }
     },
     {
@@ -179080,8 +179070,8 @@
         "interfaces[].ipv4_addresses": {
           "actual": "drifted",
           "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
           "drift_detail": {
             "subfield": "ipv4_addresses",
             "per_record": {
@@ -179205,7 +179195,9 @@
                   }
                 ]
               }
-            }
+            },
+            "reclassified_from": "CODEC_BUG",
+            "reclassified_reason": "drift confined to anycast-gateway companion (virtual_gateway_*); target 'opnsense' declares the anycast capability path unsupported"
           }
         },
         "interfaces[].ipv6_addresses": {
@@ -180279,19 +180271,19 @@
       },
       "summary": {
         "ALIGNED": 9,
-        "CODEC_BUG": 1,
+        "CODEC_BUG": 0,
         "EXPECTED_LOSSY": 8,
-        "EXPECTED_UNSUPPORTED": 9,
+        "EXPECTED_UNSUPPORTED": 10,
         "METHODOLOGY_ISSUE_under": 7,
         "METHODOLOGY_ISSUE_over": 0,
         "STRUCTURAL_ONLY": 11,
         "TRIVIAL_EMPTY": 11,
         "fields_total": 56,
         "missing_in_phase1": 3,
-        "severity_high": 1,
+        "severity_high": 0,
         "severity_medium": 1,
         "severity_low": 17,
-        "severity_ok": 37
+        "severity_ok": 38
       }
     },
     {
