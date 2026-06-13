@@ -1,18 +1,19 @@
 """
-Translator / migration engine — Phase 0.
+Translator / migration engine.
 
-Scope (see ``translator-plans.txt`` §12):
+Provides:
     * CodecBase + CapabilityMatrix contract.
-    * In-memory codec registry.
-    * One reference codec (``_mock``) that round-trips a trivial
-      dict-of-strings "tree" so the contract itself is testable
-      without any real YANG tooling.
-    * Capability-matrix-driven ``ValidationReport`` and a thin
-      ``run_plan`` pipeline skeleton (``netcanon/services/``).
+    * In-memory codec registry (auto-discovered below).
+    * The canonical intent tree — a Pydantic model
+      (:mod:`netcanon.migration.canonical.intent`), NOT the
+      originally-planned libyang-backed tree; ``canonical/loader.py``
+      remains an unused libyang stub.
+    * Shared cross-vendor transforms (``canonical/transforms.py``)
+      plus the capability-matrix-driven ``ValidationReport`` and the
+      ``run_plan`` pipeline (``netcanon/services/``).
 
-Out of scope for Phase 0 (queued for Phase 0.5+):
-    * libyang-backed canonical tree (``canonical/loader.py`` is a stub).
-    * Transforms, deploy, snapshot (Phase 2+).
+The ``_mock`` reference codec round-trips a trivial dict-of-strings
+"tree" so the contract itself is testable in isolation.
 
 Importing this package auto-discovers every codec sub-package under
 ``netcanon/migration/codecs/`` and imports it, firing its module-
