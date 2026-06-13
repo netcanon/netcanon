@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–5)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–6)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -99,6 +99,20 @@ canonical-model or codec-grammar changes.
   `models/migration.py` is replaced with present-tense reality (the
   Pydantic canonical IR shipped; `canonical/loader.py` remains a
   deliberately-unused libyang stub).
+
+* **Documentation / interlinking sweep** (review Batch 6 — findings
+  R-19, R-20, R-23, R-24, R-25, R-26, R-27, actuated from a read-only
+  agent sweep under `docs/project-review/2026-06-06/remediation-sweep/`).
+  Normalised all 8 codec `__init__.py` headers to one template
+  (consistent digit ordinal + standalone `Direction:` / `Certainty:`
+  lines — the certainty guard test now covers all 8, zero skips);
+  recorded why the codec-contract types (`CapabilityMatrix` et al.) live
+  in `models/` rather than `codecs/` (R-19, an HTTP `response_model`);
+  documented the best-effort/lossy `file_store` hostname-display decode
+  (R-20, display-only); repointed the `AGENTS.md` contents-map exemplar
+  to `definitions.html` (R-23); added reciprocal + inbound links so no
+  hand-authored doc is orphaned (R-25 / R-27) and converted the NX-OS
+  planning index to real Markdown links (R-26).
 
 ## [0.1.3] - 2026-06-06
 

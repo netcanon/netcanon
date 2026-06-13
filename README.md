@@ -156,7 +156,9 @@ python -m netcanon_desktop
 ```
 
 The desktop shell runs the same FastAPI app inside a PySide6 webview
-with a tray icon — same UI, no command-line.
+with a tray icon — same UI, no command-line.  See
+[`netcanon_desktop/README.md`](netcanon_desktop/README.md) for the
+threading model, settings, and MSI build instructions.
 
 ---
 

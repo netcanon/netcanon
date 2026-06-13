@@ -1,5 +1,5 @@
 """
-Arista EOS codec — 6th shipped codec, first DC-switching specialist.
+Arista EOS codec — 6th shipped codec; DC-switching specialist.
 
 Scope
 -----
@@ -29,16 +29,17 @@ Supported / lossy / unsupported xpaths: see ``_CAPS`` on
 detected and routed to ``CanonicalIntent.dropped_tier3_sections``
 for the migrate-page banner.
 
-Direction: ``bidirectional``.
-Certainty: ``certified``.
-
 Module layout:
-    * codec.py — ``AristaEOSCodec`` class (metadata, delegation,
-                 probe, port-name bridges)
-    * parse.py — line-scan + per-stanza dispatch over EOS
-                 ``show running-config`` text
-    * render.py — canonical tree → EOS CLI text
+    * codec.py      — ``AristaEOSCodec`` class (metadata, delegation,
+                      probe, port-name bridges)
+    * parse.py      — line-scan + per-stanza dispatch over EOS
+                      ``show running-config`` text
+    * render.py     — canonical tree → EOS CLI text
     * port_names.py — cross-vendor port-name bridge
+
+Direction: ``bidirectional``.
+Certainty: ``certified`` — validated against real-capture fixtures;
+    see ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import AristaEOSCodec

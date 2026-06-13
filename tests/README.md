@@ -137,3 +137,6 @@ No test patches `ConnectHandler` or `paramiko.SSHClient` directly.
 | Operator-spotted cross-vendor bugs | [`fixtures/real/user_smoke_findings.md`](fixtures/real/user_smoke_findings.md) |
 | Codec authoring (how to add a new vendor) | [`../netcanon/migration/codecs/README.md`](../netcanon/migration/codecs/README.md) |
 | Device-definition + target-profile schema | [`../definitions/README.md`](../definitions/README.md) |
+| Project orientation + quickstart | [`../README.md`](../README.md) |
+| Contributor rules + hard rules | [`../AGENTS.md`](../AGENTS.md) |
+| Phase 4b fix-task prompt drafts | [`fixtures/real/phase4_spawn_tasks.md`](fixtures/real/phase4_spawn_tasks.md) |

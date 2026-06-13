@@ -517,17 +517,17 @@ When reviewing this design before approving the implementation:
 
 ## 10. References + further reading
 
-* `01-grammar-survey.md` — full per-stanza grammar inventory + IOS-XE
+* [`01-grammar-survey.md`](01-grammar-survey.md) — full per-stanza grammar inventory + IOS-XE
   delta table.
-* `02-codec-architecture.md` — module layout, class shape, parse +
+* [`02-codec-architecture.md`](02-codec-architecture.md) — module layout, class shape, parse +
   render strategies, port-name handling, probe ladder.
-* `03-canonical-mapping.md` — xpath → NX-OS command table + schema
+* [`03-canonical-mapping.md`](03-canonical-mapping.md) — xpath → NX-OS command table + schema
   extension list.
-* `04-test-plan.md` — unit + real-capture + cross-vendor test
+* [`04-test-plan.md`](04-test-plan.md) — unit + real-capture + cross-vendor test
   matrix, per-phase test counts.
-* `05-fixture-targets.md` — batfish + community corpus targets,
+* [`05-fixture-targets.md`](05-fixture-targets.md) — batfish + community corpus targets,
   per-fixture grammar coverage.
-* `06-capabilities-matrix.md` — proposed `CapabilityMatrix` row
+* [`06-capabilities-matrix.md`](06-capabilities-matrix.md) — proposed `CapabilityMatrix` row
   list with grammar-pointer justifications.
 
 External:

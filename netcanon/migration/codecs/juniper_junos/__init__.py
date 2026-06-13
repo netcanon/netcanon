@@ -1,21 +1,19 @@
 """
-Juniper Junos codec — 7th shipped vendor, first hierarchical-config
-grammar family in the portfolio.
+Juniper Junos codec — 7th shipped codec; hierarchical-config
+grammar family (set-form + block-form).
 
 Scope
 -----
-Bidirectional codec.  Accepts Junos ``set``-form configuration text
-— the flat command-style output of ``show configuration | display
-set`` — as the canonical paste form.  Block-form (``{ ... ; }``
-hierarchical) input is auto-detected and converted to set-form
-ahead of the normal parser, so operators with block-form exports
-can paste either grammar.
+Accepts Junos ``set``-form configuration text — the flat
+command-style output of ``show configuration | display set`` — as
+the canonical paste form.  Block-form (``{ ... ; }`` hierarchical)
+input is auto-detected and converted to set-form ahead of the normal
+parser, so operators with block-form exports can paste either grammar.
 
-Direction: ``bidirectional``.  Render emits set-form Junos that
-round-trips through the parser; apply-groups statements + group
-content are preserved end-to-end (GAP 9b) so the rendered output
-matches the operator-paste shape rather than dumping every
-inherited statement inline.
+Render emits set-form Junos that round-trips through the parser;
+apply-groups statements + group content are preserved end-to-end
+(GAP 9b) so the rendered output matches the operator-paste shape
+rather than dumping every inherited statement inline.
 
 Supported grammar (Tier 1 + Tier 2):
     * ``set system host-name <name>`` /
@@ -61,19 +59,16 @@ Tier-3 parse-and-ignore:
       ``set chassis ...`` / ``set services ...``
 
 Module layout:
-    * codec.py — ``JunosCodec`` class (metadata, delegation,
-                 probe, port-name bridges, iter_xpaths)
-    * parse.py — set-form + block-form parser; two-pass groups-
-                 then-top-level dispatch + per-stanza appliers
-    * render.py — canonical tree → Junos ``set``-form text
+    * codec.py      — ``JunosCodec`` class (metadata, delegation,
+                      probe, port-name bridges, iter_xpaths)
+    * parse.py      — set-form + block-form parser; two-pass groups-
+                      then-top-level dispatch + per-stanza appliers
+    * render.py     — canonical tree → Junos ``set``-form text
     * port_names.py — cross-vendor port-name bridge
 
-Strategic value:
-    Junos is the dominant service-provider OS (~25% SP market share
-    per Omdia 2024) and widely used in mixed-vendor enterprise
-    fabrics.  Bidirectional support unlocks **cross-vendor
-    migration BOTH WAYS** between Junos and the Cisco / Arista /
-    Aruba / OPNsense / FortiGate / MikroTik portfolio.
+Direction: ``bidirectional``.
+Certainty: ``certified`` — validated against real-capture fixtures;
+    see ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
 from .codec import JunosCodec
