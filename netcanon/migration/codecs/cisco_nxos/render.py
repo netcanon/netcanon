@@ -7,8 +7,9 @@ NX-OS CLI text out.
 Phase 1 emits the supported subset declared in the capability matrix:
 hostname, a synthesised banner / version / ``vdc`` wrapper, render-derived
 ``feature`` lines, default-VRF static routes, coalesced VLANs (+ names),
-``vrf context`` blocks (name + description), and interface stanzas with
-description / admin-state / mtu / IPv4 (CIDR) / IPv6 / ``vrf member``.
+``vrf context`` blocks (name + description + rd + route-target + nested
+per-VRF static routes), and interface stanzas with description /
+admin-state / mtu / IPv4 (CIDR) / IPv6 / ``vrf member``.
 
 The render path is deliberately tolerant of canonical surfaces it does
 NOT yet emit (switchport / LAG / SNMP / local-users / VRRP / VXLAN /
@@ -101,13 +102,33 @@ def render_intent(tree: CanonicalIntent) -> str:
                 lines.append(f"  name {v.name}")
         lines.append("")
 
-    # ── VRF contexts (name + description) ──
+    # ── VRF contexts (name + description + rd + route-target + per-VRF
+    # static routes) ──
     # Emit in tree order (= source order on a same-vendor round-trip).
     # The round-trip invariant does NOT normalise routing_instances
     # ordering, so re-sorting here would register as canonical drift.
-    if tree.routing_instances:
+    # Per-VRF static routes (CanonicalStaticRoute.vrf set) nest inside
+    # their VRF's block — the default-VRF routes were emitted above.
+    routes_by_vrf: dict[str, list] = {}
+    for r in tree.static_routes:
+        if r.vrf:
+            routes_by_vrf.setdefault(r.vrf, []).append(r)
+    rendered_vrfs: set[str] = set()
+    if tree.routing_instances or routes_by_vrf:
         for ri in tree.routing_instances:
-            lines.extend(_render_vrf_context(ri))
+            lines.extend(_render_vrf_context(ri, routes_by_vrf.get(ri.name, [])))
+            rendered_vrfs.add(ri.name)
+        # Defensive: a per-VRF static route whose VRF has no routing-
+        # instance record (e.g. a cisco_iosxe_cli source where ``ip route
+        # vrf X`` never declared a ``vrf definition X``) still needs a
+        # ``vrf context`` wrapper so the route is valid NX-OS and
+        # re-parses with vrf=<name>.
+        for vrf_name, routes in routes_by_vrf.items():
+            if vrf_name not in rendered_vrfs:
+                lines.extend(_render_vrf_context(
+                    CanonicalRoutingInstance(name=vrf_name), routes,
+                ))
+                rendered_vrfs.add(vrf_name)
         lines.append("")
 
     # ── Interfaces (NX-OS sort order) ──
@@ -215,16 +236,51 @@ def _render_snmp(snmp) -> list[str]:
     return lines
 
 
-def _render_vrf_context(ri: CanonicalRoutingInstance) -> list[str]:
-    """Render a ``vrf context <name>`` block (name + description).
+def _render_vrf_context(ri: CanonicalRoutingInstance, routes=None) -> list[str]:
+    """Render a ``vrf context <name>`` block.
 
-    Phase 1 emits the description only; RD / route-target / vni land in
-    later phases.
+    Emits ``description``, ``rd`` (the ``auto`` sentinel re-emits
+    verbatim), an ``address-family ipv4 unicast`` sub-block with
+    ``route-target`` lines (the compact ``both <rt>`` form when an RT is
+    in both import + export), and any per-VRF static routes nested inside
+    the block.  The source's ``evpn`` address-family discriminator is NOT
+    re-emitted (declared lossy — the RT survives, the L2VPN-EVPN scope
+    reverts to IPv4 unicast).  ``vni`` (L3VNI) lands in Phase 4.
     """
     block = [f"vrf context {ri.name}"]
     if ri.description:
         block.append(f"  description {ri.description}")
+    if ri.route_distinguisher:
+        block.append(f"  rd {ri.route_distinguisher}")
+    rt_lines = _render_route_targets(ri.rt_imports, ri.rt_exports)
+    if rt_lines:
+        block.append("  address-family ipv4 unicast")
+        block.extend(rt_lines)
+    for route in routes or []:
+        block.append(f"  {_render_static_route(route)}")
     return block
+
+
+def _render_route_targets(imports: list, exports: list) -> list[str]:
+    """Return ``route-target`` lines for an ``address-family`` sub-block.
+
+    An RT present in BOTH import + export collapses to the compact
+    ``route-target both <rt>`` form (matching how operators write it and
+    how :func:`parse._parse_routing_instances` re-expands it); the
+    import-only and export-only remainders follow.  Lines are indented
+    four spaces (nested under ``address-family ipv4 unicast``).
+    """
+    both = [rt for rt in imports if rt in exports]
+    imp_only = [rt for rt in imports if rt not in exports]
+    exp_only = [rt for rt in exports if rt not in imports]
+    lines: list[str] = []
+    for rt in both:
+        lines.append(f"    route-target both {rt}")
+    for rt in imp_only:
+        lines.append(f"    route-target import {rt}")
+    for rt in exp_only:
+        lines.append(f"    route-target export {rt}")
+    return lines
 
 
 def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
