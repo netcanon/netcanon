@@ -39,6 +39,7 @@ from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
+    cisco_nxos,
     fortigate_cli,
     juniper_junos,
     mikrotik_routeros,
@@ -183,6 +184,29 @@ set interfaces ge-0/0/0 unit 0 family ethernet-switching vlan members USERS
         "  </interface>\n"
         "</interfaces>\n"
     ),
+    "cisco_nxos": """\
+!Command: show running-config
+version 9.3(11) Bios:version
+hostname TestNexus
+vdc TestNexus id 1
+
+feature interface-vlan
+
+vlan 1,10,20
+vlan 10
+  name USERS
+vlan 20
+  name VOICE
+
+vrf context management
+
+interface Vlan10
+  no shutdown
+  ip address 10.10.10.1/24
+
+interface Ethernet1/1
+  no shutdown
+""",
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -210,6 +234,7 @@ _SOURCE_CAPABLE = [
     "juniper_junos",
     "fortigate_cli",
     "cisco_iosxe",
+    "cisco_nxos",
 ]
 # Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
 # every bidirectional codec is now in the smoke matrix.  The
@@ -225,6 +250,7 @@ _TARGET_CAPABLE = [
     "fortigate_cli",
     "cisco_iosxe",
     "cisco_iosxe_cli",
+    "cisco_nxos",
 ]
 
 
