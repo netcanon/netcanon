@@ -26,6 +26,47 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+Remediation of the two P1 findings from the read-only full-project
+review at [`docs/project-review/2026-06-06/`](docs/project-review/2026-06-06/)
+(two-fleet review + adversarial verification).  No canonical-model or
+codec-grammar changes; translation behaviour and the capability matrix
+are unchanged.  The remaining P2/P3 findings are sequenced in that
+dossier's `recommended-remediation-plan.md`.
+
+### Security
+
+* **Sanitiser now redacts VRRP / CARP / HSRP authentication secrets**
+  (finding R-01 / CF-01).  `netcanon sanitize` walked only interface
+  `description` + `ipv4_addresses` and never visited
+  `vrrp_groups[].authentication` — a cleartext-bearing field (`plain:` /
+  `carp-key:` schemes hold the literal secret; the Aruba / OPNsense /
+  cisco_iosxe_cli renderers emit it verbatim).  So a config containing a
+  VRRP/CARP auth key, run through the tool operators are told to use
+  before posting a public bug report, leaked that secret — and
+  `--dry-run` showed no substitution, giving false assurance.  The
+  value is now redacted while the `<scheme>:` prefix is preserved (the
+  renderers slice a scheme-width prefix, so the prefix must survive for
+  the rendered output to stay valid).  Added a two-sided structural
+  guard test asserting every secret-bearing canonical field has a
+  redaction rule.  `SECURITY.md` + `BUG_REPORTING.md` redaction tables
+  updated.
+
+### Fixed
+
+* **`netcanon demo` now ships in the wheel + Docker image** (finding
+  R-02 / CF-02 / DA-01).  The README's "See it in 10 seconds" command
+  invoked `tools/demo.py`, but the repo-root `tools/` is excluded from
+  both the wheel (`packages.find` matches `netcanon*` only) and the
+  image (the Dockerfile copies only `netcanon/`), and the image
+  entrypoint is the server — so `docker run … python tools/demo.py`
+  could never have worked against a published artifact.  The demo
+  scenarios moved into the package at `netcanon/tools/demo.py` behind a
+  new `netcanon demo` subcommand that ships automatically; the repo-root
+  `tools/demo.py` is retained as a thin re-export shim so
+  `python tools/demo.py` keeps working from a source checkout.  README
+  hero corrected to `docker run --rm --entrypoint netcanon …
+  demo --pair cisco__junos` (and `netcanon demo …` for pip installs).
+
 ## [0.1.2] - 2026-05-21
 
 Security-hardening release.  No canonical-model or codec-grammar

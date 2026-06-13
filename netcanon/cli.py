@@ -3,6 +3,7 @@
 Subcommands:
 
 * ``netcanon sanitize`` — redact PII from a network config for safe sharing.
+* ``netcanon demo`` — run a self-contained cross-vendor translation demo.
 
 Run via the entry point declared in ``pyproject.toml`` ``[project.scripts]``::
 
@@ -74,10 +75,41 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
 
+    # ``netcanon demo`` — the scenarios live in netcanon.tools.demo (the
+    # single source of truth, shared with the repo-root tools/demo.py shim);
+    # validation of --pair is delegated there to keep `netcanon --help` from
+    # importing the codec registry.
+    demo_parser = subparsers.add_parser(
+        "demo",
+        help="Run a self-contained cross-vendor translation demo (no setup)",
+        description=(
+            "Translate a small embedded synthetic config between two vendors "
+            "using the same pipeline + codec registry as the API.  Pass "
+            "--list to see every available scenario."
+        ),
+    )
+    demo_parser.add_argument(
+        "--pair",
+        default="cisco__junos",
+        help="Source__target codec pair (default: cisco__junos); --list to see all",
+    )
+    demo_parser.add_argument(
+        "--list",
+        action="store_true",
+        help="List all available demo scenarios and exit",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "sanitize":
         return _cmd_sanitize(args)
+    if args.command == "demo":
+        # Lazy import — keeps `netcanon --help` and `netcanon sanitize`
+        # from loading the codec registry / pipeline graph the demo pulls in.
+        from .tools.demo import main as _demo_main
+
+        demo_argv = ["--list"] if args.list else ["--pair", args.pair]
+        return _demo_main(demo_argv)
     return 1
 
 

@@ -1,0 +1,70 @@
+"""Unit tests for the ``netcanon demo`` CLI and the ``netcanon.tools.demo`` module.
+
+Regression guard for finding R-02 / CF-02 (2026-06-06 review): the demo
+must ship inside the package so ``netcanon demo`` works from a bare
+``pip install`` / the Docker image (the README hero command) — not only
+``python tools/demo.py`` from a source checkout.  The repo-root
+``tools/demo.py`` is retained as a thin shim and must keep re-exporting
+the package entry point.
+"""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+
+from netcanon.cli import main as cli_main
+from netcanon.tools.demo import SCENARIOS, main as demo_main
+
+pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+class TestDemoModule:
+    def test_list_returns_zero_and_shows_every_pair(self, capsys):
+        assert demo_main(["--list"]) == 0
+        out = capsys.readouterr().out
+        for key in SCENARIOS:
+            assert f"--pair {key}" in out
+
+    def test_default_pair_translates_to_junos(self, capsys):
+        # No args → default cisco__junos scenario; Cisco hostname becomes
+        # Junos set-form.  Proves the pipeline actually ran end-to-end.
+        assert demo_main([]) == 0
+        out = capsys.readouterr().out
+        assert "set system host-name leaf-01" in out
+
+    @pytest.mark.parametrize("pair", sorted(SCENARIOS))
+    def test_every_scenario_runs_clean(self, pair, capsys):
+        assert demo_main(["--pair", pair]) == 0
+        out = capsys.readouterr().out
+        assert "OUTPUT" in out
+        assert "FAILED" not in out
+
+
+class TestDemoViaCLI:
+    """``netcanon demo …`` must delegate to the same module (the shipped path)."""
+
+    def test_cli_demo_list(self, capsys):
+        assert cli_main(["demo", "--list"]) == 0
+        assert "Available demo scenarios" in capsys.readouterr().out
+
+    def test_cli_demo_pair(self, capsys):
+        assert cli_main(["demo", "--pair", "aruba__arista"]) == 0
+        assert "Aruba AOS-S -> Arista EOS" in capsys.readouterr().out
+
+
+class TestRootShim:
+    """The repo-root ``tools/demo.py`` shim stays valid and re-exports ``main``."""
+
+    def test_shim_reexports_package_main(self):
+        shim_path = REPO_ROOT / "tools" / "demo.py"
+        assert shim_path.is_file()
+        spec = importlib.util.spec_from_file_location("_demo_shim_under_test", shim_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        # The shim must expose the *same* callable the package ships.
+        assert module.main is demo_main
