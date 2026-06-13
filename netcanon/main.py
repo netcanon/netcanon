@@ -34,6 +34,7 @@ from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
 from .api.routes import device_profiles as device_profiles_router
+from .api.routes import docs as docs_router
 from .api.routes import health as health_router
 from .api.routes import migration as migration_router
 from .api.routes import sanitize as sanitize_router
@@ -299,6 +300,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(device_profiles_router.router, prefix="/api/v1")
     app.include_router(migration_router.router, prefix="/api/v1")
     app.include_router(sanitize_router.router, prefix="/api/v1")
+    app.include_router(docs_router.router)  # custom Swagger UI at /docs (no prefix)
     app.include_router(ui_router.router)  # UI routes at root (/, /jobs, …)
 
     return app

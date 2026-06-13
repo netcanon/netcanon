@@ -43,7 +43,7 @@ the former is an ``OSError`` subclass).
 
 Design rationale: a helper function — not a FastAPI exception handler
 — because the failing code runs inside a ``BackgroundTasks`` worker
-thread (see :func:`netcanon.api.routes.backups._run_backup_job` via
+thread (see :func:`netcanon.services.backup_runner.run_backup_job` via
 :class:`ThreadPoolExecutor`), not in an HTTP request lifecycle.
 FastAPI's ``@app.exception_handler`` only fires on the request stack;
 it cannot intercept exceptions inside a background worker that writes

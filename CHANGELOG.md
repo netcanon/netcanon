@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–8)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–9)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -99,6 +99,27 @@ canonical-model or codec-grammar changes.
   and README examples; a new test pins their parameter names, order,
   kind, and defaults so an accidental signature change fails CI instead
   of silently breaking positional callers.
+
+* **Backup orchestration extracted to `services/backup_runner.py`**
+  (finding R-18 / CA-02).  `_process_one_device` + the renamed public
+  `run_backup_job` (was `_run_backup_job`) moved out of the
+  `api/routes/backups.py` route module into a service sibling of
+  `services/migration_pipeline.py`, so the scheduler no longer reaches
+  *into* a route module to borrow the backup engine.  Behaviour-
+  preserving move — the documented SSH mock-point
+  `netcanon.api.routes.backups.get_collector` is unchanged: the service
+  resolves the factory back through the route module at call time, so
+  the ~60 tests that patch that string keep working with zero edits.
+
+* **`/docs` Swagger-UI reskin split into `api/routes/docs.py`** (finding
+  R-12 / CE-01).  The ~440-line dark-mode Swagger wrapper (six `_DOCS_*`
+  CSS/JS constants + the `swagger_ui()` handler) moved out of
+  `api/routes/ui.py` (which was ~48% this one concern) into its own
+  `include_in_schema=False` router, registered at root in `main.py` so
+  the public `/docs` URL is byte-for-byte unchanged.  `ui.py` keeps the
+  eight thin HTML page handlers; the location-agnostic 24-method
+  `test_swagger_docs_page.py` contract test stays green, plus a new
+  guard pins that the constants actually moved.
 
 ### Documentation
 

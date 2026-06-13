@@ -59,7 +59,7 @@ def register_schedule_job(scheduler, schedule: BackupSchedule, app) -> None:
 async def _run_scheduled_backup(schedule_id: str, app) -> None:
     """Coroutine executed by APScheduler for each scheduled run.
 
-    Creates a ``BackupJob``, runs ``_run_backup_job`` in a thread pool
+    Creates a ``BackupJob``, runs ``run_backup_job`` in a thread pool
     (blocking SSH must not run on the event loop), persists the job, and
     updates the schedule's ``last_run_at`` / ``next_run_at``.
     """
@@ -73,9 +73,9 @@ async def _run_scheduled_backup(schedule_id: str, app) -> None:
 
 
 async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
-    """Resolve targets, build a job, and dispatch ``_run_backup_job``.
+    """Resolve targets, build a job, and dispatch ``run_backup_job``.
 
-    The actual blocking SSH/NETCONF work in ``_run_backup_job`` is
+    The actual blocking SSH/NETCONF work in ``run_backup_job`` is
     dispatched via ``asyncio.to_thread`` so it never runs on the
     APScheduler / FastAPI event loop.  Exceptions are allowed to
     propagate; the outer ``_run_scheduled_backup`` wrapper logs and
@@ -90,7 +90,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     Tests patch ``netcanon.api.routes.backups.get_collector`` to mock
     device collection — see AGENTS.md "Hard Rules".  The collector is
-    invoked transitively via ``_run_backup_job``.
+    invoked transitively via ``run_backup_job``.
 
     Args:
         schedule_id: ID of the ``BackupSchedule`` to run.  Looked up
@@ -103,7 +103,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     Side effects:
         * Inserts a new ``BackupJob`` into ``app.state.jobs``.
-        * Persists the job (via ``_run_backup_job``'s ``job_store``).
+        * Persists the job (via ``run_backup_job``'s ``job_store``).
         * Updates ``schedule.last_run_at`` / ``last_job_id`` /
           ``next_run_at`` and persists the schedule.
     """
@@ -112,7 +112,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
     from ...models.device_profile import DeviceProfile
-    from .backups import _run_backup_job
+    from ...services.backup_runner import run_backup_job
 
     schedules = app.state.schedules
     schedule = schedules.get(schedule_id)
@@ -199,7 +199,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
     job_store: FileJobStore = app.state.job_store
     max_workers = getattr(app.state.settings, "backup_concurrency", 10)
     await asyncio.to_thread(
-        _run_backup_job,
+        run_backup_job,
         job,
         request,
         app.state.definitions,
