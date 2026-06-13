@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–11)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–12)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -178,6 +178,21 @@ canonical-model or codec-grammar changes.
   `tests/fixtures/real/phase4_findings_residuals.md`.  +5 guard tests;
   reconciliation artifacts regenerated.  Dev-tooling only — no
   shipped-package behaviour change.
+
+* **Committed `_phase4_runs/latest.json` is now slim** (follow-up to the
+  reconciler-honesty entry above).  The committed reconciliation mirror
+  was a tracked ~166k-line dump of all 424 cells (incl. the ok-severity
+  `ALIGNED` / `EXPECTED_*` / `TRIVIAL_EMPTY` bulk) that churned wholesale
+  on every fixture-corpus regen.  `write_json` (`_slim_for_commit`) now
+  commits only the high-severity `CODEC_BUG` ("investigate first") cells
+  plus the full top-level aggregates / matrix / pair-counts — ~87 %
+  smaller (5 cells / ~21k lines today) and stable across regens — while
+  the full per-cell archive remains the gitignored timestamped JSON
+  beside it.  Self-documents its filter + elided counts under
+  `latest_json_slimmed`; the `phase4_findings_*.md` doc links + Phase 4b
+  investigation flow are unchanged (`CODEC_BUG` cells are exactly what
+  they read).  +1 guard test.  Dev tooling only — no shipped-package
+  behaviour change.
 
 ### Documentation
 
