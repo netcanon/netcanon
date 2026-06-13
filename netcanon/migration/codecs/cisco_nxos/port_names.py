@@ -29,13 +29,13 @@ Logical kinds::
     Vlan<N>                → svi
     loopback<N>            → loopback
     mgmt<N>                → mgmt   (always re-emitted as ``mgmt0``)
+    nve<N>                 → vtep   (always re-emitted as ``nve1``)
 
 Deferred (not classified in v1):
 
 * ``Ethernet1/1/1`` breakout-lane form — structurally ambiguous with the
   N7K three-part slot form; both classify as ``physical`` here.  A
   dedicated breakout model lands with a fixture that needs it.
-* ``nve1`` VTEP — VXLAN-EVPN is Phase 4; would add a ``"vtep"`` PortKind.
 
 Unrecognised names return ``kind="unknown"`` (verbatim fallback with a
 warning).
@@ -68,6 +68,7 @@ _LOGICAL_PATTERNS: tuple[tuple[str, str], ...] = (
     (r"^Vlan(\d+)$", "svi"),
     (r"^loopback(\d+)$", "loopback"),
     (r"^mgmt(\d+)$", "mgmt"),
+    (r"^nve(\d+)$", "vtep"),
 )
 _LOGICAL_RES: tuple[tuple[re.Pattern[str], str], ...] = tuple(
     (re.compile(p, re.IGNORECASE), k) for p, k in _LOGICAL_PATTERNS
@@ -142,6 +143,9 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "mgmt":
         # NX-OS has exactly one mgmt port, always mgmt0.
         return "mgmt0"
+    if identity.kind == "vtep":
+        # NX-OS has exactly one VTEP, always nve1 (grammar survey § 4.6).
+        return "nve1"
     if identity.kind == "virtual":
         # Closest NX-OS analogue for a vendor-specific virtual port.
         return f"loopback{identity.index or 0}"
