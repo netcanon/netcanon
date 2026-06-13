@@ -27,7 +27,7 @@ tests.  Backup-side device definitions are listed under
 |---|---|---|---|---|
 | `cisco_iosxe_cli` | Cisco IOS-XE | `show running-config` text | bidirectional | certified |
 | `cisco_iosxe`     | Cisco IOS-XE | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
-| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | best_effort (Phase 3 complete — L1/L3 basics + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static; VXLAN-EVPN + L3VNI land in Phase 4) |
+| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | best_effort (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI; only T2 anycast-gateway remains unsupported) |
 | `arista_eos`      | Arista EOS    | EOS CLI text              | bidirectional | certified |
 | `aruba_aoss`      | Aruba AOS-S   | AOS-S CLI banner + positional port lists | bidirectional | certified |
 | `juniper_junos`   | Juniper Junos | `set`-form CLI            | bidirectional | certified |

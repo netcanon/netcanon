@@ -25,11 +25,13 @@ Phase 1 surface (see ``docs/v0.2.0-planning/03-nxos-codec/``):
 * top-level ``ip route <dest>/<prefix> <gw> [<pref>]`` (default VRF only)
   → :class:`CanonicalStaticRoute`.
 
-Deliberately NOT parsed in Phase 1 (declared ``unsupported`` in the
-capability matrix — they land in later phases): switchport / L2 mode,
-LAGs, SNMP, local users, per-VRF static routes, VRF RD/RT, VXLAN-EVPN.
-``feature`` / ``vdc`` / ``boot`` / ``line`` lines are discarded on parse
-and re-synthesised on render (the matrix declares the cosmetic loss).
+Phases 2-4 add: L2 switchport, LAGs, SNMP, local users, HSRP, VRF
+RD/RT + per-VRF static routes, and VXLAN-EVPN (``vlan N / vn-segment``
++ ``interface nve1`` VTEP source-interface + per-VRF L3VNI ``vrf
+context X / vni N``).  Still declared ``unsupported``: anycast-gateway
+(T2) plus the Tier-3 protocol / ACL / QoS blocks.  ``feature`` / ``vdc``
+/ ``boot`` / ``line`` lines are discarded on parse and re-synthesised on
+render (the matrix declares the cosmetic loss).
 
 Where this codec diverges from ``cisco_iosxe_cli`` (see
 ``02-codec-architecture.md`` § 14):
@@ -59,6 +61,7 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -229,6 +232,19 @@ _VRF_IP_ROUTE_RE = re.compile(
     r"^\s+ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
     re.IGNORECASE,
 )
+# ── VXLAN-EVPN (Phase 4) ──
+#: ``vni <N>`` inside a ``vrf context`` block → the VRF's L3VNI (symmetric
+#: IRB).  Authoritative VRF↔L3VNI binding; the matching ``interface nve1 /
+#: member vni N associate-vrf`` line is parse-discard.
+_VRF_VNI_RE = re.compile(r"^\s+vni\s+(\d+)\s*$", re.IGNORECASE)
+#: ``vn-segment <vni>`` inside a ``vlan <N>`` stanza → the L2 VLAN↔VNI
+#: binding.  Joined with the VLAN id to build a :class:`CanonicalVxlan`.
+_VN_SEGMENT_RE = re.compile(r"^\s+vn-segment\s+(\d+)\s*$", re.IGNORECASE)
+#: ``source-interface <name>`` inside ``interface nve1`` → the switch-level
+#: VTEP source, broadcast onto every CanonicalVxlan record.
+_NVE_SOURCE_IF_RE = re.compile(
+    r"^\s+source-interface\s+(\S+)\s*$", re.IGNORECASE,
+)
 #: ``vlan 1,10,2000`` / ``vlan 10-20`` — comma + range list (unique to
 #: NX-OS / Arista in this codebase).
 _VLAN_TOP_RE = re.compile(r"^vlan\s+([\d,\-]+)\s*$", re.IGNORECASE)
@@ -348,6 +364,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # Local users (Phase 2b) — ``username ... role <role>``.
     intent.local_users = _parse_local_users(raw)
+
+    # VXLAN-EVPN (Phase 4) — L2 VLAN↔VNI bindings from ``vlan N /
+    # vn-segment <vni>`` + the ``interface nve1`` source-interface
+    # (broadcast onto every record).  L3VNIs live on
+    # routing_instances[].l3_vni (harvested by _parse_routing_instances).
+    intent.vxlan_vnis = _parse_vxlan(raw)
 
     # Shared switchport→VLAN projection: mirror per-port switchport state
     # into the VLAN-centric tagged/untagged lists so VLAN-centric
@@ -473,11 +495,16 @@ def _parse_routing_instances(
                 vrf=current.name,
             ))
             continue
+        vnim = _VRF_VNI_RE.match(line)
+        if vnim:
+            # ``vni <N>`` → the VRF's L3VNI (Phase 4 symmetric IRB).
+            current.l3_vni = int(vnim.group(1))
+            continue
         if _VRF_AF_RE.match(line):
             # ``address-family ... unicast`` — wire framing only; the
             # route-target lines it brackets are matched above by indent.
             continue
-        # ``vni N`` (Phase 4 L3VNI) + anything else — parse-and-ignore.
+        # Anything else inside the block — parse-and-ignore.
 
     if current is not None:
         instances.append(current)
@@ -534,7 +561,19 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         m = _IFACE_RE.match(line)
         if m:
             _flush()
-            current = _new_iface_scratch(m.group(1))
+            name = m.group(1)
+            if name.lower().startswith("nve"):
+                # VTEP (``interface nve1``) is a VXLAN config container,
+                # not a routed/switched port: its source-interface +
+                # member-vni sub-commands are harvested by
+                # :func:`_parse_vxlan` (L2) and
+                # :func:`_parse_routing_instances` (L3VNI).  Don't
+                # materialise it as an interface — mirrors arista_eos's
+                # ``Vxlan1`` interception; the indented body lines fall
+                # through the ``current is None`` guard below.
+                current = None
+                continue
+            current = _new_iface_scratch(name)
             continue
 
         if current is None:
@@ -964,6 +1003,60 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             m.group(1), m.group(2), m.group(3), m.group(4),
         ))
     return routes
+
+
+def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
+    """Build :class:`CanonicalVxlan` records from NX-OS VXLAN grammar.
+
+    The L2 VLAN↔VNI bindings come from ``vlan <N> / vn-segment <vni>``;
+    the switch-level VTEP source comes from ``interface nve1 /
+    source-interface <X>`` and broadcasts onto every record (per the
+    CanonicalVxlan per-switch convention).  L3VNIs (``vrf context X /
+    vni N``) are NOT L2 records — they live on
+    :attr:`CanonicalRoutingInstance.l3_vni` (harvested by
+    :func:`_parse_routing_instances`).  The ``interface nve1`` member-vni
+    / suppress-arp / ingress-replication sub-flags are parse-discard (v1
+    assumes modern BGP-EVPN head-end replication; declared lossy).
+    """
+    # Pass 1: vlan_id → vni from ``vlan N / vn-segment <vni>``.
+    vn_by_vlan: dict[int, int] = {}
+    current_id: int | None = None
+    for line in raw.splitlines():
+        tm = _VLAN_TOP_RE.match(line)
+        if tm:
+            ids = _parse_vlan_list(tm.group(1))
+            current_id = ids[0] if len(ids) == 1 else None
+            continue
+        if current_id is not None:
+            sm = _VN_SEGMENT_RE.match(line)
+            if sm:
+                vn_by_vlan[current_id] = int(sm.group(1))
+                continue
+            if line and not line[0].isspace():
+                current_id = None
+
+    # Pass 2: switch-level VTEP source-interface from ``interface nve1``.
+    source_iface = ""
+    in_nve = False
+    for line in raw.splitlines():
+        im = _IFACE_RE.match(line)
+        if im:
+            in_nve = im.group(1).lower().startswith("nve")
+            continue
+        if line and not line[0].isspace():
+            in_nve = False
+            continue
+        if in_nve:
+            sm = _NVE_SOURCE_IF_RE.match(line)
+            if sm:
+                source_iface = sm.group(1)
+
+    return [
+        CanonicalVxlan(
+            vlan_id=vid, vni=vn_by_vlan[vid], source_interface=source_iface,
+        )
+        for vid in sorted(vn_by_vlan)
+    ]
 
 
 def _parse_snmp(raw: str) -> CanonicalSNMP | None:
