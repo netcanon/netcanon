@@ -28,6 +28,33 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco IOS-XR codec — Phase 2 (VRF + RD-from-`router bgp` + LAGs +
+  local users + dot1q VLAN synth).**  Top-level `vrf <name>` stanzas with
+  nested `import|export route-target` blocks → `CanonicalRoutingInstance`
+  (RT import/export; XR's word order is `import route-target` with the
+  RT values on their own `!`-terminated lines, not NX-OS/IOS-XE's
+  single-line `route-target import <rt>`); per-interface bare `vrf
+  <name>` membership → `CanonicalInterface.vrf`; per-VRF `router static /
+  vrf <name>` routes → `CanonicalStaticRoute.vrf`; `Bundle-Ether<N>`
+  LAGs from member `bundle id <N> mode <m>` lines → `CanonicalLAG` +
+  `lag_member_of`; local users (the `username` block form `group
+  <task-group>` + `secret <type> <hash>`, with `root-lr` / `root-system`
+  → admin privilege 15); and sub-interface `encapsulation dot1q <vid>` →
+  synthesised `CanonicalVlan` id-list (no port membership; XR routers
+  have no classic `vlan` stanza).  **The route-distinguisher is
+  harvested from / rendered to the `router bgp <asn> / vrf <name> / rd`
+  block** — IOS-XR keeps the RD in the BGP process, NOT the `vrf` stanza
+  (the big XR/IOS-XE structural divergence).  The re-emitted minimal
+  `router bgp` RD-carrier derives its ASN from the RD administrator field
+  (the `<asn>:<nn>` convention) so a same-vendor round-trip re-detects
+  the identical `router bgp <asn>` Tier-3 header; an XR config with no
+  `router bgp` stanza keeps `route_distinguisher=''` (declared lossy).
+  Matrix graduates to **22 supported / 3 lossy / 17 unsupported**
+  (`/routing-instances/instance` is declared both supported and lossy →
+  classifies lossy for the RD-from-BGP caveat; SNMP + the SP-routing /
+  `route-policy` / MPLS / `l2vpn` Tier-3 stanzas remain unsupported).
+  Cross-mesh + phase-4 regenerated; high-severity CODEC_BUG held flat at
+  5.  Phases 3 (SP-routing harvest) + 4 (certified corpus) remain.
 * **Cisco IOS-XR codec — Phase 1, a new bidirectional codec
   (`cisco_iosxr`).**  Parses + renders `show running-config` for the
   ASR 9000 / NCS 5500 / 540 / 8000 / CRS service-provider routers:
