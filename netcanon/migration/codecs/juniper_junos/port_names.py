@@ -94,6 +94,7 @@ def classify_port_name(name: str) -> PortIdentity:
             module=int(m.group("pic")),
             port=int(m.group("port")),
             name_speed_hint=_MEDIA_TO_SPEED.get(media, ""),
+            original=name,
         )
 
     # Management (em0 / me0 / fxp0)
@@ -103,6 +104,7 @@ def classify_port_name(name: str) -> PortIdentity:
             kind="mgmt",
             port=int(m.group("n")),
             name_speed_hint="gig",
+            original=name,
         )
 
     # Loopback
@@ -111,6 +113,7 @@ def classify_port_name(name: str) -> PortIdentity:
         return PortIdentity(
             kind="loopback",
             index=int(m.group("n")),
+            original=name,
         )
 
     # Aggregated Ethernet = LAG
@@ -119,6 +122,7 @@ def classify_port_name(name: str) -> PortIdentity:
         return PortIdentity(
             kind="lag",
             index=int(m.group("n")),
+            original=name,
         )
 
     # Integrated Routing and Bridging = SVI-ish
@@ -127,6 +131,7 @@ def classify_port_name(name: str) -> PortIdentity:
         return PortIdentity(
             kind="svi",
             index=int(m.group("n")),
+            original=name,
         )
 
     # Legacy ``vlan.N`` (older EX platforms).
@@ -135,9 +140,10 @@ def classify_port_name(name: str) -> PortIdentity:
         return PortIdentity(
             kind="svi",
             index=int(m.group("n")),
+            original=name,
         )
 
-    return PortIdentity(kind="unknown")
+    return PortIdentity(kind="unknown", original=name)
 
 
 def format_port_identity(identity: PortIdentity) -> str | None:
