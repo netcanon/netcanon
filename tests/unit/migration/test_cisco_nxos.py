@@ -201,14 +201,18 @@ class TestParse:
         assert by_dest["0.0.0.0/0"].gateway == "192.0.2.254"
         assert by_dest["0.0.0.0/0"].metric == 0
         assert by_dest["10.100.0.0/16"].metric == 200
-        # All Phase-1 routes are default-VRF.
-        assert all(r.vrf == "" for r in intent.static_routes)
+        # Default-VRF routes carry no vrf; the TENANT-A per-VRF route
+        # (Phase 3) carries its VRF name.
+        assert by_dest["0.0.0.0/0"].vrf == ""
+        assert by_dest["10.100.0.0/16"].vrf == ""
+        assert by_dest["10.50.0.0/16"].vrf == "TENANT-A"
 
-    def test_per_vrf_static_route_not_parsed_in_phase1(self, codec):
-        """Per-VRF static routes (indented inside ``vrf context``) are
-        Phase 3 — Phase 1 must NOT harvest them, and must NOT
-        auto-materialise a phantom routing-instance from a ``vrf member``
-        reference (see the per-VRF harvest memory)."""
+    def test_per_vrf_static_route_harvested_no_phantom_instance(self, codec):
+        """Phase 3: a per-VRF ``ip route`` nested in ``vrf context`` is
+        harvested onto ``CanonicalStaticRoute.vrf`` — and must NOT
+        materialise a phantom routing-instance (the ``vrf context``
+        header already created exactly one).  See the per-VRF harvest
+        memory."""
         raw = (
             "!Command: show running-config\n"
             "hostname R1\n"
@@ -217,10 +221,12 @@ class TestParse:
             "ip route 0.0.0.0/0 192.0.2.254\n"
         )
         intent = codec.parse(raw)
-        # Only the top-level (default-VRF) route is harvested.
-        assert [r.destination for r in intent.static_routes] == ["0.0.0.0/0"]
-        # The explicit ``vrf context TENANT`` materialises exactly one
-        # instance — no phantom duplicates.
+        by_dest = {r.destination: r for r in intent.static_routes}
+        # The per-VRF route carries its VRF; the default route stays global.
+        assert by_dest["10.9.9.0/24"].vrf == "TENANT"
+        assert by_dest["10.9.9.0/24"].gateway == "10.9.9.1"
+        assert by_dest["0.0.0.0/0"].vrf == ""
+        # Exactly one instance — no phantom duplicate from the route harvest.
         assert [r.name for r in intent.routing_instances] == ["TENANT"]
 
 
@@ -328,17 +334,16 @@ class TestCapabilityMatrix:
             assert path in sup, path
 
     def test_deferred_paths_declared_unsupported(self, codec):
-        """Surfaces deferred to Phase 2b/2c/3/4 must classify
+        """Surfaces deferred to Phase 4 / Tier-3 must classify
         ``unsupported`` so the migrate-page banner + cross-mesh report
-        flag them.  (The Phase-2a L2 surface has graduated — see
-        ``test_l2_paths_graduated_to_supported``.)"""
+        flag them.  (Phase-2a L2 + Phase-3 VRF RD/RT + per-VRF static
+        have graduated — see ``test_l2_paths_graduated_to_supported``
+        and ``TestPhase3VRF.test_phase3_matrix_graduated``.)"""
         caps = codec.capabilities
         for path in [
-            "/routing-instances/instance/route-distinguisher",  # Phase 3
-            "/routing-instances/instance/rt-imports",       # Phase 3
-            "/routing/static-route/vrf",                    # Phase 3
             "/routing-instances/instance/l3-vni",           # Phase 4
             "/vxlan-vnis/vni",                              # Phase 4
+            "/vxlan-vnis/source-interface",                # Phase 4
             "/anycast-gateway",                             # Phase 4
             "/routing-protocols/bgp",                       # Tier-3
             "/access-list/extended",                        # Tier-3
@@ -661,3 +666,171 @@ class TestPhase2cHSRP:
         assert codec.capabilities.classify(
             "/interfaces/interface/vrrp-groups/group"
         ) == "lossy"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — VRF RD / route-target + per-VRF static routes
+# ---------------------------------------------------------------------------
+
+
+_VRF_RDRT_CONFIG = """\
+!Command: show running-config
+hostname VRF3
+vrf context management
+  description oob
+vrf context TENANT-A
+  description tenant a
+  rd 65001:100
+  address-family ipv4 unicast
+    route-target import 65001:100
+    route-target export 65001:200
+  ip route 10.50.0.0/16 172.16.0.2
+  ip route 10.60.0.0/16 172.16.0.2 250
+vrf context TENANT-EVPN
+  rd auto
+  address-family ipv4 unicast
+    route-target both 65001:300 evpn
+ip route 0.0.0.0/0 192.0.2.254
+"""
+
+
+class TestPhase3VRF:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_VRF_RDRT_CONFIG)
+
+    def test_rd_and_split_rts(self, tree):
+        a = next(r for r in tree.routing_instances if r.name == "TENANT-A")
+        assert a.route_distinguisher == "65001:100"
+        assert a.rt_imports == ["65001:100"]
+        assert a.rt_exports == ["65001:200"]
+
+    def test_rd_auto_sentinel(self, tree):
+        evpn = next(
+            r for r in tree.routing_instances if r.name == "TENANT-EVPN"
+        )
+        assert evpn.route_distinguisher == "auto"
+
+    def test_route_target_both_evpn_suffix_stripped(self, tree):
+        """``route-target both 65001:300 evpn`` → RT preserved on both
+        import + export; the ``evpn`` AF discriminator is dropped (lossy)."""
+        evpn = next(
+            r for r in tree.routing_instances if r.name == "TENANT-EVPN"
+        )
+        assert evpn.rt_imports == ["65001:300"]
+        assert evpn.rt_exports == ["65001:300"]
+
+    def test_per_vrf_static_routes_harvested(self, tree):
+        a_routes = sorted(
+            (r for r in tree.static_routes if r.vrf == "TENANT-A"),
+            key=lambda r: r.destination,
+        )
+        assert [(r.destination, r.gateway, r.metric) for r in a_routes] == [
+            ("10.50.0.0/16", "172.16.0.2", 0),
+            ("10.60.0.0/16", "172.16.0.2", 250),
+        ]
+
+    def test_default_vrf_route_stays_global(self, tree):
+        default = [r for r in tree.static_routes if not r.vrf]
+        assert [r.destination for r in default] == ["0.0.0.0/0"]
+
+    def test_no_phantom_instance(self, tree):
+        # Exactly the three declared vrf contexts — the per-VRF ``ip
+        # route`` harvest must not conjure a duplicate / phantom instance.
+        assert sorted(r.name for r in tree.routing_instances) == [
+            "TENANT-A", "TENANT-EVPN", "management",
+        ]
+
+    def test_render_round_trips(self, codec, tree):
+        rendered = codec.render(tree)
+        # RD + per-VRF routes nest inside the vrf context block.
+        assert "vrf context TENANT-A" in rendered
+        assert "  rd 65001:100" in rendered
+        assert "  address-family ipv4 unicast" in rendered
+        assert "    route-target import 65001:100" in rendered
+        assert "    route-target export 65001:200" in rendered
+        assert "  ip route 10.50.0.0/16 172.16.0.2" in rendered
+        assert "  ip route 10.60.0.0/16 172.16.0.2 250" in rendered
+        # rd auto sentinel re-emits verbatim.
+        assert "  rd auto" in rendered
+
+        def vrf_view(t):
+            return {
+                r.name: (
+                    r.route_distinguisher,
+                    tuple(r.rt_imports),
+                    tuple(r.rt_exports),
+                )
+                for r in t.routing_instances
+            }
+
+        def route_view(t):
+            return sorted(
+                (r.destination, r.gateway, r.interface, r.metric, r.vrf)
+                for r in t.static_routes
+            )
+
+        second = codec.parse(rendered)
+        assert vrf_view(tree) == vrf_view(second)
+        assert route_view(tree) == route_view(second)
+
+    def test_route_target_both_compact_render(self, codec):
+        """An RT in both import + export renders the compact ``both`` form
+        and round-trips back to import == export."""
+        tree = CanonicalIntent(
+            hostname="X",
+            routing_instances=[
+                CanonicalRoutingInstance(
+                    name="T", route_distinguisher="65001:1",
+                    rt_imports=["65001:1"], rt_exports=["65001:1"],
+                ),
+            ],
+        )
+        out = codec.render(tree)
+        assert "    route-target both 65001:1" in out
+        t2 = next(
+            r for r in codec.parse(out).routing_instances if r.name == "T"
+        )
+        assert t2.rt_imports == ["65001:1"]
+        assert t2.rt_exports == ["65001:1"]
+
+    def test_defensive_vrf_context_for_orphan_per_vrf_route(self, codec):
+        """A per-VRF static route whose VRF has NO routing-instance record
+        (e.g. a cisco_iosxe_cli source where ``ip route vrf X`` never
+        declared a ``vrf definition X``) still renders a ``vrf context``
+        wrapper so the route is valid NX-OS and re-parses with vrf set."""
+        tree = CanonicalIntent(
+            hostname="X", source_vendor="cisco_iosxe",
+            static_routes=[
+                CanonicalStaticRoute(
+                    destination="10.7.0.0/16", gateway="10.7.0.1", vrf="ORPHAN",
+                ),
+            ],
+        )
+        out = codec.render(tree)
+        assert "vrf context ORPHAN" in out
+        assert "  ip route 10.7.0.0/16 10.7.0.1" in out
+        reparsed = codec.parse(out)
+        r = next(
+            r for r in reparsed.static_routes if r.destination == "10.7.0.0/16"
+        )
+        assert r.vrf == "ORPHAN"
+
+    def test_phase3_matrix_graduated(self, codec):
+        caps = codec.capabilities
+        # rt-exports + per-VRF static-route are cleanly supported.
+        assert caps.classify(
+            "/routing-instances/instance/rt-exports"
+        ) == "supported"
+        assert caps.classify("/routing/static-route/vrf") == "supported"
+        # rd + rt-imports are supported-but-lossy (auto sentinel / evpn).
+        assert caps.classify(
+            "/routing-instances/instance/route-distinguisher"
+        ) == "lossy"
+        assert caps.classify(
+            "/routing-instances/instance/rt-imports"
+        ) == "lossy"
+        # L3VNI stays Phase-4 unsupported.
+        assert caps.classify(
+            "/routing-instances/instance/l3-vni"
+        ) == "unsupported"

@@ -14,8 +14,9 @@ Phase 1 surface (see ``docs/v0.2.0-planning/03-nxos-codec/``):
 * ``version <N.N(N)> Bios:version`` → :attr:`CanonicalIntent.source_version`
   (metadata only; the banner line itself is synthesised on render).
 * ``vrf context <name>`` (top-level) → :class:`CanonicalRoutingInstance`
-  (name + description only; ``rd`` / ``route-target`` / ``vni`` are
-  Phase 3 / Phase 4 and parse-and-ignore here).
+  (name + description + ``rd`` + ``route-target import/export/both``;
+  nested per-VRF ``ip route`` → :class:`CanonicalStaticRoute` with
+  ``vrf=<name>``).  ``vni`` (L3VNI) is Phase 4 and parse-and-ignore here.
 * ``interface <name>`` blocks → :class:`CanonicalInterface` carrying
   ``description`` / ``shutdown`` / ``mtu`` / ``ip address X/N`` (CIDR) /
   ``ipv6 address X/N`` / ``vrf member <name>``.
@@ -200,6 +201,34 @@ def _normalise_priv_proto(proto: str | None) -> str:
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
+# ── VRF RD / route-target + per-VRF static route (Phase 3) ──
+#: ``rd <asn>:<nn>`` / ``rd <ip>:<nn>`` / ``rd auto`` inside a ``vrf
+#: context`` block.  ``auto`` (NX-OS derives the RD from the BGP ASN +
+#: VRF VNI) is preserved verbatim as a sentinel — declared lossy.
+_VRF_RD_RE = re.compile(r"^\s+rd\s+(\S+)\s*$", re.IGNORECASE)
+#: ``route-target import|export|both <rt> [evpn]`` (nested under an
+#: ``address-family ... unicast`` sub-block).  ``both`` expands to
+#: import + export; the trailing ``evpn`` address-family discriminator
+#: is consumed but not modelled (declared lossy — the RT is preserved
+#: but the L2VPN-EVPN scope reverts to IPv4 unicast cross-vendor).
+_VRF_RT_RE = re.compile(
+    r"^\s+route-target\s+(import|export|both)\s+(\S+)(?:\s+evpn)?\s*$",
+    re.IGNORECASE,
+)
+#: ``address-family ipv4|ipv6 unicast`` framing inside ``vrf context`` —
+#: gates the nested route-target lines on the wire but carries no
+#: canonical state of its own (consumed / ignored, like IOS-XE's
+#: ``address-family`` / ``exit-address-family`` markers).
+_VRF_AF_RE = re.compile(r"^\s+address-family\s+\S+", re.IGNORECASE)
+#: Per-VRF static route nested inside ``vrf context X`` (indented).
+#: NX-OS form: ``  ip route <dest>/<prefix> <gw> [<pref>]``.  Harvested
+#: onto :attr:`CanonicalStaticRoute.vrf` — the instance already exists
+#: (the ``vrf context`` header created it), so the harvest can never
+#: conjure a phantom routing-instance (see the per-VRF harvest memory).
+_VRF_IP_ROUTE_RE = re.compile(
+    r"^\s+ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    re.IGNORECASE,
+)
 #: ``vlan 1,10,2000`` / ``vlan 10-20`` — comma + range list (unique to
 #: NX-OS / Arista in this codebase).
 _VLAN_TOP_RE = re.compile(r"^vlan\s+([\d,\-]+)\s*$", re.IGNORECASE)
@@ -287,10 +316,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.source_version = _extract_version(raw)
 
     # VRF declarations (``vrf context <name>`` top-level stanzas).
-    # Phase 1 harvests name + description only; rd / route-target / vni
-    # land in later phases.  Per-interface ``vrf member`` membership is
-    # set by :func:`_parse_interfaces`.
-    intent.routing_instances = _parse_routing_instances(raw)
+    # Phase 3 harvests name + description + rd + route-target; the nested
+    # per-VRF ``ip route`` lines come back as the second tuple element and
+    # merge into static_routes below.  ``vni`` (L3VNI) stays Phase 4.
+    # Per-interface ``vrf member`` membership is set by
+    # :func:`_parse_interfaces`.
+    intent.routing_instances, _vrf_static_routes = _parse_routing_instances(raw)
 
     intent.interfaces = _parse_interfaces(raw)
 
@@ -301,10 +332,12 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # downstream codecs.
     _synthesize_vlans_from_svis(intent)
 
-    # Static routes — top-level (default VRF) only in Phase 1.  Per-VRF
-    # routes embedded in ``vrf context`` blocks are deferred to Phase 3
-    # (declared unsupported).
-    intent.static_routes = _parse_static_routes(raw)
+    # Static routes — top-level scan harvests default-VRF routes; the
+    # per-VRF routes harvested from inside ``vrf context`` blocks (above)
+    # carry ``vrf=<name>`` and merge in here.  The two sets are disjoint
+    # by indentation (top-level ``^ip route`` vs nested ``  ip route``),
+    # so no de-dup is required.
+    intent.static_routes = _parse_static_routes(raw) + _vrf_static_routes
 
     # LAGs (Phase 2) — both the ``interface port-channelN`` declaration
     # and per-member ``channel-group N mode M`` lines contribute.
@@ -356,25 +389,40 @@ def _extract_version(raw: str) -> str:
     return m.group(1) if m else ""
 
 
-def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
-    """Extract ``vrf context <name>`` blocks (name + description only).
+def _parse_routing_instances(
+    raw: str,
+) -> tuple[list[CanonicalRoutingInstance], list[CanonicalStaticRoute]]:
+    """Extract ``vrf context <name>`` blocks + their per-VRF static routes.
 
     A NX-OS VRF stanza looks like::
 
         vrf context TENANT-A
           description tenant a
-          vni 10001                       ← Phase 4 (ignored)
-          rd auto                         ← Phase 3 (ignored)
-          address-family ipv4 unicast     ← Phase 3 (ignored)
-            route-target both auto evpn   ← Phase 3 (ignored)
+          vni 10001                       ← Phase 4 L3VNI (ignored)
+          rd 65001:100                    ← Phase 3
+          address-family ipv4 unicast     ← framing (ignored)
+            route-target import 65001:100 ← Phase 3
+            route-target export 65001:100 ← Phase 3
+            route-target both auto evpn   ← Phase 3 (RT kept, evpn dropped)
+          ip route 10.50.0.0/16 172.16.0.2  ← Phase 3 (per-VRF static)
 
-    Phase 1 harvests ``name`` + ``description``.  Everything else inside
-    the block is parse-and-ignore (declared unsupported in the matrix).
-    Block-walker pattern mirrors ``cisco_iosxe_cli`` — open on the header
-    regex, absorb indented sub-lines, close on the first non-indented
-    line.
+    Returns a ``(instances, per_vrf_routes)`` pair.  Phase 3 harvests
+    ``name`` / ``description`` / ``rd`` (``auto`` preserved verbatim as a
+    sentinel) / ``route-target`` (``both`` expands to import + export; a
+    trailing ``evpn`` discriminator is dropped) onto the instance, and
+    each nested ``ip route`` onto a :class:`CanonicalStaticRoute` carrying
+    ``vrf=<name>``.  ``vni`` (L3VNI) and the ``address-family`` framing
+    stay parse-and-ignore (L3VNI is Phase 4).
+
+    The per-VRF route harvest never materialises an instance — the ``vrf
+    context`` header already created it — so it cannot conjure a phantom
+    routing-instance on cross-vendor round-trip (see the per-VRF harvest
+    memory).  Block-walker pattern mirrors ``cisco_iosxe_cli`` — open on
+    the header regex, absorb indented sub-lines, close on the first
+    non-indented line.
     """
     instances: list[CanonicalRoutingInstance] = []
+    per_vrf_routes: list[CanonicalStaticRoute] = []
     current: CanonicalRoutingInstance | None = None
 
     for line in raw.splitlines():
@@ -393,9 +441,8 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
         if line and not line[0].isspace():
             instances.append(current)
             current = None
-            # Fall through is unnecessary — a top-level line that opens a
-            # new vrf context is re-matched on the next iteration; but we
-            # already consumed it, so re-check the header here.
+            # A top-level line that opens a new vrf context: re-check the
+            # header here since we've already consumed the line.
             header = _VRF_CONTEXT_RE.match(line)
             if header:
                 current = CanonicalRoutingInstance(name=header.group(1))
@@ -405,11 +452,36 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
         if dm:
             current.description = dm.group(1).strip()
             continue
-        # rd / route-target / vni / address-family — Phase 3/4; ignore.
+        rm = _VRF_RD_RE.match(line)
+        if rm:
+            current.route_distinguisher = rm.group(1)
+            continue
+        rtm = _VRF_RT_RE.match(line)
+        if rtm:
+            direction = rtm.group(1).lower()
+            rt = rtm.group(2)
+            if direction in ("import", "both"):
+                current.rt_imports.append(rt)
+            if direction in ("export", "both"):
+                current.rt_exports.append(rt)
+            continue
+        route_m = _VRF_IP_ROUTE_RE.match(line)
+        if route_m:
+            per_vrf_routes.append(_make_static_route(
+                route_m.group(1), route_m.group(2),
+                route_m.group(3), route_m.group(4),
+                vrf=current.name,
+            ))
+            continue
+        if _VRF_AF_RE.match(line):
+            # ``address-family ... unicast`` — wire framing only; the
+            # route-target lines it brackets are matched above by indent.
+            continue
+        # ``vni N`` (Phase 4 L3VNI) + anything else — parse-and-ignore.
 
     if current is not None:
         instances.append(current)
-    return instances
+    return instances, per_vrf_routes
 
 
 def _new_iface_scratch(name: str) -> dict:
@@ -837,6 +909,39 @@ def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
                 existing.ipv4_addresses.append(addr)
 
 
+def _make_static_route(
+    dest_ip: str,
+    prefix: str,
+    gw_or_iface: str,
+    metric_str: str | None,
+    vrf: str = "",
+) -> CanonicalStaticRoute:
+    """Build a :class:`CanonicalStaticRoute` from matched NX-OS tokens.
+
+    Shared by the default-VRF top-level scan (:func:`_parse_static_routes`)
+    and the per-VRF harvest inside ``vrf context`` blocks
+    (:func:`_parse_routing_instances`).  A next-hop that parses as an
+    IPv4 address becomes ``gateway``; otherwise it's an egress
+    ``interface`` (directly-attached next-hop).  The trailing integer
+    (if any) is the route preference / administrative distance → ``metric``.
+    """
+    metric = int(metric_str) if metric_str else 0
+    gateway = ""
+    iface = ""
+    try:
+        ipaddress.IPv4Address(gw_or_iface)
+        gateway = gw_or_iface
+    except ipaddress.AddressValueError:
+        iface = gw_or_iface
+    return CanonicalStaticRoute(
+        destination=f"{dest_ip}/{prefix}",
+        gateway=gateway,
+        interface=iface,
+        metric=metric,
+        vrf=vrf,
+    )
+
+
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """Extract top-level ``ip route`` lines (default VRF) from NX-OS text.
 
@@ -845,30 +950,18 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     distance and maps to :attr:`CanonicalStaticRoute.metric`.
 
     Per-VRF static routes (indented inside a ``vrf context`` block) do
-    NOT match the top-level ``^ip route`` anchor and are deferred to
-    Phase 3 (declared unsupported; requires no phantom routing-instance —
-    see the per-VRF harvest memory).
+    NOT match the top-level ``^ip route`` anchor — they are harvested by
+    :func:`_parse_routing_instances` (Phase 3) onto
+    ``CanonicalStaticRoute.vrf`` and merged into the route list by the
+    caller.
     """
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue
-        dest = f"{m.group(1)}/{m.group(2)}"
-        gw_or_iface = m.group(3)
-        metric = int(m.group(4)) if m.group(4) else 0
-        gateway = ""
-        iface = ""
-        try:
-            ipaddress.IPv4Address(gw_or_iface)
-            gateway = gw_or_iface
-        except ipaddress.AddressValueError:
-            iface = gw_or_iface
-        routes.append(CanonicalStaticRoute(
-            destination=dest,
-            gateway=gateway,
-            interface=iface,
-            metric=metric,
+        routes.append(_make_static_route(
+            m.group(1), m.group(2), m.group(3), m.group(4),
         ))
     return routes
 
