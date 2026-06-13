@@ -1137,3 +1137,50 @@ def test_drift_is_anycast_companion_only_predicate() -> None:
     assert recon._drift_is_anycast_companion_only(
         {"drift_summary": "count drift: 6 -> 9"}
     ) is False
+
+
+# ---------------------------------------------------------------------------
+# _slim_for_commit — the committed latest.json mirror carries full
+# aggregates + only the high-severity CODEC_BUG ("investigate first")
+# cells, eliding the lower-severity bulk (the regen-churn source) with a
+# self-documenting note.  See run_phase4_reconciliation.write_json.
+# ---------------------------------------------------------------------------
+
+
+def test_slim_for_commit_keeps_codec_bug_drops_lower_severity() -> None:
+    result = {
+        "started_utc": "2026-06-13T00:00:00+00:00",
+        "aggregate": {"CODEC_BUG": 1, "ALIGNED": 9},
+        "severity_matrix": {"arista_eos": {"opnsense": 1}},
+        "pair_codec_bug_counts": [
+            {"source_codec": "arista_eos", "target_codec": "opnsense",
+             "codec_bug_count": 1},
+        ],
+        "cells": [
+            {"source_codec": "arista_eos", "target_codec": "opnsense",
+             "summary": {"severity_high": 1, "severity_medium": 0}},
+            {"source_codec": "cisco_iosxe_cli", "target_codec": "arista_eos",
+             "summary": {"severity_high": 0, "severity_medium": 2}},
+            {"source_codec": "aruba_aoss", "target_codec": "juniper_junos",
+             "summary": {"severity_high": 0, "severity_medium": 0,
+                         "severity_low": 5, "severity_ok": 20}},
+        ],
+    }
+    slim = recon._slim_for_commit(result)
+    # Full top-level aggregates / matrix / pair-counts preserved verbatim.
+    assert slim["aggregate"] == result["aggregate"]
+    assert slim["severity_matrix"] == result["severity_matrix"]
+    assert slim["pair_codec_bug_counts"] == result["pair_codec_bug_counts"]
+    # Only the high-severity CODEC_BUG cell survives; the medium-only
+    # (methodology over-claim) cell AND the low/ok-only cell are elided.
+    kept = {(c["source_codec"], c["target_codec"]) for c in slim["cells"]}
+    assert kept == {("arista_eos", "opnsense")}
+    assert ("cisco_iosxe_cli", "arista_eos") not in kept  # medium-only elided
+    # Self-documenting elision record — never a silent truncation.
+    meta = slim["latest_json_slimmed"]
+    assert meta["cells_committed"] == 1
+    assert meta["cells_total_in_run"] == 3
+    assert "severity_high" in meta["filter"]
+    # The input result is not mutated.
+    assert len(result["cells"]) == 3
+    assert "latest_json_slimmed" not in result

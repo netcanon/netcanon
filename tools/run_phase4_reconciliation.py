@@ -1244,9 +1244,11 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         "(its module docstring defines every variance class, including "
         "the structural-collapse rule that produces "
         "``STRUCTURAL_ONLY`` entries)\n"
-        "- ``tests/fixtures/real/_phase4_runs/`` — per-run JSON outputs "
-        "(gitignored except the latest, which is committed for Phase 4b "
-        "agents to read)\n"
+        "- ``tests/fixtures/real/_phase4_runs/`` — per-run JSON outputs. "
+        "A SLIM ``latest.json`` (full aggregates + only the high-severity "
+        "CODEC_BUG 'investigate first' cells) is committed for Phase 4b "
+        "agents; every FULL per-run JSON (incl. the ok-severity bulk) is "
+        "gitignored — regenerate locally for the complete cell set\n"
         "- ``tests/fixtures/cross_vendor_expectations/`` — Phase 3 "
         "vendor-doc-grounded expectations (56 pair YAMLs)\n"
         "- ``tests/fixtures/real/CROSS_MESH_RESULTS.md`` — Phase 1 "
@@ -1272,27 +1274,80 @@ def _all_target_codecs(result: dict[str, Any]) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
-def write_json(result: dict[str, Any]) -> Path:
-    """Write the reconciliation result twice:
+def _slim_for_commit(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a slim copy of *result* for the committed ``latest.json``
+    mirror: full top-level metadata (aggregate counts, severity matrix,
+    pair-codec-bug counts) but only the **high-severity ``CODEC_BUG``**
+    cells — the Phase 4b "investigate first" set the docstring's variance
+    table points agents at first.
 
-    * ``<timestamp>.json`` — the per-run archive (gitignored)
-    * ``latest.json``      — a stable filename overwritten on every
-                             invocation, committed alongside the
-                             skeleton .md so Phase 4b investigation
-                             agents always have an up-to-date input
-                             without the operator having to ``git add``
-                             the timestamped name each time.
+    Everything lower-severity (``EXPECTED_*`` / ``ALIGNED`` /
+    ``TRIVIAL_EMPTY`` at ``ok``; methodology over-claims at low/medium;
+    ``STRUCTURAL_ONLY`` at low) is the bulk of the full file and the
+    source of the multi-100k-line churn every fixture-corpus regen
+    otherwise adds to the committed artifact — it is elided here.  Its
+    *counts* survive in the full top-level ``aggregate`` block, so the
+    summary stays complete; only the lower-severity per-cell DETAIL moves
+    to the gitignored ``<timestamp>.json`` beside this file (regenerate
+    with ``tools/run_phase4_reconciliation.py`` for the complete set).
+    The elision is recorded under ``latest_json_slimmed`` so the
+    committed file is self-documenting and never silently truncated.
+    """
+    cells = result.get("cells", [])
+    actionable = [
+        c
+        for c in cells
+        if (c.get("summary") or {}).get("severity_high", 0)
+    ]
+    slim = dict(result)
+    slim["cells"] = actionable
+    slim["latest_json_slimmed"] = {
+        "note": (
+            "Committed mirror — high-severity CODEC_BUG cells only (the "
+            "Phase 4b 'investigate first' set).  Lower-severity "
+            "methodology / structural / ok cells are summarised in the "
+            "full top-level `aggregate` block above; their per-cell "
+            "detail is in the gitignored <timestamp>.json beside this "
+            "file (regenerate with tools/run_phase4_reconciliation.py)."
+        ),
+        "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
+        "cells_committed": len(actionable),
+        "cells_total_in_run": len(cells),
+    }
+    return slim
+
+
+def write_json(result: dict[str, Any]) -> Path:
+    """Write the reconciliation result to two files:
+
+    * ``<timestamp>.json`` — the FULL per-run archive: every cell,
+      including the ``ok``-severity ``ALIGNED`` / ``EXPECTED_*`` /
+      ``TRIVIAL_EMPTY`` bulk.  Gitignored (operator scratch / full local
+      fidelity).
+    * ``latest.json``      — a SLIM, committed mirror produced by
+      :func:`_slim_for_commit`: full top-level aggregates + matrix +
+      pair-counts, but only the high-severity ``CODEC_BUG``
+      ("investigate first") cells.  Committed so the
+      ``phase4_findings_<vendor>.md``
+      docs keep a stable, linkable raw-data source WITHOUT the
+      multi-100k-line churn the full cell list adds to every
+      fixture-corpus regen.  Self-documents its filter under
+      ``latest_json_slimmed``.
 
     Returns the timestamped path (the canonical "this run" identifier);
-    ``latest.json`` is a side-effect mirror.
+    ``latest.json`` is the slim committed mirror.
     """
     PHASE4_RUNS_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    body = json.dumps(result, indent=2, default=str)
     out_path = PHASE4_RUNS_DIR / f"{timestamp}.json"
-    out_path.write_text(body, encoding="utf-8")
+    out_path.write_text(
+        json.dumps(result, indent=2, default=str), encoding="utf-8",
+    )
     latest_path = PHASE4_RUNS_DIR / "latest.json"
-    latest_path.write_text(body, encoding="utf-8")
+    latest_path.write_text(
+        json.dumps(_slim_for_commit(result), indent=2, default=str),
+        encoding="utf-8",
+    )
     return out_path
 
 
