@@ -55,6 +55,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
+    cisco_nxos,
     fortigate_cli,
     juniper_junos,
     mikrotik_routeros,

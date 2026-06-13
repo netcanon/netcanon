@@ -28,6 +28,31 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **New codec: Cisco NX-OS (`cisco_nxos`) — Phase 1 of 4.**  Bidirectional
+  `show running-config` translator for the Nexus 3000 / 5000 / 7000 /
+  9000 data-center series.  NX-OS is a distinct CLI grammar from IOS-XE
+  (same vendor, different parser): CIDR-only addressing (`ip address
+  X/N`, never dotted mask), `vrf context` / `vrf member` keywords,
+  render-derived `feature` declarations, and uniform `Ethernet<slot>/
+  <port>` naming with no speed prefix.  Phase 1 ships the scaffold +
+  L1/L3 basics: hostname; interfaces (description / admin-state / MTU /
+  IPv4 + IPv6 CIDR / `vrf member` / mgmt-port classification); VLANs
+  (comma+range id-list, names, SVI synthesis); `vrf context` (name +
+  description); and default-VRF static routes (`ip route X/N GW
+  [pref]`).  Switchport / LAG / SNMP / local-users / per-VRF static /
+  VRF RD-RT / VXLAN-EVPN are declared `unsupported` in the capability
+  matrix (15 supported / 3 lossy / 31 unsupported) and land in
+  Phases 2-4; `certainty="experimental"` until the L2/L3 surface and a
+  real-capture corpus arrive.  The codec auto-enrolls into the
+  cross-mesh + phase-4 reconciliation (486 cells; high-severity
+  CODEC_BUG held flat at 5 — every cross-vendor cell into/out of NX-OS
+  classifies `EXPECTED_LOSSY` / `EXPECTED_UNSUPPORTED` / `ALIGNED`,
+  none `CODEC_BUG`).  Companion wiring: `cli-nxos` added to
+  `INPUT_FORMATS`, `detect_tier3_sections_nxos` (BGP / OSPF / ACL /
+  route-map / QoS notification surface), a `cisco_nxos` vendor YAML,
+  and a synthetic kitchen-sink fixture under the generic round-trip
+  drift-guards.  Design dossier:
+  [`docs/v0.2.0-planning/03-nxos-codec/`](docs/v0.2.0-planning/03-nxos-codec/).
 * **Per-VRF static routes on `cisco_iosxe_cli`** (v0.2.0 — graduates a
   ship-before-wire surface).  `ip route vrf <NAME> <dest> <mask> <gw>`
   now round-trips: the parser populates `CanonicalStaticRoute.vrf`
