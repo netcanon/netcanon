@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-06-06
+
 Remediation of the two P1 findings from the read-only full-project
 review at [`docs/project-review/2026-06-06/`](docs/project-review/2026-06-06/)
 (two-fleet review + adversarial verification).  No canonical-model or
