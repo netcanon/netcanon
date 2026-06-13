@@ -51,7 +51,15 @@ the UI's notification banners.
 
 ### Tier 1 — auto-translatable (cross-vendor stable)
 
-Fully modelled; every shipped bidirectional codec parses and renders:
+Modelled and wired across the shipped bidirectional codecs.  Most leaves
+round-trip cleanly on every codec; a few carry documented per-codec
+exceptions (e.g. `tunnel_type` is **lossy** on FortiGate — FortiOS expresses
+tunnels in separate top-level sections, not as an encap discriminator on a
+tunnel interface; `mtu` is unsupported on Aruba AOS-S, which has no per-port
+MTU concept).  The per-codec tables under
+[§A](#a-capability-matrix-unsupported--lossy-panels) are the source of
+truth for which leaves are lossy/unsupported on which codec; this list
+names the canonical surface, not a blanket guarantee.
 
 * `hostname`, `domain`
 * `interfaces` — `name`, `description`, `enabled`, IPv4 + IPv6
