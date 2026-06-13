@@ -191,6 +191,7 @@ hostname TestNexus
 vdc TestNexus id 1
 
 feature interface-vlan
+feature lacp
 
 vlan 1,10,20
 vlan 10
@@ -204,8 +205,15 @@ interface Vlan10
   no shutdown
   ip address 10.10.10.1/24
 
+interface port-channel1
+  switchport mode trunk
+  switchport trunk allowed vlan 10,20
+
 interface Ethernet1/1
-  no shutdown
+  switchport access vlan 10
+
+interface Ethernet1/2
+  channel-group 1 mode active
 """,
 }
 

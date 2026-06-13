@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco NX-OS codec — Phase 2a (L2 switchport + LAG).**  Graduates the
+  Layer-2 surface from `unsupported` to `supported`: switchport mode
+  (access / trunk), access-vlan, trunk allowed + native VLANs, the NX-OS
+  L2-default semantics (a routed physical/LAG port renders an explicit
+  `no switchport`; SVIs / loopbacks / mgmt0 stay inherently L3), the
+  VLAN-centric port projection (tagged / untagged), and LAG membership
+  (`interface port-channelN` + per-member `channel-group N mode
+  active|passive|on`, with `on` → canonical `static`).  `feature lacp`
+  is render-derived on LAG presence.  Mirrors `arista_eos`'s
+  render-decides L2-default model rather than materialising a phantom
+  access mode on bare ports.  Capability matrix now 26 supported /
+  3 lossy / 23 unsupported; `certainty` stays `experimental` (SNMP +
+  local-users land in Phase 2b, HSRP in Phase 2c).  Cross-mesh + phase-4
+  regenerated; high-severity CODEC_BUG held flat at 5.
 * **New codec: Cisco NX-OS (`cisco_nxos`) — Phase 1 of 4.**  Bidirectional
   `show running-config` translator for the Nexus 3000 / 5000 / 7000 /
   9000 data-center series.  NX-OS is a distinct CLI grammar from IOS-XE
