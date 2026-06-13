@@ -64,6 +64,25 @@ the configs carry no local users / secrets (lab startup configs).
 | `xrdtools_sr_xrd1.cfg` | `samples/xr_compose_topos/segment-routing/xrd-1-startup.cfg` | Apache-2.0 | **SR-MPLS** node — IS-IS + segment-routing MPLS, `router bgp 100`, `route-policy`, `extcommunity-set`, 5 interfaces, 1 VRF, default static. |
 | `xrdtools_isis_r1.cfg` | `samples/xr_compose_topos/isis-ipfrr/r1.cfg` | Apache-2.0 | **IS-IS IP-FRR** router — minimal `router isis LAB` config, 3 interfaces.  Exercises the IS-IS surface absent from batfish. |
 
+## cisco_nxos/
+
+All six configs are from [batfish/lab-validation](https://github.com/batfish/lab-validation)
+under Apache-2.0, retained verbatim with a 3-line `!`-comment
+attribution header.  All NX-OS **9.2(3)**; RFC 5737 / RFC 1918
+addressing, RFC 6996 private ASNs, generic lab device names, and
+published lab type-5 ``username admin password 5 $5$...`` credentials
+(publicly-known batfish lab material, not real device secrets) — no
+sanitization required.
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `batfish_nxos_hsrp_nxos1.txt` | `snapshots/nxos_hsrp/configs/nxos1` | Apache-2.0 | HSRP on SVIs (FHRP → `CanonicalVRRPGroup` mode=hsrp) + a port-channel LAG, VRF, 3 VLANs.  The L3-redundancy witness. |
+| `batfish_nxos_hsrp_nxos2.txt` | `snapshots/nxos_hsrp/configs/nxos2` | Apache-2.0 | HSRP peer to nxos1 (standby-side priorities). |
+| `batfish_nxos_evpn_l3vni_nx1.txt` | `snapshots/nxos_evpn_l3vni/configs/NX-1` | Apache-2.0 | VXLAN-EVPN symmetric IRB — 2 VRFs, `interface nve1` VTEP, per-VRF L3VNI (`vrf context X / vni N`). |
+| `batfish_nxos_evpn_l3vni_nx2.txt` | `snapshots/nxos_evpn_l3vni/configs/NX-2` | Apache-2.0 | L3VNI peer to NX-1. |
+| `batfish_nxos_evpn_l2vni_nx1.txt` | `snapshots/nxos_evpn_l2vni/configs/NX-1` | Apache-2.0 | VXLAN-EVPN L2VNI — `vlan N / vn-segment` VLAN↔VNI bindings (2 VNIs) + the nve1 VTEP source-interface. |
+| `batfish_nxos_bgp_redist_d1.txt` | `snapshots/nxos_bgp_redist_connected/configs/d1_nxos` | Apache-2.0 | Baseline `router bgp` + redistribute-connected (Tier-3 BGP surfaced via `dropped_tier3_sections`) + VRF, no overlay. |
+
 ## opnsense/
 
 | File | Origin | License | Notes |

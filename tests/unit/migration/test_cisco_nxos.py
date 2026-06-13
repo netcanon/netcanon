@@ -376,7 +376,7 @@ class TestCapabilityMatrix:
         assert codec.name == "cisco_nxos"
         assert codec.input_format == "cli-nxos"
         assert codec.direction == "bidirectional"
-        assert codec.certainty == "best_effort"   # Phase 2 complete
+        assert codec.certainty == "certified"   # 6-config batfish corpus
         assert codec.capabilities.vendor_id == "cisco_nxos"
 
     def test_l2_paths_graduated_to_supported(self, codec):

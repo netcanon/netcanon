@@ -225,6 +225,46 @@ but is not a `certified`-gating concern.
 
 ---
 
+## cisco_nxos
+
+**Codec:** `netcanon.migration.codecs.cisco_nxos.CiscoNXOSCodec`
+**Direction:** `bidirectional`
+**Certainty:** `certified` ✅
+
+### Status
+
+All four phases + IPv4 Distributed Anycast Gateway shipped.  Corpus is 6
+`batfish/lab-validation` configs (Apache-2.0), all NX-OS 9.2(3), spanning
+four distinct scenarios (HSRP, EVPN L3VNI, EVPN L2VNI, BGP-redistribute).
+All parse, are deterministic, and round-trip cleanly.  Routing-protocol
+stanzas (`router bgp` / `router ospf`) are surfaced via
+`dropped_tier3_sections`.
+
+### Coverage matrix
+
+| Fixture | Lines | iface | vlan | vrf | vxlan | lag | Exercises |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `batfish_nxos_hsrp_nxos1.txt` | 340 | 134 | 3 | 1 | — | 1 | HSRP (FHRP) + port-channel LAG |
+| `batfish_nxos_hsrp_nxos2.txt` | 336 | 134 | 3 | 1 | — | 1 | HSRP peer (standby) |
+| `batfish_nxos_evpn_l3vni_nx1.txt` | 352 | 132 | 2 | 2 | 1 | — | VXLAN-EVPN symmetric-IRB L3VNI + nve1 VTEP |
+| `batfish_nxos_evpn_l3vni_nx2.txt` | 358 | 132 | 2 | 2 | 1 | — | L3VNI peer |
+| `batfish_nxos_evpn_l2vni_nx1.txt` | 358 | 131 | 3 | 1 | 2 | — | VXLAN-EVPN L2VNI (`vn-segment`) |
+| `batfish_nxos_bgp_redist_d1.txt` | 326 | 129 | 1 | 1 | — | — | BGP redistribute-connected + VRF |
+
+(The high interface counts reflect batfish's full chassis dumps — every
+Ethernet port appears, most unconfigured.)
+
+### Certification decision
+
+`certified`.  Six real captures clear the `base.py` "≥3 real captures
+round-trip cleanly" bar 2×, across four distinct grammar scenarios
+(HSRP / L3VNI / L2VNI / BGP).  The corpus is single-source
+(`batfish/lab-validation`) and single-version (NX-OS 9.2(3)); a newer
+NX-OS major + a second source are flagged in `WANTED.md` as welcomed
+quality nice-to-haves, not `certified`-gating per the base.py definition.
+
+---
+
 ## opnsense
 
 **Codec:** `netcanon.migration.codecs.opnsense.OPNsenseCodec`

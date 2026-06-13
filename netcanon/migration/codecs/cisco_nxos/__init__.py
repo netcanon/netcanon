@@ -15,11 +15,13 @@ Module layout (mirrors ``cisco_iosxe_cli`` post-split):
     * port_names.py — cross-vendor port-name bridge.
 
 Direction: ``bidirectional``.
-Certainty: ``best_effort`` — Phase 2 of a four-phase build is complete
-    (L1/L3 basics + L2 switchport/LAG + SNMP/users + HSRP).  Per-VRF
-    static + VRF RD-RT (Phase 3) and VXLAN-EVPN (Phase 4) are still
-    declared unsupported.  See ``docs/v0.2.0-planning/03-nxos-codec/``
-    for the phase plan.
+Certainty: ``certified`` — all four phases complete (L1/L3 + L2
+    switchport/LAG + SNMP/users + HSRP + VRF RD-RT + per-VRF static +
+    VXLAN-EVPN/L3VNI + IPv4 Distributed Anycast Gateway).
+    Round-trip-validated against 6 real ``batfish/lab-validation``
+    captures (Apache-2.0) spanning four NX-OS 9.x scenarios.  Only the
+    IPv6 anycast companion + the Tier-3 protocol / ACL / QoS surfaces
+    remain unsupported.  See ``docs/v0.2.0-planning/03-nxos-codec/``.
 """
 
 from .codec import CiscoNXOSCodec
