@@ -11,11 +11,13 @@ hostname, a synthesised banner / version / ``vdc`` wrapper, render-derived
 per-VRF static routes), and interface stanzas with description /
 admin-state / mtu / IPv4 (CIDR) / IPv6 / ``vrf member``.
 
-The render path is deliberately tolerant of canonical surfaces it does
-NOT yet emit (switchport / LAG / SNMP / local-users / VRRP / VXLAN /
-anycast — all Phase 2+): a cross-vendor source tree carrying those
-fields renders cleanly, simply omitting them.  The matrix declares each
-omission ``unsupported`` so the migrate-page banner surfaces the gap.
+The render path emits the full Phase 2-4 surface (L2 switchport / LAG /
+SNMP / local-users / HSRP / VRF RD-RT / per-VRF static / VXLAN-EVPN +
+L3VNI) and stays deliberately tolerant of the canonical surfaces it
+still does NOT emit (anycast-gateway — T2): a cross-vendor source tree
+carrying those fields renders cleanly, simply omitting them.  The matrix
+declares each omission ``unsupported`` so the migrate-page banner
+surfaces the gap.
 
 ``feature`` lines are render-derived (NOT modelled canonically — see
 ``03-canonical-mapping.md`` § 5); the ``vdc`` / ``line`` / ``boot``
@@ -92,14 +94,25 @@ def render_intent(tree: CanonicalIntent) -> str:
     if default_vrf_routes:
         lines.append("")
 
-    # ── VLANs (coalesced id-list + per-name stanzas) ──
-    if tree.vlans:
-        ids = sorted({v.id for v in tree.vlans})
-        lines.append(f"vlan {_coalesce_vlan_ids(ids)}")
-        for v in sorted(tree.vlans, key=lambda x: x.id):
-            if v.name:
-                lines.append(f"vlan {v.id}")
-                lines.append(f"  name {v.name}")
+    # ── VLANs (coalesced id-list + per-name / vn-segment stanzas) ──
+    # A VLAN gets a body stanza when it has a name and/or a VXLAN VNI
+    # (``vn-segment``).  VXLAN vlan-ids that lack a top-level vlan record
+    # are still declared (the id-list + a body stanza) so the
+    # vn-segment binding survives cross-vendor sources.
+    vni_by_vlan = {x.vlan_id: x.vni for x in tree.vxlan_vnis}
+    all_vlan_ids = sorted({v.id for v in tree.vlans} | set(vni_by_vlan))
+    if all_vlan_ids:
+        lines.append(f"vlan {_coalesce_vlan_ids(all_vlan_ids)}")
+        names = {v.id: v.name for v in tree.vlans if v.name}
+        for vid in all_vlan_ids:
+            name = names.get(vid)
+            vni = vni_by_vlan.get(vid)
+            if name or vni is not None:
+                lines.append(f"vlan {vid}")
+                if name:
+                    lines.append(f"  name {name}")
+                if vni is not None:
+                    lines.append(f"  vn-segment {vni}")
         lines.append("")
 
     # ── VRF contexts (name + description + rd + route-target + per-VRF
@@ -136,6 +149,9 @@ def render_intent(tree: CanonicalIntent) -> str:
     for iface in _sort_interfaces_nxos(tree.interfaces):
         lines.extend(_render_interface(iface, lag_mode_by_name))
 
+    # ── VTEP (interface nve1) — Phase 4 VXLAN-EVPN ──
+    lines.extend(_render_nve(tree))
+
     # ── Footers (synthesised defaults) ──
     lines.append("line console")
     lines.append("line vty")
@@ -145,11 +161,12 @@ def render_intent(tree: CanonicalIntent) -> str:
 
 
 def _derive_features(tree: CanonicalIntent) -> list[str]:
-    """Return the sorted ``feature`` list Phase 1 must emit.
+    """Return the sorted ``feature`` list the render must emit.
 
-    Phase 1 only renders one feature-gated surface: SVIs require
-    ``feature interface-vlan``.  LAG / HSRP / VXLAN / anycast features
-    are derived in later phases when their render paths land.
+    NX-OS feature-gates are derived from the canonical-tree shape (not a
+    canonical primitive — see ``03-canonical-mapping.md`` § 5): any SVI →
+    ``interface-vlan``, any LAG → ``lacp``, any FHRP group → ``hsrp``, and
+    any VXLAN VNI / L3VNI → ``nv overlay`` + ``vn-segment-vlan-based``.
     """
     features: set[str] = set()
     if any(_is_svi(i.name) for i in tree.interfaces):
@@ -158,6 +175,11 @@ def _derive_features(tree: CanonicalIntent) -> list[str]:
         features.add("lacp")
     if any(i.vrrp_groups for i in tree.interfaces):
         features.add("hsrp")
+    if tree.vxlan_vnis or any(
+        ri.l3_vni is not None for ri in tree.routing_instances
+    ):
+        features.add("nv overlay")
+        features.add("vn-segment-vlan-based")
     return sorted(features)
 
 
@@ -239,17 +261,19 @@ def _render_snmp(snmp) -> list[str]:
 def _render_vrf_context(ri: CanonicalRoutingInstance, routes=None) -> list[str]:
     """Render a ``vrf context <name>`` block.
 
-    Emits ``description``, ``rd`` (the ``auto`` sentinel re-emits
-    verbatim), an ``address-family ipv4 unicast`` sub-block with
-    ``route-target`` lines (the compact ``both <rt>`` form when an RT is
-    in both import + export), and any per-VRF static routes nested inside
-    the block.  The source's ``evpn`` address-family discriminator is NOT
-    re-emitted (declared lossy — the RT survives, the L2VPN-EVPN scope
-    reverts to IPv4 unicast).  ``vni`` (L3VNI) lands in Phase 4.
+    Emits ``description``, ``vni`` (the Phase-4 L3VNI for symmetric IRB),
+    ``rd`` (the ``auto`` sentinel re-emits verbatim), an ``address-family
+    ipv4 unicast`` sub-block with ``route-target`` lines (the compact
+    ``both <rt>`` form when an RT is in both import + export), and any
+    per-VRF static routes nested inside the block.  The source's ``evpn``
+    address-family discriminator is NOT re-emitted (declared lossy — the
+    RT survives, the L2VPN-EVPN scope reverts to IPv4 unicast).
     """
     block = [f"vrf context {ri.name}"]
     if ri.description:
         block.append(f"  description {ri.description}")
+    if ri.l3_vni is not None:
+        block.append(f"  vni {ri.l3_vni}")
     if ri.route_distinguisher:
         block.append(f"  rd {ri.route_distinguisher}")
     rt_lines = _render_route_targets(ri.rt_imports, ri.rt_exports)
@@ -281,6 +305,44 @@ def _render_route_targets(imports: list, exports: list) -> list[str]:
     for rt in exp_only:
         lines.append(f"    route-target export {rt}")
     return lines
+
+
+def _render_nve(tree: CanonicalIntent) -> list[str]:
+    """Render the ``interface nve1`` VTEP stanza from VXLAN + L3VNI data.
+
+    NX-OS uses exactly one VTEP (``nve1``).  L2 VNIs come from
+    ``tree.vxlan_vnis`` (one ``member vni <vni>`` each, joined to a VLAN
+    via the ``vlan N / vn-segment`` lines rendered earlier); L3VNIs come
+    from ``routing_instances[].l3_vni`` (``member vni <l3vni>
+    associate-vrf``).  ``source-interface`` is the switch-level VTEP
+    source (broadcast across every CanonicalVxlan record; falls back to
+    ``loopback0`` when undeclared).  ``host-reachability protocol bgp`` is
+    the constant modern BGP-EVPN head-end default — legacy
+    flood-and-learn + the per-VNI ``suppress-arp`` / ``ingress-
+    replication`` sub-flags are not modelled (declared lossy).  Returns
+    an empty list when the switch carries no overlay.
+    """
+    l3_vnis = sorted(
+        ri.l3_vni for ri in tree.routing_instances if ri.l3_vni is not None
+    )
+    if not tree.vxlan_vnis and not l3_vnis:
+        return []
+    source_iface = next(
+        (x.source_interface for x in tree.vxlan_vnis if x.source_interface), "",
+    ) or "loopback0"
+    block = [
+        "interface nve1",
+        "  no shutdown",
+        "  host-reachability protocol bgp",
+        f"  source-interface {source_iface}",
+    ]
+    for v in sorted(tree.vxlan_vnis, key=lambda x: x.vni):
+        block.append(f"  member vni {v.vni}")
+        if v.mcast_group:
+            block.append(f"    mcast-group {v.mcast_group}")
+    for l3 in l3_vnis:
+        block.append(f"  member vni {l3} associate-vrf")
+    return block
 
 
 def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:

@@ -30,7 +30,9 @@ from netcanon.migration.canonical.intent import (
     CanonicalRoutingInstance,
     CanonicalSNMP,
     CanonicalStaticRoute,
+    CanonicalVlan,
     CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
 from netcanon.migration.codecs.cisco_nxos import CiscoNXOSCodec
 
@@ -334,19 +336,18 @@ class TestCapabilityMatrix:
             assert path in sup, path
 
     def test_deferred_paths_declared_unsupported(self, codec):
-        """Surfaces deferred to Phase 4 / Tier-3 must classify
+        """Surfaces still deferred (T2 anycast + Tier-3) must classify
         ``unsupported`` so the migrate-page banner + cross-mesh report
-        flag them.  (Phase-2a L2 + Phase-3 VRF RD/RT + per-VRF static
-        have graduated — see ``test_l2_paths_graduated_to_supported``
-        and ``TestPhase3VRF.test_phase3_matrix_graduated``.)"""
+        flag them.  (Phase-2a L2, Phase-3 VRF RD/RT + per-VRF static, and
+        Phase-4 VXLAN-EVPN + L3VNI have all graduated — see the
+        ``test_*_matrix_graduated`` companions.)"""
         caps = codec.capabilities
         for path in [
-            "/routing-instances/instance/l3-vni",           # Phase 4
-            "/vxlan-vnis/vni",                              # Phase 4
-            "/vxlan-vnis/source-interface",                # Phase 4
-            "/anycast-gateway",                             # Phase 4
+            "/anycast-gateway",                             # T2 — deferred
             "/routing-protocols/bgp",                       # Tier-3
+            "/routing-protocols/ospf",                      # Tier-3
             "/access-list/extended",                        # Tier-3
+            "/qos",                                         # Tier-3
         ]:
             assert caps.classify(path) == "unsupported", path
 
@@ -830,7 +831,134 @@ class TestPhase3VRF:
         assert caps.classify(
             "/routing-instances/instance/rt-imports"
         ) == "lossy"
-        # L3VNI stays Phase-4 unsupported.
-        assert caps.classify(
-            "/routing-instances/instance/l3-vni"
-        ) == "unsupported"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4 — VXLAN-EVPN (vn-segment + nve1 VTEP + L3VNI) + vtep PortKind
+# ---------------------------------------------------------------------------
+
+
+_VXLAN_CONFIG = """\
+!Command: show running-config
+hostname EVPN1
+feature interface-vlan
+feature nv overlay
+feature vn-segment-vlan-based
+vlan 1,10,20
+vlan 10
+  name WEB
+  vn-segment 10010
+vlan 20
+  name APP
+  vn-segment 10020
+vrf context TENANT-A
+  vni 50001
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto evpn
+interface Vlan10
+  no shutdown
+  ip address 10.10.10.1/24
+interface loopback0
+  ip address 10.255.0.1/32
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback0
+  member vni 10010
+  member vni 10020
+  member vni 50001 associate-vrf
+"""
+
+
+class TestPhase4VXLAN:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_VXLAN_CONFIG)
+
+    def test_vlan_vni_bindings(self, tree):
+        vnis = sorted((v.vlan_id, v.vni) for v in tree.vxlan_vnis)
+        assert vnis == [(10, 10010), (20, 10020)]
+
+    def test_source_interface_broadcast(self, tree):
+        # The nve1 source-interface stamps onto every L2 VNI record.
+        assert all(v.source_interface == "loopback0" for v in tree.vxlan_vnis)
+
+    def test_l3_vni_on_vrf(self, tree):
+        a = next(r for r in tree.routing_instances if r.name == "TENANT-A")
+        assert a.l3_vni == 50001
+
+    def test_l3_vni_not_an_l2_record(self, tree):
+        # The L3VNI (50001) is a VRF property, NOT an L2 VLAN↔VNI record.
+        assert 50001 not in {v.vni for v in tree.vxlan_vnis}
+
+    def test_nve1_not_materialised_as_interface(self, tree):
+        # nve1 is a VXLAN config container, not a routed/switched port.
+        assert "nve1" not in {i.name for i in tree.interfaces}
+
+    def test_render_emits_vxlan(self, codec, tree):
+        out = codec.render(tree)
+        assert "  vn-segment 10010" in out
+        assert "  vn-segment 10020" in out
+        assert "interface nve1" in out
+        assert "  source-interface loopback0" in out
+        assert "  member vni 10010" in out
+        assert "  member vni 50001 associate-vrf" in out
+        assert "  vni 50001" in out                    # vrf-context L3VNI
+        assert "feature nv overlay" in out
+        assert "feature vn-segment-vlan-based" in out
+
+    def test_round_trips(self, codec, tree):
+        rendered = codec.render(tree)
+        second = codec.parse(rendered)
+
+        def vx(t):
+            return sorted(
+                (v.vlan_id, v.vni, v.source_interface) for v in t.vxlan_vnis
+            )
+
+        assert vx(tree) == vx(second)
+        l3a = next(
+            r for r in tree.routing_instances if r.name == "TENANT-A"
+        ).l3_vni
+        l3b = next(
+            r for r in second.routing_instances if r.name == "TENANT-A"
+        ).l3_vni
+        assert l3a == l3b == 50001
+
+    def test_vtep_portkind_classify_and_format(self, codec):
+        ident = codec.classify_port_name("nve1")
+        assert ident.kind == "vtep"
+        assert codec.format_port_identity(ident) == "nve1"
+
+    def test_mcast_group_render(self, codec):
+        tree = CanonicalIntent(
+            hostname="X",
+            vlans=[CanonicalVlan(id=30, name="MC")],
+            vxlan_vnis=[
+                CanonicalVxlan(
+                    vlan_id=30, vni=10030, mcast_group="239.1.1.30",
+                    source_interface="loopback0",
+                ),
+            ],
+        )
+        out = codec.render(tree)
+        assert "  member vni 10030" in out
+        assert "    mcast-group 239.1.1.30" in out
+
+    def test_phase4_matrix_graduated(self, codec):
+        caps = codec.capabilities
+        for path in [
+            "/vxlan-vnis/source-interface",
+            "/vxlan-vnis/udp-port",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+            "/routing-instances/instance/l3-vni",
+        ]:
+            assert caps.classify(path) == "supported", path
+        # vxlan-vni is supported-but-lossy (nve sub-flags dropped);
+        # evpn-type5 is lossy (modelled via the l3_vni VRF binding).
+        assert caps.classify("/vxlan-vnis/vni") == "lossy"
+        assert caps.classify("/evpn-type5-routes/route") == "lossy"
+        # Anycast remains T2-deferred.
+        assert caps.classify("/anycast-gateway") == "unsupported"

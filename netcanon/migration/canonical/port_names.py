@@ -53,6 +53,9 @@ PortKind = Literal[
     "svi",          # VLAN SVI (L3 interface bound to a VLAN)
     "loopback",     # virtual loopback
     "tunnel",       # VPN / GRE / WireGuard / IPsec tunnel
+    "vtep",         # VXLAN tunnel endpoint (NX-OS nve1, etc.) — most
+                    # codecs have no native equivalent and return None
+                    # from format_port_identity (verbatim + warning)
     "mgmt",         # out-of-band management port
     "virtual",      # vendor-specific virtual (VirtualPortGroup, etc.)
     "unknown",      # codec couldn't classify — leave verbatim

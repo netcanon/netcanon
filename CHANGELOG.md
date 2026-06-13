@@ -28,6 +28,30 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco NX-OS codec — Phase 4 (VXLAN-EVPN + L3VNI + `vtep` PortKind),
+  completing the codec.**  Parses the EVPN overlay: `vlan N / vn-segment
+  <vni>` → `CanonicalVxlan` (L2 VLAN↔VNI binding), `interface nve1 /
+  source-interface <X>` (the switch-level VTEP source, broadcast onto
+  every record), and `vrf context X / vni <N>` →
+  `CanonicalRoutingInstance.l3_vni` (symmetric-IRB L3VNI).  The `nve1`
+  stanza is intercepted as a config container — not materialised as an
+  interface (mirrors arista_eos's `Vxlan1`); its `member vni` /
+  `suppress-arp` / `ingress-replication` sub-flags are parse-discard (v1
+  assumes modern BGP-EVPN head-end replication).  Render emits the
+  `vn-segment` lines, the `interface nve1` VTEP (`member vni <vni>` for
+  L2 + `member vni <l3vni> associate-vrf` for L3), `vrf context X / vni`,
+  and derives `feature nv overlay` + `feature vn-segment-vlan-based`.
+  Adds `"vtep"` to the canonical `PortKind` literal (nve1 → vtep; other
+  codecs return `None` → the verbatim+warning fall-through; nxos formats
+  vtep → `nve1`).  Capability matrix now **44 supported / 11 lossy / 11
+  unsupported** — newly supported `/vxlan-vnis/{vni,source-interface,
+  udp-port,mcast-group,flood-list}` + `/routing-instances/instance/l3-vni`;
+  new lossy `/vxlan-vnis/vni` (nve per-VNI sub-flags) +
+  `/evpn-type5-routes/route` (modelled via the l3_vni VRF binding, not
+  per-prefix records).  Only the T2 anycast-gateway surface remains
+  unsupported.  `certainty` stays `best_effort` (reaches `certified`
+  once a real-capture corpus across two OS versions lands).  Cross-mesh +
+  phase-4 regenerated; high-severity CODEC_BUG held flat at 5.
 * **Cisco NX-OS codec — Phase 3 (VRF RD / route-target + per-VRF static
   routes).**  Graduates the L3-isolation surface inside `vrf context X`:
   `rd <rd>` (the NX-OS `rd auto` derivation preserved verbatim as a

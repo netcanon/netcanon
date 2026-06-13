@@ -23,18 +23,20 @@ introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
 This codec lands in four phases (see
-``docs/v0.2.0-planning/03-nxos-codec/``).  **Phase 3 is complete**:
-Phase 1 (hostname, basic-L3 interfaces, VLANs, ``vrf context``
-name+description, default-VRF static routes), Phase 2a (L2 switchport
-with the NX-OS default-flip, VLAN-centric port projection, LAG /
-``channel-group`` membership), Phase 2b (SNMPv2c community + v3 USM
-users + local-users), Phase 2c (HSRP via
-``CanonicalVRRPGroup(mode="hsrp")``), and Phase 3 (VRF RD /
-route-target + per-VRF static routes nested inside ``vrf context``).
-VXLAN-EVPN + L3VNI + the ``vtep`` PortKind (Phase 4) remain
-``unsupported`` in the matrix below so the migrate-page banner surfaces
-the gap.  ``certainty`` is ``best_effort``; it reaches ``certified``
-once a real-capture corpus across two OS versions lands.
+``docs/v0.2.0-planning/03-nxos-codec/``).  **All four phases are
+complete**: Phase 1 (hostname, basic-L3 interfaces, VLANs, ``vrf
+context`` name+description, default-VRF static routes), Phase 2a (L2
+switchport with the NX-OS default-flip, VLAN-centric port projection,
+LAG / ``channel-group`` membership), Phase 2b (SNMPv2c community + v3
+USM users + local-users), Phase 2c (HSRP via
+``CanonicalVRRPGroup(mode="hsrp")``), Phase 3 (VRF RD / route-target +
+per-VRF static routes nested inside ``vrf context``), and Phase 4
+(VXLAN-EVPN — ``vlan N / vn-segment`` VLAN↔VNI bindings, the ``interface
+nve1`` VTEP source-interface, and per-VRF L3VNI ``vrf context X / vni
+N``, plus the ``vtep`` PortKind).  Only the T2 anycast-gateway surface
+remains ``unsupported`` in the matrix below.  ``certainty`` is
+``best_effort``; it reaches ``certified`` once a real-capture corpus
+across two OS versions lands.
 """
 
 from __future__ import annotations
@@ -158,6 +160,13 @@ class CiscoNXOSCodec(CodecBase):
             # Static routes (default VRF + Phase-3 per-VRF)
             "/routing/static-route",
             "/routing/static-route/vrf",
+            # VXLAN-EVPN (Phase 4) — L2 VLAN↔VNI + VTEP + L3VNI
+            "/vxlan-vnis/vni",
+            "/vxlan-vnis/source-interface",
+            "/vxlan-vnis/udp-port",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+            "/routing-instances/instance/l3-vni",
         ],
         lossy=[
             LossyPath(
@@ -274,35 +283,46 @@ class CiscoNXOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/vxlan-vnis/vni",
+                reason=(
+                    "NX-OS `interface nve1 / member vni N` per-VNI "
+                    "sub-flags (`suppress-arp`, `ingress-replication "
+                    "protocol bgp`) do not round-trip — the codec emits "
+                    "the modern BGP-EVPN head-end-replication shape on "
+                    "every render (constant `host-reachability protocol "
+                    "bgp`).  Source configs using legacy flood-and-learn "
+                    "or alternate ingress-replication protocols normalise "
+                    "to the default.  The VLAN↔VNI binding itself "
+                    "round-trips via `vlan N / vn-segment`."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/evpn-type5-routes/route",
+                reason=(
+                    "EVPN Type-5 (IP-prefix) announcements are modelled as "
+                    "a VRF property via `CanonicalRoutingInstance.l3_vni` "
+                    "(`vrf context X / vni N` + `interface nve1 / member "
+                    "vni N associate-vrf`), not per-prefix records.  The "
+                    "codec does not enumerate per-prefix "
+                    "`CanonicalEvpnType5Route` entries (no route-map / "
+                    "prefix-filter parsing in v1); the supported canonical "
+                    "alternative is the l3_vni VRF binding."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
-            # ── Phase 4 surfaces — VRF L3VNI + VXLAN-EVPN + anycast ──
-            UnsupportedPath(
-                path="/routing-instances/instance/l3-vni",
-                reason=(
-                    "L3VNI binding (`vrf context X / vni N`) lands in "
-                    "Phase 4 EVPN."
-                ),
-            ),
-            UnsupportedPath(
-                path="/vxlan-vnis/vni",
-                reason="VXLAN-EVPN parse + render lands in Phase 4.",
-            ),
-            UnsupportedPath(
-                path="/vxlan-vnis/source-interface",
-                reason="Phase 4.",
-            ),
-            UnsupportedPath(path="/vxlan-vnis/udp-port", reason="Phase 4."),
-            UnsupportedPath(
-                path="/vxlan-vnis/mcast-group",
-                reason="Phase 4 (head-end only initially; mcast deferred).",
-            ),
+            # ── Anycast-gateway — T2 surface, deferred beyond Phase 4 ──
             UnsupportedPath(
                 path="/anycast-gateway",
                 reason=(
-                    "Anycast-gateway-mac + per-SVI fabric-forwarding mode "
-                    "land in Phase 4 (gated on the T2 anycast canonical "
-                    "surface)."
+                    "Anycast-gateway-mac (`fabric forwarding "
+                    "anycast-gateway-mac`) + the per-SVI fabric-forwarding "
+                    "mode are the T2 canonical surface; deferred beyond "
+                    "Phase 4 (VXLAN-EVPN shipped without the anycast SVI "
+                    "slice)."
                 ),
             ),
             # ── Tier-3 — never auto-translatable ──
