@@ -72,6 +72,7 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
+from ..base import RenderError
 from ...canonical.intent import CanonicalIntent
 
 logger = logging.getLogger(__name__)
@@ -99,12 +100,16 @@ def render_intent(tree: Any) -> str:
     their prefix stripped so parse(render(tree)) round-trips.
 
     Raises:
-        TypeError: If *tree* is not a :class:`CanonicalIntent`.
+        RenderError: If *tree* is not a :class:`CanonicalIntent`.  Matches
+            the ``CodecBase.render`` contract + the other seven codecs, so
+            the pipeline's ``except RenderError`` catches it in the render
+            stage instead of mis-bucketing it as an unexpected error.
     """
     if not isinstance(tree, CanonicalIntent):
-        raise TypeError(
+        raise RenderError(
             "juniper_junos.render: expected CanonicalIntent, got "
-            f"{type(tree).__name__}"
+            f"{type(tree).__name__}",
+            yang_path="/",
         )
 
     # Materialise port-centric switchport state from VLAN-centric

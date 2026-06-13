@@ -25,7 +25,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from netcanon.migration.codecs.base import ParseError
+from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.juniper_junos import JunosCodec
 from netcanon.migration.codecs.juniper_junos.port_names import (
     classify_port_name,
@@ -277,9 +277,10 @@ class TestParseValidation:
         assert intent.hostname == "sw1"
 
     def test_render_rejects_non_canonical_tree(self):
-        """Render is strict: anything other than a CanonicalIntent is a
-        programming error, fail loud."""
-        with pytest.raises(TypeError, match="CanonicalIntent"):
+        """Render is strict: anything other than a CanonicalIntent raises
+        RenderError — matching the CodecBase.render contract + the other
+        codecs, so the pipeline catches it in the render stage (R-03)."""
+        with pytest.raises(RenderError, match="CanonicalIntent"):
             JunosCodec().render({"hostname": "oops"})
 
 
