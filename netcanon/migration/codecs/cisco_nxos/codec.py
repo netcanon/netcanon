@@ -23,17 +23,18 @@ introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
 This codec lands in four phases (see
-``docs/v0.2.0-planning/03-nxos-codec/``).  **Phase 2 is complete**:
+``docs/v0.2.0-planning/03-nxos-codec/``).  **Phase 3 is complete**:
 Phase 1 (hostname, basic-L3 interfaces, VLANs, ``vrf context``
 name+description, default-VRF static routes), Phase 2a (L2 switchport
 with the NX-OS default-flip, VLAN-centric port projection, LAG /
 ``channel-group`` membership), Phase 2b (SNMPv2c community + v3 USM
-users + local-users), and Phase 2c (HSRP via
-``CanonicalVRRPGroup(mode="hsrp")``).  Per-VRF static + VRF RD-RT
-(Phase 3) and VXLAN-EVPN (Phase 4) remain ``unsupported`` in the matrix
-below so the migrate-page banner surfaces the gap.  ``certainty`` is
-``best_effort`` (Phase 2 ship); it reaches ``certified`` once a
-real-capture corpus across two OS versions lands.
+users + local-users), Phase 2c (HSRP via
+``CanonicalVRRPGroup(mode="hsrp")``), and Phase 3 (VRF RD /
+route-target + per-VRF static routes nested inside ``vrf context``).
+VXLAN-EVPN + L3VNI + the ``vtep`` PortKind (Phase 4) remain
+``unsupported`` in the matrix below so the migrate-page banner surfaces
+the gap.  ``certainty`` is ``best_effort``; it reaches ``certified``
+once a real-capture corpus across two OS versions lands.
 """
 
 from __future__ import annotations
@@ -148,11 +149,15 @@ class CiscoNXOSCodec(CodecBase):
             "/local-users/user/name",
             "/local-users/user/role",
             "/local-users/user/hashed-password",
-            # VRF (basic — name + description)
+            # VRF (name + description + Phase-3 RD / route-target)
             "/routing-instances/instance/name",
             "/routing-instances/instance/description",
-            # Static routes (default VRF only)
+            "/routing-instances/instance/route-distinguisher",
+            "/routing-instances/instance/rt-imports",
+            "/routing-instances/instance/rt-exports",
+            # Static routes (default VRF + Phase-3 per-VRF)
             "/routing/static-route",
+            "/routing/static-route/vrf",
         ],
         lossy=[
             LossyPath(
@@ -244,21 +249,34 @@ class CiscoNXOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/routing-instances/instance/route-distinguisher",
+                reason=(
+                    "NX-OS supports `rd auto` (deriving the RD from the "
+                    "BGP ASN + VRF VNI) as well as an explicit "
+                    "`rd <asn>:<nn>`.  The codec preserves `auto` verbatim "
+                    "as a sentinel; cross-vendor renderers that don't "
+                    "recognise it must synthesise an explicit RD or emit "
+                    "nothing.  An explicit RD round-trips losslessly."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing-instances/instance/rt-imports",
+                reason=(
+                    "NX-OS `route-target both <rt> evpn` advertises the RT "
+                    "in both the IPv4-unicast AND the L2VPN-EVPN address-"
+                    "family.  The `evpn` discriminator does not round-trip "
+                    "cross-vendor — the RT value is preserved but the "
+                    "address-family scope reverts to IPv4 unicast on a "
+                    "cross-vendor target.  Same-vendor RTs round-trip "
+                    "(the `both`/import/export split is reconstructed)."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
-            # ── Phase 3 surfaces — VRF RD/RT + per-VRF static ──
-            UnsupportedPath(
-                path="/routing-instances/instance/route-distinguisher",
-                reason="VRF RD / RT parse lands in Phase 3.",
-            ),
-            UnsupportedPath(
-                path="/routing-instances/instance/rt-imports",
-                reason="Phase 3.",
-            ),
-            UnsupportedPath(
-                path="/routing-instances/instance/rt-exports",
-                reason="Phase 3.",
-            ),
+            # ── Phase 4 surfaces — VRF L3VNI + VXLAN-EVPN + anycast ──
             UnsupportedPath(
                 path="/routing-instances/instance/l3-vni",
                 reason=(
@@ -266,17 +284,6 @@ class CiscoNXOSCodec(CodecBase):
                     "Phase 4 EVPN."
                 ),
             ),
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "Per-VRF static route (`vrf context X / ip route "
-                    "Y/N Z`) lands in Phase 3.  Uses the "
-                    "CanonicalStaticRoute.vrf schema field (already "
-                    "present); the harvest must not auto-materialise a "
-                    "phantom routing-instance."
-                ),
-            ),
-            # ── Phase 4 surfaces — VXLAN-EVPN + anycast ──
             UnsupportedPath(
                 path="/vxlan-vnis/vni",
                 reason="VXLAN-EVPN parse + render lands in Phase 4.",

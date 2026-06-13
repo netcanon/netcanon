@@ -26,6 +26,33 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+* **Cisco NX-OS codec — Phase 3 (VRF RD / route-target + per-VRF static
+  routes).**  Graduates the L3-isolation surface inside `vrf context X`:
+  `rd <rd>` (the NX-OS `rd auto` derivation preserved verbatim as a
+  sentinel), `address-family ipv4 unicast / route-target
+  import|export|both <rt> [evpn]` (the `both` shorthand expands to
+  import + export; the trailing `evpn` address-family discriminator is
+  dropped on render), and per-VRF static routes nested inside the block
+  (`  ip route X/N GW [pref]` → `CanonicalStaticRoute.vrf`).  The
+  per-VRF route harvest never materialises a phantom routing-instance —
+  the `vrf context` header already created it (see the per-VRF harvest
+  pattern from PRs #23/#24).  Render nests RD / route-target / per-VRF
+  routes back inside the `vrf context` block (collapsing matched
+  import+export RTs to the compact `route-target both <rt>` form) and
+  defensively synthesises a `vrf context` wrapper for any per-VRF route
+  whose VRF lacks a routing-instance record (e.g. a cisco_iosxe_cli
+  source's `ip route vrf X`).  Capability matrix now 38 supported /
+  9 lossy / 16 unsupported — newly supported `…/rt-exports` +
+  `/routing/static-route/vrf`; new lossy
+  `/routing-instances/instance/route-distinguisher` (`auto` sentinel) +
+  `/routing-instances/instance/rt-imports` (`evpn` suffix).  `certainty`
+  stays `best_effort`.  Cross-mesh + phase-4 regenerated: the Cisco→Cisco
+  `batfish_cisco_ip_route` capture now translates at full fidelity
+  (WARN 20/21 → OK 21/21) and junos→nxos mechanical drift dropped;
+  high-severity CODEC_BUG held flat at 5.
+
 ## [0.1.4] - 2026-06-13
 
 ### Added
