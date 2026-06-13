@@ -230,7 +230,7 @@ stages stay frozen.  See the module docstring.
 
 **Where:** `run_plan_with_overrides` in
 `netcanon/services/migration_pipeline.py` +
-`netcanon/migration/canonical/{port_names,vlan_names,local_user_names,snmp_names}.py`
+`netcanon/migration/canonical/{port_names,vlan_names,local_user_names,snmp_names,snmpv3_user_names}.py`
 + `netcanon/api/routes/migration.py` (per-pane POST endpoints) +
 the left-rail category nav in `netcanon/templates/migrate.html`
 with per-category partials under `_partials/`.
@@ -238,7 +238,7 @@ with per-category partials under `_partials/`.
 **What:** The Tier-3 rename modal lets operators override the
 auto-heuristic for individual canonical categories without
 leaving the translate workflow.  Each category (Ports, VLANs,
-Local Users, SNMP community today; future SNMP trap-hosts /
+Local Users, SNMP community, SNMPv3 users today; future SNMP trap-hosts /
 RADIUS) has:
 
 1. **An orchestrator** under `netcanon/migration/canonical/`
@@ -249,7 +249,8 @@ RADIUS) has:
 2. **A per-pane API endpoint** — `POST /api/v1/migration/plan/ports`,
    `POST /api/v1/migration/plan/vlans`,
    `POST /api/v1/migration/plan/local_users`,
-   `POST /api/v1/migration/plan/snmp` — that accepts only
+   `POST /api/v1/migration/plan/snmp`,
+   `POST /api/v1/migration/plan/snmpv3` — that accepts only
    its category's override map and delegates to
    `run_plan_with_overrides` with the other categories' maps
    defaulted to `None`.
