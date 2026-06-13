@@ -26,9 +26,30 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–7)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–8)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
+
+### Security
+
+* **Sanitiser now redacts the PII / network tail it previously left
+  intact** (finding R-16 / CF-04).  `netcanon sanitize` redacted
+  secrets and interface L3 addresses but skipped five identifying
+  fields that parsers populate and renderers emit: SNMP `contact` /
+  `location` (operator email / name / site), the SNMP trap-target +
+  RADIUS-server + DHCP-pool-gateway hosts (public IPv4), and — the
+  material leak — VLAN-SVI addresses on `CanonicalVlan.ipv4_addresses`,
+  a field separate from `interfaces[].ipv4_addresses` that the
+  interface walk never reached.  On Aruba AOS-S the SVI is a property
+  of the VLAN and renders straight off that un-walked list, so a public
+  SVI IP survived sanitisation verbatim.  Contact / location now map to
+  opaque placeholders; the host / SVI fields reuse the existing
+  public-IPv4 → RFC 5737 docs-range policy (private / loopback /
+  hostname forms preserved, cross-references stable).  These are
+  PII/network rather than secrets, so they are deliberately kept out of
+  the secret-coverage guard's registry; a new forward test pins that
+  they no longer survive.  Host fields written as DNS names remain a
+  documented passthrough (`SECURITY.md` / `BUG_REPORTING.md`).
 
 ### Fixed
 
