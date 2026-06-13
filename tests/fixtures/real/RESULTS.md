@@ -636,7 +636,7 @@ Strategic:
 > vlans, users etc.) need a parse pass to fill accurately rather
 > than estimation.  Tracked under docs-audit cluster F finding F3.
 
-10 total bugs surfaced by the real-capture harness across all five
+17 total bugs surfaced by the real-capture harness across all seven
 codecs.  Every one would have survived arbitrarily long against our
 synthetic fixtures — exactly the regression class the harness was
 built to catch.  All fixes include regression tests so reverting

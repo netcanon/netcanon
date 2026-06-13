@@ -26,9 +26,9 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 remediation from the 2026-06-06 review (Batch 2) — sequenced in that
-dossier's `recommended-remediation-plan.md`.  No canonical-model or
-codec-grammar changes.
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–3)
+— sequenced in that dossier's `recommended-remediation-plan.md`.  No
+canonical-model or codec-grammar changes.
 
 ### Fixed
 
@@ -55,6 +55,24 @@ codec-grammar changes.
   and README examples; a new test pins their parameter names, order,
   kind, and defaults so an accidental signature change fails CI instead
   of silently breaking positional callers.
+
+### Documentation
+
+* **Aruba AOS-S codec header corrected to `certified`** (finding R-05 /
+  DE-01).  `aruba_aoss/__init__.py` still claimed
+  `Certainty: best_effort` while `codec.py` declared `certified` — the
+  2026-05-21 audit fixed the identical MikroTik drift but missed Aruba.
+  Added a guard test asserting every codec's header `Certainty:` line
+  matches its `certainty` ClassVar, so the contradiction can't recur.
+
+* **Fixed stale / contradictory doc references** surfaced by the review:
+  `RESULTS.md` "10 bugs across five codecs" → "17 across seven" to match
+  its own summary table (R-07); `ARCHITECTURE.md`'s per-pane override
+  section now lists all five rename categories incl. SNMPv3 /
+  `/plan/snmpv3` (was four — R-22); `AGENTS.md` swapped a drifted
+  `SECURITY.md (line 385)` reference for a durable section anchor (R-10);
+  and removed a dangling `@pytest.mark.slow` snippet from the NX-OS codec
+  test-plan (the `slow` marker was removed in v0.1.2 — R-28).
 
 ## [0.1.3] - 2026-06-06
 
