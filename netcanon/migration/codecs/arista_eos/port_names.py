@@ -88,11 +88,13 @@ def classify_port_name(name: str) -> PortIdentity:
                 breakout_lane=int(b),
                 breakout_parent=f"Ethernet{a}",
                 name_speed_hint="gig",   # default class; real speed from SFP
+                original=name,
             )
         return PortIdentity(
             kind="physical",
             port=a,
             name_speed_hint="gig",
+            original=name,
         )
 
     # Management — physical-but-mgmt.
@@ -102,6 +104,7 @@ def classify_port_name(name: str) -> PortIdentity:
             kind="mgmt",
             port=int(m.group("a")),
             name_speed_hint="gig",
+            original=name,
         )
 
     # Logical interfaces — LAG / SVI / loopback / tunnel.
@@ -111,11 +114,12 @@ def classify_port_name(name: str) -> PortIdentity:
             return PortIdentity(
                 kind=kind,
                 index=int(lm.group(1)),
+                original=name,
             )
 
     # Unknown — pass through verbatim.  Cross-vendor targets will
     # treat this as "can't represent" and auto-drop with a warning.
-    return PortIdentity(kind="unknown")
+    return PortIdentity(kind="unknown", original=name)
 
 
 def format_port_identity(identity: PortIdentity) -> str | None:

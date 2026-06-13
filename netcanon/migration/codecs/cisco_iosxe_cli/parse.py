@@ -124,7 +124,11 @@ _TUNNEL_MODE_RE = re.compile(
 # § "Cisco IOS-XE" for the full grammar reference.
 _VRRP_IP_RE = re.compile(
     r"^\s+vrrp\s+(?P<group>\d+)\s+ip\s+(?P<ip>\S+)"
-    r"(?P<secondary>\s+secondary)?\s*$",
+    # Non-capturing: the ``secondary`` trailer must be consumed for the
+    # line to match, but the VRRP-VIP path doesn't model secondary VIPs,
+    # so there's no named group to read (R-13 / CC-02: was an unused
+    # ``(?P<secondary>…)`` capture).
+    r"(?:\s+secondary)?\s*$",
     re.IGNORECASE,
 )
 _VRRP_IPV6_RE = re.compile(
