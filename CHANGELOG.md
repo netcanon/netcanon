@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–6)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–7)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -58,6 +58,17 @@ canonical-model or codec-grammar changes.
   (the code-smell half of R-13 / CC-02; the cross-vendor `is_secondary`
   fidelity fix is tracked separately as it needs multi-site parser
   changes + round-trip tests).
+
+* **Classic `ip address X secondary` now survives cross-vendor
+  translation** (finding R-13 / CC-02 — the fidelity half, review
+  Batch 7).  `cisco_iosxe_cli` parse now captures `is_secondary` (its
+  render stays positional, so self-round-trips are byte-stable);
+  `arista_eos` parse reads the plain-`ip address` `secondary` trailer
+  instead of dropping it; and `arista_eos`'s plain render branch emits
+  ` secondary` for flagged addresses.  A secondary address is no longer
+  silently demoted to primary on `cisco_iosxe_cli → arista_eos` (or
+  `arista_eos → arista_eos`).  Additive on the common IP-address path;
+  +6 round-trip tests.
 
 ### Internal
 

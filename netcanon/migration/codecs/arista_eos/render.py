@@ -595,9 +595,12 @@ def render_intent(tree: Any) -> str:
                         primary_line += " secondary"
                     out.append(primary_line)
             else:
-                out.append(
+                plain_line = (
                     f"   ip address {addr.ip}/{addr.prefix_length}"
                 )
+                if addr.is_secondary:
+                    plain_line += " secondary"
+                out.append(plain_line)
         # GAP-EVPN-3: IPv6 addresses.  Link-local form re-emits
         # the explicit ``link-local`` keyword; global form emits
         # plain ``ipv6 address X/Y``.  Wave C IPv6 VARP (EOS 4.30+)
