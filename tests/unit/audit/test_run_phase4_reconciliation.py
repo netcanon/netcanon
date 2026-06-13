@@ -1006,3 +1006,134 @@ def test_reconcile_cell_subfield_with_data_still_methodology_under() -> None:
     assert fv["interfaces[].switchport_mode"]["variance"] == (
         recon.VAR_METHODOLOGY_UNDER
     )
+
+
+# ---------------------------------------------------------------------------
+# Capability-aware anycast reclassification (v0.2.0 Wave-C surface)
+#
+# A drifted address field whose drift is confined to the anycast-gateway
+# companion (virtual_gateway_*) is EXPECTED_UNSUPPORTED — not CODEC_BUG —
+# when the TARGET codec's capability matrix declares the anycast path
+# unsupported.  Consults the live _CAPS (source of truth) rather than the
+# per-pair YAML.  See run_phase4_reconciliation._target_anycast_declaration.
+# ---------------------------------------------------------------------------
+
+
+def _addr(ip="", is_secondary=False, vga="", vgm=""):
+    return {
+        "ip": ip,
+        "prefix_length": 24,
+        "is_secondary": is_secondary,
+        "virtual_gateway_address": vga,
+        "virtual_gateway_mac": vgm,
+    }
+
+
+def _anycast_cell(target_codec, source_addrs, target_addrs):
+    """A reconcile_cell input with one interfaces[] record whose
+    ipv4_addresses sub-field drifted from source_addrs to target_addrs."""
+    return {
+        "fixture": "f.txt",
+        "fixture_kind": "real",
+        "source_codec": "arista_eos",
+        "target_codec": target_codec,
+        "render_status": "ok",
+        "roundtrip_parse_status": "ok",
+        "field_disposition": {
+            "interfaces": {
+                "preserved": False,
+                "source_count": 1,
+                "target_count": 1,
+                "drift": {
+                    "interfaces[0] {'name': 'Vlan110'}": {
+                        "ipv4_addresses": {
+                            "source": source_addrs,
+                            "target": target_addrs,
+                        },
+                    },
+                },
+            },
+        },
+    }
+
+
+_EXPECT_IPV4 = {
+    "per_field_expectation": {
+        "interfaces[].ipv4_addresses": {"disposition": "good"},
+    },
+}
+
+
+def test_anycast_only_drift_to_unsupported_target_is_expected_unsupported() -> None:
+    """Arista pure-VARP SVI (ip='' + virtual_gateway_address set) dropped by
+    a target declaring anycast unsupported (opnsense) → reclassified
+    EXPECTED_UNSUPPORTED, not CODEC_BUG."""
+    cell = _anycast_cell(
+        "opnsense",
+        source_addrs=[_addr(ip="", vga="10.1.10.1")],
+        target_addrs=[],
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_EXPECTED_UNSUPPORTED
+    assert fv["severity"] == "ok"
+    assert fv["drift_detail"]["reclassified_from"] == recon.VAR_CODEC_BUG
+    assert result["summary"][recon.VAR_CODEC_BUG] == 0
+    assert result["summary"][recon.VAR_EXPECTED_UNSUPPORTED] == 1
+
+
+def test_anycast_companion_blanked_on_kept_address_is_expected_unsupported() -> None:
+    """Junos irb with a real IP + virtual_gateway_address: target keeps the
+    IP but blanks the (unsupported) anycast companion → EXPECTED_UNSUPPORTED."""
+    cell = _anycast_cell(
+        "cisco_iosxe",  # NETCONF stub declares anycast unsupported
+        source_addrs=[_addr(ip="172.16.100.3", vga="172.16.100.100")],
+        target_addrs=[_addr(ip="172.16.100.3")],
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_EXPECTED_UNSUPPORTED
+
+
+def test_real_ip_drift_to_unsupported_target_stays_codec_bug() -> None:
+    """A substantive IP change (not just the anycast companion) must NOT be
+    masked — stays CODEC_BUG even though the target declares anycast
+    unsupported."""
+    cell = _anycast_cell(
+        "opnsense",
+        source_addrs=[_addr(ip="10.0.0.1", vga="10.1.10.1")],
+        target_addrs=[_addr(ip="10.0.0.2")],  # IP actually changed
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_CODEC_BUG
+    assert fv["severity"] == "high"
+
+
+def test_anycast_only_drift_to_supporting_target_stays_codec_bug() -> None:
+    """When the target SUPPORTS anycast (cisco_iosxe_cli renders SD-Access),
+    an anycast drift is a genuine bug, not expected — stays CODEC_BUG."""
+    cell = _anycast_cell(
+        "cisco_iosxe_cli",
+        source_addrs=[_addr(ip="10.0.0.1", vga="10.1.10.1")],
+        target_addrs=[_addr(ip="10.0.0.1")],  # dropped the (supported) anycast
+    )
+    result = reconcile_cell(cell, _EXPECT_IPV4)
+    fv = result["field_variances"]["interfaces[].ipv4_addresses"]
+    assert fv["variance"] == recon.VAR_CODEC_BUG
+
+
+def test_drift_is_anycast_companion_only_predicate() -> None:
+    """Direct unit of the companion-only predicate."""
+    # Pure-VARP placeholder dropped → companion-only.
+    dd = {"per_record": {"i[0]": {
+        "source": [_addr(ip="", vga="10.1.10.1")], "target": []}}}
+    assert recon._drift_is_anycast_companion_only(dd) is True
+    # Real IP change → NOT companion-only (must not be masked).
+    dd2 = {"per_record": {"i[0]": {
+        "source": [_addr(ip="10.0.0.1")], "target": [_addr(ip="10.0.0.2")]}}}
+    assert recon._drift_is_anycast_companion_only(dd2) is False
+    # Wholesale structural string (no per_record) → False.
+    assert recon._drift_is_anycast_companion_only(
+        {"drift_summary": "count drift: 6 -> 9"}
+    ) is False
