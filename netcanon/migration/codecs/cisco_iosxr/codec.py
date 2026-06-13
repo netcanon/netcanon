@@ -25,19 +25,24 @@ introduces no new canonical xpaths, so the shared walker yields exactly
 the right set.
 
 This codec lands in four phases (see
-``docs/v0.2.0-planning/04-iosxr-codec/``).  **Phase 1 is complete**:
-hostname, domain, interfaces (4-segment physical / Loopback / MgmtEth /
-Bundle-Ether / sub-interfaces, with IPv4 dotted-mask + IPv6 CIDR +
-description / admin-state / mtu), and default-VRF ``router static``
-routes.  Shipped ``bidirectional`` (not the dossier's transient
+``docs/v0.2.0-planning/04-iosxr-codec/``).  **Phases 1-2 are complete.**
+Phase 1: hostname, domain, interfaces (4-segment physical / Loopback /
+MgmtEth / Bundle-Ether / sub-interfaces, with IPv4 dotted-mask + IPv6
+CIDR + description / admin-state / mtu), and default-VRF ``router
+static`` routes.  Phase 2 adds: top-level ``vrf <name>`` stanzas + ``import|export route-target`` blocks → routing-instances; the
+route-distinguisher harvested from / rendered to ``router bgp <asn> /
+vrf <name> / rd`` (IOS-XR keeps the RD in the BGP process, not the
+``vrf`` stanza — declared lossy); per-interface ``vrf <name>``
+membership; ``Bundle-Ether`` LAGs (``bundle id <N> mode <m>``); local
+users (``username`` block → group + secret); per-VRF ``router static``
+routes; and sub-interface ``encapsulation dot1q`` → synthesised VLAN
+records.  Shipped ``bidirectional`` (not the dossier's transient
 ``parse_only``) because the repo forbids a ``parse_only`` + ``cli-*``
 codec (``TestNoOrphanedParseOnlyCliCodec``) — same call the NX-OS codec
-made.  The top-level ``vrf`` stanza + RT (Phase 2), RD-from-``router
-bgp`` (Phase 2), Bundle-Ether membership / LAGs (Phase 2), local users
-(Phase 2), and the SP-routing / ``route-policy`` Tier-3 stanzas remain
-``unsupported`` in the matrix below.  ``certainty`` is ``experimental``;
-it reaches ``certified`` once a real-capture corpus across two OS
-versions lands (Phase 4).
+made.  SNMP (out of v1 XR scope) plus the SP-routing / ``route-policy``
+/ MPLS / ``l2vpn`` Tier-3 stanzas remain ``unsupported`` in the matrix
+below.  ``certainty`` is ``experimental``; it reaches ``certified`` once
+a real-capture corpus across two OS versions lands (Phase 4).
 """
 
 from __future__ import annotations
@@ -121,8 +126,28 @@ class CiscoIOSXRCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
-            # Static routes (default VRF only — `router static`)
+            # Phase 2 — per-interface VRF membership (bare `vrf <name>`)
+            "/interfaces/interface/config/vrf",
+            # Phase 2 — sub-interface `encapsulation dot1q` → synthesised
+            # VLAN id-list (no port membership; name always empty)
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
+            # Static routes — default VRF + per-VRF (`router static / vrf`)
             "/routing/static-route",
+            "/routing/static-route/vrf",
+            # Phase 2 — VRF declarations.  Also declared lossy below (the
+            # route-distinguisher must be read from / rendered to the
+            # `router bgp` block) → the path classifies lossy.  Name /
+            # description / route-target import+export round-trip cleanly.
+            "/routing-instances/instance",
+            # Phase 2 — Bundle-Ether LAGs (`bundle id <N> mode <m>`)
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/lags/lag/mode",
+            # Phase 2 — local users (`username` block → group + secret)
+            "/aaa/authentication/users/user/config/username",
+            "/aaa/authentication/users/user/config/password",
+            "/aaa/authentication/users/user/config/role",
         ],
         lossy=[
             LossyPath(
@@ -153,47 +178,34 @@ class CiscoIOSXRCodec(CodecBase):
                 ),
                 severity="warn",
             ),
-        ],
-        unsupported=[
-            # ── VRF / VLAN / LAG / users — land in Phase 2 ──
-            UnsupportedPath(
+            LossyPath(
                 path="/routing-instances/instance",
                 reason=(
-                    "IOS-XR `vrf <name>` top-level stanzas + per-"
-                    "interface `vrf <name>` membership + RD (read from "
-                    "`router bgp / vrf <name> / rd`) land in Phase 2.  "
-                    "Phase 1 parses interfaces + static routes only."
+                    "VRF declarations (`vrf <name>` + `address-family "
+                    "ipv4 unicast` / `import|export route-target`) and "
+                    "per-interface `vrf <name>` membership parse + render "
+                    "cleanly, but `route_distinguisher` must be read from "
+                    "/ rendered to the BGP block (`router bgp <asn> / vrf "
+                    "<name> / rd <rd>`) — IOS-XR keeps the RD there, not "
+                    "in the `vrf` stanza.  Phase 2 wires a minimal "
+                    "BGP-RD harvest + a minimal `router bgp` RD-carrier "
+                    "on render whose ASN is derived from the RD's "
+                    "administrator field (the `<asn>:<nn>` convention); a "
+                    "config whose BGP ASN differs from the RD "
+                    "administrator re-emits the normalised ASN (cosmetic "
+                    "— the RD itself round-trips).  An XR source with no "
+                    "`router bgp` stanza keeps route_distinguisher='' on "
+                    "round-trip.  `l3_vni` (EVPN Type-5) is not modelled "
+                    "— IOS-XR EVPN is a Tier-3 `l2vpn` / `evpn` surface."
                 ),
+                severity="warn",
             ),
-            UnsupportedPath(
-                path="/interfaces/interface/config/vrf",
-                reason="Per-interface `vrf <name>` membership lands in Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/lags/lag",
-                reason=(
-                    "Bundle-Ether membership (`bundle id <n> mode <m>`) "
-                    "→ CanonicalLAG lands in Phase 2.  Phase 1 classifies "
-                    "the Bundle-Ether interface as kind=lag for port-name "
-                    "translation but builds no LAG records."
-                ),
-            ),
-            UnsupportedPath(
-                path="/local-users/user",
-                reason="Local users (`username <name>`) land in Phase 2.",
-            ),
+        ],
+        unsupported=[
+            # ── SNMP — out of the v1 XR scope ──
             UnsupportedPath(
                 path="/snmp/community",
                 reason="SNMP parse + render is out of the v1 XR scope.",
-            ),
-            UnsupportedPath(
-                path="/vlans/vlan/id",
-                reason=(
-                    "IOS-XR routers have no classic VLAN stanzas — VLAN "
-                    "ids appear only on sub-interfaces via `encapsulation "
-                    "dot1q <vid>`.  Sub-interface dot1q -> CanonicalVlan "
-                    "synthesis lands in Phase 2."
-                ),
             ),
             # ── Routing protocols — Tier 3 ──
             UnsupportedPath(
