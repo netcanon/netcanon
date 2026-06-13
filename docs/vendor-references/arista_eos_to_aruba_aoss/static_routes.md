@@ -14,9 +14,10 @@ ip route vrf TENANT_A 10.100.0.0/16 10.100.0.254     ; per-VRF
 ipv6 route ::/0 2001:db8:0:1::2
 ```
 
-Per-VRF static routes use the `ip route vrf <name>` form (parsed
-by the EOS codec but currently lossy to canonical because
-`CanonicalStaticRoute` lacks a VRF field).
+Per-VRF static routes use the `ip route vrf <name>` form (currently
+lossy because the EOS codec does not yet parse the per-VRF form into
+the canonical `CanonicalStaticRoute.vrf` field — it declares
+`/routing/static-route/vrf` `unsupported`).
 
 ## Aruba AOS-S
 
@@ -53,10 +54,12 @@ Arista -> Aruba round-trip:
   IPv4); IPv6 default routes drop on this direction.
 
 Per-VRF static routes (`ip route vrf TENANT_A ...`) are
-currently **parse-and-ignore on Arista** (the canonical model
-has no VRF field on `CanonicalStaticRoute`), so the data never
-reaches the canonical tree — nothing to render on Aruba either.
-Known gap; lands alongside richer VRF wire-up.
+currently **parse-and-ignore on Arista** (the `arista_eos` codec
+does not yet parse the per-VRF form into the canonical
+`CanonicalStaticRoute.vrf` field — it declares
+`/routing/static-route/vrf` `unsupported`), so the data never
+reaches the canonical tree — and Aruba has no VRF concept to render
+into either.  Known gap; lands alongside richer VRF wire-up.
 
 The Arista kitchen-sink:
 
@@ -70,4 +73,5 @@ ipv6 route ::/0 2001:db8:0:1::2
 
 Disposition: **good** for IPv4 default-VRF static routes;
 **lossy** for IPv6 routes (canonical-side gap on Aruba parse) and
-per-VRF routes (canonical-side gap on the route record).
+per-VRF routes (Arista parse gap on the per-VRF form, and Aruba has
+no VRF concept regardless).

@@ -121,6 +121,7 @@ class CiscoIOSXECLICodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/vrf",          # v0.2.0 — per-VRF binding (ip route vrf <NAME>)
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -296,7 +297,9 @@ class CiscoIOSXECLICodec(CodecBase):
                     "policy manually."
                 ),
             ),
-            # -- Ship-before-wire (v0.2.0) -- per-VRF static routes / IPv6 anycast --
+            # -- Ship-before-wire (v0.2.0) -- IPv6 anycast --
+            # (per-VRF static routes graduated to ``supported`` in
+            # v0.2.0 — see ``/routing/static-route/vrf`` above.)
             UnsupportedPath(
                 path="/interfaces/interface/ipv6/address/virtual-gateway-address",
                 reason=(
@@ -308,15 +311,6 @@ class CiscoIOSXECLICodec(CodecBase):
                     "supported (see ``/interfaces/interface/ipv4/"
                     "address/virtual-gateway-address`` in the "
                     "``supported`` list)."
-                ),
-            ),
-            UnsupportedPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "Per-VRF static-route binding parses-and-ignores in "
-                    "v1.  Schema exists on CanonicalStaticRoute.vrf; "
-                    "wire-up scheduled for v0.2.0 (closes existing "
-                    "per-VRF static-route lossy declaration)."
                 ),
             ),
         ],
@@ -543,8 +537,10 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
     for _ in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"
-    for _ in intent.static_routes:
+    for route in intent.static_routes:
         yield "/routing/static-route"
+        if route.vrf:
+            yield "/routing/static-route/vrf"
     if intent.anycast_gateway_mac:
         yield "/anycast-gateway-mac"
     # Tier 2 — emit only what's populated

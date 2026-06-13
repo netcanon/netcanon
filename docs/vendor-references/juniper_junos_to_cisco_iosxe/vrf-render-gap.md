@@ -101,9 +101,12 @@ because the Junos enum is richer than what Cisco models cleanly.
 
 ## Per-VRF static routes
 
-`CanonicalStaticRoute` lacks a `vrf` field today, so per-VRF
-static routes (Junos's `set routing-instances X routing-options
-static route ...`) parse-and-ignore on the canonical layer.
-This is a schema gap deferred to a subsequent canonical-model
-pass; even with cisco_iosxe render-side VRF wire-up, per-VRF
-static routes wouldn't survive until the schema gap closes.
+`CanonicalStaticRoute.vrf` carries the per-route VRF discriminator,
+but the `juniper_junos` codec does not yet harvest per-VRF statics:
+its routing-instances dispatcher does not descend into
+`routing-options static`, so Junos's `set routing-instances X
+routing-options static route ...` is `lossy` on parse and the route
+never reaches the canonical layer with its VRF.  This is a Junos
+parse-side gap deferred to a subsequent pass; even with cisco_iosxe
+render-side VRF wire-up, per-VRF static routes wouldn't survive
+until the Junos dispatcher harvests them.

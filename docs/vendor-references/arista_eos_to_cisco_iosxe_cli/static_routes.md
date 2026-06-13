@@ -48,10 +48,15 @@ gateway and optional outgoing interface.  Both codecs convert at the
 boundary; round-trip is lossless within the canonical surface.
 
 Tracked fields (gateway, interface, metric, description) survive both
-ways.  Per-VRF static routes (`ip route vrf X ...`) are currently
-parse-and-ignore in v1 — the canonical `CanonicalStaticRoute` lacks a
-`vrf` field.  This is a known gap that lands alongside richer VRF
-wire-up; see `vrf.md`.
+ways.  Per-VRF static routes are handled asymmetrically on this pair:
+the `cisco_iosxe_cli` target renders the `ip route vrf X ...` form and
+the canonical `CanonicalStaticRoute.vrf` field carries the
+discriminator, but the `arista_eos` source codec does not yet parse
+`ip route vrf X ...` into that field (it declares
+`/routing/static-route/vrf` `unsupported`), so on Arista -> Cisco the
+VRF never reaches canonical and the route lands in the global table.
+This is an Arista parse-side gap, not a canonical-model gap; see
+`vrf.md`.
 
 Disposition: **good** for default-VRF routes; **lossy** for VRF-scoped
-routes (canonical model gap).
+routes (Arista source does not yet parse the per-VRF form).

@@ -23,7 +23,7 @@ CLI lineage but diverge on:
 | `vlans.md` | VLAN definition (Cisco `vlan N / name X`, Aruba `vlan N / name "X" / untagged 1-24 / ip address X/N`) and the canonical VLAN-centric model. |
 | `port_naming.md` | Cisco `GigabitEthernet1/0/1` (speed prefix) vs Aruba `1/1`/`A1` (bare numeric).  Speed hint lossy. |
 | `ip_addressing.md` | IPv4 dotted-mask vs CIDR; IPv6 link-local discriminator. |
-| `static_routes.md` | Default-VRF routes round-trip cleanly; per-VRF routes lossy (no canonical VRF field on `CanonicalStaticRoute`). |
+| `static_routes.md` | Default-VRF routes round-trip cleanly; per-VRF routes lossy (Cisco preserves the VRF on `CanonicalStaticRoute.vrf`, but Aruba AOS-S has no VRF concept). |
 | `snmp.md` | v1/v2c surface good; v3 USM passphrases not cross-compatible (engineID-salted). |
 | `local_users.md` | Cisco `privilege N` (1-15) vs Aruba `manager`/`operator` two-role; hash formats incompatible. |
 | `lags.md` | Cisco `Port-channel<N>` vs Aruba `Trk<N>`; LAG members + LACP mode round-trip; PAgP/dt-lacp lossy. |

@@ -20,8 +20,11 @@ the cross-pair flips to:
 * Default-VRF static routes (destination + gateway + metric) ->
   `good`.  CLI render emits `ip route <DEST> <MASK> <GW> [<metric>]`
   which is byte-identical to what the source device would emit.
-* Per-VRF static routes -> `lossy`.  Same canonical-model gap as in
-  the CLI -> NETCONF direction: `CanonicalStaticRoute` lacks a
-  `vrf` field, so per-VRF routes either drop or all collapse into
-  the default VRF on round-trip.  The CLI codec parses `ip route
-  vrf X ...` lines today but parse-and-ignores the VRF prefix.
+* Per-VRF static routes -> `good`.  The canonical
+  `CanonicalStaticRoute.vrf` field carries the discriminator, and
+  the CLI target codec parses `ip route vrf X ...` lines into it and
+  renders them back out (`/routing/static-route/vrf` is `supported`
+  on the CLI codec).  Once the NETCONF source parser populates
+  per-instance static routes, the VRF survives the round-trip; the
+  remaining blocker on this pair is the NETCONF source stub, not the
+  canonical schema or the CLI render path.

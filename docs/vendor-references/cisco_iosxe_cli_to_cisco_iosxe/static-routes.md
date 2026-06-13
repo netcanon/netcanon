@@ -74,8 +74,10 @@ populates `intent.static_routes`.
 When the NETCONF codec is extended to emit
 `openconfig-network-instance` XML, the disposition flips to `good`
 for default-VRF static routes (`destination`, `gateway`, `metric`).
-Per-VRF static routes remain `lossy` until `CanonicalStaticRoute`
-gains a `vrf` field — same gap that the `cisco_iosxe_cli` codec lists
-under its `/routing-instances/instance` `unsupported` declaration.
-The CLI codec parses `ip route vrf X ...` lines today but
-parse-and-ignores them (drops the VRF prefix).
+Per-VRF static routes flip to `good` too once the NETCONF render
+walks non-default `<network-instance>` records: the canonical
+`CanonicalStaticRoute.vrf` field already carries the discriminator,
+and the `cisco_iosxe_cli` codec parses `ip route vrf X ...` lines
+into it and renders them back out (the `/routing/static-route/vrf`
+capability is `supported` on the CLI codec).  The blocker on this
+pair is purely the NETCONF target stub, not the canonical schema.

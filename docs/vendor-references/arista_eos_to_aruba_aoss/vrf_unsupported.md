@@ -70,8 +70,11 @@ aruba_aoss direction.  Arista carries fully-modelled VRFs in DC
 deployments; Aruba simply has no place to put them.
 
 Per-VRF static routes (`ip route vrf X ...`) drop with the same
-banner — the canonical static-route record has no VRF field, so
-the data never even reaches the canonical tree (lossy at parse).
+banner — the `arista_eos` codec does not yet parse the per-VRF form
+into the canonical `CanonicalStaticRoute.vrf` field (it declares
+`/routing/static-route/vrf` `unsupported`), so the data never even
+reaches the canonical tree (lossy at parse); Aruba has no VRF
+concept to land it in regardless.
 
 `apply_groups` / `group_content` are Junos-specific; neither
 Arista nor Aruba populates them.

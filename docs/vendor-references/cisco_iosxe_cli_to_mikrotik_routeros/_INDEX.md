@@ -22,7 +22,7 @@ RouterOS.
 | `ip_addressing.md` | Cisco `ip address A.B.C.D MASK` (dotted-mask, on-interface) versus RouterOS `/ip address add address=A.B.C.D/N interface=etherN` (CIDR, decoupled section). |
 | `vlans.md` | Cisco interface-centric switchport model versus RouterOS's two-plane model (`/interface vlan` for routed sub-interfaces; bridge VLAN filtering for switching).  Plane mismatch documented. |
 | `switching_model.md` | Philosophy difference — Cisco distinguishes L2/L3 ports natively; RouterOS is router-first with optional bridge for switching.  Cisco-to-MikroTik mode mapping table. |
-| `static_routes.md` | Cisco `ip route DEST MASK GW` versus RouterOS `/ip route add dst-address=X/N gateway=Y`.  Default-VRF round-trips; per-VRF deferred (canonical schema gap). |
+| `static_routes.md` | Cisco `ip route DEST MASK GW` versus RouterOS `/ip route add dst-address=X/N gateway=Y`.  Default-VRF round-trips; per-VRF lossy (Cisco preserves the VRF on `CanonicalStaticRoute.vrf`, but the RouterOS codec does not render the `routing-table=X` form). |
 | `dhcp_server.md` | Cisco's bundled `ip dhcp pool` versus RouterOS's three-section split (`/ip pool` + `/ip dhcp-server network` + `/ip dhcp-server`).  Static reservations / option codes lossy. |
 | `snmp.md` | `snmp-server community` versus `/snmp community add` (RouterOS overloads section for v1/v2c + v3).  v3 SHA-2 / AES-256 / 3DES not available on RouterOS — downgrade required.  USM passphrases re-key required regardless. |
 | `local_users.md` | Cisco `username X privilege Y secret 9 $9$...` versus RouterOS `/user add name=X group=full password=...`.  Hash formats are NOT cross-compatible.  Privilege-number to named-group mapping is operator-curated. |

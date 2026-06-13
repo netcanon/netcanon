@@ -70,8 +70,10 @@ class CanonicalStaticRoute(BaseModel):
   description field on static routes.
 
 Per-VRF static routes (FortiGate `set vrf <id>`) are unsupported on
-this pair — canonical model lacks a vrf field on
-CanonicalStaticRoute AND Aruba has no VRF concept.  Aruba's legacy
+this pair — the FortiGate source codec does not parse `set vrf <id>`
+(it declares `/routing/static-route/vrf` `unsupported`) and Aruba
+has no VRF concept; `CanonicalStaticRoute.vrf` itself exists but is
+never populated on either end here.  Aruba's legacy
 `ip default-gateway` form synthesises from a `0.0.0.0/0` canonical
 record.
 

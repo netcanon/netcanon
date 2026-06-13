@@ -45,9 +45,11 @@ add dst-address=10.0.10.0/24 gateway=10.0.10.1 routing-table=tenant-a
 RouterOS uses CIDR natively as well.  Gateway can be either an IP or
 an interface name (`gateway=ether1` is valid).  Per-VRF static routes
 on RouterOS 7+ live under the same `/ip route` section with a
-`routing-table=<vrf-name>` parameter; the canonical model lacks a
-`vrf` field on `CanonicalStaticRoute` so this is currently lossy
-(deferred — lands alongside VRF wire-up).
+`routing-table=<vrf-name>` parameter; the `mikrotik_routeros` codec
+does not yet parse / render that form (it declares
+`/routing/static-route/vrf` `unsupported`), so this is currently
+lossy even though `CanonicalStaticRoute.vrf` exists (deferred —
+lands alongside VRF wire-up).
 
 ## Cross-vendor mapping
 
@@ -60,9 +62,13 @@ on RouterOS 7+ live under the same `/ip route` section with a
   scalars not 1:1; canonical `metric` is the operator-visible metric,
   not preference / AD.
 * Per-VRF: Junos `routing-instances <X> routing-options static` ->
-  RouterOS `/ip route ... routing-table=X`.  Lossy in the canonical
-  v1 because `CanonicalStaticRoute` lacks a `vrf` field — Junos source
-  per-VRF routes flatten to the global table on RouterOS render.
+  RouterOS `/ip route ... routing-table=X`.  Lossy on this pair
+  because the `juniper_junos` codec does not yet harvest per-VRF
+  statics (its routing-instances dispatcher does not descend into
+  `routing-options static`) and the `mikrotik_routeros` codec does
+  not render the `routing-table=X` form — so Junos source per-VRF
+  routes flatten to the global table on RouterOS render, even though
+  `CanonicalStaticRoute.vrf` exists.
 * Junos's `qualified-next-hop` (weighted multi-NH) flattens to
   multiple canonical entries on parse; RouterOS render emits each
   as a separate `/ip route` record (no native multi-NH composite on
