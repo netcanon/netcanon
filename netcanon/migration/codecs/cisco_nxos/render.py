@@ -41,6 +41,17 @@ _CANON_TO_NXOS_LAG_MODE = {
     "static": "on",
 }
 
+#: Canonical SNMPv3 privacy cipher -> NX-OS ``priv`` keyword (inverse of
+#: parse._normalise_priv_proto; canonical ``aes128`` -> NX-OS ``aes-128``).
+_CANON_TO_NXOS_PRIV = {
+    "aes": "aes-128",
+    "aes128": "aes-128",
+    "aes192": "aes-192",
+    "aes256": "aes-256",
+    "des": "des",
+    "3des": "3des",
+}
+
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Cisco NX-OS config text."""
@@ -56,10 +67,22 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.append("")
 
     # ── Render-derived feature block ──
-    for feat in _derive_features(tree):
+    features = _derive_features(tree)
+    for feat in features:
         lines.append(f"feature {feat}")
-    if _derive_features(tree):
+    if features:
         lines.append("")
+
+    # ── Local users + SNMP (Phase 2b) ──
+    for user in tree.local_users:
+        lines.append(_render_local_user(user))
+    if tree.local_users:
+        lines.append("")
+    if tree.snmp is not None:
+        snmp_lines = _render_snmp(tree.snmp)
+        if snmp_lines:
+            lines.extend(snmp_lines)
+            lines.append("")
 
     # ── Static routes (default VRF only) ──
     default_vrf_routes = [r for r in tree.static_routes if not r.vrf]
@@ -131,6 +154,63 @@ def _render_static_route(route) -> str:
     if route.metric:
         out += f" {route.metric}"
     return out
+
+
+def _render_local_user(user) -> str:
+    """Render a ``username <name> password <type> <hash> role <role>``.
+
+    The hash is preserved with its type-digit prefix (parse stored
+    ``5 $5$...``); a bare value (no leading single-digit type) renders as
+    the plaintext type-0 form.  ``role`` is emitted verbatim when set
+    (same-vendor round-trip) and otherwise derived from the privilege
+    level (network-admin >= 15, else network-operator).
+    """
+    role = user.role or (
+        "network-admin" if user.privilege_level >= 15 else "network-operator"
+    )
+    if not user.hashed_password:
+        return f"username {user.name} role {role}"
+    parts = user.hashed_password.split(" ", 1)
+    if len(parts) == 2 and parts[0].isdigit() and len(parts[0]) <= 2:
+        htype, payload = parts[0], parts[1]
+    else:
+        htype, payload = "0", user.hashed_password
+    return f"username {user.name} password {htype} {payload} role {role}"
+
+
+def _render_snmp(snmp) -> list[str]:
+    """Render NX-OS ``snmp-server`` lines (v2c community + v3 USM users).
+
+    v3 privacy cipher denormalises canonical -> NX-OS (``aes128`` ->
+    ``aes-128``); opaque keys re-emit verbatim with the ``localizedkey``
+    keyword (the 10.x ``localizedV2key`` digest is not modelled —
+    declared lossy).  ``engineID`` (colon-decimal) re-emits verbatim.
+    """
+    lines: list[str] = []
+    if snmp.community:
+        lines.append(f"snmp-server community {snmp.community}")
+    if snmp.location:
+        lines.append(f"snmp-server location {snmp.location}")
+    if snmp.contact:
+        lines.append(f"snmp-server contact {snmp.contact}")
+    for host in snmp.trap_hosts:
+        lines.append(f"snmp-server host {host}")
+    for user in snmp.v3_users:
+        line = f"snmp-server user {user.name}"
+        if user.group:
+            line += f" {user.group}"
+        if user.auth_protocol:
+            line += f" auth {user.auth_protocol} {user.auth_passphrase}"
+            if user.priv_protocol:
+                priv = _CANON_TO_NXOS_PRIV.get(
+                    user.priv_protocol, user.priv_protocol,
+                )
+                line += f" priv {priv} {user.priv_passphrase}"
+            line += " localizedkey"
+        if user.engine_id:
+            line += f" engineID {user.engine_id}"
+        lines.append(line)
+    return lines
 
 
 def _render_vrf_context(ri: CanonicalRoutingInstance) -> list[str]:
