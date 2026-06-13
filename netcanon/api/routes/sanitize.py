@@ -15,6 +15,7 @@ Endpoints:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
@@ -55,7 +56,13 @@ async def post_sanitize(
     raw = raw_bytes.decode("utf-8", errors="replace")
 
     try:
-        result = sanitize_text(raw, source_vendor, dry_run=dry_run)
+        # sanitize_text runs the full parse → redact → render pipeline,
+        # which is synchronous + CPU-bound.  Offload it so it never blocks
+        # the event loop (mirrors the scheduler's asyncio.to_thread dispatch
+        # in routes/schedules.py).
+        result = await asyncio.to_thread(
+            sanitize_text, raw, source_vendor, dry_run=dry_run
+        )
     except ParseError as e:
         raise HTTPException(
             status_code=400,
