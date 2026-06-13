@@ -486,7 +486,7 @@ class TestCapabilityMatrix:
         assert codec.name == "cisco_iosxr"
         assert codec.input_format == "cli-iosxr"
         assert codec.direction == "bidirectional"
-        assert codec.certainty == "best_effort"
+        assert codec.certainty == "certified"
         assert codec.capabilities.vendor_id == "cisco_iosxr"
 
 

@@ -162,17 +162,20 @@ Cisco surface and is `certified`.
 
 **Codec:** `netcanon.migration.codecs.cisco_iosxr.CiscoIOSXRCodec`
 **Direction:** `bidirectional`
-**Certainty:** `best_effort` ⚠️
+**Certainty:** `certified` ✅
 
 ### Status
 
-Phases 1-3 shipped.  Corpus is the full 7-config `batfish/lab-validation`
-trio (Apache-2.0): the `cisco_xr_ios_vpnv4` XR-XE VPNv4 PEs, the
-`iosxr_ebgp_basic` borders, and the `iosxr_ibgp_rr_over_ospf` RR +
-client.  All 7 parse, are deterministic, and round-trip cleanly.  The
-SP-routing / policy stanzas (`router bgp`, `router ospf`, `mpls ldp`,
-`route-policy`, `prefix-set`) are surfaced via `dropped_tier3_sections`
-(Phase 3 parse-and-display) rather than translated.
+All four phases shipped.  Corpus spans **10 configs from two independent
+sources** (both Apache-2.0): the 7-config `batfish/lab-validation` trio
+(`cisco_xr_ios_vpnv4` PEs, `iosxr_ebgp_basic` borders,
+`iosxr_ibgp_rr_over_ospf` RR + client) plus 3 `ios-xr/xrd-tools`
+`xr_compose_topos` configs (SRv6-L3VPN, SR-MPLS, IS-IS IP-FRR) adding the
+IS-IS / SR / SRv6 grammar batfish lacks.  All 10 parse, are
+deterministic, and round-trip cleanly.  The SP-routing / policy stanzas
+(`router bgp`, `router ospf`, `router isis`, `mpls ldp`, `route-policy`,
+`prefix-set`, `extcommunity-set`) are surfaced via
+`dropped_tier3_sections` (parse-and-display) rather than translated.
 
 ### Coverage matrix
 
@@ -185,6 +188,9 @@ SP-routing / policy stanzas (`router bgp`, `router ospf`, `mpls ldp`,
 | `batfish_ebgp_border02.txt` | 116 | 15 | 1 | 1 VLAN, 1 static, 1 user | bgp |
 | `batfish_ibgp_rr.txt` | 140 | 16 | — | 2 LAGs (Bundle-Ether), 1 user | bgp, ospf, route-policy ×2 |
 | `batfish_ibgp_border01.txt` | 158 | 17 | — | 2 LAGs, 1 static, 1 user | bgp, ospf, route-policy, prefix-set |
+| `xrdtools_srv6_pe1.cfg` | 86 | 3 | 1 | SRv6 L3VPN PE | bgp, isis, route-policy |
+| `xrdtools_sr_xrd1.cfg` | 177 | 5 | 1 | SR-MPLS, 1 static | bgp, isis, route-policy, extcommunity-set |
+| `xrdtools_isis_r1.cfg` | 49 | 3 | — | IS-IS IP-FRR (minimal) | isis |
 
 Collectively the corpus exercises 4-segment ports, Bundle-Ether LAGs
 (member `bundle id N mode active`), MgmtEth, Loopback, the top-level
@@ -208,11 +214,14 @@ subinterface → synthesised VLAN.
 
 ### Certification decision
 
-`best_effort` at Phase 3.  The "≥3 real captures round-trip cleanly"
-bar for `certified` is already met by the 7 batfish configs, but
-Phase 4 adds 1-2 grammar-diverse non-batfish captures (e.g.
-`ios-xr/xrd-tools` SR / IS-IS topologies, Apache-2.0) before the
-`certified` flip so the corpus isn't single-source.
+`certified` (Phase 4).  The corpus clears the `base.py` "≥3 real
+captures round-trip cleanly" bar by >3× (10 configs) and — crucially —
+spans **two independent sources** (`batfish/lab-validation` +
+`ios-xr/xrd-tools`) so the certification doesn't rest on a single
+upstream's grammar conventions.  The 3 xrd-tools configs add IS-IS /
+SR-MPLS / SRv6-L3VPN coverage the batfish trio lacks.  Further grammar
+diversity (ACL, QoS, L2VPN bridge-groups) is welcomed via `WANTED.md`
+but is not a `certified`-gating concern.
 
 ---
 

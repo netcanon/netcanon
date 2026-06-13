@@ -43,11 +43,12 @@ made.  SNMP (out of v1 XR scope) plus the SP-routing / ``route-policy``
 / MPLS / ``l2vpn`` Tier-3 stanzas remain ``unsupported`` in the matrix
 below — Phase 3 surfaces them on ``dropped_tier3_sections`` (the
 ``detect_tier3_sections_iosxr`` notification banner) rather than
-translating them.  ``certainty`` is ``best_effort`` (Phase 3 — the 7
-``batfish/lab-validation`` real captures in
-``tests/fixtures/real/cisco_iosxr/`` all parse + round-trip cleanly);
-it reaches ``certified`` once 1-2 grammar-diverse non-batfish captures
-land (Phase 4).
+translating them.  ``certainty`` is ``certified`` (Phase 4) — the
+real-capture corpus in ``tests/fixtures/real/cisco_iosxr/`` spans 10
+configs from two independent sources (7 ``batfish/lab-validation`` +
+3 ``ios-xr/xrd-tools`` covering IS-IS / SR-MPLS / SRv6-L3VPN grammar
+batfish lacks), all parsing + round-tripping cleanly — well past the
+``base.py`` "≥3 real captures" bar.
 """
 
 from __future__ import annotations
@@ -78,7 +79,7 @@ class CiscoIOSXRCodec(CodecBase):
     version_hint: ClassVar[str | None] = "6.x / 7.x"
     input_format: ClassVar[str] = "cli-iosxr"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from a Cisco IOS-XR "
