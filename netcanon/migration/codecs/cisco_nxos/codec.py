@@ -22,14 +22,17 @@ Module layout mirrors the ``cisco_iosxe_cli`` post-split shape:
 introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
-This is **Phase 1** of a four-phase build (see
-``docs/v0.2.0-planning/03-nxos-codec/``): hostname, basic-L3 interfaces,
-VLANs, ``vrf context`` (name + description), and default-VRF static
-routes.  Switchport / LAG / SNMP / local-users / per-VRF static / VRF
-RD-RT / VXLAN-EVPN land in Phases 2-4 and are declared ``unsupported``
-in the matrix below so the migrate-page banner surfaces the gap from
-day one.  ``certainty`` is ``experimental`` until the L2/L3 surface and
-a real-capture corpus land.
+This codec lands in four phases (see
+``docs/v0.2.0-planning/03-nxos-codec/``).  Shipped so far: **Phase 1**
+(hostname, basic-L3 interfaces, VLANs, ``vrf context`` name+description,
+default-VRF static routes) and **Phase 2a** (L2 switchport with the
+NX-OS default-flip, VLAN-centric port projection, and LAG /
+``channel-group`` membership).  SNMP + local-users (Phase 2b), HSRP
+(Phase 2c), per-VRF static + VRF RD-RT (Phase 3), and VXLAN-EVPN
+(Phase 4) remain ``unsupported`` in the matrix below so the
+migrate-page banner surfaces the gap.  ``certainty`` stays
+``experimental`` until the rest of the L2/L3 surface and a real-capture
+corpus land.
 """
 
 from __future__ import annotations
@@ -119,9 +122,21 @@ class CiscoNXOSCodec(CodecBase):
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
             "/interfaces/interface/vrf",
-            # VLANs (top-level only; no port projection yet)
+            # Interfaces — L2 switchport + LAG membership (Phase 2a)
+            "/interfaces/interface/switchport-mode",
+            "/interfaces/interface/access-vlan",
+            "/interfaces/interface/trunk-allowed-vlans",
+            "/interfaces/interface/trunk-native-vlan",
+            "/interfaces/interface/lag-member-of",
+            # VLANs (id/name + Phase-2a port projection)
             "/vlans/vlan/id",
             "/vlans/vlan/name",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+            # LAGs (Phase 2a)
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/lags/lag/mode",
             # VRF (basic — name + description)
             "/routing-instances/instance/name",
             "/routing-instances/instance/description",
@@ -168,47 +183,18 @@ class CiscoNXOSCodec(CodecBase):
             ),
         ],
         unsupported=[
-            # ── Phase 2 surfaces — L2 / SNMP / local users ──
-            UnsupportedPath(
-                path="/interfaces/interface/switchport-mode",
-                reason="Switchport / L2-mode parse + render lands in Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/access-vlan",
-                reason="Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/trunk-allowed-vlans",
-                reason="Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/trunk-native-vlan",
-                reason="Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/lag-member-of",
-                reason="LAG / port-channel parse lands in Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/vlans/vlan/tagged-ports",
-                reason="VLAN-centric port projection ships with Phase 2.",
-            ),
-            UnsupportedPath(
-                path="/vlans/vlan/untagged-ports",
-                reason="VLAN-centric port projection ships with Phase 2.",
-            ),
-            UnsupportedPath(path="/lags/lag", reason="Phase 2."),
+            # ── Phase 2b surfaces — SNMP / local users ──
             UnsupportedPath(
                 path="/snmp/community",
-                reason="SNMP parse + render lands in Phase 2.",
+                reason="SNMP parse + render lands in Phase 2b.",
             ),
             UnsupportedPath(
                 path="/snmp/v3-user",
-                reason="SNMPv3 USM lands in Phase 2.",
+                reason="SNMPv3 USM lands in Phase 2b.",
             ),
             UnsupportedPath(
                 path="/local-users/user",
-                reason="Local-user parse + render lands in Phase 2.",
+                reason="Local-user parse + render lands in Phase 2b.",
             ),
             # ── Phase 3 surfaces — VRF RD/RT + per-VRF static ──
             UnsupportedPath(

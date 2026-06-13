@@ -24,12 +24,22 @@ single-VDC NX-OS config even for a cross-vendor source.
 
 from __future__ import annotations
 
+import re
+
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from . import port_names as _port_names
 
 #: Synthesised NX-OS release stamped into the banner.  Cosmetic — the
 #: parsed ``source_version`` is metadata only and not echoed.
 _DEFAULT_VERSION = "9.3(11)"
+
+#: Canonical LAG mode -> NX-OS ``channel-group ... mode`` keyword
+#: (inverse of parse._NXOS_LAG_MODE_MAP; canonical ``static`` -> ``on``).
+_CANON_TO_NXOS_LAG_MODE = {
+    "active": "active",
+    "passive": "passive",
+    "static": "on",
+}
 
 
 def render_intent(tree: CanonicalIntent) -> str:
@@ -78,8 +88,9 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.append("")
 
     # ── Interfaces (NX-OS sort order) ──
+    lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     for iface in _sort_interfaces_nxos(tree.interfaces):
-        lines.extend(_render_interface(iface))
+        lines.extend(_render_interface(iface, lag_mode_by_name))
 
     # ── Footers (synthesised defaults) ──
     lines.append("line console")
@@ -99,6 +110,8 @@ def _derive_features(tree: CanonicalIntent) -> list[str]:
     features: set[str] = set()
     if any(_is_svi(i.name) for i in tree.interfaces):
         features.add("interface-vlan")
+    if tree.lags:
+        features.add("lacp")
     return sorted(features)
 
 
@@ -132,12 +145,16 @@ def _render_vrf_context(ri: CanonicalRoutingInstance) -> list[str]:
     return block
 
 
-def _render_interface(iface) -> list[str]:
+def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     """Render one interface stanza.
 
-    Emits ``vrf member`` BEFORE ``ip address`` (NX-OS wipes addressing
-    when the VRF binding changes, so VRF must come first) and uses the
-    CIDR address form throughout.
+    Switchport handling is kind-aware: only physical / LAG ports take
+    ``switchport`` config.  A routed physical/LAG port (no switchport
+    mode but carrying an IP) gets an explicit ``no switchport`` — NX-OS
+    defaults those ports to L2, so the routed intent must be stated.
+    SVIs / loopbacks / mgmt0 are inherently L3 and emit no switchport
+    line.  ``no switchport`` and ``vrf member`` precede ``ip address``
+    (NX-OS rejects an IP on an L2 port and wipes it on a VRF change).
     """
     block = [f"interface {iface.name}"]
     if iface.description:
@@ -148,6 +165,31 @@ def _render_interface(iface) -> list[str]:
         block.append("  no shutdown")
     if iface.mtu is not None:
         block.append(f"  mtu {iface.mtu}")
+
+    kind = _port_names.classify_port_name(iface.name).kind
+    # Switchport applies to L2-capable ports.  Exclude the inherently-L3
+    # kinds (SVI / loopback / mgmt / VTEP / tunnel); everything else —
+    # physical, LAG, and unknown cross-vendor names that default to L2 on
+    # NX-OS — is switchport-eligible.
+    if kind not in ("svi", "loopback", "mgmt", "vtep", "tunnel"):
+        if iface.switchport_mode == "access":
+            if iface.access_vlan is not None:
+                block.append(f"  switchport access vlan {iface.access_vlan}")
+            else:
+                block.append("  switchport mode access")
+        elif iface.switchport_mode == "trunk":
+            block.append("  switchport mode trunk")
+            if iface.trunk_native_vlan is not None:
+                block.append(
+                    f"  switchport trunk native vlan {iface.trunk_native_vlan}"
+                )
+            if iface.trunk_allowed_vlans:
+                vlist = _coalesce_vlan_ids(sorted(set(iface.trunk_allowed_vlans)))
+                block.append(f"  switchport trunk allowed vlan {vlist}")
+        elif iface.ipv4_addresses or iface.ipv6_addresses:
+            # Routed physical / LAG port — state the L3 intent explicitly.
+            block.append("  no switchport")
+
     if iface.vrf:
         block.append(f"  vrf member {iface.vrf}")
     for addr in iface.ipv4_addresses:
@@ -157,6 +199,14 @@ def _render_interface(iface) -> list[str]:
         block.append(line)
     for addr in iface.ipv6_addresses:
         block.append(f"  ipv6 address {addr.ip}/{addr.prefix_length}")
+
+    if iface.lag_member_of:
+        m = re.search(r"(\d+)\s*$", iface.lag_member_of)
+        if m:
+            mode = _CANON_TO_NXOS_LAG_MODE.get(
+                lag_mode_by_name.get(iface.lag_member_of, "active"), "active",
+            )
+            block.append(f"  channel-group {m.group(1)} mode {mode}")
     return block
 
 
