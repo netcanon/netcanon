@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-06-13
+
 ### Added
 
 * **Cisco NX-OS codec — Phase 2c (HSRP), completing Phase 2.**  Parses the
