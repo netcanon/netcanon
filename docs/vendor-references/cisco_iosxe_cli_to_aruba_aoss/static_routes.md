@@ -55,11 +55,15 @@ convert:
 Default-VRF static routes round-trip cleanly.  Per-VRF static routes
 (`ip route vrf X ...`) are lossy:
 
-* Cisco -> Aruba: drop the VRF; the route lands in the global
-  table.  `CanonicalStaticRoute` lacks a `vrf` field today.
+* Cisco -> Aruba: the Cisco codec parses the VRF into
+  `CanonicalStaticRoute.vrf` and would round-trip it, but Aruba
+  AOS-S has no VRF concept (the `aruba_aoss` codec declares
+  `/routing/static-route/vrf` `unsupported`), so the VRF is dropped
+  on render and the route lands in the global table.
 * Aruba -> Cisco: never populated on the Aruba side (no VRF
   concept), so this direction is not affected.
 
 Disposition: **good** for default-VRF.  **Lossy** for per-VRF
-(Cisco-only feature that has no Aruba equivalent and no canonical
-field).
+(Cisco-only feature that has no Aruba equivalent; the Cisco source
+preserves the VRF on `CanonicalStaticRoute.vrf`, but the Aruba
+render has nowhere to put it).

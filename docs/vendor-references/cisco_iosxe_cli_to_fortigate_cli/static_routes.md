@@ -92,10 +92,14 @@ class CanonicalStaticRoute(BaseModel):
   FortiOS counterpart in `set comment "..."` but the FortiGate codec
   does not currently parse / render this field.
 
-Per-VRF routes (Cisco `ip route vrf X ...`) are `unsupported` on
-both codecs in v1 — `CanonicalStaticRoute` has no `vrf` field.
-Cross-vendor migration of multi-VRF static-route tables therefore
-flattens to global routes with a banner.
+Per-VRF routes (Cisco `ip route vrf X ...`) parse into
+`CanonicalStaticRoute.vrf` and round-trip on the Cisco codec
+(`/routing/static-route/vrf` is `supported`), but the FortiGate
+codec neither parses nor renders the per-interface integer-VRF form
+(`set vrf <id>`) — it declares `/routing/static-route/vrf`
+`unsupported`.  Cross-vendor migration of multi-VRF static-route
+tables therefore flattens to global routes on FortiGate render with
+a banner.
 
 Disposition for default-VRF static routes: **good**.
 
@@ -105,5 +109,6 @@ across vendors).
 Disposition for `description` field: **lossy** (FortiGate render
 not yet wired).
 
-Disposition for per-VRF static routes: **unsupported** (canonical
-schema gap).
+Disposition for per-VRF static routes: **unsupported** (FortiGate
+codec does not model `set vrf <id>`; Cisco source preserves the VRF
+on `CanonicalStaticRoute.vrf`).

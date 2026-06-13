@@ -15,9 +15,10 @@ ip route vrf TENANT_A 10.100.0.0/24 10.100.0.254
 - Optional administrative-distance integer trails the next-hop
   (`5` in the example) — the canonical
   `CanonicalStaticRoute.metric` carries it.
-- Per-VRF routes use `ip route vrf <name> ...`; canonical lacks a
-  per-route VRF field today (would require schema extension on
-  `CanonicalStaticRoute`).
+- Per-VRF routes use `ip route vrf <name> ...`; the `arista_eos`
+  codec does not yet parse this into the canonical
+  `CanonicalStaticRoute.vrf` field (it declares
+  `/routing/static-route/vrf` `unsupported`).
 - Default route is the bare `0.0.0.0/0` form (no `ip
   default-gateway` legacy directive on Arista).
 
@@ -87,5 +88,6 @@ CanonicalStaticRoute:
   zone interface) rather than emitting an explicit
   `<route><network>0.0.0.0/0</network></route>`.
 - Per-VRF static routes (Arista `ip route vrf X ...`):
-  **unsupported** — canonical lacks a VRF field on
-  `CanonicalStaticRoute`, and OPNsense has no VRF model anyway.
+  **unsupported** — the `arista_eos` codec does not yet parse the
+  per-VRF form into `CanonicalStaticRoute.vrf`, and OPNsense has no
+  VRF model anyway.

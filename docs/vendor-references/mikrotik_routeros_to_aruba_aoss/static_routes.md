@@ -60,10 +60,12 @@ Default-table IPv4 routes round-trip cleanly:
 ### Lossy bits
 
 - **Per-VRF routes** — RouterOS source `routing-table=TENANT-A`
-  drops to the global table on render because the canonical
-  schema lacks a `vrf` field on `CanonicalStaticRoute` (deferred —
-  lands alongside VRF wire-up).  Aruba target has no VRF
-  concept anyway, so the loss is structural.
+  drops to the global table because the `mikrotik_routeros` codec
+  does not yet parse the per-VRF form into the canonical
+  `CanonicalStaticRoute.vrf` field (it declares
+  `/routing/static-route/vrf` `unsupported`; deferred — lands
+  alongside VRF wire-up).  Aruba target has no VRF concept anyway,
+  so the loss is structural.
 - **Blackhole / unreachable** — RouterOS has explicit
   `blackhole=yes` / `type=unreachable` flags; the canonical model
   does not carry this.  Aruba expresses blackhole via `null0`
@@ -90,5 +92,5 @@ Default-table IPv4 routes round-trip cleanly:
 | `static_routes[].interface` | lossy (RouterOS encodes; Aruba does not) |
 | `static_routes[].metric` | good |
 | `static_routes[].description` | lossy (RouterOS comment= maps; Aruba has no field) |
-| Per-VRF (`routing-table=`) | unsupported (canonical schema gap; Aruba has no VRF) |
+| Per-VRF (`routing-table=`) | unsupported (RouterOS codec does not parse the per-VRF form; Aruba has no VRF) |
 | Blackhole | lossy (RouterOS flag drops; Aruba has no canonical blackhole) |

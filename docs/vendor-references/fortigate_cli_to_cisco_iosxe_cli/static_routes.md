@@ -68,8 +68,12 @@ class CanonicalStaticRoute(BaseModel):
   rendered.  Field always empty on this cross-pair.
 
 Per-VRF static routes (FortiGate `set vrf <id>`) are
-**unsupported** in v1 — `CanonicalStaticRoute` has no `vrf`
-field.
+**unsupported** in v1 — the `cisco_iosxe_cli` target renders the
+`ip route vrf X ...` form and `CanonicalStaticRoute.vrf` carries the
+discriminator, but the FortiGate source codec does not parse
+`set vrf <id>` (it declares `/routing/static-route/vrf`
+`unsupported`), so the VRF never reaches canonical on this
+direction.
 
 Disposition for default-VRF static routes: **good** (with
 rename-mesh dependency for the `interface` field).
@@ -80,5 +84,6 @@ meaning differs).
 
 Disposition for `description` field: **lossy**.
 
-Disposition for per-VRF static routes: **unsupported** (canonical
-schema gap).
+Disposition for per-VRF static routes: **unsupported** (FortiGate
+source does not parse `set vrf <id>`; the Cisco target could render
+`ip route vrf X`).

@@ -49,9 +49,14 @@ boundary; round-trip is lossless within the canonical surface.
 
 Tracked fields (gateway, interface, metric, description) survive both
 ways.  Cisco IOS-XE per-VRF static routes (`ip route vrf X ...`) are
-currently parse-and-ignore in v1 — the canonical
-`CanonicalStaticRoute` lacks a `vrf` field.  This is a known gap that
-will land alongside VRF wire-up; see `vrf.md`.
+parsed into `CanonicalStaticRoute.vrf` and round-trip on the Cisco
+codec (`/routing/static-route/vrf` is `supported`).  The Arista EOS
+codec, however, does not yet render the per-VRF form (it declares
+`/routing/static-route/vrf` `unsupported`), so a Cisco -> Arista
+migration drops the VRF and the route lands in the default VRF on
+render.  This is an Arista render-side gap, not a canonical-schema
+gap; see `vrf.md`.
 
 Disposition: **good** for default-VRF routes; **lossy** for VRF-scoped
-routes (deferred to subsequent audit pass).
+routes (Cisco source preserves them; Arista render does not yet emit
+the per-VRF form).

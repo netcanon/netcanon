@@ -98,11 +98,14 @@ Arista -> RouterOS round-trip:
 Lossy bits:
 
 * **Per-VRF routes:** Arista's `ip route vrf TENANT_A ...` drops
-  to the global table on render because the canonical
-  `CanonicalStaticRoute` model lacks a `vrf` field (deferred —
-  lands alongside the broader VRF wire-up in both codecs).
-  RouterOS's `routing-table=TENANT_A` form is similarly
-  unreachable from the canonical layer in this direction.
+  to the global table because the `arista_eos` codec does not yet
+  parse the per-VRF form into `CanonicalStaticRoute.vrf` (it
+  declares `/routing/static-route/vrf` `unsupported`; deferred —
+  lands alongside the broader VRF wire-up).  The
+  `mikrotik_routeros` codec likewise does not yet parse / render
+  the `routing-table=TENANT_A` form, so the per-VRF surface is
+  unreachable on both ends of this pair even though
+  `CanonicalStaticRoute.vrf` exists.
 
 * **Tag:** Arista's `tag <N>` route-tag has no canonical surface;
   drops on parse.  Operators using tag-based redistribution

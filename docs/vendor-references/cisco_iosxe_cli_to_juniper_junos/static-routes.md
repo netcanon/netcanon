@@ -77,14 +77,21 @@ set routing-options rib inet6.0 static route 2001:db8:1::/64 next-hop 2001:db8:0
   operator.
 - **Per-VRF.** Both vendors model per-VRF static routes; Cisco
   uses `ip route vrf X` and Junos uses `set routing-instances X
-  routing-options static route`.  The canonical model does NOT
-  carry a VRF discriminator on `CanonicalStaticRoute` in v1;
-  per-VRF static routes are parse-and-ignore on both codecs
-  pending schema extension.
+  routing-options static route`.  The canonical model carries the
+  discriminator on `CanonicalStaticRoute.vrf`.  The `cisco_iosxe_cli`
+  codec parses `ip route vrf X` into that field and renders it back
+  out (`/routing/static-route/vrf` is `supported`).  The
+  `juniper_junos` codec still does not harvest per-VRF statics — its
+  routing-instances dispatcher does not descend into
+  `routing-options static` — so Junos-side per-VRF routes remain
+  `lossy` pending that wire-up.
 - **Next-hop variants.** Cisco supports `ip route DEST MASK
   <interface>` (recursive next-hop); Junos uses `qualified-next-hop`
   for similar semantics.  Both surfaces fall under the canonical
   `gateway` field as opaque string today.
 
-Disposition: **lossy** on per-VRF routes (deferred), **good** on
-default-VRF IPv4 / IPv6 static routes.
+Disposition: **lossy** on per-VRF routes (the Cisco source preserves
+the VRF on `CanonicalStaticRoute.vrf`, but the Junos render does not
+yet emit per-VRF statics, so the route flattens to the master
+instance on this direction), **good** on default-VRF IPv4 / IPv6
+static routes.

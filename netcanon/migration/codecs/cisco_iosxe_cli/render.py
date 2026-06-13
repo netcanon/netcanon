@@ -537,7 +537,11 @@ def render_intent(tree: Any) -> str:
         target = route.gateway or route.interface
         if not target:
             continue
-        out.append(f"ip route {dest} {mask} {target}{tail}")
+        # Per-VRF routes carry the ``vrf <NAME>`` qualifier between the
+        # ``ip route`` keyword and the destination (v0.2.0 — graduated
+        # /routing/static-route/vrf from unsupported to supported).
+        vrf_prefix = f"vrf {route.vrf} " if route.vrf else ""
+        out.append(f"ip route {vrf_prefix}{dest} {mask} {target}{tail}")
     if tree.static_routes:
         out.append("!")
 

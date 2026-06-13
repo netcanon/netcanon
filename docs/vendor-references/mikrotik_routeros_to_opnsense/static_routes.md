@@ -81,10 +81,11 @@ matrix.supported references either path).  RouterOS-source canonical
   via a ``dst-address=0.0.0.0/0`` static route; OPNsense's idiom is
   to set the WAN zone's ``<gateway>`` attribute (which references a
   ``<gateway_item>`` by name).  Operator-curated mapping needed.
-- **Per-VRF routes** — RouterOS ``routing-table=TENANT-A`` is not
-  modelled on canonical (CanonicalStaticRoute has no ``vrf`` field)
-  and the MikroTik codec does not yet parse VRF context.  Drops
-  unconditionally.
+- **Per-VRF routes** — the MikroTik codec does not yet parse the
+  RouterOS ``routing-table=TENANT-A`` form into the canonical
+  ``CanonicalStaticRoute.vrf`` field (it declares
+  ``/routing/static-route/vrf`` ``unsupported``), and OPNsense has
+  no VRF model either.  Drops unconditionally.
 - **Interface-as-gateway** — RouterOS ``gateway=bridge1`` (interface
   name as next-hop) maps to OPNsense's named-gateway pattern with
   ``<interface>...</interface>`` set; not a 1:1 wire shape.

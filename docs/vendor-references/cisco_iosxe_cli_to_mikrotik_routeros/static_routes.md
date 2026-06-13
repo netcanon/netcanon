@@ -55,12 +55,15 @@ Cisco's distance field and RouterOS's `distance=` parameter.
 
 ### Per-VRF routes
 
-The canonical model **does not yet carry a `vrf` field** on
-`CanonicalStaticRoute` — the cross-vendor VRF-aware static route is
-deferred until the canonical schema gains the field.  Today, both
-codecs preserve the parsed route (Cisco's `ip route vrf X ...` line
-and RouterOS's `/ip route add routing-table=X ...` line) but
-emit them under the global / default routing table on render.
+The canonical model carries the discriminator on
+`CanonicalStaticRoute.vrf`.  The `cisco_iosxe_cli` codec parses
+Cisco's `ip route vrf X ...` line into that field and renders it
+back out (`/routing/static-route/vrf` is `supported`).  The
+`mikrotik_routeros` codec, however, does not yet parse or render the
+`routing-table=X` per-VRF form — it declares
+`/routing/static-route/vrf` `unsupported` — so on a Cisco ->
+RouterOS migration the VRF is dropped and the route emits under the
+global / default routing table.
 
 ### Disposition
 
@@ -71,4 +74,4 @@ emit them under the global / default routing table on render.
 | `static_routes[].interface` | good (Cisco interface gateway form -> `gateway=ether2`) |
 | `static_routes[].metric` | good |
 | `static_routes[].description` | good |
-| Per-VRF static routes (canonical schema gap) | lossy (drops to default VRF on render) |
+| Per-VRF static routes (RouterOS render gap) | lossy (Cisco source preserves `vrf`; RouterOS render drops to default VRF) |

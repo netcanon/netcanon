@@ -25,9 +25,11 @@ Notable Arista specifics:
 - **Optional `name "<desc>"`** as a free-form label on the route.
 - **Optional administrative distance** as a trailing integer (default
   1; higher integer = less preferred — used for floating statics).
-- **Per-VRF routes** via `ip route vrf <name> ...` — the canonical
-  model lacks a `vrf` field on `CanonicalStaticRoute`, so per-VRF
-  routes parse-and-ignore.
+- **Per-VRF routes** via `ip route vrf <name> ...` — the
+  `arista_eos` codec does not yet parse this into the canonical
+  `CanonicalStaticRoute.vrf` field (it declares
+  `/routing/static-route/vrf` `unsupported`), so per-VRF routes
+  parse-and-ignore.
 - **IPv6** via `ipv6 route ::/0 <gw>` with the same modifier syntax.
 
 ## FortiGate FortiOS CLI
@@ -104,15 +106,18 @@ static_routes[].description: str
   canonical; FortiGate renders as `set comment "<desc>"`.  Codec
   parse coverage on Arista's `name` modifier may be inconsistent
   in v1 — verify with real-capture fixture.
-- **Per-VRF routes (`ip route vrf X`)** — `unsupported`.  Canonical
-  model lacks a `vrf` field on `CanonicalStaticRoute`; data drops at
-  parse on Arista source.  Even if it carried, FortiGate codec
-  doesn't parse `set vrf <id>`.
+- **Per-VRF routes (`ip route vrf X`)** — `unsupported`.  The
+  `arista_eos` codec does not yet parse the per-VRF form into
+  `CanonicalStaticRoute.vrf`, so data drops at parse on Arista
+  source.  And the FortiGate target codec doesn't parse / render
+  `set vrf <id>` either.
 - **IPv6 routes** — `unsupported`.  Not wired through canonical
   `static_routes` list on either codec; data drops on parse.
 
 Disposition summary: **good** for IPv4 default-VRF route round-trip
 (destination, gateway).  **Lossy** for interface (rename mesh),
 metric (semantic mismatch), description (codec parse coverage).
-**Unsupported** for per-VRF and IPv6 routes (canonical-model gap +
-codec wire-up gap).
+**Unsupported** for per-VRF routes (neither the Arista source nor
+the FortiGate target wires the per-VRF form, though
+`CanonicalStaticRoute.vrf` exists) and IPv6 routes (codec wire-up
+gap).

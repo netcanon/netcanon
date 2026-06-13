@@ -57,8 +57,10 @@ Notable Arista specifics:
 - **Optional `name "<desc>"`** as a free-form label.
 - **Optional administrative distance** as a trailing integer
   (default 1).
-- **Per-VRF routes** via `ip route vrf <name> ...` — canonical
-  model lacks a vrf field on CanonicalStaticRoute.
+- **Per-VRF routes** via `ip route vrf <name> ...` — the
+  `arista_eos` codec does not yet parse / render this form (it
+  declares `/routing/static-route/vrf` `unsupported`), though
+  `CanonicalStaticRoute.vrf` exists.
 - **IPv6** via `ipv6 route ::/0 <gw>` with the same modifier syntax.
 
 ## Cross-vendor mapping (FortiGate -> Arista)
@@ -92,9 +94,9 @@ static_routes[].description: str
   FortiGate codec parses `set comment` into the canonical
   description as of Phase 4 wave 7c-F.
 - **Per-VRF routes (FortiOS `set vrf <id>`)** — `unsupported`.
-  Canonical model lacks a vrf field on CanonicalStaticRoute, AND
-  the FortiGate codec does not currently parse `set vrf` even if
-  the field existed.  Data drops at parse.
+  `CanonicalStaticRoute.vrf` exists, but the FortiGate source codec
+  does not parse `set vrf <id>`, so data drops at parse; the Arista
+  target codec does not render the per-VRF form either.
 - **IPv6 routes** — `unsupported`.  FortiGate codec does not parse
   `config router static6` into the canonical static_routes list;
   data drops at parse, and Arista codec wouldn't have any IPv6
@@ -103,5 +105,7 @@ static_routes[].description: str
 Disposition summary: **good** for IPv4 default-VRF route round-trip
 (destination, gateway).  **Lossy** for interface (rename mesh),
 metric (semantic mismatch), description (codec coverage gap).
-**Unsupported** for per-VRF and IPv6 routes (canonical-model gap +
-codec wire-up gap).
+**Unsupported** for per-VRF routes (neither the FortiGate source nor
+the Arista target wires the per-VRF form, though
+`CanonicalStaticRoute.vrf` exists) and IPv6 routes (codec wire-up
+gap).

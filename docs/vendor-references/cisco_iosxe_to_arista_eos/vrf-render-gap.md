@@ -103,6 +103,9 @@ for `name`, `route_distinguisher`, `rt_imports`, `rt_exports`,
 has no per-VRF instance-type discriminator (always `vrf`) while
 Junos / Arista MAC-VRF richer.  `interfaces[].vrf` flips to `good`.
 `l3_vni` stays `not_applicable` until VXLAN parser wire-up also
-lands.  `static_routes` flips to `good` for default-VRF routes,
-`lossy` until `CanonicalStaticRoute` gains a `vrf` field for
-per-VRF routes.
+lands.  `static_routes` flips to `good` for default-VRF routes;
+per-VRF routes stay `lossy` because the `arista_eos` target codec
+does not yet render the per-VRF form (it declares
+`/routing/static-route/vrf` `unsupported`) — the canonical
+`CanonicalStaticRoute.vrf` field itself already carries the
+discriminator.

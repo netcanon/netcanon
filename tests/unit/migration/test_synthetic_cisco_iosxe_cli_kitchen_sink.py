@@ -264,11 +264,11 @@ class TestCanonicalCoverage:
     # --- static routes ---------------------------------------------------
 
     def test_static_routes_at_least_three(self, parsed_intent) -> None:
-        # The IPv4 ``ip route`` lines + the ``ip default-gateway`` line
-        # all populate static_routes.  IPv6 routes and ``ip route vrf
-        # ...`` lines are parse-and-ignored — same-vendor round-trip
-        # drops them silently (documented in the parse module's
-        # static-route regex docstring).
+        # The IPv4 ``ip route`` lines (incl. the ``ip route vrf <NAME>``
+        # per-VRF form, graduated to first-class support in v0.2.0) +
+        # the ``ip default-gateway`` line all populate static_routes.
+        # IPv6 routes are still parse-and-ignored (documented in the
+        # parse module's static-route regex docstring).
         assert len(parsed_intent.static_routes) >= 3
 
     def test_default_route_present(self, parsed_intent) -> None:
@@ -291,6 +291,17 @@ class TestCanonicalCoverage:
             and r.interface == "GigabitEthernet0/0/0"
             for r in iface_routes
         )
+
+    def test_per_vrf_static_route(self, parsed_intent) -> None:
+        # ``ip route vrf CUSTOMER-A 172.16.0.0 255.255.0.0 198.51.100.50``
+        # graduated from parse-and-ignore to a first-class
+        # CanonicalStaticRoute.vrf binding in v0.2.0.
+        assert any(
+            r.vrf == "CUSTOMER-A"
+            and r.destination == "172.16.0.0/16"
+            and r.gateway == "198.51.100.50"
+            for r in parsed_intent.static_routes
+        ), "expected the ip route vrf CUSTOMER-A line to parse with vrf set"
 
     # --- DHCP pools ------------------------------------------------------
 
@@ -448,12 +459,12 @@ def test_round_trip_stable(kitchen_sink_text: str) -> None:
     assert sorted(_interface_signature(first)) == \
            sorted(_interface_signature(second))
 
-    # Static routes — destination + gateway + interface tuple.
+    # Static routes — destination + gateway + interface + vrf tuple.
     assert sorted(
-        (r.destination, r.gateway, r.interface)
+        (r.destination, r.gateway, r.interface, r.vrf)
         for r in first.static_routes
     ) == sorted(
-        (r.destination, r.gateway, r.interface)
+        (r.destination, r.gateway, r.interface, r.vrf)
         for r in second.static_routes
     )
 

@@ -68,10 +68,14 @@ CanonicalStaticRoute(destination, gateway, interface, metric, description)
   blackhole flag.  Cisco render uses the `Null0` interface name
   in the `interface` field; round-trip is round-trip-equivalent
   but not byte-equivalent.
-- **routing-table** (per-VRF): canonical model lacks a `vrf`
-  field on `CanonicalStaticRoute` today.  Per-VRF routes from
-  RouterOS source drop to the global / default routing table on
-  Cisco render.
+- **routing-table** (per-VRF): the canonical model carries the
+  discriminator on `CanonicalStaticRoute.vrf`, and the
+  `cisco_iosxe_cli` target renders the `ip route vrf X ...` form,
+  but the `mikrotik_routeros` source codec does not yet parse the
+  `routing-table=X` form into that field (it declares
+  `/routing/static-route/vrf` `unsupported`).  Per-VRF routes from
+  RouterOS source therefore drop to the global / default routing
+  table on Cisco render.
 
 ### Disposition
 
@@ -82,5 +86,5 @@ CanonicalStaticRoute(destination, gateway, interface, metric, description)
 | `static_routes[].interface` | good (gateway-as-interface form maps) |
 | `static_routes[].metric` | good |
 | `static_routes[].description` | good |
-| Per-VRF routes (canonical schema gap) | lossy (drops to default VRF on render) |
+| Per-VRF routes (RouterOS parse gap) | lossy (RouterOS source does not parse `routing-table=X`; Cisco target could render `ip route vrf X`) |
 | `blackhole=yes` (no canonical flag) | lossy (encoded via `Null0` interface name; semantic-equivalent) |

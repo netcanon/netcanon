@@ -68,10 +68,12 @@ interface as gateway.
 
 - **Per-VRF routes** — Aruba has no VRF concept, so the source
   side never populates a per-VRF route record.  Inverse direction
-  RouterOS source has `/ip route routing-table=<name>` but the
-  canonical schema lacks a `vrf` field on `CanonicalStaticRoute`
-  (deferred — lands alongside VRF wire-up).  Per-VRF RouterOS
-  source routes drop to the global table on render.
+  RouterOS source has `/ip route routing-table=<name>`, but the
+  `mikrotik_routeros` codec does not yet parse that form into the
+  canonical `CanonicalStaticRoute.vrf` field (it declares
+  `/routing/static-route/vrf` `unsupported`; deferred — lands
+  alongside VRF wire-up).  Per-VRF RouterOS source routes therefore
+  drop to the global table on render.
 - **Blackhole / unreachable** — RouterOS has explicit flags
   (`blackhole=yes`, `type=unreachable`); Aruba expresses
   blackhole via `null0` interface-as-gateway form (which the
@@ -93,5 +95,5 @@ interface as gateway.
 | `static_routes[].interface` | lossy (Aruba does not encode; RouterOS does) |
 | `static_routes[].metric` | good (round-trips) |
 | `static_routes[].description` | lossy (RouterOS comment= maps; Aruba has no field) |
-| Per-VRF (`routing-table=`) | unsupported (canonical schema gap) |
+| Per-VRF (`routing-table=`) | unsupported (RouterOS codec does not parse the per-VRF form; Aruba has no VRF concept) |
 | Blackhole | lossy (flag-vs-interface encoding mismatch) |

@@ -385,6 +385,54 @@ class TestRender:
         # on switches with no routing).
         assert "ip route 0.0.0.0 0.0.0.0 10.0.0.1" in out
 
+    def test_per_vrf_ip_route_parse_sets_vrf(self):
+        # v0.2.0 — ``ip route vrf <NAME> <dest> <mask> <gw>`` populates
+        # CanonicalStaticRoute.vrf (previously parse-and-ignored).
+        intent = CiscoIOSXECLICodec().parse(
+            "ip route vrf RED 172.16.0.0 255.255.0.0 198.51.100.50\n"
+        )
+        vrf_routes = [r for r in intent.static_routes if r.vrf]
+        assert len(vrf_routes) == 1
+        assert vrf_routes[0].vrf == "RED"
+        assert vrf_routes[0].destination == "172.16.0.0/16"
+        assert vrf_routes[0].gateway == "198.51.100.50"
+
+    def test_per_vrf_ip_route_round_trip(self):
+        # The vrf qualifier survives parse → render → parse.
+        codec = CiscoIOSXECLICodec()
+        out = codec.render(codec.parse(
+            "ip route vrf BLUE 10.10.0.0 255.255.0.0 10.0.0.2\n"
+        ))
+        assert "ip route vrf BLUE 10.10.0.0 255.255.0.0 10.0.0.2" in out
+        reparsed = codec.parse(out)
+        assert any(
+            r.vrf == "BLUE" and r.destination == "10.10.0.0/16"
+            for r in reparsed.static_routes
+        )
+
+    def test_per_vrf_ip_route_tolerates_trailing_global_keyword(self):
+        # Real captures carry route-leak nuances, e.g.
+        # ``ip route vrf myvrf 0.0.0.0 0.0.0.0 5.6.7.8 global``.  The
+        # vrf binding + next-hop are modelled; the trailing ``global``
+        # next-hop-leak keyword is not (parse-and-ignore, same as the
+        # administrative distance / ``name`` trailers).
+        intent = CiscoIOSXECLICodec().parse(
+            "ip route vrf myvrf 0.0.0.0 0.0.0.0 5.6.7.8 global\n"
+        )
+        match = [r for r in intent.static_routes if r.vrf == "myvrf"]
+        assert match
+        assert match[0].destination == "0.0.0.0/0"
+        assert match[0].gateway == "5.6.7.8"
+
+    def test_global_table_ip_route_has_no_vrf_qualifier(self):
+        # Non-vrf routes keep vrf="" and render WITHOUT the qualifier.
+        codec = CiscoIOSXECLICodec()
+        out = codec.render(codec.parse(
+            "ip route 192.168.0.0 255.255.255.0 10.0.0.1\n"
+        ))
+        assert "ip route 192.168.0.0 255.255.255.0 10.0.0.1" in out
+        assert "ip route vrf" not in out
+
     def test_render_emits_vlan_database_and_svi(self):
         intent = CiscoIOSXECLICodec().parse(
             "vlan 10\n name USERS\n!\n"
@@ -1360,8 +1408,10 @@ class TestAnycastGateway:
             "/interfaces/interface/ipv6/address/virtual-gateway-address"
             in unsupported
         )
-        # Per-VRF static-route also remains unsupported (separate work).
-        assert "/routing/static-route/vrf" in unsupported
+        # Per-VRF static-route graduated to supported in v0.2.0
+        # (``ip route vrf <NAME>`` round-trips through parse + render).
+        assert "/routing/static-route/vrf" in supported
+        assert "/routing/static-route/vrf" not in unsupported
 
     def test_cross_vendor_virtual_ip_distinct_from_primary_emits_review(self):
         """When ``virtual_gateway_address`` differs from the primary

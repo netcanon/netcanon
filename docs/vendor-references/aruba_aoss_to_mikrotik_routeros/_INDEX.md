@@ -23,7 +23,7 @@ L3-by-default).
 | `ip_addressing.md` | CIDR <-> CIDR; v6 link-local discriminator preserved. |
 | `vlans.md` | Aruba VLAN-centric -> RouterOS two-plane model (`/interface vlan` for L3 + bridge-VLAN filtering for L2).  Plane-2 wire-up partial in v1. |
 | `switching_model.md` | Philosophy mismatch — Aruba L2-by-default vs RouterOS L3-by-default.  L2 features (DHCP-snooping, ARP-protect, BPDU-guard) drop on cross-pair. |
-| `static_routes.md` | Aruba CIDR / dotted-mask -> RouterOS CIDR.  `ip default-gateway` legacy form normalises.  Per-VRF routes deferred (canonical schema gap). |
+| `static_routes.md` | Aruba CIDR / dotted-mask -> RouterOS CIDR.  `ip default-gateway` legacy form normalises.  Per-VRF routes deferred (RouterOS codec does not parse the per-VRF form; Aruba has no VRF concept). |
 | `dhcp.md` | Aruba is relay-only / no server pools.  RouterOS three-section DHCP form joins on parse and lossy on Aruba target. |
 | `snmp.md` | Aruba `Operator/Manager` access keywords vs RouterOS `read-access=` / `write-access=` flags.  v3 USM auth/priv overlap (MD5/SHA1 + AES/DES); passphrases re-key required. |
 | `local_users.md` | Aruba two-role (manager/operator) <-> RouterOS named groups (full/write/read).  Hash format incompatibility — re-key required. |
