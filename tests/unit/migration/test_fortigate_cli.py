@@ -470,6 +470,21 @@ class TestCapabilities:
         reasons = [l.reason for l in FortiGateCLICodec().capabilities.lossy]
         assert any("25 character" in r for r in reasons)
 
+    def test_caps_declares_mtu_supported(self):
+        """R-06: FortiGate parses + renders per-interface MTU (see
+        test_mtu_wire_through.py::TestFortiGateMTUParseRender) — the
+        capability matrix must declare it ``supported``, matching the
+        MTU worked example in docs/adding-a-canonical-field.md step 6.
+        It must not also be double-declared lossy/unsupported."""
+        caps = FortiGateCLICodec().capabilities
+        assert "/interfaces/interface/config/mtu" in caps.supported
+        assert "/interfaces/interface/config/mtu" not in {
+            p.path for p in caps.lossy
+        }
+        assert "/interfaces/interface/config/mtu" not in {
+            p.path for p in caps.unsupported
+        }
+
 
 class TestIterXpaths:
     def test_xpaths_match_matrix(self):

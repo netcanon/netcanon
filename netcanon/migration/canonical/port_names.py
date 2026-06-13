@@ -308,6 +308,27 @@ def translate_port_names(
     if not isinstance(intent, CanonicalIntent):
         return PortRenameResult(applied={}, warnings=[], dropped=[])
 
+    # Early-exit: target codec declares port-name translation unsupported.
+    # Emit ONE banner-level warning instead of N per-port "no native
+    # representation" warnings.  Behaviour-preserving for codecs that DO
+    # implement port-name translation (they won't have "ports" in the set).
+    if "ports" in getattr(target_codec, "unsupported_rename_categories", frozenset()):
+        logger.debug(
+            "translate_port_names: target %s declares ports unsupported — "
+            "skipping per-port rename loop, emitting single banner warning",
+            target_codec.name,
+        )
+        return PortRenameResult(
+            applied={},
+            warnings=[
+                f"{target_codec.name}: port-name translation is not supported "
+                f"(inherited no-op classify_port_name / format_port_identity). "
+                f"Interface names from {source_codec.name} are carried verbatim. "
+                f"No per-port rewrites applied."
+            ],
+            dropped=[],
+        )
+
     user_map = dict(rename_map or {})
     # Split user map into drops (value is None) and renames (value is str).
     # Drops never go through the target codec — they're stripped from the

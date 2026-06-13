@@ -29,10 +29,11 @@ firewall translation is your primary need, see
   `internal1`-`internalN`), VLAN sub-interfaces (`VL_<id>`,
   `LAN_TRUNK`), aggregate (`fortilink`, `LAG_INTERNAL`), tunnel
   (SSL-VPN, IPsec); descriptions, IPv4 + IPv6, enabled state.
-  **Note:** per-interface MTU is parsed when FortiGate is the
-  *source* (carried into the canonical model and rendered by other
-  target codecs that emit MTU) but not emitted when FortiGate is the
-  *target* — see codec capability matrix.  Per-interface VRF is
+  **Note:** per-interface MTU round-trips both directions — parsed from
+  `set mtu N` into the canonical model, and emitted on render as
+  `set mtu-override enable` + `set mtu N` (FortiOS requires the override
+  flag before `set mtu` takes effect on physical ports).  `mtu` is declared
+  `supported` in the codec capability matrix.  Per-interface VRF is
   routing-instance-scoped, not a Tier-1 binding.
 - VLANs — VLAN sub-interface form (`config system interface` →
   `set type vlan` + `set vlanid <N>`)

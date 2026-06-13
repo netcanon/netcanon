@@ -265,12 +265,13 @@ per_field_expectation:
   "interfaces[].mtu":
     disposition: lossy
     reason: >
-      FortiOS has a `set mtu <N>` directive (gated by `set
-      mtu-override enable`) but the fortigate_cli parser does not
-      currently surface it onto canonical (parse-side codec gap;
-      deferred).  `intent.interfaces[].mtu` is None on parse;
-      cisco_iosxe render emits no `<config><mtu>` line.  Doubly
-      deferred: even if FortiGate parse were wired, the cisco_iosxe
+      FortiGate parses `set mtu <N>` into `CanonicalInterface.mtu`
+      (gated on `set mtu-override enable` on render — see
+      fortigate_cli/codec.py `supported` + test_mtu_wire_through.py).
+      The `cisco_iosxe` NETCONF target is a Phase-0.5 stub whose
+      `_render_canonical()` emits only `openconfig-interfaces` and
+      does not emit `<config><mtu>`, so the MTU drops on THIS
+      direction.  Even with a full NETCONF render, the cisco_iosxe
       matrix declares `/interfaces/interface/config/mtu` `lossy`
       because OpenConfig's single mtu leaf doesn't distinguish
       link-MTU from `ip mtu` / `ipv6 mtu` / `mpls mtu`.
@@ -618,8 +619,10 @@ per_field_expectation:
 #   * timezone — fortigate_cli parse-side gap (`set timezone <NN>`
 #     not surfaced as canonical scalar).
 #
-#   * mtu — fortigate_cli parse-side gap (`set mtu <N>` not surfaced
-#     as canonical scalar).
+#   * mtu — cisco_iosxe target-side gap.  FortiGate parses `set mtu
+#     <N>` into canonical (supported); the cisco_iosxe NETCONF stub
+#     renders no `<config><mtu>`, and even a full render is lossy
+#     (OpenConfig's single mtu leaf can't split link/ip/ipv6/mpls MTU).
 #
 # Surprises uncovered authoring this pair:
 #
