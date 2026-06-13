@@ -13,11 +13,13 @@ admin-state / mtu / IPv4 (CIDR) / IPv6 / ``vrf member``.
 
 The render path emits the full Phase 2-4 surface (L2 switchport / LAG /
 SNMP / local-users / HSRP / VRF RD-RT / per-VRF static / VXLAN-EVPN +
-L3VNI) and stays deliberately tolerant of the canonical surfaces it
-still does NOT emit (anycast-gateway — T2): a cross-vendor source tree
-carrying those fields renders cleanly, simply omitting them.  The matrix
-declares each omission ``unsupported`` so the migrate-page banner
-surfaces the gap.
+L3VNI) plus IPv4 Distributed Anycast Gateway (per-SVI ``fabric
+forwarding mode anycast-gateway`` + the chassis-wide ``fabric forwarding
+anycast-gateway-mac``).  It stays deliberately tolerant of the canonical
+surfaces it does NOT emit (IPv6 anycast, Tier-3 protocols): a
+cross-vendor source tree carrying those fields renders cleanly, simply
+omitting them.  The matrix declares each omission ``unsupported`` so the
+migrate-page banner surfaces the gap.
 
 ``feature`` lines are render-derived (NOT modelled canonically — see
 ``03-canonical-mapping.md`` § 5); the ``vdc`` / ``line`` / ``boot``
@@ -75,6 +77,16 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.append(f"feature {feat}")
     if features:
         lines.append("")
+
+    # ── Distributed Anycast Gateway — chassis-wide MAC ──
+    # The per-SVI `fabric forwarding mode anycast-gateway` markers are
+    # emitted inside the interface stanzas below; both are needed for the
+    # DAG fabric to function.  Canonical colon-hex → NX-OS dotted-triplet.
+    if tree.anycast_gateway_mac:
+        dotted = _mac_to_dotted_triplet(tree.anycast_gateway_mac)
+        if dotted:
+            lines.append(f"fabric forwarding anycast-gateway-mac {dotted}")
+            lines.append("")
 
     # ── Local users + SNMP (Phase 2b) ──
     for user in tree.local_users:
@@ -397,6 +409,17 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
         if addr.is_secondary:
             line += " secondary"
         block.append(line)
+    # ── Distributed Anycast Gateway per-SVI marker ──
+    # The primary IP IS the distributed gateway (virtual_gateway_address
+    # == ip — the DAG / SD-Access mirror shape), so emit the per-SVI
+    # `fabric forwarding mode anycast-gateway` line once.  A cross-vendor
+    # source whose virtual_gateway_address differs from the IP (Junos /
+    # Arista VARP separate VIP) has no DAG equivalent and is skipped.
+    if any(
+        a.virtual_gateway_address and a.virtual_gateway_address == a.ip
+        for a in iface.ipv4_addresses
+    ):
+        block.append("  fabric forwarding mode anycast-gateway")
     for addr in iface.ipv6_addresses:
         block.append(f"  ipv6 address {addr.ip}/{addr.prefix_length}")
 
@@ -446,6 +469,23 @@ def _coalesce_vlan_ids(ids: list[int]) -> str:
         run_start = prev = vid
     parts.append(_run_token(run_start, prev))
     return ",".join(parts)
+
+
+def _mac_to_dotted_triplet(mac: str) -> str:
+    """Convert a canonical colon-hex MAC to NX-OS dotted-triplet form.
+
+    NX-OS emits MAC addresses as ``aabb.ccdd.eeff``; the canonical model
+    stores colon-hex (``aa:bb:cc:dd:ee:ff``).  Returns empty string for
+    malformed input so the caller skips the emit rather than poisoning
+    the wire.  Forked from cisco_iosxe_cli per the duplicate-rather-than-
+    lift convention.
+    """
+    if not mac:
+        return ""
+    hex_only = re.sub(r"[^0-9a-fA-F]", "", mac).lower()
+    if len(hex_only) != 12:
+        return ""
+    return f"{hex_only[0:4]}.{hex_only[4:8]}.{hex_only[8:12]}"
 
 
 def _run_token(lo: int, hi: int) -> str:
