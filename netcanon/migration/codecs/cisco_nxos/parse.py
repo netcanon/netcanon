@@ -50,6 +50,7 @@ from ...canonical.intent import (
     CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
     CanonicalRoutingInstance,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -91,6 +92,35 @@ _IPV6_CIDR_RE = re.compile(
 #: ``vrf member <name>`` inside an interface stanza (NX-OS form of
 #: IOS-XE's ``vrf forwarding``).
 _VRF_MEMBER_RE = re.compile(r"^\s+vrf\s+member\s+(\S+)\s*$", re.IGNORECASE)
+
+# ── L2 switchport grammar (Phase 2) ──
+# NX-OS Ethernet / port-channel ports default to L2 switchport; a routed
+# port requires an explicit ``no switchport``.  Mirrors arista_eos's
+# render-decides model: set ``switchport_mode`` only on explicit
+# mode/access/trunk lines, leave it ``None`` otherwise, and let render
+# emit ``no switchport`` for a physical/LAG port that carries an IP.
+# ``no switchport`` is consumed (it marks the port routed) but sets no
+# canonical field — ``switchport_mode=None`` already means "routed".
+_NO_SWITCHPORT_RE = re.compile(r"^\s+no\s+switchport\s*$", re.IGNORECASE)
+_SWITCHPORT_MODE_RE = re.compile(
+    r"^\s+switchport\s+mode\s+(\S+)", re.IGNORECASE,
+)
+_SWITCHPORT_ACCESS_RE = re.compile(
+    r"^\s+switchport\s+access\s+vlan\s+(\d+)", re.IGNORECASE,
+)
+_SWITCHPORT_TRUNK_ALLOWED_RE = re.compile(
+    r"^\s+switchport\s+trunk\s+allowed\s+vlan\s+(.+)", re.IGNORECASE,
+)
+_SWITCHPORT_TRUNK_NATIVE_RE = re.compile(
+    r"^\s+switchport\s+trunk\s+native\s+vlan\s+(\d+)", re.IGNORECASE,
+)
+# ``channel-group N mode active|passive|on`` declares the port a member
+# of ``port-channelN``.  NX-OS mode vocab → canonical LAG modes
+# (``on`` is static aggregation).
+_CHANNEL_GROUP_RE = re.compile(
+    r"^\s+channel-group\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
+)
+_NXOS_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
@@ -200,9 +230,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # (declared unsupported).
     intent.static_routes = _parse_static_routes(raw)
 
-    # Shared switchport→VLAN projection.  A no-op in Phase 1 (switchport
-    # parsing lands in Phase 2) but kept in the pipeline for parity with
-    # the other codecs; the phantom-VLAN guard mirrors iosxe_cli.
+    # LAGs (Phase 2) — both the ``interface port-channelN`` declaration
+    # and per-member ``channel-group N mode M`` lines contribute.
+    intent.lags = _parse_lags(raw)
+
+    # Shared switchport→VLAN projection: mirror per-port switchport state
+    # into the VLAN-centric tagged/untagged lists so VLAN-centric
+    # renderers can emit the membership.  The phantom-VLAN guard
+    # (snapshot legitimate VLAN ids before, prune after) mirrors
+    # iosxe_cli — a wide ``switchport trunk allowed`` range must not
+    # inflate tree.vlans with thousands of phantom records.
     legitimate_vlan_ids = {v.id for v in intent.vlans}
     from ...canonical.transforms import project_switchport_to_vlan
     project_switchport_to_vlan(intent)
@@ -293,14 +330,40 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     return instances
 
 
+def _new_iface_scratch(name: str) -> dict:
+    """Fresh per-interface parse-time scratch dict.
+
+    Single source of truth for the field set so the two stanza-open
+    sites in :func:`_parse_interfaces` can't drift apart.
+    """
+    return {
+        "name": name,
+        "description": "",
+        "enabled": True,
+        "type": _infer_type(name),
+        "mtu": None,
+        "ipv4": [],
+        "ipv6": [],
+        "vrf": "",
+        "kind": "",
+        "switchport_mode": None,
+        "access_vlan": None,
+        "trunk_allowed": [],
+        "trunk_native": None,
+        "lag_member_of": None,
+    }
+
+
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     """Extract ``interface <name>`` stanzas from NX-OS config text.
 
-    Phase 1 surface per interface: description, enabled (shutdown /
-    no shutdown), mtu, IPv4 (CIDR), IPv6 (CIDR + scope), VRF membership
-    (``vrf member``).  The management-VRF heuristic promotes a
-    physical-named port bound to the ``management`` VRF to
-    ``kind="mgmt"`` (mgmt0 already classifies mgmt by name).
+    Per interface: description, enabled (shutdown / no shutdown), mtu,
+    IPv4 (CIDR), IPv6 (CIDR + scope), VRF membership (``vrf member``),
+    and (Phase 2) L2 switchport state (mode / access-vlan / trunk-allowed
+    / trunk-native) + LAG membership (``channel-group``).  The
+    management-VRF heuristic promotes a physical-named port bound to the
+    ``management`` VRF to ``kind="mgmt"`` (mgmt0 already classifies mgmt
+    by name).
     """
     lines = raw.splitlines()
     interfaces: list[CanonicalInterface] = []
@@ -314,18 +377,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         m = _IFACE_RE.match(line)
         if m:
             _flush()
-            iface_name = m.group(1)
-            current = {
-                "name": iface_name,
-                "description": "",
-                "enabled": True,
-                "type": _infer_type(iface_name),
-                "mtu": None,
-                "ipv4": [],
-                "ipv6": [],
-                "vrf": "",
-                "kind": "",
-            }
+            current = _new_iface_scratch(m.group(1))
             continue
 
         if current is None:
@@ -338,18 +390,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             # The closing line might itself open a new interface.
             m = _IFACE_RE.match(line)
             if m:
-                iface_name = m.group(1)
-                current = {
-                    "name": iface_name,
-                    "description": "",
-                    "enabled": True,
-                    "type": _infer_type(iface_name),
-                    "mtu": None,
-                    "ipv4": [],
-                    "ipv6": [],
-                    "vrf": "",
-                    "kind": "",
-                }
+                current = _new_iface_scratch(m.group(1))
             continue
 
         dm = _DESC_RE.match(line)
@@ -408,6 +449,36 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["vrf"] = vm.group(1)
             continue
 
+        # ── L2 switchport (Phase 2) ──
+        if _NO_SWITCHPORT_RE.match(line):
+            # Routed port — leave switchport_mode None (render emits
+            # ``no switchport`` for a physical/LAG port carrying an IP).
+            continue
+        sm = _SWITCHPORT_MODE_RE.match(line)
+        if sm:
+            current["switchport_mode"] = sm.group(1).lower()
+            continue
+        am = _SWITCHPORT_ACCESS_RE.match(line)
+        if am:
+            current["switchport_mode"] = current["switchport_mode"] or "access"
+            current["access_vlan"] = int(am.group(1))
+            continue
+        tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
+        if tam:
+            current["switchport_mode"] = current["switchport_mode"] or "trunk"
+            current["trunk_allowed"] = _parse_vlan_list(tam.group(1).strip())
+            continue
+        tnm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
+        if tnm:
+            current["switchport_mode"] = current["switchport_mode"] or "trunk"
+            current["trunk_native"] = int(tnm.group(1))
+            continue
+
+        cgm = _CHANNEL_GROUP_RE.match(line)
+        if cgm:
+            current["lag_member_of"] = f"port-channel{int(cgm.group(1))}"
+            continue
+
     _flush()
     return interfaces
 
@@ -452,7 +523,73 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         ],
         vrf=vrf,
         kind=kind,
+        switchport_mode=raw.get("switchport_mode"),
+        access_vlan=raw.get("access_vlan"),
+        trunk_allowed_vlans=raw.get("trunk_allowed", []),
+        trunk_native_vlan=raw.get("trunk_native"),
+        lag_member_of=raw.get("lag_member_of"),
     )
+
+
+def _lag_sort_key(name: str) -> tuple[int, int]:
+    """Stable sort key grouping ``port-channel<N>`` numerically."""
+    m = re.match(r"^port-channel(\d+)$", name, re.IGNORECASE)
+    return (0, int(m.group(1))) if m else (1, 0)
+
+
+def _parse_lags(raw: str) -> list[CanonicalLAG]:
+    """Build :class:`CanonicalLAG` records from NX-OS config.
+
+    Two signals, either sufficient (mirrors cisco_iosxe_cli):
+      * an ``interface port-channel<N>`` stanza declares the LAG exists;
+      * a ``channel-group <N> mode <m>`` line under a physical port
+        declares that port a member of ``port-channel<N>``.
+
+    Mode is the first member's mode (NX-OS ``on`` → canonical
+    ``static``); an empty LAG keeps :attr:`CanonicalLAG.mode` default.
+    """
+    members_by_lag: dict[str, list[str]] = {}
+    mode_by_lag: dict[str, str] = {}
+    declared: set[str] = set()
+    current_iface: str | None = None
+
+    def _note_header(name: str) -> None:
+        if name.lower().startswith("port-channel"):
+            declared.add(name)
+
+    for line in raw.splitlines():
+        m = _IFACE_RE.match(line)
+        if m:
+            current_iface = m.group(1)
+            _note_header(current_iface)
+            continue
+        if current_iface is None:
+            continue
+        if line and not line[0].isspace():
+            current_iface = None
+            m = _IFACE_RE.match(line)
+            if m:
+                current_iface = m.group(1)
+                _note_header(current_iface)
+            continue
+        cgm = _CHANNEL_GROUP_RE.match(line)
+        if cgm:
+            lag_name = f"port-channel{int(cgm.group(1))}"
+            mode = _NXOS_LAG_MODE_MAP.get(cgm.group(2).lower(), "active")
+            members = members_by_lag.setdefault(lag_name, [])
+            if current_iface and current_iface not in members:
+                members.append(current_iface)
+            mode_by_lag.setdefault(lag_name, mode)
+
+    lags: list[CanonicalLAG] = []
+    for lag_name in sorted(declared | set(members_by_lag), key=_lag_sort_key):
+        lag = CanonicalLAG(
+            name=lag_name, members=list(members_by_lag.get(lag_name, [])),
+        )
+        if lag_name in mode_by_lag:
+            lag.mode = mode_by_lag[lag_name]
+        lags.append(lag)
+    return lags
 
 
 def _parse_vlan_list(text: str) -> list[int]:

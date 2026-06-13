@@ -118,9 +118,10 @@ class TestParse:
         intent = codec.parse(kitchen_sink)
         by_name = {i.name: i for i in intent.interfaces}
         eth1 = by_name["Ethernet1/1"]
-        assert eth1.description == "uplink to spine"
+        assert eth1.description == "routed uplink to spine"
         assert eth1.enabled is True
         assert eth1.mtu == 9216
+        assert eth1.switchport_mode is None          # `no switchport` → routed
         assert [(a.ip, a.prefix_length) for a in eth1.ipv4_addresses] == [
             ("192.0.2.1", 31),
         ]
@@ -135,8 +136,8 @@ class TestParse:
 
     def test_shutdown_disables_interface(self, codec, kitchen_sink):
         intent = codec.parse(kitchen_sink)
-        eth3 = next(i for i in intent.interfaces if i.name == "Ethernet1/3")
-        assert eth3.enabled is False
+        eth7 = next(i for i in intent.interfaces if i.name == "Ethernet1/7")
+        assert eth7.enabled is False
 
     def test_mgmt0_classifies_by_name_no_kind_override(self, codec, kitchen_sink):
         """mgmt0 is classified as kind=mgmt by NAME, so the kind OVERRIDE
@@ -255,33 +256,42 @@ class TestRoundTrip:
         probe = codec.probe(rendered)
         assert probe is not None and probe[0] >= 90
 
-    def test_render_ignores_unsupported_cross_vendor_surfaces(self, codec):
-        """A cross-vendor tree carrying Phase-2+ surfaces (switchport /
-        LAG / SNMP / VRRP) renders cleanly, simply omitting them — no
-        crash, and none of those surfaces leak into the output."""
+    def test_render_emits_l2_skips_phase2bc_surfaces(self, codec):
+        """A cross-vendor tree renders the Phase-2a L2 surface (switchport
+        / LAG) but still omits the Phase-2b/2c surfaces (SNMP, VRRP/HSRP)
+        — no crash, and the deferred surfaces don't leak into output."""
         tree = CanonicalIntent(hostname="X", source_vendor="arista_eos")
         tree.interfaces = [
             CanonicalInterface(
                 name="Ethernet1",
                 switchport_mode="access",
                 access_vlan=10,
-                lag_member_of="port-channel1",
-                ipv4_addresses=[CanonicalIPv4Address(ip="1.1.1.1", prefix_length=24)],
-                vrrp_groups=[CanonicalVRRPGroup(group_id=5, virtual_ips=["1.1.1.254"])],
+                vrrp_groups=[
+                    CanonicalVRRPGroup(group_id=5, virtual_ips=["1.1.1.254"]),
+                ],
             ),
+            CanonicalInterface(
+                name="Ethernet2",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(ip="1.1.1.1", prefix_length=24),
+                ],
+            ),
+            CanonicalInterface(name="Ethernet3", lag_member_of="port-channel1"),
         ]
-        tree.lags = [CanonicalLAG(name="port-channel1", members=["Ethernet1"])]
+        tree.lags = [
+            CanonicalLAG(name="port-channel1", members=["Ethernet3"], mode="active"),
+        ]
         tree.snmp = CanonicalSNMP(community="public")
         tree.routing_instances = [
             CanonicalRoutingInstance(name="MGMT", route_distinguisher="65000:1"),
         ]
         out = codec.render(tree)
-        assert "interface Ethernet1" in out
-        assert "ip address 1.1.1.1/24" in out
+        # Phase-2a L2 surface IS rendered.
+        assert "switchport access vlan 10" in out
+        assert "no switchport" in out                 # Ethernet2 routed
+        assert "channel-group 1 mode active" in out
         assert "vrf context MGMT" in out
-        # Phase-2+ surfaces must NOT appear.
-        assert "switchport" not in out
-        assert "channel-group" not in out
+        # Phase-2b/2c surfaces must NOT appear.
         assert "snmp-server" not in out
         assert "vrrp" not in out and "hsrp" not in out
         # And it must re-parse without error.
@@ -313,21 +323,22 @@ class TestCapabilityMatrix:
         ]:
             assert path in sup, path
 
-    def test_phase2plus_paths_declared_unsupported(self, codec):
-        """Surfaces deferred to later phases must classify ``unsupported``
-        so the migrate-page banner + cross-mesh report flag them."""
+    def test_deferred_paths_declared_unsupported(self, codec):
+        """Surfaces deferred to Phase 2b/2c/3/4 must classify
+        ``unsupported`` so the migrate-page banner + cross-mesh report
+        flag them.  (The Phase-2a L2 surface has graduated — see
+        ``test_l2_paths_graduated_to_supported``.)"""
         caps = codec.capabilities
         for path in [
-            "/interfaces/interface/switchport-mode",
-            "/interfaces/interface/lag-member-of",
-            "/lags/lag",
-            "/snmp/community",
-            "/snmp/v3-user",
-            "/local-users/user",
-            "/routing-instances/instance/route-distinguisher",
-            "/routing/static-route/vrf",
-            "/vxlan-vnis/vni",
-            "/anycast-gateway",
+            "/snmp/community",                              # Phase 2b
+            "/snmp/v3-user",                                # Phase 2b
+            "/local-users/user",                            # Phase 2b
+            "/routing-instances/instance/route-distinguisher",  # Phase 3
+            "/routing-instances/instance/rt-imports",       # Phase 3
+            "/routing/static-route/vrf",                    # Phase 3
+            "/vxlan-vnis/vni",                              # Phase 4
+            "/anycast-gateway",                             # Phase 4
+            "/routing-protocols/bgp",                       # Tier-3
         ]:
             assert caps.classify(path) == "unsupported", path
 
@@ -358,3 +369,119 @@ class TestCapabilityMatrix:
         assert codec.direction == "bidirectional"
         assert codec.certainty == "experimental"
         assert codec.capabilities.vendor_id == "cisco_nxos"
+
+    def test_l2_paths_graduated_to_supported(self, codec):
+        """Phase 2a graduates the L2 switchport + LAG surface from
+        ``unsupported`` to ``supported``."""
+        caps = codec.capabilities
+        for path in [
+            "/interfaces/interface/switchport-mode",
+            "/interfaces/interface/access-vlan",
+            "/interfaces/interface/trunk-allowed-vlans",
+            "/interfaces/interface/trunk-native-vlan",
+            "/interfaces/interface/lag-member-of",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/lags/lag/mode",
+        ]:
+            assert caps.classify(path) == "supported", path
+
+
+# ---------------------------------------------------------------------------
+# Phase 2a — L2 switchport (default-flip) + LAG
+# ---------------------------------------------------------------------------
+
+
+_L2_CONFIG = """\
+!Command: show running-config
+hostname L2
+feature interface-vlan
+feature lacp
+vlan 1,10,20
+interface port-channel1
+  switchport mode trunk
+  switchport trunk allowed vlan 10,20
+interface Ethernet1/1
+  no switchport
+  ip address 192.0.2.1/31
+interface Ethernet1/2
+  switchport access vlan 10
+interface Ethernet1/3
+  switchport mode trunk
+  switchport trunk native vlan 1
+  switchport trunk allowed vlan 10,20
+interface Ethernet1/5
+  channel-group 1 mode active
+interface Ethernet1/6
+  channel-group 1 mode active
+"""
+
+
+class TestPhase2L2:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_L2_CONFIG)
+
+    def test_routed_port_mode_none_with_ip(self, tree):
+        """`no switchport` + IP → routed (switchport_mode None)."""
+        eth1 = next(i for i in tree.interfaces if i.name == "Ethernet1/1")
+        assert eth1.switchport_mode is None
+        assert [a.ip for a in eth1.ipv4_addresses] == ["192.0.2.1"]
+
+    def test_access_port(self, tree):
+        eth2 = next(i for i in tree.interfaces if i.name == "Ethernet1/2")
+        assert eth2.switchport_mode == "access"
+        assert eth2.access_vlan == 10
+
+    def test_trunk_port(self, tree):
+        eth3 = next(i for i in tree.interfaces if i.name == "Ethernet1/3")
+        assert eth3.switchport_mode == "trunk"
+        assert eth3.trunk_native_vlan == 1
+        assert sorted(eth3.trunk_allowed_vlans) == [10, 20]
+
+    def test_lag_membership_and_mode(self, tree):
+        lags = {lag.name: lag for lag in tree.lags}
+        assert "port-channel1" in lags
+        assert sorted(lags["port-channel1"].members) == [
+            "Ethernet1/5", "Ethernet1/6",
+        ]
+        assert lags["port-channel1"].mode == "active"
+        members = {i.name: i.lag_member_of for i in tree.interfaces}
+        assert members["Ethernet1/5"] == "port-channel1"
+
+    def test_channel_group_on_mode_maps_to_static(self, codec):
+        intent = codec.parse(
+            "!Command: show running-config\nhostname X\n"
+            "interface Ethernet1/9\n  channel-group 7 mode on\n"
+        )
+        lag = next(lag for lag in intent.lags if lag.name == "port-channel7")
+        assert lag.mode == "static"
+
+    def test_switchport_and_lag_render_kind_aware(self, codec, tree):
+        out = codec.render(tree)
+        assert "  switchport access vlan 10" in out
+        assert "  switchport mode trunk" in out
+        assert "  switchport trunk allowed vlan 10,20" in out
+        assert "  no switchport" in out                 # routed Ethernet1/1
+        assert "  channel-group 1 mode active" in out
+        assert "feature lacp" in out
+
+    def test_svi_is_not_switchport_capable(self, codec):
+        """An SVI is inherently L3 — render must NOT emit a `no
+        switchport` line for it (only physical / LAG ports take one)."""
+        intent = codec.parse(
+            "!Command: show running-config\nhostname X\nfeature interface-vlan\n"
+            "interface Vlan10\n  no shutdown\n  ip address 10.0.0.1/24\n"
+        )
+        out = codec.render(intent)
+        # The Vlan10 stanza carries no switchport line.
+        svi_block = out.split("interface Vlan10", 1)[1].split("interface ", 1)[0]
+        assert "switchport" not in svi_block
+
+    def test_lag_round_trips(self, codec, tree):
+        second = codec.parse(codec.render(tree))
+        lags1 = {lag.name: (sorted(lag.members), lag.mode) for lag in tree.lags}
+        lags2 = {lag.name: (sorted(lag.members), lag.mode) for lag in second.lags}
+        assert lags1 == lags2
