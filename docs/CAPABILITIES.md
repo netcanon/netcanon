@@ -19,7 +19,7 @@ lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md
 
 ## Supported vendors
 
-Eight migration codecs ship today, plus a `_mock` adapter used in
+Nine migration codecs ship today, plus a `_mock` adapter used in
 tests.  Backup-side device definitions are listed under
 [`../definitions/`](../definitions/) (one YAML per vendor/OS family).
 
@@ -27,6 +27,7 @@ tests.  Backup-side device definitions are listed under
 |---|---|---|---|---|
 | `cisco_iosxe_cli` | Cisco IOS-XE | `show running-config` text | bidirectional | certified |
 | `cisco_iosxe`     | Cisco IOS-XE | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
+| `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | experimental (Phase 1 of 4 — L1/L3 basics; switchport / LAG / SNMP / VXLAN land in Phases 2-4) |
 | `arista_eos`      | Arista EOS    | EOS CLI text              | bidirectional | certified |
 | `aruba_aoss`      | Aruba AOS-S   | AOS-S CLI banner + positional port lists | bidirectional | certified |
 | `juniper_junos`   | Juniper Junos | `set`-form CLI            | bidirectional | certified |

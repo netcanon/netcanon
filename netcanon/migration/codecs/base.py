@@ -94,6 +94,7 @@ INPUT_FORMATS = frozenset({
     "cli-fortigate",    # FortiGate CLI `config` blocks
     "cli-mikrotik",     # MikroTik `/export` text
     "cli-junos-set",    # Junos `show configuration | display set` text
+    "cli-nxos",         # Cisco NX-OS `show running-config` text
     "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
     "unknown",          # experimental adapter with no declared format
 })

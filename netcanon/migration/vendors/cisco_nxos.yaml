@@ -1,0 +1,15 @@
+# Cisco NX-OS — Nexus 3000 / 5000 / 7000 / 9000 data-center switches.
+# Codec: cisco_nxos (CLI `show running-config`).
+id: cisco_nxos
+display_name: "Cisco NX-OS"
+device_classes:
+  - switch
+  - router
+default_timeout: 30
+notes: >
+  NX-OS is Cisco's data-center NOS; its CLI grammar is distinct from
+  IOS-XE (CIDR addressing, `vrf context` / `vrf member`, `feature`
+  declarations, uniform `Ethernet` port naming).  The codec parses +
+  renders `show running-config` text and is shipping in phases —
+  Phase 1 covers hostname, basic-L3 interfaces, VLANs, vrf-context
+  (name + description), and default-VRF static routes.

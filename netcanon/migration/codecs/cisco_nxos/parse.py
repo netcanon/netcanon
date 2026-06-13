@@ -1,0 +1,588 @@
+"""
+Parse path for Cisco NX-OS (``show running-config`` form).
+
+Public function: :func:`parse_intent` — raw text in,
+:class:`CanonicalIntent` out.  Targets the Nexus 3000 / 5000 / 7000 /
+9000 series on NX-OS 9.x / 10.x.
+
+Note: probe is in :mod:`.codec`; this module assumes input has already
+been classified as Cisco NX-OS CLI.
+
+Phase 1 surface (see ``docs/v0.2.0-planning/03-nxos-codec/``):
+
+* ``hostname <name>`` → :attr:`CanonicalIntent.hostname`.
+* ``version <N.N(N)> Bios:version`` → :attr:`CanonicalIntent.source_version`
+  (metadata only; the banner line itself is synthesised on render).
+* ``vrf context <name>`` (top-level) → :class:`CanonicalRoutingInstance`
+  (name + description only; ``rd`` / ``route-target`` / ``vni`` are
+  Phase 3 / Phase 4 and parse-and-ignore here).
+* ``interface <name>`` blocks → :class:`CanonicalInterface` carrying
+  ``description`` / ``shutdown`` / ``mtu`` / ``ip address X/N`` (CIDR) /
+  ``ipv6 address X/N`` / ``vrf member <name>``.
+* top-level ``vlan <id-list>`` (comma + range form) and ``vlan N / name
+  <text>`` → :class:`CanonicalVlan`, plus SVI synthesis.
+* top-level ``ip route <dest>/<prefix> <gw> [<pref>]`` (default VRF only)
+  → :class:`CanonicalStaticRoute`.
+
+Deliberately NOT parsed in Phase 1 (declared ``unsupported`` in the
+capability matrix — they land in later phases): switchport / L2 mode,
+LAGs, SNMP, local users, per-VRF static routes, VRF RD/RT, VXLAN-EVPN.
+``feature`` / ``vdc`` / ``boot`` / ``line`` lines are discarded on parse
+and re-synthesised on render (the matrix declares the cosmetic loss).
+
+Where this codec diverges from ``cisco_iosxe_cli`` (see
+``02-codec-architecture.md`` § 14):
+
+* IP addresses are **CIDR only** (``ip address X/N``), never dotted mask.
+* VRF stanza keyword is ``vrf context`` (not ``vrf definition``).
+* Per-interface VRF bind is ``vrf member`` (not ``vrf forwarding``).
+* Physical ports are uniform ``Ethernet<slot>/<port>`` — no speed prefix.
+"""
+
+from __future__ import annotations
+
+import ipaddress
+import logging
+import re
+
+from ...canonical.intent import (
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalRoutingInstance,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+)
+from .._input_shape import detect_input_shape
+from ..base import ParseError
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Regex constants — module-level so they compile once per import.
+# Shapes lifted from cisco_iosxe_cli/parse.py; the IP / VRF families
+# diverge per NX-OS grammar (see module docstring).
+# ---------------------------------------------------------------------------
+
+_HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: ``version 9.2(3) Bios:version`` / ``version 10.3(9)`` — first token
+#: after ``version`` is the NX-OS release string.
+_VERSION_RE = re.compile(r"^version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+
+_IFACE_RE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
+_SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
+_NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
+_MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: ``ip address 10.10.10.1/24`` — CIDR form, NEVER dotted mask.  The
+#: optional ``secondary`` trailer is consumed but not modelled in Phase 1.
+_IP_CIDR_RE = re.compile(
+    r"^\s+ip\s+address\s+(\d+\.\d+\.\d+\.\d+)/(\d+)(?:\s+(secondary))?",
+    re.IGNORECASE,
+)
+#: ``ipv6 address 2001:db8::1/64`` — CIDR form.  Optional ``link-local``
+#: trailer tags scope explicitly; fe80::/10 prefix infers it otherwise.
+_IPV6_CIDR_RE = re.compile(
+    r"^\s+ipv6\s+address\s+(\S+?)/(\d+)(?:\s+(link-local))?\s*$",
+    re.IGNORECASE,
+)
+#: ``vrf member <name>`` inside an interface stanza (NX-OS form of
+#: IOS-XE's ``vrf forwarding``).
+_VRF_MEMBER_RE = re.compile(r"^\s+vrf\s+member\s+(\S+)\s*$", re.IGNORECASE)
+#: ``vrf context <name>`` opens a top-level VRF stanza.
+_VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
+_VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
+#: ``vlan 1,10,2000`` / ``vlan 10-20`` — comma + range list (unique to
+#: NX-OS / Arista in this codebase).
+_VLAN_TOP_RE = re.compile(r"^vlan\s+([\d,\-]+)\s*$", re.IGNORECASE)
+_VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
+#: ``ip route 0.0.0.0/0 10.0.0.2 [<pref>]`` — top-level (default VRF)
+#: static route.  Per-VRF routes (indented inside ``vrf context``) do
+#: NOT match this top-level anchor and are deferred to Phase 3.
+_STATIC_ROUTE_RE = re.compile(
+    r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    re.IGNORECASE,
+)
+_SVI_NAME_RE = re.compile(r"^Vlan(\d+)$", re.IGNORECASE)
+
+#: Interface-name prefix → IANA ifType hint.  NX-OS uses a single
+#: ``Ethernet`` prefix for every speed.
+_TYPE_HINTS: tuple[tuple[str, str], ...] = (
+    ("ethernet", "ianaift:ethernetCsmacd"),
+    ("loopback", "ianaift:softwareLoopback"),
+    ("vlan", "ianaift:l3ipvlan"),
+    ("port-channel", "ianaift:ieee8023adLag"),
+    ("nve", "ianaift:tunnel"),
+    ("mgmt", "ianaift:ethernetCsmacd"),
+)
+
+#: A VRF whose name matches this heuristic is the device's management
+#: (OOBM) VRF.  NX-OS convention is the literal ``management`` VRF;
+#: ``mgmt`` / ``management`` are accepted case-insensitively.
+_MGMT_VRF_RE = re.compile(r"^(?:management|mgmt)$", re.IGNORECASE)
+
+
+def _infer_type(iface_name: str) -> str:
+    """Best-effort IANA ifType from the NX-OS interface-name prefix."""
+    lower = iface_name.lower()
+    for prefix, iftype in _TYPE_HINTS:
+        if lower.startswith(prefix):
+            return iftype
+    return "ianaift:other"
+
+
+def _is_link_local_v6(addr: str) -> bool:
+    """Return True iff *addr* is in the IPv6 link-local prefix fe80::/10.
+
+    Mirrors ``cisco_iosxe_cli.parse._is_link_local_v6`` — the prefix is
+    vendor-neutral (RFC 4291 §2.4), so scope can be recovered even when
+    the operator omits the ``link-local`` keyword.
+    """
+    if not addr:
+        return False
+    lo = addr.lower()
+    return len(lo) >= 3 and lo[:2] == "fe" and lo[2] in ("8", "9", "a", "b")
+
+
+def _is_mgmt_vrf(vrf_name: str) -> bool:
+    """Return True when *vrf_name* is the NX-OS management VRF."""
+    return bool(_MGMT_VRF_RE.match(vrf_name or ""))
+
+
+def parse_intent(raw: str) -> CanonicalIntent:
+    """Parse NX-OS ``show running-config`` output into a
+    :class:`CanonicalIntent`.
+
+    Raises:
+        ParseError: If the input is empty or looks like XML / JSON
+            rather than NX-OS CLI text.
+    """
+    if not raw.strip():
+        raise ParseError("cisco_nxos: empty input", snippet="")
+
+    # Shape sanity: reject XML / JSON early so the operator gets a clean
+    # error instead of a near-empty render.  Mirrors cisco_iosxe_cli.
+    shape = detect_input_shape(raw)
+    if shape is not None:
+        raise ParseError(
+            f"cisco_nxos: input looks like {shape.upper()}, not NX-OS "
+            f"CLI.  Paste the output of `show running-config`.",
+            snippet=raw.lstrip()[:120],
+        )
+
+    intent = CanonicalIntent(
+        source_vendor="cisco_nxos",
+        source_format="cli-nxos",
+    )
+
+    intent.hostname = _extract_hostname(raw)
+    intent.source_version = _extract_version(raw)
+
+    # VRF declarations (``vrf context <name>`` top-level stanzas).
+    # Phase 1 harvests name + description only; rd / route-target / vni
+    # land in later phases.  Per-interface ``vrf member`` membership is
+    # set by :func:`_parse_interfaces`.
+    intent.routing_instances = _parse_routing_instances(raw)
+
+    intent.interfaces = _parse_interfaces(raw)
+
+    intent.vlans = _parse_vlans(raw)
+    # Derive VLAN records from ``interface Vlan<N>`` SVIs that had no
+    # matching top-level ``vlan`` stanza — same fix as iosxe_cli to
+    # avoid silently dropping the SVI's L3 config on VLAN-centric
+    # downstream codecs.
+    _synthesize_vlans_from_svis(intent)
+
+    # Static routes — top-level (default VRF) only in Phase 1.  Per-VRF
+    # routes embedded in ``vrf context`` blocks are deferred to Phase 3
+    # (declared unsupported).
+    intent.static_routes = _parse_static_routes(raw)
+
+    # Shared switchport→VLAN projection.  A no-op in Phase 1 (switchport
+    # parsing lands in Phase 2) but kept in the pipeline for parity with
+    # the other codecs; the phantom-VLAN guard mirrors iosxe_cli.
+    legitimate_vlan_ids = {v.id for v in intent.vlans}
+    from ...canonical.transforms import project_switchport_to_vlan
+    project_switchport_to_vlan(intent)
+    intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
+
+    logger.debug(
+        "cisco_nxos parsed: hostname=%r ifaces=%d vlans=%d routes=%d "
+        "vrfs=%d (input=%d chars)",
+        intent.hostname,
+        len(intent.interfaces),
+        len(intent.vlans),
+        len(intent.static_routes),
+        len(intent.routing_instances),
+        len(raw),
+    )
+    return intent
+
+
+def _extract_hostname(raw: str) -> str:
+    m = _HOSTNAME_RE.search(raw)
+    return m.group(1) if m else ""
+
+
+def _extract_version(raw: str) -> str:
+    """Return the NX-OS release string from the ``version`` line.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata).  The
+    render path synthesises a fresh banner rather than echoing this, so
+    it is informational only.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
+
+
+def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
+    """Extract ``vrf context <name>`` blocks (name + description only).
+
+    A NX-OS VRF stanza looks like::
+
+        vrf context TENANT-A
+          description tenant a
+          vni 10001                       ← Phase 4 (ignored)
+          rd auto                         ← Phase 3 (ignored)
+          address-family ipv4 unicast     ← Phase 3 (ignored)
+            route-target both auto evpn   ← Phase 3 (ignored)
+
+    Phase 1 harvests ``name`` + ``description``.  Everything else inside
+    the block is parse-and-ignore (declared unsupported in the matrix).
+    Block-walker pattern mirrors ``cisco_iosxe_cli`` — open on the header
+    regex, absorb indented sub-lines, close on the first non-indented
+    line.
+    """
+    instances: list[CanonicalRoutingInstance] = []
+    current: CanonicalRoutingInstance | None = None
+
+    for line in raw.splitlines():
+        header = _VRF_CONTEXT_RE.match(line)
+        if header:
+            if current is not None:
+                instances.append(current)
+            current = CanonicalRoutingInstance(name=header.group(1))
+            continue
+
+        if current is None:
+            continue
+
+        # Stanza terminator: any non-indented line (a sibling top-level
+        # stanza).  NX-OS does not bracket VRF blocks with ``!``.
+        if line and not line[0].isspace():
+            instances.append(current)
+            current = None
+            # Fall through is unnecessary — a top-level line that opens a
+            # new vrf context is re-matched on the next iteration; but we
+            # already consumed it, so re-check the header here.
+            header = _VRF_CONTEXT_RE.match(line)
+            if header:
+                current = CanonicalRoutingInstance(name=header.group(1))
+            continue
+
+        dm = _VRF_DESCRIPTION_RE.match(line)
+        if dm:
+            current.description = dm.group(1).strip()
+            continue
+        # rd / route-target / vni / address-family — Phase 3/4; ignore.
+
+    if current is not None:
+        instances.append(current)
+    return instances
+
+
+def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
+    """Extract ``interface <name>`` stanzas from NX-OS config text.
+
+    Phase 1 surface per interface: description, enabled (shutdown /
+    no shutdown), mtu, IPv4 (CIDR), IPv6 (CIDR + scope), VRF membership
+    (``vrf member``).  The management-VRF heuristic promotes a
+    physical-named port bound to the ``management`` VRF to
+    ``kind="mgmt"`` (mgmt0 already classifies mgmt by name).
+    """
+    lines = raw.splitlines()
+    interfaces: list[CanonicalInterface] = []
+    current: dict | None = None
+
+    def _flush() -> None:
+        if current is not None:
+            interfaces.append(_build_canonical_interface(current))
+
+    for line in lines:
+        m = _IFACE_RE.match(line)
+        if m:
+            _flush()
+            iface_name = m.group(1)
+            current = {
+                "name": iface_name,
+                "description": "",
+                "enabled": True,
+                "type": _infer_type(iface_name),
+                "mtu": None,
+                "ipv4": [],
+                "ipv6": [],
+                "vrf": "",
+                "kind": "",
+            }
+            continue
+
+        if current is None:
+            continue
+
+        # Non-indented line closes the current stanza.
+        if line and not line[0].isspace():
+            _flush()
+            current = None
+            # The closing line might itself open a new interface.
+            m = _IFACE_RE.match(line)
+            if m:
+                iface_name = m.group(1)
+                current = {
+                    "name": iface_name,
+                    "description": "",
+                    "enabled": True,
+                    "type": _infer_type(iface_name),
+                    "mtu": None,
+                    "ipv4": [],
+                    "ipv6": [],
+                    "vrf": "",
+                    "kind": "",
+                }
+            continue
+
+        dm = _DESC_RE.match(line)
+        if dm:
+            current["description"] = dm.group(1).strip()
+            continue
+
+        if _SHUTDOWN_RE.match(line):
+            current["enabled"] = False
+            continue
+        if _NO_SHUTDOWN_RE.match(line):
+            current["enabled"] = True
+            continue
+
+        mm = _MTU_RE.match(line)
+        if mm:
+            try:
+                current["mtu"] = int(mm.group(1))
+            except ValueError:
+                pass
+            continue
+
+        im = _IP_CIDR_RE.match(line)
+        if im:
+            try:
+                current["ipv4"].append({
+                    "ip": im.group(1),
+                    "prefix_length": int(im.group(2)),
+                    "is_secondary": im.group(3) is not None,
+                })
+            except ValueError:
+                pass
+            continue
+
+        v6m = _IPV6_CIDR_RE.match(line)
+        if v6m:
+            addr = v6m.group(1)
+            keyword_ll = v6m.group(3)
+            try:
+                scope = (
+                    "link-local"
+                    if (keyword_ll or _is_link_local_v6(addr))
+                    else "global"
+                )
+                current["ipv6"].append({
+                    "ip": addr,
+                    "prefix_length": int(v6m.group(2)),
+                    "scope": scope,
+                })
+            except ValueError:
+                pass
+            continue
+
+        vm = _VRF_MEMBER_RE.match(line)
+        if vm:
+            current["vrf"] = vm.group(1)
+            continue
+
+    _flush()
+    return interfaces
+
+
+def _build_canonical_interface(raw: dict) -> CanonicalInterface:
+    """Convert the parse-time scratch dict into a CanonicalInterface."""
+    name = raw["name"]
+    vrf = raw.get("vrf", "")
+    kind = raw.get("kind", "")
+
+    # Management-VRF cascade: a physical-named port bound to the
+    # ``management`` VRF is semantically the OOBM port.  mgmt0 already
+    # classifies as kind="mgmt" by name, so only promote when the name
+    # alone would classify as "physical".  Mirrors iosxe_cli.
+    if not kind and _is_mgmt_vrf(vrf):
+        from . import port_names as _port_names
+        ident = _port_names.classify_port_name(name)
+        if ident.kind == "physical":
+            kind = "mgmt"
+
+    return CanonicalInterface(
+        name=name,
+        description=raw.get("description", ""),
+        enabled=raw.get("enabled", True),
+        interface_type=raw.get("type", ""),
+        mtu=raw.get("mtu"),
+        ipv4_addresses=[
+            CanonicalIPv4Address(
+                ip=a["ip"],
+                prefix_length=a["prefix_length"],
+                is_secondary=a.get("is_secondary", False),
+            )
+            for a in raw.get("ipv4", [])
+        ],
+        ipv6_addresses=[
+            CanonicalIPv6Address(
+                ip=a["ip"],
+                prefix_length=a["prefix_length"],
+                scope=a.get("scope", "global"),
+            )
+            for a in raw.get("ipv6", [])
+        ],
+        vrf=vrf,
+        kind=kind,
+    )
+
+
+def _parse_vlan_list(text: str) -> list[int]:
+    """Parse an NX-OS VLAN id-list like ``1,10,2000`` or ``10-20`` into a
+    flat list of ints.  Ranges are expanded inclusively."""
+    result: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                result.extend(range(int(lo.strip()), int(hi.strip()) + 1))
+            except ValueError:
+                continue
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
+
+def _parse_vlans(raw: str) -> list[CanonicalVlan]:
+    """Extract VLAN definitions from NX-OS config text.
+
+    NX-OS declares VLANs two ways, often both in one config:
+
+    1. A bare id-list line: ``vlan 1,10,2000`` / ``vlan 10-20`` (declares
+       the VLANs exist; no per-VLAN body).
+    2. A single-id stanza with a name: ``vlan 10 / name PROD``.
+
+    Both feed the same :class:`CanonicalVlan` set, de-duplicated by id.
+    A named single-id stanza wins the ``name`` for its id.
+    """
+    vlans_by_id: dict[int, CanonicalVlan] = {}
+    order: list[int] = []
+
+    def _touch(vid: int) -> CanonicalVlan:
+        v = vlans_by_id.get(vid)
+        if v is None:
+            v = CanonicalVlan(id=vid, name="")
+            vlans_by_id[vid] = v
+            order.append(vid)
+        return v
+
+    lines = raw.splitlines()
+    current_id: int | None = None
+
+    for line in lines:
+        tm = _VLAN_TOP_RE.match(line)
+        if tm:
+            ids = _parse_vlan_list(tm.group(1))
+            for vid in ids:
+                if 1 <= vid <= 4094:
+                    _touch(vid)
+            # A single-id ``vlan N`` line opens a stanza whose indented
+            # ``name`` sub-command (if any) applies to N.
+            current_id = ids[0] if len(ids) == 1 else None
+            continue
+
+        if current_id is not None:
+            nm = _VLAN_NAME_RE.match(line)
+            if nm:
+                _touch(current_id).name = nm.group(1).strip()
+                continue
+            # Any non-indented line closes the stanza.
+            if line and not line[0].isspace():
+                current_id = None
+
+    return [vlans_by_id[vid] for vid in order]
+
+
+def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
+    """Derive VLAN records from ``interface Vlan<N>`` SVIs.
+
+    Mirrors ``cisco_iosxe_cli._synthesize_vlans_from_svis``: an SVI whose
+    VLAN has no top-level ``vlan`` stanza still implies the VLAN exists
+    (and carries its L3 config), so create / merge a record.
+    """
+    existing_by_id: dict[int, CanonicalVlan] = {v.id: v for v in intent.vlans}
+    for iface in intent.interfaces:
+        m = _SVI_NAME_RE.match(iface.name)
+        if not m:
+            continue
+        vid = int(m.group(1))
+        if not (1 <= vid <= 4094):
+            continue
+        existing = existing_by_id.get(vid)
+        if existing is None:
+            synthesised = CanonicalVlan(
+                id=vid,
+                name=iface.description,
+                ipv4_addresses=list(iface.ipv4_addresses),
+            )
+            intent.vlans.append(synthesised)
+            existing_by_id[vid] = synthesised
+            continue
+        for addr in iface.ipv4_addresses:
+            if addr not in existing.ipv4_addresses:
+                existing.ipv4_addresses.append(addr)
+
+
+def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
+    """Extract top-level ``ip route`` lines (default VRF) from NX-OS text.
+
+    NX-OS form: ``ip route <dest>/<prefix> <gw> [<pref>]``.  The trailing
+    integer (if present) is the route preference / administrative
+    distance and maps to :attr:`CanonicalStaticRoute.metric`.
+
+    Per-VRF static routes (indented inside a ``vrf context`` block) do
+    NOT match the top-level ``^ip route`` anchor and are deferred to
+    Phase 3 (declared unsupported; requires no phantom routing-instance —
+    see the per-VRF harvest memory).
+    """
+    routes: list[CanonicalStaticRoute] = []
+    for line in raw.splitlines():
+        m = _STATIC_ROUTE_RE.match(line)
+        if not m:
+            continue
+        dest = f"{m.group(1)}/{m.group(2)}"
+        gw_or_iface = m.group(3)
+        metric = int(m.group(4)) if m.group(4) else 0
+        gateway = ""
+        iface = ""
+        try:
+            ipaddress.IPv4Address(gw_or_iface)
+            gateway = gw_or_iface
+        except ipaddress.AddressValueError:
+            iface = gw_or_iface
+        routes.append(CanonicalStaticRoute(
+            destination=dest,
+            gateway=gateway,
+            interface=iface,
+            metric=metric,
+        ))
+    return routes

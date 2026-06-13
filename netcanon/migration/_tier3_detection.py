@@ -118,6 +118,26 @@ _ROUTEROS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^/routing ospf\b", re.MULTILINE),
 )
 
+# NX-OS shape — Cisco Nexus `show running-config` headers for sections
+# the NX-OS codec does NOT consume (routing protocols, ACLs, route-maps,
+# QoS class/policy-maps, crypto, AAA, SPAN, multicast).  Excludes
+# `interface`, `vlan`, `vrf context`, `ip route`, `hostname`, `feature`
+# (discarded / render-derived) which the parser handles.
+_NXOS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^router (?:bgp|ospf|eigrp|isis)\b.*$", re.MULTILINE),
+    re.compile(r"^ip access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^ipv6 access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^mac access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^route-map\s+\S+", re.MULTILINE),
+    re.compile(r"^class-map\b.*$", re.MULTILINE),
+    re.compile(r"^policy-map\b.*$", re.MULTILINE),
+    re.compile(r"^crypto\b.*$", re.MULTILINE),
+    re.compile(r"^aaa\b.*$", re.MULTILINE),
+    re.compile(r"^monitor session\s+\d+", re.MULTILINE),
+    re.compile(r"^feature pim\b", re.MULTILINE),
+    re.compile(r"^ip pim\b.*$", re.MULTILINE),
+)
+
 # OPNsense XML element shape (heuristic — substring presence check on
 # top-level elements that the parser doesn't currently extract).  The
 # OPNsense codec consumes ``<vlans>``, ``<interfaces>``, ``<dhcpd>``,
@@ -155,6 +175,11 @@ def detect_tier3_sections_fortios(raw: str) -> list[str]:
 def detect_tier3_sections_junos(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Junos set-form text."""
     return _detect_regex(raw, _JUNOS_TIER3_HEADERS)
+
+
+def detect_tier3_sections_nxos(raw: str) -> list[str]:
+    """Detect Tier-3 stanza headers in Cisco NX-OS CLI text."""
+    return _detect_regex(raw, _NXOS_TIER3_HEADERS)
 
 
 def detect_tier3_sections_routeros(raw: str) -> list[str]:
