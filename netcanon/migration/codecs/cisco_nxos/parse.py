@@ -57,6 +57,7 @@ from ...canonical.intent import (
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -124,6 +125,28 @@ _CHANNEL_GROUP_RE = re.compile(
     r"^\s+channel-group\s+(\d+)\s+mode\s+(\S+)", re.IGNORECASE,
 )
 _NXOS_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
+
+# ── HSRP (Phase 2c) ──
+# NX-OS HSRP is a nested block under an L3 interface:
+#   interface Vlan10
+#     hsrp version 2          (interface-level; not modelled)
+#     hsrp 10                 (2-indent — opens a group)
+#       ip 10.10.10.254       (4-indent — group sub-commands)
+#       priority 110
+#       preempt
+# Maps to CanonicalVRRPGroup(mode="hsrp").  NX-OS HSRP defaults preempt
+# DISABLED (unlike VRRP), so the scratch default is preempt=False.
+_HSRP_GROUP_RE = re.compile(r"^\s+hsrp\s+(\d+)\s*$", re.IGNORECASE)
+_HSRP_VERSION_RE = re.compile(r"^\s+hsrp\s+version\s+\d+\s*$", re.IGNORECASE)
+_HSRP_IP_RE = re.compile(r"^\s+ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE)
+_HSRP_PRIORITY_RE = re.compile(r"^\s+priority\s+(\d+)\s*$", re.IGNORECASE)
+_HSRP_PREEMPT_RE = re.compile(r"^\s+(no\s+)?preempt\b", re.IGNORECASE)
+_HSRP_AUTH_MD5_RE = re.compile(
+    r"^\s+authentication\s+md5\s+key-string\s+(\S+)", re.IGNORECASE,
+)
+_HSRP_AUTH_TEXT_RE = re.compile(
+    r"^\s+authentication\s+text\s+(\S+)", re.IGNORECASE,
+)
 
 # ── SNMP + local users (Phase 2b) ──
 _SNMP_COMMUNITY_RE = re.compile(
@@ -410,6 +433,9 @@ def _new_iface_scratch(name: str) -> dict:
         "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
+        # HSRP (Phase 2c): {gid: {virtual_ips, priority, preempt, auth}}.
+        "hsrp_groups": {},
+        "_hsrp_gid": None,   # active group while inside an ``hsrp N`` block
     }
 
 
@@ -451,6 +477,53 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             if m:
                 current = _new_iface_scratch(m.group(1))
             continue
+
+        # ── HSRP nested block (Phase 2c) ──
+        # ``hsrp <N>`` opens a group; its sub-commands are further-indented
+        # (>= 4 spaces).  Any shallower indented line ends the block.
+        hg = _HSRP_GROUP_RE.match(line)
+        if hg:
+            gid = int(hg.group(1))
+            current["hsrp_groups"].setdefault(gid, {
+                "virtual_ips": [],
+                "priority": 100,
+                "preempt": False,   # NX-OS HSRP default: preempt disabled
+                "authentication": "",
+            })
+            current["_hsrp_gid"] = gid
+            continue
+        if _HSRP_VERSION_RE.match(line):
+            # ``hsrp version 2`` is interface-level; not modelled.
+            current["_hsrp_gid"] = None
+            continue
+        _gid = current["_hsrp_gid"]
+        if _gid is not None and (len(line) - len(line.lstrip())) >= 4:
+            g = current["hsrp_groups"][_gid]
+            him = _HSRP_IP_RE.match(line)
+            if him:
+                g["virtual_ips"].append(him.group(1))
+                continue
+            hpm = _HSRP_PRIORITY_RE.match(line)
+            if hpm:
+                g["priority"] = int(hpm.group(1))
+                continue
+            hpe = _HSRP_PREEMPT_RE.match(line)
+            if hpe:
+                g["preempt"] = not bool(hpe.group(1))   # ``no preempt`` -> False
+                continue
+            ham = _HSRP_AUTH_MD5_RE.match(line)
+            if ham:
+                g["authentication"] = f"md5:{ham.group(1)}"
+                continue
+            hat = _HSRP_AUTH_TEXT_RE.match(line)
+            if hat:
+                g["authentication"] = f"plain:{hat.group(1)}"
+                continue
+            # Unknown hsrp sub-command (timers / mac-address / track) —
+            # consume it; still inside the group block.
+            continue
+        # Any other indented line ends the active hsrp group block.
+        current["_hsrp_gid"] = None
 
         dm = _DESC_RE.match(line)
         if dm:
@@ -558,6 +631,21 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         if ident.kind == "physical":
             kind = "mgmt"
 
+    # HSRP groups (Phase 2c) -> CanonicalVRRPGroup(mode="hsrp"), sorted by
+    # group id for deterministic ordering (the round-trip invariant does
+    # not normalise vrrp_groups order).
+    vrrp_groups = [
+        CanonicalVRRPGroup(
+            group_id=gid,
+            mode="hsrp",
+            virtual_ips=list(g.get("virtual_ips", [])),
+            priority=g.get("priority", 100),
+            preempt=g.get("preempt", False),
+            authentication=g.get("authentication", ""),
+        )
+        for gid, g in sorted(raw.get("hsrp_groups", {}).items())
+    ]
+
     return CanonicalInterface(
         name=name,
         description=raw.get("description", ""),
@@ -587,6 +675,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
+        vrrp_groups=vrrp_groups,
     )
 
 

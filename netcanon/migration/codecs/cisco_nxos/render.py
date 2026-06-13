@@ -135,6 +135,8 @@ def _derive_features(tree: CanonicalIntent) -> list[str]:
         features.add("interface-vlan")
     if tree.lags:
         features.add("lacp")
+    if any(i.vrrp_groups for i in tree.interfaces):
+        features.add("hsrp")
     return sorted(features)
 
 
@@ -279,6 +281,23 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
         block.append(line)
     for addr in iface.ipv6_addresses:
         block.append(f"  ipv6 address {addr.ip}/{addr.prefix_length}")
+
+    # ── HSRP groups (Phase 2c) ── every FHRP group normalises to an
+    # NX-OS ``hsrp`` block (the mode discriminator is declared lossy).
+    for group in iface.vrrp_groups:
+        block.append(f"  hsrp {group.group_id}")
+        for vip in group.virtual_ips:
+            block.append(f"    ip {vip}")
+        if group.priority != 100:
+            block.append(f"    priority {group.priority}")
+        if group.preempt:
+            block.append("    preempt")
+        if group.authentication:
+            scheme, _, key = group.authentication.partition(":")
+            if scheme == "md5":
+                block.append(f"    authentication md5 key-string {key}")
+            elif scheme == "plain":
+                block.append(f"    authentication text {key}")
 
     if iface.lag_member_of:
         m = re.search(r"(\d+)\s*$", iface.lag_member_of)
