@@ -33,10 +33,13 @@ USM users + local-users), Phase 2c (HSRP via
 per-VRF static routes nested inside ``vrf context``), and Phase 4
 (VXLAN-EVPN — ``vlan N / vn-segment`` VLAN↔VNI bindings, the ``interface
 nve1`` VTEP source-interface, and per-VRF L3VNI ``vrf context X / vni
-N``, plus the ``vtep`` PortKind).  Only the T2 anycast-gateway surface
-remains ``unsupported`` in the matrix below.  ``certainty`` is
-``best_effort``; it reaches ``certified`` once a real-capture corpus
-across two OS versions lands.
+N``, plus the ``vtep`` PortKind), and the IPv4 Distributed Anycast
+Gateway (per-SVI ``fabric forwarding mode anycast-gateway`` + the
+chassis-wide ``fabric forwarding anycast-gateway-mac``).  Only the IPv6
+anycast companion + the Tier-3 protocol / ACL / QoS blocks remain
+``unsupported`` in the matrix below.  ``certainty`` is ``best_effort``;
+it reaches ``certified`` once a real-capture corpus across two OS
+versions lands.
 """
 
 from __future__ import annotations
@@ -167,6 +170,12 @@ class CiscoNXOSCodec(CodecBase):
             "/vxlan-vnis/mcast-group",
             "/vxlan-vnis/flood-list",
             "/routing-instances/instance/l3-vni",
+            # Distributed Anycast Gateway (T2) — per-SVI `fabric forwarding
+            # mode anycast-gateway` mirrors the primary IP into
+            # virtual_gateway_address; `fabric forwarding anycast-gateway-mac`
+            # is the chassis-wide MAC (dotted-triplet ↔ canonical colon-hex).
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
         ],
         lossy=[
             LossyPath(
@@ -314,15 +323,17 @@ class CiscoNXOSCodec(CodecBase):
             ),
         ],
         unsupported=[
-            # ── Anycast-gateway — T2 surface, deferred beyond Phase 4 ──
+            # ── IPv6 anycast — IPv4 DAG is supported; v6 form deferred ──
             UnsupportedPath(
-                path="/anycast-gateway",
+                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
                 reason=(
-                    "Anycast-gateway-mac (`fabric forwarding "
-                    "anycast-gateway-mac`) + the per-SVI fabric-forwarding "
-                    "mode are the T2 canonical surface; deferred beyond "
-                    "Phase 4 (VXLAN-EVPN shipped without the anycast SVI "
-                    "slice)."
+                    "IPv4 Distributed Anycast Gateway is supported (per-SVI "
+                    "`fabric forwarding mode anycast-gateway` mirrors the "
+                    "primary IPv4 into virtual_gateway_address + the "
+                    "chassis-wide `fabric forwarding anycast-gateway-mac`).  "
+                    "The IPv6 anycast companion parses-and-ignores in v1 — "
+                    "no fixture coverage today; parity with the IOS-XE "
+                    "codec's identical IPv6-anycast deferral."
                 ),
             ),
             # ── Tier-3 — never auto-translatable ──

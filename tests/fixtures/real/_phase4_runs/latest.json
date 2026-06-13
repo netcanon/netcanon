@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-13T21:45:48+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T214545Z.json",
-  "mesh_run_started_utc": "2026-06-13T21:45:37+00:00",
+  "started_utc": "2026-06-13T23:40:19+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T234018Z.json",
+  "mesh_run_started_utc": "2026-06-13T23:40:14+00:00",
   "cells_total": 650,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -10209,6 +10209,11 @@
             ],
             "target": [
               {
+                "name": "Port-Channel3",
+                "members": [],
+                "mode": "active"
+              },
+              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -10217,13 +10222,10 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
-                "name": "Port-Channel5",
-                "members": [],
+                "name": "Port-channel5",
+                "members": [
+                  "Ethernet5"
+                ],
                 "mode": "active"
               },
               "... and 3 more"

@@ -26,6 +26,22 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+* **Cisco NX-OS codec — IPv4 Distributed Anycast Gateway (DAG).**  Parses
+  + renders the per-SVI `fabric forwarding mode anycast-gateway` marker
+  (which mirrors the SVI's primary IP into
+  `CanonicalIPv4Address.virtual_gateway_address`) plus the chassis-wide
+  `fabric forwarding anycast-gateway-mac` (round-trips NX-OS
+  dotted-triplet ↔ canonical colon-hex).  Mirrors the `cisco_iosxe_cli`
+  SD-Access implementation — the grammar is identical across the two
+  Cisco DC platforms.  Matrix graduates
+  `/interfaces/interface/ipv4/address/virtual-gateway-address` +
+  `/anycast-gateway-mac` to `supported`; the IPv6 anycast companion stays
+  `unsupported` (parity with the IOS-XE codec's deferral).  Closes the
+  last Tier-2 gap in the NX-OS codec.  Cross-mesh + phase-4 regenerated;
+  high-severity CODEC_BUG held flat at 5.
+
 ## [0.1.5] - 2026-06-13
 
 ### Added

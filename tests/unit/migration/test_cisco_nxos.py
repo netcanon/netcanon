@@ -336,14 +336,14 @@ class TestCapabilityMatrix:
             assert path in sup, path
 
     def test_deferred_paths_declared_unsupported(self, codec):
-        """Surfaces still deferred (T2 anycast + Tier-3) must classify
-        ``unsupported`` so the migrate-page banner + cross-mesh report
-        flag them.  (Phase-2a L2, Phase-3 VRF RD/RT + per-VRF static, and
-        Phase-4 VXLAN-EVPN + L3VNI have all graduated — see the
-        ``test_*_matrix_graduated`` companions.)"""
+        """Surfaces still deferred (Tier-3) must classify ``unsupported``
+        so the migrate-page banner + cross-mesh report flag them.
+        (Phase-2a L2, Phase-3 VRF RD/RT + per-VRF static, Phase-4
+        VXLAN-EVPN + L3VNI, and IPv4 DAG anycast have all graduated — see
+        the ``test_*_matrix_graduated`` companions.)"""
         caps = codec.capabilities
         for path in [
-            "/anycast-gateway",                             # T2 — deferred
+            "/interfaces/interface/ipv6/address/virtual-gateway-address",  # v6 anycast deferred
             "/routing-protocols/bgp",                       # Tier-3
             "/routing-protocols/ospf",                      # Tier-3
             "/access-list/extended",                        # Tier-3
@@ -960,5 +960,50 @@ class TestPhase4VXLAN:
         # evpn-type5 is lossy (modelled via the l3_vni VRF binding).
         assert caps.classify("/vxlan-vnis/vni") == "lossy"
         assert caps.classify("/evpn-type5-routes/route") == "lossy"
-        # Anycast remains T2-deferred.
-        assert caps.classify("/anycast-gateway") == "unsupported"
+        # IPv4 DAG anycast graduated; only the IPv6 companion is deferred.
+        assert caps.classify("/anycast-gateway-mac") == "supported"
+        assert caps.classify(
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+        ) == "supported"
+        assert caps.classify(
+            "/interfaces/interface/ipv6/address/virtual-gateway-address"
+        ) == "unsupported"
+
+
+class TestAnycastGateway:
+    """Distributed Anycast Gateway (DAG) — per-SVI ``fabric forwarding
+    mode anycast-gateway`` mirrors the primary IP into
+    ``virtual_gateway_address``; the chassis-wide ``fabric forwarding
+    anycast-gateway-mac`` round-trips dotted-triplet ↔ canonical
+    colon-hex.  Mirrors the IOS-XE SD-Access shape."""
+
+    def test_global_mac_harvested_colon_hex(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        assert intent.anycast_gateway_mac == "00:01:c7:3a:00:00"
+
+    def test_svi_mirrors_primary_ip(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        svi = next(i for i in intent.interfaces if i.name == "Vlan20")
+        addr = svi.ipv4_addresses[0]
+        assert addr.virtual_gateway_address == addr.ip == "10.20.20.1"
+
+    def test_non_anycast_svi_has_no_vga(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        svi = next(i for i in intent.interfaces if i.name == "Vlan10")
+        assert all(a.virtual_gateway_address == "" for a in svi.ipv4_addresses)
+
+    def test_render_emits_dotted_triplet_and_mode(self, codec, kitchen_sink):
+        out = codec.render(codec.parse(kitchen_sink))
+        assert "fabric forwarding anycast-gateway-mac 0001.c73a.0000" in out
+        assert "  fabric forwarding mode anycast-gateway" in out
+
+    def test_round_trip(self, codec, kitchen_sink):
+        first = codec.parse(kitchen_sink)
+        second = codec.parse(codec.render(first))
+        assert second.anycast_gateway_mac == first.anycast_gateway_mac
+        s1 = next(i for i in first.interfaces if i.name == "Vlan20")
+        s2 = next(i for i in second.interfaces if i.name == "Vlan20")
+        assert (
+            [(a.ip, a.virtual_gateway_address) for a in s1.ipv4_addresses]
+            == [(a.ip, a.virtual_gateway_address) for a in s2.ipv4_addresses]
+        )

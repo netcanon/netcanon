@@ -26,10 +26,13 @@ Phase 1 surface (see ``docs/v0.2.0-planning/03-nxos-codec/``):
   → :class:`CanonicalStaticRoute`.
 
 Phases 2-4 add: L2 switchport, LAGs, SNMP, local users, HSRP, VRF
-RD/RT + per-VRF static routes, and VXLAN-EVPN (``vlan N / vn-segment``
+RD/RT + per-VRF static routes, VXLAN-EVPN (``vlan N / vn-segment``
 + ``interface nve1`` VTEP source-interface + per-VRF L3VNI ``vrf
-context X / vni N``).  Still declared ``unsupported``: anycast-gateway
-(T2) plus the Tier-3 protocol / ACL / QoS blocks.  ``feature`` / ``vdc``
+context X / vni N``), and IPv4 Distributed Anycast Gateway (per-SVI
+``fabric forwarding mode anycast-gateway`` → ``virtual_gateway_address``
++ the chassis-wide ``fabric forwarding anycast-gateway-mac``).  Still
+declared ``unsupported``: the IPv6 anycast companion plus the Tier-3
+protocol / ACL / QoS blocks.  ``feature`` / ``vdc``
 / ``boot`` / ``line`` lines are discarded on parse and re-synthesised on
 render (the matrix declares the cosmetic loss).
 
@@ -201,6 +204,38 @@ def _normalise_priv_proto(proto: str | None) -> str:
     if not proto:
         return ""
     return proto.lower().replace("-", "")
+
+
+# ── Distributed Anycast Gateway (T2) ──
+#: ``fabric forwarding anycast-gateway-mac <mac>`` (top-level) — the
+#: chassis-wide anycast MAC every DAG SVI shares as its virtual L2
+#: next-hop.  NX-OS emits dotted-triplet (``0001.c73a.0000``).
+_FABRIC_AG_MAC_RE = re.compile(
+    r"^fabric\s+forwarding\s+anycast-gateway-mac\s+(?P<mac>\S+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: ``fabric forwarding mode anycast-gateway`` inside an ``interface
+#: Vlan<N>`` SVI marks the primary IP as the distributed anycast gateway.
+_FABRIC_AG_MODE_RE = re.compile(
+    r"^\s+fabric\s+forwarding\s+mode\s+anycast-gateway\s*$", re.IGNORECASE,
+)
+
+
+def _normalise_mac_to_colon_hex(mac: str) -> str:
+    """Normalise a MAC representation to canonical colon-hex.
+
+    Accepts dotted-triplet (``0001.c73a.0000`` — NX-OS native), colon-hex,
+    or dash-hex; returns lower-case ``aa:bb:cc:dd:ee:ff``.  Returns empty
+    string for input it can't classify (caller skips population rather
+    than poisoning the field).  Forked from cisco_iosxe_cli per the
+    duplicate-rather-than-lift convention.
+    """
+    if not mac:
+        return ""
+    hex_only = re.sub(r"[^0-9a-f]", "", mac.strip().lower())
+    if len(hex_only) != 12:
+        return ""
+    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
@@ -330,6 +365,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
+
+    # Distributed Anycast Gateway: the chassis-wide MAC (`fabric
+    # forwarding anycast-gateway-mac`).  Per-SVI anycast-mode markers are
+    # harvested in :func:`_parse_interfaces`.
+    agm = _FABRIC_AG_MAC_RE.search(raw)
+    if agm:
+        normalised = _normalise_mac_to_colon_hex(agm.group("mac"))
+        if normalised:
+            intent.anycast_gateway_mac = normalised
 
     # VRF declarations (``vrf context <name>`` top-level stanzas).
     # Phase 3 harvests name + description + rd + route-target; the nested
@@ -532,6 +576,10 @@ def _new_iface_scratch(name: str) -> dict:
         "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
+        # Distributed Anycast Gateway: set True by ``fabric forwarding
+        # mode anycast-gateway`` → mirrors the primary IP into
+        # virtual_gateway_address in _build_canonical_interface.
+        "fabric_forwarding_anycast": False,
         # HSRP (Phase 2c): {gid: {virtual_ips, priority, preempt, auth}}.
         "hsrp_groups": {},
         "_hsrp_gid": None,   # active group while inside an ``hsrp N`` block
@@ -692,6 +740,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["vrf"] = vm.group(1)
             continue
 
+        # ── Distributed Anycast Gateway per-SVI marker ──
+        if _FABRIC_AG_MODE_RE.match(line):
+            current["fabric_forwarding_anycast"] = True
+            continue
+
         # ── L2 switchport (Phase 2) ──
         if _NO_SWITCHPORT_RE.match(line):
             # Routed port — leave switchport_mode None (render emits
@@ -768,6 +821,13 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
                 ip=a["ip"],
                 prefix_length=a["prefix_length"],
                 is_secondary=a.get("is_secondary", False),
+                # DAG: the SVI's primary IP IS the distributed anycast
+                # gateway, so mirror it into virtual_gateway_address
+                # (X == virtual_gateway_address — see the canonical
+                # docstring + the IOS-XE SD-Access shape).
+                virtual_gateway_address=(
+                    a["ip"] if raw.get("fabric_forwarding_anycast") else ""
+                ),
             )
             for a in raw.get("ipv4", [])
         ],
