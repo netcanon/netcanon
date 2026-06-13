@@ -1,0 +1,16 @@
+# Cisco IOS-XR — ASR 9000 / NCS 5500 / 540 / 8000 / CRS service-provider routers.
+# Codec: cisco_iosxr (CLI `show running-config`).
+id: cisco_iosxr
+display_name: "Cisco IOS-XR"
+device_classes:
+  - router
+default_timeout: 30
+notes: >
+  IOS-XR is Cisco's service-provider routing NOS; its CLI grammar is
+  distinct from IOS-XE (4-segment port names like
+  GigabitEthernet0/0/0/0, `vrf` as a top-level stanza, `route-policy`
+  instead of `route-map`, `ipv4 address` inside interface stanzas,
+  `Bundle-Ether` LAGs).  The codec parses + renders `show running-config`
+  text and is shipping in phases — Phase 1 covers hostname, domain,
+  interfaces (physical / Loopback / MgmtEth / Bundle-Ether /
+  sub-interfaces) and default-VRF static routes.

@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-13T17:45:29+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T174528Z.json",
-  "mesh_run_started_utc": "2026-06-13T17:45:25+00:00",
-  "cells_total": 486,
+  "started_utc": "2026-06-13T18:16:12+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T181611Z.json",
+  "mesh_run_started_utc": "2026-06-13T18:16:08+00:00",
+  "cells_total": 550,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -251,6 +251,11 @@
       "target_codec": "cisco_iosxe_cli"
     },
     {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
       "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
       "source_codec": "cisco_nxos",
       "target_codec": "cisco_nxos"
@@ -280,7 +285,17 @@
     {
       "fixture": "tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt",
       "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/batfish_duplicateprivate_eos4211.txt",
+      "source_codec": "arista_eos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt",
+      "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/arista_eos/batfish_eos_evpn_vlan_based_leaf.txt",
@@ -290,7 +305,17 @@
     {
       "fixture": "tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt",
       "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/batfish_labval_dc1_leaf2a_eos4230.txt",
+      "source_codec": "arista_eos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/karneliuk_a_eos1_eos4260.txt",
+      "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/arista_eos/karneliuk_a_eos1_eos4260.txt",
@@ -300,7 +325,17 @@
     {
       "fixture": "tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt",
       "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt",
+      "source_codec": "arista_eos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/aruba_central_5memberstack_rendered.cfg",
+      "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/aruba_aoss/aruba_central_5memberstack_rendered.cfg",
@@ -310,7 +345,17 @@
     {
       "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg",
       "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2920_wb1608_dhcp_snooping.cfg",
+      "source_codec": "aruba_aoss",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg",
+      "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1607_intervlan.cfg",
@@ -320,7 +365,17 @@
     {
       "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg",
       "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_2930f_wc1610_dhcp_server.cfg",
+      "source_codec": "aruba_aoss",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg",
+      "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/aruba_aoss/hpe_community_5406rzl2_kb1515.cfg",
@@ -330,7 +385,17 @@
     {
       "fixture": "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg",
       "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoss/user_contrib_2930m_wc1611.cfg",
+      "source_codec": "aruba_aoss",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_aaa.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_aaa.txt",
@@ -340,7 +405,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_interface.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_interface.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_ip_route.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_ip_route.txt",
@@ -350,7 +425,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_logging.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_logging.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_snmp.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_cisco_snmp.txt",
@@ -360,7 +445,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/batfish_iosxe_basic_vrrp.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/cml_basic_forwarding_iosv_r1_ospf.txt",
@@ -370,7 +465,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/cml_saumur_iosxe1712_pvrstp.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/ntc_carrier_interfaces.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/ntc_carrier_interfaces.txt",
@@ -380,7 +485,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/racc_cat8000v_iosxe179_netconf.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/racc_csr1000v_iosxe169_bgp_ospf.txt",
@@ -390,7 +505,17 @@
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/racc_csr1_iosxe173_umbrella_sig.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt",
+      "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/cisco_iosxe/user_contrib_cat9300_iosxe1712.txt",
@@ -400,7 +525,17 @@
     {
       "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf",
       "source_codec": "fortigate_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_70g_branch.conf",
+      "source_codec": "fortigate_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_vm_hub.conf",
+      "source_codec": "fortigate_cli",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/fortigate/kevinguenay_fgt_vm_hub.conf",
@@ -410,7 +545,17 @@
     {
       "fixture": "tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf",
       "source_codec": "fortigate_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/fortigate/user_contrib_fg100e_fos7213.conf",
+      "source_codec": "fortigate_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/batfish_evpntype5_router1_junos2541.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/junos/batfish_evpntype5_router1_junos2541.set",
@@ -420,7 +565,17 @@
     {
       "fixture": "tests/fixtures/real/junos/batfish_l3vpn_pe1_junos2541.set",
       "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/batfish_l3vpn_pe1_junos2541.set",
+      "source_codec": "juniper_junos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/buraglio_netlab_junos184.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/junos/buraglio_netlab_junos184.set",
@@ -430,7 +585,17 @@
     {
       "fixture": "tests/fixtures/real/junos/ksator_labmgmt_ex4550_junos151.set",
       "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/ksator_labmgmt_ex4550_junos151.set",
+      "source_codec": "juniper_junos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx10k2_junos173.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx10k2_junos173.set",
@@ -440,7 +605,17 @@
     {
       "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx5100_junos173.set",
       "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx5100_junos173.set",
+      "source_codec": "juniper_junos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx5110_junos173.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx5110_junos173.set",
@@ -450,7 +625,17 @@
     {
       "fixture": "tests/fixtures/real/mikrotik/ntc_ip_address_export.rsc",
       "source_codec": "mikrotik_routeros",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/mikrotik/ntc_ip_address_export.rsc",
+      "source_codec": "mikrotik_routeros",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/mikrotik/routeros_diff_verbose_export.rsc",
+      "source_codec": "mikrotik_routeros",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/mikrotik/routeros_diff_verbose_export.rsc",
@@ -460,7 +645,17 @@
     {
       "fixture": "tests/fixtures/real/mikrotik/taqavi_initial_provisioning.rsc",
       "source_codec": "mikrotik_routeros",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/mikrotik/taqavi_initial_provisioning.rsc",
+      "source_codec": "mikrotik_routeros",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc",
+      "source_codec": "mikrotik_routeros",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/mikrotik/user_contrib_crs310_ros7.rsc",
@@ -470,7 +665,17 @@
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_acl_test_config.xml",
       "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_acl_test_config.xml",
+      "source_codec": "opnsense",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_core_default.xml",
+      "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_core_default.xml",
@@ -480,7 +685,17 @@
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_docs_carp_ha_backup.xml",
       "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_docs_carp_ha_backup.xml",
+      "source_codec": "opnsense",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_docs_carp_ha_master.xml",
+      "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_docs_carp_ha_master.xml",
@@ -490,7 +705,17 @@
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_paramiko_shell_capture.xml",
       "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_paramiko_shell_capture.xml",
+      "source_codec": "opnsense",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/opnsense_service_test_config.xml",
+      "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/real/opnsense/opnsense_service_test_config.xml",
@@ -500,7 +725,17 @@
     {
       "fixture": "tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml",
       "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/opnsense/user_contrib_supergate_opn25.xml",
+      "source_codec": "opnsense",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/arista_eos/kitchen_sink.txt",
+      "source_codec": "arista_eos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/synthetic/arista_eos/kitchen_sink.txt",
@@ -510,7 +745,17 @@
     {
       "fixture": "tests/fixtures/synthetic/aruba_aoss/kitchen_sink.cfg",
       "source_codec": "aruba_aoss",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/aruba_aoss/kitchen_sink.cfg",
+      "source_codec": "aruba_aoss",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxe/kitchen_sink.xml",
+      "source_codec": "cisco_iosxe",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/synthetic/cisco_iosxe/kitchen_sink.xml",
@@ -520,7 +765,57 @@
     {
       "fixture": "tests/fixtures/synthetic/cisco_iosxe_cli/kitchen_sink.txt",
       "source_codec": "cisco_iosxe_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxe_cli/kitchen_sink.txt",
+      "source_codec": "cisco_iosxe_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
     },
     {
       "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
@@ -545,6 +840,11 @@
     {
       "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
       "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/cisco_nxos/kitchen_sink.cfg",
+      "source_codec": "cisco_nxos",
       "target_codec": "fortigate_cli"
     },
     {
@@ -565,7 +865,17 @@
     {
       "fixture": "tests/fixtures/synthetic/fortigate_cli/kitchen_sink.conf",
       "source_codec": "fortigate_cli",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/fortigate_cli/kitchen_sink.conf",
+      "source_codec": "fortigate_cli",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/juniper_junos/kitchen_sink.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/synthetic/juniper_junos/kitchen_sink.set",
@@ -575,7 +885,17 @@
     {
       "fixture": "tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc",
       "source_codec": "mikrotik_routeros",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/mikrotik_routeros/kitchen_sink.rsc",
+      "source_codec": "mikrotik_routeros",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/synthetic/opnsense/kitchen_sink.xml",
+      "source_codec": "opnsense",
+      "target_codec": "cisco_iosxr"
     },
     {
       "fixture": "tests/fixtures/synthetic/opnsense/kitchen_sink.xml",
@@ -9389,16 +9709,16 @@
             ],
             "target": [
               {
+                "name": "Port-Channel3",
+                "members": [],
+                "mode": "active"
+              },
+              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
                   "Ethernet4"
                 ],
-                "mode": "active"
-              },
-              {
-                "name": "Port-Channel3",
-                "members": [],
                 "mode": "active"
               },
               {
@@ -18537,11 +18857,6 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -18550,10 +18865,13 @@
                 "mode": "active"
               },
               {
-                "name": "Port-channel6",
-                "members": [
-                  "Ethernet6"
-                ],
+                "name": "Port-Channel3",
+                "members": [],
+                "mode": "active"
+              },
+              {
+                "name": "Port-Channel6",
+                "members": [],
                 "mode": "active"
               },
               "... and 7 more"
@@ -21731,6 +22049,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 486
+    "cells_total_in_run": 550
   }
 }
