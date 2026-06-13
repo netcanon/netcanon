@@ -1988,17 +1988,61 @@ def _apply_routing_instances(
     if len(tokens) < 2:
         return
     ri_name = tokens[0]
+    rest = tokens[1:]
+    if not rest:
+        return
+
+    head = rest[0]
+
+    # Per-VRF static routes (next-hop form) harvest onto
+    # CanonicalStaticRoute.vrf and return WITHOUT materialising a
+    # routing-instance.  An instance implied solely by a static route
+    # carries no canonical metadata (instance-type / RD / RT /
+    # interface binding), and inventing an empty one would drift
+    # cross-vendor — a Cisco ``ip route vrf X`` source declares no VRF,
+    # so cisco -> junos round-trips must not conjure one.  A VRF that
+    # ALSO carries instance-type / RD / RT / interface / a non-static
+    # ``routing-options`` line still materialises via those paths
+    # (Junos set-lines are order-independent).  next-hop form only —
+    # ``discard`` / ``reject`` and explicit ``rib <name>`` forms are not
+    # modelled, same as the global routing table.  (v0.2.0 — graduates
+    # /routing/static-route/vrf from lossy to supported.)
+    if head == "routing-options":
+        if (
+            len(rest) >= 6
+            and rest[1] == "static"
+            and rest[2] == "route"
+            and "/" in rest[3]
+            and rest[4] == "next-hop"
+        ):
+            dest = rest[3]
+            gateway = rest[5]
+            already = any(
+                r.destination == dest
+                and r.gateway == gateway
+                and r.vrf == ri_name
+                for r in intent.static_routes
+            )
+            if not already:
+                intent.static_routes.append(CanonicalStaticRoute(
+                    destination=dest,
+                    gateway=gateway,
+                    interface="",
+                    vrf=ri_name,
+                ))
+            return
+        # Non-static routing-options (``rib`` / ``autonomous-system`` /
+        # etc.) fall through to routing-instance materialisation +
+        # parse-and-ignore below — unchanged from prior behaviour.
+
+    # All other sub-paths describe the routing-instance itself —
+    # materialise (or find) it.
     ri = next(
         (r for r in intent.routing_instances if r.name == ri_name), None,
     )
     if ri is None:
         ri = CanonicalRoutingInstance(name=ri_name)
         intent.routing_instances.append(ri)
-    rest = tokens[1:]
-    if not rest:
-        return
-
-    head = rest[0]
     if head == "instance-type" and len(rest) >= 2:
         ri.instance_type = rest[1]
         return
@@ -2087,8 +2131,8 @@ def _apply_routing_instances(
         except ValueError:
             pass
         return
-    # Other sub-paths (protocols bgp, routing-options, etc.) —
-    # parse-and-ignore.
+    # Other sub-paths (protocols bgp, routing-options ``rib`` /
+    # blackhole forms, policies) — parse-and-ignore.
 
 
 def _apply_routing_options(
@@ -2107,7 +2151,9 @@ def _apply_routing_options(
             # content render replays the same route at both levels,
             # we don't want to double up in the canonical list.
             already = any(
-                r.destination == dest and r.gateway == gateway
+                r.destination == dest
+                and r.gateway == gateway
+                and r.vrf == ""
                 for r in intent.static_routes
             )
             if already:
