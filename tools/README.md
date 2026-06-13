@@ -184,12 +184,19 @@ python tools/run_phase4_reconciliation.py --mesh-json \
 
 * **JSON archive (gitignored):**
   `tests/fixtures/real/_phase4_runs/<UTC-timestamp>.json` — one
-  record per cell with full per-field variance breakdown.
-* **JSON snapshot (committed):**
+  record per cell with full per-field variance breakdown, including the
+  `ok`-severity (`ALIGNED` / `EXPECTED_*` / `TRIVIAL_EMPTY`) bulk.
+* **Slim JSON snapshot (committed):**
   `tests/fixtures/real/_phase4_runs/latest.json` — stable mirror
-  overwritten on every run.  Phase 4b investigation agents read this
-  to surface CODEC_BUG findings per source vendor without the operator
-  having to track timestamped names.
+  overwritten on every run, carrying full top-level aggregates + only
+  the **high-severity `CODEC_BUG` "investigate first" cells** (see
+  `_slim_for_commit`).  Phase 4b
+  investigation agents read this to surface CODEC_BUG findings per
+  source vendor without tracking timestamped names — and without the
+  multi-100k-line churn the full cell list would add to every regen.
+  It self-documents its filter + elided count under
+  `latest_json_slimmed`; regenerate the gitignored timestamped archive
+  for the complete cell set.
 * **Skeleton report (committed, overwritten on every run):**
   `tests/fixtures/real/PHASE4_RECONCILIATION.md` — aggregate
   variance counts, per-(source × target) CODEC_BUG matrix, top-N
