@@ -95,6 +95,7 @@ INPUT_FORMATS = frozenset({
     "cli-mikrotik",     # MikroTik `/export` text
     "cli-junos-set",    # Junos `show configuration | display set` text
     "cli-nxos",         # Cisco NX-OS `show running-config` text
+    "cli-iosxr",        # Cisco IOS-XR `show running-config` text
     "json-flat",        # flat {"xpath": "value"} JSON — the mock adapter
     "unknown",          # experimental adapter with no declared format
 })
