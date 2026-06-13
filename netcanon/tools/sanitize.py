@@ -33,6 +33,11 @@ Field-typed rules (counter-per-session):
 * ``CanonicalSNMPv3User.auth_passphrase`` → ``REDACTED-AUTH-N``
 * ``CanonicalSNMPv3User.priv_passphrase`` → ``REDACTED-PRIV-N``
 * ``CanonicalRADIUSServer.key`` → ``REDACTED-RADIUS-N``
+* ``CanonicalVRRPGroup.authentication`` → ``<scheme>:REDACTED-VRRP-AUTH-N``
+  — the ``<scheme>:`` prefix (``plain:`` / ``md5:`` / ``carp-key:``) is
+  metadata and is preserved so the renderer still emits valid syntax;
+  only the secret value (cleartext for ``plain:`` / ``carp-key:``, a
+  key-string for ``md5:``) is replaced
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalStaticRoute.gateway`` (public) → docs range
@@ -234,6 +239,24 @@ def sanitize_intent(
                     redacted=new_ip,
                 ))
                 addr.ip = new_ip
+
+        # ---- VRRP / CARP / HSRP authentication ----
+        # Cleartext-bearing: the ``plain:`` / ``carp-key:`` schemes
+        # hold the literal secret and ``md5:`` holds a key-string, all
+        # of which the renderers emit back verbatim.  Preserve the
+        # ``<scheme>:`` prefix (each renderer slices a scheme-width
+        # prefix and branches on ``startswith``) and redact only the
+        # value portion.
+        for k, group in enumerate(iface.vrrp_groups):
+            if group.authentication:
+                new_auth = table.redact_vrrp_authentication(group.authentication)
+                subs.append(Substitution(
+                    category="vrrp-authentication",
+                    field=f"interfaces[{i}].vrrp_groups[{k}].authentication",
+                    original=group.authentication,
+                    redacted=new_auth,
+                ))
+                group.authentication = new_auth
 
     # ---- local users (usernames + hashed passwords) ----
     # Phase-3 R6.1: redact the username too.  Operator-chosen
@@ -457,6 +480,27 @@ class _SubstitutionTable:
         n = self._secret_counters.get(category, 0) + 1
         self._secret_counters[category] = n
         return f"REDACTED-{category}-{n}"
+
+    def redact_vrrp_authentication(self, value: str) -> str:
+        """Redact a VRRP / CARP / HSRP authentication token.
+
+        Canonical form is ``<scheme>:<value>`` (e.g. ``plain:secret``,
+        ``carp-key:bytes``, ``md5:keystring``).  The value after the
+        scheme is the secret — cleartext for ``plain:`` / ``carp-key:``
+        and a key-string for ``md5:`` — and is always replaced.  The
+        ``<scheme>:`` prefix is metadata, NOT a secret, and is preserved
+        verbatim: every renderer slices a scheme-width prefix
+        (``plain:`` → ``[6:]``, ``md5:`` → ``[4:]``, ``carp-key:`` →
+        ``[9:]``) and branches on ``startswith``, so the prefix MUST
+        survive intact or the rendered output becomes malformed.
+
+        Per-occurrence counter (like :meth:`redact_secret`) — VRRP auth
+        is not cross-referenced, so the value need not be stable across
+        groups.
+        """
+        scheme, sep, _secret = value.partition(":")
+        placeholder = self.redact_secret("VRRP-AUTH")
+        return f"{scheme}{sep}{placeholder}" if sep else placeholder
 
     def redact_local_user_name(self, name: str) -> str:
         """Cross-reference-stable local-user-name redaction.

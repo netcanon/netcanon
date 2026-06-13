@@ -21,8 +21,10 @@ drops or transforms a field — before they ship.
 ## See it in 10 seconds
 
 ```bash
-docker run --rm ghcr.io/netcanon/netcanon:latest python tools/demo.py --pair cisco__junos
+docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pair cisco__junos
 ```
+
+(Installed via pip instead? Just `netcanon demo --pair cisco__junos`.)
 
 Paste this:
 
@@ -49,8 +51,9 @@ set routing-options static route 0.0.0.0/0 next-hop 192.168.1.1
 ```
 
 Same canonical pipeline drives the HTTP API and the browser UI.  Run
-`python tools/demo.py --list` to see all four embedded scenarios
-(Cisco→Junos, FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
+`netcanon demo --list` (or `python tools/demo.py --list` from a source
+checkout) to see all four embedded scenarios (Cisco→Junos,
+FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
 
 ---
 
