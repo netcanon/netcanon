@@ -93,6 +93,7 @@ from netcanon.migration.codecs import (  # noqa: E402, F401
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
+    cisco_iosxr,
     cisco_nxos,
     fortigate_cli,
     juniper_junos,

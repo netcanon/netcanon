@@ -39,6 +39,7 @@ from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
+    cisco_iosxr,
     cisco_nxos,
     fortigate_cli,
     juniper_junos,
@@ -215,6 +216,32 @@ interface Ethernet1/1
 interface Ethernet1/2
   channel-group 1 mode active
 """,
+    "cisco_iosxr": """\
+!! IOS XR Configuration 6.6.2
+!
+hostname TestXR
+domain name lab.example.com
+!
+interface Loopback0
+ ipv4 address 10.255.0.1 255.255.255.255
+!
+interface GigabitEthernet0/0/0/0
+ description core uplink
+ ipv4 address 198.51.100.1 255.255.255.252
+!
+interface GigabitEthernet0/0/0/1
+ ipv4 address 203.0.113.1 255.255.255.0
+!
+interface MgmtEth0/RP0/CPU0/0
+ ipv4 address 192.168.0.1 255.255.255.0
+!
+router static
+ address-family ipv4 unicast
+  0.0.0.0/0 198.51.100.2
+ !
+!
+end
+""",
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -243,6 +270,7 @@ _SOURCE_CAPABLE = [
     "fortigate_cli",
     "cisco_iosxe",
     "cisco_nxos",
+    "cisco_iosxr",
 ]
 # Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
 # every bidirectional codec is now in the smoke matrix.  The
@@ -259,6 +287,7 @@ _TARGET_CAPABLE = [
     "cisco_iosxe",
     "cisco_iosxe_cli",
     "cisco_nxos",
+    "cisco_iosxr",
 ]
 
 

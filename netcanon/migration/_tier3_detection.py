@@ -138,6 +138,42 @@ _NXOS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^ip pim\b.*$", re.MULTILINE),
 )
 
+# IOS-XR shape — Cisco IOS-XR `show running-config` headers for the
+# SP-routing / policy / L2VPN sections the codec does NOT consume.
+# Excludes `interface`, `router static`, `vrf`, `hostname`, `domain name`
+# (parsed or Phase-2) which the parser handles.
+_IOSXR_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    # Routing protocols
+    re.compile(r"^router bgp\s+\d+", re.MULTILINE),
+    re.compile(r"^router ospf(?:v3)?\s+\S+", re.MULTILINE),
+    re.compile(r"^router isis\s+\S+", re.MULTILINE),
+    re.compile(r"^router rip\b", re.MULTILINE),
+    re.compile(r"^router pim\b", re.MULTILINE),
+    # MPLS
+    re.compile(r"^mpls ldp\b", re.MULTILINE),
+    re.compile(r"^mpls traffic-eng\b", re.MULTILINE),
+    re.compile(r"^mpls oam\b", re.MULTILINE),
+    # Policy primitives (XR set-form DSL)
+    re.compile(r"^route-policy\s+\S+", re.MULTILINE),
+    re.compile(r"^prefix-set\s+\S+", re.MULTILINE),
+    re.compile(r"^community-set\s+\S+", re.MULTILINE),
+    re.compile(r"^extcommunity-set\s+\S+", re.MULTILINE),
+    re.compile(r"^as-path-set\s+\S+", re.MULTILINE),
+    re.compile(r"^rd-set\s+\S+", re.MULTILINE),
+    # Filters
+    re.compile(r"^ipv4 access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^ipv6 access-list\s+\S+", re.MULTILINE),
+    re.compile(r"^class-map\b.*$", re.MULTILINE),
+    re.compile(r"^policy-map\b.*$", re.MULTILINE),
+    # L2VPN / EVPN
+    re.compile(r"^l2vpn\b", re.MULTILINE),
+    re.compile(r"^evpn\b", re.MULTILINE),
+    re.compile(r"^bridge group\s+\S+", re.MULTILINE),
+    # Misc
+    re.compile(r"^multicast-routing\b", re.MULTILINE),
+    re.compile(r"^call-home\b", re.MULTILINE),
+)
+
 # OPNsense XML element shape (heuristic — substring presence check on
 # top-level elements that the parser doesn't currently extract).  The
 # OPNsense codec consumes ``<vlans>``, ``<interfaces>``, ``<dhcpd>``,
@@ -180,6 +216,11 @@ def detect_tier3_sections_junos(raw: str) -> list[str]:
 def detect_tier3_sections_nxos(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Cisco NX-OS CLI text."""
     return _detect_regex(raw, _NXOS_TIER3_HEADERS)
+
+
+def detect_tier3_sections_iosxr(raw: str) -> list[str]:
+    """Detect Tier-3 stanza headers in Cisco IOS-XR CLI text."""
+    return _detect_regex(raw, _IOSXR_TIER3_HEADERS)
 
 
 def detect_tier3_sections_routeros(raw: str) -> list[str]:

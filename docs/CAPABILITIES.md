@@ -19,7 +19,7 @@ lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md
 
 ## Supported vendors
 
-Nine migration codecs ship today, plus a `_mock` adapter used in
+Ten migration codecs ship today, plus a `_mock` adapter used in
 tests.  Backup-side device definitions are listed under
 [`../definitions/`](../definitions/) (one YAML per vendor/OS family).
 
@@ -28,6 +28,7 @@ tests.  Backup-side device definitions are listed under
 | `cisco_iosxe_cli` | Cisco IOS-XE | `show running-config` text | bidirectional | certified |
 | `cisco_iosxe`     | Cisco IOS-XE | NETCONF / OpenConfig XML  | bidirectional | best_effort (Phase 0.5 stub render) |
 | `cisco_nxos`      | Cisco NX-OS  | `show running-config` text | bidirectional | best_effort (all 4 phases — L1/L3 + L2 switchport/LAG + SNMP/users + HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI; only T2 anycast-gateway remains unsupported) |
+| `cisco_iosxr`     | Cisco IOS-XR | `show running-config` text | bidirectional | experimental (Phase 1 of 4 — hostname/domain/interfaces (4-segment) + default-VRF `router static`; VRF + RD-from-BGP, SP-routing Tier-3, and the certified corpus land in Phases 2-4) |
 | `arista_eos`      | Arista EOS    | EOS CLI text              | bidirectional | certified |
 | `aruba_aoss`      | Aruba AOS-S   | AOS-S CLI banner + positional port lists | bidirectional | certified |
 | `juniper_junos`   | Juniper Junos | `set`-form CLI            | bidirectional | certified |

@@ -28,6 +28,36 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Cisco IOS-XR codec — Phase 1, a new bidirectional codec
+  (`cisco_iosxr`).**  Parses + renders `show running-config` for the
+  ASR 9000 / NCS 5500 / 540 / 8000 / CRS service-provider routers:
+  hostname, `domain name`, interfaces (4-segment physical
+  `GigabitEthernet0/0/0/0` + the TenGigE/HundredGigE/… speed variants,
+  `Loopback`, `MgmtEth`, `Bundle-Ether`, sub-interfaces — with
+  `ipv4 address X Y` dotted-mask, `ipv6 address X/N` CIDR, description,
+  `shutdown`, `mtu`), and default-VRF `router static` routes
+  (`<CIDR> <interface> <next-hop>`, incl. `Null0` blackhole + gateway-
+  only forms).  4-segment XR port names map onto the cross-vendor
+  `PortIdentity` as rack/slot/instance with the 4th (per-PIC port)
+  segment preserved via `meta["iosxr_port_index"]` for same-vendor
+  round-trip — it drops to `0` on a 3-segment cross-vendor rename
+  (declared lossy); `Bundle-Ether<N>` ↔ `Port-channel<N>` and `MgmtEth`
+  cascade through the existing port-name bridge.  The probe keys off the
+  unambiguous `!! IOS XR Configuration` banner (98) with an XR-marker
+  fallback (4-segment ports + `ipv4 address` + `MgmtEth` + `route-policy`)
+  that does NOT steal IOS-XE / NX-OS captures.
+  `detect_tier3_sections_iosxr` surfaces the dropped SP-routing /
+  `route-policy` / `l2vpn` stanzas on the migrate banner.  **Shipped
+  `bidirectional` / `experimental`** — not the dossier's transient
+  `parse_only`, because the repo forbids a `parse_only` + `cli-*` codec
+  (`TestNoOrphanedParseOnlyCliCodec`); same call the NX-OS codec made.
+  Capability matrix: **11 supported / 2 lossy / 22 unsupported** — VRF
+  stanzas + RD-from-`router bgp` (Phase 2), Bundle-Ether membership /
+  LAGs (Phase 2), local users (Phase 2), and the SP-routing /
+  `route-policy` Tier-3 harvest (Phase 3) remain unsupported; the
+  certified real-capture corpus lands in Phase 4.  Tenth migration
+  codec.  Cross-mesh + phase-4 regenerated; high-severity CODEC_BUG held
+  flat at 5.  (Design dossier: `docs/v0.2.0-planning/04-iosxr-codec/`.)
 * **Cisco NX-OS codec — Phase 4 (VXLAN-EVPN + L3VNI + `vtep` PortKind),
   completing the codec.**  Parses the EVPN overlay: `vlan N / vn-segment
   <vni>` → `CanonicalVxlan` (L2 VLAN↔VNI binding), `interface nve1 /
