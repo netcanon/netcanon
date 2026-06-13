@@ -31,6 +31,26 @@ re-discover them.
 | `cml_basic_forwarding_iosv_r1_ospf.txt` | [CiscoDevNet/cml-community](https://github.com/CiscoDevNet/cml-community) `lab-topologies/basic-forwarding-behavior.yaml` — embedded `configuration: \|-` block for the `R1` IOSv router node | BSD-3-Clause | Real `show running-config` on **Cisco IOSv 15.x** (CML virtual IOSv image) — adds **OSPF single-area multi-feature grammar** the existing corpus doesn't exercise: `router ospf 1` + `router-id 1.1.1.1` + `passive-interface` + 5 `network <addr> <wildcard> area 0` statements, plus per-interface `ip ospf cost 100` / `ip ospf cost 110` metric tuning.  Also exercises `encapsulation dot1Q <vlan>` on two subinterfaces of a single physical (`GigabitEthernet0/1.100` + `.200`) and the full IOSv banner block (three banner types with `^C` delimiters) that's parse-tolerance-tested but silently dropped.  IOSv ≠ IOS-XE in formal branding but shares grammar; the codec handles both via shared `cisco_iosxe_cli` parse paths.  All IPs are lab RFC1918 (`192.168.100.0/24`, `192.168.200.0/24`, `10.12.12.0/24`..`10.14.14.0/24`). |
 | `batfish_iosxe_basic_vrrp.txt` | [batfish/lab-validation](https://github.com/batfish/lab-validation) `snapshots/ios_basic_vrrp/configs/BR1/show_running-config.txt` @ commit `d40faf6`.  Retained verbatim — the upstream `username cisco privilege 15 password 0 cisco` is a deliberately-cleartext lab credential (RFC 5737-class test material, not a real device secret) and the IOS-XE codec round-trips the `password 0 X` form cleanly. | Apache-2.0 *(derived)* | Real Cisco IOS BR1 router config with **VRRP grammar** (`vrrp 12 ip 192.168.1.254` + `vrrp 12 priority 110` on GigabitEthernet0/2) — the first dedicated VRRP fixture in the corpus.  153 lines.  Currently VRRP parses-and-ignores at the codec level (no `CanonicalVRRPGroup` model yet); the fixture exists as a regression-and-enrichment witness for v0.2.0+ VRRP canonical-model work (see `WANTED.md` "VRRP / HSRP / anycast-gateway cross-vendor canonical" — the universal L3 redundancy primitive present in every shipped codec but modelled in none).  Also exercises `interface GigabitEthernet0/0..3` IPv4 subnetting (4 routed interfaces), `ip route` static default-via, IOSv-class banner. |
 
+## cisco_iosxr/
+
+All seven configs are from [batfish/lab-validation](https://github.com/batfish/lab-validation)
+under Apache-2.0, retained verbatim with a 3-line `!`-comment
+attribution header prepended (source URL + license + snapshot path).
+The configs use RFC 5737 / RFC 1918 addressing, RFC 6996 private ASNs,
+generic lab device names, and published Cisco type-7 lab credentials
+(`password 7 ...` — publicly-known weak-cipher hashes, not real device
+secrets) — no sanitization required.
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `batfish_vpnv4_pe1.txt` | `snapshots/cisco_xr_ios_vpnv4/configs/PE1/show_running-config.txt` | Apache-2.0 | XR-XE VPNv4 interop PE on **IOS-XR 6.6.2**.  3 VRFs (`red`/`blue`/`management`) with RT import/export blocks, RD harvested from `router bgp / vrf / rd` (IP-based `10.254.1.1:65102`), per-VRF `router static`, MgmtEth in mgmt VRF, MPLS LDP, OSPF, BGP RR client + vpnv4, `route-policy PASS_ALL`.  The headline RD-from-BGP round-trip witness. |
+| `batfish_vpnv4_pe2.txt` | `snapshots/cisco_xr_ios_vpnv4/configs/PE2/show_running-config.txt` | Apache-2.0 | Mirror PE to PE1 (same 3-VRF vpnv4 shape, smaller). |
+| `batfish_vpnv4_pe3.txt` | `snapshots/cisco_xr_ios_vpnv4/configs/PE3/show_running-config.txt` | Apache-2.0 | Mirror PE to PE1/PE2. |
+| `batfish_ebgp_border01.txt` | `snapshots/iosxr_ebgp_basic/configs/border01/show_running-config.txt` | Apache-2.0 | eBGP border on IOS-XR.  **`encapsulation dot1q` subinterface (`.35`) → synthesised VLAN**, route-policy with `elseif`, prefix-set, ASN local-as/remove-private-AS.  15 interfaces. |
+| `batfish_ebgp_border02.txt` | `snapshots/iosxr_ebgp_basic/configs/border02/show_running-config.txt` | Apache-2.0 | Smaller eBGP peer; default `router static`, dot1q subif, minimal-XR coverage. |
+| `batfish_ibgp_rr.txt` | `snapshots/iosxr_ibgp_rr_over_ospf/configs/RR/show_running-config.txt` | Apache-2.0 | Route reflector — **2× Bundle-Ether** with member `bundle id N mode active`, OSPF underlay, BGP RR neighbor-group, MTU 9216. |
+| `batfish_ibgp_border01.txt` | `snapshots/iosxr_ibgp_rr_over_ospf/configs/border01/show_running-config.txt` | Apache-2.0 | iBGP client — Bundle-Ether members, default `router static`, network/aggregate statements, `route-policy ADD-PATH`. |
+
 ## opnsense/
 
 | File | Origin | License | Notes |

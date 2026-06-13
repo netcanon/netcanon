@@ -486,7 +486,7 @@ class TestCapabilityMatrix:
         assert codec.name == "cisco_iosxr"
         assert codec.input_format == "cli-iosxr"
         assert codec.direction == "bidirectional"
-        assert codec.certainty == "experimental"
+        assert codec.certainty == "best_effort"
         assert codec.capabilities.vendor_id == "cisco_iosxr"
 
 
@@ -539,3 +539,58 @@ class TestPortNames:
         """A Port-channel (IOS-XE) identity renders as Bundle-Ether."""
         ident = PortIdentity(kind="lag", index=5)
         assert codec.format_port_identity(ident) == "Bundle-Ether5"
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 — SP-routing Tier-3 parse-and-display on the real batfish corpus
+# ---------------------------------------------------------------------------
+
+
+_REAL_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "fixtures" / "real" / "cisco_iosxr"
+)
+
+
+@pytest.mark.skipif(
+    not (_REAL_DIR / "batfish_vpnv4_pe1.txt").is_file(),
+    reason="batfish IOS-XR real-capture corpus not present",
+)
+class TestTier3Display:
+    """The SP-routing / policy stanzas the codec deliberately drops must
+    surface on ``dropped_tier3_sections`` (Phase 3), while the Tier-1/2
+    surface (interfaces, VRFs, RD-from-BGP) is still harvested — the
+    parse-and-display split, validated against real `batfish` captures."""
+
+    def _parse(self, codec, name):
+        return codec.parse((_REAL_DIR / name).read_text(encoding="utf-8"))
+
+    def test_vpnv4_pe_surfaces_sp_routing(self, codec):
+        intent = self._parse(codec, "batfish_vpnv4_pe1.txt")
+        dropped = intent.dropped_tier3_sections
+        assert "router bgp 65001" in dropped
+        assert "router ospf 1" in dropped
+        assert "mpls ldp" in dropped
+        assert "route-policy PASS_ALL" in dropped
+
+    def test_vpnv4_pe_still_harvests_vrf_and_rd(self, codec):
+        """SP-routing is dropped, but the VRF surface + the RD harvested
+        from `router bgp / vrf / rd` (Phase 2) survive on a real config."""
+        intent = self._parse(codec, "batfish_vpnv4_pe1.txt")
+        assert {ri.name for ri in intent.routing_instances} == {
+            "red", "blue", "management",
+        }
+        red = next(ri for ri in intent.routing_instances if ri.name == "red")
+        assert red.route_distinguisher == "10.254.1.1:65102"
+        assert red.rt_imports == ["65102:2", "65102:4"]
+        # Per-interface VRF membership is harvested too.
+        assert any(i.vrf == "blue" for i in intent.interfaces)
+
+    def test_ebgp_border_surfaces_policy_primitives(self, codec):
+        intent = self._parse(codec, "batfish_ebgp_border01.txt")
+        dropped = intent.dropped_tier3_sections
+        assert "router bgp 65100" in dropped
+        assert any(d.startswith("prefix-set ") for d in dropped)
+        assert any(d.startswith("route-policy ") for d in dropped)
+        # The `.35` dot1q subinterface still synthesises a VLAN.
+        assert intent.vlans

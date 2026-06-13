@@ -1,0 +1,116 @@
+! Source: https://github.com/batfish/lab-validation
+! License: Apache-2.0
+! Snapshot: iosxr_ebgp_basic/configs/border02
+Building configuration...
+!! IOS XR Configuration version = 6.2.2
+!! Last configuration change at Wed Apr  7 16:52:58 2021 by cisco
+!
+hostname border02
+domain name test.com
+username cisco
+ group root-lr
+ group cisco-support
+ secret 5 $1$Fyyl$4hCQrSP.yZElIJXxvK5Nv0
+!
+vrf AZURE
+ address-family ipv4 unicast
+  import route-target
+   65100:151
+  !
+  export route-target
+   65100:151
+  !
+ !
+!
+line default
+ transport input ssh
+!
+call-home
+ service active
+ contact smart-licensing
+ profile CiscoTAC-1
+  active
+  destination transport-method http
+ !
+!
+interface Loopback0
+ ipv4 address 10.188.62.4 255.255.255.255
+!
+interface Loopback123
+ vrf AZURE
+ ipv4 address 192.168.123.3 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/1
+ description AZURE-EAST
+ cdp
+!
+interface GigabitEthernet0/0/0/1.35
+ description AZURE-EAST
+ vrf AZURE
+ ipv4 address 10.103.127.1 255.255.255.252
+ encapsulation dot1q 35
+!
+interface GigabitEthernet0/0/0/2
+ shutdown
+!
+interface GigabitEthernet0/0/0/3
+ shutdown
+!
+interface GigabitEthernet0/0/0/4
+ shutdown
+!
+interface GigabitEthernet0/0/0/5
+ shutdown
+!
+interface GigabitEthernet0/0/0/6
+ shutdown
+!
+interface GigabitEthernet0/0/0/7
+ shutdown
+!
+interface GigabitEthernet0/0/0/8
+ shutdown
+!
+interface GigabitEthernet0/0/0/9
+ shutdown
+!
+interface GigabitEthernet0/0/0/10
+ shutdown
+!
+router static
+ vrf AZURE
+  address-family ipv4 unicast
+   0.0.0.0/0 10.103.127.2
+  !
+ !
+!
+router bgp 65100
+ bgp router-id 10.188.62.4
+ bgp log neighbor changes detail
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ vrf AZURE
+  rd 10.188.62.4:151
+  address-family ipv4 unicast
+   network 192.168.123.3/32
+  !
+  neighbor 10.103.127.2
+   remote-as 65300
+   local-as 65200 no-prepend replace-as
+   address-family ipv4 unicast
+    remove-private-AS
+   !
+  !
+ !
+!
+ssh server v2
+ssh server vrf AZURE
+end

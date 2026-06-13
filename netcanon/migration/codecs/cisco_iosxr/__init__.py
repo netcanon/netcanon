@@ -17,11 +17,15 @@ Module layout (mirrors ``cisco_iosxe_cli`` / ``cisco_nxos`` post-split):
     * port_names.py — cross-vendor 4-segment port-name bridge.
 
 Direction: ``bidirectional``.
-Certainty: ``experimental`` — Phase 1 of a four-phase build is complete
-    (hostname / domain / interfaces / default-VRF static routes).  VRF +
-    RD-from-BGP (Phase 2), SP-routing Tier-3 harvest (Phase 3), and the
-    certified-tier real-capture corpus (Phase 4) remain.  See
-    ``docs/v0.2.0-planning/04-iosxr-codec/`` for the phase plan.
+Certainty: ``best_effort`` — Phases 1-3 of a four-phase build are
+    complete: interfaces + default-VRF static (P1); VRF + RT +
+    RD-from-``router bgp`` + per-iface VRF + Bundle-Ether LAGs + local
+    users + per-VRF static + dot1q→VLAN (P2); the 7-config
+    ``batfish/lab-validation`` real-capture corpus + SP-routing
+    parse-and-display via ``dropped_tier3_sections`` (P3).  The
+    ``certified`` flip + 1-2 grammar-diverse non-batfish captures remain
+    (Phase 4).  See ``docs/v0.2.0-planning/04-iosxr-codec/`` for the
+    phase plan.
 """
 
 from .codec import CiscoIOSXRCodec

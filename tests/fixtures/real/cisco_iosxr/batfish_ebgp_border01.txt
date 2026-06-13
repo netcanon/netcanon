@@ -1,0 +1,155 @@
+! Source: https://github.com/batfish/lab-validation
+! License: Apache-2.0
+! Snapshot: iosxr_ebgp_basic/configs/border01
+Building configuration...
+!! IOS XR Configuration version = 6.2.2
+!! Last configuration change at Wed Apr  7 16:52:21 2021 by cisco
+!
+hostname border01
+domain name test.com
+username cisco
+ group root-lr
+ group cisco-support
+ secret 5 $1$Joxi$FOgljf610R6off2td9BC.1
+!
+vrf AZURE
+ address-family ipv4 unicast
+  import route-target
+   65100:151
+  !
+  export route-target
+   65100:151
+  !
+ !
+!
+line default
+ transport input ssh
+!
+call-home
+ service active
+ contact smart-licensing
+ profile CiscoTAC-1
+  active
+  destination transport-method http
+ !
+!
+interface Loopback0
+ description Loopback for Routing
+ ipv4 address 10.188.62.3 255.255.255.255
+!
+interface Loopback123
+ vrf AZURE
+ ipv4 address 192.168.123.2 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/1
+ description Azure-EAST
+!
+interface GigabitEthernet0/0/0/1.35
+ description Azure-EAST
+ vrf AZURE
+ ipv4 address 10.103.127.5 255.255.255.252
+ encapsulation dot1q 35
+!
+interface GigabitEthernet0/0/0/2
+ shutdown
+!
+interface GigabitEthernet0/0/0/3
+ shutdown
+!
+interface GigabitEthernet0/0/0/4
+ shutdown
+!
+interface GigabitEthernet0/0/0/5
+ shutdown
+!
+interface GigabitEthernet0/0/0/6
+ shutdown
+!
+interface GigabitEthernet0/0/0/7
+ shutdown
+!
+interface GigabitEthernet0/0/0/8
+ shutdown
+!
+interface GigabitEthernet0/0/0/9
+ shutdown
+!
+interface GigabitEthernet0/0/0/10
+ shutdown
+!
+prefix-set AZURE-EAST-IN
+  10.77.128.0/17 le 32,
+  192.168.122.0/24
+end-set
+!
+prefix-set AZURE-WEST-IN
+  10.77.0.0/17 le 32
+end-set
+!
+prefix-set AZURE-EAST-OUT
+  192.168.123.2/32
+end-set
+!
+prefix-set REDIST_CONNECTED
+  192.168.123.2/32
+end-set
+!
+route-policy AZURE-EAST-IN
+  if destination in AZURE-EAST-IN then
+    pass
+  elseif destination in AZURE-WEST-IN then
+    prepend as-path 65300 1
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy AZURE-EAST-OUT
+  if destination in AZURE-EAST-OUT then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+route-policy REDIST_CONNECTED
+  if destination in REDIST_CONNECTED then
+    pass
+  else
+    drop
+  endif
+end-policy
+!
+router bgp 65100
+ bgp router-id 10.188.62.3
+ bgp log neighbor changes detail
+ address-family ipv4 unicast
+ !
+ address-family vpnv4 unicast
+ !
+ vrf AZURE
+  rd 10.188.62.3:151
+  address-family ipv4 unicast
+   redistribute connected route-policy REDIST_CONNECTED
+  !
+  neighbor 10.103.127.6
+   remote-as 65300
+   local-as 65200 no-prepend replace-as
+   address-family ipv4 unicast
+    route-policy AZURE-EAST-IN in
+    route-policy AZURE-EAST-OUT out
+    remove-private-AS
+   !
+  !
+ !
+!
+ssh server v2
+ssh server vrf AZURE
+end

@@ -1,0 +1,140 @@
+! Source: https://github.com/batfish/lab-validation
+! License: Apache-2.0
+! Snapshot: iosxr_ibgp_rr_over_ospf/configs/RR
+Building configuration...
+!! IOS XR Configuration version = 6.2.2
+!! Last configuration change at Wed Apr  7 05:36:55 2021 by cisco
+!
+hostname RR
+domain name lab.com
+username cisco
+ group root-lr
+ group cisco-support
+ secret 5 $1$CwTp$5pWzabK7SXgMMiFdRtyyE1
+!
+line default
+ transport input ssh
+ transport output ssh
+!
+call-home
+ service active
+ contact smart-licensing
+ profile CiscoTAC-1
+  active
+  destination transport-method http
+ !
+!
+interface Bundle-Ether23
+ description To_BORDER01
+ mtu 9216
+ ipv4 address 10.188.248.18 255.255.255.252
+ bundle minimum-active links 2
+!
+interface Bundle-Ether45
+ description To_BORDER02
+ mtu 9216
+ ipv4 address 10.188.248.26 255.255.255.252
+ bundle minimum-active links 2
+!
+interface Loopback0
+ ipv4 address 10.169.6.152 255.255.255.255
+!
+interface Loopback123
+ ipv4 address 192.168.123.1 255.255.255.255
+!
+interface MgmtEth0/RP0/CPU0/0
+ shutdown
+!
+interface GigabitEthernet0/0/0/0
+ ipv4 address 192.168.122.2 255.255.255.0
+!
+interface GigabitEthernet0/0/0/1
+ shutdown
+!
+interface GigabitEthernet0/0/0/2
+ description To_BORDER01
+ bundle id 23 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/3
+ description To_BORDER01
+ bundle id 23 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/4
+ description To_BORDER02
+ bundle id 45 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/5
+ description To_BORDER02
+ bundle id 45 mode active
+ cdp
+!
+interface GigabitEthernet0/0/0/6
+ shutdown
+!
+interface GigabitEthernet0/0/0/7
+ shutdown
+!
+interface GigabitEthernet0/0/0/8
+ shutdown
+!
+interface GigabitEthernet0/0/0/9
+ shutdown
+!
+interface GigabitEthernet0/0/0/10
+ shutdown
+!
+route-policy OSPF-REDIST-STATIC
+  drop
+end-policy
+!
+route-policy OSPF-REDIST-CONNECTED
+  drop
+end-policy
+!
+router ospf 65200
+ log adjacency changes detail
+ router-id 10.169.6.152
+ network point-to-point
+ auto-cost reference-bandwidth 4000000
+ max-metric router-lsa on-startup wait-for-bgp include-stub summary-lsa external-lsa
+ redistribute connected route-policy OSPF-REDIST-CONNECTED
+ redistribute static route-policy OSPF-REDIST-STATIC
+ area 0
+  interface Bundle-Ether23
+   cost 35000
+  !
+  interface Bundle-Ether45
+   cost 2
+   passive disable
+  !
+  interface Loopback0
+  !
+ !
+!
+router bgp 65100
+ bgp router-id 10.169.6.152
+ bgp log neighbor changes detail
+ address-family ipv4 unicast
+  network 192.168.122.0/24
+  network 192.168.123.1/32
+ !
+ neighbor-group RR
+  remote-as 65100
+  update-source Loopback0
+  address-family ipv4 unicast
+   route-reflector-client
+   soft-reconfiguration inbound always
+  !
+ !
+ neighbor 10.188.62.3
+  use neighbor-group RR
+ !
+ neighbor 10.188.62.4
+  use neighbor-group RR
+ !
+!
+ssh server v2
+end

@@ -54,6 +54,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     arista_eos,
     aruba_aoss,
     cisco_iosxe_cli,
+    cisco_iosxr,
     fortigate_cli,
     juniper_junos,
     mikrotik_routeros,
@@ -79,6 +80,7 @@ REAL_FIXTURES_ROOT = (
 #: loud if you forget.
 _DIR_TO_CODEC_NAME: dict[str, str] = {
     "cisco_iosxe":  "cisco_iosxe_cli",
+    "cisco_iosxr":  "cisco_iosxr",
     "aruba_aoss":   "aruba_aoss",
     "fortigate":    "fortigate_cli",
     "opnsense":     "opnsense",
