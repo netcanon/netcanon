@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-P2 + documentation remediation from the 2026-06-06 review (Batches 2–4)
+P2 + documentation remediation from the 2026-06-06 review (Batches 2–5)
 — sequenced in that dossier's `recommended-remediation-plan.md`.  No
 canonical-model or codec-grammar changes.
 
@@ -46,6 +46,18 @@ canonical-model or codec-grammar changes.
   offloads via `asyncio.to_thread` (matching the scheduler in
   `routes/schedules.py`), so a large sanitise no longer stalls
   concurrent requests.
+
+* **`classify_port_name` now populates `PortIdentity.original` on all
+  paths** for `arista_eos` and `juniper_junos` (finding R-17 / CC-03).
+  The field is documented "always populated by the source classifier"
+  (the cross-vendor port-name bridge echoes it verbatim when a target
+  can't represent an identity), but the two codecs returned it empty on
+  every path — a latent contract violation.  Added a guard test pinning
+  the contract.  Separately, converted an unused `(?P<secondary>…)`
+  capture in `cisco_iosxe_cli`'s VRRP regex to a non-capturing group
+  (the code-smell half of R-13 / CC-02; the cross-vendor `is_secondary`
+  fidelity fix is tracked separately as it needs multi-site parser
+  changes + round-trip tests).
 
 ### Internal
 
