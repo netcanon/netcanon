@@ -1,5 +1,5 @@
 """
-Unit tests for the Cisco IOS-XR codec — Phase 1 surface.
+Unit tests for the Cisco IOS-XR codec — Phase 1-2 surface.
 
 Phase 1 scope (see ``docs/v0.2.0-planning/04-iosxr-codec/``): hostname,
 domain, interfaces (4-segment physical / Loopback / MgmtEth /
@@ -8,10 +8,15 @@ description / admin-state / mtu), and default-VRF ``router static``
 routes.  Shipped bidirectional (not the dossier's transient parse_only)
 to satisfy the no-orphan-parse_only-cli invariant — same call NX-OS made.
 
-VRF stanzas + RT, RD-from-BGP, Bundle-Ether membership / LAGs, local
-users, per-VRF static, dot1q->VLAN synth, and SP-routing harvest are
-declared ``unsupported`` and explicitly NOT parsed — guarded below so a
-future phase landing one of them updates this test deliberately.
+Phase 2 adds: top-level ``vrf <name>`` stanzas + ``import|export
+route-target`` blocks → routing-instances; the route-distinguisher
+harvested from / rendered to ``router bgp <asn> / vrf <name> / rd``;
+per-interface ``vrf <name>`` membership; ``Bundle-Ether`` LAGs (``bundle
+id <N> mode <m>``); local users (``username`` block); per-VRF ``router
+static`` routes; and sub-interface ``encapsulation dot1q`` → synthesised
+VLAN records.  SNMP + the SP-routing / route-policy / MPLS / l2vpn
+Tier-3 stanzas remain ``unsupported`` — guarded below so a future phase
+landing one of them updates this test deliberately.
 
 The generic ``test_synthetic_kitchen_sink_round_trips`` harness already
 exercises ``tests/fixtures/synthetic/cisco_iosxr/kitchen_sink.cfg`` for
@@ -174,8 +179,12 @@ class TestParse:
         # Interface-only (Null0 blackhole).
         assert by_dest["192.0.2.0/24"].interface == "Null0"
         assert by_dest["192.0.2.0/24"].gateway == ""
-        # Phase 1 is default-VRF only.
-        assert all(r.vrf == "" for r in intent.static_routes)
+        # Default-VRF routes carry no vrf discriminator.
+        assert by_dest["0.0.0.0/0"].vrf == ""
+        assert by_dest["10.50.0.0/16"].vrf == ""
+        # Phase 2 — per-VRF static (`router static / vrf CUSTOMER-A`).
+        assert by_dest["10.99.0.0/16"].vrf == "CUSTOMER-A"
+        assert by_dest["10.99.0.0/16"].gateway == "203.0.113.2"
 
     def test_non_contiguous_mask_tolerated(self, codec):
         """A malformed mask drops the address rather than crashing the
@@ -192,6 +201,102 @@ class TestParse:
             if i.name == "GigabitEthernet0/0/0/0"
         )
         assert gi.ipv4_addresses == []
+
+
+# ---------------------------------------------------------------------------
+# Parse — Phase 2 surfaces (VRF / RD / LAG / users / dot1q)
+# ---------------------------------------------------------------------------
+
+
+class TestParsePhase2:
+    def test_vrf_stanzas_with_route_targets(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        by_name = {ri.name: ri for ri in intent.routing_instances}
+        assert set(by_name) == {"CUSTOMER-A", "MGMT"}
+        ca = by_name["CUSTOMER-A"]
+        assert ca.description == "customer a l3vpn"
+        assert ca.rt_imports == ["65001:100"]
+        assert ca.rt_exports == ["65001:100"]
+
+    def test_rd_harvested_from_router_bgp(self, codec, kitchen_sink):
+        """The route-distinguisher lives under `router bgp / vrf / rd`,
+        not the `vrf` stanza — harvest + merge by VRF name."""
+        intent = codec.parse(kitchen_sink)
+        by_name = {ri.name: ri for ri in intent.routing_instances}
+        assert by_name["CUSTOMER-A"].route_distinguisher == "65001:100"
+        assert by_name["MGMT"].route_distinguisher == "65001:999"
+
+    def test_rd_empty_without_router_bgp(self, codec):
+        """An XR config with a `vrf` stanza but no `router bgp` keeps
+        route_distinguisher='' (the documented lossy gap)."""
+        raw = (
+            "!! IOS XR Configuration 7.3.2\n"
+            "hostname R1\n"
+            "vrf TENANT\n"
+            " address-family ipv4 unicast\n"
+            "  import route-target\n"
+            "   65000:1\n"
+            "  !\n"
+            " !\n"
+            "!\n"
+        )
+        intent = codec.parse(raw)
+        ri = next(r for r in intent.routing_instances if r.name == "TENANT")
+        assert ri.route_distinguisher == ""
+        assert ri.rt_imports == ["65000:1"]
+
+    def test_orphan_bgp_rd_creates_no_phantom_instance(self, codec):
+        """A `router bgp / vrf X / rd` with no top-level `vrf X` stanza
+        must NOT conjure a phantom routing-instance (per the per-VRF
+        harvest memory)."""
+        raw = (
+            "!! IOS XR Configuration 7.3.2\n"
+            "hostname R1\n"
+            "router bgp 65001\n"
+            " vrf GHOST\n"
+            "  rd 65001:7\n"
+            " !\n"
+            "!\n"
+        )
+        intent = codec.parse(raw)
+        assert intent.routing_instances == []
+
+    def test_per_interface_vrf_membership(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        by_name = {i.name: i for i in intent.interfaces}
+        assert by_name["GigabitEthernet0/0/0/1"].vrf == "CUSTOMER-A"
+        assert by_name["MgmtEth0/RP0/CPU0/0"].vrf == "MGMT"
+        # A global-VRF interface stays empty.
+        assert by_name["GigabitEthernet0/0/0/0"].vrf == ""
+
+    def test_bundle_ether_lag(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        lags = {lag.name: lag for lag in intent.lags}
+        assert "Bundle-Ether1" in lags
+        assert sorted(lags["Bundle-Ether1"].members) == [
+            "GigabitEthernet0/0/0/3",
+            "GigabitEthernet0/0/0/4",
+        ]
+        assert lags["Bundle-Ether1"].mode == "active"
+        # Members carry the back-pointer.
+        by_name = {i.name: i for i in intent.interfaces}
+        assert by_name["GigabitEthernet0/0/0/3"].lag_member_of == "Bundle-Ether1"
+
+    def test_local_users(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        users = {u.name: u for u in intent.local_users}
+        assert set(users) == {"netops", "readonly"}
+        assert users["netops"].role == "root-lr"
+        assert users["netops"].privilege_level == 15
+        assert users["netops"].hashed_password.startswith("10 $6$")
+        # Non-admin group → privilege 1, role preserved verbatim.
+        assert users["readonly"].role == "operator"
+        assert users["readonly"].privilege_level == 1
+
+    def test_dot1q_subinterface_synthesises_vlan(self, codec, kitchen_sink):
+        intent = codec.parse(kitchen_sink)
+        assert [v.id for v in intent.vlans] == [100]
+        assert intent.vlans[0].name == ""
 
 
 # ---------------------------------------------------------------------------
@@ -235,6 +340,45 @@ class TestRoundTrip:
         assert "router static" in out
         assert "  192.0.2.0/24 Null0" in out
         assert out.rstrip().endswith("end")
+
+    def test_render_emits_phase2_grammar(self, codec, kitchen_sink):
+        out = codec.render(codec.parse(kitchen_sink))
+        # VRF stanza + nested route-target blocks (XR word order).
+        assert "vrf CUSTOMER-A" in out
+        assert "  import route-target" in out
+        assert "   65001:100" in out
+        # RD carried in the `router bgp` block (NOT the vrf stanza).
+        assert "router bgp 65001" in out
+        assert "  rd 65001:100" in out
+        # Per-interface vrf membership, bundle membership, dot1q, user.
+        assert " vrf CUSTOMER-A" in out
+        assert " bundle id 1 mode active" in out
+        assert " encapsulation dot1q 100" in out
+        assert "username netops" in out
+        assert " group root-lr" in out
+        # Per-VRF static route nests under `router static / vrf`.
+        assert "   10.99.0.0/16 203.0.113.2" in out
+
+    def test_phase2_values_round_trip(self, codec, kitchen_sink):
+        """RD / RT / per-iface vrf / LAG / users / dot1q survive a
+        parse → render → parse cycle (the focused companion to the
+        generic synthetic harness)."""
+        second = codec.parse(codec.render(codec.parse(kitchen_sink)))
+        ri = {r.name: r for r in second.routing_instances}
+        assert ri["CUSTOMER-A"].route_distinguisher == "65001:100"
+        assert ri["CUSTOMER-A"].rt_imports == ["65001:100"]
+        assert ri["MGMT"].route_distinguisher == "65001:999"
+        assert {i.name: i.vrf for i in second.interfaces}[
+            "GigabitEthernet0/0/0/1"
+        ] == "CUSTOMER-A"
+        lag = {lag.name: lag for lag in second.lags}["Bundle-Ether1"]
+        assert sorted(lag.members) == [
+            "GigabitEthernet0/0/0/3", "GigabitEthernet0/0/0/4",
+        ]
+        assert {u.name for u in second.local_users} == {"netops", "readonly"}
+        assert [v.id for v in second.vlans] == [100]
+        # The BGP block re-detects identically (dropped-tier3 stability).
+        assert second.dropped_tier3_sections == ["router bgp 65001"]
 
     def test_render_cross_vendor_tree_tolerated(self, codec):
         """A tree carrying surfaces XR Phase 1 doesn't emit (VLANs, LAGs,
@@ -285,16 +429,34 @@ class TestCapabilityMatrix:
     def test_deferred_paths_unsupported(self, codec):
         caps = codec.capabilities
         for path in [
-            "/routing-instances/instance",      # Phase 2 (VRF)
-            "/lags/lag",                         # Phase 2
-            "/local-users/user",                 # Phase 2
-            "/vlans/vlan/id",                    # Phase 2 (dot1q synth)
-            "/routing/bgp",                      # Tier-3
+            "/snmp/community",                   # out of XR v1 scope
+            "/routing/bgp",                      # Tier-3 (RD-only harvest)
+            "/routing/ospf",                     # Tier-3
+            "/mpls",                             # Tier-3
             "/policy/route-policy",              # Tier-3
             "/vxlan-vnis/vni",                   # out of scope
             "/access-list/extended",             # Tier-3
         ]:
             assert caps.classify(path) == "unsupported", path
+
+    def test_phase2_graduated_paths(self, codec):
+        """VRF / VLAN / LAG / users / per-iface-vrf graduated in Phase 2.
+        The routing-instances path is supported AND lossy → classifies
+        lossy (the RD needs the `router bgp` block)."""
+        caps = codec.capabilities
+        for path in [
+            "/interfaces/interface/config/vrf",
+            "/vlans/vlan/id",
+            "/vlans/vlan/name",
+            "/routing/static-route/vrf",
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/lags/lag/mode",
+            "/aaa/authentication/users/user/config/username",
+            "/aaa/authentication/users/user/config/role",
+        ]:
+            assert caps.classify(path) == "supported", path
+        assert caps.classify("/routing-instances/instance") == "lossy"
 
     def test_config_type_lossy(self, codec):
         assert codec.capabilities.classify(
