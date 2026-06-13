@@ -3,7 +3,7 @@ Integration tests for the Swagger UI ``/docs`` page wrapping.
 
 Phase-3 Round-7.2 deliverable.  The page is built from
 ``fastapi.openapi.docs.get_swagger_ui_html()`` then post-processed
-in ``netcanon.api.routes.ui:swagger_ui`` to inject:
+in ``netcanon.api.routes.docs:swagger_ui`` to inject:
 
 1. A theme-detect boot script (reads localStorage + sets
    ``<html data-theme>``).
@@ -221,3 +221,48 @@ class TestDocsResponseIntegrity:
     def test_openapi_url_referenced(self, client):
         resp = client.get("/docs")
         assert "/api/v1/openapi.json" in resp.text
+
+
+class TestDocsRouterSplit:
+    """R-12 / CE-01: the ``/docs`` Swagger reskin was extracted from
+    ``ui.py`` into the sibling ``docs.py`` router.  These pin that the
+    split actually happened (constants moved, not duplicated) and that
+    every root-mounted page — including the relocated ``/docs`` — still
+    resolves."""
+
+    def test_docs_module_exposes_router_and_owns_the_constants(self):
+        """docs.py imports cleanly, exposes an ``include_in_schema=False``
+        router carrying exactly the ``/docs`` GET route, and owns the
+        ``_DOCS_*`` constants + handler that used to live in ui.py."""
+        from fastapi import APIRouter
+
+        from netcanon.api.routes import docs as docs_router
+
+        assert isinstance(docs_router.router, APIRouter)
+        paths = {r.path for r in docs_router.router.routes}
+        assert paths == {"/docs"}
+        # The constants + handler moved onto docs.py ...
+        assert hasattr(docs_router, "_DOCS_SWAGGER_DARK_CSS")
+        assert hasattr(docs_router, "swagger_ui")
+
+        # ... and are GONE from ui.py (no accidental duplicate definition).
+        from netcanon.api.routes import ui as ui_router
+
+        assert not hasattr(ui_router, "_DOCS_SWAGGER_DARK_CSS")
+        assert not hasattr(ui_router, "swagger_ui")
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/", "/jobs", "/schedules", "/configs", "/devices",
+            "/definitions", "/migrate", "/sanitize",  # page handlers (stay in ui.py)
+            "/docs",  # the extracted Swagger page (now served by docs.py)
+        ],
+    )
+    def test_root_pages_resolve(self, client, path):
+        """Every root-mounted HTML page resolves to a 200 after the
+        split — the page handlers still live in ui.py and /docs now
+        comes from docs.py, but the URLs are unchanged."""
+        resp = client.get(path)
+        assert resp.status_code == 200
+        assert "text/html" in resp.headers["content-type"]
