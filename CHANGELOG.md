@@ -26,6 +26,36 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+P2 remediation from the 2026-06-06 review (Batch 2) — sequenced in that
+dossier's `recommended-remediation-plan.md`.  No canonical-model or
+codec-grammar changes.
+
+### Fixed
+
+* **Junos render now raises `RenderError` (not `TypeError`) on
+  non-`CanonicalIntent` input** (finding R-03 / CC-01 / CF-03 / DD-01).
+  `juniper_junos.render_intent` was the only codec raising `TypeError`
+  from its input-type guard; the pipeline catches `RenderError`, so the
+  mismatch mis-bucketed the failure as an "unexpected error in stage
+  rendering" rather than a clean render error.  Now matches the
+  `CodecBase.render` contract and the other seven codecs.
+
+* **`POST /api/v1/sanitize` no longer blocks the event loop** (finding
+  R-04 / CA-01).  The async handler ran the synchronous, CPU-bound
+  parse → redact → render pipeline directly on the event loop; it now
+  offloads via `asyncio.to_thread` (matching the scheduler in
+  `routes/schedules.py`), so a large sanitise no longer stalls
+  concurrent requests.
+
+### Internal
+
+* **Frozen-signature guard test for the migration pipeline** (finding
+  R-11 / CD-03).  `run_plan` / `run_plan_with_rename` /
+  `run_plan_with_overrides` are called positionally by the UI, tests,
+  and README examples; a new test pins their parameter names, order,
+  kind, and defaults so an accidental signature change fails CI instead
+  of silently breaking positional callers.
+
 ## [0.1.3] - 2026-06-06
 
 Remediation of the two P1 findings from the read-only full-project
