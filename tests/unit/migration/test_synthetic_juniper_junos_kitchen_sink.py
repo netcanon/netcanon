@@ -127,13 +127,24 @@ def test_populates_every_expected_canonical_field():
         assert x.source_interface == "lo0.0"
         assert x.udp_port == 4789
 
-    # --- static routes (3 — IPv4 default, IPv4 named, IPv6 default) ---
-    route_dests = {r.destination for r in intent.static_routes}
-    assert route_dests == {"0.0.0.0/0", "10.50.0.0/16", "::/0"}
-    by_dest = {r.destination: r for r in intent.static_routes}
+    # --- static routes (3 global + 1 per-VRF) ---
+    # 3 global (IPv4 default, IPv4 named, IPv6 default) round-trip via
+    # ``set routing-options static route``; the per-VRF route under
+    # TENANT_A graduated to supported in v0.2.0.
+    global_routes = [r for r in intent.static_routes if not r.vrf]
+    global_dests = {r.destination for r in global_routes}
+    assert global_dests == {"0.0.0.0/0", "10.50.0.0/16", "::/0"}
+    by_dest = {r.destination: r for r in global_routes}
     assert by_dest["0.0.0.0/0"].gateway == "10.0.0.2"
     assert by_dest["10.50.0.0/16"].gateway == "10.0.0.3"
     assert by_dest["::/0"].gateway == "2001:db8::2"
+    # Per-VRF static route harvested from ``set routing-instances
+    # TENANT_A routing-options static route ...``.
+    vrf_routes = [r for r in intent.static_routes if r.vrf]
+    assert len(vrf_routes) == 1
+    assert vrf_routes[0].vrf == "TENANT_A"
+    assert vrf_routes[0].destination == "10.99.0.0/16"
+    assert vrf_routes[0].gateway == "10.0.0.99"
 
     # --- routing instances (3 — vrf, mac-vrf, virtual-router) ---
     ri_names = {r.name for r in intent.routing_instances}

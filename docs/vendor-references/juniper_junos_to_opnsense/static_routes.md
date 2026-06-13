@@ -79,11 +79,10 @@ Junos -> OPNsense:
   pending wire-up.
 - Per-VRF static routes (Junos `set routing-instances <vrf> routing-
   options static`) are unsupported on the cross-pair: the
-  `juniper_junos` codec does not yet harvest per-VRF statics (its
-  routing-instances dispatcher does not descend into
-  `routing-options static`), AND OPNsense has no VRF model.
-  `CanonicalStaticRoute.vrf` itself exists but is never populated on
-  this direction.
+  `juniper_junos` source codec now harvests per-VRF statics onto
+  `CanonicalStaticRoute.vrf` (`set routing-instances X routing-options
+  static route <dest> next-hop <gw>`), so the VRF is populated on this
+  direction, but OPNsense has no VRF model and drops it on render.
 - Junos's `qualified-next-hop` flattens to multiple canonical entries
   (one per NH); preference values drop (OPNsense has no
   per-route preference field outside the gateway hierarchy).

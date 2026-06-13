@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-13T07:58:56+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T075844Z.json",
-  "mesh_run_started_utc": "2026-06-13T07:58:41+00:00",
+  "started_utc": "2026-06-13T08:46:34+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260613T084633Z.json",
+  "mesh_run_started_utc": "2026-06-13T08:46:30+00:00",
   "cells_total": 424,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -275,17 +275,17 @@
   "aggregate": {
     "ALIGNED": 1467,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1117,
-    "EXPECTED_UNSUPPORTED": 660,
-    "METHODOLOGY_ISSUE_under": 871,
+    "EXPECTED_LOSSY": 1128,
+    "EXPECTED_UNSUPPORTED": 661,
+    "METHODOLOGY_ISSUE_under": 866,
     "METHODOLOGY_ISSUE_over": 25,
     "STRUCTURAL_ONLY": 952,
-    "TRIVIAL_EMPTY": 8721,
+    "TRIVIAL_EMPTY": 8714,
     "fields_total": 13818,
     "severity_high": 5,
     "severity_medium": 103,
-    "severity_low": 1745,
-    "severity_ok": 11965
+    "severity_low": 1740,
+    "severity_ok": 11970
   },
   "severity_matrix": {
     "arista_eos": {
@@ -18241,8 +18241,10 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel6",
-                "members": [],
+                "name": "Port-channel6",
+                "members": [
+                  "Ethernet6"
+                ],
                 "mode": "active"
               },
               "... and 7 more"

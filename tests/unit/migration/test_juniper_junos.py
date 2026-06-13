@@ -2058,7 +2058,36 @@ class TestVRRPAnycastCapabilities:
         unsupported_paths = {u.path for u in caps.unsupported}
         assert "/anycast-gateway-mac" in unsupported_paths
 
-    def test_routing_static_route_vrf_lossy(self):
+    def test_routing_static_route_vrf_supported(self):
+        # v0.2.0 — per-VRF static routes now round-trip via
+        # ``set routing-instances <NAME> routing-options static route``,
+        # so the path graduated from lossy to supported.
         caps = JunosCodec().capabilities
+        supported = set(caps.supported)
         lossy_paths = {p.path for p in caps.lossy}
-        assert "/routing/static-route/vrf" in lossy_paths
+        assert "/routing/static-route/vrf" in supported
+        assert "/routing/static-route/vrf" not in lossy_paths
+
+    def test_per_vrf_static_route_round_trip(self):
+        codec = JunosCodec()
+        intent = codec.parse(
+            "set routing-instances RED routing-options static route "
+            "10.10.0.0/16 next-hop 10.0.0.2\n"
+        )
+        vrf_routes = [r for r in intent.static_routes if r.vrf]
+        assert len(vrf_routes) == 1
+        assert vrf_routes[0].vrf == "RED"
+        assert vrf_routes[0].destination == "10.10.0.0/16"
+        assert vrf_routes[0].gateway == "10.0.0.2"
+        out = codec.render(intent)
+        assert (
+            "set routing-instances RED routing-options static route "
+            "10.10.0.0/16 next-hop 10.0.0.2" in out
+        )
+        # discard / reject blackhole forms carry no next-hop and are not
+        # modelled (next-hop form only — mirrors the global table).
+        intent2 = codec.parse(
+            "set routing-instances BLUE routing-options static route "
+            "10.20.0.0/16 discard\n"
+        )
+        assert not [r for r in intent2.static_routes if r.vrf == "BLUE"]

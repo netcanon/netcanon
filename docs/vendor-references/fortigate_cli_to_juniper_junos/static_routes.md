@@ -93,11 +93,13 @@ class CanonicalStaticRoute(BaseModel):
   preserves but its meaning differs.
 - **description** — `lossy`.  FortiOS `set comment` is not parsed
   into canonical in v1.
-- **Per-VRF static routes** — `unsupported`.  `CanonicalStaticRoute.vrf`
-  exists, but the FortiGate source codec does not parse `set vrf <id>`
-  (it declares `/routing/static-route/vrf` `unsupported`) and the
-  Junos render does not emit per-VRF statics, so the VRF is not
-  carried on this direction.
+- **Per-VRF static routes** — `unsupported`.  The FortiGate source
+  codec does not parse `set vrf <id>` (it declares
+  `/routing/static-route/vrf` `unsupported`), so
+  `CanonicalStaticRoute.vrf` is never populated from this source and
+  there is no VRF to carry on this direction.  (The Junos target would
+  render `set routing-instances X routing-options static route ...` if
+  a VRF were present.)
 
 ## Cross-vendor mapping (Junos -> FortiGate)
 

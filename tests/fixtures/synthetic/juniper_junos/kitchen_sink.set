@@ -13,7 +13,8 @@
 #   - 8 interfaces (ge ethernet x2, lo0, ae0 LAG, irb SVI, em0/fxp0 mgmt)
 #     covering IPv4 + IPv6 + link-local, VLAN trunk + native, MTU
 #   - 4 named VLANs, 3 with VXLAN VNI mappings + switch-options globals
-#   - static routes (IPv4 default, IPv4 named, IPv6 default)
+#   - static routes (IPv4 default, IPv4 named, IPv6 default,
+#     per-VRF under TENANT_A routing-instance)
 #   - 3 routing-instances (vrf, mac-vrf, virtual-router) with RD,
 #     vrf-target import/export, interface bindings, L3 VNI for Type-5
 #   - 2 LAGs (ae0 + ae1) with members via 802.3ad ether-options
@@ -157,6 +158,7 @@ set routing-instances TENANT_A route-distinguisher 172.16.0.1:10000
 set routing-instances TENANT_A vrf-target target:65000:10000
 set routing-instances TENANT_A interface irb.100
 set routing-instances TENANT_A protocols evpn ip-prefix-routes vni 50100
+set routing-instances TENANT_A routing-options static route 10.99.0.0/16 next-hop 10.0.0.99
 set routing-instances TENANT_B instance-type mac-vrf
 set routing-instances TENANT_B description "Tenant B L2 mac-vrf"
 set routing-instances TENANT_B route-distinguisher 172.16.0.1:20000

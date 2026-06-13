@@ -134,6 +134,7 @@ class JunosCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/vrf",   # v0.2.0 — per-VRF binding (set routing-instances <NAME> routing-options static)
             "/snmp/community",
             "/snmp/location",
             "/snmp/contact",
@@ -202,30 +203,6 @@ class JunosCodec(CodecBase):
                     "Consumers needing explicit per-prefix semantics "
                     "should infer from VRF membership + l3_vni "
                     "rather than relying on this list."
-                ),
-                severity="warn",
-            ),
-            # -- v0.2.0 Wave A: per-VRF static-route binding --
-            LossyPath(
-                path="/routing/static-route/vrf",
-                reason=(
-                    "CanonicalStaticRoute.vrf is parseable from ``set "
-                    "routing-instances <NAME> routing-options static "
-                    "route <dest>/<prefix> next-hop <gw>`` but the "
-                    "current Junos routing-instances dispatcher "
-                    "(``_apply_routing_instances``) only harvests RD "
-                    "/ RT / interface-binding / L3 VNI sub-paths; "
-                    "static routes inside the VRF block parse-and-"
-                    "ignore.  Top-level ``set routing-options static "
-                    "route`` lines round-trip cleanly with vrf=''.  "
-                    "Cross-vendor migration from a source carrying "
-                    "per-VRF static routes (Cisco IOS-XE ``ip route "
-                    "vrf <NAME> ...``, NX-OS ``vrf context <NAME> / "
-                    "ip route ...``) into Junos surfaces these "
-                    "routes at the global level today — operators "
-                    "must manually move them under the matching "
-                    "routing-instance until the dispatcher is "
-                    "widened (follow-up commit)."
                 ),
                 severity="warn",
             ),

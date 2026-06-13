@@ -84,13 +84,14 @@ counted under v0.2.0 cumulative even though it isn't VRRP-specific.
   coverage exercises the modern form yet).
 * **Cisco IOS-XE IPv6 anycast** — kept `unsupported` (no fixture
   coverage today; SD-Access IPv6-anycast public corpus is empty).
-* **Junos per-VRF static-route harvest** — flipped to `lossy`
-  rather than `supported` because the routing-instances
-  dispatcher doesn't yet harvest per-VRF statics.  Separate scope.
-  (The `cisco_iosxe_cli` side of this surface — `ip route vrf
-  <NAME>` — graduated `unsupported` → `supported` in a later
-  v0.2.0 PR; Junos remains the open follow-up on the per-VRF
-  static-route surface.)
+* **Junos per-VRF static-route harvest** — was initially flipped to
+  `lossy` here (the routing-instances dispatcher didn't descend into
+  `routing-options static`).  **RESOLVED** in later v0.2.0 PRs: both
+  `cisco_iosxe_cli` (`ip route vrf <NAME>`) and `juniper_junos`
+  (`set routing-instances <NAME> routing-options static route`) now
+  graduate `/routing/static-route/vrf` to `supported` (next-hop form;
+  `discard` / `reject` / explicit-`rib` IPv6 forms remain unmodelled,
+  same as the global table).
 * **NX-OS HSRP wire-up** — gated on the NX-OS codec landing
   (Tier-D in `tests/fixtures/real/WANTED.md`; design in sibling
   task `03-nxos-codec/`).  Phase 2 of that codec consumes this
