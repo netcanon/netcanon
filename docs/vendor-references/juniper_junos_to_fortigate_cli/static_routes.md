@@ -81,11 +81,14 @@ Canonical surface (`CanonicalStaticRoute`).
 - **qualified-next-hop** flattens to multiple canonical entries with
   different metrics; FortiGate render emits multiple `edit N`
   records.
-- **Per-VRF static routes** — `unsupported`.  `CanonicalStaticRoute.vrf`
-  exists, but the `juniper_junos` source codec does not yet harvest
-  per-VRF statics (its routing-instances dispatcher does not descend
-  into `routing-options static`) and the FortiGate target does not
-  render the per-interface integer-VRF form.
+- **Per-VRF static routes** — `unsupported`.  The `juniper_junos`
+  source codec now harvests per-VRF statics onto
+  `CanonicalStaticRoute.vrf` (`set routing-instances X routing-options
+  static route <dest> next-hop <gw>`), so the VRF reaches canonical on
+  this direction.  The loss is target-side: the FortiGate codec
+  declares `/routing/static-route/vrf` `unsupported` and does not
+  render the per-interface integer-VRF form, so the VRF drops on
+  render.
 
 ## Cross-vendor mapping (FortiGate -> Junos)
 

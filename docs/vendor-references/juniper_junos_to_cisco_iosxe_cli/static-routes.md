@@ -60,14 +60,15 @@ ipv6 route 2001:db8:1::/64 2001:db8:0::1
   preference/AD value unless the operator explicitly preserves it.
 - **Per-VRF.** Both vendors model per-VRF static routes, and the
   canonical `CanonicalStaticRoute.vrf` field carries the
-  discriminator.  The `cisco_iosxe_cli` target codec parses
-  `ip route vrf X` into it and renders it back out
-  (`/routing/static-route/vrf` is `supported`).  The
-  `juniper_junos` source codec, however, does not yet harvest
-  per-VRF statics — its routing-instances dispatcher does not
-  descend into `routing-options static` — so Junos-source per-VRF
-  routes are `lossy` on this direction, flattening to the master
-  instance.
+  discriminator.  The `juniper_junos` source codec now harvests
+  `set routing-instances X routing-options static route <dest>
+  next-hop <gw>` into that field, and the `cisco_iosxe_cli` target
+  codec renders it back out as `ip route vrf X`
+  (`/routing/static-route/vrf` is `supported` on both), so per-VRF
+  next-hop routes round-trip on this direction.  (Junos parses the
+  next-hop form only; `discard`/`reject` blackhole routes and the
+  explicit `rib <name>` IPv6 form remain unmodelled, same as the
+  global table.)
 - **Qualified-next-hop.** Junos's `qualified-next-hop` (multiple
   next-hops with per-NH metrics) has no clean Cisco equivalent;
   Cisco models the same intent through multiple parallel
@@ -75,8 +76,8 @@ ipv6 route 2001:db8:1::/64 2001:db8:0::1
   one `gateway` + `metric` per route entry; the qualified-NH
   detail flattens to one or more separate canonical entries.
 
-Disposition: **lossy** on per-VRF routes (the Junos source codec
-does not yet harvest per-VRF statics, so the VRF never reaches
-canonical on this direction; the Cisco target would render
-`ip route vrf X` if it did), **good** on default-VRF IPv4 / IPv6
-static routes; **lossy** on qualified-next-hop preservation.
+Disposition: **good** on per-VRF routes (the Junos source codec now
+harvests per-VRF statics onto `CanonicalStaticRoute.vrf` and the Cisco
+target renders `ip route vrf X`, so per-VRF next-hop routes round-trip
+on this direction), **good** on default-VRF IPv4 / IPv6 static routes;
+**lossy** on qualified-next-hop preservation.

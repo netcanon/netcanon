@@ -62,9 +62,11 @@ multi-NH, and `discard` / `reject` for blackhole.
 * Per-VRF: RouterOS `/ip route ... routing-table=X` -> Junos
   `routing-instances X routing-options static`.  Lossy on this pair
   because the `mikrotik_routeros` source codec does not parse the
-  `routing-table=X` form and the Junos target does not emit per-VRF
-  statics (both declare `/routing/static-route/vrf` `unsupported`) —
-  `CanonicalStaticRoute.vrf` itself exists.
+  `routing-table=X` form (it declares `/routing/static-route/vrf`
+  `unsupported`), so `CanonicalStaticRoute.vrf` is never populated
+  from this source and there is no VRF to carry — the Junos target
+  would render `set routing-instances X routing-options static route
+  ...` if one were present.
 * RouterOS `type=blackhole` -> Junos `discard` is structurally
   similar but not modelled canonically — drops to a simple
   destination-only record.

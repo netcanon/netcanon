@@ -62,13 +62,14 @@ lands alongside VRF wire-up).
   scalars not 1:1; canonical `metric` is the operator-visible metric,
   not preference / AD.
 * Per-VRF: Junos `routing-instances <X> routing-options static` ->
-  RouterOS `/ip route ... routing-table=X`.  Lossy on this pair
-  because the `juniper_junos` codec does not yet harvest per-VRF
-  statics (its routing-instances dispatcher does not descend into
-  `routing-options static`) and the `mikrotik_routeros` codec does
-  not render the `routing-table=X` form — so Junos source per-VRF
-  routes flatten to the global table on RouterOS render, even though
-  `CanonicalStaticRoute.vrf` exists.
+  RouterOS `/ip route ... routing-table=X`.  Lossy on this pair: the
+  `juniper_junos` source codec now harvests per-VRF statics onto
+  `CanonicalStaticRoute.vrf` (`set routing-instances X routing-options
+  static route <dest> next-hop <gw>`), so the VRF reaches canonical,
+  but the `mikrotik_routeros` codec declares `/routing/static-route/vrf`
+  `unsupported` and does not render the `routing-table=X` form — so
+  Junos-source per-VRF routes flatten to the global table on RouterOS
+  render.
 * Junos's `qualified-next-hop` (weighted multi-NH) flattens to
   multiple canonical entries on parse; RouterOS render emits each
   as a separate `/ip route` record (no native multi-NH composite on

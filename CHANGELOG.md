@@ -43,10 +43,25 @@ timestamp if your timezone matters for an audit.
   grammar (Arista / FortiGate / MikroTik / OPNsense / Aruba — each
   declares the path `unsupported`) still drops the VRF binding; the
   phase-4 reconciler classifies that drop as `EXPECTED_UNSUPPORTED`,
-  not a false `CODEC_BUG`.  Junos stays `lossy` on this surface (its
-  routing-instances dispatcher does not yet harvest per-VRF statics —
-  separate scope).  Cross-mesh + phase-4 artifacts regenerated;
+  not a false `CODEC_BUG`.  Cross-mesh + phase-4 artifacts regenerated;
   high-severity CODEC_BUG count unchanged at 5 (documented residuals).
+
+* **Per-VRF static routes on `juniper_junos`** (v0.2.0 — completes the
+  per-VRF static-route surface for the two vendors with native
+  grammar).  `set routing-instances <NAME> routing-options static
+  route <dest> next-hop <gw>` now harvests onto
+  `CanonicalStaticRoute.vrf` and renders back out, graduating
+  `/routing/static-route/vrf` from `lossy` to `supported` (the
+  routing-instances dispatcher now descends into `routing-options
+  static`).  next-hop form only — `discard` / `reject` blackhole
+  routes and the explicit `rib <name>` form (e.g. IPv6 `inet6.0`) are
+  not modelled, same as the global table.  A VRF implied solely by a
+  static route does not materialise an empty routing-instance, so a
+  Cisco `ip route vrf X` source (which declares no VRF) round-trips
+  through Junos without conjuring one.  With both codecs wired,
+  `cisco_iosxe_cli` ↔ `juniper_junos` per-VRF static routes now
+  round-trip in both directions.  Cross-mesh + phase-4 artifacts
+  regenerated; high-severity CODEC_BUG count unchanged at 5.
 
 The remainder of [Unreleased] below is P2 + documentation remediation
 from the 2026-06-06 review (Batches 2–12), sequenced in that dossier's

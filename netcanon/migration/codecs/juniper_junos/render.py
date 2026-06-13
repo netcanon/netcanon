@@ -1004,10 +1004,22 @@ def render_intent(tree: Any) -> str:
             # Junos requires a next-hop for static routes; skip
             # connected/blackhole entries we can't express.
             continue
-        out.append(
-            f"set routing-options static route {route.destination} "
-            f"next-hop {route.gateway}"
-        )
+        if route.vrf:
+            # Per-VRF static routes nest under the routing-instance
+            # (v0.2.0 — graduated /routing/static-route/vrf to
+            # supported).  Junos accepts set-lines in any order, so
+            # emitting here (rather than inside the routing-instances
+            # block) round-trips cleanly.
+            out.append(
+                f"set routing-instances {_quote_if_needed(route.vrf)} "
+                f"routing-options static route {route.destination} "
+                f"next-hop {route.gateway}"
+            )
+        else:
+            out.append(
+                f"set routing-options static route {route.destination} "
+                f"next-hop {route.gateway}"
+            )
 
     # --- snmp ---
     if tree.snmp is not None:
