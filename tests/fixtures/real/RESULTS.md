@@ -758,6 +758,49 @@ Strategic:
 
 ---
 
+## vyos
+
+**Codec:** `netcanon.migration.codecs.vyos.VyOSCodec`
+**Direction:** `bidirectional`
+**Certainty:** `certified` ✅
+
+### Status
+
+All four phases shipped (Tier-1 curly-brace + local users / NTP / bonding
+LAGs + `service snmp` + VRF).  Corpus is 6 `cisagov/prescup-challenges`
+real `config.boot` files (MIT (SEI)), all VyOS 1.4-rolling-202105152149,
+spanning two families (round-1 IPv4/OSPF, round-3b IPv6/BGP).  All parse,
+are deterministic, and round-trip cleanly.  Routing-protocol stanzas
+(`protocols ospf` / `protocols bgp`) are surfaced via
+`dropped_tier3_sections`.
+
+### Coverage matrix
+
+| Fixture | Lines | iface | family | users | ntp | Exercises |
+|---|---:|---:|---|---:|---:|---|
+| `pc5-round1-border.conf` | 75 | 2 | IPv4 | 2 | 3 | OSPF border, lan/dmz |
+| `pc5-round1-core.conf` | 79 | 3 | IPv4 | 2 | 3 | OSPF core, 3 routed ports |
+| `pc5-round3b-routera.conf` | 128 | 4 | IPv6 | 1 | 3 | BGP AS65001 + dhcpv6-server + router-advert |
+| `pc5-round3b-routerb.conf` | 108 | 3 | IPv6 | 1 | 3 | BGP AS65002 (disable-send-community) |
+| `pc5-round3b-routerd.conf` | 112 | 4 | IPv6 | 1 | 3 | BGP AS65004 (soft-reconfig outbound) |
+| `pc5-round3b-routere.conf` | 209 | 8 | IPv6 | 1 | 3 | BGP AS65005 — 8 ifaces / 8 neighbors (dense) |
+
+### Certification decision
+
+`certified`.  Six real captures clear the `base.py` "≥3 real captures
+round-trip cleanly" bar 2×, across two distinct families (IPv4/OSPF +
+IPv6/BGP).  The corpus is single-source (`cisagov/prescup-challenges`)
+and single-version (VyOS 1.4-rolling-202105152149); a second VyOS major
+(1.3 / 1.5) is flagged in `WANTED.md` as a welcomed quality nice-to-have,
+not `certified`-gating per the base.py definition.  The round-tripping
+surface is interfaces + host-name + local-users + NTP; OSPF/BGP are
+Tier-3 (`dropped_tier3_sections`).  **Honest scope:** `service snmp` +
+VRF round-trip is validated by the synthetic kitchen-sink only — the real
+corpus carries neither, so SNMP/VRF have no real-capture witness yet
+(welcomed in `WANTED.md`).
+
+---
+
 ## Summary
 
 | Codec | Fixtures | OS versions | Bugs surfaced | Certainty | Certified blocker |

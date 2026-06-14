@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **VyOS codec — Phase 4 (certified).**  Flips the `vyos` codec from
+  `experimental` to **`certified`** on the strength of a real-capture
+  corpus: 6 VyOS 1.4-rolling `config.boot` files from the MIT-licensed
+  (SEI) `cisagov/prescup-challenges` US President's Cup material, committed
+  under `tests/fixtures/real/vyos/` (2 round-1 IPv4/OSPF routers + 4
+  round-3b IPv6/BGP routers).  All parse, are deterministic, and
+  round-trip cleanly through the real-capture harness (OSPF/BGP surfaced
+  via `dropped_tier3_sections`), clearing the `base.py` "≥3 real captures
+  round-trip cleanly" bar 2×.  Corpus chosen over `vyos/vyos-build` to
+  avoid the VyOS project's GPL/LGPL.  Wires `tests/fixtures/real/vyos/`
+  into the real-capture harness + cross-mesh (`_DIR_TO_CODEC_NAME` in both
+  `test_real_captures.py` and `tools/run_full_mesh.py`).  **Honest scope:**
+  the real corpus exercises interfaces / host-name / local-users / NTP;
+  `service snmp` + VRF remain synthetic-only (no real capture carries
+  them), and VXLAN + `set`-form input are still future phases.  Cross-mesh
+  regenerated (924 → 996 cells — 6 new VyOS source configs);
+  high-severity CODEC_BUG held flat at 5.
 * **VyOS codec — Phase 3 (`service snmp` + VRF routing-instances).**
   Extends the `vyos` codec with two management-/control-plane surfaces.
   **SNMP** (`service snmp`) → `CanonicalSNMP`: the v1/v2c `community`
