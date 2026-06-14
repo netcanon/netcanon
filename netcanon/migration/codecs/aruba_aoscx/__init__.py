@@ -19,14 +19,17 @@ Module layout (mirrors ``cisco_nxos`` post-split):
     * port_names.py — cross-vendor port-name bridge (multi-token names).
 
 Direction: ``bidirectional``.
-Certainty: ``best_effort`` — Phase 1 (Tier-1: hostname, basic-L3
+Certainty: ``certified`` — Phase 1 (Tier-1: hostname, basic-L3
     interfaces, VLANs, top-level ``vrf`` name, default-VRF static routes)
     + Phase 2 (L2 switchport + VLAN port projection, LAGs, local users)
     + Phase 2b (SNMP — community / system-location / system-contact / v3
     USM) + Phase 3 (active-gateway anycast — the VSX/EVPN distributed
-    gateway).  Synthetically round-trip-validated; no real-capture corpus
-    is wired yet — VSX / VXLAN-EVPN and the certified tier follow in later
-    phases.  See ``docs/fixture-research-2015/11-aruba_aoscx.md``.
+    gateway) + Phase 4 (L2 VXLAN VLAN↔VNI binding via ``interface vxlan``,
+    + a real-capture corpus).  Round-trip-validated on the Apache-2.0
+    ``aruba/aoscx-ansible-dcn-workflows`` reference fabric (VXLAN leaves +
+    active-gateway cores).  Still deferred: the per-VLAN L2VNI RD/RT,
+    symmetric-IRB L3VNI, VSX, and VRRP.  See
+    ``docs/fixture-research-2015/11-aruba_aoscx.md``.
 """
 
 from .codec import ArubaAOSCXCodec

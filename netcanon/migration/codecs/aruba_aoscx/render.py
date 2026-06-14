@@ -14,11 +14,16 @@ trunk``) for physical + LAG ports, IPv4 (CIDR) / ``vrf attach`` / IPv6
 for routed ports, LAG membership (``lag N``), and ``lacp mode`` on the
 ``interface lag N`` stanzas.
 
+Phase 4 adds the ``interface vxlan 1`` VTEP — the L2 VLAN↔VNI bindings
+(``vni <VNI>`` / nested ``vlan <VLAN>``) plus the switch-level ``source
+ip`` (emitted only when the opaque ``source_interface`` parses as an
+IPv4 address).
+
 The render path stays deliberately tolerant of the canonical surfaces it
-does NOT yet emit (SNMP, active-gateway anycast, VXLAN / EVPN, Tier-3
-protocols): a cross-vendor source tree carrying those fields renders
-cleanly, simply omitting them.  The matrix declares each omission
-``unsupported`` so the migrate-page banner surfaces the gap.
+does NOT emit (the per-VLAN L2VNI RD / route-target, symmetric-IRB
+L3VNI, and Tier-3 protocols): a cross-vendor source tree carrying those
+fields renders cleanly, simply omitting them.  The matrix declares each
+omission ``unsupported`` so the migrate-page banner surfaces the gap.
 
 AOS-CX grammar notes that shape the output (see
 ``docs/fixture-research-2015/11-aruba_aoscx.md``):
@@ -36,6 +41,7 @@ AOS-CX grammar notes that shape the output (see
 
 from __future__ import annotations
 
+import ipaddress
 import re
 
 from ...canonical.intent import CanonicalIntent
@@ -104,7 +110,54 @@ def render_intent(tree: CanonicalIntent) -> str:
             iface, lag_mode_by_name, tree.anycast_gateway_mac,
         ))
 
+    # ── VTEP (interface vxlan 1) — Phase 4 VXLAN-EVPN ──
+    lines.extend(_render_vxlan(tree))
+
     return "\n".join(lines) + "\n"
+
+
+def _is_ipv4(value: str) -> bool:
+    """Return True iff *value* parses as a literal IPv4 address."""
+    try:
+        ipaddress.IPv4Address(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _render_vxlan(tree: CanonicalIntent) -> list[str]:
+    """Render the ``interface vxlan 1`` VTEP stanza from VXLAN data.
+
+    AOS-CX uses a single VTEP (``vxlan 1``).  Each L2 VNI emits a ``vni
+    <VNI>`` sub-block carrying a nested ``vlan <VLAN>`` (the L2 binding);
+    the switch-level ``source ip <X>`` is taken from the first record
+    whose ``source_interface`` parses as an IPv4 address.  AOS-CX states
+    the VTEP source as an address (not an interface name), so a
+    cross-vendor source carrying an interface *name* there has no AOS-CX
+    ``source ip`` form — the line is omitted rather than emitting a
+    malformed address (the VNI bindings still render).  Records are
+    emitted sorted by ``vlan_id`` so a same-vendor round-trip is stable
+    (the real-capture round-trip compares ``vxlan_vnis`` by list equality
+    without re-sorting).  Returns an empty list when there is no overlay.
+    """
+    if not tree.vxlan_vnis:
+        return []
+    source_ip = next(
+        (
+            v.source_interface
+            for v in tree.vxlan_vnis
+            if v.source_interface and _is_ipv4(v.source_interface)
+        ),
+        "",
+    )
+    block = ["interface vxlan 1"]
+    if source_ip:
+        block.append(f"    source ip {source_ip}")
+    block.append("    no shutdown")
+    for v in sorted(tree.vxlan_vnis, key=lambda x: x.vlan_id):
+        block.append(f"    vni {v.vni}")
+        block.append(f"        vlan {v.vlan_id}")
+    return block
 
 
 def _render_local_user(user) -> str:

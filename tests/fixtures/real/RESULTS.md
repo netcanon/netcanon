@@ -490,6 +490,48 @@ fixture).
 
 ---
 
+## aruba_aoscx
+
+**Codec:** `netcanon.migration.codecs.aruba_aoscx.ArubaAOSCXCodec`
+**Direction:** `bidirectional`
+**Certainty:** `certified` ✅
+
+### Status
+
+All four phases shipped (Tier-1 + L2 switchport/LAG/users + SNMP +
+`active-gateway` anycast + VXLAN L2 VLAN↔VNI binding).  Corpus is 4
+configs from Aruba's published `aruba/aoscx-ansible-dcn-workflows`
+reference fabric (Apache-2.0), spanning two grammar families and two
+AOS-CX majors.  All parse, are deterministic, and round-trip cleanly.
+`router bgp` / `router ospf` are surfaced via `dropped_tier3_sections`;
+`evpn` / `vsx` / per-VLAN L2VNI RD/RT are parse-and-ignore (deferred
+Tier-2 surfaces).
+
+### Coverage matrix
+
+| Fixture | Lines | iface | vlan | vxlan | lag | active-gw | Exercises |
+|---|---:|---:|---:|---:|---:|:---:|---|
+| `aoscx_dcn_arch3_ibgp_leaf1a.cfg` | 104 | 9 | 2 | 1 | 1 | — | EVPN-VXLAN leaf (iBGP), `interface vxlan` L2VNI, `rd auto` |
+| `aoscx_dcn_arch3_ebgp_leaf1a.cfg` | 114 | 9 | 2 | 1 | 1 | — | EVPN-VXLAN leaf (eBGP), explicit `route-target 1:11` |
+| `aoscx_dcn_arch4_core1_1.cfg` | 172 | 18 | 4 | — | 5 | ✅ | L3-agg core — real `active-gateway` SVIs + multi-chassis LAGs |
+| `aoscx_dcn_arch4_core1_2.cfg` | 268 | 42 | 4 | — | 5 | ✅ | L3-agg core (VSX secondary peer) — dense iface table |
+
+(GL.10.04.0020 leaves + GL.10.13.1000 cores — two distinct AOS-CX
+majors.  The arch4 cores are the first *real* `active-gateway` capture:
+the anycast surface was synthetic-only through Phase 3.)
+
+### Certification decision
+
+`certified`.  Four real captures clear the `base.py` "≥3 real captures
+round-trip cleanly" bar, across two grammar families (EVPN-VXLAN leaves
++ active-gateway L3-agg cores) and two OS majors (10.04 / 10.13).  The
+corpus is single-source (`aruba/aoscx-ansible-dcn-workflows`); an
+operator capture from a different source + a config exercising
+symmetric-IRB L3VNI are flagged in `WANTED.md` as welcomed quality
+nice-to-haves, not `certified`-gating per the base.py definition.
+
+---
+
 ## aruba_aoss
 
 **Codec:** `netcanon.migration.codecs.aruba_aoss.ArubaAOSSCodec`

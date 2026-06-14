@@ -136,7 +136,7 @@ def test_registered() -> None:
     assert isinstance(c, ArubaAOSCXCodec)
     assert c.input_format == "cli-aoscx"
     assert c.direction == "bidirectional"
-    assert c.certainty == "best_effort"
+    assert c.certainty == "certified"
 
 
 # ---------------------------------------------------------------------------
@@ -224,9 +224,13 @@ def test_interface_lag_materialized_modifier_stripped(
     assert port_names.classify_port_name("lag 1").kind == "lag"
 
 
-def test_interface_vxlan_skipped(codec: ArubaAOSCXCodec) -> None:
-    """`interface vxlan N` is intercepted (a later phase) and never
-    materialised as an interface."""
+def test_interface_vxlan_not_materialised_as_interface(
+    codec: ArubaAOSCXCodec,
+) -> None:
+    """`interface vxlan N` is the VTEP — a VXLAN config container, never a
+    real interface; its sub-commands populate ``vxlan_vnis`` instead.  A
+    ``vni`` with no nested ``vlan`` child (the L3VNI shape) yields no L2
+    record (symmetric-IRB L3VNI is deferred)."""
     raw = (
         "!Version ArubaOS-CX FL.10.13.1000\n"
         "hostname x\n"
@@ -238,6 +242,72 @@ def test_interface_vxlan_skipped(codec: ArubaAOSCXCodec) -> None:
     assert not any(
         i.name.lower().startswith("vxlan") for i in intent.interfaces
     )
+    assert intent.vxlan_vnis == []  # vni with no `vlan` child → no record
+
+
+def test_parse_vxlan_l2vni_binding(codec: ArubaAOSCXCodec) -> None:
+    """`interface vxlan / vni N / vlan M` populates a CanonicalVxlan with
+    the VLAN↔VNI binding; the `source ip` lands in source_interface
+    (verbatim — AOS-CX states the VTEP source as an address)."""
+    raw = (
+        "!Version ArubaOS-CX FL.10.13.1000\n"
+        "hostname leaf\n"
+        "interface vxlan 1\n"
+        "    source ip 10.0.0.1\n"
+        "    no shutdown\n"
+        "    vni 10020\n"
+        "        vlan 20\n"
+        "    vni 10010\n"
+        "        vlan 10\n"
+    )
+    intent = codec.parse(raw)
+    # Records are returned sorted by vlan_id regardless of file order.
+    assert [
+        (v.vlan_id, v.vni, v.source_interface) for v in intent.vxlan_vnis
+    ] == [(10, 10010, "10.0.0.1"), (20, 10020, "10.0.0.1")]
+
+
+def test_render_vxlan_grammar(codec: ArubaAOSCXCodec) -> None:
+    """Render emits the AOS-CX VTEP stanza (interface vxlan 1 / source ip
+    / vni / nested vlan), sorted by vlan_id."""
+    raw = (
+        "!Version ArubaOS-CX FL.10.13.1000\n"
+        "hostname leaf\n"
+        "vlan 10\n"
+        "vlan 20\n"
+        "interface vxlan 1\n"
+        "    source ip 10.0.0.1\n"
+        "    vni 10010\n"
+        "        vlan 10\n"
+        "    vni 10020\n"
+        "        vlan 20\n"
+    )
+    out = codec.render(codec.parse(raw))
+    assert "interface vxlan 1" in out
+    assert "    source ip 10.0.0.1" in out
+    assert "    vni 10010" in out
+    assert "        vlan 10" in out
+    assert out.index("vni 10010") < out.index("vni 10020")
+
+
+def test_render_vxlan_omits_non_ip_source(codec: ArubaAOSCXCodec) -> None:
+    """A cross-vendor source whose source_interface is an interface NAME
+    (not an IP) renders the VNI bindings but omits the malformed
+    `source ip` line."""
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalVxlan,
+    )
+    intent = CanonicalIntent(
+        hostname="leaf",
+        vxlan_vnis=[
+            CanonicalVxlan(vlan_id=10, vni=10010, source_interface="loopback0"),
+        ],
+    )
+    out = codec.render(intent)
+    assert "interface vxlan 1" in out
+    assert "    vni 10010" in out
+    assert "source ip" not in out
 
 
 def test_interface_l3_addressing(codec: ArubaAOSCXCodec) -> None:
@@ -442,6 +512,10 @@ def _normalise(intent):
             (r.destination, r.gateway, r.interface, r.metric)
             for r in intent.static_routes
         ),
+        "vxlan": sorted(
+            (x.vlan_id, x.vni, x.source_interface)
+            for x in intent.vxlan_vnis
+        ),
         "snmp": (
             None if intent.snmp is None else (
                 intent.snmp.community,
@@ -511,6 +585,7 @@ def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
     "/snmp/v3-user",
     "/interfaces/interface/ipv4/address/virtual-gateway-address",
     "/anycast-gateway-mac",
+    "/vxlan-vnis/vni",
 ])
 def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -520,6 +595,7 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     "/interfaces/interface/config/type",
     "/local-users/user/privilege-level",
     "/snmp/v3-user/auth-passphrase",
+    "/vxlan-vnis/source-interface",
 ])
 def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
@@ -527,7 +603,8 @@ def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/snmp/trap-host",
-    "/vxlan-vnis/vni",
+    "/vxlan-vnis/l2vni-route-target",
+    "/routing-instances/instance/l3-vni",
     "/routing-protocols/bgp",
     "/interfaces/interface/ipv6/address/virtual-gateway-address",
     "/routing-instances/instance/route-distinguisher",
