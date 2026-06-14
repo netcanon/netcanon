@@ -203,6 +203,102 @@ def test_unquoted_values_tolerated(codec: VyOSCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2 — local users / NTP / bonding LAGs
+# ---------------------------------------------------------------------------
+
+_P2 = """\
+interfaces {
+    bonding bond0 {
+        address "10.0.0.1/24"
+        mode 802.3ad
+        member {
+            interface eth1 {
+            }
+            interface eth2 {
+            }
+        }
+    }
+    ethernet eth3 {
+        bond-group bond1
+    }
+    bonding bond1 {
+        mode 802.3ad
+    }
+}
+system {
+    host-name r1
+    login {
+        user vyos {
+            authentication {
+                encrypted-password $6$FAKEhash
+            }
+        }
+    }
+    ntp {
+        server 0.pool.ntp.org
+        server 1.pool.ntp.org
+    }
+}
+// vyos-config-version: "system@27"
+"""
+
+
+def test_parse_local_users(codec: VyOSCodec) -> None:
+    users = {u.name: u for u in codec.parse(_P2).local_users}
+    assert "vyos" in users
+    assert users["vyos"].hashed_password == "$6$FAKEhash"
+    assert users["vyos"].privilege_level == 15  # VyOS login users = admin
+
+
+def test_parse_ntp_servers(codec: VyOSCodec) -> None:
+    assert codec.parse(_P2).ntp_servers == [
+        "0.pool.ntp.org", "1.pool.ntp.org",
+    ]
+
+
+def test_parse_bonding_member_interface_form(codec: VyOSCodec) -> None:
+    """1.4-style ``bonding bondN { member { interface ethN { } } }``."""
+    intent = codec.parse(_P2)
+    bond0 = next(l for l in intent.lags if l.name == "bond0")
+    assert sorted(bond0.members) == ["eth1", "eth2"]
+    assert bond0.mode == "active"  # 802.3ad -> LACP
+    eth1 = next(i for i in intent.interfaces if i.name == "eth1")
+    assert eth1.lag_member_of == "bond0"
+
+
+def test_parse_bonding_legacy_bond_group_form(codec: VyOSCodec) -> None:
+    """Legacy 1.2-style ``ethernet ethN { bond-group bondN }``."""
+    intent = codec.parse(_P2)
+    bond1 = next(l for l in intent.lags if l.name == "bond1")
+    assert "eth3" in bond1.members
+    eth3 = next(i for i in intent.interfaces if i.name == "eth3")
+    assert eth3.lag_member_of == "bond1"
+
+
+def test_render_bonding_grammar(codec: VyOSCodec) -> None:
+    out = codec.render(codec.parse(_P2))
+    assert "    bonding bond0 {" in out
+    assert "        mode 802.3ad" in out
+    assert "        member {" in out
+    assert "            interface eth1 {" in out
+
+
+def test_render_login_and_ntp(codec: VyOSCodec) -> None:
+    out = codec.render(codec.parse(_P2))
+    assert "    login {" in out
+    assert "        user vyos {" in out
+    assert "encrypted-password $6$FAKEhash" in out
+    assert "    ntp {" in out
+    assert "        server 0.pool.ntp.org" in out
+
+
+def test_round_trip_p2(codec: VyOSCodec) -> None:
+    once = codec.parse(_P2)
+    twice = codec.parse(codec.render(once))
+    assert _normalise(twice) == _normalise(once)
+
+
+# ---------------------------------------------------------------------------
 # Port names
 # ---------------------------------------------------------------------------
 
@@ -233,7 +329,7 @@ def _normalise(intent):
         "interfaces": sorted(
             (
                 i.name, i.enabled, i.mtu, i.description,
-                i.dhcp_client, i.dhcp_client_v6,
+                i.dhcp_client, i.dhcp_client_v6, i.lag_member_of,
                 tuple((a.ip, a.prefix_length) for a in i.ipv4_addresses),
                 tuple((a.ip, a.prefix_length) for a in i.ipv6_addresses),
             )
@@ -242,6 +338,15 @@ def _normalise(intent):
         "routes": sorted(
             (r.destination, r.gateway, r.metric)
             for r in intent.static_routes
+        ),
+        "users": sorted(
+            (u.name, u.hashed_password, u.privilege_level)
+            for u in intent.local_users
+        ),
+        "ntp": list(intent.ntp_servers),
+        "lags": sorted(
+            (lag.name, tuple(sorted(lag.members)), lag.mode)
+            for lag in intent.lags
         ),
     }
 
@@ -283,6 +388,13 @@ def test_render_vif_nested_under_parent(codec: VyOSCodec) -> None:
     "/interfaces/interface/config/mtu",
     "/interfaces/interface/dhcp-client-v6",
     "/routing/static-route",
+    # Phase 2
+    "/local-users/user/name",
+    "/local-users/user/hashed-password",
+    "/system/ntp-server",
+    "/lags/lag/name",
+    "/lags/lag/members",
+    "/interfaces/interface/lag-member-of",
 ])
 def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -291,6 +403,9 @@ def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
 @pytest.mark.parametrize("path", [
     "/interfaces/interface/config/type",
     "/system/raw-sections/version-banner",
+    # Phase 2
+    "/local-users/user/privilege-level",
+    "/lags/lag/mode",
 ])
 def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
@@ -298,8 +413,6 @@ def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/vlans/vlan/id",
-    "/lags/lag/name",
-    "/local-users/user/name",
     "/snmp/community",
     "/routing-instances/instance/name",
     "/vxlan-vnis/vni",

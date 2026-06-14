@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **VyOS codec — Phase 2 (local users + NTP + bonding LAGs).**  Extends
+  the `vyos` codec: `system login user { authentication
+  encrypted-password }` → `CanonicalLocalUser` (VyOS login users map to
+  privilege 15 / role `admin` — declared lossy, no per-user numeric
+  privilege); `system` / `service` `ntp { server <host> }` →
+  `CanonicalIntent.ntp_servers`; and `interfaces bonding bondN` →
+  `CanonicalLAG` + a kind-`lag` interface (`mode 802.3ad` → LACP
+  `active`, non-LACP modes collapse to `static` — lossy).  Bond members
+  are parsed from BOTH the 1.4-style `bonding bondN { member { interface
+  ethN { } } }` and the legacy 1.2-style `ethernet ethN { bond-group
+  bondN }` forms, and rendered in the 1.4 member-interface form.
+  Graduates `/local-users/user/{name,role,hashed-password}` +
+  `/system/ntp-server` + `/lags/lag/{name,members}` +
+  `/interfaces/interface/lag-member-of` → `supported`;
+  `/local-users/user/privilege-level` + `/lags/lag/mode` → `lossy`.
+  Still `experimental` (no real corpus yet).  Cross-mesh regenerated
+  (924 cells, roster unchanged); high-severity CODEC_BUG held flat at 5.
 * **New codec: VyOS (`vyos`) — Phase 1.**  Bidirectional codec for the
   VyOS router/firewall NOS (the OSS Vyatta successor) — netcanon's
   **12th migration codec**.  VyOS stores its configuration as a
