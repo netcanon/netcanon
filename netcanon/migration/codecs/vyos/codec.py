@@ -31,15 +31,16 @@ and ``protocols static`` routes.  **Phase 2**: ``system login user``
 local users (name + ``authentication encrypted-password``); ``system``
 / ``service`` ``ntp`` servers; and ``bonding bondN`` LAGs (``mode
 802.3ad`` → LACP, members via both the 1.4 ``member interface`` form and
-the legacy ``bond-group`` form).  **Phase 3** (this commit): ``service
-snmp`` (v1/v2c community + ``location`` / ``contact`` + v3 USM users)
-and VRF (``vrf name <X> { table <N> }`` routing instances + the
-per-interface ``vrf <X>`` binding).  ``certainty`` stays
-``experimental`` — synthetically round-trip-validated across the
-supported surface; no real-capture corpus is wired yet (the certified
-tier follows in a later phase, once a corpus from the MIT-licensed
-``cisagov/prescup-challenges`` source is landed).  Later phases add
-VXLAN (``interfaces vxlan vxlanN``) and ``set``-form input support.
+the legacy ``bond-group`` form).  **Phase 3**: ``service snmp`` (v1/v2c
+community + ``location`` / ``contact`` + v3 USM users) and VRF (``vrf
+name <X> { table <N> }`` routing instances + the per-interface ``vrf
+<X>`` binding).  **Phase 4** (this commit) flips ``certainty`` to
+``certified`` — round-trip-validated against a real-capture corpus of
+VyOS 1.4 ``config.boot`` files from the MIT-licensed
+``cisagov/prescup-challenges`` source (6 configs spanning IPv4/OSPF +
+IPv6/BGP families), in addition to the synthetic kitchen-sink.  Later
+phases add VXLAN (``interfaces vxlan vxlanN``) and ``set``-form input
+support.
 """
 
 from __future__ import annotations
@@ -70,7 +71,7 @@ class VyOSCodec(CodecBase):
     version_hint: ClassVar[str | None] = "1.3/1.4"
     input_format: ClassVar[str] = "cli-vyos"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the contents of `/config/config.boot` (or the output of "

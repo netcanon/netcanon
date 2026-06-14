@@ -81,7 +81,7 @@ def test_registered() -> None:
     assert isinstance(c, VyOSCodec)
     assert c.input_format == "cli-vyos"
     assert c.direction == "bidirectional"
-    assert c.certainty == "experimental"
+    assert c.certainty == "certified"
 
 
 # ---------------------------------------------------------------------------

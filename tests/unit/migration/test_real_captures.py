@@ -60,6 +60,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     juniper_junos,
     mikrotik_routeros,
     opnsense,
+    vyos,
 )
 from netcanon.migration.codecs.registry import get_codec
 
@@ -90,6 +91,7 @@ _DIR_TO_CODEC_NAME: dict[str, str] = {
     "mikrotik":     "mikrotik_routeros",
     "arista_eos":   "arista_eos",
     "junos":        "juniper_junos",
+    "vyos":         "vyos",
 }
 
 
