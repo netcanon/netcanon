@@ -9,7 +9,7 @@ Public function: :func:`parse_intent` — raw text in,
 Note: probe is in :mod:`.codec`; this module assumes input has already
 been classified as Aruba AOS-CX CLI text.
 
-Phase 1 surface (Tier-1, mirrors the ``cisco_nxos`` Phase 1 scope):
+Surface (Phase 1 = Tier-1; Phase 2 adds the L2 + LAG + users surface):
 
 * ``hostname <name>`` → :attr:`CanonicalIntent.hostname`.
 * ``!Version ArubaOS-CX <ver>`` → :attr:`CanonicalIntent.source_version`
@@ -17,10 +17,20 @@ Phase 1 surface (Tier-1, mirrors the ``cisco_nxos`` Phase 1 scope):
 * ``vlan <id>`` stanzas (one id per line) + nested ``name`` / ``description``
   → :class:`CanonicalVlan`, plus SVI synthesis from ``interface vlan N``.
 * ``vrf <name>`` (top-level) → :class:`CanonicalRoutingInstance` (name
-  only in Phase 1).
+  only).
 * ``interface <name>`` blocks → :class:`CanonicalInterface` carrying
   ``description`` / admin-state (``no shutdown`` / ``shutdown``) / ``mtu``
-  / ``ip address X/N`` (CIDR) / ``ipv6 address X/N`` / ``vrf attach <name>``.
+  / ``ip address X/N`` (CIDR) / ``ipv6 address X/N`` / ``vrf attach <name>``
+  and (Phase 2) the L2 switchport surface — ``no routing`` + ``vlan
+  access <N>`` / ``vlan trunk native <N> [tag]`` / ``vlan trunk allowed
+  <list|all>`` — plus LAG membership (``lag <N>``).
+* ``interface lag <N> [multi-chassis]`` stanzas → :class:`CanonicalLAG`
+  (Phase 2; ``lacp mode active|passive`` → mode, absent → static) AND a
+  :class:`CanonicalInterface` (kind ``lag``) carrying the LAG's switchport
+  state.  The ``multi-chassis`` (VSX MLAG) modifier is dropped in v1.
+* ``user <name> group <group> password ciphertext <blob>`` (Phase 2) →
+  :class:`CanonicalLocalUser` (``group`` → role; administrators → priv
+  15, else 1).
 * top-level ``ip route <dest>/<prefix> <gw> [<dist>]`` (default VRF only)
   → :class:`CanonicalStaticRoute`.
 
@@ -31,24 +41,20 @@ see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
   slot / port triple), ``interface vlan 11``, ``interface lag 1``,
   ``interface loopback 0``, ``interface mgmt``.  The canonical ``name``
   carries the space; :mod:`.port_names` splits it back.
-* **Default admin-state is DOWN** for physical / SVI / mgmt ports
+* **Default admin-state is DOWN** for physical / SVI / mgmt / LAG ports
   (active ports carry an explicit ``no shutdown``); loopbacks are up by
   default.  The scratch default is therefore type-aware.
-* VRF stanza keyword is bare ``vrf <name>`` (not ``vrf context``);
-  per-interface bind is ``vrf attach <name>`` (not ``vrf member`` /
-  ``vrf forwarding``).
-* L2 ports declare ``no routing`` + ``vlan access`` / ``vlan trunk``;
-  L3 ports carry a bare ``ip address`` (routing is implicit).  Phase 1
-  parses the L3 addressing and defers the L2 switchport surface to a
-  later phase.
+* **L2 is opt-in**: AOS-CX ports default to routed (L3); ``no routing``
+  marks a port L2, with ``vlan access`` / ``vlan trunk`` carrying the
+  membership — the INVERSE of NX-OS (which defaults L2 and uses ``no
+  switchport`` for routed).
+* VRF stanza keyword is bare ``vrf <name>``; per-interface bind is ``vrf
+  attach <name>``.
 
-Deferred to later phases (parse-and-ignore in v1): L2 switchport
-(``no routing`` / ``vlan access`` / ``vlan trunk``), LAG membership
-(``interface lag`` + per-port ``lag N``), local users
-(``user ... password ciphertext``), the ``active-gateway`` anycast
-surface, VSX, VXLAN / EVPN (``interface vxlan`` / ``evpn``), and the
-Tier-3 protocol / ACL / QoS blocks.  Those lines fall through the parser
-silently; the matrix declares each ``unsupported``.
+Deferred to later phases (parse-and-ignore in v1): SNMP, the
+``active-gateway`` anycast surface, VSX (incl. the LAG ``multi-chassis``
+flag), VXLAN / EVPN (``interface vxlan`` / ``evpn``), and the Tier-3
+protocol / ACL / QoS blocks.
 """
 
 from __future__ import annotations
@@ -62,6 +68,8 @@ from ...canonical.intent import (
     CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalRoutingInstance,
     CanonicalStaticRoute,
     CanonicalVlan,
@@ -93,7 +101,7 @@ _DESC_RE = re.compile(r"^\s+description\s+(.+)", re.IGNORECASE)
 _SHUTDOWN_RE = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
 _NO_SHUTDOWN_RE = re.compile(r"^\s+no\s+shutdown\s*$", re.IGNORECASE)
 #: ``mtu 9198`` — the L2 frame MTU.  The separate ``ip mtu`` line (L3
-#: MTU) is parse-and-ignore in Phase 1.
+#: MTU) is parse-and-ignore in v1.
 _MTU_RE = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 #: ``ip address 10.0.0.1/24`` — CIDR form, never dotted mask.  The mgmt
 #: port's ``ip static`` / ``ip dhcp`` forms are deferred (not this regex).
@@ -110,6 +118,41 @@ _IPV6_CIDR_RE = re.compile(
 #: ``vrf attach <name>`` inside an interface stanza (AOS-CX form of
 #: NX-OS's ``vrf member`` / IOS-XE's ``vrf forwarding``).
 _VRF_ATTACH_RE = re.compile(r"^\s+vrf\s+attach\s+(\S+)\s*$", re.IGNORECASE)
+
+# ── L2 switchport grammar (Phase 2) ──
+# AOS-CX ports default to routed (L3); ``no routing`` marks a port L2 and
+# the ``vlan access`` / ``vlan trunk`` lines carry the membership.  Mode
+# is set by the vlan lines (mirrors the arista/NX-OS render-decides model,
+# inverted): a port carrying an IP keeps ``switchport_mode=None`` (routed).
+_NO_ROUTING_RE = re.compile(r"^\s+no\s+routing\s*$", re.IGNORECASE)
+_VLAN_ACCESS_RE = re.compile(r"^\s+vlan\s+access\s+(\d+)\s*$", re.IGNORECASE)
+#: ``vlan trunk native <N> [tag]`` — the ``tag`` modifier (tag the native
+#: VLAN) is consumed but not modelled in v1.
+_VLAN_TRUNK_NATIVE_RE = re.compile(
+    r"^\s+vlan\s+trunk\s+native\s+(\d+)(?:\s+tag)?\s*$", re.IGNORECASE,
+)
+#: ``vlan trunk allowed <list|all>`` — ``all`` maps to an empty
+#: allowed-list (the render re-emits ``all`` for an empty list).
+_VLAN_TRUNK_ALLOWED_RE = re.compile(
+    r"^\s+vlan\s+trunk\s+allowed\s+(.+?)\s*$", re.IGNORECASE,
+)
+#: ``lag <N>`` on a physical port declares it a member of ``lag <N>``.
+_LAG_MEMBER_RE = re.compile(r"^\s+lag\s+(\d+)\s*$", re.IGNORECASE)
+#: ``lacp mode active|passive`` inside an ``interface lag N`` stanza.
+_LACP_MODE_RE = re.compile(
+    r"^\s+lacp\s+mode\s+(active|passive)\s*$", re.IGNORECASE,
+)
+
+#: ``user <name> group <group> password ciphertext <blob>`` (Phase 2).
+#: The ciphertext blob is a single token (base64-ish, no spaces).  The
+#: ``plaintext`` form is not parsed (rare in a running-config; would drop
+#: the user).
+_USER_RE = re.compile(
+    r"^user\s+(\S+)\s+group\s+(\S+)\s+password\s+ciphertext\s+(\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: AOS-CX built-in group that maps to the cross-vendor admin privilege.
+_AOSCX_ADMIN_GROUPS = {"administrators"}
 
 #: ``vrf <name>`` opens a top-level VRF declaration (single token, whole
 #: line).  Distinct from the interface-level ``vrf attach`` (indented) and
@@ -176,6 +219,29 @@ def _is_link_local_v6(addr: str) -> bool:
     return len(lo) >= 3 and lo[:2] == "fe" and lo[2] in ("8", "9", "a", "b")
 
 
+def _parse_vlan_list(text: str) -> list[int]:
+    """Parse a VLAN id-list like ``101-102`` or ``10,20,30`` into a flat
+    list of ints.  Ranges are expanded inclusively (mirrors cisco_nxos)."""
+    result: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                result.extend(range(int(lo.strip()), int(hi.strip()) + 1))
+            except ValueError:
+                continue
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
+
+def _lag_sort_key(name: str) -> tuple[int, int]:
+    """Stable sort key grouping ``lag <N>`` numerically."""
+    m = re.match(r"^lag\s+(\d+)$", name, re.IGNORECASE)
+    return (0, int(m.group(1))) if m else (1, 0)
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse AOS-CX ``show running-config`` output into a
     :class:`CanonicalIntent`.
@@ -203,8 +269,8 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
 
-    # VRF declarations (``vrf <name>`` top-level).  Phase 1 harvests the
-    # name only; per-interface ``vrf attach`` membership is set by
+    # VRF declarations (``vrf <name>`` top-level).  Harvests the name only;
+    # per-interface ``vrf attach`` membership is set by
     # :func:`_parse_interfaces`.
     intent.routing_instances = _parse_routing_instances(raw)
 
@@ -218,14 +284,35 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     intent.static_routes = _parse_static_routes(raw)
 
+    # LAGs (Phase 2) — ``interface lag N`` declares the LAG; per-member
+    # ``lag N`` lines + the stanza's ``lacp mode`` contribute.
+    intent.lags = _parse_lags(raw)
+
+    # Local users (Phase 2) — ``user <name> group <group> password
+    # ciphertext <blob>``.
+    intent.local_users = _parse_local_users(raw)
+
+    # Shared switchport→VLAN projection: mirror per-port switchport state
+    # into the VLAN-centric tagged/untagged lists so VLAN-centric
+    # renderers can emit the membership.  The phantom-VLAN guard
+    # (snapshot legitimate VLAN ids before, prune after) mirrors
+    # cisco_nxos — a wide ``vlan trunk allowed`` range must not inflate
+    # tree.vlans with phantom records.
+    legitimate_vlan_ids = {v.id for v in intent.vlans}
+    from ...canonical.transforms import project_switchport_to_vlan
+    project_switchport_to_vlan(intent)
+    intent.vlans = [v for v in intent.vlans if v.id in legitimate_vlan_ids]
+
     logger.debug(
         "aruba_aoscx parsed: hostname=%r ifaces=%d vlans=%d routes=%d "
-        "vrfs=%d (input=%d chars)",
+        "vrfs=%d lags=%d users=%d (input=%d chars)",
         intent.hostname,
         len(intent.interfaces),
         len(intent.vlans),
         len(intent.static_routes),
         len(intent.routing_instances),
+        len(intent.lags),
+        len(intent.local_users),
         len(raw),
     )
     return intent
@@ -251,11 +338,10 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     """Extract top-level ``vrf <name>`` declarations.
 
     AOS-CX creates a VRF with a bare ``vrf <name>`` line (no nested body
-    in the common case — RD / route-target live under the ``evpn`` /
-    ``router bgp`` stanzas, which are deferred).  Phase 1 harvests the
-    name only.  The built-in ``mgmt`` VRF is created the same way when it
-    appears as an explicit declaration; references such as ``ssh server
-    vrf mgmt`` do NOT match this anchored single-token pattern.
+    in the common case — RD / route-target live under the deferred
+    ``evpn`` / ``router bgp`` stanzas).  Harvests the name only.
+    References such as ``ssh server vrf mgmt`` do NOT match this anchored
+    single-token pattern.
     """
     instances: list[CanonicalRoutingInstance] = []
     seen: set[str] = set()
@@ -288,6 +374,11 @@ def _new_iface_scratch(name: str) -> dict:
         "ipv4": [],
         "ipv6": [],
         "vrf": "",
+        "switchport_mode": None,
+        "access_vlan": None,
+        "trunk_allowed": [],
+        "trunk_native": None,
+        "lag_member_of": None,
     }
 
 
@@ -304,10 +395,13 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
 
     Per interface: description, admin-state (``no shutdown`` / ``shutdown``
     over the type-aware default), mtu, IPv4 (CIDR), IPv6 (CIDR + scope),
-    and VRF membership (``vrf attach``).  ``interface lag`` and
-    ``interface vxlan`` stanzas are intercepted and NOT materialised as
-    interfaces (LAGs are a later phase; the VTEP is a VXLAN config
-    container) — mirrors cisco_nxos's ``interface nve1`` interception.
+    VRF membership (``vrf attach``), the L2 switchport surface (``no
+    routing`` + ``vlan access`` / ``vlan trunk``), and LAG membership
+    (``lag N``).  ``interface lag N`` IS materialised as a kind-``lag``
+    interface (it carries the LAG's switchport config).  ``interface
+    vxlan N`` is intercepted and NOT materialised (the VTEP is a VXLAN
+    config container — a later phase), mirroring cisco_nxos's ``nve1``
+    interception.
     """
     lines = raw.splitlines()
     interfaces: list[CanonicalInterface] = []
@@ -319,10 +413,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
 
     def _open(m: re.Match) -> dict | None:
         """Return a fresh scratch for an interface header, or None for the
-        ``lag`` / ``vxlan`` kinds Phase 1 deliberately skips."""
+        ``vxlan`` kind (a later phase)."""
         name = _iface_name(m)
-        low = name.lower()
-        if low.startswith("lag ") or low.startswith("vxlan "):
+        if name.lower().startswith("vxlan "):
             return None
         return _new_iface_scratch(name)
 
@@ -401,9 +494,37 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["vrf"] = vm.group(1)
             continue
 
-        # Any other indented line (no routing / routing / vlan access /
-        # vlan trunk / lag N / active-gateway / lacp / ...) is deferred to
-        # a later phase — parse-and-ignore.
+        # ── L2 switchport (Phase 2) ──
+        if _NO_ROUTING_RE.match(line):
+            # The L2 marker; the mode is set by the vlan lines below.
+            continue
+        am = _VLAN_ACCESS_RE.match(line)
+        if am:
+            current["switchport_mode"] = "access"
+            current["access_vlan"] = int(am.group(1))
+            continue
+        tnm = _VLAN_TRUNK_NATIVE_RE.match(line)
+        if tnm:
+            current["switchport_mode"] = current["switchport_mode"] or "trunk"
+            current["trunk_native"] = int(tnm.group(1))
+            continue
+        tam = _VLAN_TRUNK_ALLOWED_RE.match(line)
+        if tam:
+            current["switchport_mode"] = current["switchport_mode"] or "trunk"
+            val = tam.group(1).strip()
+            current["trunk_allowed"] = (
+                [] if val.lower() == "all" else _parse_vlan_list(val)
+            )
+            continue
+
+        # ── LAG membership (Phase 2) ── ``lag N`` on a physical port.
+        lm = _LAG_MEMBER_RE.match(line)
+        if lm:
+            current["lag_member_of"] = f"lag {int(lm.group(1))}"
+            continue
+
+        # Any other indented line (lacp mode / spanning-tree / ip mtu /
+        # active-gateway / ...) is deferred — parse-and-ignore.
 
     _flush()
     return interfaces
@@ -434,7 +555,108 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
             for a in raw.get("ipv6", [])
         ],
         vrf=raw.get("vrf", ""),
+        switchport_mode=raw.get("switchport_mode"),
+        access_vlan=raw.get("access_vlan"),
+        trunk_allowed_vlans=raw.get("trunk_allowed", []),
+        trunk_native_vlan=raw.get("trunk_native"),
+        lag_member_of=raw.get("lag_member_of"),
     )
+
+
+def _parse_lags(raw: str) -> list[CanonicalLAG]:
+    """Build :class:`CanonicalLAG` records from AOS-CX config.
+
+    Two signals, either sufficient:
+      * an ``interface lag <N>`` stanza declares the LAG exists (and
+        carries ``lacp mode active|passive`` — absent means a static
+        LAG);
+      * a ``lag <N>`` line under a physical port declares that port a
+        member of ``lag <N>``.
+
+    Mirrors ``cisco_nxos._parse_lags`` (block-walker over the interface
+    stanzas).  The ``multi-chassis`` (VSX MLAG) modifier on the header is
+    dropped in v1.
+    """
+    members_by_lag: dict[str, list[str]] = {}
+    mode_by_lag: dict[str, str] = {}
+    declared: set[str] = set()
+    current_iface: str | None = None
+    current_lag: str | None = None  # set when the current stanza is a LAG
+
+    def _note_header(name: str) -> None:
+        nonlocal current_lag
+        if name.lower().startswith("lag "):
+            declared.add(name)
+            current_lag = name
+        else:
+            current_lag = None
+
+    for line in raw.splitlines():
+        m = _IFACE_RE.match(line)
+        if m:
+            current_iface = _iface_name(m)
+            _note_header(current_iface)
+            continue
+        if current_iface is None:
+            continue
+        if line and not line[0].isspace():
+            current_iface = None
+            current_lag = None
+            m = _IFACE_RE.match(line)
+            if m:
+                current_iface = _iface_name(m)
+                _note_header(current_iface)
+            continue
+        # ``lacp mode`` on the LAG stanza itself.
+        if current_lag is not None:
+            lcm = _LACP_MODE_RE.match(line)
+            if lcm:
+                mode_by_lag[current_lag] = lcm.group(1).lower()
+            continue
+        # ``lag N`` membership on a (non-LAG) port stanza.
+        lm = _LAG_MEMBER_RE.match(line)
+        if lm:
+            lag_name = f"lag {int(lm.group(1))}"
+            members = members_by_lag.setdefault(lag_name, [])
+            if current_iface and current_iface not in members:
+                members.append(current_iface)
+
+    lags: list[CanonicalLAG] = []
+    for lag_name in sorted(declared | set(members_by_lag), key=_lag_sort_key):
+        lag = CanonicalLAG(
+            name=lag_name, members=list(members_by_lag.get(lag_name, [])),
+        )
+        # AOS-CX LAGs are static unless an explicit ``lacp mode`` is set.
+        lag.mode = mode_by_lag.get(lag_name, "static")
+        lags.append(lag)
+    return lags
+
+
+def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
+    """Extract ``user <name> group <group> password ciphertext <blob>``.
+
+    AOS-CX uses a named ``group`` (administrators / operators / auditors /
+    custom) rather than a numeric privilege; the group → role maps
+    directly, and ``administrators`` → privilege 15, everything else → 1
+    (lossy — cross-vendor renderers expecting numeric privilege round-trip
+    non-admin groups as 1).  The ``ciphertext`` blob is preserved verbatim
+    in ``hashed_password`` (it is AES-encrypted with the device key, so it
+    is portable only same-device; declared lossy cross-vendor).
+    """
+    users: list[CanonicalLocalUser] = []
+    seen: set[str] = set()
+    for m in _USER_RE.finditer(raw):
+        name, group, blob = m.group(1), m.group(2), m.group(3)
+        if name in seen:
+            continue
+        seen.add(name)
+        users.append(CanonicalLocalUser(
+            name=name,
+            privilege_level=15 if group.lower() in _AOSCX_ADMIN_GROUPS else 1,
+            hashed_password=blob,
+            role=group,
+        ))
+    return users
 
 
 def _parse_vlans(raw: str) -> list[CanonicalVlan]:
