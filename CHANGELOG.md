@@ -26,6 +26,10 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [0.1.6] - 2026-06-13
+
 ### Added
 
 * **Aruba AOS-CX codec — Phase 4 (VXLAN L2VNI + certified).**  Parses +
