@@ -41,7 +41,12 @@ IPv4/OSPF + IPv6/BGP families).  **Phase 5** (this commit) adds
 ``interfaces vxlan vxlanN`` netdevs (one VNI each — ``vni`` / source /
 ``group`` or ``remote`` / ``port``) + block-form NTP servers, real-
 validated against a 2-config ``zhouleyan/wcni-kind`` (Apache-2.0) VXLAN
-tunnel pair.  Later: ``set``-form ``config`` input support.
+tunnel pair.  **Phase 6** adds *set-form* input (``show configuration
+commands``): :func:`~netcanon.migration.codecs.vyos.parse._setform_to_brace`
+converts ``set <path> [value]`` lines to the equivalent curly-brace text up
+front, so the brace-stack walker runs unchanged (mirroring the
+``juniper_junos`` block-form→set-form front-end).  The probe disambiguates
+VyOS set-form from Junos set-form (which the ``juniper_junos`` codec owns).
 """
 
 from __future__ import annotations
@@ -75,11 +80,12 @@ class VyOSCodec(CodecBase):
     certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
-        "Paste the contents of `/config/config.boot` (or the output of "
-        "`show configuration`) from a VyOS router.  VyOS is the OSS "
-        "Vyatta-successor NOS; its configuration is a JunOS-style "
-        "curly-brace tree — NOT the `set`-form that the `juniper_junos` "
-        "codec consumes (use that codec for Juniper devices)."
+        "Paste the contents of `/config/config.boot`, the output of "
+        "`show configuration` (curly-brace), or `show configuration "
+        "commands` (set-form) from a VyOS router.  VyOS is the OSS "
+        "Vyatta-successor NOS.  Both grammars are accepted; VyOS set-form "
+        "is distinct from Juniper's — use the `juniper_junos` codec for "
+        "Juniper devices."
     )
     sample_input: ClassVar[str] = (
         "interfaces {\n"
@@ -349,9 +355,14 @@ class VyOSCodec(CodecBase):
 
     def parse(self, raw: str) -> CanonicalIntent:
         from ..._tier3_detection import detect_tier3_sections_vyos
+        from .parse import _setform_to_brace
 
-        intent = parse_intent(raw)
-        intent.dropped_tier3_sections = detect_tier3_sections_vyos(raw)
+        # Normalise set-form → curly-brace once so the Tier-3 banner
+        # detector (curly-shape patterns) fires for set-form input too;
+        # idempotent on curly-brace input.
+        brace = _setform_to_brace(raw)
+        intent = parse_intent(brace)
+        intent.dropped_tier3_sections = detect_tier3_sections_vyos(brace)
         return intent
 
     def render(self, tree: Any) -> str:
@@ -383,21 +394,26 @@ class VyOSCodec(CodecBase):
 
     @classmethod
     def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
-        """Detect VyOS ``config.boot`` curly-brace text.
+        """Detect VyOS configuration text — curly-brace ``config.boot`` OR
+        set-form (``show configuration commands``).
 
-        Primary marker: the ``// vyos-config-version`` component-version
-        trailer is present in every saved ``config.boot`` and is
-        unambiguously VyOS.
+        **Curly-brace.**  Primary marker: the ``// vyos-config-version``
+        trailer (present in every saved ``config.boot``; unambiguously
+        VyOS).  Structural fallback (no trailer — e.g. a ``show
+        configuration`` paste): a curly-brace tree with VyOS-specific
+        markers (``interfaces {`` + ``ethernet ethN {`` + ``disable`` /
+        ``loopback lo``).  ``;``-terminated leaves veto (that is a Junos
+        curly capture; VyOS uses bare newlines).
 
-        Structural fallback (no trailer — e.g. a ``show configuration``
-        paste): a curly-brace tree with VyOS-specific markers
-        (``interfaces {`` + ``ethernet ethN {`` + ``disable`` /
-        ``loopback lo``).  Two guards keep this from claiming a Juniper
-        capture: ``set ``-form lines (Junos set-form, which the
-        ``juniper_junos`` codec owns — and a deferred VyOS set-form) and
-        ``;``-terminated leaves (Junos curly-form) both veto the match.
-        VyOS uses Linux ``ethN`` names + brace blocks with NO statement
-        terminators.
+        **Set-form** (``set `` lines).  Claimed only when a Junos-disjoint
+        VyOS marker is present (Linux ``ethernet ethN`` / ``bonding bondN``
+        / ``vxlan`` netdev names, top-level ``set service``, ``set
+        protocols static route``, or ``set vrf name``).  Junos-defining
+        markers (``set version``, ``ge-/xe-/…`` interface names,
+        ``routing-options`` / ``routing-instances`` / ``set snmp`` / ``set
+        vlans``) veto the match so the ``juniper_junos`` codec keeps its
+        set-form.  (``set protocols bgp|ospf|…`` is deliberately NOT a veto
+        — VyOS hosts routing protocols under ``protocols`` too.)
         """
         if detect_input_shape(raw_prefix) is not None:
             return None
@@ -405,9 +421,11 @@ class VyOSCodec(CodecBase):
         if "vyos-config-version" in raw_prefix.lower():
             return (99, "VyOS config-version trailer present")
 
-        # Veto: Junos set-form (or deferred VyOS set-form) — `set ` lines.
+        # Set-form candidate — any `set ` line routes here.
         if re.search(r"^\s*set\s+\S", raw_prefix, re.MULTILINE):
-            return None
+            return cls._probe_setform(raw_prefix)
+
+        # ── Curly-brace structural fallback (no `set ` lines) ──
         # Veto: Junos curly-form — `;`-terminated leaves.  VyOS NEVER
         # terminates a leaf with `;` (its grammar uses bare newlines), so
         # even a single `;`-ended line means this is a Junos
@@ -439,4 +457,62 @@ class VyOSCodec(CodecBase):
             return (90, f"VyOS curly-brace structural markers ({markers})")
         # A lone ``interfaces {`` is not VyOS-specific enough to claim
         # (Junos curly shares it); require >= 2 markers or the trailer.
+        return None
+
+    #: Junos-defining set-form markers — their presence means the capture
+    #: belongs to the ``juniper_junos`` codec, not VyOS.  The Junos media-
+    #: interface alternatives require a trailing ``-`` / digit so they do
+    #: not false-match VyOS ``loopback`` / ``ethernet`` names.  Note: ``set
+    #: protocols bgp|ospf|isis|…`` is deliberately NOT a veto — VyOS hosts
+    #: routing protocols under ``protocols`` too, so it is shared syntax.
+    _JUNOS_SETFORM_VETO: ClassVar[tuple[str, ...]] = (
+        r"^set version \d",
+        r"^set interfaces (?:ge-|xe-|et-|fe-|em\d|me\d|fxp\d|ae\d|lo\d|irb)",
+        r"^set routing-options\b",
+        r"^set routing-instances\b",
+        r"^set (?:snmp|vlans|policy-options|security|chassis|"
+        r"forwarding-options|class-of-service)\b",
+    )
+
+    @classmethod
+    def _probe_setform(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Score a ``set ``-bearing prefix as VyOS set-form, or return
+        None (vetoing to ``juniper_junos``) when Junos markers are seen."""
+        for pat in cls._JUNOS_SETFORM_VETO:
+            if re.search(pat, raw_prefix, re.MULTILINE):
+                return None
+
+        markers = strong = 0
+        if re.search(
+            r"^set interfaces (?:ethernet eth|bonding bond|dummy dum|"
+            r"loopback lo|vxlan vxlan|bridge br|wireguard wg|tunnel tun|"
+            r"pppoe pppoe|geneve gnv)\b",
+            raw_prefix, re.MULTILINE,
+        ):
+            markers += 1
+            strong += 1
+        if re.search(r"^set service \S", raw_prefix, re.MULTILINE):
+            markers += 1
+            strong += 1
+        if re.search(
+            r"^set protocols static route6?\b", raw_prefix, re.MULTILINE
+        ):
+            markers += 1
+            strong += 1
+        if re.search(r"^set vrf name \S", raw_prefix, re.MULTILINE):
+            markers += 1
+            strong += 1
+        if re.search(
+            r"^set system (?:host-name|name-server|time-zone|login|"
+            r"domain-name|domain-search)\b",
+            raw_prefix, re.MULTILINE,
+        ):
+            markers += 1
+
+        # Require >= 1 Junos-disjoint marker so an ambiguous
+        # `set system …`-only snippet is not mis-claimed (it stays
+        # undetected; the operator selects the codec manually).
+        if strong >= 1:
+            score = 89 if markers >= 2 else 80
+            return (score, f"VyOS set-form grammar markers ({markers})")
         return None

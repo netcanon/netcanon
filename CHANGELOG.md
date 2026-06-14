@@ -28,6 +28,27 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **VyOS codec — set-form input (`show configuration commands`).**  The
+  `vyos` codec now accepts VyOS *set-form* configuration (the flat `set
+  <path> [value]` output of `show configuration commands`) in addition to
+  the native curly-brace `config.boot`.  A new front-end
+  (`_setform_to_brace` in `vyos/parse.py`) converts set-form to the
+  equivalent curly-brace text up front, so the certified brace-stack walker
+  — and every phase of its dispatch — runs unchanged (mirroring how the
+  `juniper_junos` codec converts block-form to set-form ahead of its
+  set-parser).  The conversion is idempotent on curly-brace input and
+  generic enough that Tier-3 blocks (`set firewall` / `set nat` / `set
+  protocols bgp`) still feed the dropped-sections banner.  The probe
+  disambiguates VyOS set-form from Junos set-form: VyOS-disjoint markers
+  (Linux `ethernet ethN` / `bonding bondN` / `vxlan` netdev names, `set
+  service`, `set protocols static route`, `set vrf name`) claim it, while
+  Junos-defining markers (`set version`, `ge-/xe-/…` interface names,
+  `routing-options`, `set snmp`, `set vlans`) veto so the `juniper_junos`
+  codec keeps its set-form (verified non-colliding both ways).  Render is
+  unchanged — always curly-brace `config.boot`; set-form is input-only.  No
+  canonical surfaces change, so the capability matrix and cross-mesh are
+  unaffected (CODEC_BUG flat at 5).  Synthetic-validated; a permissive real
+  set-form capture is tracked in `WANTED.md`.
 * **VyOS codec — real-capture validation for `service snmp`.**  Lands two
   permissive real `config.boot` SNMP captures under
   `tests/fixtures/real/vyos/`, flipping the `service snmp` surface from
