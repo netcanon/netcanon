@@ -34,13 +34,14 @@ local users (name + ``authentication encrypted-password``); ``system``
 the legacy ``bond-group`` form).  **Phase 3**: ``service snmp`` (v1/v2c
 community + ``location`` / ``contact`` + v3 USM users) and VRF (``vrf
 name <X> { table <N> }`` routing instances + the per-interface ``vrf
-<X>`` binding).  **Phase 4** (this commit) flips ``certainty`` to
-``certified`` — round-trip-validated against a real-capture corpus of
-VyOS 1.4 ``config.boot`` files from the MIT-licensed
-``cisagov/prescup-challenges`` source (6 configs spanning IPv4/OSPF +
-IPv6/BGP families), in addition to the synthetic kitchen-sink.  Later
-phases add VXLAN (``interfaces vxlan vxlanN``) and ``set``-form input
-support.
+<X>`` binding).  **Phase 4** flipped ``certainty`` to ``certified``
+against a real-capture corpus of VyOS 1.4 ``config.boot`` files from the
+MIT-licensed ``cisagov/prescup-challenges`` source (6 configs spanning
+IPv4/OSPF + IPv6/BGP families).  **Phase 5** (this commit) adds
+``interfaces vxlan vxlanN`` netdevs (one VNI each — ``vni`` / source /
+``group`` or ``remote`` / ``port``) + block-form NTP servers, real-
+validated against a 2-config ``zhouleyan/wcni-kind`` (Apache-2.0) VXLAN
+tunnel pair.  Later: ``set``-form ``config`` input support.
 """
 
 from __future__ import annotations
@@ -152,6 +153,12 @@ class VyOSCodec(CodecBase):
             # per-interface binding (`interfaces ethernet ethN { vrf X }`).
             "/routing-instances/instance/name",
             "/interfaces/interface/config/vrf",
+            # ── Phase 5: VXLAN netdevs (`interfaces vxlan vxlanN`) — one
+            # VNI per netdev (vni + source + mcast/flood + udp port).
+            "/vxlan-vnis/vni",
+            "/vxlan-vnis/mcast-group",
+            "/vxlan-vnis/flood-list",
+            "/vxlan-vnis/udp-port",
         ],
         lossy=[
             LossyPath(
@@ -232,6 +239,30 @@ class VyOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # ── Phase 5: VXLAN ──
+            LossyPath(
+                path="/vxlan-vnis/source-interface",
+                reason=(
+                    "VyOS states the VTEP source as `source-address <ip>` (or "
+                    "`source-interface <if>`) on the vxlan netdev; the opaque "
+                    "string round-trips same-vendor but a cross-vendor source "
+                    "(e.g. `Loopback0`) is re-emitted verbatim and may need an "
+                    "operator port-rename."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/vlan-id",
+                reason=(
+                    "VyOS models ONE VNI per `vxlan vxlanN` netdev with no "
+                    "VLAN on the device (the L2 VLAN binding lives on a "
+                    "separate `bridge`); the required canonical `vlan_id` is "
+                    "synthesised from the VNI and the netdev name is "
+                    "regenerated `vxlan<index>` on render — both deterministic "
+                    "(same-vendor round-trip stable, cross-vendor advisory)."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             # VLAN database — VyOS has no top-level VLAN table.
@@ -256,10 +287,25 @@ class VyOSCodec(CodecBase):
                     "binding ARE supported."
                 ),
             ),
-            # VXLAN — later phase.
+            # ── Phase 5: VXLAN — the L2 VNI binding IS supported; the EVPN
+            # control-plane (per-VNI RD/RT) + symmetric-IRB L3VNI are
+            # Tier-3 / out of scope for the per-netdev model.
             UnsupportedPath(
-                path="/vxlan-vnis/vni",
-                reason="VyOS `interfaces vxlan vxlanN` is a later phase.",
+                path="/vxlan-vnis/l2vni-route-target",
+                reason=(
+                    "VyOS attaches EVPN per-VNI RD/route-target under "
+                    "`protocols bgp ... address-family l2vpn-evpn` (Tier-3, "
+                    "dropped) — the L2 VLAN<->VNI binding is supported but the "
+                    "control-plane RD/RT is not auto-translated."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing-instances/instance/l3-vni",
+                reason=(
+                    "VyOS symmetric-IRB L3VNI (a VNI bound to a VRF for "
+                    "inter-subnet routing) is out of scope for the Phase-5 "
+                    "per-netdev L2-VNI model."
+                ),
             ),
             # Tier-3 — never auto-translatable.
             UnsupportedPath(

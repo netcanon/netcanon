@@ -60,16 +60,19 @@ Grammar notes that shape the walker:
   (incl. the ``// vyos-config-version`` stamp) are skipped.
 
 Phase 2 added ``bonding`` LAGs, ``system login`` local users, and
-``system`` / ``service`` NTP servers.  **Phase 3** (this commit) adds
-``service snmp`` (v1/v2c community + location / contact + v3 USM users)
-and VRF (``vrf name <X> { table <N> }`` routing instances + the
-per-interface ``vrf <X>`` binding).
+``system`` / ``service`` NTP servers.  Phase 3 added ``service snmp``
+(v1/v2c community + location / contact + v3 USM users) and VRF (``vrf
+name <X> { table <N> }`` routing instances + the per-interface ``vrf
+<X>`` binding).  **Phase 5** (this commit) adds ``interfaces vxlan
+vxlanN`` netdevs → :class:`CanonicalVxlan` (one VNI per netdev:
+``vni`` / ``source-address`` / ``group`` / ``remote`` / ``port``).
 
 Deferred to later phases (parse-and-ignore for now): the remaining
-``service`` management-plane blocks (SSH / DHCP / syslog / DNS), VyOS
-``interfaces vxlan``, per-VRF static routes (``vrf name <X> { protocols
-static ... }``), and the Tier-3 ``protocols bgp/ospf`` / ``nat`` /
-``firewall`` / ``policy`` blocks.
+``service`` management-plane blocks (SSH / DHCP / syslog / DNS), the
+VXLAN-to-bridge L2 VLAN binding (``interfaces bridge`` membership) +
+single-device SVD ``vlan-to-vni``, per-VRF static routes (``vrf name
+<X> { protocols static ... }``), and the Tier-3 ``protocols bgp/ospf``
+/ ``nat`` / ``firewall`` / ``policy`` blocks.
 """
 
 from __future__ import annotations
@@ -88,6 +91,7 @@ from ...canonical.intent import (
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
+    CanonicalVxlan,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -173,6 +177,9 @@ def parse_intent(raw: str) -> CanonicalIntent:
     v3_user_order: list[str] = []
     vrfs: dict[str, dict] = {}        # vrf name -> {} (numeric table id dropped)
     vrf_order: list[str] = []
+    # ── Phase 5 scratch ──
+    vxlans: dict[str, dict] = {}      # vxlanN -> {vni, mcast, source, udp_port, flood}
+    vxlan_order: list[str] = []
 
     stack: list[tuple[str, str]] = []
 
@@ -219,6 +226,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
         if name not in vrfs:
             vrfs[name] = {}
             vrf_order.append(name)
+
+    def _touch_vxlan(name: str) -> dict:
+        vx = vxlans.get(name)
+        if vx is None:
+            vx = {
+                "vni": None, "mcast": "", "source": "",
+                "udp_port": None, "flood": [],
+            }
+            vxlans[name] = vx
+            vxlan_order.append(name)
+        return vx
 
     def _touch_iface(name: str, kind: str) -> dict:
         sc = iface_scratch.get(name)
@@ -306,6 +324,15 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 and stack[2][0] == "member"
             ):
                 _add_lag_member(stack[1][1], node[1])
+            # ── Phase 5: an ``interfaces vxlan vxlanN`` netdev (one VNI
+            # per netdev — NOT a generic L3 interface; handled separately
+            # from ``_current_iface``).
+            elif (
+                node[0] == "vxlan" and node[1]
+                and len(stack) == 2
+                and stack[0][0] == "interfaces"
+            ):
+                _touch_vxlan(node[1])
             # ── Phase 3: a ``vrf { name <X> { ... } }`` routing instance,
             # materialised from this authoritative declaration only.
             elif (
@@ -341,6 +368,19 @@ def parse_intent(raw: str) -> CanonicalIntent:
             ):
                 snmp_seen = True
                 _touch_v3_user(node[1])
+            # ── Phase 5: NTP server in BLOCK form
+            # (``system``/``service`` / ``ntp`` / ``server <host> { ... }``).
+            # VyOS 1.4-rolling (mid-2023+) writes NTP servers as blocks; the
+            # older bare-leaf ``server <host>`` form is handled in the leaf
+            # dispatch below.  Both yield the same canonical host list.
+            elif (
+                node[0] == "server" and node[1]
+                and len(stack) == 3
+                and stack[0][0] in ("system", "service")
+                and stack[1][0] == "ntp"
+            ):
+                if node[1] not in ntp_servers:
+                    ntp_servers.append(node[1])
             # A ``next-hop`` block under ``static route`` creates a route.
             elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
@@ -473,6 +513,28 @@ def parse_intent(raw: str) -> CanonicalIntent:
                     u["priv_pass"] = value
             continue
 
+        # ── Phase 5: VXLAN netdev leaves
+        # (interfaces / vxlan vxlanN / {vni|group|remote|source-*|port}) ──
+        if (
+            len(stack) == 2
+            and stack[0][0] == "interfaces" and stack[1][0] == "vxlan"
+            and value
+        ):
+            vx = _touch_vxlan(stack[1][1])
+            if key == "vni" and value.isdigit():
+                vx["vni"] = int(value)
+            elif key == "group":
+                vx["mcast"] = value
+            elif key == "remote":
+                if value not in vx["flood"]:
+                    vx["flood"].append(value)
+            elif key in ("source-address", "source-interface", "link", "dev"):
+                vx["source"] = value
+            elif key == "port" and value.isdigit():
+                vx["udp_port"] = int(value)
+            # address / mtu / parameters / vlan-to-vni → parse-and-ignore
+            continue
+
         # interface leaves
         sc = _current_iface(stack)
         if sc is not None:
@@ -537,12 +599,36 @@ def parse_intent(raw: str) -> CanonicalIntent:
         CanonicalRoutingInstance(name=name) for name in vrf_order
     ]
 
+    # ── Phase 5: VXLAN netdevs (one VNI each).  ``vlan_id`` is synthesised
+    # — VyOS carries no VLAN on the netdev (the L2 binding lives on a
+    # separate bridge), but the canonical field is required; the derivation
+    # is deterministic so it survives the round-trip.  Sorted by vni (the
+    # round-trip does not normalise ``vxlan_vnis`` order). ──
+    vxlan_vnis = []
+    for name in vxlan_order:
+        vx = vxlans[name]
+        if vx["vni"] is None:
+            continue  # a vxlan netdev with no `vni` isn't a usable binding
+        vni = vx["vni"]
+        vxlan_vnis.append(
+            CanonicalVxlan(
+                vlan_id=((vni - 1) % 4094) + 1,
+                vni=vni,
+                mcast_group=vx["mcast"],
+                flood_list=list(vx["flood"]),
+                source_interface=vx["source"],
+                udp_port=vx["udp_port"] if vx["udp_port"] is not None else 8472,
+            )
+        )
+    intent.vxlan_vnis = sorted(vxlan_vnis, key=lambda v: v.vni)
+
     logger.debug(
         "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "
-        "ntp=%d snmp=%s vrfs=%d (input=%d chars)",
+        "ntp=%d snmp=%s vrfs=%d vxlans=%d (input=%d chars)",
         intent.hostname, len(intent.interfaces), len(intent.static_routes),
         len(intent.local_users), len(intent.lags), len(intent.ntp_servers),
         intent.snmp is not None, len(intent.routing_instances),
+        len(intent.vxlan_vnis),
         len(raw),
     )
     return intent

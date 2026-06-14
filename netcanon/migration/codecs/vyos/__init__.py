@@ -24,10 +24,11 @@ Certainty: ``certified`` — Phase 1 (Tier-1: ``system host-name``;
     ``protocols static`` routes) + Phase 2 (``system login`` local users;
     ``system`` / ``service`` ntp servers; ``bonding`` LAGs) + Phase 3
     (``service snmp`` v1/v2c + v3 USM; VRF ``vrf name`` routing-instances
-    + per-interface binding).  Round-trip-validated against a real-capture
-    corpus of VyOS 1.4 ``config.boot`` files from the MIT-licensed
-    ``cisagov/prescup-challenges`` source (Phase 4).  VXLAN + ``set``-form
-    input follow in later phases.
+    + per-interface binding) + Phase 5 (``interfaces vxlan`` netdevs, one
+    VNI each).  Round-trip-validated against a real-capture corpus of VyOS
+    1.4 ``config.boot`` files: 6 MIT ``cisagov/prescup-challenges`` +
+    2 Apache-2.0 ``zhouleyan/wcni-kind`` VXLAN configs.  ``set``-form
+    ``config`` input follows in a later phase.
 """
 
 from .codec import VyOSCodec
