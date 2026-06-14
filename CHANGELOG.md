@@ -28,6 +28,29 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **New codec: Aruba AOS-CX (`aruba_aoscx`) — Phase 1.**  Bidirectional
+  `show running-config` translator for Aruba's modern switch portfolio
+  (6000 / 6100 / 6200 / 6300 / 6400 / 8100 / 8320 / 8325 / 8360 / 8400 /
+  9300 / CX-10000), the **11th migration codec**.  Distinct vendor
+  identity from the legacy `aruba_aoss` (AOS-S) codec — AOS-CX is a
+  ground-up redesign modelled on `arista_eos` (see
+  `docs/fixture-research-2015/11-aruba_aoscx.md`), so it gets its own
+  grammar, `CapabilityMatrix`, probe, and render path.  Phase 1 covers
+  the Tier-1 surface: hostname, basic-L3 interfaces (description /
+  admin-state / `mtu` / IPv4 + IPv6 CIDR / `vrf attach`), VLANs (id +
+  name + description), top-level `vrf <name>` declarations, and
+  default-VRF static routes.  Handles the AOS-CX grammar divergences —
+  multi-token interface names (`interface vlan 11` / `interface lag 1` /
+  `interface 1/1/1`), the admin-down interface default (loopbacks
+  excepted), and the `!Version ArubaOS-CX` probe banner (no collision
+  with the `;`-banner AOS-S codec or Arista's `interface Ethernet`
+  markers).  `certainty` is `experimental` — the L2 switchport / LAG /
+  SNMP / local-users / `active-gateway` anycast / VXLAN-EVPN surfaces and
+  a real-capture corpus (`certified` tier) follow in later phases.  Wired
+  through the standard new-codec sites (`aruba_aoscx` vendor YAML,
+  `cli-aoscx` input format, `detect_tier3_sections_aoscx`, cross-mesh
+  source + target).  Cross-mesh + phase-4 regenerated; high-severity
+  CODEC_BUG held flat at 5.
 * **Cisco NX-OS codec — `certified` (real-capture corpus).**  Flips
   `certainty` `best_effort` → `certified` and lands a 6-config
   `batfish/lab-validation` real-capture corpus (Apache-2.0) under

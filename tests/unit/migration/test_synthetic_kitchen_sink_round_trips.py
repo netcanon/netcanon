@@ -52,6 +52,7 @@ from netcanon.migration.codecs.base import ParseError
 # registry view.
 from netcanon.migration.codecs import (  # noqa: F401
     arista_eos,
+    aruba_aoscx,
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
