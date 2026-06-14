@@ -21,10 +21,11 @@ Direction: ``bidirectional``.
 Certainty: ``experimental`` — Phase 1 (Tier-1: ``system host-name``;
     ethernet / loopback / dummy interfaces with address (IPv4+IPv6 CIDR /
     dhcp) / description / disable / mtu; ``vif`` VLAN sub-interfaces;
-    ``protocols static`` routes).  Synthetically round-trip-validated; no
-    real-capture corpus is wired yet — ``bonding`` LAGs, ``system login``
-    users, ``service`` (SSH/NTP/SNMP), VRF, and the certified tier follow
-    in later phases.
+    ``protocols static`` routes) + Phase 2 (``system login`` local users;
+    ``system`` / ``service`` ntp servers; ``bonding`` LAGs).
+    Synthetically round-trip-validated; no real-capture corpus is wired
+    yet — ``service snmp``, VRF, VXLAN, and the certified tier follow in
+    later phases.
 """
 
 from .codec import VyOSCodec

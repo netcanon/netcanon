@@ -75,6 +75,8 @@ from ...canonical.intent import (
     CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalStaticRoute,
 )
 from .._input_shape import detect_input_shape
@@ -145,8 +147,37 @@ def parse_intent(raw: str) -> CanonicalIntent:
     iface_order: list[str] = []
     static_routes: list[dict] = []
     cur_route: dict | None = None  # the route whose next-hop block is open
+    # ── Phase 2 scratch ──
+    users: dict[str, dict] = {}       # name -> {"hash": str, "level": str}
+    user_order: list[str] = []
+    ntp_servers: list[str] = []
+    lags: dict[str, dict] = {}        # bondN -> {"mode": str, "members": list}
+    lag_order: list[str] = []
 
     stack: list[tuple[str, str]] = []
+
+    def _touch_user(name: str) -> dict:
+        u = users.get(name)
+        if u is None:
+            u = {"hash": "", "level": ""}
+            users[name] = u
+            user_order.append(name)
+        return u
+
+    def _touch_lag(name: str) -> dict:
+        lg = lags.get(name)
+        if lg is None:
+            lg = {"mode": "static", "members": []}
+            lags[name] = lg
+            lag_order.append(name)
+        return lg
+
+    def _add_lag_member(bond: str, member: str) -> None:
+        lg = _touch_lag(bond)
+        if member and member not in lg["members"]:
+            lg["members"].append(member)
+        # Materialise the member iface + set its back-reference.
+        _touch_iface(member, "ethernet")["lag_member_of"] = bond
 
     def _touch_iface(name: str, kind: str) -> dict:
         sc = iface_scratch.get(name)
@@ -161,6 +192,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 "ipv6": [],
                 "dhcp_client": False,
                 "dhcp_client_v6": "",
+                "lag_member_of": None,
             }
             iface_scratch[name] = sc
             iface_order.append(name)
@@ -173,6 +205,11 @@ def parse_intent(raw: str) -> CanonicalIntent:
         if len(stk) < 2 or stk[0][0] != "interfaces":
             return None
         typ, arg = stk[1]
+        # A ``bonding bondN`` block is an L3-capable interface (it can
+        # carry address / description / mtu); its ``mode`` / ``member``
+        # are handled separately in the leaf / block-open dispatch.
+        if typ == "bonding" and arg and len(stk) == 2:
+            return _touch_iface(arg, "bonding")
         if typ not in _IFACE_BLOCK_TYPES or not arg:
             return None
         if len(stk) == 2:
@@ -203,11 +240,32 @@ def parse_intent(raw: str) -> CanonicalIntent:
             node = _split_header(header)
             stack.append(node)
             # Materialise an interface stub on block-open so an empty
-            # interface (no leaves) still round-trips.
-            if node[0] == "vif" or node[0] in _IFACE_BLOCK_TYPES:
+            # interface (no leaves) still round-trips.  ``bonding bondN``
+            # is L3-capable AND declares a LAG.
+            if node[0] in ("vif", "bonding") or node[0] in _IFACE_BLOCK_TYPES:
                 _current_iface(stack)
+                if node[0] == "bonding" and node[1]:
+                    _touch_lag(node[1])
+            # A ``user <name>`` block under ``system { login { ... } }``.
+            elif (
+                node[0] == "user" and node[1]
+                and len(stack) == 3
+                and stack[0][0] == "system"
+                and stack[1][0] == "login"
+            ):
+                _touch_user(node[1])
+            # A bond member declared 1.3+/1.4-style:
+            # ``interfaces / bonding bondN / member / interface ethN``.
+            elif (
+                node[0] == "interface" and node[1]
+                and len(stack) == 4
+                and stack[0][0] == "interfaces"
+                and stack[1][0] == "bonding"
+                and stack[2][0] == "member"
+            ):
+                _add_lag_member(stack[1][1], node[1])
             # A ``next-hop`` block under ``static route`` creates a route.
-            if node[0] == "next-hop":
+            elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
             continue
 
@@ -228,6 +286,53 @@ def parse_intent(raw: str) -> CanonicalIntent:
         # static-route metric (distance) inside the open next-hop block
         if key == "distance" and cur_route is not None and value.isdigit():
             cur_route["metric"] = int(value)
+            continue
+
+        # ── Phase 2: bond mode (interfaces / bonding bondN / mode <m>) ──
+        # `802.3ad` is LACP -> "active"; other modes (active-backup,
+        # balance-rr, ...) collapse to "static" (declared lossy).
+        if (
+            key == "mode" and value
+            and len(stack) == 2
+            and stack[0][0] == "interfaces"
+            and stack[1][0] == "bonding"
+        ):
+            _touch_lag(stack[1][1])["mode"] = (
+                "active" if value == "802.3ad" else "static"
+            )
+            continue
+
+        # ── Phase 2: bond member, legacy 1.2 form
+        # (interfaces / ethernet ethN / bond-group bondN) ──
+        if (
+            key == "bond-group" and value
+            and len(stack) == 2
+            and stack[0][0] == "interfaces"
+            and stack[1][0] == "ethernet"
+        ):
+            _add_lag_member(value, stack[1][1])
+            continue
+
+        # ── Phase 2: local-user password
+        # (system / login / user X / authentication / encrypted-password) ──
+        if (
+            key == "encrypted-password" and value
+            and len(stack) == 4
+            and stack[0][0] == "system" and stack[1][0] == "login"
+            and stack[2][0] == "user" and stack[3][0] == "authentication"
+        ):
+            _touch_user(stack[2][1])["hash"] = value
+            continue
+
+        # ── Phase 2: NTP servers (system/service / ntp / server <host>) ──
+        if (
+            key == "server" and value
+            and len(stack) == 2
+            and stack[0][0] in ("system", "service")
+            and stack[1][0] == "ntp"
+        ):
+            if value not in ntp_servers:
+                ntp_servers.append(value)
             continue
 
         # interface leaves
@@ -251,10 +356,32 @@ def parse_intent(raw: str) -> CanonicalIntent:
         for r in static_routes
     ]
 
+    # ── Phase 2 surfaces ──
+    intent.local_users = [
+        CanonicalLocalUser(
+            name=name,
+            privilege_level=15,  # VyOS login users have full access
+            role="admin",
+            hashed_password=users[name]["hash"],
+        )
+        for name in user_order
+    ]
+    intent.ntp_servers = list(ntp_servers)
+    intent.lags = [
+        CanonicalLAG(
+            name=name,
+            members=list(lags[name]["members"]),
+            mode=lags[name]["mode"],
+        )
+        for name in lag_order
+    ]
+
     logger.debug(
-        "vyos parsed: hostname=%r ifaces=%d routes=%d (input=%d chars)",
-        intent.hostname, len(intent.interfaces),
-        len(intent.static_routes), len(raw),
+        "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "
+        "ntp=%d (input=%d chars)",
+        intent.hostname, len(intent.interfaces), len(intent.static_routes),
+        len(intent.local_users), len(intent.lags), len(intent.ntp_servers),
+        len(raw),
     )
     return intent
 
@@ -329,4 +456,5 @@ def _build_iface(sc: dict) -> CanonicalInterface:
         ],
         dhcp_client=sc.get("dhcp_client", False),
         dhcp_client_v6=sc.get("dhcp_client_v6", ""),
+        lag_member_of=sc.get("lag_member_of"),
     )

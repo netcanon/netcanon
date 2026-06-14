@@ -36,7 +36,7 @@ tests.  Backup-side device definitions are listed under
 | `fortigate_cli`   | Fortinet FortiGate | nested `config / edit / set / next / end` CLI | bidirectional | certified |
 | `mikrotik_routeros` | MikroTik RouterOS | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | `config.xml`              | bidirectional | certified |
-| `vyos`            | VyOS          | `config.boot` curly-brace text | bidirectional | experimental (Phase 1 — Tier-1: `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes; curly-brace `config.boot` form — distinct from the `set`-form `juniper_junos` codec; `bonding` LAGs + `system login` users + `service` (SSH/NTP/SNMP) + VRF + the certified tier follow in later phases) |
+| `vyos`            | VyOS          | `config.boot` curly-brace text | bidirectional | experimental (Phases 1-2 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers + `bonding` LAGs (`mode 802.3ad` LACP + both member forms); curly-brace `config.boot` form — distinct from the `set`-form `juniper_junos` codec; `service snmp` + VRF + VXLAN + the certified tier follow in later phases) |
 
 Backup-side device-definition YAMLs ship for the same vendor families
 plus per-OS-version overlays.  See
