@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-14T02:29:53+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T022952Z.json",
-  "mesh_run_started_utc": "2026-06-14T02:29:47+00:00",
-  "cells_total": 792,
+  "started_utc": "2026-06-14T03:24:53+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T032434Z.json",
+  "mesh_run_started_utc": "2026-06-14T03:24:29+00:00",
+  "cells_total": 836,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -29,6 +29,26 @@
       "fixture": "tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt",
       "source_codec": "arista_eos",
       "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoscx"
     },
     {
       "fixture": "tests/fixtures/real/aruba_aoss/aruba_central_5memberstack_rendered.cfg",
@@ -441,6 +461,206 @@
       "fixture": "tests/fixtures/real/arista_eos/ksator_dcs_7150s64_eos4224.txt",
       "source_codec": "arista_eos",
       "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ebgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch3_ibgp_leaf1a.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_1.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/aruba_aoscx/aoscx_dcn_arch4_core1_2.cfg",
+      "source_codec": "aruba_aoscx",
+      "target_codec": "opnsense"
     },
     {
       "fixture": "tests/fixtures/real/aruba_aoss/aruba_central_5memberstack_rendered.cfg",
@@ -23261,6 +23481,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 792
+    "cells_total_in_run": 836
   }
 }

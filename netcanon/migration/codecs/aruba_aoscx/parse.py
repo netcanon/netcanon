@@ -51,10 +51,16 @@ see ``docs/fixture-research-2015/11-aruba_aoscx.md``:
 * VRF stanza keyword is bare ``vrf <name>``; per-interface bind is ``vrf
   attach <name>``.
 
-Deferred to later phases (parse-and-ignore in v1): SNMP, the
-``active-gateway`` anycast surface, VSX (incl. the LAG ``multi-chassis``
-flag), VXLAN / EVPN (``interface vxlan`` / ``evpn``), and the Tier-3
-protocol / ACL / QoS blocks.
+* ``interface vxlan <N>`` VTEP (Phase 4) → :class:`CanonicalVxlan`
+  L2 VLAN↔VNI bindings (``vni <VNI>`` / nested ``vlan <VLAN>``) + the
+  switch-level ``source ip`` (an IPv4 address, stashed verbatim in the
+  opaque ``source_interface`` field).
+
+Deferred to later phases (parse-and-ignore in v1): the per-VLAN L2VNI
+RD / route-target (``evpn / vlan N / rd auto / route-target ...`` —
+almost always ``auto``-derived, no cross-vendor canonical home), the
+symmetric-IRB L3VNI (``vni N / vrf <name>``), VSX (incl. the LAG
+``multi-chassis`` flag), and the Tier-3 protocol / ACL / QoS blocks.
 """
 
 from __future__ import annotations
@@ -75,6 +81,7 @@ from ...canonical.intent import (
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVxlan,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -201,6 +208,37 @@ _ACTIVE_GW_MAC_TOP_RE = re.compile(
 _ACTIVE_GW_IP_RE = re.compile(
     r"^\s+active-gateway\s+ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
 )
+
+# ── VXLAN-EVPN (Phase 4) ──
+# AOS-CX models the VTEP as ``interface vxlan 1`` (intercepted + NOT
+# materialised as an interface — see :func:`_parse_interfaces`); the
+# L2 VLAN↔VNI bindings live inside it as ``vni <VNI>`` sub-blocks each
+# carrying a nested ``vlan <VLAN>``::
+#
+#     interface vxlan 1
+#         source ip 192.168.100.1
+#         no shutdown
+#         vni 11
+#             vlan 11
+#
+# Unlike NX-OS / Arista (whose VTEP source is an interface *name*),
+# AOS-CX states the source as an IPv4 *address*; it is stashed verbatim
+# in :attr:`CanonicalVxlan.source_interface` (an opaque per-vendor
+# string) so it survives a same-vendor round-trip.  The per-VLAN L2VNI
+# RD / route-target (``evpn / vlan N / rd auto / route-target ...``) is
+# almost always ``auto`` (derived) and has no cross-vendor canonical
+# home — it is parse-and-ignore (declared unsupported).  An L3VNI
+# ``vni <N> / vrf <name>`` sub-block carries no ``vlan`` child, so it is
+# naturally skipped here (symmetric-IRB L3VNI is a later phase).
+_VXLAN_SOURCE_IP_RE = re.compile(
+    r"^\s+source\s+ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
+)
+#: ``vni <N>`` opens a per-VNI sub-block inside ``interface vxlan``.
+_VXLAN_VNI_RE = re.compile(r"^\s+vni\s+(\d+)\s*$", re.IGNORECASE)
+#: ``vlan <N>`` nested under a ``vni`` sub-block — the L2 VLAN↔VNI bind.
+#: (Indented; the top-level VLAN declaration is matched by
+#: :data:`_VLAN_TOP_RE`, which anchors ``vlan`` at column 0.)
+_VXLAN_VLAN_MAP_RE = re.compile(r"^\s+vlan\s+(\d+)\s*$", re.IGNORECASE)
 
 
 def _normalise_mac_to_colon_hex(mac: str) -> str:
@@ -370,6 +408,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # SNMP (Phase 2b) — v2c community + system-location / system-contact
     # + v3 USM users.
     intent.snmp = _parse_snmp(raw)
+
+    # VXLAN (Phase 4) — L2 VLAN↔VNI bindings from the ``interface vxlan``
+    # VTEP (``vni N / vlan N``) + the switch-level ``source ip``.
+    intent.vxlan_vnis = _parse_vxlan(raw)
 
     # Shared switchport→VLAN projection: mirror per-port switchport state
     # into the VLAN-centric tagged/untagged lists so VLAN-centric
@@ -902,3 +944,64 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             metric=metric,
         ))
     return routes
+
+
+def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
+    """Build :class:`CanonicalVxlan` records from the AOS-CX VTEP stanza.
+
+    Scans every ``interface vxlan <N>`` block (a VXLAN config container —
+    NOT a real interface, mirroring NX-OS ``nve1``) for the switch-level
+    ``source ip <X>`` and the per-VNI ``vni <VNI>`` sub-blocks, each of
+    which carries a nested ``vlan <VLAN>`` giving the L2 VLAN↔VNI binding.
+    The source IP is broadcast onto every record (the per-switch
+    :class:`CanonicalVxlan` convention) in ``source_interface`` — AOS-CX
+    states the VTEP source as an IPv4 address rather than an interface
+    name, so the opaque field carries the address verbatim for the
+    same-vendor round-trip.
+
+    A ``vni`` whose sub-block has no ``vlan`` child (an L3VNI ``vni N /
+    vrf <name>``) yields no record — symmetric-IRB L3VNI is a later
+    phase.  Records are returned sorted by ``vlan_id`` so the order is
+    canonical (the real-capture round-trip compares ``vxlan_vnis`` by
+    list equality, without re-sorting).
+    """
+    source_ip = ""
+    vlan_by_vni: dict[int, int] = {}
+    in_vxlan = False
+    current_vni: int | None = None
+
+    for line in raw.splitlines():
+        im = _IFACE_RE.match(line)
+        if im:
+            in_vxlan = _iface_name(im).lower().startswith("vxlan ")
+            current_vni = None
+            continue
+        if line and not line[0].isspace():
+            in_vxlan = False
+            current_vni = None
+            continue
+        if not in_vxlan:
+            continue
+
+        sm = _VXLAN_SOURCE_IP_RE.match(line)
+        if sm:
+            source_ip = sm.group(1)
+            continue
+        vnim = _VXLAN_VNI_RE.match(line)
+        if vnim:
+            current_vni = int(vnim.group(1))
+            continue
+        if current_vni is not None:
+            vmap = _VXLAN_VLAN_MAP_RE.match(line)
+            if vmap:
+                vlan_by_vni[current_vni] = int(vmap.group(1))
+                continue
+        # Any other indented line (``no shutdown`` / ``address-family``
+        # / per-VNI flags) is parse-and-ignore.
+
+    records = [
+        CanonicalVxlan(vlan_id=vlan, vni=vni, source_interface=source_ip)
+        for vni, vlan in vlan_by_vni.items()
+    ]
+    records.sort(key=lambda r: r.vlan_id)
+    return records

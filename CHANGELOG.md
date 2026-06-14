@@ -28,6 +28,26 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Aruba AOS-CX codec — Phase 4 (VXLAN L2VNI + certified).**  Parses +
+  renders the VTEP overlay: `interface vxlan 1` / `source ip <X>` /
+  `vni <VNI>` / nested `vlan <VLAN>` → `CanonicalVxlan` L2 VLAN↔VNI
+  bindings (the cross-vendor primitive shared with NX-OS / Arista /
+  Junos).  AOS-CX states the VTEP source as an IPv4 *address* (not an
+  interface name), stashed verbatim in the opaque
+  `CanonicalVxlan.source_interface` and re-emitted only when it parses as
+  an IP (a cross-vendor interface-name source omits the `source ip` line
+  rather than emit a malformed address).  Graduates `/vxlan-vnis/vni` →
+  `supported` and `/vxlan-vnis/source-interface` → `lossy`; the per-VLAN
+  L2VNI RD/route-target (`evpn / vlan N / rd auto / route-target ...` —
+  `auto`-derived, no cross-vendor home) + symmetric-IRB L3VNI stay
+  `unsupported`.  **Flips `certainty` `best_effort` → `certified`**: a
+  4-config real-capture corpus from the Apache-2.0
+  [`aruba/aoscx-ansible-dcn-workflows`](https://github.com/aruba/aoscx-ansible-dcn-workflows)
+  reference fabric (2 VXLAN-EVPN leaves + 2 active-gateway cores, AOS-CX
+  10.04 / 10.13) round-trips cleanly — the `active-gateway` surface,
+  synthetic-only through Phase 3, is now exercised by the real arch4
+  core configs.  Cross-mesh + phase-4 regenerated; high-severity
+  CODEC_BUG held flat at 5.
 * **Aruba AOS-CX codec — Phase 3 (`active-gateway` anycast).**  Parses +
   renders the VSX/EVPN distributed-gateway surface: the per-SVI
   `active-gateway ip <vip>` (mirrored into
