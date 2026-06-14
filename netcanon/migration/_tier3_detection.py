@@ -174,6 +174,19 @@ _IOSXR_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^call-home\b", re.MULTILINE),
 )
 
+# Aruba AOS-CX shape — `show running-config` headers for the routing /
+# ACL / QoS / policy sections the codec does NOT consume.  Excludes
+# `interface`, `vlan`, `vrf`, `ip route`, `hostname` (parsed) and the
+# deferred Tier-2 `evpn` / `vsx` / `interface vxlan` blocks (which have
+# planned canonical surfaces, so flagging them as Tier-3 would mislead).
+_AOSCX_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^router (?:bgp|ospf|ospfv3|rip|pim)\b.*$", re.MULTILINE),
+    re.compile(r"^access-list (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
+    re.compile(r"^route-map\s+\S+", re.MULTILINE),
+    re.compile(r"^class (?:ip|ipv6|mac)\s+\S+", re.MULTILINE),
+    re.compile(r"^policy\s+\S+", re.MULTILINE),
+)
+
 # OPNsense XML element shape (heuristic — substring presence check on
 # top-level elements that the parser doesn't currently extract).  The
 # OPNsense codec consumes ``<vlans>``, ``<interfaces>``, ``<dhcpd>``,
@@ -221,6 +234,11 @@ def detect_tier3_sections_nxos(raw: str) -> list[str]:
 def detect_tier3_sections_iosxr(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Cisco IOS-XR CLI text."""
     return _detect_regex(raw, _IOSXR_TIER3_HEADERS)
+
+
+def detect_tier3_sections_aoscx(raw: str) -> list[str]:
+    """Detect Tier-3 stanza headers in Aruba AOS-CX CLI text."""
+    return _detect_regex(raw, _AOSCX_TIER3_HEADERS)
 
 
 def detect_tier3_sections_routeros(raw: str) -> list[str]:

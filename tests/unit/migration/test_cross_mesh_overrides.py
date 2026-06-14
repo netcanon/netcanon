@@ -36,6 +36,7 @@ import pytest
 from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     _mock,
     arista_eos,
+    aruba_aoscx,
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,
@@ -242,6 +243,34 @@ router static
 !
 end
 """,
+    "aruba_aoscx": """\
+!
+!Version ArubaOS-CX FL.10.13.1000
+!export-password: default
+hostname TestAOSCX
+!
+vrf RED
+vlan 1
+vlan 10
+    name USERS
+    description User access VLAN
+vlan 20
+    name VOICE
+interface 1/1/1
+    no shutdown
+    mtu 9198
+    ip address 198.51.100.1/31
+interface 1/1/2
+    no shutdown
+    ip address 203.0.113.1/24
+interface vlan 10
+    no shutdown
+    vrf attach RED
+    ip address 10.10.10.1/24
+interface loopback 0
+    ip address 10.255.0.1/32
+ip route 0.0.0.0/0 198.51.100.2
+""",
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -271,6 +300,7 @@ _SOURCE_CAPABLE = [
     "cisco_iosxe",
     "cisco_nxos",
     "cisco_iosxr",
+    "aruba_aoscx",
 ]
 # Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
 # every bidirectional codec is now in the smoke matrix.  The
@@ -288,6 +318,7 @@ _TARGET_CAPABLE = [
     "cisco_iosxe_cli",
     "cisco_nxos",
     "cisco_iosxr",
+    "aruba_aoscx",
 ]
 
 
