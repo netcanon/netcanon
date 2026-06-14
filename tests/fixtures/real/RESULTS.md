@@ -767,13 +767,16 @@ Strategic:
 ### Status
 
 All five phases shipped (Tier-1 curly-brace + local users / NTP / bonding
-LAGs + `service snmp` + VRF + `interfaces vxlan`).  Corpus is **8** real
-`config.boot` files: 6 `cisagov/prescup-challenges` (MIT (SEI), VyOS
-1.4-rolling-202105152149, round-1 IPv4/OSPF + round-3b IPv6/BGP) + 2
-`zhouleyan/wcni-kind` (Apache-2.0, VyOS 1.4-rolling-202307070317 — the
-two ends of one `vni 10` VXLAN tunnel).  All parse, are deterministic,
-and round-trip cleanly.  Routing-protocol stanzas (`protocols ospf` /
-`protocols bgp`) are surfaced via `dropped_tier3_sections`.
+LAGs + `service snmp` + VRF + `interfaces vxlan`).  Corpus is **10** real
+`config.boot` files from four sources: 6 `cisagov/prescup-challenges`
+(MIT (SEI), VyOS 1.4-rolling-202105, round-1 IPv4/OSPF + round-3b
+IPv6/BGP) + 2 `zhouleyan/wcni-kind` (Apache-2.0, VyOS 1.4-rolling-202307
+— the two ends of one `vni 10` VXLAN tunnel) + `scottlaird/vyos-parser`
+(Apache-2.0, VyOS **1.5**, `service snmp`) + `rapid7/metasploit-framework`
+(BSD-3, VyOS **1.3**, `service snmp`).  All parse, are deterministic, and
+round-trip cleanly.  Routing-protocol + firewall stanzas (`protocols
+ospf` / `protocols bgp` / `firewall`) are surfaced via
+`dropped_tier3_sections`.
 
 ### Coverage matrix
 
@@ -787,22 +790,21 @@ and round-trip cleanly.  Routing-protocol stanzas (`protocols ospf` /
 | `pc5-round3b-routere.conf` | 209 | 8 | IPv6 | 1 | 3 | BGP AS65005 — 8 ifaces / 8 neighbors (dense) |
 | `wcni-kind-gw0.conf` | 74 | 3 | IPv4 | 1 | 3 | **VXLAN** `vxlan0` vni 10 + `remote` (tunnel end A); block-form NTP |
 | `wcni-kind-gw1.conf` | 74 | 3 | IPv4 | 1 | 3 | **VXLAN** `vxlan0` vni 10 + `remote` (tunnel end B); mirror of gw0 |
+| `scottlaird-vyos-parser.conf` | 248 | 7 | IPv4 | 2 | 5 | **SNMP** `community public` (VyOS 1.5); 5 block-form NTP; `firewall`→Tier-3 |
+| `metasploit-vyos-config.conf` | 65 | 3 | IPv4 | 1 | 3 | **SNMP** `community ro`/`write` (keeps `ro`; VyOS 1.3) |
 
 ### Certification decision
 
-`certified`.  Six real captures clear the `base.py` "≥3 real captures
-round-trip cleanly" bar 2×, across two distinct families (IPv4/OSPF +
-IPv6/BGP).  The corpus is single-source (`cisagov/prescup-challenges`)
-and single-version (VyOS 1.4-rolling-202105152149); a second VyOS major
-(1.3 / 1.5) is flagged in `WANTED.md` as a welcomed quality nice-to-have,
-not `certified`-gating per the base.py definition.  The round-tripping
-surface is interfaces + host-name + local-users + NTP + (wcni-kind)
-`interfaces vxlan`; OSPF/BGP are Tier-3 (`dropped_tier3_sections`).
-**Honest scope:** `interfaces vxlan` is now real-validated (the
-`zhouleyan/wcni-kind` tunnel pair); `service snmp` + VRF round-trip is
-still validated by the synthetic kitchen-sink only — a 2026-06 hunt found
-no permissive + curly-brace real capture carrying them (only GPL
-`vyos-1x` smoketests or unlicensed configs), so SNMP/VRF stay
+`certified`.  Ten real captures from **four sources** clear the `base.py`
+"≥3 real captures round-trip cleanly" bar comfortably, spanning **three
+VyOS majors** (1.3 / 1.4 / 1.5) and the IPv4/OSPF, IPv6/BGP, VXLAN, and
+SNMP surfaces.  The round-tripping surface is interfaces + host-name +
+local-users + NTP (bare + block form) + `interfaces vxlan` (wcni-kind) +
+`service snmp` (scottlaird + metasploit); OSPF/BGP/firewall are Tier-3
+(`dropped_tier3_sections`).  **Honest scope:** only **VRF** round-trip
+remains validated by the synthetic kitchen-sink alone — a 2026-06 hunt
+found no permissive + curly-brace real capture carrying `vrf name` (only
+GPL `vyos-1x` smoketests or unlicensed configs), so VRF stays
 synthetic-validated (tracked in `WANTED.md`).
 
 ---

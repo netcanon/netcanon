@@ -199,6 +199,16 @@ These configs write NTP servers in the 1.4-rolling block form
 | `wcni-kind-gw0.conf` | `network/5-demo-cni/6-vxlan/1-clab-vxlan/startup-conf/gw0.cfg` | Apache-2.0 | VXLAN tunnel end A — `vxlan vxlan0` (`vni 10` + `remote 172.12.1.11`), 2 ethernet + a static route, block-form NTP.  Round-trips the VXLAN netdev (vni / remote / port). |
 | `wcni-kind-gw1.conf` | `network/5-demo-cni/6-vxlan/1-clab-vxlan/startup-conf/gw1.cfg` | Apache-2.0 | VXLAN tunnel end B — mirror of gw0 (`vni 10` + `remote 172.12.1.10`); the complementary peer. |
 
+The two SNMP captures below are the real-capture witnesses for the
+`service snmp` surface (the cisagov + wcni-kind corpora carry none).
+Retained verbatim with the same 3-line `//` attribution header; both
+round-trip cleanly (the codec keeps the canonical single `community`).
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `scottlaird-vyos-parser.conf` | [scottlaird/vyos-parser](https://github.com/scottlaird/vyos-parser) `parser/testdata/config.boot.1` | Apache-2.0 | A VyOS-parser author's test fixture — VyOS **1.5-rolling-202501060800** (newest version in the corpus).  `service snmp { community public }` + 5 block-form NTP servers; `firewall` → Tier-3; static-arp / ipv6 / offload / ring-buffer parse-and-ignore.  Secrets are author-redacted (`$6$xxxxxxx`, `AAAAxxxxxxxxx`) — not real. |
+| `metasploit-vyos-config.conf` | [rapid7/metasploit-framework](https://github.com/rapid7/metasploit-framework) `documentation/modules/auxiliary/admin/networking/vyos_config.md` (first embedded config block) | BSD-3-Clause | The Metasploit `vyos_config` module's documentation example — VyOS **1.3-rolling-202008270118** (oldest in the corpus).  `service snmp { community ro / community write }` (the codec keeps the first, `ro`; `write` drops — lossy single-community).  The `encrypted-password` is the published metasploit example hash (a doc demo, not a live secret), per the published-lab-hashes convention. |
+
 ---
 
 ## Adding new captures
