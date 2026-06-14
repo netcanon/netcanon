@@ -25,25 +25,31 @@ Module layout mirrors the ``cisco_nxos`` post-split shape:
 introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
-This codec lands in phases (Tier-1 first, mirroring the ``cisco_nxos``
+This codec landed in phases (Tier-1 first, mirroring the ``cisco_nxos``
 cadence).  **Phase 1**: hostname, basic-L3 interfaces (description /
 admin-state / mtu / IPv4 + IPv6 CIDR / ``vrf attach``), VLANs (id + name
 + description), top-level ``vrf`` declarations (name), and default-VRF
-static routes.  **Phase 2** (this commit): the L2 switchport surface
-(``no routing`` + ``vlan access`` / ``vlan trunk native`` / ``vlan trunk
-allowed``) with VLAN-centric port projection, LAGs (``interface lag N``
-+ per-port ``lag N`` + ``lacp mode``), and local users (``user <name>
-group <group> password ciphertext <blob>``).  **Phase 2b** (this
-commit): SNMP — v2c community, ``system-location`` / ``system-contact``,
-and ``snmpv3 user`` USM users (``auth-pass`` / ``priv-pass`` ciphertext).
-**Phase 3** (this commit): the ``active-gateway`` anycast surface (the
-VSX/EVPN distributed gateway — ``active-gateway ip <vip>`` mirrors into
-``virtual_gateway_address`` + ``active-gateway ip mac <mac>`` ->
-``anycast_gateway_mac``; reuses the certified NX-OS DAG / IOS-XE
-SD-Access canonical surface).  ``certainty`` is ``best_effort`` —
-synthetically round-trip-validated across the supported surface; no
-real-capture corpus is wired yet (the certified tier follows in a later
-phase).  Later phases add VSX and VXLAN / EVPN.
+static routes.  **Phase 2**: the L2 switchport surface (``no routing`` +
+``vlan access`` / ``vlan trunk native`` / ``vlan trunk allowed``) with
+VLAN-centric port projection, LAGs (``interface lag N`` + per-port ``lag
+N`` + ``lacp mode``), and local users (``user <name> group <group>
+password ciphertext <blob>``).  **Phase 2b**: SNMP — v2c community,
+``system-location`` / ``system-contact``, and ``snmpv3 user`` USM users
+(``auth-pass`` / ``priv-pass`` ciphertext).  **Phase 3**: the
+``active-gateway`` anycast surface (the VSX/EVPN distributed gateway —
+``active-gateway ip <vip>`` mirrors into ``virtual_gateway_address`` +
+``active-gateway ip mac <mac>`` -> ``anycast_gateway_mac``; reuses the
+certified NX-OS DAG / IOS-XE SD-Access canonical surface).  **Phase 4**
+(this commit): the L2 VXLAN VLAN↔VNI binding (``interface vxlan 1`` /
+``source ip <X>`` / ``vni <VNI>`` / nested ``vlan <VLAN>`` ->
+:class:`CanonicalVxlan`), and a real-capture corpus (the Apache-2.0
+``aruba/aoscx-ansible-dcn-workflows`` reference fabric — VXLAN leaves +
+active-gateway cores) wired into ``test_real_captures``.  ``certainty``
+is now ``certified`` — the supported surface round-trips on the real
+corpus (the active-gateway surface, synthetic-only through Phase 3, is
+now exercised by the real arch4 core configs).  Still deferred: the
+per-VLAN L2VNI RD/RT (``auto``-derived, no canonical home), symmetric-
+IRB L3VNI (``vni N / vrf``), VSX, and VRRP.
 """
 
 from __future__ import annotations
@@ -78,7 +84,7 @@ class ArubaAOSCXCodec(CodecBase):
     version_hint: ClassVar[str | None] = "10.x"
     input_format: ClassVar[str] = "cli-aoscx"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "best_effort"
+    certainty: ClassVar[str] = "certified"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Aruba AOS-CX "
@@ -165,6 +171,9 @@ class ArubaAOSCXCodec(CodecBase):
             # virtual_gateway_address + `active-gateway ip mac <mac>`. ──
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/anycast-gateway-mac",
+            # ── Phase 4: VXLAN L2 VLAN↔VNI binding (`interface vxlan 1`
+            # / `vni <VNI>` / nested `vlan <VLAN>`). ──
+            "/vxlan-vnis/vni",
         ],
         lossy=[
             LossyPath(
@@ -220,6 +229,22 @@ class ArubaAOSCXCodec(CodecBase):
                     "must re-key the SNMPv3 user on the target; the "
                     "`plaintext` key form is normalised to `ciphertext` on "
                     "render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/source-interface",
+                reason=(
+                    "AOS-CX states the VTEP source as an IPv4 *address* "
+                    "(`interface vxlan 1 / source ip <X>`), not an interface "
+                    "name like NX-OS / Arista (`source-interface loopbackN`). "
+                    "The address is stored verbatim in the opaque "
+                    "`source_interface` field and round-trips losslessly "
+                    "same-vendor; a cross-vendor source carrying an interface "
+                    "*name* there has no AOS-CX `source ip` form, so the "
+                    "`source ip` line is omitted on render (the VLAN↔VNI "
+                    "bindings still emit).  Operators set the loopback->IP "
+                    "mapping on the target manually."
                 ),
                 severity="warn",
             ),
@@ -281,21 +306,27 @@ class ArubaAOSCXCodec(CodecBase):
                     "NX-OS / IOS-XE IPv6-anycast deferral)."
                 ),
             ),
-            # ── VXLAN / EVPN (later phase) ──
+            # ── VXLAN / EVPN — L2 VLAN↔VNI binding IS supported (Phase 4);
+            # the per-VLAN L2VNI RD/RT + symmetric-IRB L3VNI are not. ──
             UnsupportedPath(
-                path="/vxlan-vnis/vni",
+                path="/vxlan-vnis/l2vni-route-target",
                 reason=(
-                    "VXLAN (`interface vxlan N` / `vni N` / `evpn`) is a "
-                    "later phase."
+                    "The per-VLAN L2VNI route-distinguisher / route-target "
+                    "(`evpn / vlan N / rd auto / route-target export|import "
+                    "...`) is almost always `auto`-derived and has no "
+                    "cross-vendor canonical home — NX-OS / Arista / Junos all "
+                    "auto-derive the L2VNI RD/RT from the VNI too.  The "
+                    "VLAN↔VNI binding (`/vxlan-vnis/vni`) IS translated; the "
+                    "RD/RT is dropped (re-derived on the target)."
                 ),
             ),
             UnsupportedPath(
-                path="/vxlan-vnis/source-interface",
-                reason="VXLAN VTEP source is a later phase (see /vxlan-vnis/vni).",
-            ),
-            UnsupportedPath(
                 path="/routing-instances/instance/l3-vni",
-                reason="EVPN L3VNI symmetric IRB is a later phase.",
+                reason=(
+                    "EVPN symmetric-IRB L3VNI (`vni N / vrf <name>` under the "
+                    "VTEP + `router bgp / vrf`) is a later phase; the L2VNI "
+                    "VLAN↔VNI binding (`/vxlan-vnis/vni`) IS supported."
+                ),
             ),
             # ── Tier-3 — never auto-translatable ──
             UnsupportedPath(
