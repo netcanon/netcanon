@@ -100,7 +100,9 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Interfaces (AOS-CX show-output order) ──
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     for iface in _sort_interfaces(tree.interfaces):
-        lines.extend(_render_interface(iface, lag_mode_by_name))
+        lines.extend(_render_interface(
+            iface, lag_mode_by_name, tree.anycast_gateway_mac,
+        ))
 
     return "\n".join(lines) + "\n"
 
@@ -175,7 +177,9 @@ def _render_static_route(route) -> str:
     return out
 
 
-def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
+def _render_interface(
+    iface, lag_mode_by_name: dict, anycast_mac: str = "",
+) -> list[str]:
     """Render one interface stanza.
 
     Switchport handling is kind-aware: only physical / LAG ports take the
@@ -184,6 +188,9 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     keyword (routing is the AOS-CX default for an addressed port).  SVIs /
     loopbacks / mgmt are inherently L3.  ``lacp mode`` is emitted on the
     ``interface lag N`` stanza; ``lag N`` membership on the member port.
+    An SVI address carrying a ``virtual_gateway_address`` emits the
+    ``active-gateway ip mac <mac>`` + ``active-gateway ip <vip>`` anycast
+    pair (the MAC is the chassis-wide ``anycast_gateway_mac``).
     """
     from . import port_names as _port_names
 
@@ -232,6 +239,14 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
             if addr.is_secondary:
                 line += " secondary"
             block.append(line)
+            # ── Active-gateway anycast (Phase 3) ── the per-SVI VIP +
+            # the chassis-wide MAC; AOS-CX emits both under the SVI.
+            if addr.virtual_gateway_address:
+                if anycast_mac:
+                    block.append(f"    active-gateway ip mac {anycast_mac}")
+                block.append(
+                    f"    active-gateway ip {addr.virtual_gateway_address}"
+                )
         for addr in iface.ipv6_addresses:
             block.append(f"    ipv6 address {addr.ip}/{addr.prefix_length}")
 
