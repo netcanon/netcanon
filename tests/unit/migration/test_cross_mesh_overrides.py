@@ -46,6 +46,7 @@ from netcanon.migration.codecs import (  # noqa: F401 — side-effect import
     juniper_junos,
     mikrotik_routeros,
     opnsense,
+    vyos,
 )
 from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 from netcanon.migration.codecs.registry import get_codec, list_codecs
@@ -271,6 +272,34 @@ interface loopback 0
     ip address 10.255.0.1/32
 ip route 0.0.0.0/0 198.51.100.2
 """,
+    "vyos": """\
+interfaces {
+    ethernet eth0 {
+        address 198.51.100.1/31
+        description "uplink"
+    }
+    ethernet eth1 {
+        vif 20 {
+            address 10.20.20.1/24
+        }
+    }
+    loopback lo {
+        address 10.255.0.1/32
+    }
+}
+protocols {
+    static {
+        route 0.0.0.0/0 {
+            next-hop 198.51.100.2 {
+            }
+        }
+    }
+}
+system {
+    host-name TestVyOS
+}
+// vyos-config-version: "system@27:interfaces@29"
+""",
 }
 
 #: Codec classes used in the cross-mesh smoke matrix.  Built lazily
@@ -301,6 +330,7 @@ _SOURCE_CAPABLE = [
     "cisco_nxos",
     "cisco_iosxr",
     "aruba_aoscx",
+    "vyos",
 ]
 # Target-capable expanded post-aruba→cisco-iosxe-NETCONF bug:
 # every bidirectional codec is now in the smoke matrix.  The
@@ -319,6 +349,7 @@ _TARGET_CAPABLE = [
     "cisco_nxos",
     "cisco_iosxr",
     "aruba_aoscx",
+    "vyos",
 ]
 
 

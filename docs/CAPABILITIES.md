@@ -19,7 +19,7 @@ lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md
 
 ## Supported vendors
 
-Ten migration codecs ship today, plus a `_mock` adapter used in
+Twelve migration codecs ship today, plus a `_mock` adapter used in
 tests.  Backup-side device definitions are listed under
 [`../definitions/`](../definitions/) (one YAML per vendor/OS family).
 
@@ -36,6 +36,7 @@ tests.  Backup-side device definitions are listed under
 | `fortigate_cli`   | Fortinet FortiGate | nested `config / edit / set / next / end` CLI | bidirectional | certified |
 | `mikrotik_routeros` | MikroTik RouterOS | `/path` slash-prefixed CLI export | bidirectional | certified |
 | `opnsense`        | OPNsense      | `config.xml`              | bidirectional | certified |
+| `vyos`            | VyOS          | `config.boot` curly-brace text | bidirectional | experimental (Phase 1 — Tier-1: `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes; curly-brace `config.boot` form — distinct from the `set`-form `juniper_junos` codec; `bonding` LAGs + `system login` users + `service` (SSH/NTP/SNMP) + VRF + the certified tier follow in later phases) |
 
 Backup-side device-definition YAMLs ship for the same vendor families
 plus per-OS-version overlays.  See

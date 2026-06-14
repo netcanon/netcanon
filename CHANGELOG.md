@@ -26,7 +26,31 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+* **New codec: VyOS (`vyos`) — Phase 1.**  Bidirectional codec for the
+  VyOS router/firewall NOS (the OSS Vyatta successor) — netcanon's
+  **12th migration codec**.  VyOS stores its configuration as a
+  JunOS-style **curly-brace tree** (`config.boot` / `show
+  configuration`), parsed by a new brace-stack walker.  It is a distinct
+  codec from `juniper_junos`: a VyOS config has no `set ` lines, uses
+  Linux-style `ethN` / `lo` / `bondN` device names, and terminates
+  leaves with bare newlines (no `;`) — the probe keys off the
+  `// vyos-config-version` trailer (or, trailer-less, curly-brace
+  structural markers) and vetoes both Junos set-form (`set ` lines) and
+  Junos curly-form (`;`-terminated leaves).  Phase-1 Tier-1 surface:
+  `system host-name`; `interfaces ethernet` / `loopback` / `dummy`
+  blocks (`address` IPv4+IPv6 CIDR / `dhcp` / `description` / `disable`
+  → admin-down / `mtu`); `vif` VLAN sub-interfaces (modelled as
+  `ethN.<vid>` interfaces); and `protocols static` routes (`route` /
+  `route6` / `next-hop` / `distance`).  Leaf values are parsed
+  quote-agnostically (VyOS 1.4+ quotes them, older releases don't).
+  `certainty` is `experimental` — synthetically round-trip-validated; a
+  real-capture corpus (the MIT-licensed `cisagov/prescup-challenges`
+  VyOS configs) + the certified tier follow in later phases, alongside
+  `bonding` LAGs, `system login` users, `service` (SSH/NTP/SNMP), and
+  VRF.  Cross-mesh regenerated (836 → 924 cells); high-severity
+  CODEC_BUG held flat at 5.
 
 ## [0.1.6] - 2026-06-13
 
