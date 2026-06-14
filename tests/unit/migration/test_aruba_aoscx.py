@@ -89,6 +89,8 @@ interface vlan 10
     no shutdown
     vrf attach RED
     ip address 10.10.10.1/24
+    active-gateway ip mac 02:00:0a:0a:0a:01
+    active-gateway ip 10.10.10.254
 interface loopback 0
     ip address 10.255.0.1/32
 ip route 0.0.0.0/0 198.51.100.2
@@ -347,6 +349,27 @@ def test_render_snmp_grammar(codec: ArubaAOSCXCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3 — active-gateway anycast
+# ---------------------------------------------------------------------------
+
+def test_parse_active_gateway(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    svi = next(i for i in intent.interfaces if i.name == "vlan 10")
+    # The `active-gateway ip <vip>` attaches to the SVI's primary address
+    # (distinct from the SVI's own ip — Arista-VARP style).
+    assert svi.ipv4_addresses[0].ip == "10.10.10.1"
+    assert svi.ipv4_addresses[0].virtual_gateway_address == "10.10.10.254"
+    # The MAC is the chassis-wide anycast gateway MAC (colon-hex).
+    assert intent.anycast_gateway_mac == "02:00:0a:0a:0a:01"
+
+
+def test_render_active_gateway(codec: ArubaAOSCXCodec) -> None:
+    out = codec.render(codec.parse(_SAMPLE))
+    assert "active-gateway ip mac 02:00:0a:0a:0a:01" in out
+    assert "active-gateway ip 10.10.10.254" in out
+
+
+# ---------------------------------------------------------------------------
 # Type-aware default admin-state
 # ---------------------------------------------------------------------------
 
@@ -378,6 +401,7 @@ def _normalise(intent):
     sorted so render-order vs file-order doesn't register as drift."""
     return {
         "hostname": intent.hostname,
+        "anycast_mac": intent.anycast_gateway_mac,
         "vrfs": [ri.name for ri in intent.routing_instances],
         "vlans": sorted(
             (
@@ -398,7 +422,10 @@ def _normalise(intent):
                 tuple(sorted(i.trunk_allowed_vlans)),
                 i.trunk_native_vlan,
                 i.lag_member_of,
-                tuple((a.ip, a.prefix_length) for a in i.ipv4_addresses),
+                tuple(
+                    (a.ip, a.prefix_length, a.virtual_gateway_address)
+                    for a in i.ipv4_addresses
+                ),
                 tuple((a.ip, a.prefix_length) for a in i.ipv6_addresses),
             )
             for i in intent.interfaces
@@ -482,6 +509,8 @@ def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
     "/snmp/location",
     "/snmp/contact",
     "/snmp/v3-user",
+    "/interfaces/interface/ipv4/address/virtual-gateway-address",
+    "/anycast-gateway-mac",
 ])
 def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -500,7 +529,7 @@ def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
     "/snmp/trap-host",
     "/vxlan-vnis/vni",
     "/routing-protocols/bgp",
-    "/anycast-gateway-mac",
+    "/interfaces/interface/ipv6/address/virtual-gateway-address",
     "/routing-instances/instance/route-distinguisher",
 ])
 def test_matrix_unsupported(codec: ArubaAOSCXCodec, path: str) -> None:

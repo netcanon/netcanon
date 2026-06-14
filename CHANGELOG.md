@@ -28,6 +28,19 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Aruba AOS-CX codec — Phase 3 (`active-gateway` anycast).**  Parses +
+  renders the VSX/EVPN distributed-gateway surface: the per-SVI
+  `active-gateway ip <vip>` (mirrored into
+  `CanonicalIPv4Address.virtual_gateway_address`) + `active-gateway ip
+  mac <mac>` (the first occurrence → the chassis-wide
+  `CanonicalIntent.anycast_gateway_mac`, colon-hex).  Unlike NX-OS DAG
+  (where the gateway VIP == the SVI's own IP), AOS-CX is Arista-VARP
+  style — the VIP is distinct from the SVI's per-switch address — but it
+  reuses the same certified anycast canonical surface.  Graduates
+  `/interfaces/interface/ipv4/address/virtual-gateway-address` +
+  `/anycast-gateway-mac` → `supported`; the IPv6 anycast companion stays
+  unsupported (parity with the NX-OS / IOS-XE deferral).  Cross-mesh +
+  phase-4 regenerated; high-severity CODEC_BUG held flat at 5.
 * **Aruba AOS-CX codec — SNMP + `best_effort`.**  Adds the SNMP surface:
   `snmp-server community`, `snmp-server system-location` /
   `system-contact` (note AOS-CX's `system-` prefix vs NX-OS's bare

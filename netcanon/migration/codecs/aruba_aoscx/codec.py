@@ -36,10 +36,14 @@ allowed``) with VLAN-centric port projection, LAGs (``interface lag N``
 group <group> password ciphertext <blob>``).  **Phase 2b** (this
 commit): SNMP — v2c community, ``system-location`` / ``system-contact``,
 and ``snmpv3 user`` USM users (``auth-pass`` / ``priv-pass`` ciphertext).
-``certainty`` is ``best_effort`` — synthetically round-trip-validated
-across the supported surface; no real-capture corpus is wired yet (the
-certified tier follows in a later phase).  Later phases add the
-``active-gateway`` anycast surface, VSX, and VXLAN / EVPN.
+**Phase 3** (this commit): the ``active-gateway`` anycast surface (the
+VSX/EVPN distributed gateway — ``active-gateway ip <vip>`` mirrors into
+``virtual_gateway_address`` + ``active-gateway ip mac <mac>`` ->
+``anycast_gateway_mac``; reuses the certified NX-OS DAG / IOS-XE
+SD-Access canonical surface).  ``certainty`` is ``best_effort`` —
+synthetically round-trip-validated across the supported surface; no
+real-capture corpus is wired yet (the certified tier follows in a later
+phase).  Later phases add VSX and VXLAN / EVPN.
 """
 
 from __future__ import annotations
@@ -156,6 +160,11 @@ class ArubaAOSCXCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/v3-user",
+            # ── Phase 3: active-gateway anycast (VSX/EVPN distributed
+            # gateway) — `active-gateway ip <vip>` mirrors into
+            # virtual_gateway_address + `active-gateway ip mac <mac>`. ──
+            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            "/anycast-gateway-mac",
         ],
         lossy=[
             LossyPath(
@@ -254,31 +263,22 @@ class ArubaAOSCXCodec(CodecBase):
                     "Phase 1; only default-VRF `ip route` is wired."
                 ),
             ),
-            # ── FHRP / active-gateway anycast (later phase) ──
+            # ── FHRP VRRP (later phase — distinct from active-gateway) ──
             UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group",
                 reason=(
                     "AOS-CX VRRP (`vrrp <vrid> address-family` under an "
-                    "SVI) is a later phase."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
-                reason=(
-                    "The AOS-CX `active-gateway ip` anycast-gateway "
-                    "surface (the VSX/EVPN distributed gateway equivalent "
-                    "of NX-OS DAG) is a later phase."
+                    "SVI) is a later phase; the `active-gateway` anycast "
+                    "surface (the VSX/EVPN distributed gateway) IS "
+                    "supported."
                 ),
             ),
             UnsupportedPath(
                 path="/interfaces/interface/ipv6/address/virtual-gateway-address",
-                reason="IPv6 active-gateway anycast is a later phase.",
-            ),
-            UnsupportedPath(
-                path="/anycast-gateway-mac",
                 reason=(
-                    "The chassis-wide `active-gateway mac` is a later "
-                    "phase (companion to the active-gateway IP surface)."
+                    "IPv4 active-gateway is supported; the IPv6 anycast "
+                    "companion parses-and-ignores in v1 (parity with the "
+                    "NX-OS / IOS-XE IPv6-anycast deferral)."
                 ),
             ),
             # ── VXLAN / EVPN (later phase) ──

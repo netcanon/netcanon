@@ -23,10 +23,10 @@ Certainty: ``best_effort`` — Phase 1 (Tier-1: hostname, basic-L3
     interfaces, VLANs, top-level ``vrf`` name, default-VRF static routes)
     + Phase 2 (L2 switchport + VLAN port projection, LAGs, local users)
     + Phase 2b (SNMP — community / system-location / system-contact / v3
-    USM).  Synthetically round-trip-validated; no real-capture corpus is
-    wired yet — the active-gateway anycast / VXLAN-EVPN surfaces and the
-    certified tier follow in later phases.  See
-    ``docs/fixture-research-2015/11-aruba_aoscx.md``.
+    USM) + Phase 3 (active-gateway anycast — the VSX/EVPN distributed
+    gateway).  Synthetically round-trip-validated; no real-capture corpus
+    is wired yet — VSX / VXLAN-EVPN and the certified tier follow in later
+    phases.  See ``docs/fixture-research-2015/11-aruba_aoscx.md``.
 """
 
 from .codec import ArubaAOSCXCodec
