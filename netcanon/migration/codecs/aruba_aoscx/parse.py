@@ -181,6 +181,44 @@ _SNMPV3_USER_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+# ── Active-gateway anycast (Phase 3) ──
+# AOS-CX VSX/EVPN distributed gateway, configured PER-SVI (Arista-VARP
+# style — the VIP is distinct from the SVI's own `ip address`, unlike
+# NX-OS DAG where they coincide).  Maps onto the shared anycast canonical
+# surface: `active-gateway ip <vip>` -> virtual_gateway_address on the
+# SVI's primary address; the first `active-gateway ip mac <mac>` ->
+# CanonicalIntent.anycast_gateway_mac.
+_ACTIVE_GW_MAC_RE = re.compile(
+    r"^\s+active-gateway\s+ip\s+mac\s+(\S+)\s*$", re.IGNORECASE,
+)
+#: MULTILINE variant for the intent-level chassis-MAC scan.
+_ACTIVE_GW_MAC_TOP_RE = re.compile(
+    r"^\s+active-gateway\s+ip\s+mac\s+(\S+)\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: ``active-gateway ip <vip>`` — the digit guard means it never matches
+#: the ``active-gateway ip mac ...`` line.
+_ACTIVE_GW_IP_RE = re.compile(
+    r"^\s+active-gateway\s+ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
+)
+
+
+def _normalise_mac_to_colon_hex(mac: str) -> str:
+    """Normalise a MAC to canonical lower-case colon-hex.
+
+    AOS-CX emits colon-hex already (``02:00:0a:01:65:01``); this also
+    tolerates dotted-triplet / dash forms.  Returns empty string for
+    input it can't classify.  Forked from cisco_nxos per the
+    duplicate-rather-than-lift convention.
+    """
+    if not mac:
+        return ""
+    hex_only = re.sub(r"[^0-9a-f]", "", mac.strip().lower())
+    if len(hex_only) != 12:
+        return ""
+    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
+
+
 #: ``vrf <name>`` opens a top-level VRF declaration (single token, whole
 #: line).  Distinct from the interface-level ``vrf attach`` (indented) and
 #: from ``ssh server vrf mgmt`` / ``ntp vrf mgmt`` (different leading
@@ -296,6 +334,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     intent.hostname = _extract_hostname(raw)
     intent.source_version = _extract_version(raw)
 
+    # Active-gateway anycast (Phase 3): the per-SVI `active-gateway ip
+    # mac` (first occurrence) is the chassis-wide anycast MAC.  The
+    # per-SVI `active-gateway ip <vip>` is harvested into
+    # virtual_gateway_address by :func:`_parse_interfaces`.
+    agm = _ACTIVE_GW_MAC_TOP_RE.search(raw)
+    if agm:
+        normalised = _normalise_mac_to_colon_hex(agm.group(1))
+        if normalised:
+            intent.anycast_gateway_mac = normalised
+
     # VRF declarations (``vrf <name>`` top-level).  Harvests the name only;
     # per-interface ``vrf attach`` membership is set by
     # :func:`_parse_interfaces`.
@@ -410,6 +458,10 @@ def _new_iface_scratch(name: str) -> dict:
         "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
+        # Active-gateway anycast: the per-SVI `active-gateway ip <vip>`
+        # mirrors into virtual_gateway_address in
+        # _build_canonical_interface.
+        "active_gw_ip": None,
     }
 
 
@@ -525,6 +577,17 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["vrf"] = vm.group(1)
             continue
 
+        # ── Active-gateway anycast (Phase 3) ──
+        # The `active-gateway ip mac` line is consumed here (the MAC is
+        # harvested at intent level); `active-gateway ip <vip>` sets the
+        # SVI's virtual gateway.
+        if _ACTIVE_GW_MAC_RE.match(line):
+            continue
+        agi = _ACTIVE_GW_IP_RE.match(line)
+        if agi:
+            current["active_gw_ip"] = agi.group(1)
+            continue
+
         # ── L2 switchport (Phase 2) ──
         if _NO_ROUTING_RE.match(line):
             # The L2 marker; the mode is set by the vlan lines below.
@@ -574,8 +637,13 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
                 ip=a["ip"],
                 prefix_length=a["prefix_length"],
                 is_secondary=a.get("is_secondary", False),
+                # Active-gateway anycast: the `active-gateway ip <vip>`
+                # attaches to the SVI's PRIMARY (first) address.
+                virtual_gateway_address=(
+                    (raw.get("active_gw_ip") or "") if idx == 0 else ""
+                ),
             )
-            for a in raw.get("ipv4", [])
+            for idx, a in enumerate(raw.get("ipv4", []))
         ],
         ipv6_addresses=[
             CanonicalIPv6Address(
