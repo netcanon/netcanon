@@ -43,6 +43,10 @@ _SAMPLE = """\
 hostname Leaf1
 user admin group administrators password ciphertext FAKECIPHERTEXTBLOBADMIN
 user netops group operators password ciphertext FAKECIPHERTEXTBLOBNETOPS
+snmp-server community FAKECOMMUNITY
+snmp-server system-location Data Center 1
+snmp-server system-contact noc@example.net
+snmpv3 user monitor auth sha auth-pass ciphertext FAKEAUTHBLOB priv aes priv-pass ciphertext FAKEPRIVBLOB
 !
 vrf RED
 vlan 1
@@ -130,7 +134,7 @@ def test_registered() -> None:
     assert isinstance(c, ArubaAOSCXCodec)
     assert c.input_format == "cli-aoscx"
     assert c.direction == "bidirectional"
-    assert c.certainty == "experimental"
+    assert c.certainty == "best_effort"
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +319,34 @@ def test_local_users(codec: ArubaAOSCXCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2b — SNMP
+# ---------------------------------------------------------------------------
+
+def test_parse_snmp(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    assert intent.snmp is not None
+    assert intent.snmp.community == "FAKECOMMUNITY"
+    # `system-location` value carries spaces — captured to end of line.
+    assert intent.snmp.location == "Data Center 1"
+    assert intent.snmp.contact == "noc@example.net"
+    users = {u.name: u for u in intent.snmp.v3_users}
+    assert "monitor" in users
+    assert users["monitor"].auth_protocol == "sha"
+    assert users["monitor"].auth_passphrase == "FAKEAUTHBLOB"
+    assert users["monitor"].priv_protocol == "aes"
+    assert users["monitor"].priv_passphrase == "FAKEPRIVBLOB"
+
+
+def test_render_snmp_grammar(codec: ArubaAOSCXCodec) -> None:
+    out = codec.render(codec.parse(_SAMPLE))
+    assert "snmp-server community FAKECOMMUNITY" in out
+    assert "snmp-server system-location Data Center 1" in out
+    assert "snmp-server system-contact noc@example.net" in out
+    assert "snmpv3 user monitor auth sha auth-pass ciphertext" in out
+    assert "priv aes priv-pass ciphertext" in out
+
+
+# ---------------------------------------------------------------------------
 # Type-aware default admin-state
 # ---------------------------------------------------------------------------
 
@@ -383,6 +415,18 @@ def _normalise(intent):
             (r.destination, r.gateway, r.interface, r.metric)
             for r in intent.static_routes
         ),
+        "snmp": (
+            None if intent.snmp is None else (
+                intent.snmp.community,
+                intent.snmp.location,
+                intent.snmp.contact,
+                tuple(
+                    (u.name, u.auth_protocol, u.auth_passphrase,
+                     u.priv_protocol, u.priv_passphrase)
+                    for u in intent.snmp.v3_users
+                ),
+            )
+        ),
     }
 
 
@@ -434,6 +478,10 @@ def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
     "/lags/lag/mode",
     "/local-users/user/name",
     "/local-users/user/role",
+    "/snmp/community",
+    "/snmp/location",
+    "/snmp/contact",
+    "/snmp/v3-user",
 ])
 def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -442,13 +490,14 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
 @pytest.mark.parametrize("path", [
     "/interfaces/interface/config/type",
     "/local-users/user/privilege-level",
+    "/snmp/v3-user/auth-passphrase",
 ])
 def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
 
 
 @pytest.mark.parametrize("path", [
-    "/snmp/community",
+    "/snmp/trap-host",
     "/vxlan-vnis/vni",
     "/routing-protocols/bgp",
     "/anycast-gateway-mac",
