@@ -58,7 +58,7 @@ def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as VyOS ``config.boot`` text."""
     lines: list[str] = []
 
-    iface_lines = _render_interfaces(tree.interfaces)
+    iface_lines = _render_interfaces(tree.interfaces, tree.lags)
     if iface_lines:
         lines.append("interfaces {")
         lines.extend(iface_lines)
@@ -70,9 +70,12 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.extend(static_lines)
         lines.append("}")
 
-    # ``system`` always carries at least the host-name.
+    # ``system`` always carries at least the host-name; Phase 2 adds the
+    # ``login`` (local users) and ``ntp`` sub-blocks.
     lines.append("system {")
     lines.append(f"    host-name {tree.hostname or 'vyos'}")
+    lines.extend(_render_login(tree.local_users))
+    lines.extend(_render_ntp(tree.ntp_servers))
     lines.append("}")
 
     # Trailer — every config.boot ends with the component-version stamp.
@@ -132,13 +135,17 @@ def _iface_body(iface, indent: str) -> list[str]:
     return out
 
 
-def _render_interfaces(interfaces: list) -> list[str]:
+def _render_interfaces(interfaces: list, lags: list | None = None) -> list[str]:
     """Render the body of the ``interfaces { }`` block.
 
     Splits canonical interfaces into parents and ``vif`` sub-interfaces
     (``ethN.<vid>``), nests each vif inside its parent ethernet block,
-    and synthesises an empty parent block for any orphan vif.
+    and synthesises an empty parent block for any orphan vif.  A
+    ``bonding bondN`` interface additionally emits its LACP ``mode`` and
+    1.4-style ``member { interface ethN { } }`` list from the matching
+    :class:`CanonicalLAG`.
     """
+    lag_by_name = {lag.name: lag for lag in (lags or [])}
     parents: dict[str, object] = {}
     vifs: dict[str, list[tuple[int, object]]] = {}
     order: list[str] = []
@@ -156,6 +163,12 @@ def _render_interfaces(interfaces: list) -> list[str]:
         if parent not in parents:
             parents[parent] = None
             order.append(parent)
+    # Ensure a block exists for any LAG declared but not separately
+    # materialised as an interface.
+    for lag_name in lag_by_name:
+        if lag_name not in parents:
+            parents[lag_name] = None
+            order.append(lag_name)
 
     lines: list[str] = []
     for name in sorted(order, key=_iface_sort_key):
@@ -164,12 +177,72 @@ def _render_interfaces(interfaces: list) -> list[str]:
         iface = parents[name]
         if iface is not None:
             lines.extend(_iface_body(iface, "        "))
+        if btype == "bonding":
+            lines.extend(_bond_extra(lag_by_name.get(name), "        "))
         for vid, viface in sorted(vifs.get(name, []), key=lambda t: t[0]):
             lines.append(f"        vif {vid} {{")
             lines.extend(_iface_body(viface, "            "))
             lines.append("        }")
         lines.append("    }")
     return lines
+
+
+def _bond_extra(lag, indent: str) -> list[str]:
+    """Render a bonding interface's ``mode`` + ``member`` lines from the
+    matching :class:`CanonicalLAG` (1.4-style member-interface form;
+    members sorted).  ``mode 802.3ad`` is emitted for an ``active``
+    (LACP) LAG; a ``static`` LAG omits the line (VyOS applies its
+    default)."""
+    if lag is None:
+        return []
+    out: list[str] = []
+    if lag.mode == "active":
+        out.append(f"{indent}mode 802.3ad")
+    if lag.members:
+        out.append(f"{indent}member {{")
+        for member in sorted(lag.members):
+            out.append(f"{indent}    interface {member} {{")
+            out.append(f"{indent}    }}")
+        out.append(f"{indent}}}")
+    return out
+
+
+def _render_login(users: list) -> list[str]:
+    """Render the ``login { }`` sub-block (nested under ``system``).
+
+    Each user emits ``user <name> { authentication { encrypted-password
+    <hash> } }``.  Sorted by name for stable output (the round-trip
+    compares local_users by name).  A user with no stored hash renders
+    the bare ``user <name> { }`` form.
+    """
+    if not users:
+        return []
+    out = ["    login {"]
+    for u in sorted(users, key=lambda x: x.name):
+        out.append(f"        user {u.name} {{")
+        if u.hashed_password:
+            out.append("            authentication {")
+            out.append(
+                f"                encrypted-password {u.hashed_password}"
+            )
+            out.append("            }")
+        out.append("        }")
+    out.append("    }")
+    return out
+
+
+def _render_ntp(servers: list) -> list[str]:
+    """Render the ``ntp { }`` sub-block (nested under ``system``).
+
+    Emits one ``server <host>`` per NTP server in canonical-list order
+    (preserved from parse, so the round-trip is stable)."""
+    if not servers:
+        return []
+    out = ["    ntp {"]
+    for s in servers:
+        out.append(f"        server {s}")
+    out.append("    }")
+    return out
 
 
 def _render_static(routes: list) -> list[str]:

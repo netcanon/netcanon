@@ -27,13 +27,16 @@ This codec lands in phases (Tier-1 first, mirroring the ``aruba_aoscx``
 cadence).  **Phase 1** (this commit): ``system host-name``; interfaces
 (``ethernet`` / ``loopback`` / ``dummy`` with ``address`` IPv4+IPv6 CIDR
 / ``dhcp`` / ``description`` / ``disable`` / ``mtu``); ``vif`` VLAN
-sub-interfaces; and ``protocols static`` routes.  ``certainty`` is
-``experimental`` — synthetically round-trip-validated across the
-supported surface; no real-capture corpus is wired yet (the certified
-tier follows in a later phase, once a corpus from the Apache/MIT-licensed
-sources — e.g. ``cisagov/prescup-challenges`` — is landed).  Later phases
-add ``bonding`` LAGs, ``system login`` local users, ``service`` (SSH /
-NTP / SNMP / DHCP), and VRF.
+sub-interfaces; and ``protocols static`` routes.  **Phase 2** (this
+commit): ``system login user`` local users (name + ``authentication
+encrypted-password``); ``system`` / ``service`` ``ntp`` servers; and
+``bonding bondN`` LAGs (``mode 802.3ad`` → LACP, members via both the
+1.4 ``member interface`` form and the legacy ``bond-group`` form).
+``certainty`` stays ``experimental`` — synthetically round-trip-validated
+across the supported surface; no real-capture corpus is wired yet (the
+certified tier follows in a later phase, once a corpus from the
+MIT-licensed ``cisagov/prescup-challenges`` source is landed).  Later
+phases add ``service snmp``, VRF (``vrf name`` + per-iface), and VXLAN.
 """
 
 from __future__ import annotations
@@ -126,6 +129,16 @@ class VyOSCodec(CodecBase):
             "/interfaces/interface/dhcp-client-v6",
             # Static routes (default VRF)
             "/routing/static-route",
+            # ── Phase 2: local users (`system login user`) ──
+            "/local-users/user/name",
+            "/local-users/user/role",
+            "/local-users/user/hashed-password",
+            # ── Phase 2: NTP servers (`system`/`service` ntp) ──
+            "/system/ntp-server",
+            # ── Phase 2: bonding LAGs (`interfaces bonding bondN`) ──
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/interfaces/interface/lag-member-of",
         ],
         lossy=[
             LossyPath(
@@ -142,10 +155,33 @@ class VyOSCodec(CodecBase):
                 path="/system/raw-sections/version-banner",
                 reason=(
                     "The `// vyos-config-version` component-version trailer "
-                    "+ the `service` / `system login` / `system ntp` "
-                    "management-plane blocks are discarded on parse and a "
-                    "synthesised trailer is emitted on render.  The operator "
-                    "must re-apply management-plane services on the target."
+                    "+ the `service` / `system` management-plane blocks not "
+                    "yet modelled (SSH / syslog / DNS) are discarded on parse "
+                    "and a synthesised trailer is emitted on render.  The "
+                    "operator must re-apply those services on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/local-users/user/privilege-level",
+                reason=(
+                    "VyOS `system login user` accounts have no numeric "
+                    "privilege level in the common case (configured users "
+                    "have full operator/admin access); the codec maps every "
+                    "login user to privilege 15 / role `admin`.  The "
+                    "`encrypted-password` hash round-trips verbatim "
+                    "same-vendor; cross-vendor migration requires re-keying."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "VyOS bonding `mode 802.3ad` (LACP) maps to `active`; the "
+                    "non-LACP modes (`active-backup` / `balance-rr` / "
+                    "`balance-xor` / ...) collapse to `static` (the specific "
+                    "balancing algorithm is dropped — re-select it on the "
+                    "target)."
                 ),
                 severity="warn",
             ),
@@ -158,19 +194,6 @@ class VyOSCodec(CodecBase):
                     "VyOS has no top-level VLAN database; 802.1Q VLANs are "
                     "modelled as `vif <vid>` sub-interfaces (rendered as "
                     "`ethN.<vid>` CanonicalInterfaces), which ARE supported."
-                ),
-            ),
-            # LAGs (bonding) — later phase.
-            UnsupportedPath(
-                path="/lags/lag/name",
-                reason="VyOS `bonding bondN` link aggregation is a later phase.",
-            ),
-            # Local users (system login) — later phase.
-            UnsupportedPath(
-                path="/local-users/user/name",
-                reason=(
-                    "VyOS `system login user` accounts (incl. "
-                    "`authentication encrypted-password`) are a later phase."
                 ),
             ),
             # SNMP (service snmp) — later phase.
