@@ -100,6 +100,7 @@ from netcanon.migration.codecs import (  # noqa: E402, F401
     juniper_junos,
     mikrotik_routeros,
     opnsense,
+    vyos,
 )
 from netcanon.migration.codecs.base import CodecBase  # noqa: E402
 from netcanon.migration.codecs.registry import (  # noqa: E402

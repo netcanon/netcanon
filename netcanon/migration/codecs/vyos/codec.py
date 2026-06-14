@@ -1,0 +1,330 @@
+"""
+``VyOSCodec`` — bidirectional codec for VyOS ``config.boot`` /
+``show configuration`` curly-brace text.
+
+Targets the VyOS router/firewall NOS (Debian-derived; the OSS Vyatta
+successor) on VyOS 1.3 / 1.4 / rolling.  VyOS stores its configuration
+as a JunOS-style **curly-brace tree** — distinct from both the
+line-oriented CLI of the other text codecs AND the Junos ``set``-form
+the ``juniper_junos`` codec consumes (that codec keys off ``set `` lines
+and ``ge-/xe-/et-`` interface names, neither of which appears in a VyOS
+``config.boot``; see :meth:`VyOSCodec.probe`).
+
+Module layout mirrors the ``cisco_nxos`` / ``aruba_aoscx`` post-split shape:
+
+* ``codec.py`` (this file) — the class with metadata / capabilities /
+  probe / port-name delegates.
+* ``parse.py`` — brace-stack walker over VyOS config text.
+* ``render.py`` — canonical tree → VyOS ``config.boot`` text.
+* ``port_names.py`` — cross-vendor port-name bridge (Linux-style
+  ``ethN`` / ``lo`` / ``bondN`` device names).
+
+``iter_xpaths`` reuses ``_walk_canonical`` from
+:mod:`netcanon.migration.codecs.cisco_iosxe_cli.codec` — VyOS introduces
+no new canonical xpaths in Phase 1.
+
+This codec lands in phases (Tier-1 first, mirroring the ``aruba_aoscx``
+cadence).  **Phase 1** (this commit): ``system host-name``; interfaces
+(``ethernet`` / ``loopback`` / ``dummy`` with ``address`` IPv4+IPv6 CIDR
+/ ``dhcp`` / ``description`` / ``disable`` / ``mtu``); ``vif`` VLAN
+sub-interfaces; and ``protocols static`` routes.  ``certainty`` is
+``experimental`` — synthetically round-trip-validated across the
+supported surface; no real-capture corpus is wired yet (the certified
+tier follows in a later phase, once a corpus from the Apache/MIT-licensed
+sources — e.g. ``cisagov/prescup-challenges`` — is landed).  Later phases
+add ``bonding`` LAGs, ``system login`` local users, ``service`` (SSH /
+NTP / SNMP / DHCP), and VRF.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any, ClassVar, Iterable
+
+from ....models.migration import (
+    CapabilityMatrix,
+    DeviceClass,
+    LossyPath,
+    UnsupportedPath,
+)
+from ...canonical.intent import CanonicalIntent
+from .._input_shape import detect_input_shape
+from ..base import CodecBase
+from ..registry import register
+from . import port_names as _port_names
+from .parse import parse_intent
+from .render import render_intent
+
+
+@register
+class VyOSCodec(CodecBase):
+    """Bidirectional codec for VyOS ``config.boot`` curly-brace text."""
+
+    name: ClassVar[str] = "vyos"
+    version_hint: ClassVar[str | None] = "1.3/1.4"
+    input_format: ClassVar[str] = "cli-vyos"
+    direction: ClassVar[str] = "bidirectional"
+    certainty: ClassVar[str] = "experimental"
+    canonical_model: ClassVar[str] = "openconfig-lite"
+    description: ClassVar[str] = (
+        "Paste the contents of `/config/config.boot` (or the output of "
+        "`show configuration`) from a VyOS router.  VyOS is the OSS "
+        "Vyatta-successor NOS; its configuration is a JunOS-style "
+        "curly-brace tree — NOT the `set`-form that the `juniper_junos` "
+        "codec consumes (use that codec for Juniper devices)."
+    )
+    sample_input: ClassVar[str] = (
+        "interfaces {\n"
+        "    ethernet eth0 {\n"
+        "        address 192.0.2.1/30\n"
+        "        description \"uplink\"\n"
+        "    }\n"
+        "    ethernet eth1 {\n"
+        "        vif 100 {\n"
+        "            address 10.0.100.1/24\n"
+        "        }\n"
+        "    }\n"
+        "    loopback lo {\n"
+        "        address 192.0.2.255/32\n"
+        "    }\n"
+        "}\n"
+        "protocols {\n"
+        "    static {\n"
+        "        route 0.0.0.0/0 {\n"
+        "            next-hop 192.0.2.2 {\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "system {\n"
+        "    host-name vyos-router\n"
+        "}\n"
+        "// vyos-config-version: \"system@27:interfaces@29\"\n"
+    )
+    output_extension: ClassVar[str] = "conf"
+
+    _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
+        adapter="vyos",
+        vendor_id="vyos",
+        version_range="1.3/1.4",
+        device_classes=[DeviceClass.router, DeviceClass.firewall],
+        supported=[
+            # System
+            "/system/hostname",
+            # Interfaces — name + basic L3 (Phase 1; incl. vif VLAN
+            # sub-interfaces modelled as ethN.<vid> interfaces).
+            "/interfaces/interface/name",
+            "/interfaces/interface/config/name",
+            "/interfaces/interface/config/description",
+            "/interfaces/interface/config/enabled",
+            "/interfaces/interface/config/mtu",
+            "/interfaces/interface/ipv4/address/ip",
+            "/interfaces/interface/ipv4/address/prefix-length",
+            "/interfaces/interface/ipv6/address/ip",
+            "/interfaces/interface/ipv6/address/prefix-length",
+            "/interfaces/interface/dhcp-client",
+            "/interfaces/interface/dhcp-client-v6",
+            # Static routes (default VRF)
+            "/routing/static-route",
+        ],
+        lossy=[
+            LossyPath(
+                path="/interfaces/interface/config/type",
+                reason=(
+                    "VyOS declares no IANA ifType; the codec infers it "
+                    "from the interface-name shape (`ethN` -> "
+                    "ethernetCsmacd, `lo`/`dumN` -> softwareLoopback, "
+                    "`bondN` -> ieee8023adLag).  Best-effort."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/system/raw-sections/version-banner",
+                reason=(
+                    "The `// vyos-config-version` component-version trailer "
+                    "+ the `service` / `system login` / `system ntp` "
+                    "management-plane blocks are discarded on parse and a "
+                    "synthesised trailer is emitted on render.  The operator "
+                    "must re-apply management-plane services on the target."
+                ),
+                severity="warn",
+            ),
+        ],
+        unsupported=[
+            # VLAN database — VyOS has no top-level VLAN table.
+            UnsupportedPath(
+                path="/vlans/vlan/id",
+                reason=(
+                    "VyOS has no top-level VLAN database; 802.1Q VLANs are "
+                    "modelled as `vif <vid>` sub-interfaces (rendered as "
+                    "`ethN.<vid>` CanonicalInterfaces), which ARE supported."
+                ),
+            ),
+            # LAGs (bonding) — later phase.
+            UnsupportedPath(
+                path="/lags/lag/name",
+                reason="VyOS `bonding bondN` link aggregation is a later phase.",
+            ),
+            # Local users (system login) — later phase.
+            UnsupportedPath(
+                path="/local-users/user/name",
+                reason=(
+                    "VyOS `system login user` accounts (incl. "
+                    "`authentication encrypted-password`) are a later phase."
+                ),
+            ),
+            # SNMP (service snmp) — later phase.
+            UnsupportedPath(
+                path="/snmp/community",
+                reason="VyOS `service snmp` is a later phase.",
+            ),
+            # VRF — later phase.
+            UnsupportedPath(
+                path="/routing-instances/instance/name",
+                reason=(
+                    "VyOS `vrf name <X>` routing instances + per-VRF "
+                    "interface binding are a later phase."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing/static-route/vrf",
+                reason="Per-VRF static routes follow the VRF phase.",
+            ),
+            # VXLAN — later phase.
+            UnsupportedPath(
+                path="/vxlan-vnis/vni",
+                reason="VyOS `interfaces vxlan vxlanN` is a later phase.",
+            ),
+            # Tier-3 — never auto-translatable.
+            UnsupportedPath(
+                path="/routing-protocols/bgp",
+                reason=(
+                    "VyOS `protocols bgp` is Tier-3 — captured for the "
+                    "dropped_tier3_sections banner but never auto-rendered "
+                    "cross-vendor."
+                ),
+            ),
+            UnsupportedPath(path="/routing-protocols/ospf", reason="Tier-3."),
+            UnsupportedPath(
+                path="/nat",
+                reason=(
+                    "VyOS `nat source`/`nat destination` is Tier-3 — NAT "
+                    "semantics are too platform-specific to auto-translate."
+                ),
+            ),
+            UnsupportedPath(
+                path="/firewall",
+                reason=(
+                    "VyOS `firewall` rule-sets are Tier-3 — auto-translating "
+                    "firewall policy across vendors risks subtly-permissive "
+                    "rules.  Operator authors firewall policy manually."
+                ),
+            ),
+            UnsupportedPath(
+                path="/access-list/extended",
+                reason="VyOS `policy` route-maps / prefix-lists are Tier-3.",
+            ),
+        ],
+    )
+
+    @property
+    def capabilities(self) -> CapabilityMatrix:
+        return self._CAPS
+
+    # -----------------------------------------------------------------
+    # Parse / Render — delegate to sibling modules
+    # -----------------------------------------------------------------
+
+    def parse(self, raw: str) -> CanonicalIntent:
+        from ..._tier3_detection import detect_tier3_sections_vyos
+
+        intent = parse_intent(raw)
+        intent.dropped_tier3_sections = detect_tier3_sections_vyos(raw)
+        return intent
+
+    def render(self, tree: Any) -> str:
+        return render_intent(tree)
+
+    # -----------------------------------------------------------------
+    # iter_xpaths — reuse the shared canonical walker
+    # -----------------------------------------------------------------
+
+    def iter_xpaths(self, tree: Any) -> Iterable[str]:
+        """Yield schema xpaths from a :class:`CanonicalIntent`."""
+        if isinstance(tree, CanonicalIntent):
+            from ..cisco_iosxe_cli.codec import _walk_canonical
+            yield from _walk_canonical(tree)
+
+    # -----------------------------------------------------------------
+    # Cross-vendor port-name translation (delegated to .port_names)
+    # -----------------------------------------------------------------
+
+    def classify_port_name(self, name: str):
+        return _port_names.classify_port_name(name)
+
+    def format_port_identity(self, identity) -> str | None:
+        return _port_names.format_port_identity(identity)
+
+    # -----------------------------------------------------------------
+    # Auto-detection probe
+    # -----------------------------------------------------------------
+
+    @classmethod
+    def probe(cls, raw_prefix: str) -> tuple[int, str] | None:
+        """Detect VyOS ``config.boot`` curly-brace text.
+
+        Primary marker: the ``// vyos-config-version`` component-version
+        trailer is present in every saved ``config.boot`` and is
+        unambiguously VyOS.
+
+        Structural fallback (no trailer — e.g. a ``show configuration``
+        paste): a curly-brace tree with VyOS-specific markers
+        (``interfaces {`` + ``ethernet ethN {`` + ``disable`` /
+        ``loopback lo``).  Two guards keep this from claiming a Juniper
+        capture: ``set ``-form lines (Junos set-form, which the
+        ``juniper_junos`` codec owns — and a deferred VyOS set-form) and
+        ``;``-terminated leaves (Junos curly-form) both veto the match.
+        VyOS uses Linux ``ethN`` names + brace blocks with NO statement
+        terminators.
+        """
+        if detect_input_shape(raw_prefix) is not None:
+            return None
+
+        if "vyos-config-version" in raw_prefix.lower():
+            return (99, "VyOS config-version trailer present")
+
+        # Veto: Junos set-form (or deferred VyOS set-form) — `set ` lines.
+        if re.search(r"^\s*set\s+\S", raw_prefix, re.MULTILINE):
+            return None
+        # Veto: Junos curly-form — `;`-terminated leaves.  VyOS NEVER
+        # terminates a leaf with `;` (its grammar uses bare newlines), so
+        # even a single `;`-ended line means this is a Junos
+        # `show configuration` capture, not VyOS.
+        if re.search(r";\s*$", raw_prefix, re.MULTILINE):
+            return None
+
+        markers = 0
+        if re.search(r"^\s*interfaces\s*\{", raw_prefix, re.MULTILINE):
+            markers += 1
+        if re.search(
+            r"^\s+ethernet\s+eth\d+\s*\{", raw_prefix,
+            re.MULTILINE | re.IGNORECASE,
+        ):
+            markers += 1
+        if re.search(
+            r"^\s+(?:loopback\s+lo|dummy\s+dum\d+|bonding\s+bond\d+)\s*\{",
+            raw_prefix, re.MULTILINE | re.IGNORECASE,
+        ):
+            markers += 1
+        if re.search(r"^\s+disable\s*$", raw_prefix, re.MULTILINE):
+            markers += 1
+        if re.search(
+            r"^\s+host-name\s+\S", raw_prefix, re.MULTILINE | re.IGNORECASE,
+        ):
+            markers += 1
+
+        if markers >= 2:
+            return (90, f"VyOS curly-brace structural markers ({markers})")
+        # A lone ``interfaces {`` is not VyOS-specific enough to claim
+        # (Junos curly shares it); require >= 2 markers or the trailer.
+        return None

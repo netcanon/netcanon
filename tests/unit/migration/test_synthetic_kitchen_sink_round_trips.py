@@ -62,6 +62,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     juniper_junos,
     mikrotik_routeros,
     opnsense,
+    vyos,
 )
 from netcanon.migration.codecs.registry import get_codec, list_codecs
 

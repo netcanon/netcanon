@@ -187,6 +187,26 @@ _AOSCX_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^policy\s+\S+", re.MULTILINE),
 )
 
+# VyOS curly-brace shape — block openers for the routing-protocol / NAT /
+# firewall / policy sections the codec does NOT consume.  Excludes
+# `interfaces`, `protocols static` (parsed), `system` (host-name parsed),
+# and the deferred Tier-2 `service` (SSH/NTP/SNMP/DHCP) / `vrf` blocks
+# (planned canonical surfaces, so flagging them Tier-3 would mislead).
+# Matches the keyword at a line start (with optional indent for the
+# blocks nested under `protocols {`); `\b` keeps the label to the bare
+# keyword (the trailing ` {` is not captured).
+_VYOS_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*nat\b", re.MULTILINE),
+    re.compile(r"^\s*nat66\b", re.MULTILINE),
+    re.compile(r"^\s*firewall\b", re.MULTILINE),
+    re.compile(r"^\s*policy\b", re.MULTILINE),
+    re.compile(r"^\s*vpn\b", re.MULTILINE),
+    re.compile(r"^\s+bgp\b", re.MULTILINE),
+    re.compile(r"^\s+ospf(?:v3)?\b", re.MULTILINE),
+    re.compile(r"^\s+rip\b", re.MULTILINE),
+    re.compile(r"^\s+isis\b", re.MULTILINE),
+)
+
 # OPNsense XML element shape (heuristic — substring presence check on
 # top-level elements that the parser doesn't currently extract).  The
 # OPNsense codec consumes ``<vlans>``, ``<interfaces>``, ``<dhcpd>``,
@@ -239,6 +259,11 @@ def detect_tier3_sections_iosxr(raw: str) -> list[str]:
 def detect_tier3_sections_aoscx(raw: str) -> list[str]:
     """Detect Tier-3 stanza headers in Aruba AOS-CX CLI text."""
     return _detect_regex(raw, _AOSCX_TIER3_HEADERS)
+
+
+def detect_tier3_sections_vyos(raw: str) -> list[str]:
+    """Detect Tier-3 block keywords in VyOS curly-brace config text."""
+    return _detect_regex(raw, _VYOS_TIER3_HEADERS)
 
 
 def detect_tier3_sections_routeros(raw: str) -> list[str]:
