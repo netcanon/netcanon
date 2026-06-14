@@ -90,6 +90,7 @@ if str(_REPO_ROOT) not in sys.path:
 # Side-effect imports register every codec with the registry.
 from netcanon.migration.codecs import (  # noqa: E402, F401
     arista_eos,
+    aruba_aoscx,
     aruba_aoss,
     cisco_iosxe,
     cisco_iosxe_cli,

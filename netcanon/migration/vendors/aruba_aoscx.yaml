@@ -1,0 +1,19 @@
+# Aruba AOS-CX — modern Aruba switch portfolio (6000 / 8000 / 9300 /
+# CX-10000 data-center + campus switches).
+# Codec: aruba_aoscx (CLI `show running-config`).
+id: aruba_aoscx
+display_name: "Aruba AOS-CX"
+device_classes:
+  - switch
+  - router
+default_timeout: 30
+notes: >
+  AOS-CX is Aruba's modern NOS (a ground-up redesign inspired by Arista
+  EOS), distinct from the legacy ArubaOS-Switch / ProVision codec
+  (`aruba_aoss`).  Its CLI uses multi-token interface names (`interface
+  vlan 11` / `interface lag 1` / `interface 1/1/1`), CIDR addressing,
+  bare `vrf <name>` declarations + `vrf attach` interface binds, and an
+  admin-down interface default.  The codec parses + renders `show
+  running-config` text and is shipping in phases — Phase 1 covers
+  hostname, basic-L3 interfaces, VLANs (id + name + description),
+  top-level `vrf` declarations, and default-VRF static routes.
