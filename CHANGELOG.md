@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Aruba AOS-CX codec — SNMP + `best_effort`.**  Adds the SNMP surface:
+  `snmp-server community`, `snmp-server system-location` /
+  `system-contact` (note AOS-CX's `system-` prefix vs NX-OS's bare
+  keyword), and `snmpv3 user <name> auth <md5|sha> auth-pass ciphertext
+  <blob> [priv <des|aes> priv-pass ciphertext <blob>]` USM users.
+  Graduates `/snmp/community` + `/snmp/v3-user` → `supported` and adds
+  `/snmp/location` + `/snmp/contact`; `/snmp/v3-user/auth-passphrase` is
+  declared lossy (the device-key `ciphertext` blob is same-device-portable
+  only, and the `plaintext` key form normalises to `ciphertext` on
+  render); `/snmp/trap-host` stays unsupported (the `snmp-server host`
+  trap-receiver grammar is deferred).  With the core L2/L3 + LAG + user +
+  SNMP surface synthetically round-trip-validated, `certainty` bumps
+  `experimental` → `best_effort`.  Cross-mesh + phase-4 regenerated;
+  high-severity CODEC_BUG held flat at 5.
 * **Aruba AOS-CX codec — Phase 2 (L2 switchport + LAGs + local users).**
   Graduates the L2 surface to `supported`: `no routing` + `vlan access
   <N>` / `vlan trunk native <N> [tag]` / `vlan trunk allowed <list|all>`

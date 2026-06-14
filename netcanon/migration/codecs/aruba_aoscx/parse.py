@@ -71,6 +71,8 @@ from ...canonical.intent import (
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRoutingInstance,
+    CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
 )
@@ -153,6 +155,31 @@ _USER_RE = re.compile(
 )
 #: AOS-CX built-in group that maps to the cross-vendor admin privilege.
 _AOSCX_ADMIN_GROUPS = {"administrators"}
+
+# ── SNMP (Phase 2b) ──
+# AOS-CX uses `system-location` / `system-contact` (not `location` /
+# `contact`), `snmp-server community <name>`, and a `snmpv3 user` block
+# whose auth / priv keys are `<ciphertext|plaintext> <blob>`.
+_SNMP_COMMUNITY_RE = re.compile(
+    r"^snmp-server\s+community\s+(\S+)", re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_LOCATION_RE = re.compile(
+    r"^snmp-server\s+system-location\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+)
+_SNMP_CONTACT_RE = re.compile(
+    r"^snmp-server\s+system-contact\s+(.+)$", re.IGNORECASE | re.MULTILINE,
+)
+#: ``snmpv3 user <name> auth <proto> auth-pass <ciphertext|plaintext>
+#: <blob> [priv <proto> priv-pass <ciphertext|plaintext> <blob>]``.  The
+#: blob is device-key-encrypted (preserved verbatim; lossy cross-vendor /
+#: cross-device).  The ``ciphertext`` / ``plaintext`` keyword is consumed
+#: (render always emits ``ciphertext``).
+_SNMPV3_USER_RE = re.compile(
+    r"^snmpv3\s+user\s+(\S+)"
+    r"\s+auth\s+(\S+)\s+auth-pass\s+(?:ciphertext|plaintext)\s+(\S+)"
+    r"(?:\s+priv\s+(\S+)\s+priv-pass\s+(?:ciphertext|plaintext)\s+(\S+))?",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 #: ``vrf <name>`` opens a top-level VRF declaration (single token, whole
 #: line).  Distinct from the interface-level ``vrf attach`` (indented) and
@@ -291,6 +318,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # Local users (Phase 2) — ``user <name> group <group> password
     # ciphertext <blob>``.
     intent.local_users = _parse_local_users(raw)
+
+    # SNMP (Phase 2b) — v2c community + system-location / system-contact
+    # + v3 USM users.
+    intent.snmp = _parse_snmp(raw)
 
     # Shared switchport→VLAN projection: mirror per-port switchport state
     # into the VLAN-centric tagged/untagged lists so VLAN-centric
@@ -657,6 +688,43 @@ def _parse_local_users(raw: str) -> list[CanonicalLocalUser]:
             role=group,
         ))
     return users
+
+
+def _parse_snmp(raw: str) -> CanonicalSNMP | None:
+    """Extract SNMP config from AOS-CX text (v2c community + v3 USM).
+
+    AOS-CX diverges from NX-OS: ``snmp-server system-location`` /
+    ``system-contact`` (not ``location`` / ``contact``), and a ``snmpv3
+    user`` block whose auth / priv keys are ``<ciphertext|plaintext>
+    <blob>``.  The auth protocol is lower-cased; the privacy cipher is
+    lower-cased too (``des`` / ``aes``).  Returns ``None`` when no SNMP
+    lines are present so the tree doesn't carry an empty stub.  Trap
+    hosts (``snmp-server host``) and the ``snmp-server vrf`` binding are
+    deferred (parse-and-ignore).
+    """
+    community_m = _SNMP_COMMUNITY_RE.search(raw)
+    location_m = _SNMP_LOCATION_RE.search(raw)
+    contact_m = _SNMP_CONTACT_RE.search(raw)
+    v3_matches = list(_SNMPV3_USER_RE.finditer(raw))
+    if not (community_m or location_m or contact_m or v3_matches):
+        return None
+    snmp = CanonicalSNMP()
+    if community_m:
+        snmp.community = community_m.group(1).strip()
+    if location_m:
+        snmp.location = location_m.group(1).strip().strip('"')
+    if contact_m:
+        snmp.contact = contact_m.group(1).strip().strip('"')
+    for m in v3_matches:
+        name, auth_p, auth_pw, priv_p, priv_pw = m.groups()
+        snmp.v3_users.append(CanonicalSNMPv3User(
+            name=name,
+            auth_protocol=(auth_p or "").lower(),
+            auth_passphrase=auth_pw or "",
+            priv_protocol=(priv_p or "").lower(),
+            priv_passphrase=priv_pw or "",
+        ))
+    return snmp
 
 
 def _parse_vlans(raw: str) -> list[CanonicalVlan]:
