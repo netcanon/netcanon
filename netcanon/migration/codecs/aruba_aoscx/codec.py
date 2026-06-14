@@ -33,9 +33,12 @@ static routes.  **Phase 2** (this commit): the L2 switchport surface
 (``no routing`` + ``vlan access`` / ``vlan trunk native`` / ``vlan trunk
 allowed``) with VLAN-centric port projection, LAGs (``interface lag N``
 + per-port ``lag N`` + ``lacp mode``), and local users (``user <name>
-group <group> password ciphertext <blob>``).  ``certainty`` is
-``experimental`` — no real-capture corpus is wired yet (the certified
-tier follows in a later phase).  Later phases add SNMP, the
+group <group> password ciphertext <blob>``).  **Phase 2b** (this
+commit): SNMP — v2c community, ``system-location`` / ``system-contact``,
+and ``snmpv3 user`` USM users (``auth-pass`` / ``priv-pass`` ciphertext).
+``certainty`` is ``best_effort`` — synthetically round-trip-validated
+across the supported surface; no real-capture corpus is wired yet (the
+certified tier follows in a later phase).  Later phases add the
 ``active-gateway`` anycast surface, VSX, and VXLAN / EVPN.
 """
 
@@ -71,7 +74,7 @@ class ArubaAOSCXCodec(CodecBase):
     version_hint: ClassVar[str | None] = "10.x"
     input_format: ClassVar[str] = "cli-aoscx"
     direction: ClassVar[str] = "bidirectional"
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[str] = "best_effort"
     canonical_model: ClassVar[str] = "openconfig-lite"
     description: ClassVar[str] = (
         "Paste the output of `show running-config` from an Aruba AOS-CX "
@@ -148,6 +151,11 @@ class ArubaAOSCXCodec(CodecBase):
             "/local-users/user/name",
             "/local-users/user/role",
             "/local-users/user/hashed-password",
+            # ── Phase 2b: SNMP (v2c community + v3 USM) ──
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/v3-user",
         ],
         lossy=[
             LossyPath(
@@ -193,16 +201,30 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "AOS-CX SNMPv3 auth/priv keys are `ciphertext` blobs "
+                    "encrypted with the device key (portable same-device "
+                    "only).  Cross-vendor / cross-device migration emits "
+                    "the blob verbatim under `ciphertext`, but the operator "
+                    "must re-key the SNMPv3 user on the target; the "
+                    "`plaintext` key form is normalised to `ciphertext` on "
+                    "render."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
-            # ── SNMP (later phase) ──
+            # ── SNMP trap hosts (deferred — `snmp-server host` grammar) ──
             UnsupportedPath(
-                path="/snmp/community",
-                reason="`snmp-server` config is a later phase.",
-            ),
-            UnsupportedPath(
-                path="/snmp/v3-user",
-                reason="SNMPv3 USM users are a later phase.",
+                path="/snmp/trap-host",
+                reason=(
+                    "The `snmp-server host <ip> trap version ... community "
+                    "...` trap-receiver grammar is deferred; v2c community "
+                    "+ system-location / system-contact + v3 USM users are "
+                    "supported."
+                ),
             ),
             # ── VRF description + RD / route-target + per-VRF static ──
             UnsupportedPath(

@@ -46,6 +46,14 @@ from ...canonical.intent import CanonicalIntent
 #: ``Virtual.`` prefix is the AOS-CX simulator image family.
 _DEFAULT_VERSION = "Virtual.10.13.1000"
 
+#: Canonical SNMPv3 privacy cipher -> AOS-CX `priv` keyword.  AOS-CX
+#: supports `des` and `aes`; NX-OS-style aes128/192/256 collapse to
+#: `aes`, 3des -> des.
+_CANON_TO_AOSCX_PRIV = {
+    "aes": "aes", "aes128": "aes", "aes192": "aes", "aes256": "aes",
+    "des": "des", "3des": "des",
+}
+
 
 def render_intent(tree: CanonicalIntent) -> str:
     """Render a :class:`CanonicalIntent` as Aruba AOS-CX config text."""
@@ -61,6 +69,10 @@ def render_intent(tree: CanonicalIntent) -> str:
     # ── Local users (Phase 2) ──
     for user in tree.local_users:
         lines.append(_render_local_user(user))
+
+    # ── SNMP (Phase 2b) ──
+    if tree.snmp is not None:
+        lines.extend(_render_snmp(tree.snmp))
 
     lines.append("!")
 
@@ -111,6 +123,41 @@ def _render_local_user(user) -> str:
             f"password ciphertext {user.hashed_password}"
         )
     return f"user {user.name} group {role}"
+
+
+def _render_snmp(snmp) -> list[str]:
+    """Render AOS-CX ``snmp-server`` + ``snmpv3 user`` lines.
+
+    AOS-CX uses ``system-location`` / ``system-contact`` (not ``location``
+    / ``contact``).  v3 auth/priv keys re-emit with the ``ciphertext``
+    keyword (the ``plaintext`` form is normalised away — declared lossy);
+    the auth protocol collapses to ``md5`` / ``sha`` and the privacy
+    cipher denormalises canonical -> AOS-CX (aes-family -> ``aes``,
+    des/3des -> ``des``).  Trap hosts and the ``snmp-server vrf`` binding
+    are not emitted (deferred).
+    """
+    lines: list[str] = []
+    if snmp.community:
+        lines.append(f"snmp-server community {snmp.community}")
+    if snmp.location:
+        lines.append(f"snmp-server system-location {snmp.location}")
+    if snmp.contact:
+        lines.append(f"snmp-server system-contact {snmp.contact}")
+    for user in snmp.v3_users:
+        if not user.auth_protocol:
+            continue  # AOS-CX snmpv3 users require an auth protocol
+        auth = "md5" if user.auth_protocol.lower() == "md5" else "sha"
+        line = (
+            f"snmpv3 user {user.name} auth {auth} "
+            f"auth-pass ciphertext {user.auth_passphrase}"
+        )
+        if user.priv_protocol:
+            priv = _CANON_TO_AOSCX_PRIV.get(user.priv_protocol.lower(), "aes")
+            line += (
+                f" priv {priv} priv-pass ciphertext {user.priv_passphrase}"
+            )
+        lines.append(line)
+    return lines
 
 
 def _render_static_route(route) -> str:
