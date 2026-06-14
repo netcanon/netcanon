@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-14T04:35:05+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T043504Z.json",
-  "mesh_run_started_utc": "2026-06-14T04:34:59+00:00",
+  "started_utc": "2026-06-14T05:27:38+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T052726Z.json",
+  "mesh_run_started_utc": "2026-06-14T05:27:20+00:00",
   "cells_total": 924,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -11579,16 +11579,16 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
                   "Ethernet4"
                 ],
+                "mode": "active"
+              },
+              {
+                "name": "Port-Channel3",
+                "members": [],
                 "mode": "active"
               },
               {
