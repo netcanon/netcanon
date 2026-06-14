@@ -1,5 +1,5 @@
 """
-Focused unit tests for the VyOS codec (``vyos``) — Phases 1-3.
+Focused unit tests for the VyOS codec (``vyos``) — Phases 1-5.
 
 Covers the curly-brace ``config.boot`` grammar: probe (config-version
 trailer + structural fallback + the Junos non-collision the codec is
@@ -7,7 +7,8 @@ careful about), the brace-stack parser (hostname / ethernet+loopback+dummy
 interfaces / addresses (IPv4+IPv6 / dhcp) / description / disable / mtu /
 ``vif`` VLAN sub-interfaces / static routes; Phase 2 local users + NTP +
 bonding LAGs; Phase 3 ``service snmp`` + VRF routing-instances + the
-per-interface ``vrf`` binding), port-name classification, the canonical
+per-interface ``vrf`` binding; Phase 5 ``interfaces vxlan`` netdevs +
+block-form NTP servers), port-name classification, the canonical
 round-trip, and the capability-matrix declarations.
 """
 
@@ -434,6 +435,102 @@ def test_round_trip_p3(codec: VyOSCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 5 — VXLAN (interfaces vxlan vxlanN)
+# ---------------------------------------------------------------------------
+
+_P5 = """\
+interfaces {
+    ethernet eth0 {
+        address "10.0.0.1/24"
+    }
+    vxlan vxlan0 {
+        vni 5000
+        source-address 10.0.0.1
+        group 239.1.1.1
+        port 4789
+    }
+    vxlan vxlan1 {
+        vni 10100
+        source-interface eth0
+        remote 198.51.100.9
+        remote 198.51.100.10
+    }
+}
+system {
+    host-name r1
+}
+// vyos-config-version: "system@27"
+"""
+
+
+def test_parse_vxlan_vni_source_group(codec: VyOSCodec) -> None:
+    vx = {v.vni: v for v in codec.parse(_P5).vxlan_vnis}
+    assert set(vx) == {5000, 10100}
+    assert vx[5000].source_interface == "10.0.0.1"
+    assert vx[5000].mcast_group == "239.1.1.1"
+    assert vx[5000].udp_port == 4789
+
+
+def test_parse_vxlan_remote_flood_list(codec: VyOSCodec) -> None:
+    vx = {v.vni: v for v in codec.parse(_P5).vxlan_vnis}
+    assert vx[10100].flood_list == ["198.51.100.9", "198.51.100.10"]
+    assert vx[10100].source_interface == "eth0"
+
+
+def test_parse_vxlan_synthesises_vlan_id(codec: VyOSCodec) -> None:
+    """CanonicalVxlan.vlan_id is required but a VyOS vxlan netdev has no
+    VLAN — it is synthesised deterministically from the VNI."""
+    vx = {v.vni: v for v in codec.parse(_P5).vxlan_vnis}
+    assert vx[5000].vlan_id == ((5000 - 1) % 4094) + 1   # = 906
+    assert vx[10100].vlan_id == ((10100 - 1) % 4094) + 1  # = 1912
+    assert all(1 <= v.vlan_id <= 4094 for v in vx.values())
+
+
+def test_vxlan_not_materialised_as_interface(codec: VyOSCodec) -> None:
+    """A `vxlan vxlanN` netdev becomes a CanonicalVxlan, NOT a
+    CanonicalInterface."""
+    intent = codec.parse(_P5)
+    assert not any(i.name.startswith("vxlan") for i in intent.interfaces)
+    assert len(intent.vxlan_vnis) == 2
+
+
+def test_render_vxlan(codec: VyOSCodec) -> None:
+    out = codec.render(codec.parse(_P5))
+    assert "    vxlan vxlan0 {" in out
+    assert "        vni 5000" in out
+    assert "        source-address 10.0.0.1" in out   # IPv4 → source-address
+    assert "        group 239.1.1.1" in out
+    assert "        source-interface eth0" in out      # name → source-interface
+    assert "        remote 198.51.100.9" in out
+    assert "        port 4789" in out
+
+
+def test_round_trip_p5(codec: VyOSCodec) -> None:
+    once = codec.parse(_P5)
+    twice = codec.parse(codec.render(once))
+    assert _normalise(twice) == _normalise(once)
+
+
+def test_parse_ntp_block_form(codec: VyOSCodec) -> None:
+    """VyOS 1.4-rolling (mid-2023+) writes NTP servers as blocks
+    (`server <host> { }`); the codec captures both that and the older
+    bare-leaf form."""
+    raw = (
+        "system {\n"
+        "    host-name r1\n"
+        "    ntp {\n"
+        "        server 0.pool.ntp.org {\n"
+        "        }\n"
+        "        server 1.pool.ntp.org {\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "// vyos-config-version: \"x@1\"\n"
+    )
+    assert codec.parse(raw).ntp_servers == ["0.pool.ntp.org", "1.pool.ntp.org"]
+
+
+# ---------------------------------------------------------------------------
 # Port names
 # ---------------------------------------------------------------------------
 
@@ -443,12 +540,13 @@ def test_round_trip_p3(codec: VyOSCodec) -> None:
     ("bond0", "lag"),
     ("dum0", "loopback"),
     ("lo", "loopback"),
+    ("vxlan0", "vtep"),
 ])
 def test_port_name_classify(name: str, kind: str) -> None:
     assert port_names.classify_port_name(name).kind == kind
 
 
-@pytest.mark.parametrize("name", ["eth0", "bond0", "lo"])
+@pytest.mark.parametrize("name", ["eth0", "bond0", "lo", "vxlan0"])
 def test_port_name_round_trip(name: str) -> None:
     ident = port_names.classify_port_name(name)
     assert port_names.format_port_identity(ident) == name
@@ -495,6 +593,11 @@ def _normalise(intent):
         ),
         "vrf": sorted(
             (ri.name, ri.instance_type) for ri in intent.routing_instances
+        ),
+        "vxlan": sorted(
+            (v.vni, v.vlan_id, v.mcast_group, tuple(v.flood_list),
+             v.source_interface, v.udp_port)
+            for v in intent.vxlan_vnis
         ),
     }
 
@@ -550,6 +653,11 @@ def test_render_vif_nested_under_parent(codec: VyOSCodec) -> None:
     "/snmp/v3-user",
     "/routing-instances/instance/name",
     "/interfaces/interface/config/vrf",
+    # Phase 5
+    "/vxlan-vnis/vni",
+    "/vxlan-vnis/mcast-group",
+    "/vxlan-vnis/flood-list",
+    "/vxlan-vnis/udp-port",
 ])
 def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -565,6 +673,9 @@ def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
     "/snmp/v3-user/auth-passphrase",
     "/snmp/v3-user/engine-id",
     "/routing-instances/instance/table",
+    # Phase 5
+    "/vxlan-vnis/source-interface",
+    "/vxlan-vnis/vlan-id",
 ])
 def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
@@ -573,7 +684,7 @@ def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
 @pytest.mark.parametrize("path", [
     "/vlans/vlan/id",
     "/routing/static-route/vrf",
-    "/vxlan-vnis/vni",
+    "/vxlan-vnis/l2vni-route-target",
     "/routing-protocols/bgp",
     "/nat",
     "/firewall",

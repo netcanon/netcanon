@@ -26,6 +26,29 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+* **VyOS codec — Phase 5 (VXLAN + real-capture validation).**  Adds
+  `interfaces vxlan vxlanN` netdevs → `CanonicalVxlan` (one VNI per
+  netdev: `vni` / `source-address`|`source-interface` / `group` /
+  `remote` / `port`).  VyOS models VXLAN as a Linux netdev — one VNI
+  each, the L2 VLAN binding lives on a separate `bridge` — unlike the
+  NX-OS/AOS-CX vlan→vni table, so the required canonical `vlan_id` is
+  synthesised from the VNI and the netdev name is regenerated
+  `vxlan<index>` on render (both deterministic; declared lossy).
+  Graduates `/vxlan-vnis/{vni,mcast-group,flood-list,udp-port}` →
+  `supported`; `/vxlan-vnis/{source-interface,vlan-id}` → `lossy`; the
+  per-VNI EVPN RD/RT (`/vxlan-vnis/l2vni-route-target`) + symmetric-IRB
+  L3VNI stay `unsupported`.  Also captures **block-form NTP servers**
+  (`server <host> { }`, VyOS 1.4-rolling mid-2023+) alongside the older
+  bare-leaf form — a real-world grammar gap surfaced by the new corpus.
+  **VXLAN is real-validated**: two Apache-2.0 `config.boot` captures from
+  [`zhouleyan/wcni-kind`](https://github.com/zhouleyan/wcni-kind) (the
+  two ends of one `vni 10` tunnel) land under `tests/fixtures/real/vyos/`
+  and round-trip cleanly through the real-capture harness.  `vyos` stays
+  `certified`.  Cross-mesh regenerated (996 → 1020 cells); high-severity
+  CODEC_BUG held flat at 5.
+
 ## [0.1.7] - 2026-06-14
 
 ### Added
