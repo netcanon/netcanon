@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Aruba AOS-CX codec — Phase 2 (L2 switchport + LAGs + local users).**
+  Graduates the L2 surface to `supported`: `no routing` + `vlan access
+  <N>` / `vlan trunk native <N> [tag]` / `vlan trunk allowed <list|all>`
+  (with VLAN-centric port projection), LAGs (`interface lag N` is now
+  materialised as a kind-`lag` interface carrying its switchport config,
+  plus per-port `lag N` membership and `lacp mode active|passive` —
+  static aggregation when absent), and local users (`user <name> group
+  <group> password ciphertext <blob>`; `group` → role, administrators →
+  privilege 15 else 1, declared lossy).  An empty trunk-allowed list
+  round-trips as `vlan trunk allowed all`; the `interface lag N`
+  `multi-chassis` (VSX MLAG) modifier is dropped in v1.  `certainty`
+  stays `experimental` — no real-capture corpus yet, and SNMP +
+  `active-gateway` anycast + VXLAN-EVPN are still pending.  Cross-mesh +
+  phase-4 regenerated; high-severity CODEC_BUG held flat at 5.
 * **New codec: Aruba AOS-CX (`aruba_aoscx`) — Phase 1.**  Bidirectional
   `show running-config` translator for Aruba's modern switch portfolio
   (6000 / 6100 / 6200 / 6300 / 6400 / 8100 / 8320 / 8325 / 8360 / 8400 /

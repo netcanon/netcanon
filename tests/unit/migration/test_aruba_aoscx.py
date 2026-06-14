@@ -11,10 +11,13 @@ generic tests don't isolate:
 * the ``!Version ArubaOS-CX`` probe + its non-collision with the legacy
   ``aruba_aoss`` codec and with Arista EOS,
 * multi-token interface-name parsing (``interface vlan 11`` /
-  ``interface 1/1/1`` / the ``interface lag N`` interception),
+  ``interface 1/1/1`` / the ``interface vxlan`` interception),
 * the type-aware default admin-state (loopbacks up, everything else
   down),
 * the ``vrf <name>`` declaration + ``vrf attach`` interface bind,
+* (Phase 2) the L2 switchport surface (``no routing`` + ``vlan access`` /
+  ``vlan trunk``), LAGs (``interface lag N`` + ``lag N`` + ``lacp mode``),
+  and local users (``user … group … password ciphertext``),
 * the port-name bridge round-trip.
 """
 
@@ -38,12 +41,16 @@ _SAMPLE = """\
 !Version ArubaOS-CX FL.10.13.1000
 !export-password: default
 hostname Leaf1
+user admin group administrators password ciphertext FAKECIPHERTEXTBLOBADMIN
+user netops group operators password ciphertext FAKECIPHERTEXTBLOBNETOPS
 !
 vrf RED
 vlan 1
 vlan 10
     name USERS
     description User access VLAN
+vlan 20
+    name VOICE
 interface 1/1/1
     no shutdown
     mtu 9198
@@ -52,10 +59,28 @@ interface 1/1/2
     no shutdown
     no routing
     vlan access 10
-interface lag 1 multi-chassis
+interface 1/1/3
     no shutdown
     no routing
+    vlan trunk native 1
+    vlan trunk allowed 10,20
+interface 1/1/4
+    no shutdown
+    lag 1
+interface 1/1/5
+    no shutdown
+    lag 1
+interface lag 1 multi-chassis
+    no shutdown
+    description Server-LAG
+    no routing
+    vlan trunk native 1
     vlan trunk allowed all
+    lacp mode active
+interface lag 2
+    no shutdown
+    no routing
+    vlan access 20
 interface vlan 10
     no shutdown
     vrf attach RED
@@ -127,8 +152,6 @@ def test_probe_structural_fallback_without_banner() -> None:
     result = ArubaAOSCXCodec.probe(no_banner)
     assert result is not None
     score, _reason = result
-    # `interface 1/1/1` + `interface lag N` + `vlan access/trunk` +
-    # `vrf attach` + `no routing` -> several structural markers.
     assert score >= 90
 
 
@@ -157,7 +180,7 @@ def test_parse_hostname_and_vrf(codec: ArubaAOSCXCodec) -> None:
 def test_parse_vlans_with_name_and_description(codec: ArubaAOSCXCodec) -> None:
     intent = codec.parse(_SAMPLE)
     by_id = {v.id: v for v in intent.vlans}
-    assert set(by_id) >= {1, 10}
+    assert set(by_id) >= {1, 10, 20}
     assert by_id[10].name == "USERS"
     assert by_id[10].description == "User access VLAN"
 
@@ -171,28 +194,44 @@ def test_parse_static_route(codec: ArubaAOSCXCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Multi-token interface names
+# Multi-token interface names + stanza interception
 # ---------------------------------------------------------------------------
 
 def test_multitoken_interface_names(codec: ArubaAOSCXCodec) -> None:
     intent = codec.parse(_SAMPLE)
     names = {i.name for i in intent.interfaces}
-    # Physical triple, SVI, loopback, and the access port are materialised
-    # with their space-separated canonical names.
     assert "1/1/1" in names
-    assert "1/1/2" in names
     assert "vlan 10" in names
     assert "loopback 0" in names
 
 
-def test_interface_lag_is_skipped(codec: ArubaAOSCXCodec) -> None:
-    """`interface lag N [multi-chassis]` is intercepted (LAGs are a later
-    phase) and never materialised as an interface — and the `multi-chassis`
-    modifier never leaks into a name."""
+def test_interface_lag_materialized_modifier_stripped(
+    codec: ArubaAOSCXCodec,
+) -> None:
+    """Phase 2: `interface lag N [multi-chassis]` IS materialised as a
+    kind-lag interface, and the `multi-chassis` modifier never leaks into
+    the name."""
     intent = codec.parse(_SAMPLE)
     names = {i.name for i in intent.interfaces}
-    assert not any(n.lower().startswith("lag") for n in names)
+    assert "lag 1" in names
     assert "lag 1 multi-chassis" not in names
+    assert port_names.classify_port_name("lag 1").kind == "lag"
+
+
+def test_interface_vxlan_skipped(codec: ArubaAOSCXCodec) -> None:
+    """`interface vxlan N` is intercepted (a later phase) and never
+    materialised as an interface."""
+    raw = (
+        "!Version ArubaOS-CX FL.10.13.1000\n"
+        "hostname x\n"
+        "interface vxlan 1\n"
+        "    source ip 1.1.1.1\n"
+        "    vni 10\n"
+    )
+    intent = codec.parse(raw)
+    assert not any(
+        i.name.lower().startswith("vxlan") for i in intent.interfaces
+    )
 
 
 def test_interface_l3_addressing(codec: ArubaAOSCXCodec) -> None:
@@ -211,15 +250,78 @@ def test_vrf_attach_binds_interface(codec: ArubaAOSCXCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2 — L2 switchport
+# ---------------------------------------------------------------------------
+
+def test_switchport_access(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    port = next(i for i in intent.interfaces if i.name == "1/1/2")
+    assert port.switchport_mode == "access"
+    assert port.access_vlan == 10
+
+
+def test_switchport_trunk(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    port = next(i for i in intent.interfaces if i.name == "1/1/3")
+    assert port.switchport_mode == "trunk"
+    assert port.trunk_native_vlan == 1
+    assert sorted(port.trunk_allowed_vlans) == [10, 20]
+
+
+def test_trunk_allowed_all_is_empty_list(codec: ArubaAOSCXCodec) -> None:
+    """`vlan trunk allowed all` maps to an empty allowed-list (which the
+    render re-emits as `all`)."""
+    intent = codec.parse(_SAMPLE)
+    lag = next(i for i in intent.interfaces if i.name == "lag 1")
+    assert lag.switchport_mode == "trunk"
+    assert lag.trunk_allowed_vlans == []
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — LAGs
+# ---------------------------------------------------------------------------
+
+def test_lag_members_and_mode(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    by_name = {lag.name: lag for lag in intent.lags}
+    assert set(by_name) == {"lag 1", "lag 2"}
+    assert sorted(by_name["lag 1"].members) == ["1/1/4", "1/1/5"]
+    assert by_name["lag 1"].mode == "active"
+    # No `lacp mode` line on lag 2 -> static aggregation.
+    assert by_name["lag 2"].members == []
+    assert by_name["lag 2"].mode == "static"
+
+
+def test_lag_member_back_reference(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    member = next(i for i in intent.interfaces if i.name == "1/1/4")
+    assert member.lag_member_of == "lag 1"
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — local users
+# ---------------------------------------------------------------------------
+
+def test_local_users(codec: ArubaAOSCXCodec) -> None:
+    intent = codec.parse(_SAMPLE)
+    by_name = {u.name: u for u in intent.local_users}
+    assert set(by_name) == {"admin", "netops"}
+    assert by_name["admin"].role == "administrators"
+    assert by_name["admin"].privilege_level == 15
+    assert by_name["admin"].hashed_password == "FAKECIPHERTEXTBLOBADMIN"
+    # Non-admin group -> privilege 1 (lossy numeric mapping).
+    assert by_name["netops"].role == "operators"
+    assert by_name["netops"].privilege_level == 1
+
+
+# ---------------------------------------------------------------------------
 # Type-aware default admin-state
 # ---------------------------------------------------------------------------
 
 def test_default_admin_state_type_aware(codec: ArubaAOSCXCodec) -> None:
     intent = codec.parse(_SAMPLE)
     by_name = {i.name: i for i in intent.interfaces}
-    # loopback 0 has no `no shutdown` line — loopbacks are up by default.
     assert by_name["loopback 0"].enabled is True
-    # Explicit `no shutdown` enables a physical port.
     assert by_name["1/1/1"].enabled is True
 
 
@@ -232,7 +334,6 @@ def test_bare_physical_defaults_down(codec: ArubaAOSCXCodec) -> None:
     )
     intent = codec.parse(raw)
     iface = next(i for i in intent.interfaces if i.name == "1/1/9")
-    # No explicit admin-state line + a physical port -> AOS-CX default down.
     assert iface.enabled is False
 
 
@@ -247,7 +348,12 @@ def _normalise(intent):
         "hostname": intent.hostname,
         "vrfs": [ri.name for ri in intent.routing_instances],
         "vlans": sorted(
-            (v.id, v.name, v.description) for v in intent.vlans
+            (
+                v.id, v.name, v.description,
+                tuple(sorted(v.tagged_ports)),
+                tuple(sorted(v.untagged_ports)),
+            )
+            for v in intent.vlans
         ),
         "interfaces": sorted(
             (
@@ -255,10 +361,23 @@ def _normalise(intent):
                 i.enabled,
                 i.mtu,
                 i.vrf,
+                i.switchport_mode,
+                i.access_vlan,
+                tuple(sorted(i.trunk_allowed_vlans)),
+                i.trunk_native_vlan,
+                i.lag_member_of,
                 tuple((a.ip, a.prefix_length) for a in i.ipv4_addresses),
                 tuple((a.ip, a.prefix_length) for a in i.ipv6_addresses),
             )
             for i in intent.interfaces
+        ),
+        "lags": sorted(
+            (lag.name, tuple(sorted(lag.members)), lag.mode)
+            for lag in intent.lags
+        ),
+        "users": sorted(
+            (u.name, u.role, u.privilege_level, u.hashed_password)
+            for u in intent.local_users
         ),
         "routes": sorted(
             (r.destination, r.gateway, r.interface, r.metric)
@@ -283,8 +402,19 @@ def test_round_trip_kitchen_sink(codec: ArubaAOSCXCodec) -> None:
 def test_render_emits_version_banner(codec: ArubaAOSCXCodec) -> None:
     out = codec.render(codec.parse(_SAMPLE))
     assert "!Version ArubaOS-CX" in out
-    # Rendered output re-probes as AOS-CX (self-consistent).
     assert ArubaAOSCXCodec.probe(out) is not None
+
+
+def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
+    """Render emits the AOS-CX L2 + LAG grammar (no routing / vlan access
+    / vlan trunk allowed all / lacp mode / lag membership)."""
+    out = codec.render(codec.parse(_SAMPLE))
+    assert "no routing" in out
+    assert "vlan access 10" in out
+    assert "vlan trunk allowed all" in out
+    assert "lacp mode active" in out
+    assert "    lag 1" in out
+    assert "user admin group administrators password ciphertext" in out
 
 
 # ---------------------------------------------------------------------------
@@ -297,23 +427,32 @@ def test_render_emits_version_banner(codec: ArubaAOSCXCodec) -> None:
     "/vlans/vlan/name",
     "/routing/static-route",
     "/routing-instances/instance/name",
+    "/interfaces/interface/switchport-mode",
+    "/interfaces/interface/lag-member-of",
+    "/vlans/vlan/untagged-ports",
+    "/lags/lag/name",
+    "/lags/lag/mode",
+    "/local-users/user/name",
+    "/local-users/user/role",
 ])
 def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
 
 
-def test_matrix_type_is_lossy(codec: ArubaAOSCXCodec) -> None:
-    assert codec.capabilities.classify(
-        "/interfaces/interface/config/type"
-    ) == "lossy"
+@pytest.mark.parametrize("path", [
+    "/interfaces/interface/config/type",
+    "/local-users/user/privilege-level",
+])
+def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
+    assert codec.capabilities.classify(path) == "lossy"
 
 
 @pytest.mark.parametrize("path", [
-    "/interfaces/interface/switchport-mode",
-    "/lags/lag/name",
+    "/snmp/community",
     "/vxlan-vnis/vni",
     "/routing-protocols/bgp",
     "/anycast-gateway-mac",
+    "/routing-instances/instance/route-distinguisher",
 ])
 def test_matrix_unsupported(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "unsupported"
