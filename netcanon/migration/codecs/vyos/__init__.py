@@ -18,14 +18,16 @@ Module layout (mirrors ``aruba_aoscx`` post-split):
     * port_names.py — cross-vendor port-name bridge (Linux device names).
 
 Direction: ``bidirectional``.
-Certainty: ``experimental`` — Phase 1 (Tier-1: ``system host-name``;
+Certainty: ``certified`` — Phase 1 (Tier-1: ``system host-name``;
     ethernet / loopback / dummy interfaces with address (IPv4+IPv6 CIDR /
     dhcp) / description / disable / mtu; ``vif`` VLAN sub-interfaces;
     ``protocols static`` routes) + Phase 2 (``system login`` local users;
-    ``system`` / ``service`` ntp servers; ``bonding`` LAGs).
-    Synthetically round-trip-validated; no real-capture corpus is wired
-    yet — ``service snmp``, VRF, VXLAN, and the certified tier follow in
-    later phases.
+    ``system`` / ``service`` ntp servers; ``bonding`` LAGs) + Phase 3
+    (``service snmp`` v1/v2c + v3 USM; VRF ``vrf name`` routing-instances
+    + per-interface binding).  Round-trip-validated against a real-capture
+    corpus of VyOS 1.4 ``config.boot`` files from the MIT-licensed
+    ``cisagov/prescup-challenges`` source (Phase 4).  VXLAN + ``set``-form
+    input follow in later phases.
 """
 
 from .codec import VyOSCodec

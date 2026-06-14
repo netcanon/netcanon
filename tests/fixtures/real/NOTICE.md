@@ -155,6 +155,34 @@ sanitization required.
 | `karneliuk_a_eos1_eos4260.txt` | [karneliuk-com/batfish-mvp](https://github.com/karneliuk-com/batfish-mvp) `snapshots/nat/configs/EOS1.cfg` @ commit `62e8ce7` | BSD-3-Clause — Copyright 2021 karneliuk.com | Real **A-EOS1** vEOS fixture from Anton Karneliuk's Batfish MVP demo — full EVPN/VXLAN kitchen-sink.  82 lines + `end`.  Banner: `! device: A-EOS1 (vEOS, EOS-4.26.0.1F)`.  **Fourth Arista fixture spanning a 4th distinct EOS major** (4.21 + 4.22 + 4.23 + 4.26).  Grammar surface: `service routing protocols model multi-agent`, `spanning-tree mode mstp`, local AAA with sha512 hash, VLAN 100 (Tenant_100), 2× Ethernet routed + Loopback0 + Management1 (IPv4+IPv6), **Vxlan1 with vni 100**, ip/ipv6 routing, ip prefix-list, static default route, route-maps (permit+deny), **router bgp 65033** with two eBGP neighbors, `router bgp / vlan RD+RT / evpn redistribute-learned`, `address-family evpn` + `address-family ipv4` with route-map in/out filter.  Promotes the Arista corpus beyond the 4.21-4.23 range that predated the GAP 6 EVPN/VXLAN codec wire-up. |
 | `batfish_eos_evpn_vlan_based_leaf.txt` | [batfish/lab-validation](https://github.com/batfish/lab-validation) `snapshots/eos_evpn_l3_design_guide_vlan_based/configs/H-LEAF2A/show_running-config.txt` @ commit `d40faf6` | Apache-2.0 | Real **H-LEAF2A** vEOS leaf from the **VLAN-based** variant of the Arista EVPN L3 Design Guide lab validation, on **EOS-4.23.0.1F**.  330 lines.  Fifth Arista fixture, sibling to `batfish_labval_dc1_leaf2a_eos4230.txt` (which is the symmetric-IRB variant on the same EOS train).  The two variants share topology + node naming but encode EVPN differently — the symmetric-IRB design announces L3VNI routes from both ingress + egress VTEPs, while this VLAN-based variant uses L2VNIs only with a centralised L3 gateway (different `router bgp / vlan / vlan-aware-bundle` shape, different `interface Vxlan1 / vxlan vlan X vni Y` block layout).  Together the two fixtures exercise the two prevailing Arista EVPN templates without bloating coverage on a single design pattern. |
 
+## vyos/
+
+All six configs are from [cisagov/prescup-challenges](https://github.com/cisagov/prescup-challenges)
+under **MIT (SEI)** — the software-artifact license of the US President's
+Cup cyber-competition material.  The repo's root `LICENSE.md` dual-licenses
+documentation under CC-BY-NC 4.0 (DM24-0107) and software under MIT (SEI)
+(DM24-0702); `pc5/README.md` confirms the challenge artifacts are
+"Released under a MIT (SEI)-style license", and every file carries
+**DISTRIBUTION STATEMENT A**: "approved for public release and unlimited
+distribution".  Chosen deliberately over `vyos/vyos-build` to avoid the
+VyOS project's own GPL/LGPL licensing.  Retained verbatim with a 3-line
+`//`-comment attribution header (the VyOS parser skips `//` lines, so the
+header is inert to parse + probe).  All VyOS **1.4-rolling-202105152149**;
+RFC 5737 / RFC 3849 (`2001:db8::/32`) addressing, generic host-names, and
+published competition SHA-512-crypt login hashes (public-release lab
+material, not real device secrets) — no sanitization required.  Two config
+families: round-1 (IPv4 + OSPF) and round-3b (IPv6 + BGP); the OSPF/BGP
+stanzas are surfaced via `dropped_tier3_sections`.
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `pc5-round1-border.conf` | `pc5/team/round1-ipv6-flag-day/challenge/border.config.boot` | MIT (SEI) | IPv4 border router — 2 ethernet (lan/dmz), `protocols ospf` (Tier-3 banner), 2 local users (`user` + `vyos`), 3 NTP servers; `service ssh` + `system console`/`syslog`/`config-management` parse-and-ignore. |
+| `pc5-round1-core.conf` | `pc5/team/round1-ipv6-flag-day/challenge/core.config.boot` | MIT (SEI) | IPv4 core router — 3 ethernet (lan/competitor/devops), OSPF, same 2-user / 3-NTP shape.  OSPF peer to border. |
+| `pc5-round3b-routera.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routera-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65001) — 4 ethernet (IPv6 /64 + `hw-id`), `protocols bgp` ipv6-unicast 3-neighbor (Tier-3 banner); `service dhcpv6-server` + `router-advert` parse-and-ignore.  The dhcpv6 outlier. |
+| `pc5-round3b-routerb.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routerb-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65002) — 3 ethernet, 3-neighbor BGP with `disable-send-community`. |
+| `pc5-round3b-routerd.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routerd-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65004) — 4 ethernet, BGP with `soft-reconfiguration outbound`. |
+| `pc5-round3b-routere.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routere-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65005) — the dense outlier: 8 ethernet, 8 BGP neighbors, bare-leaf `router-advert interface ethN`.  Largest VyOS fixture. |
+
 ---
 
 ## Adding new captures

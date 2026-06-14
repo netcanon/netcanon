@@ -131,6 +131,7 @@ _DIR_TO_CODEC_NAME: dict[str, str] = {
     "mikrotik":     "mikrotik_routeros",
     "arista_eos":   "arista_eos",
     "junos":        "juniper_junos",
+    "vyos":         "vyos",
 }
 
 #: Per-vendor native fixture extensions.  Mirrors the filter in
