@@ -24,19 +24,22 @@ Module layout mirrors the ``cisco_nxos`` / ``aruba_aoscx`` post-split shape:
 no new canonical xpaths in Phase 1.
 
 This codec lands in phases (Tier-1 first, mirroring the ``aruba_aoscx``
-cadence).  **Phase 1** (this commit): ``system host-name``; interfaces
-(``ethernet`` / ``loopback`` / ``dummy`` with ``address`` IPv4+IPv6 CIDR
-/ ``dhcp`` / ``description`` / ``disable`` / ``mtu``); ``vif`` VLAN
-sub-interfaces; and ``protocols static`` routes.  **Phase 2** (this
-commit): ``system login user`` local users (name + ``authentication
-encrypted-password``); ``system`` / ``service`` ``ntp`` servers; and
-``bonding bondN`` LAGs (``mode 802.3ad`` → LACP, members via both the
-1.4 ``member interface`` form and the legacy ``bond-group`` form).
-``certainty`` stays ``experimental`` — synthetically round-trip-validated
-across the supported surface; no real-capture corpus is wired yet (the
-certified tier follows in a later phase, once a corpus from the
-MIT-licensed ``cisagov/prescup-challenges`` source is landed).  Later
-phases add ``service snmp``, VRF (``vrf name`` + per-iface), and VXLAN.
+cadence).  **Phase 1**: ``system host-name``; interfaces (``ethernet``
+/ ``loopback`` / ``dummy`` with ``address`` IPv4+IPv6 CIDR / ``dhcp`` /
+``description`` / ``disable`` / ``mtu``); ``vif`` VLAN sub-interfaces;
+and ``protocols static`` routes.  **Phase 2**: ``system login user``
+local users (name + ``authentication encrypted-password``); ``system``
+/ ``service`` ``ntp`` servers; and ``bonding bondN`` LAGs (``mode
+802.3ad`` → LACP, members via both the 1.4 ``member interface`` form and
+the legacy ``bond-group`` form).  **Phase 3** (this commit): ``service
+snmp`` (v1/v2c community + ``location`` / ``contact`` + v3 USM users)
+and VRF (``vrf name <X> { table <N> }`` routing instances + the
+per-interface ``vrf <X>`` binding).  ``certainty`` stays
+``experimental`` — synthetically round-trip-validated across the
+supported surface; no real-capture corpus is wired yet (the certified
+tier follows in a later phase, once a corpus from the MIT-licensed
+``cisagov/prescup-challenges`` source is landed).  Later phases add
+VXLAN (``interfaces vxlan vxlanN``) and ``set``-form input support.
 """
 
 from __future__ import annotations
@@ -139,6 +142,15 @@ class VyOSCodec(CodecBase):
             "/lags/lag/name",
             "/lags/lag/members",
             "/interfaces/interface/lag-member-of",
+            # ── Phase 3: SNMP (`service snmp`) — v1/v2c + v3 USM ──
+            "/snmp/community",
+            "/snmp/location",
+            "/snmp/contact",
+            "/snmp/v3-user",
+            # ── Phase 3: VRF routing-instances (`vrf name <X>`) + the
+            # per-interface binding (`interfaces ethernet ethN { vrf X }`).
+            "/routing-instances/instance/name",
+            "/interfaces/interface/config/vrf",
         ],
         lossy=[
             LossyPath(
@@ -185,6 +197,40 @@ class VyOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # ── Phase 3: SNMP v3 USM keys + engineID, VRF table id ──
+            LossyPath(
+                path="/snmp/v3-user/auth-passphrase",
+                reason=(
+                    "VyOS stores the v3 USM auth / privacy keys as an opaque "
+                    "`encrypted-password` blob; it round-trips verbatim "
+                    "same-vendor but cross-vendor migration requires re-keying "
+                    "on the target (hashes are salted with vendor-specific "
+                    "constants).  Plaintext keys are never accepted."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/engine-id",
+                reason=(
+                    "VyOS declares a single config-wide `engineid` for the "
+                    "whole SNMP agent; the canonical model carries the "
+                    "engineID per-user, so the codec maps the one VyOS value "
+                    "onto every v3 user (and emits a single `engineid` on "
+                    "render when the users share one)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing-instances/instance/table",
+                reason=(
+                    "VyOS requires a numeric `table <id>` on every `vrf name "
+                    "<X>`; the canonical RoutingInstance carries no table "
+                    "number, so the codec synthesises a deterministic id "
+                    "(100 + sort-index) on render.  The original table id is "
+                    "not preserved."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             # VLAN database — VyOS has no top-level VLAN table.
@@ -196,22 +242,18 @@ class VyOSCodec(CodecBase):
                     "`ethN.<vid>` CanonicalInterfaces), which ARE supported."
                 ),
             ),
-            # SNMP (service snmp) — later phase.
-            UnsupportedPath(
-                path="/snmp/community",
-                reason="VyOS `service snmp` is a later phase.",
-            ),
-            # VRF — later phase.
-            UnsupportedPath(
-                path="/routing-instances/instance/name",
-                reason=(
-                    "VyOS `vrf name <X>` routing instances + per-VRF "
-                    "interface binding are a later phase."
-                ),
-            ),
+            # VRF: the `vrf name <X>` instances + per-interface binding
+            # ARE supported (Phase 3); the per-VRF static-route table
+            # (`vrf name <X> { protocols static route ... }`) stays
+            # deferred past the Phase-3 wire-up.
             UnsupportedPath(
                 path="/routing/static-route/vrf",
-                reason="Per-VRF static routes follow the VRF phase.",
+                reason=(
+                    "VyOS per-VRF static routes (`vrf name <X> { protocols "
+                    "static route ... }`) are deferred past the Phase-3 VRF "
+                    "wire-up; the `vrf name` instances + per-interface "
+                    "binding ARE supported."
+                ),
             ),
             # VXLAN — later phase.
             UnsupportedPath(

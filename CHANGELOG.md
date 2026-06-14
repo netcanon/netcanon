@@ -28,6 +28,29 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **VyOS codec — Phase 3 (`service snmp` + VRF routing-instances).**
+  Extends the `vyos` codec with two management-/control-plane surfaces.
+  **SNMP** (`service snmp`) → `CanonicalSNMP`: the v1/v2c `community`
+  (a name-keyed block; rendered read-only), `location` / `contact`, and
+  `v3 { user <name> { auth { … } privacy { … } } }` USM users (auth +
+  privacy protocol, the opaque `encrypted-password` key, and `group`;
+  the single config-wide `engineid` is mapped onto every user).
+  **VRF**: `vrf { name <X> { table <N> } }` → `CanonicalRoutingInstance`
+  + the per-interface `vrf <X>` leaf → `CanonicalInterface.vrf`.  The
+  per-interface binding never conjures a routing-instance — instances
+  materialise only from their authoritative `vrf name` declaration (the
+  phantom-instance guard).  Graduates
+  `/snmp/{community,location,contact,v3-user}` +
+  `/routing-instances/instance/name` +
+  `/interfaces/interface/config/vrf` → `supported`;
+  `/snmp/v3-user/{auth-passphrase,engine-id}` +
+  `/routing-instances/instance/table` → `lossy` (VyOS requires a numeric
+  VRF `table` id the canonical model has no field for — the codec
+  synthesises a deterministic `100 + sort-index` on render).  Per-VRF
+  static routes (`/routing/static-route/vrf`) stay `unsupported`
+  (deferred).  Still `experimental` (no real corpus yet).  Cross-mesh
+  regenerated (924 cells, roster unchanged); high-severity CODEC_BUG
+  held flat at 5.
 * **VyOS codec — Phase 2 (local users + NTP + bonding LAGs).**  Extends
   the `vyos` codec: `system login user { authentication
   encrypted-password }` → `CanonicalLocalUser` (VyOS login users map to

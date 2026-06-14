@@ -4,10 +4,14 @@ Render path for VyOS (canonical tree → ``config.boot`` curly-brace text).
 Public function: :func:`render_intent` — :class:`CanonicalIntent` in,
 VyOS configuration text out.
 
-Emits the Phase-1 supported subset: the ``interfaces`` tree (ethernet /
-loopback / dummy blocks with ``address`` / ``description`` / ``disable``
-/ ``mtu``, plus nested ``vif`` VLAN sub-interfaces), the ``protocols
-static`` route tree, the ``system host-name``, and the
+Emits the supported subset: the ``interfaces`` tree (ethernet /
+loopback / dummy / bonding blocks with ``address`` / ``description`` /
+``disable`` / ``mtu`` / per-interface ``vrf``, plus nested ``vif`` VLAN
+sub-interfaces and the bonding ``mode`` / ``member`` lines), the
+``protocols static`` route tree, the ``service { snmp { ... } }`` block
+(v1/v2c community + location / contact + v3 USM users), the ``system``
+block (``host-name`` + ``login`` local users + ``ntp`` servers), the
+``vrf { name <X> { table <N> } }`` routing instances, and the
 ``// vyos-config-version`` trailer every ``config.boot`` carries.
 
 Grammar notes that shape the output (see
@@ -20,8 +24,8 @@ Grammar notes that shape the output (see
   is quote-agnostic.
 * Leaves within an interface block are emitted in VyOS's alphabetical
   commit order (``address`` → ``description`` → ``disable`` → ``mtu`` →
-  ``vif``) so a same-vendor diff against a real ``show configuration``
-  is reviewable.
+  ``vrf``), followed by any nested ``vif`` sub-interface blocks, so a
+  same-vendor diff against a real ``show configuration`` is reviewable.
 * A ``vif`` sub-interface (canonical name ``ethN.<vid>``) is nested
   inside its parent ``ethernet ethN`` block; an orphan vif (parent not
   separately declared) synthesises an empty parent block so the output
@@ -70,6 +74,10 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.extend(static_lines)
         lines.append("}")
 
+    # ``service { snmp { ... } }`` — emitted between ``protocols`` and
+    # ``system`` to match VyOS's alphabetical top-level node order.
+    lines.extend(_render_service(tree.snmp))
+
     # ``system`` always carries at least the host-name; Phase 2 adds the
     # ``login`` (local users) and ``ntp`` sub-blocks.
     lines.append("system {")
@@ -77,6 +85,10 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.extend(_render_login(tree.local_users))
     lines.extend(_render_ntp(tree.ntp_servers))
     lines.append("}")
+
+    # ``vrf { name <X> { table <N> } }`` — the last top-level node
+    # (alphabetical), emitted after ``system``.
+    lines.extend(_render_vrf(tree.routing_instances))
 
     # Trailer — every config.boot ends with the component-version stamp.
     lines.append("// Warning: Do not remove the following line.")
@@ -132,6 +144,8 @@ def _iface_body(iface, indent: str) -> list[str]:
         out.append(f"{indent}disable")
     if iface.mtu is not None:
         out.append(f"{indent}mtu {iface.mtu}")
+    if iface.vrf:
+        out.append(f"{indent}vrf {_q(iface.vrf)}")
     return out
 
 
@@ -267,3 +281,108 @@ def _render_static(routes: list) -> list[str]:
         lines.append("        }")
     lines.append("    }")
     return lines
+
+
+def _snmp_auth_type(proto: str) -> str:
+    """Denormalise a canonical SNMPv3 auth protocol to the VyOS keyword
+    (``md5`` or ``sha``; the SHA-2 variants collapse to ``sha``)."""
+    return "md5" if proto == "md5" else "sha"
+
+
+def _snmp_priv_type(proto: str) -> str:
+    """Denormalise a canonical SNMPv3 privacy cipher to the VyOS keyword
+    (``des`` or ``aes``; the AES key-length variants collapse to ``aes``)."""
+    return "des" if proto in ("des", "3des") else "aes"
+
+
+def _render_snmp_v3(users: list) -> list[str]:
+    """Render the ``v3 { }`` USM sub-block (nested under ``snmp``).
+
+    Users are sorted by name for stable output.  A single config-wide
+    ``engineid`` is emitted when every USM user shares one (the canonical
+    model carries the engineID per-user; VyOS declares it once for the
+    whole agent).  A user with no auth protocol is skipped — VyOS USM
+    requires authentication.  Auth / privacy keys are emitted as
+    ``encrypted-password`` (the 1.4 saved-config form); the opaque blob
+    round-trips verbatim same-vendor.
+    """
+    usable = [u for u in users if u.auth_protocol]
+    if not usable:
+        return []
+    out = ["        v3 {"]
+    engine_ids = {u.engine_id for u in usable if u.engine_id}
+    if len(engine_ids) == 1:
+        out.append(f"            engineid {next(iter(engine_ids))}")
+    for u in sorted(usable, key=lambda x: x.name):
+        out.append(f"            user {u.name} {{")
+        if u.group:
+            out.append(f"                group {u.group}")
+        out.append("                auth {")
+        out.append(
+            f"                    encrypted-password {u.auth_passphrase}"
+        )
+        out.append(
+            f"                    type {_snmp_auth_type(u.auth_protocol)}"
+        )
+        out.append("                }")
+        if u.priv_protocol:
+            out.append("                privacy {")
+            out.append(
+                f"                    encrypted-password {u.priv_passphrase}"
+            )
+            out.append(
+                f"                    type {_snmp_priv_type(u.priv_protocol)}"
+            )
+            out.append("                }")
+        out.append("            }")
+    out.append("        }")
+    return out
+
+
+def _render_service(snmp) -> list[str]:
+    """Render the top-level ``service { snmp { ... } }`` block.
+
+    Returns ``[]`` when there is no SNMP configuration so the caller
+    omits the enclosing ``service { }`` block entirely.  The v1/v2c
+    community is rendered read-only (``authorization ro``) — the
+    canonical model carries only the community string, not the ro/rw
+    flag.
+    """
+    if snmp is None:
+        return []
+    body: list[str] = []
+    if snmp.community:
+        body.append(f"        community {snmp.community} {{")
+        body.append("            authorization ro")
+        body.append("        }")
+    if snmp.contact:
+        body.append(f"        contact {_q(snmp.contact)}")
+    if snmp.location:
+        body.append(f"        location {_q(snmp.location)}")
+    body.extend(_render_snmp_v3(snmp.v3_users))
+    if not body:
+        return []
+    return ["service {", "    snmp {"] + body + ["    }", "}"]
+
+
+def _render_vrf(instances: list) -> list[str]:
+    """Render the top-level ``vrf { }`` block.
+
+    Each routing-instance emits ``name <X> { table <N> }``; the numeric
+    ``table`` id is SYNTHESISED (``100 + sort-index``) because the
+    canonical :class:`CanonicalRoutingInstance` carries no table number
+    (declared lossy ``/routing-instances/instance/table``).  Instances
+    are sorted by name for stable, deterministic output (the round-trip
+    does not normalise ``routing_instances`` order, and the synthesised
+    id must be reproducible).
+    """
+    usable = [ri for ri in instances if ri.name]
+    if not usable:
+        return []
+    out = ["vrf {"]
+    for idx, ri in enumerate(sorted(usable, key=lambda x: x.name)):
+        out.append(f"    name {ri.name} {{")
+        out.append(f"        table {100 + idx}")
+        out.append("    }")
+    out.append("}")
+    return out
