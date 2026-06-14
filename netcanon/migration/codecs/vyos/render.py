@@ -11,8 +11,10 @@ sub-interfaces and the bonding ``mode`` / ``member`` lines), the
 ``protocols static`` route tree, the ``service { snmp { ... } }`` block
 (v1/v2c community + location / contact + v3 USM users), the ``system``
 block (``host-name`` + ``login`` local users + ``ntp`` servers), the
-``vrf { name <X> { table <N> } }`` routing instances, and the
-``// vyos-config-version`` trailer every ``config.boot`` carries.
+``vrf { name <X> { table <N> } }`` routing instances, the ``interfaces
+vxlan vxlanN`` netdevs (one VNI each — ``vni`` / source / ``group`` /
+``remote`` / ``port``), and the ``// vyos-config-version`` trailer every
+``config.boot`` carries.
 
 Grammar notes that shape the output (see
 ``docs/fixture-research-2015/`` + the parse-path docstring):
@@ -63,9 +65,11 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines: list[str] = []
 
     iface_lines = _render_interfaces(tree.interfaces, tree.lags)
-    if iface_lines:
+    vxlan_lines = _render_vxlan(tree.vxlan_vnis)
+    if iface_lines or vxlan_lines:
         lines.append("interfaces {")
         lines.extend(iface_lines)
+        lines.extend(vxlan_lines)
         lines.append("}")
 
     static_lines = _render_static(tree.static_routes)
@@ -385,4 +389,50 @@ def _render_vrf(instances: list) -> list[str]:
         out.append(f"        table {100 + idx}")
         out.append("    }")
     out.append("}")
+    return out
+
+
+def _is_ipv4(value: str) -> bool:
+    """True iff *value* is a bare dotted-quad IPv4 address (vs an interface
+    name).  Chooses ``source-address`` (IP) vs ``source-interface`` (name)
+    when rendering a VXLAN netdev's VTEP source."""
+    parts = value.split(".")
+    return len(parts) == 4 and all(
+        p.isdigit() and 0 <= int(p) <= 255 for p in parts
+    )
+
+
+def _render_vxlan(vxlans: list) -> list[str]:
+    """Render ``vxlan vxlanN { ... }`` netdev blocks (inside ``interfaces``).
+
+    VyOS models ONE VNI per netdev (no vlan->vni table — the L2 VLAN
+    binding is via a separate ``bridge``, out of scope).  The canonical
+    :class:`CanonicalVxlan` carries no netdev name, so the name is
+    regenerated deterministically as ``vxlan<sort-index>`` (sorted by vni
+    — the round-trip does not normalise ``vxlan_vnis`` order; the
+    canonical ``vlan_id`` has no VyOS home, so it is dropped here and
+    re-synthesised on parse).  ``source-address`` is emitted when the
+    source parses as an IPv4 address, else ``source-interface``.  ``port``
+    is always emitted for round-trip symmetry (VyOS's native default 8472
+    differs from the canonical 4789).
+    """
+    usable = [v for v in vxlans if v.vni]
+    if not usable:
+        return []
+    out: list[str] = []
+    for idx, v in enumerate(sorted(usable, key=lambda x: x.vni)):
+        out.append(f"    vxlan vxlan{idx} {{")
+        out.append(f"        vni {v.vni}")
+        if v.source_interface:
+            kw = (
+                "source-address" if _is_ipv4(v.source_interface)
+                else "source-interface"
+            )
+            out.append(f"        {kw} {v.source_interface}")
+        if v.mcast_group:
+            out.append(f"        group {v.mcast_group}")
+        for remote in v.flood_list:
+            out.append(f"        remote {remote}")
+        out.append(f"        port {v.udp_port}")
+        out.append("    }")
     return out

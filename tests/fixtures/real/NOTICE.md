@@ -183,6 +183,22 @@ stanzas are surfaced via `dropped_tier3_sections`.
 | `pc5-round3b-routerd.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routerd-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65004) — 4 ethernet, BGP with `soft-reconfiguration outbound`. |
 | `pc5-round3b-routere.conf` | `pc5/team/round3b-route-route-revolution/challenge/RouterConfigurationFiles/routere-config.boot` | MIT (SEI) | IPv6 BGP router (AS 65005) — the dense outlier: 8 ethernet, 8 BGP neighbors, bare-leaf `router-advert interface ethN`.  Largest VyOS fixture. |
 
+The two VXLAN captures below are from
+[zhouleyan/wcni-kind](https://github.com/zhouleyan/wcni-kind) under
+**Apache-2.0** — a containerlab VXLAN demo (the two ends of one `vni 10`
+tunnel), VyOS **1.4-rolling-202307070317**.  They are the real-capture
+witnesses for the Phase-5 `interfaces vxlan` surface (the cisagov corpus
+has none).  Same 3-line `//` attribution header.  The `vyos` login hash
+is the published VyOS factory default (`$6$QxPS…`, identical across
+countless public configs incl. the cisagov corpus) — not a real secret.
+These configs write NTP servers in the 1.4-rolling block form
+(`server <host> { }`).
+
+| File | Origin | License | Notes |
+|---|---|---|---|
+| `wcni-kind-gw0.conf` | `network/5-demo-cni/6-vxlan/1-clab-vxlan/startup-conf/gw0.cfg` | Apache-2.0 | VXLAN tunnel end A — `vxlan vxlan0` (`vni 10` + `remote 172.12.1.11`), 2 ethernet + a static route, block-form NTP.  Round-trips the VXLAN netdev (vni / remote / port). |
+| `wcni-kind-gw1.conf` | `network/5-demo-cni/6-vxlan/1-clab-vxlan/startup-conf/gw1.cfg` | Apache-2.0 | VXLAN tunnel end B — mirror of gw0 (`vni 10` + `remote 172.12.1.10`); the complementary peer. |
+
 ---
 
 ## Adding new captures

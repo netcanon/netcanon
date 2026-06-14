@@ -14,6 +14,7 @@ VyOS uses Linux-style device names (the OS is Debian-derived):
     lo                   → loopback  (the single kernel loopback)
     dum0, dum1, ...      → loopback  (``dummy`` interfaces — loopback-like)
     bond0, bond1, ...    → lag       (``bonding`` link aggregation)
+    vxlan0, vxlan1, ...  → vtep      (``vxlan`` overlay tunnel netdev)
 
 A ``vif`` sub-interface classifies as ``physical`` (it lives on a
 physical port); the cross-vendor formatter collapses it to the parent
@@ -44,13 +45,16 @@ _BOND_RE = re.compile(r"^bond(?P<idx>\d+)$", re.IGNORECASE)
 _DUM_RE = re.compile(r"^dum(?P<idx>\d+)$", re.IGNORECASE)
 #: ``lo`` — the single kernel loopback.
 _LO_RE = re.compile(r"^lo$", re.IGNORECASE)
+#: ``vxlan0`` — VXLAN overlay tunnel netdev (VTEP).
+_VXLAN_RE = re.compile(r"^vxlan(?P<idx>\d+)$", re.IGNORECASE)
 
 
 def classify_port_name(name: str) -> PortIdentity:
     """Parse a VyOS interface name into a :class:`PortIdentity`.
 
     Dispatch order: ethernet (``ethN`` / ``ethN.vid``) → bonding
-    (``bondN``) → dummy (``dumN``) → loopback (``lo``) → unknown.
+    (``bondN``) → dummy (``dumN``) → loopback (``lo``) → vtep
+    (``vxlanN``) → unknown.
     """
     stripped = name.strip()
 
@@ -82,6 +86,12 @@ def classify_port_name(name: str) -> PortIdentity:
     if _LO_RE.match(stripped):
         return PortIdentity(kind="loopback", index=0, original=name)
 
+    m = _VXLAN_RE.match(stripped)
+    if m:
+        return PortIdentity(
+            kind="vtep", index=int(m.group("idx")), original=name,
+        )
+
     return PortIdentity(kind="unknown", original=name)
 
 
@@ -102,6 +112,8 @@ def format_port_identity(identity: PortIdentity) -> str | None:
     if identity.kind == "loopback":
         idx = identity.index if identity.index is not None else 0
         return "lo" if idx == 0 else f"dum{idx}"
-    # svi / vtep / tunnel / mgmt / breakout / hw_aggregate / virtual /
-    # unknown — no native VyOS v1 form.
+    if identity.kind == "vtep":
+        return f"vxlan{identity.index if identity.index is not None else 0}"
+    # svi / tunnel / mgmt / breakout / hw_aggregate / virtual / unknown —
+    # no native VyOS v1 form.
     return None

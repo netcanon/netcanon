@@ -766,13 +766,14 @@ Strategic:
 
 ### Status
 
-All four phases shipped (Tier-1 curly-brace + local users / NTP / bonding
-LAGs + `service snmp` + VRF).  Corpus is 6 `cisagov/prescup-challenges`
-real `config.boot` files (MIT (SEI)), all VyOS 1.4-rolling-202105152149,
-spanning two families (round-1 IPv4/OSPF, round-3b IPv6/BGP).  All parse,
-are deterministic, and round-trip cleanly.  Routing-protocol stanzas
-(`protocols ospf` / `protocols bgp`) are surfaced via
-`dropped_tier3_sections`.
+All five phases shipped (Tier-1 curly-brace + local users / NTP / bonding
+LAGs + `service snmp` + VRF + `interfaces vxlan`).  Corpus is **8** real
+`config.boot` files: 6 `cisagov/prescup-challenges` (MIT (SEI), VyOS
+1.4-rolling-202105152149, round-1 IPv4/OSPF + round-3b IPv6/BGP) + 2
+`zhouleyan/wcni-kind` (Apache-2.0, VyOS 1.4-rolling-202307070317 — the
+two ends of one `vni 10` VXLAN tunnel).  All parse, are deterministic,
+and round-trip cleanly.  Routing-protocol stanzas (`protocols ospf` /
+`protocols bgp`) are surfaced via `dropped_tier3_sections`.
 
 ### Coverage matrix
 
@@ -784,6 +785,8 @@ are deterministic, and round-trip cleanly.  Routing-protocol stanzas
 | `pc5-round3b-routerb.conf` | 108 | 3 | IPv6 | 1 | 3 | BGP AS65002 (disable-send-community) |
 | `pc5-round3b-routerd.conf` | 112 | 4 | IPv6 | 1 | 3 | BGP AS65004 (soft-reconfig outbound) |
 | `pc5-round3b-routere.conf` | 209 | 8 | IPv6 | 1 | 3 | BGP AS65005 — 8 ifaces / 8 neighbors (dense) |
+| `wcni-kind-gw0.conf` | 74 | 3 | IPv4 | 1 | 3 | **VXLAN** `vxlan0` vni 10 + `remote` (tunnel end A); block-form NTP |
+| `wcni-kind-gw1.conf` | 74 | 3 | IPv4 | 1 | 3 | **VXLAN** `vxlan0` vni 10 + `remote` (tunnel end B); mirror of gw0 |
 
 ### Certification decision
 
@@ -793,11 +796,14 @@ IPv6/BGP).  The corpus is single-source (`cisagov/prescup-challenges`)
 and single-version (VyOS 1.4-rolling-202105152149); a second VyOS major
 (1.3 / 1.5) is flagged in `WANTED.md` as a welcomed quality nice-to-have,
 not `certified`-gating per the base.py definition.  The round-tripping
-surface is interfaces + host-name + local-users + NTP; OSPF/BGP are
-Tier-3 (`dropped_tier3_sections`).  **Honest scope:** `service snmp` +
-VRF round-trip is validated by the synthetic kitchen-sink only — the real
-corpus carries neither, so SNMP/VRF have no real-capture witness yet
-(welcomed in `WANTED.md`).
+surface is interfaces + host-name + local-users + NTP + (wcni-kind)
+`interfaces vxlan`; OSPF/BGP are Tier-3 (`dropped_tier3_sections`).
+**Honest scope:** `interfaces vxlan` is now real-validated (the
+`zhouleyan/wcni-kind` tunnel pair); `service snmp` + VRF round-trip is
+still validated by the synthetic kitchen-sink only — a 2026-06 hunt found
+no permissive + curly-brace real capture carrying them (only GPL
+`vyos-1x` smoketests or unlicensed configs), so SNMP/VRF stay
+synthetic-validated (tracked in `WANTED.md`).
 
 ---
 
