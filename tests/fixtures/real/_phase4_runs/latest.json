@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-14T21:55:38+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T215537Z.json",
-  "mesh_run_started_utc": "2026-06-14T21:55:32+00:00",
-  "cells_total": 1020,
+  "started_utc": "2026-06-14T22:11:20+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T221119Z.json",
+  "mesh_run_started_utc": "2026-06-14T22:11:13+00:00",
+  "cells_total": 1044,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -331,6 +331,11 @@
       "target_codec": "opnsense"
     },
     {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "vyos"
+    },
+    {
       "fixture": "tests/fixtures/real/vyos/pc5-round1-border.conf",
       "source_codec": "vyos",
       "target_codec": "vyos"
@@ -357,6 +362,11 @@
     },
     {
       "fixture": "tests/fixtures/real/vyos/pc5-round3b-routere.conf",
+      "source_codec": "vyos",
+      "target_codec": "vyos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
       "source_codec": "vyos",
       "target_codec": "vyos"
     },
@@ -2433,6 +2443,61 @@
       "target_codec": "vyos"
     },
     {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/metasploit-vyos-config.conf",
+      "source_codec": "vyos",
+      "target_codec": "opnsense"
+    },
+    {
       "fixture": "tests/fixtures/real/vyos/pc5-round1-border.conf",
       "source_codec": "vyos",
       "target_codec": "arista_eos"
@@ -2759,6 +2824,61 @@
     },
     {
       "fixture": "tests/fixtures/real/vyos/pc5-round3b-routere.conf",
+      "source_codec": "vyos",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
       "source_codec": "vyos",
       "target_codec": "opnsense"
     },
@@ -12059,16 +12179,16 @@
             ],
             "target": [
               {
+                "name": "Port-Channel3",
+                "members": [],
+                "mode": "active"
+              },
+              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
                   "Ethernet4"
                 ],
-                "mode": "active"
-              },
-              {
-                "name": "Port-Channel3",
-                "members": [],
                 "mode": "active"
               },
               {
@@ -21209,16 +21329,16 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
                   "Ethernet4"
                 ],
+                "mode": "active"
+              },
+              {
+                "name": "Port-Channel3",
+                "members": [],
                 "mode": "active"
               },
               {
@@ -24401,6 +24521,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 1020
+    "cells_total_in_run": 1044
   }
 }

@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **VyOS codec — real-capture validation for `service snmp`.**  Lands two
+  permissive real `config.boot` SNMP captures under
+  `tests/fixtures/real/vyos/`, flipping the `service snmp` surface from
+  synthetic-only to real-validated: `scottlaird/vyos-parser` (Apache-2.0,
+  VyOS 1.5, `community public`) and `rapid7/metasploit-framework`'s
+  `vyos_config` module docs (BSD-3, VyOS 1.3, `community ro`/`write` —
+  the codec keeps the canonical single community).  Both round-trip
+  cleanly through the real-capture harness; secrets are author-redacted
+  or published example hashes.  The corpus now spans **three VyOS majors
+  (1.3 / 1.4 / 1.5)** from four sources.  A companion hunt found **no**
+  permissive + curly-brace real config exercising `vrf name` (only GPL
+  `vyos-1x` smoketests or unlicensed), so VRF stays synthetic-validated
+  (tracked in `WANTED.md`).  Cross-mesh regenerated (1020 → 1044 cells);
+  high-severity CODEC_BUG held flat at 5.
 * **VyOS codec — Phase 5 (VXLAN + real-capture validation).**  Adds
   `interfaces vxlan vxlanN` netdevs → `CanonicalVxlan` (one VNI per
   netdev: `vni` / `source-address`|`source-interface` / `group` /
