@@ -4,31 +4,39 @@ Render path for Aruba AOS-CX (canonical tree → ``show running-config``).
 Public function: :func:`render_intent` — :class:`CanonicalIntent` in,
 AOS-CX CLI text out.
 
-Phase 1 emits the supported Tier-1 subset declared in the capability
-matrix: a synthesised ``!Version`` banner, hostname, top-level ``vrf``
+Emits the supported subset declared in the capability matrix: a
+synthesised ``!Version`` banner, hostname, local users (``user <name>
+group <group> password ciphertext <blob>``), top-level ``vrf``
 declarations, per-id ``vlan`` stanzas (+ name / description), default-VRF
 static routes, and interface stanzas with description / admin-state /
-mtu / IPv4 (CIDR) / ``vrf attach`` / IPv6.
+mtu, the L2 switchport surface (``no routing`` + ``vlan access`` / ``vlan
+trunk``) for physical + LAG ports, IPv4 (CIDR) / ``vrf attach`` / IPv6
+for routed ports, LAG membership (``lag N``), and ``lacp mode`` on the
+``interface lag N`` stanzas.
 
 The render path stays deliberately tolerant of the canonical surfaces it
-does NOT yet emit (L2 switchport, LAG membership, active-gateway anycast,
-VXLAN / EVPN, Tier-3 protocols): a cross-vendor source tree carrying
-those fields renders cleanly, simply omitting them.  The matrix declares
-each omission ``unsupported`` so the migrate-page banner surfaces the gap.
+does NOT yet emit (SNMP, active-gateway anycast, VXLAN / EVPN, Tier-3
+protocols): a cross-vendor source tree carrying those fields renders
+cleanly, simply omitting them.  The matrix declares each omission
+``unsupported`` so the migrate-page banner surfaces the gap.
 
 AOS-CX grammar notes that shape the output (see
 ``docs/fixture-research-2015/11-aruba_aoscx.md``):
 
 * Interface names are multi-token (``vlan 11`` / ``lag 1`` / ``1/1/1``);
   :mod:`.port_names` is the single source of truth for the spelling.
-* A routed port carries a bare ``ip address`` (routing is implicit — no
-  ``routing`` keyword is emitted).
-* Admin-state is emitted explicitly (``no shutdown`` / ``shutdown``)
-  rather than relying on the type-aware default, so the round-trip is
-  stable regardless of the parser's default.
+* L2 is opt-in: an L2 port emits ``no routing`` + ``vlan access`` /
+  ``vlan trunk`` (the INVERSE of NX-OS); a routed port carries a bare
+  ``ip address`` with no ``routing`` keyword.  Switchport lines are
+  kind-gated to physical + LAG ports.
+* An empty trunk-allowed list re-emits as ``vlan trunk allowed all``.
+* Admin-state is emitted explicitly (``no shutdown`` / ``shutdown``) so
+  the round-trip is stable regardless of the parser's type-aware default.
 """
 
 from __future__ import annotations
+
+import re
 
 from ...canonical.intent import CanonicalIntent
 
@@ -49,6 +57,11 @@ def render_intent(tree: CanonicalIntent) -> str:
     lines.append(f"!Version ArubaOS-CX {_DEFAULT_VERSION}")
     lines.append("!export-password: default")
     lines.append(f"hostname {hostname}")
+
+    # ── Local users (Phase 2) ──
+    for user in tree.local_users:
+        lines.append(_render_local_user(user))
+
     lines.append("!")
 
     # ── VRF declarations ──
@@ -73,10 +86,31 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.append(_render_static_route(route))
 
     # ── Interfaces (AOS-CX show-output order) ──
+    lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     for iface in _sort_interfaces(tree.interfaces):
-        lines.extend(_render_interface(iface))
+        lines.extend(_render_interface(iface, lag_mode_by_name))
 
     return "\n".join(lines) + "\n"
+
+
+def _render_local_user(user) -> str:
+    """Render ``user <name> group <group> password ciphertext <blob>``.
+
+    ``role`` (the AOS-CX group) is emitted verbatim when set (same-vendor
+    round-trip) and otherwise derived from the privilege level
+    (administrators >= 15, else operators).  The ``ciphertext`` blob is
+    re-emitted verbatim from ``hashed_password``; a user with no stored
+    secret renders the bare form (best-effort for a cross-vendor source).
+    """
+    role = user.role or (
+        "administrators" if user.privilege_level >= 15 else "operators"
+    )
+    if user.hashed_password:
+        return (
+            f"user {user.name} group {role} "
+            f"password ciphertext {user.hashed_password}"
+        )
+    return f"user {user.name} group {role}"
 
 
 def _render_static_route(route) -> str:
@@ -94,14 +128,18 @@ def _render_static_route(route) -> str:
     return out
 
 
-def _render_interface(iface) -> list[str]:
+def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     """Render one interface stanza.
 
-    Admin-state is always stated explicitly.  A routed port emits its IP
-    with no ``routing`` keyword (routing is the AOS-CX default for a port
-    carrying an address).  ``vrf attach`` precedes the IP (AOS-CX wipes
-    the address on a VRF change, so the binding must come first).
+    Switchport handling is kind-aware: only physical / LAG ports take the
+    L2 ``no routing`` + ``vlan access`` / ``vlan trunk`` surface.  A
+    routed port (no switchport mode) emits its IP with no ``routing``
+    keyword (routing is the AOS-CX default for an addressed port).  SVIs /
+    loopbacks / mgmt are inherently L3.  ``lacp mode`` is emitted on the
+    ``interface lag N`` stanza; ``lag N`` membership on the member port.
     """
+    from . import port_names as _port_names
+
     block = [f"interface {iface.name}"]
     if iface.enabled:
         block.append("    no shutdown")
@@ -111,16 +149,94 @@ def _render_interface(iface) -> list[str]:
         block.append(f"    description {iface.description}")
     if iface.mtu is not None:
         block.append(f"    mtu {iface.mtu}")
-    if iface.vrf:
-        block.append(f"    vrf attach {iface.vrf}")
-    for addr in iface.ipv4_addresses:
-        line = f"    ip address {addr.ip}/{addr.prefix_length}"
-        if addr.is_secondary:
-            line += " secondary"
-        block.append(line)
-    for addr in iface.ipv6_addresses:
-        block.append(f"    ipv6 address {addr.ip}/{addr.prefix_length}")
+
+    kind = _port_names.classify_port_name(iface.name).kind
+    is_l2 = (
+        kind in ("physical", "lag")
+        and iface.switchport_mode in ("access", "trunk")
+    )
+
+    if is_l2:
+        # ── L2 switchport ── (the AOS-CX inverse of NX-OS: state ``no
+        # routing`` then the VLAN membership).
+        block.append("    no routing")
+        if iface.switchport_mode == "access":
+            if iface.access_vlan is not None:
+                block.append(f"    vlan access {iface.access_vlan}")
+        else:  # trunk
+            if iface.trunk_native_vlan is not None:
+                block.append(
+                    f"    vlan trunk native {iface.trunk_native_vlan}"
+                )
+            allowed = sorted(set(iface.trunk_allowed_vlans))
+            if allowed:
+                block.append(
+                    f"    vlan trunk allowed {_coalesce_vlan_ids(allowed)}"
+                )
+            else:
+                # Empty allowed-list == all (the parser maps ``all`` -> []).
+                block.append("    vlan trunk allowed all")
+    else:
+        # ── L3 (routed) — vrf bind precedes the address ──
+        if iface.vrf:
+            block.append(f"    vrf attach {iface.vrf}")
+        for addr in iface.ipv4_addresses:
+            line = f"    ip address {addr.ip}/{addr.prefix_length}"
+            if addr.is_secondary:
+                line += " secondary"
+            block.append(line)
+        for addr in iface.ipv6_addresses:
+            block.append(f"    ipv6 address {addr.ip}/{addr.prefix_length}")
+
+    # ── LAG membership (``lag N`` on the member port) ──
+    if iface.lag_member_of:
+        m = re.search(r"(\d+)\s*$", iface.lag_member_of)
+        if m:
+            block.append(f"    lag {m.group(1)}")
+
+    # ── ``lacp mode`` on the ``interface lag N`` stanza ──
+    if kind == "lag":
+        mode = lag_mode_by_name.get(iface.name, "static")
+        if mode in ("active", "passive"):
+            block.append(f"    lacp mode {mode}")
+
     return block
+
+
+def _coalesce_vlan_ids(ids: list[int]) -> str:
+    """Coalesce a sorted, de-duplicated VLAN-id list into AOS-CX form.
+
+    ``[1, 10, 11, 12, 20]`` → ``"1,10-12,20"``.  Consecutive runs of
+    three or more collapse to ``lo-hi``; the inverse of
+    :func:`parse._parse_vlan_list` so the ``vlan trunk allowed`` list
+    round-trips.
+    """
+    if not ids:
+        return ""
+    parts: list[str] = []
+    run_start = prev = ids[0]
+    for vid in ids[1:]:
+        if vid == prev + 1:
+            prev = vid
+            continue
+        parts.append(_run_token(run_start, prev))
+        run_start = prev = vid
+    parts.append(_run_token(run_start, prev))
+    return ",".join(parts)
+
+
+def _run_token(lo: int, hi: int) -> str:
+    """Format a single run for :func:`_coalesce_vlan_ids`.
+
+    A two-wide run (``10,11``) stays comma-separated rather than
+    ``10-11`` — both re-parse identically, but the comma form matches the
+    show-output convention for adjacent pairs.
+    """
+    if hi == lo:
+        return str(lo)
+    if hi == lo + 1:
+        return f"{lo},{hi}"
+    return f"{lo}-{hi}"
 
 
 #: Interface-kind render order: SVIs, then physical, then LAGs, then the

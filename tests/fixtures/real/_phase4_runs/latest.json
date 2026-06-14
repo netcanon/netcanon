@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-14T01:39:18+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T013901Z.json",
-  "mesh_run_started_utc": "2026-06-14T01:38:56+00:00",
+  "started_utc": "2026-06-14T02:02:20+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260614T020219Z.json",
+  "mesh_run_started_utc": "2026-06-14T02:02:14+00:00",
   "cells_total": 792,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
@@ -10919,11 +10919,6 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -10932,8 +10927,15 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel5",
+                "name": "Port-Channel3",
                 "members": [],
+                "mode": "active"
+              },
+              {
+                "name": "Port-channel5",
+                "members": [
+                  "Ethernet5"
+                ],
                 "mode": "active"
               },
               "... and 3 more"
@@ -20067,11 +20069,6 @@
             ],
             "target": [
               {
-                "name": "Port-Channel3",
-                "members": [],
-                "mode": "active"
-              },
-              {
                 "name": "Port-channel3",
                 "members": [
                   "Ethernet3",
@@ -20080,8 +20077,15 @@
                 "mode": "active"
               },
               {
-                "name": "Port-Channel6",
+                "name": "Port-Channel3",
                 "members": [],
+                "mode": "active"
+              },
+              {
+                "name": "Port-channel6",
+                "members": [
+                  "Ethernet6"
+                ],
                 "mode": "active"
               },
               "... and 7 more"

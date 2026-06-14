@@ -20,10 +20,10 @@ Module layout (mirrors ``cisco_nxos`` post-split):
 
 Direction: ``bidirectional``.
 Certainty: ``experimental`` — Phase 1 (Tier-1: hostname, basic-L3
-    interfaces, VLANs, top-level ``vrf`` name, default-VRF static
-    routes).  No real-capture corpus is wired yet; the L2 switchport /
-    LAG / SNMP / users / active-gateway anycast / VXLAN-EVPN surfaces and
-    the certified tier follow in later phases.  See
+    interfaces, VLANs, top-level ``vrf`` name, default-VRF static routes)
+    + Phase 2 (L2 switchport + VLAN port projection, LAGs, local users).
+    No real-capture corpus is wired yet; SNMP / active-gateway anycast /
+    VXLAN-EVPN and the certified tier follow in later phases.  See
     ``docs/fixture-research-2015/11-aruba_aoscx.md``.
 """
 

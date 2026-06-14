@@ -26,14 +26,17 @@ introduces no new canonical xpaths in Phase 1, so the shared walker
 yields exactly the right set.
 
 This codec lands in phases (Tier-1 first, mirroring the ``cisco_nxos``
-cadence).  **Phase 1** (this commit): hostname, basic-L3 interfaces
-(description / admin-state / mtu / IPv4 + IPv6 CIDR / ``vrf attach``),
-VLANs (id + name + description), top-level ``vrf`` declarations (name),
-and default-VRF static routes.  ``certainty`` is ``experimental`` — no
-real-capture corpus is wired yet (the certified tier follows in a later
-phase).  Later phases add the L2 switchport surface (``no routing`` /
-``vlan access`` / ``vlan trunk``), LAGs (``interface lag``), local users,
-SNMP, the ``active-gateway`` anycast surface, VSX, and VXLAN / EVPN.
+cadence).  **Phase 1**: hostname, basic-L3 interfaces (description /
+admin-state / mtu / IPv4 + IPv6 CIDR / ``vrf attach``), VLANs (id + name
++ description), top-level ``vrf`` declarations (name), and default-VRF
+static routes.  **Phase 2** (this commit): the L2 switchport surface
+(``no routing`` + ``vlan access`` / ``vlan trunk native`` / ``vlan trunk
+allowed``) with VLAN-centric port projection, LAGs (``interface lag N``
++ per-port ``lag N`` + ``lacp mode``), and local users (``user <name>
+group <group> password ciphertext <blob>``).  ``certainty`` is
+``experimental`` — no real-capture corpus is wired yet (the certified
+tier follows in a later phase).  Later phases add SNMP, the
+``active-gateway`` anycast surface, VSX, and VXLAN / EVPN.
 """
 
 from __future__ import annotations
@@ -127,8 +130,24 @@ class ArubaAOSCXCodec(CodecBase):
             "/vlans/vlan/description",
             # Static routes (default VRF)
             "/routing/static-route",
-            # VRF — name only in Phase 1
+            # VRF — name only (Phase 1)
             "/routing-instances/instance/name",
+            # ── Phase 2: L2 switchport + VLAN port membership ──
+            "/interfaces/interface/switchport-mode",
+            "/interfaces/interface/access-vlan",
+            "/interfaces/interface/trunk-allowed-vlans",
+            "/interfaces/interface/trunk-native-vlan",
+            "/interfaces/interface/lag-member-of",
+            "/vlans/vlan/tagged-ports",
+            "/vlans/vlan/untagged-ports",
+            # ── Phase 2: LAGs (`interface lag N`) ──
+            "/lags/lag/name",
+            "/lags/lag/members",
+            "/lags/lag/mode",
+            # ── Phase 2: local users (`user X group G password ciphertext`) ──
+            "/local-users/user/name",
+            "/local-users/user/role",
+            "/local-users/user/hashed-password",
         ],
         lossy=[
             LossyPath(
@@ -158,60 +177,25 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            LossyPath(
+                path="/local-users/user/privilege-level",
+                reason=(
+                    "AOS-CX uses a named `group` (administrators / "
+                    "operators / auditors / custom) instead of a numeric "
+                    "privilege.  The codec maps administrators -> 15 and "
+                    "everything else -> 1, so cross-vendor renderers "
+                    "expecting numeric privilege round-trip non-admin "
+                    "groups as 1.  The named group round-trips losslessly "
+                    "same-vendor.  The `password ciphertext` blob is "
+                    "AES-encrypted with the device key (portable "
+                    "same-device only); cross-vendor migration requires "
+                    "re-keying on the target."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
-            # ── L2 switchport + VLAN port membership (later phase) ──
-            # AOS-CX `no routing` + `vlan access N` / `vlan trunk native`
-            # / `vlan trunk allowed` parses-and-ignores in Phase 1.
-            UnsupportedPath(
-                path="/interfaces/interface/switchport-mode",
-                reason=(
-                    "L2 switchport (`no routing` + `vlan access` / `vlan "
-                    "trunk`) is a later phase; Phase 1 covers routed-port "
-                    "L3 addressing only."
-                ),
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/access-vlan",
-                reason="L2 switchport — later phase (see switchport-mode).",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/trunk-allowed-vlans",
-                reason="L2 switchport — later phase (see switchport-mode).",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/trunk-native-vlan",
-                reason="L2 switchport — later phase (see switchport-mode).",
-            ),
-            UnsupportedPath(
-                path="/interfaces/interface/lag-member-of",
-                reason=(
-                    "LAG membership (per-port `lag N` + the `interface "
-                    "lag N` stanza) is a later phase."
-                ),
-            ),
-            UnsupportedPath(
-                path="/vlans/vlan/tagged-ports",
-                reason="VLAN-centric port projection — later phase.",
-            ),
-            UnsupportedPath(
-                path="/vlans/vlan/untagged-ports",
-                reason="VLAN-centric port projection — later phase.",
-            ),
-            # ── LAGs (later phase — `interface lag N`) ──
-            UnsupportedPath(
-                path="/lags/lag/name",
-                reason="`interface lag N` LAGs are a later phase.",
-            ),
-            UnsupportedPath(
-                path="/lags/lag/members",
-                reason="LAG membership is a later phase (see /lags/lag/name).",
-            ),
-            UnsupportedPath(
-                path="/lags/lag/mode",
-                reason="LAG LACP mode is a later phase (see /lags/lag/name).",
-            ),
-            # ── SNMP + local users (later phase) ──
+            # ── SNMP (later phase) ──
             UnsupportedPath(
                 path="/snmp/community",
                 reason="`snmp-server` config is a later phase.",
@@ -219,13 +203,6 @@ class ArubaAOSCXCodec(CodecBase):
             UnsupportedPath(
                 path="/snmp/v3-user",
                 reason="SNMPv3 USM users are a later phase.",
-            ),
-            UnsupportedPath(
-                path="/local-users/user/name",
-                reason=(
-                    "Local users (`user <name> group <group> password "
-                    "ciphertext <blob>`) are a later phase."
-                ),
             ),
             # ── VRF description + RD / route-target + per-VRF static ──
             UnsupportedPath(
