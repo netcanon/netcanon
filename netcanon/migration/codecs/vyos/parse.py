@@ -67,6 +67,16 @@ name <X> { table <N> }`` routing instances + the per-interface ``vrf
 vxlanN`` netdevs → :class:`CanonicalVxlan` (one VNI per netdev:
 ``vni`` / ``source-address`` / ``group`` / ``remote`` / ``port``).
 
+**set-form input**: the parser also accepts VyOS *set-form* text (the
+output of ``show configuration commands`` — a flat sequence of ``set
+<path> [value]`` lines).  :func:`_setform_to_brace` converts it to the
+equivalent curly-brace text up front, so the brace-stack walker (and
+every phase of its dispatch) runs unchanged — mirroring how the
+``juniper_junos`` codec converts block-form to set-form ahead of its
+set-parser.  The conversion is idempotent on curly-brace input.  Render
+always emits curly-brace ``config.boot`` (the native backup form); a
+``set``-form-in / ``set``-form-out round-trip is not a goal.
+
 Deferred to later phases (parse-and-ignore for now): the remaining
 ``service`` management-plane blocks (SSH / DHCP / syslog / DNS), the
 VXLAN-to-bridge L2 VLAN binding (``interfaces bridge`` membership) +
@@ -135,6 +145,148 @@ def _is_v6(addr: str) -> bool:
     return ":" in addr
 
 
+# ---------------------------------------------------------------------------
+# set-form → curly-brace normalisation
+# ---------------------------------------------------------------------------
+#
+# VyOS accepts two interchangeable text grammars for the same config:
+#
+#   * **curly-brace** ``config.boot`` — the native on-disk backup, parsed
+#     directly by the brace-stack walker in :func:`parse_intent`.
+#   * **set-form** — the output of ``show configuration commands`` (a flat
+#     sequence of ``set <space-separated path> [value]`` lines).
+#
+# Rather than duplicate the walker's dispatch, set-form is *converted to
+# the equivalent curly-brace text* up front and then handed to the SAME
+# walker (mirroring how the ``juniper_junos`` codec converts block-form to
+# set-form ahead of its set-parser).  The walker — and every phase of its
+# dispatch — is therefore untouched.
+#
+# The conversion needs to know, per path token, whether it is a *tag node*
+# (consumes the next token as an identifier → a two-token brace header like
+# ``ethernet eth0``) or a *leaf* (terminal — the remainder of the line is
+# its value).  Anything else is treated as a plain single-token container.
+# These two tables are kept in sync with the block-open / leaf dispatch in
+# :func:`parse_intent`; unknown keywords default to "container" so Tier-3
+# blocks (``set firewall …`` / ``set nat …`` / ``set protocols bgp …``)
+# still nest under a recognisable top-level header for the Tier-3 banner
+# detector (they parse-and-ignore in the walker regardless).
+
+#: Keywords that consume the FOLLOWING token as a node identifier (a
+#: two-token brace header ``"<kw> <id>"``).  ``vrf`` is handled separately
+#: (it is a container only in the ``vrf name <X>`` bigram — see
+#: :func:`_chunk_setline`).
+_SETFORM_TAG_NODES = frozenset({
+    "ethernet", "loopback", "dummy", "bonding", "vxlan", "bridge",
+    "wireguard", "tunnel", "vti", "pppoe", "geneve", "vif",
+    "route", "route6", "next-hop",
+    "name",            # `vrf name <X>` (and Tier-3 `firewall name <X>`)
+    "community", "user", "server", "interface",
+})
+
+#: Terminal keywords — the remainder of the ``set`` line is the leaf value
+#: (or empty for a bare flag like ``disable``).  Kept in sync with the leaf
+#: dispatch in :func:`parse_intent`.
+_SETFORM_LEAVES = frozenset({
+    "host-name", "address", "description", "disable", "mtu", "hw-id", "mac",
+    "distance", "mode", "bond-group",
+    "encrypted-password", "plaintext-password", "encrypted-key", "type",
+    "vni", "group", "remote", "source-address", "source-interface",
+    "link", "dev", "port", "table",
+    "location", "contact", "engineid",
+})
+
+
+def _looks_like_setform(raw: str) -> bool:
+    """True iff *raw* is VyOS set-form (the first meaningful line is a
+    ``set `` command).  Curly-brace ``config.boot`` opens with a block
+    header (``interfaces {`` / ``system {`` …), so this is a clean
+    either/or — the two grammars are never interleaved in practice."""
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s or s.startswith(("#", "//", "/*", "*")):
+            continue
+        return s.startswith("set ")
+    return False
+
+
+def _chunk_setline(tokens: list[str]) -> tuple[list[str], str | None]:
+    """Split the tokens of a ``set`` line (after the leading ``set``) into
+    the list of brace-header strings (the node path) and an optional leaf
+    line (``"<key> <value...>"``).
+
+    The single context-sensitive case is ``vrf``: a top-level ``vrf name
+    <X>`` declaration makes ``vrf`` a container (and ``name`` its tag
+    node), whereas the per-interface ``vrf <name>`` binding makes ``vrf``
+    a leaf.  The ``vrf name`` bigram disambiguates them.
+    """
+    headers: list[str] = []
+    i, n = 0, len(tokens)
+    while i < n:
+        tok = tokens[i]
+        if tok == "vrf":
+            if i + 1 < n and tokens[i + 1] == "name":
+                headers.append("vrf")          # container; `name` follows
+                i += 1
+                continue
+            return headers, " ".join(tokens[i:])   # per-interface leaf
+        if tok in _SETFORM_LEAVES:
+            return headers, " ".join(tokens[i:])
+        if tok in _SETFORM_TAG_NODES and i + 1 < n:
+            headers.append(f"{tok} {tokens[i + 1]}")
+            i += 2
+            continue
+        headers.append(tok)                    # container / unknown
+        i += 1
+    return headers, None
+
+
+_LEAVES_KEY = "\x00leaves"
+
+
+def _setform_to_brace(raw: str) -> str:
+    """Convert VyOS set-form text to the equivalent curly-brace text.
+
+    Idempotent on curly-brace input (returned unchanged), so this is safe
+    to call unconditionally ahead of the brace-stack walker.  Non-``set``
+    lines (blank / comment / a stray ``deactivate``) are skipped, matching
+    the walker's parse-tolerance.
+    """
+    if not _looks_like_setform(raw):
+        return raw
+
+    root: dict = {}
+    for line in raw.splitlines():
+        s = line.strip()
+        if not s.startswith("set "):
+            continue
+        headers, leaf = _chunk_setline(s[4:].split())
+        node = root
+        for h in headers:
+            node = node.setdefault(h, {})
+        if leaf is not None:
+            node.setdefault(_LEAVES_KEY, []).append(leaf)
+
+    return "\n".join(_serialise_brace(root, 0))
+
+
+def _serialise_brace(node: dict, depth: int) -> list[str]:
+    """Render a nested node dict (built by :func:`_setform_to_brace`) into
+    indented VyOS curly-brace lines.  Leaves are emitted before child
+    blocks; sibling order is irrelevant to the stack-based walker."""
+    pad = "    " * depth
+    out: list[str] = []
+    for leaf in node.get(_LEAVES_KEY, []):
+        out.append(f"{pad}{leaf}")
+    for header, child in node.items():
+        if header == _LEAVES_KEY:
+            continue
+        out.append(f"{pad}{header} {{")
+        out.extend(_serialise_brace(child, depth + 1))
+        out.append(f"{pad}}}")
+    return out
+
+
 def parse_intent(raw: str) -> CanonicalIntent:
     """Parse VyOS ``config.boot`` text into a :class:`CanonicalIntent`.
 
@@ -152,6 +304,10 @@ def parse_intent(raw: str) -> CanonicalIntent:
             f"contents of /config/config.boot.",
             snippet=raw.lstrip()[:120],
         )
+
+    # Accept set-form (`show configuration commands`) by converting it to
+    # the equivalent curly-brace text up front; idempotent on brace input.
+    raw = _setform_to_brace(raw)
 
     intent = CanonicalIntent(source_vendor="vyos", source_format="cli-vyos")
 

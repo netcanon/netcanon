@@ -22,6 +22,7 @@ from netcanon.migration.codecs.juniper_junos import JunosCodec
 from netcanon.migration.codecs.registry import get_codec
 from netcanon.migration.codecs.vyos import port_names
 from netcanon.migration.codecs.vyos.codec import VyOSCodec
+from netcanon.migration.codecs.vyos.parse import _setform_to_brace
 
 pytestmark = pytest.mark.unit
 
@@ -137,6 +138,144 @@ def test_probe_rejects_junos_curly_form() -> None:
 
 def test_junos_probe_does_not_steal_vyos() -> None:
     assert JunosCodec.probe(_SAMPLE) is None
+
+
+# ---------------------------------------------------------------------------
+# set-form input (`show configuration commands`)
+# ---------------------------------------------------------------------------
+
+#: The set-form translation of ``_SAMPLE`` (Phase-1 surfaces) — proves the
+#: set-form front-end reproduces the curly-brace parse exactly.
+_SAMPLE_SETFORM = """\
+set interfaces ethernet eth0 address '192.0.2.1/30'
+set interfaces ethernet eth0 description 'uplink'
+set interfaces ethernet eth0 mtu 1500
+set interfaces ethernet eth1 address dhcp
+set interfaces ethernet eth1 vif 100 address '10.0.100.1/24'
+set interfaces loopback lo address '192.0.2.255/32'
+set interfaces loopback lo address '2001:db8::1/128'
+set interfaces dummy dum0 disable
+set protocols static route 0.0.0.0/0 next-hop 192.0.2.2 distance 1
+set protocols static route6 ::/0 next-hop 2001:db8::2
+set system host-name vyos-sample
+"""
+
+#: A richer set-form sample exercising Phase 2/3/5 surfaces + Tier-3 blocks.
+_SETFORM_RICH = """\
+set system host-name vyos-set
+set interfaces ethernet eth0 address '10.0.0.1/24'
+set interfaces ethernet eth0 vrf RED
+set interfaces bonding bond0 mode '802.3ad'
+set interfaces bonding bond0 member interface eth1
+set interfaces vxlan vxlan0 vni 5000
+set interfaces vxlan vxlan0 source-address 10.0.0.1
+set interfaces vxlan vxlan0 group 239.1.1.1
+set protocols static route 0.0.0.0/0 next-hop 10.0.0.254
+set service snmp community FAKEPUB authorization ro
+set service snmp location 'rack 4'
+set service snmp v3 user monitor group ro_group
+set service snmp v3 user monitor auth type sha
+set service snmp v3 user monitor auth encrypted-password fakeauthhash
+set system login user vyos authentication encrypted-password '$6$FAKE$hash'
+set system ntp server 0.pool.ntp.org
+set vrf name RED table 100
+set firewall name FOO rule 10 action drop
+set nat source rule 100 outbound-interface eth0
+"""
+
+
+def test_probe_detects_vyos_set_form() -> None:
+    score = VyOSCodec.probe(_SETFORM_RICH)
+    assert score is not None and score[0] >= 80
+    assert "set-form" in score[1]
+
+
+def test_setform_probe_beats_junos() -> None:
+    """A VyOS set-form capture must out-score the ``juniper_junos`` probe
+    so the detector resolves it to ``vyos`` — VyOS set-form is distinct
+    from Junos set-form (Linux netdev names, ``set service``, ``set vrf
+    name``)."""
+    vy = VyOSCodec.probe(_SETFORM_RICH)
+    jn = JunosCodec.probe(_SETFORM_RICH)
+    assert vy is not None
+    assert jn is None or vy[0] > jn[0]
+
+
+def test_setform_idempotent_on_curly() -> None:
+    """Converting already-curly-brace input is a no-op (the normaliser is
+    safe to call unconditionally ahead of the brace-stack walker)."""
+    assert _setform_to_brace(_SAMPLE) == _SAMPLE
+
+
+def test_setform_equivalent_to_curly(codec: VyOSCodec) -> None:
+    """The set-form front-end reproduces the curly-brace parse exactly."""
+    assert (
+        _normalise(codec.parse(_SAMPLE_SETFORM))
+        == _normalise(codec.parse(_SAMPLE))
+    )
+
+
+def test_setform_parses_all_surfaces(codec: VyOSCodec) -> None:
+    intent = codec.parse(_SETFORM_RICH)
+    assert intent.hostname == "vyos-set"
+    eth0 = next(i for i in intent.interfaces if i.name == "eth0")
+    assert eth0.ipv4_addresses[0].ip == "10.0.0.1"
+    assert eth0.vrf == "RED"
+    bond0 = next(lag for lag in intent.lags if lag.name == "bond0")
+    assert bond0.members == ["eth1"] and bond0.mode == "active"
+    assert intent.snmp is not None
+    assert intent.snmp.community == "FAKEPUB"
+    assert intent.snmp.v3_users[0].name == "monitor"
+    assert intent.snmp.v3_users[0].auth_protocol == "sha"
+    assert intent.local_users[0].name == "vyos"
+    assert intent.ntp_servers == ["0.pool.ntp.org"]
+    assert any(r.destination == "0.0.0.0/0" for r in intent.static_routes)
+    assert intent.vxlan_vnis[0].vni == 5000
+    assert intent.vxlan_vnis[0].source_interface == "10.0.0.1"
+
+
+def test_setform_vrf_bigram(codec: VyOSCodec) -> None:
+    """`set vrf name X` materialises an instance; `set interfaces … vrf X`
+    only binds — the ``vrf name`` bigram disambiguates container vs leaf."""
+    intent = codec.parse(_SETFORM_RICH)
+    assert [ri.name for ri in intent.routing_instances] == ["RED"]
+    eth0 = next(i for i in intent.interfaces if i.name == "eth0")
+    assert eth0.vrf == "RED"
+
+
+def test_setform_phantom_instance_guard(codec: VyOSCodec) -> None:
+    """A per-interface `set … vrf UNDECLARED` with no `set vrf name` must
+    NOT conjure a routing-instance (the phantom-instance guard holds for
+    set-form input too)."""
+    raw = (
+        "set interfaces ethernet eth0 address 10.0.0.1/24\n"
+        "set interfaces ethernet eth0 vrf UNDECLARED\n"
+    )
+    intent = codec.parse(raw)
+    eth0 = next(i for i in intent.interfaces if i.name == "eth0")
+    assert eth0.vrf == "UNDECLARED"
+    assert intent.routing_instances == []
+
+
+def test_setform_tier3_surfaced(codec: VyOSCodec) -> None:
+    """Tier-3 blocks in set-form (`set firewall` / `set nat`) still feed
+    the dropped-sections banner (the curly normalisation runs first)."""
+    intent = codec.parse(_SETFORM_RICH)
+    assert "firewall" in intent.dropped_tier3_sections
+    assert "nat" in intent.dropped_tier3_sections
+
+
+def test_setform_render_is_curly(codec: VyOSCodec) -> None:
+    """Render always emits curly-brace config.boot regardless of input
+    grammar (set-form is input-only); the result round-trips."""
+    out = codec.render(codec.parse(_SAMPLE_SETFORM))
+    assert "interfaces {" in out
+    assert "    ethernet eth0 {" in out
+    assert not any(ln.lstrip().startswith("set ") for ln in out.splitlines())
+    assert (
+        _normalise(codec.parse(out))
+        == _normalise(codec.parse(_SAMPLE_SETFORM))
+    )
 
 
 # ---------------------------------------------------------------------------
