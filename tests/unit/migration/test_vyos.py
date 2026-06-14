@@ -1,12 +1,14 @@
 """
-Focused unit tests for the VyOS codec (``vyos``) — Phase 1 (Tier-1).
+Focused unit tests for the VyOS codec (``vyos``) — Phases 1-3.
 
 Covers the curly-brace ``config.boot`` grammar: probe (config-version
 trailer + structural fallback + the Junos non-collision the codec is
 careful about), the brace-stack parser (hostname / ethernet+loopback+dummy
 interfaces / addresses (IPv4+IPv6 / dhcp) / description / disable / mtu /
-``vif`` VLAN sub-interfaces / static routes), port-name classification,
-the canonical round-trip, and the capability-matrix declarations.
+``vif`` VLAN sub-interfaces / static routes; Phase 2 local users + NTP +
+bonding LAGs; Phase 3 ``service snmp`` + VRF routing-instances + the
+per-interface ``vrf`` binding), port-name classification, the canonical
+round-trip, and the capability-matrix declarations.
 """
 
 from __future__ import annotations
@@ -299,6 +301,139 @@ def test_round_trip_p2(codec: VyOSCodec) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3 — SNMP (service snmp) + VRF (routing instances + per-iface)
+# ---------------------------------------------------------------------------
+
+_P3 = """\
+interfaces {
+    ethernet eth0 {
+        address "10.0.0.1/24"
+        vrf "RED"
+    }
+    ethernet eth1 {
+        address "10.0.1.1/24"
+        vrf "BLUE"
+    }
+}
+service {
+    snmp {
+        community FAKEPUB {
+            authorization ro
+        }
+        contact "netops@example.com"
+        location "rack 4"
+        v3 {
+            engineid 0xDEADBEEF01
+            user monitor {
+                group readers
+                auth {
+                    encrypted-password $6$FAKEauth
+                    type sha
+                }
+                privacy {
+                    encrypted-password $6$FAKEpriv
+                    type aes
+                }
+            }
+        }
+    }
+}
+system {
+    host-name r1
+}
+vrf {
+    name RED {
+        table 100
+    }
+    name BLUE {
+        table 200
+    }
+}
+// vyos-config-version: "system@27"
+"""
+
+
+def test_parse_snmp_community_location_contact(codec: VyOSCodec) -> None:
+    snmp = codec.parse(_P3).snmp
+    assert snmp is not None
+    assert snmp.community == "FAKEPUB"
+    assert snmp.location == "rack 4"
+    assert snmp.contact == "netops@example.com"
+
+
+def test_parse_snmp_v3_user(codec: VyOSCodec) -> None:
+    snmp = codec.parse(_P3).snmp
+    user = next(u for u in snmp.v3_users if u.name == "monitor")
+    assert user.group == "readers"
+    assert user.auth_protocol == "sha"
+    assert user.auth_passphrase == "$6$FAKEauth"
+    assert user.priv_protocol == "aes"
+    assert user.priv_passphrase == "$6$FAKEpriv"
+    assert user.engine_id == "0xDEADBEEF01"
+
+
+def test_parse_vrf_instances(codec: VyOSCodec) -> None:
+    names = {ri.name for ri in codec.parse(_P3).routing_instances}
+    assert names == {"RED", "BLUE"}
+
+
+def test_parse_iface_vrf_binding(codec: VyOSCodec) -> None:
+    intent = codec.parse(_P3)
+    eth0 = next(i for i in intent.interfaces if i.name == "eth0")
+    eth1 = next(i for i in intent.interfaces if i.name == "eth1")
+    assert eth0.vrf == "RED"
+    assert eth1.vrf == "BLUE"
+
+
+def test_iface_vrf_does_not_conjure_instance(codec: VyOSCodec) -> None:
+    """Phantom-instance guard: an interface bound to a VRF that was
+    never declared with `vrf name <X>` must NOT materialise an instance."""
+    raw = (
+        "interfaces {\n"
+        "    ethernet eth0 {\n"
+        "        address 10.0.0.1/24\n"
+        "        vrf UNDECLARED\n"
+        "    }\n"
+        "}\n"
+        "// vyos-config-version: \"x@1\"\n"
+    )
+    intent = codec.parse(raw)
+    eth0 = next(i for i in intent.interfaces if i.name == "eth0")
+    assert eth0.vrf == "UNDECLARED"
+    assert intent.routing_instances == []  # no phantom instance
+
+
+def test_render_snmp(codec: VyOSCodec) -> None:
+    out = codec.render(codec.parse(_P3))
+    assert "service {" in out
+    assert "    snmp {" in out
+    assert "        community FAKEPUB {" in out
+    assert "            authorization ro" in out
+    assert '        contact "netops@example.com"' in out
+    assert '        location "rack 4"' in out
+    assert "        v3 {" in out
+    assert "            engineid 0xDEADBEEF01" in out
+    assert "            user monitor {" in out
+    assert "                    type sha" in out
+    assert "                    type aes" in out
+
+
+def test_render_vrf(codec: VyOSCodec) -> None:
+    out = codec.render(codec.parse(_P3))
+    assert "vrf {" in out
+    assert "    name BLUE {" in out
+    assert "    name RED {" in out
+    assert "        table 100" in out  # synthesised id (BLUE, sort-index 0)
+    assert '        vrf "RED"' in out  # per-interface binding leaf
+
+
+def test_round_trip_p3(codec: VyOSCodec) -> None:
+    once = codec.parse(_P3)
+    twice = codec.parse(codec.render(once))
+    assert _normalise(twice) == _normalise(once)
+
+
+# ---------------------------------------------------------------------------
 # Port names
 # ---------------------------------------------------------------------------
 
@@ -329,7 +464,7 @@ def _normalise(intent):
         "interfaces": sorted(
             (
                 i.name, i.enabled, i.mtu, i.description,
-                i.dhcp_client, i.dhcp_client_v6, i.lag_member_of,
+                i.dhcp_client, i.dhcp_client_v6, i.lag_member_of, i.vrf,
                 tuple((a.ip, a.prefix_length) for a in i.ipv4_addresses),
                 tuple((a.ip, a.prefix_length) for a in i.ipv6_addresses),
             )
@@ -347,6 +482,19 @@ def _normalise(intent):
         "lags": sorted(
             (lag.name, tuple(sorted(lag.members)), lag.mode)
             for lag in intent.lags
+        ),
+        "snmp": None if intent.snmp is None else (
+            intent.snmp.community,
+            intent.snmp.location,
+            intent.snmp.contact,
+            tuple(sorted(
+                (u.name, u.group, u.auth_protocol, u.auth_passphrase,
+                 u.priv_protocol, u.priv_passphrase, u.engine_id)
+                for u in intent.snmp.v3_users
+            )),
+        ),
+        "vrf": sorted(
+            (ri.name, ri.instance_type) for ri in intent.routing_instances
         ),
     }
 
@@ -395,6 +543,13 @@ def test_render_vif_nested_under_parent(codec: VyOSCodec) -> None:
     "/lags/lag/name",
     "/lags/lag/members",
     "/interfaces/interface/lag-member-of",
+    # Phase 3
+    "/snmp/community",
+    "/snmp/location",
+    "/snmp/contact",
+    "/snmp/v3-user",
+    "/routing-instances/instance/name",
+    "/interfaces/interface/config/vrf",
 ])
 def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "supported"
@@ -406,6 +561,10 @@ def test_matrix_supported(codec: VyOSCodec, path: str) -> None:
     # Phase 2
     "/local-users/user/privilege-level",
     "/lags/lag/mode",
+    # Phase 3
+    "/snmp/v3-user/auth-passphrase",
+    "/snmp/v3-user/engine-id",
+    "/routing-instances/instance/table",
 ])
 def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
@@ -413,8 +572,7 @@ def test_matrix_lossy(codec: VyOSCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/vlans/vlan/id",
-    "/snmp/community",
-    "/routing-instances/instance/name",
+    "/routing/static-route/vrf",
     "/vxlan-vnis/vni",
     "/routing-protocols/bgp",
     "/nat",

@@ -59,10 +59,17 @@ Grammar notes that shape the walker:
 * **Comments** — ``/* ... */`` node comments and ``//`` trailer lines
   (incl. the ``// vyos-config-version`` stamp) are skipped.
 
-Deferred to later phases (parse-and-ignore in v1): ``bonding`` LAGs,
-``system login`` local users, ``service`` (SSH / NTP / SNMP / DHCP),
-VRF (``vrf name <X>``), and the Tier-3 ``protocols bgp/ospf`` / ``nat``
-/ ``firewall`` / ``policy`` blocks.
+Phase 2 added ``bonding`` LAGs, ``system login`` local users, and
+``system`` / ``service`` NTP servers.  **Phase 3** (this commit) adds
+``service snmp`` (v1/v2c community + location / contact + v3 USM users)
+and VRF (``vrf name <X> { table <N> }`` routing instances + the
+per-interface ``vrf <X>`` binding).
+
+Deferred to later phases (parse-and-ignore for now): the remaining
+``service`` management-plane blocks (SSH / DHCP / syslog / DNS), VyOS
+``interfaces vxlan``, per-VRF static routes (``vrf name <X> { protocols
+static ... }``), and the Tier-3 ``protocols bgp/ospf`` / ``nat`` /
+``firewall`` / ``policy`` blocks.
 """
 
 from __future__ import annotations
@@ -77,6 +84,9 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
     CanonicalLocalUser,
+    CanonicalRoutingInstance,
+    CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalStaticRoute,
 )
 from .._input_shape import detect_input_shape
@@ -153,6 +163,16 @@ def parse_intent(raw: str) -> CanonicalIntent:
     ntp_servers: list[str] = []
     lags: dict[str, dict] = {}        # bondN -> {"mode": str, "members": list}
     lag_order: list[str] = []
+    # ── Phase 3 scratch ──
+    snmp_seen = False                 # any `service snmp` content present
+    snmp_community = ""
+    snmp_location = ""
+    snmp_contact = ""
+    snmp_engine_id = ""               # config-wide v3 engineID (mapped per-user)
+    v3_users: dict[str, dict] = {}    # name -> {auth/priv proto+pass, group}
+    v3_user_order: list[str] = []
+    vrfs: dict[str, dict] = {}        # vrf name -> {} (numeric table id dropped)
+    vrf_order: list[str] = []
 
     stack: list[tuple[str, str]] = []
 
@@ -179,6 +199,27 @@ def parse_intent(raw: str) -> CanonicalIntent:
         # Materialise the member iface + set its back-reference.
         _touch_iface(member, "ethernet")["lag_member_of"] = bond
 
+    def _touch_v3_user(name: str) -> dict:
+        u = v3_users.get(name)
+        if u is None:
+            u = {
+                "auth_proto": "", "auth_pass": "",
+                "priv_proto": "", "priv_pass": "", "group": "",
+            }
+            v3_users[name] = u
+            v3_user_order.append(name)
+        return u
+
+    def _touch_vrf(name: str) -> None:
+        """Materialise a routing-instance from its authoritative ``vrf
+        name <X>`` declaration only.  A per-interface ``vrf <X>`` binding
+        NEVER calls this (it only stamps the interface scratch) — that is
+        the phantom-instance guard: an interface referencing a VRF that
+        was never declared does not conjure an empty instance."""
+        if name not in vrfs:
+            vrfs[name] = {}
+            vrf_order.append(name)
+
     def _touch_iface(name: str, kind: str) -> dict:
         sc = iface_scratch.get(name)
         if sc is None:
@@ -193,6 +234,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 "dhcp_client": False,
                 "dhcp_client_v6": "",
                 "lag_member_of": None,
+                "vrf": "",
             }
             iface_scratch[name] = sc
             iface_order.append(name)
@@ -264,6 +306,41 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 and stack[2][0] == "member"
             ):
                 _add_lag_member(stack[1][1], node[1])
+            # ── Phase 3: a ``vrf { name <X> { ... } }`` routing instance,
+            # materialised from this authoritative declaration only.
+            elif (
+                node[0] == "name" and node[1]
+                and len(stack) == 2
+                and stack[0][0] == "vrf"
+            ):
+                _touch_vrf(node[1])
+            # ── Phase 3: the ``service { snmp { ... } }`` block.
+            elif (
+                node[0] == "snmp"
+                and len(stack) == 2
+                and stack[0][0] == "service"
+            ):
+                snmp_seen = True
+            # ── Phase 3: ``snmp { community <name> { ... } }`` (v1/v2c) —
+            # only the community name is canonical (authorization dropped).
+            elif (
+                node[0] == "community" and node[1]
+                and len(stack) == 3
+                and stack[0][0] == "service" and stack[1][0] == "snmp"
+            ):
+                snmp_seen = True
+                if not snmp_community:
+                    snmp_community = node[1]
+            # ── Phase 3: an SNMP v3 ``user <name>`` block (distinct from
+            # the ``system login user`` block above — guarded by path).
+            elif (
+                node[0] == "user" and node[1]
+                and len(stack) == 4
+                and stack[0][0] == "service" and stack[1][0] == "snmp"
+                and stack[2][0] == "v3"
+            ):
+                snmp_seen = True
+                _touch_v3_user(node[1])
             # A ``next-hop`` block under ``static route`` creates a route.
             elif node[0] == "next-hop":
                 cur_route = _open_route(stack, node[1], static_routes)
@@ -335,6 +412,67 @@ def parse_intent(raw: str) -> CanonicalIntent:
                 ntp_servers.append(value)
             continue
 
+        # ── Phase 3: SNMP location / contact (service / snmp / <leaf>) ──
+        if (
+            key in ("location", "contact") and value
+            and len(stack) == 2
+            and stack[0][0] == "service" and stack[1][0] == "snmp"
+        ):
+            snmp_seen = True
+            if key == "location":
+                snmp_location = value
+            else:
+                snmp_contact = value
+            continue
+
+        # ── Phase 3: SNMP v3 config-wide engineID
+        # (service / snmp / v3 / engineid <hex>) ──
+        if (
+            key == "engineid" and value
+            and len(stack) == 3
+            and stack[0][0] == "service" and stack[1][0] == "snmp"
+            and stack[2][0] == "v3"
+        ):
+            snmp_seen = True
+            snmp_engine_id = value
+            continue
+
+        # ── Phase 3: SNMP v3 user group
+        # (service / snmp / v3 / user <name> / group <g>) ──
+        if (
+            key == "group" and value
+            and len(stack) == 4
+            and stack[0][0] == "service" and stack[1][0] == "snmp"
+            and stack[2][0] == "v3" and stack[3][0] == "user"
+        ):
+            _touch_v3_user(stack[3][1])["group"] = value
+            continue
+
+        # ── Phase 3: SNMP v3 user auth / privacy leaves
+        # (.../ user <name> / {auth|privacy} / {type | encrypted-password
+        # | encrypted-key}).  Plaintext keys never appear in a saved
+        # config; the opaque ciphertext round-trips verbatim same-vendor. ──
+        if (
+            len(stack) == 5
+            and stack[0][0] == "service" and stack[1][0] == "snmp"
+            and stack[2][0] == "v3" and stack[3][0] == "user"
+            and stack[4][0] in ("auth", "privacy")
+            and key in ("type", "encrypted-password", "encrypted-key")
+            and value
+        ):
+            u = _touch_v3_user(stack[3][1])
+            if key == "type":
+                if stack[4][0] == "auth":
+                    u["auth_proto"] = value.lower()
+                else:
+                    u["priv_proto"] = value.lower()
+            else:  # encrypted-password / encrypted-key → opaque key blob
+                if stack[4][0] == "auth":
+                    u["auth_pass"] = value
+                else:
+                    u["priv_pass"] = value
+            continue
+
         # interface leaves
         sc = _current_iface(stack)
         if sc is not None:
@@ -376,11 +514,35 @@ def parse_intent(raw: str) -> CanonicalIntent:
         for name in lag_order
     ]
 
+    # ── Phase 3 surfaces ──
+    if snmp_seen:
+        intent.snmp = CanonicalSNMP(
+            community=snmp_community,
+            location=snmp_location,
+            contact=snmp_contact,
+            v3_users=[
+                CanonicalSNMPv3User(
+                    name=name,
+                    group=v3_users[name]["group"],
+                    auth_protocol=v3_users[name]["auth_proto"],
+                    auth_passphrase=v3_users[name]["auth_pass"],
+                    priv_protocol=v3_users[name]["priv_proto"],
+                    priv_passphrase=v3_users[name]["priv_pass"],
+                    engine_id=snmp_engine_id,
+                )
+                for name in v3_user_order
+            ],
+        )
+    intent.routing_instances = [
+        CanonicalRoutingInstance(name=name) for name in vrf_order
+    ]
+
     logger.debug(
         "vyos parsed: hostname=%r ifaces=%d routes=%d users=%d lags=%d "
-        "ntp=%d (input=%d chars)",
+        "ntp=%d snmp=%s vrfs=%d (input=%d chars)",
         intent.hostname, len(intent.interfaces), len(intent.static_routes),
         len(intent.local_users), len(intent.lags), len(intent.ntp_servers),
+        intent.snmp is not None, len(intent.routing_instances),
         len(raw),
     )
     return intent
@@ -433,6 +595,10 @@ def _apply_iface_leaf(sc: dict, key: str, value: str) -> None:
         sc["enabled"] = False
     elif key == "mtu" and value.isdigit():
         sc["mtu"] = int(value)
+    elif key == "vrf" and value:
+        # ── Phase 3: per-interface VRF binding.  Stamps the scratch
+        # only — never materialises a routing-instance (phantom guard).
+        sc["vrf"] = value
     # hw-id / mac / other leaves → parse-and-ignore.
 
 
@@ -457,4 +623,5 @@ def _build_iface(sc: dict) -> CanonicalInterface:
         dhcp_client=sc.get("dhcp_client", False),
         dhcp_client_v6=sc.get("dhcp_client_v6", ""),
         lag_member_of=sc.get("lag_member_of"),
+        vrf=sc.get("vrf", ""),
     )
