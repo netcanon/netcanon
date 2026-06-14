@@ -1,0 +1,19 @@
+# VyOS — open-source router / firewall NOS (the Vyatta successor),
+# Debian-derived, JunOS-style curly-brace configuration.
+# Codec: vyos (config.boot / `show configuration` curly-brace text).
+id: vyos
+display_name: "VyOS"
+device_classes:
+  - router
+  - firewall
+default_timeout: 30
+notes: >
+  VyOS is the OSS Vyatta-successor NOS.  Its configuration is a
+  JunOS-style curly-brace tree stored in /config/config.boot — distinct
+  from the `juniper_junos` codec, which consumes Junos `set`-form (a
+  VyOS config.boot has no `set ` lines, uses Linux-style `ethN` / `lo` /
+  `bondN` device names, and terminates leaves with bare newlines rather
+  than `;`).  The codec parses + renders config.boot text and ships in
+  phases — Phase 1 covers `system host-name`, ethernet / loopback /
+  dummy interfaces (address IPv4+IPv6 / dhcp / description / disable /
+  mtu), `vif` VLAN sub-interfaces, and `protocols static` routes.
