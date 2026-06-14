@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-06-14
+
 ### Added
 
 * **VyOS codec — Phase 4 (certified).**  Flips the `vyos` codec from
