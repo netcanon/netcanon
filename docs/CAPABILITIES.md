@@ -246,7 +246,7 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders `ip vrrp vrid <N> / virtual-ip-address <Y> / priority / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). |
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority ceiling 254 (255 unrepresentable). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
@@ -644,7 +644,7 @@ different bytes on the wire.
 | Cisco IOS-XE | `interface X / vrrp 10 ip 192.168.1.254 / vrrp 10 priority 110 / vrrp 10 preempt` | `vrrp` (HSRP via `standby` grammar parses but renders as VRRP) |
 | Arista EOS | `interface VlanN / vrrp 10 ipv4 192.168.1.254 / vrrp 10 priority 110` (modern multi-line) | `vrrp` |
 | Juniper Junos | `set interfaces irb unit N family inet address X vrrp-group 10 virtual-address Y / priority 110 / preempt` | `vrrp` (IPv6 via `vrrp-inet6-group`) |
-| Aruba AOS-S | `vlan N / ip vrrp vrid 10 / virtual-ip-address Y / priority 110 / preempt / enable` | `vrrp` |
+| Aruba AOS-S | `router vrrp` + `vlan N / vrrp vrid 10 / virtual-ip-address Y / priority 110 / preempt / enable` | `vrrp` |
 | FortiGate | `config system interface / edit X / config vrrp / edit 10 / set vrip Y / set priority 110 / set preempt enable / next / end` | `vrrp` |
 | MikroTik RouterOS | `/interface vrrp add interface=ether1 vrid=10 priority=110 v3-protocol=ipv4` | `vrrp` |
 | OPNsense (BSD CARP) | `<virtualip><vip><mode>carp</mode><vhid>10</vhid><advskew>0</advskew><password>…</password><subnet>Y</subnet></vip></virtualip>` | `carp` (priority ↔ `254 − advskew`) |

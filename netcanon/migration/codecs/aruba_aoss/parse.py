@@ -20,7 +20,7 @@ location / contact / trap-host / v3 USM users with separate
 servers, VLANs (with absorbed SVI L3), physical interfaces
 (IPv4 + IPv6 with global / link-local scope discriminator), LAG
 trunk membership, static routes / default-gateway, and **VRRP
-groups** (``ip vrrp vrid N`` sub-block inside ``vlan N`` stanza
+groups** (``vrrp vrid N`` sub-block inside ``vlan N`` stanza
 with virtual-ip-address / priority / preempt / enable /
 authentication mode plaintext-password).  VRRP groups attach to
 the synthesised ``VlanN`` :class:`CanonicalInterface` via the
@@ -258,11 +258,14 @@ _IPV6_ADDR_RE = re.compile(
 )
 _IFACE_NAME_RE = re.compile(r'^name\s+"?([^"\n]+)"?', re.IGNORECASE)
 
-# VRRP grammar (Wave B v0.2.0) — nested inside ``vlan N`` stanzas.
+# VRRP grammar — nested inside ``vlan N`` stanzas, with a global
+# ``router vrrp`` enable.
 #
+#   router vrrp
 #   vlan 100
 #      ip address 10.0.100.1 255.255.255.0
-#      ip vrrp vrid 10
+#      vrrp vrid 10
+#         owner | backup
 #         virtual-ip-address 10.0.100.254
 #         priority 110
 #         preempt
@@ -275,11 +278,21 @@ _IFACE_NAME_RE = re.compile(r'^name\s+"?([^"\n]+)"?', re.IGNORECASE)
 # IS the SVI on this platform).  The canonical model attaches the
 # group to the synthesised ``Vlan<N>`` :class:`CanonicalInterface`
 # created by the SVI-absorption path — see _svi_absorption.py.
+#
+# The vrid header is ``vrrp vrid N`` (NO ``ip`` prefix) — verified
+# against the AOS-S 16.10 "Basic configuration process" CLI reference
+# (arubanetworking.hpe.com/techdocs/AOS-S/16.10/MRG) and four
+# independent operator captures (E5406/5406R-ZL2/E5400 + AOS-S 16.11
+# docs).  The optional ``(?:ip\s+)?`` keeps the older / mis-documented
+# ``ip vrrp vrid`` form parseable too (back-compat — the codec emitted
+# it through v0.1.8).  ``virtual-ip-address`` tolerates the legacy
+# K.15 ``<ip> <mask>`` two-token form (mask dropped — the canonical
+# carries the bare VIP); 16.x emits the bare ``<ip>``.
 _VRRP_VRID_HEADER_RE = re.compile(
-    r"^ip\s+vrrp\s+vrid\s+(\d+)\s*$", re.IGNORECASE,
+    r"^(?:ip\s+)?vrrp\s+vrid\s+(\d+)\s*$", re.IGNORECASE,
 )
 _VRRP_VIRTUAL_IP_RE = re.compile(
-    r"^virtual-ip-address\s+(\S+)\s*$", re.IGNORECASE,
+    r"^virtual-ip-address\s+(\S+)(?:\s+[\d.]+)?\s*$", re.IGNORECASE,
 )
 _VRRP_PRIORITY_RE = re.compile(
     r"^priority\s+(\d+)\s*$", re.IGNORECASE,
@@ -469,12 +482,12 @@ def _parse_vlan_stanza(
     """Parse a ``vlan N`` stanza starting at *start* (body line).
 
     Returns the parsed :class:`CanonicalVlan`, the list of nested
-    :class:`CanonicalVRRPGroup` instances (one per ``ip vrrp vrid N``
+    :class:`CanonicalVRRPGroup` instances (one per ``vrrp vrid N``
     sub-block), and the index of the first line AFTER the stanza's
     outer ``exit``.
 
     VRRP groups parse here (rather than at the top level) because
-    AOS-S nests the ``ip vrrp vrid N`` block INSIDE the ``vlan N``
+    AOS-S nests the ``vrrp vrid N`` block INSIDE the ``vlan N``
     stanza — the VLAN is the SVI on this platform.  Returned groups
     attach to the synthesised ``Vlan<N>`` :class:`CanonicalInterface`
     by the caller (the SVI-absorption path in :func:`parse_intent`).
@@ -554,7 +567,7 @@ def _parse_vlan_stanza(
             i += 1
             continue
 
-        # VRRP sub-block — `ip vrrp vrid N` opens a nested stanza
+        # VRRP sub-block — `vrrp vrid N` opens a nested stanza
         # terminated by its own `exit`.  See _parse_vrrp_group_stanza
         # for the body grammar.  The group attaches to the synthesised
         # Vlan<N> CanonicalInterface (NOT to the CanonicalVlan itself)
@@ -575,14 +588,18 @@ def _parse_vlan_stanza(
 def _parse_vrrp_group_stanza(
     lines: list[str], start: int, gid: int,
 ) -> tuple[CanonicalVRRPGroup, int]:
-    """Walk the body of ``ip vrrp vrid N`` until the inner ``exit``.
+    """Walk the body of ``vrrp vrid N`` until the inner ``exit``.
 
     Returns the parsed :class:`CanonicalVRRPGroup` and the index of
     the first line AFTER the sub-block's ``exit``.
 
-    Body grammar (AOS-S 16.10 Advanced Traffic Management Guide):
+    Body grammar (AOS-S 16.10 "Basic configuration process" CLI ref):
 
+      * ``owner``                   — VIP owner → ``priority = 254``
+        (canonical ceiling; 255 reserved-but-unrepresentable)
+      * ``backup``                  — explicit backup role (no field)
       * ``virtual-ip-address X``    — append to ``virtual_ips``
+        (legacy ``X <mask>`` two-token form tolerated; mask dropped)
       * ``priority N``              — integer 1-254
       * ``preempt``                 — presence = enabled
       * ``enable``                  — group is active (implicit on
@@ -622,6 +639,24 @@ def _parse_vrrp_group_stanza(
         pri = _VRRP_PRIORITY_RE.match(stripped)
         if pri:
             group.priority = int(pri.group(1))
+            i += 1
+            continue
+
+        # ``owner`` declares this switch the VIP owner — VRRP reserves
+        # priority 255 for the owner (RFC 5798 §6.1).  The canonical
+        # ``priority`` field caps at 254 (255 is intentionally
+        # unrepresentable — the owner role isn't a first-class canonical
+        # concept), so we map ``owner`` to the canonical ceiling 254:
+        # this preserves the "this switch is the highest-priority
+        # master" intent for cross-vendor render rather than silently
+        # dropping to the default 100.  ``backup`` is the complementary
+        # explicit role with no priority implication — consume it
+        # (priority stays whatever ``priority N`` set, or the default).
+        if stripped.lower() == "owner":
+            group.priority = 254
+            i += 1
+            continue
+        if stripped.lower() == "backup":
             i += 1
             continue
 
@@ -1126,7 +1161,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             # so downstream consumers (and renderers of *other*
             # vendors that DO use ``interface Vlan<N>``) see the
             # L3 record at the canonical location.  VRRP groups
-            # parsed from the nested ``ip vrrp vrid N`` blocks
+            # parsed from the nested ``vrrp vrid N`` blocks
             # attach to this same Vlan<N> interface — VRRP is an
             # interface property in the canonical model.
             #

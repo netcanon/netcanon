@@ -157,7 +157,7 @@ has a vendor-native grammar for it.
 | Cisco NX-OS | `interface Vlan10 / hsrp N { preempt; ip X }` | (Tier-D — see above) | queued (lands with NX-OS codec, v0.3.0) |
 | Arista EOS | `interface Vlan10 / ip address virtual X/Y` (VARP) | indirectly in `batfish_labval_dc1_leaf2a_eos4230.txt` + `batfish_eos_evpn_vlan_based_leaf.txt` | shipped (classic + modern multi-line + VARP) |
 | Juniper Junos | `set interfaces irb unit N family inet address X virtual-gateway-address Y` (anycast) **or** `vrrp-group N virtual-address X` (classic) | `ksator_labmgmt_qfx10k2_junos173.set` (anycast form) | shipped (classic + anycast + per-unit MAC overrides) |
-| Aruba AOS-S | `ip vrrp vrid N / virtual-ip-address X / enable` | not in corpus | shipped (parse + render; fixture still wanted) |
+| Aruba AOS-S | `router vrrp` + `vlan N / vrrp vrid N / owner\|priority / virtual-ip-address X / enable` | not in corpus | shipped (parse + render); parser now accepts the **real** `vrrp vrid` grammar (no `ip` prefix) per AOS-S 16.10 CLI ref — a real forum-share capture can now be imported (donor-blocked: forum snippets only, no full running-config) |
 | FortiGate | `config router vrrp / edit N / set vrip X` | not in corpus | shipped (parse + render with implicit `set version 3` on vrip6; fixture still wanted) |
 | MikroTik | `/ip address vrrp` (older) or `/ip vrrp` | not in corpus | shipped (two-stage `/interface vrrp` + `/ip address` correlation; fixture still wanted) |
 | OPNsense (CARP) | `<virtualip><vip><mode>carp</mode>...` | not in corpus | shipped (CARP variant via `mode="carp"` discriminator; fixture still wanted) |

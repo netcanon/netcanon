@@ -48,6 +48,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **aruba_aoss VRRP grammar corrected to the real AOS-S form.**  The
+  parser required `ip vrrp vrid <N>` and the renderer emitted it, but
+  real ArubaOS-Switch uses a global `router vrrp` enable plus
+  `vrrp vrid <N>` (NO `ip` prefix) nested in the `vlan N` stanza —
+  verified against the AOS-S 16.10 "Basic configuration process" CLI
+  reference and four independent operator captures (the
+  `fixture-gap-hunt` flagged this as the worst-covered codec's primary
+  blocker).  Parse now accepts the real `vrrp vrid` form (and still the
+  legacy `ip vrrp vrid` for back-compat), tolerates the older
+  `virtual-ip-address <ip> <mask>` two-token VIP, and maps the `owner`
+  role keyword to the canonical priority ceiling 254 (255 is reserved /
+  unrepresentable); render emits `router vrrp` + `vrrp vrid`.  No
+  cross-mesh change (no aoss fixture exercised VRRP); CODEC_BUG flat at
+  5.  Unblocks importing a real AOS-S VRRP capture.
+
 * **Cross-vendor VLAN SVI L3 now survives translation to SVI-model
   targets.**  A VLAN carrying its Layer-3 on
   ``CanonicalVlan.ipv4_addresses`` with NO sibling ``Vlan<N>`` interface

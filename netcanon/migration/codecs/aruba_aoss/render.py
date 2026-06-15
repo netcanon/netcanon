@@ -11,9 +11,9 @@ Extracted from ``codec.py`` during the parse/render split per the
 Emission order mirrors what AOS-S's own ``show running-config`` puts
 on the wire so device round-trips diff cleanly: hostname, DNS, SNTP,
 SNMP, RADIUS, DHCP-relay-comment-block, local users, LAG trunks,
-VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** —
-``ip vrrp vrid N / virtual-ip-address X / priority / preempt /
-enable / exit`` emitted inside the VLAN stanza after the SVI IP),
+VLAN stanzas (with absorbed SVI L3 + nested **VRRP groups** — a
+global ``router vrrp`` enable then ``vrrp vrid N / virtual-ip-address
+X / owner|priority / preempt / enable / exit`` inside the VLAN stanza),
 physical interface stanzas, static routes / default-gateway.
 Multi-VIP cross-vendor sources drop secondaries with ``; review:``
 comments (AOS-S supports one virtual IP per VRID).  Non-``vrrp``
@@ -579,6 +579,16 @@ def render_intent(tree: Any) -> str:
     # loop skips them (otherwise we'd emit `interface vlan0.10` after
     # the L3 was already rolled into `vlan 10`).
     absorbed_iface_names: set[str] = set()
+    # AOS-S requires the global ``router vrrp`` enable BEFORE any VLAN
+    # mounts a ``vrrp vrid`` instance (AOS-S 16.10 "Basic configuration
+    # process": ``router vrrp`` then ``vlan N / vrrp vrid``).  Emit it
+    # once when any interface carries a classic-VRRP group.
+    if any(
+        g.mode == "vrrp"
+        for iface in tree.interfaces
+        for g in iface.vrrp_groups
+    ):
+        lines.append("router vrrp")
     for vlan in tree.vlans:
         lines.append(f"vlan {vlan.id}")
         if vlan.name:
@@ -649,7 +659,7 @@ def render_intent(tree: Any) -> str:
                     )
                     continue
                 lines.append(
-                    f"   ip vrrp vrid {group.group_id}"
+                    f"   vrrp vrid {group.group_id}"
                 )
                 if group.virtual_ips:
                     # AOS-S accepts only ONE virtual-ip-address per
