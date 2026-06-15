@@ -302,6 +302,7 @@ output.
 | `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in v1. |
 | `/interfaces/interface/config/type` | Lossy | RouterOS does not expose IANA `ifType`; codec infers it from interface-name prefix (`etherN` → ethernetCsmacd, `vlanN` → l3ipvlan). |
 | `/vlans/vlan/name` | Lossy | MikroTik stores a VLAN's name as the L3 interface name (e.g. `vlan10`), not a separate descriptive name field; cross-vendor rendering may conflate the two. |
+| `/vlans/vlan/description` | Lossy | RouterOS exposes a single per-VLAN `comment` field, which the parser maps to the VLAN name; a separate description collides with it on render. |
 | `/filter/rule` | Unsupported | Firewall filter rules are Tier 3 (informational) and not auto-rendered. |
 | `/nat/rule` | Unsupported | NAT rules are Tier 3 — informational only. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | RouterOS VXLAN exists but is rare in canonical scope and not modelled in v1. |
