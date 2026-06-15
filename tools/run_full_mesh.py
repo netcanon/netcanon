@@ -194,6 +194,14 @@ _FIELD_TO_XPATH_PREFIX: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 
+def _relativize_tb(tb: str) -> str:
+    """Rewrite absolute repo-root paths in a captured traceback to repo-
+    relative, so the committed matrix never embeds an operator's local
+    filesystem layout (a committed-artifact PII leak)."""
+    root = str(_REPO_ROOT)
+    return tb.replace(root + "\\", "").replace(root + "/", "").replace(root, "")
+
+
 def _normalise_records(items: list[dict[str, Any]], id_keys: list[str]) -> list[dict[str, Any]]:
     """Sort a list of dict records by the first available identity key
     so set-equality comparison is order-independent.
@@ -316,8 +324,10 @@ def compute_field_disposition(
                 norm_src = _normalise_records(src_val, id_keys)
                 norm_tgt = _normalise_records(tgt_val, id_keys)
                 preserved = norm_src == norm_tgt
+                src_disp, tgt_disp = norm_src, norm_tgt
             else:
                 preserved = _set_equal_lists(src_val, tgt_val)
+                src_disp, tgt_disp = src_val, tgt_val
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
@@ -344,8 +354,11 @@ def compute_field_disposition(
             if not preserved:
                 drift = _list_drift_summary(field, src_val, tgt_val)
                 record["drift"] = drift
-                record["source"] = _scalar_summary(src_val)
-                record["target"] = _scalar_summary(tgt_val)
+                # Summarise the IDENTITY-NORMALISED lists so the drill-down
+                # display order is deterministic run-to-run (independent of
+                # the source parse's set-iteration order).
+                record["source"] = _scalar_summary(src_disp)
+                record["target"] = _scalar_summary(tgt_disp)
         elif isinstance(src_val, dict) and isinstance(tgt_val, dict):
             preserved = src_val == tgt_val
             record["preserved"] = preserved
@@ -514,10 +527,13 @@ def _dict_drift_summary(src: dict[str, Any], tgt: dict[str, Any]) -> Any:
     """Compact summary of dict-vs-dict drift (e.g. raw_sections)."""
     only_src = sorted(set(src.keys()) - set(tgt.keys()))
     only_tgt = sorted(set(tgt.keys()) - set(src.keys()))
-    common_diff = [
+    # Sorted: the key-set intersection iterates in hash-randomised order, so
+    # an unsorted list here made `value_drift_keys` non-deterministic
+    # run-to-run (the residual cross-mesh non-determinism after the LAG fix).
+    common_diff = sorted(
         k for k in (set(src.keys()) & set(tgt.keys()))
         if src[k] != tgt[k]
-    ]
+    )
     return {
         "only_in_source": only_src[:5] + (
             ["...more"] if len(only_src) > 5 else []
@@ -594,7 +610,7 @@ def process_cell(
         cell["render_status"] = "source_parse_error"
         cell["roundtrip_parse_status"] = "skipped"
         cell["error"] = f"source parse failed: {exc!r}"
-        cell["traceback"] = traceback.format_exc(limit=4)
+        cell["traceback"] = _relativize_tb(traceback.format_exc(limit=4))
         cell["duration_ms"] = int((time.perf_counter() - t0) * 1000)
         return cell
 
@@ -604,7 +620,7 @@ def process_cell(
         cell["render_status"] = "render_error"
         cell["roundtrip_parse_status"] = "skipped"
         cell["error"] = f"render failed: {exc!r}"
-        cell["traceback"] = traceback.format_exc(limit=4)
+        cell["traceback"] = _relativize_tb(traceback.format_exc(limit=4))
         cell["duration_ms"] = int((time.perf_counter() - t0) * 1000)
         return cell
 
@@ -613,7 +629,7 @@ def process_cell(
     except Exception as exc:  # noqa: BLE001
         cell["roundtrip_parse_status"] = "parse_error"
         cell["error"] = f"reparse failed: {exc!r}"
-        cell["traceback"] = traceback.format_exc(limit=4)
+        cell["traceback"] = _relativize_tb(traceback.format_exc(limit=4))
         cell["rendered_preview"] = rendered[:400]
         cell["duration_ms"] = int((time.perf_counter() - t0) * 1000)
         return cell

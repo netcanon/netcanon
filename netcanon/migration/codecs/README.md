@@ -12,10 +12,12 @@ matching `tests/unit/migration/test_<vendor>.py`.
 
 ## Shape of a codec
 
-Eight codecs have shipped: `cisco_iosxe`, `cisco_iosxe_cli`,
-`aruba_aoss`, `opnsense`, `mikrotik_routeros`, `fortigate_cli`,
-`arista_eos`, `juniper_junos` (plus `_mock`).  The first one you
-should copy is whichever vendor is closest in structure to yours:
+Twelve codecs have shipped (see `RESULTS.md` for the authoritative
+roster): the Cisco family `cisco_iosxe_cli` / `cisco_iosxe` /
+`cisco_nxos` / `cisco_iosxr`, `arista_eos`, `aruba_aoss` / `aruba_aoscx`,
+`juniper_junos`, `vyos`, `opnsense`, `mikrotik_routeros`, and
+`fortigate_cli` (plus `_mock`).  The first one you should copy is
+whichever vendor is closest in structure to yours:
 
 | Wire format | Reference codec |
 |---|---|
@@ -248,9 +250,8 @@ Each field on `CanonicalIntent` / `CanonicalInterface` /
 wire-through as a worked example.
 
 Rule of thumb: one feature, one commit touching every bidirectional
-codec (8 currently shipped: `cisco_iosxe_cli`, `cisco_iosxe`,
-`aruba_aoss`, `opnsense`, `mikrotik_routeros`, `fortigate_cli`,
-`arista_eos`, `juniper_junos`).  The Tier 2 wire-throughs (SNMP
+codec (12 currently shipped — see `RESULTS.md` for the live roster).
+The Tier 2 wire-throughs (SNMP
 v1/v2c + v3 USM, LAGs, local_users, DHCP, RADIUS, MTU) each landed as
 a single commit per feature with regression tests in a dedicated
 `test_<feature>_wire_through.py` file.
@@ -277,11 +278,10 @@ the policy locally:
   `_TARGET_ACCEPTS[<vendor>]`.
 
 * **`netcanon/migration/_tier3_detection.py`** — Tier-3 stanza-header
-  detection.  Public API: `detect_tier3_sections_iosxe_cli(raw)`,
-  `detect_tier3_sections_fortios(raw)`, `detect_tier3_sections_junos(raw)`,
-  `detect_tier3_sections_routeros(raw)`,
-  `detect_tier3_sections_opnsense(raw)`,
-  `detect_tier3_sections_iosxe_xml(raw)` (currently no-op).  Each codec's
+  detection.  One `detect_tier3_sections_<vendor>(raw)` per source codec
+  (`iosxe_cli`, `iosxe_xml` [no-op], `fortios`, `junos`, `routeros`,
+  `opnsense`, `nxos`, `iosxr`, `aoscx`, `vyos`) — see the module for the
+  authoritative set.  Each codec's
   `parse()` calls the matching detector and stamps the result onto
   `CanonicalIntent.dropped_tier3_sections` so the migrate page can
   surface the silent-drop in a "Detected in source but not translated"

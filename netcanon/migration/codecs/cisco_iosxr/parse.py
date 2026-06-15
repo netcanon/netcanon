@@ -762,10 +762,12 @@ def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
 # ---------------------------------------------------------------------------
 
 
-def _lag_sort_key(name: str) -> tuple[int, int]:
-    """Stable sort key grouping ``Bundle-Ether<N>`` numerically."""
+def _lag_sort_key(name: str) -> tuple[int, int, str]:
+    """Total-order sort key grouping ``Bundle-Ether<N>`` numerically, with
+    the verbatim name as a final tiebreaker so case-variants sort
+    deterministically rather than by hash-randomised set iteration."""
     m = re.match(r"^bundle-ether(\d+)$", name, re.IGNORECASE)
-    return (0, int(m.group(1))) if m else (1, 0)
+    return (0, int(m.group(1)), name) if m else (1, 0, name)
 
 
 def _parse_lags(raw: str) -> list[CanonicalLAG]:
