@@ -28,6 +28,22 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **Opt-in SSH host-key verification for the backup collectors (review finding
+  #11).**  Both collectors previously installed paramiko `AutoAddPolicy` —
+  trusting any host key unconditionally, so a man-in-the-middle on the
+  management path could harvest the SSH password + enable secret.  A new
+  `Settings.ssh_host_key_checking` (`NETCANON_SSH_HOST_KEY_CHECKING`, default
+  `auto_add` = legacy behaviour) adds `tofu` (trust-on-first-use *with*
+  persistence under `{data_dir}/known_hosts`; a later changed key is rejected)
+  and `reject` (only already-known hosts).  The Paramiko shell collector uses
+  the netcanon data-dir store (concurrent writes serialised by a lock); the
+  Netmiko collector maps the strict modes onto the OS `~/.ssh/known_hosts`
+  (`system_host_keys` + `ssh_strict`).  Default-off → no change for existing
+  deployments.  Verified end-to-end against a real in-process paramiko SSH
+  server (`tests/integration/test_ssh_hostkey.py`: TOFU learn/persist,
+  reconnect-stable, changed-key-rejected, reject-unknown, auto_add-legacy).
+  See SECURITY.md.
+
 * **Optional egress allow-list for backup targets (review finding #3).**  A new
   `Settings.block_private_egress` (`NETCANON_BLOCK_PRIVATE_EGRESS`, default
   `false`) makes the backup entry points (`POST /api/v1/backups` + the schedule
