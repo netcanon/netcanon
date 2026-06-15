@@ -28,6 +28,22 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **Device-profile credentials are write-only over the API; backups resolve
+  them server-side.**  The device-profile REST routes (`GET`/`LIST`/`POST`/`PUT
+  /api/v1/devices`) now serialise through a new `DeviceProfilePublic` response
+  model that omits `password` / `enable_password`, so the Fernet-decrypted
+  credential is never returned to a client — closing the top finding of the
+  2026-06-14 multi-lens review.  Credentials are accepted in create / update
+  request bodies but never echoed.  To keep the web "Run backup now" flows
+  working without that round-trip, `POST /api/v1/backups` now resolves a
+  device's credentials *server-side* from its `device_profile_id` when none are
+  supplied inline (mirroring the existing scheduled-trigger path), so the
+  plaintext password no longer has to traverse the browser at all.
+  `DeviceTarget.credentials` is now optional; a device with neither inline
+  credentials nor a resolvable profile is rejected with HTTP 422.  A two-sided
+  guard test (`tests/unit/test_device_profile_public.py`) keeps the public
+  model in lockstep with `DeviceProfile` minus the two credential fields.
+
 * **VLAN-range expansion is bounded before materialization (DoS hardening).**
   The four comma/range VLAN-list expanders (`cisco_iosxe_cli`, `cisco_nxos`,
   `aruba_aoscx`, `arista_eos`) clamp a range to the valid VLAN space (1..4094)
@@ -57,6 +73,11 @@ timestamp if your timezone matters for an audit.
   (`netcanon/migration/codecs/README.md`) is corrected from "Eight codecs" to
   twelve (count-resilient, pointing at `RESULTS.md`) and its Tier-3 detector
   enumeration refreshed to the full per-vendor set.
+* **`docs/CAPABILITIES.md` §A completeness.**  Added the four missing
+  per-codec "Unsupported / Lossy" panels (`cisco_nxos`, `cisco_iosxr`,
+  `aruba_aoscx`, `vyos`), generated from each codec's `CapabilityMatrix`, so
+  §A now enumerates every codec's declared exceptions rather than only the
+  original eight (also flagged by the 2026-06-14 review).
 
 ### Added
 

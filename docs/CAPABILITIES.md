@@ -317,6 +317,113 @@ output.
 | `/snmp/v3-user` | Unsupported | OPNsense's SNMPv3 lives in raw `snmpd.conf` — Tier 3. |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | VXLAN not modelled — OPNsense is a firewall codec. |
 
+#### `cisco_nxos` (Cisco NX-OS, bidirectional, certified)
+
+46 supported surfaces (L1/L3 + L2 switchport/LAG + SNMP/local-users +
+HSRP + VRF RD/RT + per-VRF static + VXLAN-EVPN/L3VNI + IPv4 Distributed
+Anycast Gateway).  The lossy / unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | Interface-type inferred from the name prefix (Ethernet → ethernetCsmacd, loopback → softwareLoopback, Vlan → l3ipvlan, port-channel → ieee8023adLag, nve → tunnel, mgmt → ethernetCsmacd).  Best-effort; may not catch every IANA type. |
+| `/system/raw-sections/vdc` | Lossy | `vdc <name> id N / limit-resource …` (N7K virtualisation) has no canonical primitive; the source block is discarded and a default single-VDC `vdc <hostname> id 1` wrapper is synthesised on render. |
+| `/system/raw-sections/features` | Lossy | `feature <name>` lines are derived on render from the canonical-tree shape (any SVI → `feature interface-vlan`, etc).  Source features not motivated by a canonical surface (`feature scp-server`, `feature telnet`) are dropped; re-authorise on the target. |
+| `/local-users/user/privilege-level` | Lossy | NX-OS uses a named `role` (network-admin / network-operator / custom), not a numeric privilege.  network-admin / vdc-admin → 15, everything else → 1.  The named role round-trips losslessly same-vendor. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | NX-OS 10.x `localizedV2key` digest is normalised to the older `localizedkey` form on render; re-key SNMPv3 users on the target across OS-version / vendor boundaries. |
+| `/snmp/v3-user/engine-id` | Lossy | engineID emitted colon-decimal (`128:0:0:9:…`); cross-vendor sources typically use hex.  Preserved verbatim same-vendor; cross-vendor render may need re-keying. |
+| `/interfaces/interface/vrrp-groups/group` | Lossy | FHRP is expressed as HSRP (`interface VlanN / hsrp N / ip <vip> / priority / preempt`).  EVERY `CanonicalVRRPGroup` renders as an `hsrp` block regardless of source `mode` — the virtual-IP redundancy intent survives but the wire protocol changes.  Same-vendor HSRP round-trips losslessly; sub-second timers / virtual-MAC / track objects are not modelled. |
+| `/routing-instances/instance/route-distinguisher` | Lossy | `rd auto` is preserved verbatim as a sentinel; cross-vendor renderers that don't recognise it must synthesise an explicit RD.  An explicit `rd <asn>:<nn>` round-trips losslessly. |
+| `/routing-instances/instance/rt-imports` | Lossy | `route-target both <rt> evpn` advertises in both IPv4-unicast and L2VPN-EVPN; the `evpn` address-family scope does not round-trip cross-vendor (RT value preserved, scope reverts to IPv4 unicast).  Same-vendor round-trips. |
+| `/vxlan-vnis/vni` | Lossy | `interface nve1 / member vni N` per-VNI sub-flags (`suppress-arp`, alternate ingress-replication) do not round-trip — render always emits the modern BGP-EVPN head-end shape (`host-reachability protocol bgp`).  The VLAN↔VNI binding round-trips via `vlan N / vn-segment`. |
+| `/evpn-type5-routes/route` | Lossy | EVPN Type-5 is modelled as a VRF property via `CanonicalRoutingInstance.l3_vni` (`vrf context X / vni N` + `member vni N associate-vrf`), not per-prefix records; no route-map / prefix-filter parsing in v1. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv4 Distributed Anycast Gateway IS supported; the IPv6 companion parses-and-ignores in v1 (no fixture coverage; parity with the IOS-XE IPv6-anycast deferral). |
+| `/routing-protocols/bgp` | Unsupported | `router bgp <asn>` is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/routing-protocols/eigrp` | Unsupported | Tier-3. |
+| `/routing-protocols/isis` | Unsupported | Tier-3. |
+| `/access-list/{extended,standard,ipv6}` | Unsupported | ACLs are Tier-3 — auto-translating ACL semantics across vendors risks subtly-permissive rules.  Operator authors firewall policy manually (mirrors cisco_iosxe_cli). |
+| `/firewall` | Unsupported | NX-OS hosts no stateful firewall; declared unsupported for cross-vendor surface consistency. |
+| `/nat` | Unsupported | NX-OS hosts no typical edge NAT. |
+| `/qos` | Unsupported | `class-map / policy-map type qos / service-policy` is Tier-3 — DC-grade QoS is too platform-specific to auto-translate. |
+
+#### `cisco_iosxr` (Cisco IOS-XR, bidirectional, certified)
+
+22 supported surfaces (Tier-1 + VRF + RT + per-interface VRF + LAG +
+local users + per-VRF static + dot1q sub-interfaces).  The lossy /
+unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | Type inferred from the name prefix (GigabitEthernet → ethernetCsmacd, Loopback → softwareLoopback, Bundle-Ether → ieee8023adLag, MgmtEth → ethernetCsmacd, tunnel-ip/te → tunnel); sub-interfaces with vendor-specific encapsulation classify as `other`. |
+| `/interfaces/interface/4th-port-segment` | Lossy | IOS-XR port names use 4 segments (rack/slot/instance/port); the cross-vendor `PortIdentity` supports 3.  The 4th segment round-trips via `PortIdentity.meta['iosxr_port_index']` same-vendor but DROPS to `0` when renaming to a 3-segment target (IOS-XE / Arista) — verify via the rename modal. |
+| `/routing-instances/instance` | Lossy | `vrf <name>` + `address-family ipv4 unicast` / `import\|export route-target` + per-interface `vrf <name>` membership round-trip, but `route_distinguisher` must be read from / rendered to the BGP block (`router bgp <asn> / vrf <name> / rd <rd>`).  A minimal BGP-RD carrier is synthesised on render with ASN derived from the RD administrator field; a config whose BGP ASN differs re-emits the normalised ASN (cosmetic — the RD round-trips).  No `router bgp` ⇒ `route_distinguisher=''`.  `l3_vni` (EVPN Type-5) is not modelled. |
+| `/snmp/community` | Unsupported | SNMP parse + render is out of the v1 XR scope. |
+| `/routing/bgp` | Unsupported | `router bgp <asn>` is Tier-3 (a minimal per-VRF RD harvest aside); full BGP modelling stays unsupported. |
+| `/routing/ospf` | Unsupported | `router ospf <pid>` parse-and-ignore (Tier-3). |
+| `/routing/isis` | Unsupported | `router isis <name>` parse-and-ignore (Tier-3). |
+| `/mpls` | Unsupported | `mpls ldp` / `mpls traffic-eng` / `mpls oam` are SP-platform fundamentals with no canonical model; Tier-3 banner notes the dropped surface. |
+| `/policy/{route-policy,prefix-set,community-set,as-path-set}` | Unsupported | The IOS-XR RPL `… end-policy` / `… end-set` set-form DSL is structurally distinct from IOS-XE `route-map` sequence form; Tier-3 by design (parity with Junos `policy-options`). |
+| `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported | IOS-XR VXLAN (NCS 5500 / 540 `nve`) is rare in the SP corpus; no canonical demand surfaced.  Parse-and-ignore in v1. |
+| `/evpn-type5-routes/route` | Unsupported | IOS-XR EVPN runs under top-level `l2vpn` + `evpn` + `bridge group` — grammatically distant from the IOS-XE / Arista / NX-OS model.  No canonical mapping in v1. |
+| `/access-list/{extended,ipv6}` | Unsupported | `ipv4 access-list NAME / N permit …` is Tier-3 — auto-translating ACL semantics risks subtly-permissive rules (parity with IOS-XE). |
+| `/firewall` | Unsupported | IOS-XR firewall features are Tier-3 stateful surfaces (parity with IOS-XE). |
+| `/nat` | Unsupported | IOS-XR NAT (`nat64` / `cgnat`) is Tier-3. |
+
+#### `aruba_aoscx` (Aruba AOS-CX, bidirectional, certified)
+
+36 supported surfaces (Tier-1 + L2 switchport/LAG + local users + SNMP
+v2c/v3 + IPv4 active-gateway anycast + VXLAN L2VNI VLAN↔VNI binding).
+Distinct from the campus `aruba_aoss` (AOS-S) codec.  The lossy /
+unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | No IANA ifType is declared; inferred from the name shape (`1/1/1` → ethernetCsmacd, `vlan N` → l3ipvlan, `lag N` → ieee8023adLag, `loopback N` → softwareLoopback, `mgmt` → ethernetCsmacd, `vxlan N` → tunnel).  Best-effort. |
+| `/system/raw-sections/version-banner` | Lossy | The `!Version ArubaOS-CX <release>` banner + service footer lines (`ssh server`, `https-server`, `clock`, `ntp`, `spanning-tree`, `system interface-group`) are discarded on parse and a synthesised banner is emitted on render; re-apply management-plane services on the target. |
+| `/local-users/user/privilege-level` | Lossy | Named `group` (administrators / operators / auditors / custom), not numeric: administrators → 15, everything else → 1.  The `password ciphertext` blob is AES-encrypted with the device key (portable same-device only); cross-vendor migration requires re-keying. |
+| `/snmp/v3-user/auth-passphrase` | Lossy | SNMPv3 auth/priv keys are `ciphertext` blobs encrypted with the device key (portable same-device only); cross-vendor / cross-device migration emits the blob verbatim but the operator must re-key.  The `plaintext` key form is normalised to `ciphertext` on render. |
+| `/vxlan-vnis/source-interface` | Lossy | AOS-CX states the VTEP source as an IPv4 *address* (`interface vxlan 1 / source ip <X>`), not an interface name (NX-OS / Arista `source-interface loopbackN`).  Stored verbatim in the opaque `source_interface` field; a cross-vendor source carrying an interface *name* has no `source ip` form so the line is omitted on render (VLAN↔VNI bindings still emit).  Set the loopback→IP mapping on the target manually. |
+| `/snmp/trap-host` | Unsupported | The `snmp-server host … trap …` trap-receiver grammar is deferred; v2c community + system-location / system-contact + v3 USM users are supported. |
+| `/routing-instances/instance/{description,route-distinguisher,rt-imports,rt-exports}` | Unsupported | The `vrf <name>` stanza is a bare name in v1; descriptions / RD / route-targets live under the deferred `evpn` / `router bgp` blocks. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static-route binding parses-and-ignores in Phase 1; only default-VRF `ip route` is wired. |
+| `/interfaces/interface/vrrp-groups/group` | Unsupported | AOS-CX VRRP (`vrrp <vrid> address-family` under an SVI) is a later phase; the `active-gateway` distributed-gateway anycast surface IS supported. |
+| `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | IPv4 active-gateway is supported; the IPv6 anycast companion parses-and-ignores in v1 (parity with NX-OS / IOS-XE). |
+| `/vxlan-vnis/l2vni-route-target` | Unsupported | The per-VLAN L2VNI RD/RT (`evpn / vlan N / rd auto / route-target …`) is almost always `auto`-derived and has no cross-vendor canonical home; the VLAN↔VNI binding IS translated, the RD/RT is re-derived on the target. |
+| `/routing-instances/instance/l3-vni` | Unsupported | EVPN symmetric-IRB L3VNI (`vni N / vrf <name>` under the VTEP + `router bgp / vrf`) is a later phase; the L2VNI binding IS supported. |
+| `/routing-protocols/bgp` | Unsupported | `router bgp <asn>` (incl. the EVPN address-family) is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/access-list/{extended,standard}` | Unsupported | ACLs are Tier-3 — auto-translating risks subtly-permissive rules (mirrors cisco_nxos). |
+| `/qos` | Unsupported | QoS (`class` / `policy` / `apply qos`) is Tier-3 — too platform-specific to auto-translate. |
+| `/nat` | Unsupported | AOS-CX hosts no typical edge NAT. |
+
+#### `vyos` (VyOS, bidirectional, certified)
+
+30 supported surfaces (curly-brace `config.boot` **and** set-form
+`show configuration commands` input; Tier-1 + local users + NTP +
+bonding LAGs + SNMP + VRF + VXLAN L2VNI).  Render always emits the
+curly-brace form.  The lossy / unsupported exceptions:
+
+| Path | Class | Reason |
+|---|---|---|
+| `/interfaces/interface/config/type` | Lossy | No IANA ifType; inferred from the name shape (`ethN` → ethernetCsmacd, `lo`/`dumN` → softwareLoopback, `bondN` → ieee8023adLag).  Best-effort. |
+| `/system/raw-sections/version-banner` | Lossy | The `// vyos-config-version` trailer + not-yet-modelled `service` / `system` management blocks (SSH / syslog / DNS) are discarded on parse and a synthesised trailer is emitted on render; re-apply those services on the target. |
+| `/local-users/user/privilege-level` | Lossy | `system login user` accounts have no numeric privilege in the common case; every login user maps to privilege 15 / role `admin`.  The `encrypted-password` hash round-trips verbatim same-vendor; cross-vendor migration requires re-keying. |
+| `/lags/lag/mode` | Lossy | Bonding `mode 802.3ad` (LACP) → `active`; the non-LACP modes (`active-backup` / `balance-rr` / `balance-xor` / …) collapse to `static` (the balancing algorithm is dropped — re-select on the target). |
+| `/snmp/v3-user/auth-passphrase` | Lossy | v3 USM auth/privacy keys are an opaque `encrypted-password` blob; round-trips verbatim same-vendor but cross-vendor migration requires re-keying (vendor-specific salts).  Plaintext keys are never accepted. |
+| `/snmp/v3-user/engine-id` | Lossy | VyOS declares a single config-wide `engineid` for the whole agent; the canonical model carries it per-user, so the one value maps onto every v3 user (and a single `engineid` is emitted when the users share one). |
+| `/routing-instances/instance/table` | Lossy | VyOS requires a numeric `table <id>` on every `vrf name <X>`; the canonical RoutingInstance carries no table number, so a deterministic id (`100 + sort-index`) is synthesised on render.  The original table id is not preserved. |
+| `/vxlan-vnis/source-interface` | Lossy | The VTEP source is `source-address <ip>` (or `source-interface <if>`) on the vxlan netdev; the opaque string round-trips same-vendor but a cross-vendor source (e.g. `Loopback0`) is re-emitted verbatim and may need an operator port-rename. |
+| `/vxlan-vnis/vlan-id` | Lossy | VyOS models ONE VNI per `vxlan vxlanN` netdev with no on-device VLAN (the L2 binding lives on a separate `bridge`); the required canonical `vlan_id` is synthesised from the VNI and the netdev name regenerated `vxlan<index>` on render — both deterministic (stable same-vendor, advisory cross-vendor). |
+| `/vlans/vlan/id` | Unsupported | VyOS has no top-level VLAN database; 802.1Q VLANs are `vif <vid>` sub-interfaces (rendered as `ethN.<vid>` interfaces), which ARE supported. |
+| `/routing/static-route/vrf` | Unsupported | Per-VRF static routes (`vrf name <X> { protocols static route … }`) are deferred past the Phase-3 VRF wire-up; the `vrf name` instances + per-interface binding ARE supported. |
+| `/vxlan-vnis/l2vni-route-target` | Unsupported | EVPN per-VNI RD/RT lives under `protocols bgp … address-family l2vpn-evpn` (Tier-3, dropped); the L2 VLAN↔VNI binding is supported but the control-plane RD/RT is not auto-translated. |
+| `/routing-instances/instance/l3-vni` | Unsupported | Symmetric-IRB L3VNI (a VNI bound to a VRF for inter-subnet routing) is out of scope for the Phase-5 per-netdev L2-VNI model. |
+| `/routing-protocols/bgp` | Unsupported | `protocols bgp` is Tier-3 — captured for the dropped-Tier-3 banner, never auto-rendered cross-vendor. |
+| `/routing-protocols/ospf` | Unsupported | Tier-3. |
+| `/nat` | Unsupported | `nat source` / `nat destination` is Tier-3 — too platform-specific to auto-translate. |
+| `/firewall` | Unsupported | `firewall` rule-sets are Tier-3 — auto-translating risks subtly-permissive rules. |
+| `/access-list/extended` | Unsupported | VyOS `policy` route-maps / prefix-lists are Tier-3. |
+
 ### B. Tier-3 sections detected banner
 
 When a source codec parses a config that contains stanzas it

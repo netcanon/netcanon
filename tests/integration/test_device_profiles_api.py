@@ -133,3 +133,55 @@ class TestGetReturnsAllFields:
         assert body["model"] == "C9300-48P"
         # detected_facts starts null (probe hasn't run yet in P1C2).
         assert body["detected_facts"] is None
+
+
+class TestCredentialsNeverSerialised:
+    """Credentials are write-only over the API (2026-06 review finding #1).
+
+    ``password`` / ``enable_password`` are accepted in create / update
+    request bodies but must never appear in *any* response — the
+    ``DeviceProfilePublic`` response model strips them so the decrypted
+    value never crosses the API boundary."""
+
+    _CRED_KEYS = ("password", "enable_password")
+
+    def test_create_response_omits_credentials(self, client):
+        body = client.post(
+            "/api/v1/devices/",
+            json=_create_body(enable_password="enable-secret"),
+        ).json()
+        for key in self._CRED_KEYS:
+            assert key not in body, f"POST response leaked {key!r}"
+        # Non-secret fields are still present.
+        assert body["username"] == "admin"
+        assert body["host"] == "10.0.0.1"
+
+    def test_get_response_omits_credentials(self, client):
+        profile_id = client.post(
+            "/api/v1/devices/", json=_create_body(enable_password="enable-secret")
+        ).json()["id"]
+        body = client.get(f"/api/v1/devices/{profile_id}").json()
+        for key in self._CRED_KEYS:
+            assert key not in body, f"GET response leaked {key!r}"
+
+    def test_list_response_omits_credentials(self, client):
+        client.post("/api/v1/devices/", json=_create_body(host="10.0.0.1"))
+        client.post("/api/v1/devices/", json=_create_body(host="10.0.0.2"))
+        items = client.get("/api/v1/devices/").json()
+        assert len(items) >= 2
+        for item in items:
+            for key in self._CRED_KEYS:
+                assert key not in item, f"LIST response leaked {key!r}"
+
+    def test_update_response_omits_credentials(self, client):
+        profile_id = client.post(
+            "/api/v1/devices/", json=_create_body()
+        ).json()["id"]
+        # Change the password via PUT; the response must still not echo it.
+        body = client.put(
+            f"/api/v1/devices/{profile_id}",
+            json={"password": "rotated-secret", "notes": "rotated"},
+        ).json()
+        for key in self._CRED_KEYS:
+            assert key not in body, f"PUT response leaked {key!r}"
+        assert body["notes"] == "rotated"
