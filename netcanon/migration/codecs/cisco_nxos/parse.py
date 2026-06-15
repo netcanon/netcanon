@@ -850,10 +850,15 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
     )
 
 
-def _lag_sort_key(name: str) -> tuple[int, int]:
-    """Stable sort key grouping ``port-channel<N>`` numerically."""
+def _lag_sort_key(name: str) -> tuple[int, int, str]:
+    """Total-order sort key grouping ``port-channel<N>`` numerically.
+
+    The verbatim *name* is the final tiebreaker so that two case-variants of
+    the same channel (e.g. a ``Port-Channel3`` stub and a synthesized
+    ``port-channel3``) sort deterministically instead of relying on
+    hash-randomized set-iteration order."""
     m = re.match(r"^port-channel(\d+)$", name, re.IGNORECASE)
-    return (0, int(m.group(1))) if m else (1, 0)
+    return (0, int(m.group(1)), name) if m else (1, 0, name)
 
 
 def _parse_lags(raw: str) -> list[CanonicalLAG]:
@@ -920,9 +925,14 @@ def _parse_vlan_list(text: str) -> list[int]:
         if "-" in part:
             lo, hi = part.split("-", 1)
             try:
-                result.extend(range(int(lo.strip()), int(hi.strip()) + 1))
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
             except ValueError:
                 continue
+            # Clamp to the valid VLAN space before materializing so a huge
+            # span cannot OOM the process (valid sub-range preserved).
+            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
+            if lo_i <= hi_i:
+                result.extend(range(lo_i, hi_i + 1))
         elif part.isdigit():
             result.append(int(part))
     return result

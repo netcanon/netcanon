@@ -26,6 +26,38 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+* **VLAN-range expansion is bounded before materialization (DoS hardening).**
+  The four comma/range VLAN-list expanders (`cisco_iosxe_cli`, `cisco_nxos`,
+  `aruba_aoscx`, `arista_eos`) clamp a range to the valid VLAN space (1..4094)
+  *before* building it, so an out-of-bounds span (e.g. `switchport trunk
+  allowed vlan 1-9999999999`) reaching the parser through a trusted operator's
+  own config paste can no longer OOM the worker process.  Lossless for valid
+  configs — the kept set equals the prior downstream 1..4094 filter; the fix
+  only moves the bound ahead of materialization.  Surfaced by the 2026-06-14
+  multi-lens codebase review.
+
+### Fixed
+
+* **Deterministic LAG ordering in the cross-mesh certification artifact.**  The
+  Cisco-family `_lag_sort_key` (`cisco_nxos`, `cisco_iosxe_cli`) now carries the
+  verbatim LAG name as a final tiebreaker, so two case-variants of the same
+  channel (a `Port-Channel3` stub vs a synthesized `port-channel3`) sort
+  deterministically instead of by hash-randomized set-iteration order.  (The
+  underlying case-mismatch duplicate-LAG round-trip defect is tracked
+  separately.)
+
+### Changed
+
+* **Documentation honesty pass (multi-lens review remediation).**  The README
+  trust-signal now states the live `CODEC_BUG` residual (5 triaged-benign cells)
+  and names `tests/fixtures/real/PHASE4_RECONCILIATION.md` as the authoritative
+  count, instead of claiming "zero".  The codec-author guide
+  (`netcanon/migration/codecs/README.md`) is corrected from "Eight codecs" to
+  twelve (count-resilient, pointing at `RESULTS.md`) and its Tier-3 detector
+  enumeration refreshed to the full per-vendor set.
+
 ### Added
 
 * **VyOS codec — set-form input (`show configuration commands`).**  The

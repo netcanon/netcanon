@@ -1137,7 +1137,17 @@ def _parse_vlan_list(text: str) -> list[int]:
         part = part.strip()
         if "-" in part:
             lo, hi = part.split("-", 1)
-            result.extend(range(int(lo.strip()), int(hi.strip()) + 1))
+            try:
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+            except ValueError:
+                continue
+            # Clamp to the valid VLAN space BEFORE materializing the range so
+            # an out-of-bounds span (e.g. `1-9999999999`) cannot OOM the
+            # process; the valid sub-range is preserved (lossless vs the
+            # downstream 1..4094 filter).
+            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
+            if lo_i <= hi_i:
+                result.extend(range(lo_i, hi_i + 1))
         elif part.isdigit():
             result.append(int(part))
     return result
@@ -1308,7 +1318,7 @@ def _lag_sort_key(name: str) -> tuple[str, int, str]:
     """Stable sort key that groups ``Port-channel<N>`` numerically."""
     m = re.match(r"^(port-channel|trk|bond|lag|lagg)(\d+)$", name, re.IGNORECASE)
     if m:
-        return (m.group(1).lower(), int(m.group(2)), "")
+        return (m.group(1).lower(), int(m.group(2)), name)
     return ("", 0, name)
 
 
