@@ -148,9 +148,9 @@ class FortiGateCLICodec(CodecBase):
             # privilege 15; other profiles → privilege 1 with the
             # profile name preserved in ``role`` for lossless intra-
             # vendor round-trip.  Hashes carry the ``fortios:`` tag.
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/password",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/local-users/user/role",
             # -- Wave B (v0.2.0) -- VRRP groups (FHRP) --
             # Nested ``config vrrp / edit N`` block inside ``config
             # system interface / edit X``.  Parses ``vrip``, ``vrip6``,

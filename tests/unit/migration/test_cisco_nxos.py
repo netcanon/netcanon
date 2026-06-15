@@ -326,7 +326,7 @@ class TestCapabilityMatrix:
             "/interfaces/interface/config/mtu",
             "/interfaces/interface/ipv4/address/ip",
             "/interfaces/interface/ipv6/address/ip",
-            "/interfaces/interface/vrf",
+            "/interfaces/interface/config/vrf",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing-instances/instance/name",

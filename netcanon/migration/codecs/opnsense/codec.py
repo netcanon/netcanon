@@ -154,9 +154,9 @@ class OPNsenseCodec(CodecBase):
             # emits name / password / scope / groupname.  Hashes are
             # passed through verbatim under a ``bcrypt:`` tag so
             # target renderers can route appropriately.
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/password",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/local-users/user/role",
             # Wave B (v0.2.0) — CARP groups on /virtualip/vip.
             # OPNsense's BSD-CARP HA primitive parses + renders
             # round-trip through CanonicalVRRPGroup with

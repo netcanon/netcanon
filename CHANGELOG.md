@@ -112,6 +112,25 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+* **Capability-matrix xpath vocabularies normalised to one granular shape
+  (review finding #8).**  Codecs declared the same canonical surface under two
+  incompatible xpath spellings, so half of them were unreachable by the
+  exact-match `classify` (and by the walker, which speaks the granular shape):
+  local users were declared as `/aaa/authentication/users/user/config/*` on
+  five codecs (arista_eos, fortigate_cli, opnsense, juniper_junos, cisco_iosxr)
+  but as `/local-users/user/*` on three (aruba_aoscx, cisco_nxos, vyos); the
+  arista DHCP pool used an underscore (`/dhcp_servers/pool`) where the walker
+  and junos use a hyphen (`/dhcp-servers/pool`); the cisco_iosxe stub declared
+  EVPN Type-5 as `/evpn-type5/route` where every other codec uses
+  `/evpn-type5-routes/route`; and the per-interface VRF binding was
+  `/interfaces/interface/vrf` on nxos/aoscx vs `/interfaces/interface/config/vrf`
+  on iosxr/vyos.  All are now the single granular vocabulary the walker emits,
+  so the declarations are reachable by live validation and comparable across
+  codecs.  `tools/run_full_mesh.py`'s `_FIELD_TO_XPATH_PREFIX` EVPN entry is
+  fixed in lockstep (`/evpn-type5/` → `/evpn-type5-routes/`; the old prefix
+  matched nothing).  Pure declaration renames — no parse/render change; the
+  cross-mesh fidelity matrix is unchanged (CODEC_BUG flat at 5; field
+  dispositions byte-identical).
 * **Interactive validation report now sees every populated Tier-2 surface
   (review finding #7).**  The shared canonical walker (`_walk_canonical`, reused
   by 10 codecs' `iter_xpaths`) previously yielded xpaths only for system

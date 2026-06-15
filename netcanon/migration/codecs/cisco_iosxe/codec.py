@@ -350,7 +350,7 @@ class CiscoIOSXECodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
-                path="/evpn-type5/route",
+                path="/evpn-type5-routes/route",
                 reason=(
                     "EVPN Type-5 advertisement requires VXLAN render "
                     "wire-up plus VRF render wire-up — both deferred "
@@ -458,7 +458,7 @@ class CiscoIOSXECodec(CodecBase):
             ),
             UnsupportedPath(
                 path="/evpn_type5_routes",
-                reason="Top-level field marker — see /evpn-type5/route.",
+                reason="Top-level field marker — see /evpn-type5-routes/route.",
             ),
             # ── ACL / firewall (Tier 3 — not auto-translatable) ──
             UnsupportedPath(

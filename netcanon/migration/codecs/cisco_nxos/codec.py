@@ -130,7 +130,7 @@ class CiscoNXOSCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
-            "/interfaces/interface/vrf",
+            "/interfaces/interface/config/vrf",
             # Interfaces — L2 switchport + LAG membership (Phase 2a)
             "/interfaces/interface/switchport-mode",
             "/interfaces/interface/access-vlan",
