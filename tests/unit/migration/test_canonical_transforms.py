@@ -12,11 +12,13 @@ import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
     CanonicalVlan,
 )
 from netcanon.migration.canonical.transforms import (
     project_switchport_to_vlan,
     project_vlan_to_switchport,
+    synthesize_svis_from_vlan_l3,
 )
 
 pytestmark = pytest.mark.unit
@@ -359,3 +361,150 @@ class TestVlanToSwitchport:
         project_vlan_to_switchport(intent)
         assert intent.interfaces[0].switchport_mode == "access"
         assert intent.interfaces[0].access_vlan == 10
+
+
+# ---------------------------------------------------------------------------
+# synthesize_svis_from_vlan_l3 — inverse of project_svi_to_vlan
+# ---------------------------------------------------------------------------
+
+
+class TestSynthesizeSvisFromVlanL3:
+    """A VLAN carrying L3 (``ipv4_addresses``) with no sibling
+    ``Vlan<N>`` interface — the shape a Junos ``irb`` + ``l3-interface``
+    source produces — gets a synthetic ``Vlan<N>`` SVI so SVI-model
+    renderers (Arista, IOS-XE) can emit the L3 instead of dropping it."""
+
+    def test_synthesises_svi_when_absent(self):
+        intent = _mk_intent(
+            vlans=[
+                CanonicalVlan(
+                    id=698,
+                    name="VLAN698",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.200.1.1", prefix_length=22)
+                    ],
+                )
+            ],
+        )
+        svis = synthesize_svis_from_vlan_l3(intent)
+        assert len(svis) == 1
+        assert svis[0].name == "Vlan698"
+        assert [(a.ip, a.prefix_length) for a in svis[0].ipv4_addresses] == [
+            ("10.200.1.1", 22)
+        ]
+
+    def test_skips_when_svi_interface_already_present(self):
+        """Same-vendor parse keeps the ``Vlan<N>`` interface — no
+        double-emit (case-insensitive match on the SVI name)."""
+        intent = _mk_intent(
+            interfaces=[
+                CanonicalInterface(
+                    name="Vlan698",
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.200.1.1", prefix_length=22)
+                    ],
+                )
+            ],
+            vlans=[
+                CanonicalVlan(
+                    id=698,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.200.1.1", prefix_length=22)
+                    ],
+                )
+            ],
+        )
+        assert synthesize_svis_from_vlan_l3(intent) == []
+
+    def test_skips_l3_empty_vlan(self):
+        intent = _mk_intent(vlans=[CanonicalVlan(id=10, name="DATA")])
+        assert synthesize_svis_from_vlan_l3(intent) == []
+
+    def test_dedupes_addresses(self):
+        intent = _mk_intent(
+            vlans=[
+                CanonicalVlan(
+                    id=5,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.5.1", prefix_length=24),
+                        CanonicalIPv4Address(ip="10.0.5.1", prefix_length=24),
+                    ],
+                )
+            ],
+        )
+        svis = synthesize_svis_from_vlan_l3(intent)
+        assert len(svis[0].ipv4_addresses) == 1
+
+    def test_non_mutating(self):
+        """Contract: the cross-mesh runner reuses one parsed intent
+        across target renders, so this must not touch intent.interfaces."""
+        intent = _mk_intent(
+            vlans=[
+                CanonicalVlan(
+                    id=7,
+                    ipv4_addresses=[
+                        CanonicalIPv4Address(ip="10.0.7.1", prefix_length=24)
+                    ],
+                )
+            ],
+        )
+        before = len(intent.interfaces)
+        synthesize_svis_from_vlan_l3(intent)
+        assert len(intent.interfaces) == before
+
+
+class TestJunosVlanL3ToSviRender:
+    """End-to-end: a Junos ``irb`` + ``l3-interface`` VLAN L3 survives
+    translation to the SVI-model targets (Arista, IOS-XE).  Regression
+    for the cross-mesh CODEC_BUG surfaced by the ``saidvandeklundert``
+    real fixture (PR #68): the VLAN SVI address dropped on render."""
+
+    JUNOS_SRC = (
+        "set interfaces irb unit 698 family inet address 10.200.1.1/22\n"
+        "set vlans VLAN698 vlan-id 698\n"
+        "set vlans VLAN698 l3-interface irb.698\n"
+    )
+
+    def _intent(self):
+        from netcanon.migration.codecs.juniper_junos.codec import JunosCodec
+
+        return JunosCodec().parse(self.JUNOS_SRC)
+
+    def test_junos_to_arista_emits_svi_and_round_trips(self):
+        from netcanon.migration.codecs.arista_eos.codec import AristaEOSCodec
+
+        codec = AristaEOSCodec()
+        out = codec.render(self._intent())
+        assert "interface Vlan698" in out
+        assert "10.200.1.1/22" in out
+        reparsed = codec.parse(out)
+        v = next(x for x in reparsed.vlans if x.id == 698)
+        assert [(a.ip, a.prefix_length) for a in v.ipv4_addresses] == [
+            ("10.200.1.1", 22)
+        ]
+
+    def test_junos_to_iosxe_cli_emits_svi_and_round_trips(self):
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
+            CiscoIOSXECLICodec,
+        )
+
+        codec = CiscoIOSXECLICodec()
+        out = codec.render(self._intent())
+        assert "interface Vlan698" in out
+        assert "10.200.1.1" in out
+        reparsed = codec.parse(out)
+        v = next(x for x in reparsed.vlans if x.id == 698)
+        assert [(a.ip, a.prefix_length) for a in v.ipv4_addresses] == [
+            ("10.200.1.1", 22)
+        ]
+
+    def test_arista_same_vendor_no_double_svi(self):
+        from netcanon.migration.codecs.arista_eos.codec import AristaEOSCodec
+
+        own = (
+            "vlan 698\n   name VLAN698\n!\n"
+            "interface Vlan698\n   ip address 10.200.1.1/22\n!\n"
+        )
+        codec = AristaEOSCodec()
+        out = codec.render(codec.parse(own))
+        assert out.count("interface Vlan698") == 1

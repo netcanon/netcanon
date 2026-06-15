@@ -525,13 +525,20 @@ per_field_expectation:
     references: [junos-vlans-statement, fortios-vlan-cookbook]
 
   vlans[].ipv4_addresses:
-    disposition: good
-    note: >
-      Junos's ``set interfaces irb unit 100 family inet address
-      X/N`` + ``set vlans <name> l3-interface irb.100`` flattens
-      on parse to ``CanonicalVlan.ipv4_addresses``.  FortiGate
-      render emits the SVI as a VLAN-child interface
-      ``edit "<vlanname>" / set vlanid N / set ip A.B.C.D MASK``.
+    disposition: lossy
+    reason: >
+      Junos folds ``set interfaces irb unit N family inet address
+      X/N`` + ``set vlans <name> l3-interface irb.N`` onto
+      ``CanonicalVlan.ipv4_addresses`` with NO sibling ``Vlan<N>``
+      interface.  FortiGate carries a VLAN's L3 on a VLAN-CHILD
+      interface (``config system interface / edit "<name>" / set
+      vlanid N / set interface <parent> / set ip A.B.C.D MASK``) that
+      REQUIRES a physical/aggregate parent; the canonical VLAN record
+      (id + name + member-port lists) carries no parent, so FortiGate
+      render cannot synthesise a valid VLAN interface and the SVI
+      address drops.  (SVI-model targets — Arista, IOS-XE — DO
+      reconstruct ``interface Vlan<N>`` from the same canonical, since
+      that SVI needs no parent; ``synthesize_svis_from_vlan_l3``.)
     references: [junos-bridging-overview, fortios-vlan-cookbook]
 
   # ── Tier 1 — static routes ──
