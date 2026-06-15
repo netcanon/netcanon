@@ -232,11 +232,18 @@ devices via this layer; for now the flow is file → codec → file.
 Every codec declares `certainty` — a promise about how battle-tested
 it is:
 
-| Level | Criterion | Deploy-ready? |
+| Level | Criterion | UI signal |
 |---|---|---|
-| `experimental` | Synthetic fixtures only | No — UI shows red banner |
-| `best_effort` | ≥1 real fixture round-trips clean | Staging only — UI shows yellow banner |
-| `certified` | ≥3 real captures from ≥2 OS versions, all round-trip stable | Yes — UI shows green chip |
+| `experimental` | Synthetic fixtures only | Red banner |
+| `best_effort` | ≥1 real fixture round-trips clean | Yellow banner |
+| `certified` | ≥3 real captures from ≥2 OS versions, all round-trip stable | Green chip |
+
+**Certainty rates round-trip fidelity, not deploy automation.**  A
+`certified` chip means the translation is trustworthy enough to hand to
+an operator — *not* that Netcanon will push it to a device.  There is no
+deploy path today; rendered output is for manual review and apply (the
+deploy endpoints remain on the roadmap — see
+[`netcanon/api/routes/migration.py`](netcanon/api/routes/migration.py)).
 
 The bar is intentionally strict.  Per-codec status is tracked in
 [`tests/fixtures/real/RESULTS.md`](tests/fixtures/real/RESULTS.md) —
