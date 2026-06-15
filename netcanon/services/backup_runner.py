@@ -63,7 +63,10 @@ from ..models.backup import BackupJob, BackupResult, JobStatus
 from ..models.device import BackupRequest, DeviceTarget
 from ..models.device_profile import DeviceProfile
 from ..storage.base import BaseConfigStore
-from ..storage.device_profile_store import FileDeviceProfileStore
+from ..storage.device_profile_store import (
+    DEVICE_PROFILE_REGISTRY_LOCK,
+    FileDeviceProfileStore,
+)
 from ..storage.job_store import FileJobStore
 
 logger = logging.getLogger(__name__)
@@ -203,10 +206,15 @@ def _process_one_device(
         and device_profile_store is not None
     ):
         try:
-            profile = device_profiles.get(device.device_profile_id)
-            if profile is not None:
-                profile.detected_facts = detected_facts
-                device_profile_store.save(profile)
+            # Re-check membership and persist atomically: this worker thread
+            # races route handlers that may delete/update the same profile.
+            # The lock + in-loop re-fetch prevents a delete-then-save from
+            # resurrecting a just-deleted profile to disk (review finding #10).
+            with DEVICE_PROFILE_REGISTRY_LOCK:
+                profile = device_profiles.get(device.device_profile_id)
+                if profile is not None:
+                    profile.detected_facts = detected_facts
+                    device_profile_store.save(profile)
         except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "Failed to persist detected_facts for profile %s: %s",
