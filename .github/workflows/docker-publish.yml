@@ -35,10 +35,27 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
         with:
+          # Full history so the on-main ancestry guard below can run a
+          # merge-base against origin/main (shallow clone lacks the graph).
+          fetch-depth: 0
           # Registry logins use explicit secrets passed to
           # docker/login-action; cosign uses keyless OIDC; no git push
           # from this job.  Clear the token-in-.git/config default.
           persist-credentials: false
+
+      # Refuse to publish a tag that isn't on main (see pypi-publish.yml
+      # for the rationale — "tag = publish" with no ancestry check would
+      # let a tag on any commit push an image + move :latest).
+      - name: Verify the build commit is on main
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$head_sha" FETCH_HEAD; then
+            echo "::error::Build commit $head_sha is not an ancestor of origin/main — refusing to publish."
+            exit 1
+          fi
+          echo "OK: build commit $head_sha is on origin/main."
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4

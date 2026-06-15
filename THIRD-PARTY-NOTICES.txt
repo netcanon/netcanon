@@ -1,0 +1,73 @@
+THIRD-PARTY SOFTWARE NOTICES
+============================
+
+Netcanon itself is distributed under the MIT License (see the bundled
+LICENSE.txt).  The Windows desktop installer (MSI), built with cx_Freeze,
+*redistributes* the third-party components listed below as compiled
+binaries / bundled Python packages.  This file satisfies their attribution
+requirement and, for the copyleft (LGPL) components, records the written
+offer of source and the right to relink.
+
+The PyPI wheel and the source distribution declare these only as
+dependencies (resolved + downloaded by the user's own package manager) and
+do not redistribute their binaries — this notice is primarily relevant to
+the MSI.
+
+How to read this file
+---------------------
+Each entry lists the component, its SPDX license identifier, the copyright
+holder, and the canonical project URL.  The full, authoritative license
+text for each component ships inside that component's own distribution
+(e.g. the package's `LICENSE` / `LICENSE.txt`) and is available at the URL
+shown; the well-known GNU license texts are published verbatim at
+https://www.gnu.org/licenses/ (LGPL-3.0: lgpl-3.0.txt, LGPL-2.1:
+lgpl-2.1.txt).  SPDX identifiers map to texts at https://spdx.org/licenses/.
+
+Copyleft (LGPL) components — source offer + relink right
+--------------------------------------------------------
+For each LGPL component below, the corresponding source code (the exact
+version bundled in this installer) is obtainable from its project URL or
+from PyPI (`pip download <name>==<version>`).  You may modify and relink
+that component with this application as permitted by its license.
+
+* Qt for Python (PySide6) and the underlying Qt 6 libraries
+  License: LGPL-3.0-only (also available under GPL / commercial terms)
+  Copyright: The Qt Company Ltd. and Qt contributors
+  Homepage: https://www.qt.io/qt-for-python  ·  https://www.qt.io/licensing
+
+* paramiko (SSH transport used by the backup collectors)
+  License: LGPL-2.1-or-later
+  Copyright: Jeff Forcier and contributors
+  Homepage: https://www.paramiko.org  ·  https://github.com/paramiko/paramiko
+
+* pystray (system-tray integration for the desktop shell)
+  License: LGPL-3.0-or-later
+  Copyright: Moses Palmér
+  Homepage: https://github.com/moses-palmer/pystray
+
+Permissive components (attribution)
+-----------------------------------
+* Pillow            — HPND (PIL/MIT-CMU style) — Jeffrey A. Clark and contributors — https://python-pillow.github.io
+* FastAPI           — MIT            — Sebastián Ramírez — https://github.com/fastapi/fastapi
+* Starlette         — BSD-3-Clause   — Encode OSS Ltd.   — https://www.starlette.io
+* Uvicorn           — BSD-3-Clause   — Encode OSS Ltd.   — https://www.uvicorn.org
+* Pydantic / pydantic-core — MIT     — Pydantic Services Inc. and contributors — https://docs.pydantic.dev
+* Jinja2            — BSD-3-Clause   — Pallets           — https://palletsprojects.com/p/jinja/
+* Netmiko           — MIT            — Kirk Byers         — https://github.com/ktbyers/netmiko
+* PyYAML            — MIT            — Ingy döt Net, Kirill Simonov and contributors — https://pyyaml.org
+* anyio             — MIT            — Alex Grönholm      — https://github.com/agronholm/anyio
+* cryptography      — Apache-2.0 OR BSD-3-Clause — The cryptography developers — https://cryptography.io
+* keyring           — MIT            — Jason R. Coombs    — https://github.com/jaraco/keyring
+* defusedxml        — PSF-2.0        — Christian Heimes   — https://github.com/tiran/defusedxml
+* CPython runtime   — PSF-2.0        — Python Software Foundation — https://www.python.org
+
+Notes
+-----
+* Version ranges for each component are declared in `pyproject.toml`
+  (`dependencies` + the `desktop` / `desktop-build` extras).  The exact
+  versions bundled in a given MSI are those resolved at build time; run
+  `pip freeze` in the build environment for the precise pin set.
+* This is an attribution + source-offer notice.  If you require the full
+  verbatim license texts bundled alongside the binaries, drop the
+  upstream `LICENSE` files into a `licenses/` directory and add it to
+  `setup_desktop.py`'s `include_files`; the URLs above are authoritative.
