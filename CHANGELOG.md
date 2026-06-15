@@ -48,6 +48,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **fortigate_cli SNMPv3 `auth-proto sha224` no longer silently
+  upgraded to `sha256`.**  The FortiGate render map coerced canonical
+  `auth_protocol="sha224"` to the FortiOS token `sha256`, even though
+  FortiOS 7.x natively accepts `sha224` (the parse map already mapped
+  `sha224 → sha224` faithfully).  On a same-vendor round-trip the value
+  was silently mangled — and the coercion contradicted the
+  junos→fortigate expectation YAML, which already declared `sha224`
+  preserved.  Render now maps `sha224 → sha224`, so the full SHA-2 auth
+  family round-trips losslessly.  Surfaced + verified during the
+  2026-06-15 `fixture-gap-hunt` codec-bug verification pass; render-side
+  one-line fix, CODEC_BUG flat at 5 (no mesh source emits `sha224` into
+  a FortiGate target).
+
 * **aruba_aoss VRRP grammar corrected to the real AOS-S form.**  The
   parser required `ip vrrp vrid <N>` and the renderer emitted it, but
   real ArubaOS-Switch uses a global `router vrrp` enable plus

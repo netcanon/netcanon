@@ -788,11 +788,13 @@ def render_intent(tree: Any) -> str:
         # presence (noAuthNoPriv / auth-no-priv / auth-priv — the
         # three FortiOS-accepted values).  Canonical priv_protocol
         # back to FortiOS: aes128 → aes; aes256 / aes192 / des
-        # preserved.  Unknown / empty auth_protocol → sha fallback
-        # to satisfy FortiOS validation when security-level implies
-        # auth.
+        # preserved.  Canonical auth_protocol maps 1:1 to the FortiOS
+        # token — md5 / sha / sha224 / sha256 / sha384 / sha512 are
+        # all natively accepted, so each is preserved verbatim.
+        # Unknown / empty auth_protocol → sha fallback to satisfy
+        # FortiOS validation when security-level implies auth.
         _CAN_TO_FG_AUTH = {
-            "md5": "md5", "sha": "sha", "sha224": "sha256",
+            "md5": "md5", "sha": "sha", "sha224": "sha224",
             "sha256": "sha256", "sha384": "sha384", "sha512": "sha512",
         }
         _CAN_TO_FG_PRIV = {
