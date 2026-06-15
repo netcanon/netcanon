@@ -1442,6 +1442,32 @@ class TestBlockFormParse:
         with pytest.raises(ParseError):
             JunosCodec().parse(raw)
 
+    def test_pathologically_deep_braces_raise_clean_parseerror(self):
+        """A hostile ``{{{{…`` payload must surface as a clean
+        ParseError, not an opaque RecursionError / HTTP 500.  The block
+        below is perfectly *balanced* — absent the depth guard it would
+        parse fine — so a raised ParseError proves the guard fired.
+
+        (Review finding #20: the recursive block-form pre-parser used
+        one Python frame per brace with no cap.)"""
+        from netcanon.migration.codecs.base import ParseError
+        from netcanon.migration.codecs.juniper_junos.parse import (
+            _MAX_BLOCK_DEPTH,
+        )
+
+        # Newline-separated with a `;` leaf so `_looks_like_blockform`
+        # routes it through the recursive pre-parser (it needs a first
+        # line ending in `{` and at least one statement terminator).
+        depth = _MAX_BLOCK_DEPTH + 2
+        raw = (
+            "".join(f"n{i} {{\n" for i in range(depth))
+            + "leaf x;\n"
+            + ("}\n" * depth)
+        )
+        with pytest.raises(ParseError) as exc:
+            JunosCodec().parse(raw)
+        assert "too deep" in str(exc.value)
+
 
 class TestVxlanSwitchOptions:
     """GAP-EVPN-2: ``set switch-options vtep-source-interface ...`` and

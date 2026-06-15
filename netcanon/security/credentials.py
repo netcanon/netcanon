@@ -125,10 +125,20 @@ def _read_key_file() -> str | None:
 def _write_key_file(key: str) -> Path:
     """Write *key* to ``$NETCANON_DATA_DIR/.fernet_key``.
 
-    Creates the parent directory if needed and attempts restrictive
-    permissions (0o600); chmod failures on platforms that don't honour
-    POSIX perms (notably Windows) are non-fatal — the directory is
-    operator-managed and presumed-protected.
+    Creates the parent directory if needed and best-effort sets POSIX
+    ``0o600`` on the key file.
+
+    On the primary Windows target ``os.chmod(0o600)`` is effectively a
+    no-op (the NTFS DACL is not derived from POSIX mode bits), so the
+    file's confidentiality there rests on the data directory inheriting
+    the user-profile ACL — under the default ``%LOCALAPPDATA%`` the
+    file is already readable only by the owning account and SYSTEM.
+    Operators who want the key off disk entirely (containers, shared
+    hosts, anything outside a single-user profile) should set the
+    ``NETCANON_FERNET_KEY`` env var instead — Tier 1 of
+    :func:`_resolve_key` then wins and this fallback never runs.  The
+    chmod failure is swallowed precisely because it carries no signal
+    on Windows.
     """
     data_dir = _data_dir()
     data_dir.mkdir(parents=True, exist_ok=True)
@@ -137,7 +147,8 @@ def _write_key_file(key: str) -> Path:
     try:
         os.chmod(key_file, 0o600)
     except OSError:
-        # Windows doesn't enforce POSIX perms; that's fine.
+        # POSIX-only hardening; on Windows confidentiality comes from
+        # the inherited user-profile ACL (see docstring), not mode bits.
         pass
     return key_file
 

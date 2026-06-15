@@ -71,28 +71,17 @@ REAL_FIXTURES_ROOT = (
     Path(__file__).resolve().parents[2] / "fixtures" / "real"
 )
 
-#: Fixture-directory name → registered codec name.  The fixture-tree
-#: layout uses human-short labels (``fortigate`` / ``mikrotik`` /
-#: ``junos``) while the codec registry uses format-qualified names
-#: (``fortigate_cli`` / ``mikrotik_routeros`` / ``juniper_junos``)
-#: — the mapping bridges the two vocabularies.
+#: Fixture-directory name → registered codec name.  Single source of
+#: truth lives in ``netcanon.migration.fixture_dirs`` and is shared with
+#: the offline audit harness (``tools/run_full_mesh.py``) so the two
+#: can't drift — they used to keep hand-replicated copies.
 #:
-#: When adding a fixture directory: add a row here.  The
+#: When adding a fixture directory: add a row in that module.  The
 #: ``test_every_fixture_dir_has_codec_mapping`` guard below fails
-#: loud if you forget.
-_DIR_TO_CODEC_NAME: dict[str, str] = {
-    "cisco_iosxe":  "cisco_iosxe_cli",
-    "cisco_iosxr":  "cisco_iosxr",
-    "cisco_nxos":   "cisco_nxos",
-    "aruba_aoscx":  "aruba_aoscx",
-    "aruba_aoss":   "aruba_aoss",
-    "fortigate":    "fortigate_cli",
-    "opnsense":     "opnsense",
-    "mikrotik":     "mikrotik_routeros",
-    "arista_eos":   "arista_eos",
-    "junos":        "juniper_junos",
-    "vyos":         "vyos",
-}
+#: loud if a directory on disk has no mapping.
+from netcanon.migration.fixture_dirs import (  # noqa: E402
+    DIR_TO_CODEC_NAME as _DIR_TO_CODEC_NAME,
+)
 
 
 def _codec_for_dir(vendor_dir: str) -> Any:
@@ -599,3 +588,56 @@ def test_arista_bgp_vlan_mac_vrf_survives_karneliuk_parse() -> None:
     assert ri.route_distinguisher == "10.0.255.33:100"
     assert ri.rt_imports == ["65000:100"]
     assert ri.rt_exports == ["65000:100"]
+
+
+@pytest.mark.skipif(
+    not _FIXTURE_PARAMS,
+    reason="no real-capture fixtures present yet",
+)
+@pytest.mark.parametrize(
+    "codec_key,path",
+    _FIXTURE_PARAMS,
+    ids=[_param_id(p) for p in _FIXTURE_PARAMS],
+)
+def test_real_capture_detects_to_unique_codec(
+    codec_key: str, path: Path,
+) -> None:
+    """Auto-detection must resolve every real capture to its own codec
+    as the *sole* top scorer.
+
+    Guards the silent failure mode flagged in the 2026-06 review: the
+    structural-fallback codecs (NX-OS / AOS-CX / VyOS) all return a
+    confidence of 90, ``detect_codec`` breaks score ties alphabetically,
+    and the /migrate UI pre-selects only ``candidates[0]``.  A real
+    capture that merely *tied* at the top would be silently
+    mis-pre-selected.  We assert the expected codec both wins and wins
+    outright (strictly above the runner-up) — a genuine config's vendor
+    signature is expected to break any structural tie.
+
+    Detection runs over the whole fixture (not the production 500-byte
+    prefix) so the committed attribution header can't crowd the vendor
+    marker out of the probe window; this exercises the discrimination of
+    the probes, not the prefix cutoff.
+    """
+    from netcanon.services.migration_detect import detect_codec
+
+    expected = _DIR_TO_CODEC_NAME[codec_key]
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    ranked = detect_codec(raw, probe_bytes=max(len(raw), 1))
+
+    assert ranked, (
+        f"{path.name}: no codec detected it at all (expected {expected})"
+    )
+    top = ranked[0]
+    assert top.codec == expected, (
+        f"{path.name}: detected as {top.codec} (conf {top.confidence}), "
+        f"expected {expected}.  Ranking: "
+        f"{[(c.codec, c.confidence) for c in ranked[:4]]}"
+    )
+    if len(ranked) > 1:
+        assert ranked[1].confidence < top.confidence, (
+            f"{path.name}: top score {top.confidence} is TIED by "
+            f"{ranked[1].codec} — detection would break this tie "
+            f"silently/alphabetically.  Ranking: "
+            f"{[(c.codec, c.confidence) for c in ranked[:4]]}"
+        )
