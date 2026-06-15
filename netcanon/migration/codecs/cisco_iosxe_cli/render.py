@@ -78,8 +78,19 @@ def render_intent(tree: Any) -> str:
     # ``vlan N / untagged 1/1-1/47`` form, OPNsense ``<vlans>``-
     # only).  Idempotent + additive — same-vendor round-trips
     # where interfaces are already populated are no-ops.
-    from ...canonical.transforms import project_vlan_to_switchport
+    from ...canonical.transforms import (
+        project_vlan_to_switchport,
+        synthesize_svis_from_vlan_l3,
+    )
     project_vlan_to_switchport(tree)
+
+    # Inverse SVI fold: materialise ``interface Vlan<N>`` SVIs for VLANs
+    # carrying L3 (``ipv4_addresses``) but with no sibling ``Vlan<N>``
+    # interface — the shape a Junos ``irb`` + ``l3-interface`` source
+    # produces.  Non-mutating (rendered alongside tree.interfaces, not
+    # appended to the possibly-reused intent); empty for same-vendor
+    # renders where the ``Vlan<N>`` interface is already present.
+    synth_svis = synthesize_svis_from_vlan_l3(tree)
 
     out: list[str] = []
 
@@ -238,7 +249,9 @@ def render_intent(tree: Any) -> str:
             kind = 4
         return (kind, _natural_port_sort_key(iface.name))
 
-    ordered_ifaces = sorted(tree.interfaces, key=_iface_sort_key)
+    ordered_ifaces = sorted(
+        [*tree.interfaces, *synth_svis], key=_iface_sort_key
+    )
 
     # Empty-stub elision (mirrors Junos commit `0fdf7e9`, finding #8
     # in tests/fixtures/real/user_smoke_findings.md).  Cross-vendor

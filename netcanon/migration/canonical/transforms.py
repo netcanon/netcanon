@@ -387,3 +387,70 @@ def project_svi_to_vlan(intent: CanonicalIntent) -> None:
                     )
                 )
                 existing_pairs.add(pair)
+
+
+def synthesize_svis_from_vlan_l3(
+    intent: CanonicalIntent,
+) -> list["CanonicalInterface"]:
+    """Inverse of :func:`project_svi_to_vlan`: materialise a synthetic
+    ``interface Vlan<N>`` SVI for every VLAN carrying Layer-3
+    (``ipv4_addresses``) that has NO matching ``Vlan<N>`` interface in
+    ``intent.interfaces``.
+
+    SVI-model renderers (arista_eos, cisco_iosxe_cli) emit a VLAN's L3
+    from a sibling ``interface Vlan<N>`` stanza, NOT from
+    :attr:`CanonicalVlan.ipv4_addresses`.  A same-vendor parse keeps
+    that interface in ``intent.interfaces`` (the
+    :func:`project_svi_to_vlan` fold is additive — it copies the IPs
+    onto the VLAN but leaves the interface), so the SVI is already
+    present and this returns nothing for it.  But a cross-vendor source
+    that lands the VLAN's L3 on ``vlans[].ipv4_addresses`` WITHOUT a
+    ``Vlan<N>`` interface — Junos ``set interfaces irb unit N family
+    inet address X/N`` + ``set vlans <name> l3-interface irb.N`` is the
+    canonical example — would otherwise lose the SVI address entirely on
+    render, even though the capability matrix and the cross-vendor
+    expectation YAMLs both declare ``vlans[].ipv4_addresses`` *good* for
+    these targets.
+
+    NON-MUTATING by contract: returns a fresh list of synthetic
+    interfaces for the caller to render ALONGSIDE
+    ``intent.interfaces`` — it must NOT append to ``intent.interfaces``,
+    because the cross-mesh runner parses a source ONCE and reuses that
+    one intent across every target render; a mutation would leak the
+    synthetic SVIs into sibling renders.
+
+    The synthetic SVI carries only ``ip`` / ``prefix_length`` — the same
+    subset :func:`project_svi_to_vlan` denormalises onto the VLAN — so
+    the rendered SVI re-parses back to an identical
+    ``vlans[].ipv4_addresses`` record (the round-trip the cross-mesh
+    audit compares), and dedupes on ``(ip, prefix_length)`` for the same
+    reason the fold does.
+    """
+    from .intent import CanonicalIPv4Address, CanonicalInterface
+
+    existing_svi_ids: set[int] = set()
+    for iface in intent.interfaces:
+        m = _SVI_NAME_RE.match(iface.name)
+        if m:
+            existing_svi_ids.add(int(m.group(1)))
+
+    synth: list[CanonicalInterface] = []
+    for vlan in intent.vlans:
+        if vlan.id in existing_svi_ids or not vlan.ipv4_addresses:
+            continue
+        seen: set[tuple[str, int]] = set()
+        addrs: list[CanonicalIPv4Address] = []
+        for a in vlan.ipv4_addresses:
+            pair = (a.ip, a.prefix_length)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            addrs.append(
+                CanonicalIPv4Address(
+                    ip=a.ip, prefix_length=a.prefix_length,
+                )
+            )
+        synth.append(
+            CanonicalInterface(name=f"Vlan{vlan.id}", ipv4_addresses=addrs)
+        )
+    return synth

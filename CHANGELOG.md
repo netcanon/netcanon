@@ -28,6 +28,25 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Cross-vendor VLAN SVI L3 now survives translation to SVI-model
+  targets.**  A VLAN carrying its Layer-3 on
+  ``CanonicalVlan.ipv4_addresses`` with NO sibling ``Vlan<N>`` interface
+  — the shape a Junos ``irb`` + ``set vlans <name> l3-interface irb.N``
+  source produces — silently dropped its SVI address when rendered to
+  Arista EOS / Cisco IOS-XE (both materialise an SVI only from a
+  ``Vlan<N>`` interface in the canonical, never from the VLAN record).
+  A new shared transform ``synthesize_svis_from_vlan_l3`` (the inverse of
+  ``project_svi_to_vlan``) materialises the missing ``interface Vlan<N>``
+  at render time, so the L3 round-trips — matching what the cross-vendor
+  expectation YAMLs already declared ``good``.  Side benefit: existing
+  Aruba AOS-S → Arista / IOS-XE VLAN-L3 now round-trips too.  Non-SVI
+  targets (FortiGate, MikroTik) carry a VLAN's L3 on a VLAN-child
+  interface that requires a physical parent the canonical VLAN record
+  doesn't hold, so those two pairs are now honestly declared ``lossy``
+  for ``vlans[].ipv4_addresses`` (was an aspirational ``good``).
+  Surfaced by the ``saidvandeklundert`` Junos SNMPv3 real capture during
+  the 2026-06-15 ``fixture-gap-hunt``; CODEC_BUG flat at 5.
+
 * **arista_eos round-trip fidelity (3 defects).**  Surfaced while
   diffing `parse(render(parse(x)))` against `parse(x)` on an Arista AVD
   `eos_cli_config_gen` golden config during the 2026-06-15

@@ -509,14 +509,19 @@ per_field_expectation:
     references: [mikrotik-bridge-vlan]
 
   vlans[].ipv4_addresses:
-    disposition: good
-    note: >
-      Junos's ``irb.<unit>`` binding (`set vlans <name> l3-interface
-      irb.100` + `set interfaces irb unit 100 family inet address
-      X/N`) -> RouterOS's `/interface vlan add name=vlan100 vlan-id=
-      100` + `/ip address add address=X/N interface=vlan100`.  SVI
-      absorption round-trips cleanly when the L3 interface name
-      follows the `vlan<id>` convention.
+    disposition: lossy
+    reason: >
+      Junos folds ``irb.<unit>`` L3 (`set vlans <name> l3-interface
+      irb.N` + `set interfaces irb unit N family inet address X/N`)
+      onto ``CanonicalVlan.ipv4_addresses`` with no sibling ``Vlan<N>``
+      interface.  RouterOS carries a VLAN's L3 on a ``/interface vlan``
+      that REQUIRES ``interface=<parent>`` (the physical/bridge
+      parent); the canonical VLAN record carries no parent, so RouterOS
+      render cannot emit a valid ``/interface vlan`` + ``/ip address``
+      pair and the SVI address drops.  (SVI-model targets — Arista,
+      IOS-XE — DO reconstruct ``interface Vlan<N>`` from the same
+      canonical, since that SVI needs no parent;
+      ``synthesize_svis_from_vlan_l3``.)
     references: [junos-vlans-statement, junos-bridging-overview, mikrotik-vlan]
 
   # ── Tier 1 — static routes ──
