@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-06-15
+
 ### Security
 
 * **PII-recurrence guard (Phase 0 of the 2026-06 PII remediation).**  A new
@@ -40,10 +42,19 @@ timestamp if your timezone matters for an audit.
   (which legitimately quotes the values) is never scanned.  This phase also
   redacted the one residual operator path that the original pre-launch sweep
   missed (a committed review doc, `docs/project-review/.../01-investigation-CE-god-file.md`)
-  and corrected that sweep's stale "zero hits" assertion.  *Phase 1 (the
-  destructive history rewrite that scrubs the 17 `Co-authored-by:` gmail
-  trailers baked into pre-existing tags) is tracked separately; this is the
-  non-destructive recurrence guard only.*
+  and corrected that sweep's stale "zero hits" assertion.
+
+* **PII history rewrite completed (Phase 1 of the 2026-06 PII remediation).**
+  Scrubbed the personal-email co-author trailer (rewritten to the
+  `Netcanon contributor` pseudonym) and the residual operator-machine path from
+  *all* historical commits, and re-pointed every tag, via `git filter-repo` +
+  force-push.  Verified: zero occurrences of either value across all reachable
+  commits and blobs, and the working-tree content is byte-identical (same tree
+  hash) so no code or functionality changed.  Every commit SHA changed, so
+  older `(commit X)` citations in this file no longer resolve via
+  `git show` — the narrative around each is the load-bearing context.  A
+  GitHub Support cache-purge of the now-orphaned commit objects is the
+  remaining manual follow-up (Phase 2).
 
 * **Opt-in SSH host-key verification for the backup collectors (review finding
   #11).**  Both collectors previously installed paramiko `AutoAddPolicy` —
