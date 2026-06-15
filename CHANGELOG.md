@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **Optional egress allow-list for backup targets (review finding #3).**  A new
+  `Settings.block_private_egress` (`NETCANON_BLOCK_PRIVATE_EGRESS`, default
+  `false`) makes the backup entry points (`POST /api/v1/backups` + the schedule
+  trigger) refuse targets that resolve to loopback or link-local addresses —
+  including the `169.254.169.254` cloud-metadata endpoint — so a reachable
+  non-operator can't turn the unauthenticated backup engine into an internal
+  port-scanner / metadata probe.  RFC-1918 ranges stay allowed (real managed
+  devices live there).  Default-off → zero change for desktop / trusted-VLAN
+  deployments; enforced at the entry point, not yet at SSH-connect time (a
+  noted DNS-rebinding follow-up).  See SECURITY.md.
+
 * **Publish jobs refuse to release a tag that isn't on `main` (review finding
   #19).**  The PyPI, Docker, and desktop-MSI publish workflows each gain an
   early `git merge-base --is-ancestor` guard, so the "tag = publish" trigger

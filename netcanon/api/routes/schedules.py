@@ -177,6 +177,33 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
         )
         return
 
+    # Egress allow-list (opt-in via Settings.block_private_egress): drop any
+    # scheduled target that resolves to loopback / link-local rather than
+    # failing the whole run (review finding #3).
+    if app.state.settings.block_private_egress:
+        from ...services.egress import EgressBlocked, assert_egress_allowed
+
+        kept = []
+        for d in devices:
+            try:
+                assert_egress_allowed(d.host)
+                kept.append(d)
+            except EgressBlocked as exc:
+                logger.warning(
+                    "Schedule '%s': skipping target %s — %s",
+                    schedule.name,
+                    d.host,
+                    exc,
+                )
+        devices = kept
+        if not devices:
+            logger.warning(
+                "Schedule '%s': all targets blocked by egress policy — "
+                "skipping run",
+                schedule.name,
+            )
+            return
+
     request = BackupRequest(devices=devices)
 
     job = BackupJob(

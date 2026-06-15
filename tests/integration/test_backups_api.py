@@ -656,3 +656,83 @@ class TestServerSideCredentialResolution:
         """The ad-hoc path (inline credentials, no profile) is unchanged."""
         job = _post_and_get(client)
         assert job["status"] == "completed"
+
+
+# ---------------------------------------------------------------------------
+# Egress allow-list (2026-06 review finding #3) — opt-in, default off
+# ---------------------------------------------------------------------------
+
+
+class _OkCollector:
+    def collect(self, device, definition):  # noqa: ARG002
+        return "! config for " + device.host
+
+
+class TestEgressAllowlist:
+    """With `block_private_egress` enabled, backups to loopback / link-local
+    targets are refused (400) before any connection; default-off keeps the
+    legacy behaviour (no egress check)."""
+
+    @staticmethod
+    def _strict_app(test_settings):
+        from netcanon.main import create_app
+
+        strict = test_settings.model_copy(update={"block_private_egress": True})
+        return create_app(strict)
+
+    def test_loopback_target_rejected_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ):
+            with TestClient(app, raise_server_exceptions=True) as c:
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="127.0.0.1")]},
+                )
+        assert resp.status_code == 400
+        assert "block" in resp.json()["detail"].lower()
+
+    def test_metadata_endpoint_rejected_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ):
+            with TestClient(app, raise_server_exceptions=True) as c:
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="169.254.169.254")]},
+                )
+        assert resp.status_code == 400
+
+    def test_public_target_allowed_when_enabled(self, test_settings):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        app = self._strict_app(test_settings)
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=_OkCollector(),
+        ):
+            with TestClient(app, raise_server_exceptions=True) as c:
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="8.8.8.8")]},
+                )
+        assert resp.status_code == 202
+
+    def test_loopback_allowed_when_disabled(self, client):
+        """Default-off: no egress check, so loopback targets still enqueue."""
+        resp = _post_backup(client, devices=[_device_payload(host="127.0.0.1")])
+        assert resp.status_code == 202
