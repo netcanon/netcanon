@@ -109,7 +109,6 @@ class CiscoIOSXECLICodec(CodecBase):
         supported=[
             "/system/hostname",
             "/interfaces/interface/name",
-            "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/ipv4/address/ip",
@@ -561,9 +560,24 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
                     "/interfaces/interface/ipv4/address/"
                     "virtual-gateway-address"
                 )
-        for _ in iface.ipv6_addresses:                # GAP-EVPN-3
+            if addr.virtual_gateway_mac:
+                yield (
+                    "/interfaces/interface/ipv4/address/"
+                    "virtual-gateway-mac"
+                )
+        for addr6 in iface.ipv6_addresses:            # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
+            if addr6.virtual_gateway_address:
+                yield (
+                    "/interfaces/interface/ipv6/address/"
+                    "virtual-gateway-address"
+                )
+            if addr6.virtual_gateway_mac:
+                yield (
+                    "/interfaces/interface/ipv6/address/"
+                    "virtual-gateway-mac"
+                )
         if iface.dhcp_client_v6:
             yield "/interfaces/interface/dhcp-client-v6"
         if iface.tunnel_type:
@@ -574,20 +588,36 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/interfaces/interface/config/vrf"
         if iface.lag_member_of:
             yield "/interfaces/interface/lag-member-of"
-        # NB: per-interface switchport fields (switchport-mode / access-vlan
-        # / trunk-vlans / native-vlan / voice-vlan) are intentionally NOT
-        # walked here.  L2 membership honesty is carried by the VLAN-centric
-        # ``/vlans/vlan/{tagged,untagged}-ports`` surface, and no codec yet
-        # declares a switchport disposition — so walking them would be inert
-        # (always classifies ``supported``).  Surfacing switchport loss for
-        # router / firewall targets requires those codecs to declare the
-        # paths ``unsupported`` first; deferred to the matrix-normalisation
-        # pass (review #8).
+        if iface.dhcp_client:
+            yield "/interfaces/interface/dhcp-client"
+        # Per-interface switchport view (the transpose of the VLAN-centric
+        # ``/vlans/vlan/{tagged,untagged}-ports`` surface).  Switch codecs
+        # declare these ``supported``; router / firewall codecs that drop
+        # them declare ``unsupported`` — so walking them surfaces the L2
+        # loss when a switch config is migrated to a routed target.  The
+        # spelling matches the existing nxos / aoscx matrix declarations
+        # (no ``config/`` segment).
+        if iface.switchport_mode:
+            yield "/interfaces/interface/switchport-mode"
+        if iface.access_vlan is not None:
+            yield "/interfaces/interface/access-vlan"
+        if iface.trunk_allowed_vlans:
+            yield "/interfaces/interface/trunk-allowed-vlans"
+        if iface.trunk_native_vlan is not None:
+            yield "/interfaces/interface/trunk-native-vlan"
+        if iface.voice_vlan is not None:
+            yield "/interfaces/interface/voice-vlan"
         for _ in iface.vrrp_groups:
             yield "/interfaces/interface/vrrp-groups/group"
-    for _ in intent.vlans:
+    for vlan in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"
+        if vlan.description:
+            yield "/vlans/vlan/description"
+        for _ in vlan.tagged_ports:
+            yield "/vlans/vlan/tagged-ports"
+        for _ in vlan.untagged_ports:
+            yield "/vlans/vlan/untagged-ports"
     for route in intent.static_routes:
         yield "/routing/static-route"
         if route.vrf:
