@@ -197,6 +197,14 @@ class ArubaAOSSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Tier-1/2 surfaces this codec drops on render — declared so the
+            #    live validation report flags the loss instead of reporting
+            #    `severity: ok` (2026-06 adversarial review #9). ──
+            UnsupportedPath(path="/system/domain", reason="Render emits no system domain-name; intent.domain is dropped on migration."),
+            UnsupportedPath(path="/system/timezone", reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration."),
+            UnsupportedPath(path="/system/syslog-server", reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration."),
+            UnsupportedPath(path="/dhcp-servers/pool", reason="Render emits no DHCP server pool; intent.dhcp_servers are dropped on migration."),
+            UnsupportedPath(path="/routing-instances/instance", reason="Render emits no VRF/routing-instance construct; intent.routing_instances are dropped on migration."),
             UnsupportedPath(
                 path="/filter/rule",
                 reason=(
@@ -286,14 +294,10 @@ class ArubaAOSSCodec(CodecBase):
     def iter_xpaths(self, tree: Any) -> Iterable[str]:
         if isinstance(tree, CanonicalIntent):
             from ..cisco_iosxe_cli.codec import _walk_canonical
+            # The shared walker now emits the VLAN port-membership xpaths
+            # (/vlans/vlan/{tagged,untagged}-ports) for every codec, so no
+            # codec-local supplement is needed here (review #9 completion).
             yield from _walk_canonical(tree)
-            # VLAN port-membership xpaths (this codec is the first
-            # that actually populates them).
-            for vlan in tree.vlans:
-                for _ in vlan.tagged_ports:
-                    yield "/vlans/vlan/tagged-ports"
-                for _ in vlan.untagged_ports:
-                    yield "/vlans/vlan/untagged-ports"
 
     # -----------------------------------------------------------------
     # Cross-vendor port-name translation

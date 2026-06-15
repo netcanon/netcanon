@@ -133,7 +133,6 @@ class OPNsenseCodec(CodecBase):
             "/system/hostname",
             "/system/domain",
             "/system/dns-server",
-            "/system/ntp-server",
             "/interfaces/interface/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
@@ -204,6 +203,15 @@ class OPNsenseCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Tier-1/2 surfaces this codec drops on render — declared so the
+            #    live validation report flags the loss instead of reporting
+            #    `severity: ok` (2026-06 adversarial review #9).  NB: domain +
+            #    dns DO round-trip (declared supported); ntp does NOT (render
+            #    emits no timeservers), so it moves here from supported. ──
+            UnsupportedPath(path="/system/timezone", reason="Render emits no time-zone stanza; intent.timezone is dropped on migration."),
+            UnsupportedPath(path="/system/ntp-server", reason="Render emits no <system><timeservers>; intent.ntp_servers are dropped on migration."),
+            UnsupportedPath(path="/system/syslog-server", reason="Render emits no remote-syslog config; intent.syslog_servers are dropped on migration."),
+            UnsupportedPath(path="/routing-instances/instance", reason="Render emits no VRF/routing-instance construct; intent.routing_instances are dropped on migration."),
             UnsupportedPath(
                 path="/filter/rule",
                 reason=(

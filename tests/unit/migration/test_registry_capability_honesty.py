@@ -135,7 +135,15 @@ def _maximal_intent() -> CanonicalIntent:
         trunk_native_vlan=99, voice_vlan=200, lag_member_of="Port-Channel1",
         dhcp_client=True, dhcp_client_v6="dhcp6", tunnel_type="gre",
         vrf="TENANT",
-        vrrp_groups=[CanonicalVRRPGroup(group_id=10, virtual_ips=["10.0.0.254"])],
+        vrrp_groups=[CanonicalVRRPGroup(
+            group_id=10,
+            # >1 VIP + virtual_mac + track exercise the VRRP sub-field
+            # losses several codecs declare lossy, so the walker yields
+            # those granular xpaths and reverse-parity confirms the lossy
+            # declarations are reachable.
+            virtual_ips=["10.0.0.254", "10.0.0.253"],
+            virtual_mac="00:00:5e:00:01:0a",
+            track_interfaces=["Ethernet2"])],
     )
     iface2 = CanonicalInterface(
         name="Ethernet2", enabled=True,
@@ -212,6 +220,36 @@ _FIELD_TO_UNSUPPORTED_MARKERS: dict[str, tuple[str, ...]] = {
         "/routing-instances/instance",
         "/routing-instances/instance/name",
     ),
+    "timezone": ("/system/timezone", "/timezone"),
+    "interfaces": ("/interfaces/interface/name",),
+    "anycast_gateway_mac": ("/anycast-gateway-mac",),
+}
+
+
+#: Top-level fields carrying ONLY naming-independent data (bare scalars /
+#: IP lists / opaque secrets — no vendor-specific interface/LAG names), keyed
+#: to the granular walker xpath(s) that prove a codec declared the drop.  For
+#: these, a TOTAL drop on render→re-parse is unambiguous (no vendor-naming
+#: false positive), so the matrix MUST declare the surface unsupported/lossy
+#: — otherwise live validation reports ``severity: ok`` while the render
+#: silently discards the data.  (Contrast the naming-SENSITIVE surfaces —
+#: lags, switchport — where a single universal kitchen-sink can't tell a true
+#: drop from a vendor-name mismatch; those stay out of this check.)
+_NAMING_INDEPENDENT_DROP_FIELDS: dict[str, tuple[str, ...]] = {
+    "domain": ("/system/domain",),
+    "timezone": ("/system/timezone",),
+    "dns_servers": ("/system/dns-server",),
+    "ntp_servers": ("/system/ntp-server",),
+    "syslog_servers": ("/system/syslog-server",),
+    "dhcp_servers": ("/dhcp-servers/pool",),
+    "radius_servers": ("/radius-servers/server/host", "/radius-servers/server/key"),
+    "routing_instances": ("/routing-instances/instance", "/routing-instances/instance/name"),
+    # NB: `vlans` is intentionally absent.  Its drop is codec-specific, not a
+    # clean universal pattern: SP-router codecs (cisco_iosxr) model VLANs as
+    # dot1q sub-interface encapsulation rather than a standalone VLAN DB, so a
+    # standalone CanonicalVlan "drops" on round-trip while the L2 intent
+    # survives via interfaces — a nuance this total-drop check would
+    # mis-attribute.  Left to a per-codec capability decision.
 }
 
 
@@ -256,7 +294,15 @@ def test_rendered_field_not_unsupported(name: str):
     """A top-level field that SURVIVES a render→re-parse round-trip is
     demonstrably emitted by the codec, so it must NOT be declared
     ``unsupported`` (review #9, the safe half of the render-honesty
-    invariant — field survival has no vendor-naming false positives)."""
+    invariant — field survival has no vendor-naming false positives).
+
+    NB: for the ``cisco_iosxe`` NETCONF stub (renders interfaces only)
+    this check is expected to be near-vacuous — almost every field
+    short-circuits at ``survived=False`` — and that codec's dropped-field
+    honesty is covered by its dedicated guard
+    (``codecs/cisco_iosxe/test_capability_matrix_honesty.py``).  The
+    finer-grained :func:`test_roundtrip_emitted_xpath_not_unsupported`
+    still does real work on its surviving interface xpaths."""
     codec = get_codec(name)
     intent = _maximal_intent()
     src = intent.model_dump()
@@ -278,6 +324,69 @@ def test_rendered_field_not_unsupported(name: str):
 
 
 @pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_roundtrip_emitted_xpath_not_unsupported(name: str):
+    """Walker-grounded render-honesty (review #9, sub-field granularity).
+
+    Render the kitchen-sink, re-parse it, then walk the RE-PARSED intent:
+    every xpath that walk yields is one the codec demonstrably emitted and
+    read back, so NONE of them may be declared ``unsupported``.  This is
+    the same survival-based (false-positive-free) logic as
+    :func:`test_rendered_field_not_unsupported` but at the granularity
+    ``validate_against`` actually uses, so it also catches a *sub-field*
+    lie (e.g. declaring ``/snmp/location`` unsupported while round-tripping
+    it) that the top-level whole-field check cannot see."""
+    codec = get_codec(name)
+    reparsed = codec.parse(codec.render(_maximal_intent()))
+    emitted = set(_walk_canonical(reparsed))
+    unsupported = {u.path for u in codec.capabilities.unsupported}
+    lies = sorted(emitted & unsupported)
+    assert not lies, (
+        f"{name}: declares these xpath(s) unsupported yet emits + re-parses "
+        f"them from a kitchen-sink render: {lies}.  Dangerous-direction lie — "
+        f"validate_against would wrongly warn/block a surface the codec "
+        f"actually round-trips.  Remove the UnsupportedPath or fix the render."
+    )
+
+
+@pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_dropped_naming_independent_field_is_declared(name: str):
+    """A naming-independent top-level field that TOTALLY drops on
+    render→re-parse must be declared ``unsupported`` or ``lossy`` (review
+    #9 follow-up; the 2026-06 adversarial pass showed the walker now SEES
+    these surfaces but the dropping codecs hadn't declared them, so
+    ``validate_against`` reported ``severity: ok`` while the render
+    discarded the data — e.g. RADIUS host + shared secret silently lost).
+
+    Restricted to surfaces whose data carries no vendor-specific names, so
+    a total drop is unambiguous and has no false positive (unlike LAG /
+    switchport, whose member names can mismatch a vendor and merely *look*
+    dropped)."""
+    codec = get_codec(name)
+    intent = _maximal_intent()
+    src = intent.model_dump()
+    reparsed = codec.parse(codec.render(intent)).model_dump()
+    caps = codec.capabilities
+    declared = {u.path for u in caps.unsupported} | {lp.path for lp in caps.lossy}
+
+    gaps = []
+    for field, paths in _NAMING_INDEPENDENT_DROP_FIELDS.items():
+        if not src.get(field):
+            continue
+        if reparsed.get(field):
+            continue  # survived (whole or partial) — not a total drop
+        if not any(p in declared for p in paths):
+            gaps.append(field)
+    assert not gaps, (
+        f"{name}: render totally DROPS these naming-independent surface(s) "
+        f"yet the matrix declares none of them unsupported/lossy, so live "
+        f"validation reports them 'supported' while the data is discarded: "
+        f"{gaps}.  Add an UnsupportedPath (exact walker spelling, e.g. "
+        f"/system/syslog-server, /radius-servers/server/key, "
+        f"/routing-instances/instance) to the codec's CapabilityMatrix."
+    )
+
+
+@pytest.mark.parametrize("name", _CODEC_NAMES)
 def test_no_supported_unsupported_overlap(name: str):
     """No xpath may appear in BOTH supported and unsupported (copy-paste
     drift guard; generalises the per-codec cisco_iosxe check)."""
@@ -286,10 +395,43 @@ def test_no_supported_unsupported_overlap(name: str):
     assert not overlap, f"{name}: xpath(s) both supported AND unsupported: {overlap}"
 
 
+#: Top-level CanonicalIntent fields that are Tier-3 / metadata / provenance —
+#: carried through but never a translatable capability surface, so they need
+#: no honesty marker.  Everything else MUST have a marker entry.
+_NON_CAPABILITY_FIELDS = frozenset({
+    "raw_sections", "dropped_tier3_sections",
+    "source_vendor", "source_format", "source_version",
+    "apply_groups", "group_content",
+})
+
+
+def test_marker_dict_covers_every_data_bearing_field():
+    """Guard the guard: every data-bearing top-level CanonicalIntent field
+    must have a `_FIELD_TO_UNSUPPORTED_MARKERS` entry, so a NEW field added
+    to the model can't silently slip past the rendered-⇒-not-unsupported
+    check (the 2026-06 adversarial pass found anycast_gateway_mac /
+    interfaces / timezone missing — a rendered-but-declared-unsupported lie
+    on them was uncaught)."""
+    model_fields = set(CanonicalIntent.model_fields)
+    must_have = model_fields - _NON_CAPABILITY_FIELDS
+    missing = sorted(must_have - set(_FIELD_TO_UNSUPPORTED_MARKERS))
+    assert not missing, (
+        f"CanonicalIntent gained data-bearing field(s) with no honesty "
+        f"marker: {missing}.  Add each to _FIELD_TO_UNSUPPORTED_MARKERS "
+        f"(or to _NON_CAPABILITY_FIELDS if it is Tier-3/metadata)."
+    )
+
+
 def test_maximal_intent_exercises_every_top_level_field():
-    """Guard the guard: the kitchen-sink must populate every top-level
-    field, else the reverse-parity universe (_WALKABLE) would be too
-    small and the checks above would pass vacuously."""
-    dump = _maximal_intent().model_dump()
+    """Guard the guard: the kitchen-sink must populate every marked field
+    (with real content, not just a truthy empty container), else the
+    reverse-parity universe (_WALKABLE) would be too small and the checks
+    above would pass vacuously."""
+    intent = _maximal_intent()
+    dump = intent.model_dump()
     for field in _FIELD_TO_UNSUPPORTED_MARKERS:
         assert dump.get(field), f"_maximal_intent left {field!r} empty"
+    # The one model-valued marked field: assert its primary sub-field is
+    # populated (an empty CanonicalSNMP() dumps truthy but would gut the
+    # /snmp/* walker coverage).
+    assert intent.snmp and intent.snmp.community, "_maximal_intent snmp.community empty"

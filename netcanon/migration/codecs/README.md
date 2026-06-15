@@ -155,8 +155,12 @@ class MyVendorCodec(CodecBase):
         device_classes=[DeviceClass.switch, DeviceClass.router],
         supported_paths=[
             "/system/hostname",
-            "/interfaces/interface/config/name",
-            # ... one xpath per CanonicalIntent field your codec wires
+            "/interfaces/interface/name",
+            # ... one xpath per CanonicalIntent field your codec wires.
+            # Use the exact strings the shared `_walk_canonical` emits —
+            # `classify` is exact-string match, so a path the walker never
+            # yields is a dead declaration (the registry honesty test
+            # `test_declared_supported_is_walkable` fails on it).
         ],
         # Plus lossy_paths / unsupported_paths as needed.
     )
