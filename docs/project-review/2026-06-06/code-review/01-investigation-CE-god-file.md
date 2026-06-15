@@ -1,7 +1,7 @@
 # 01 — Investigation CE — God-File / Cohesion / SRP Assessment
 
 *Reviewer lens: CE. Read-only, review-grade. Commit `b08040c` (v0.1.2).*
-*Repo root: `<repo>`.*
+*Repo root: `<repo>` (operator-machine path redacted).*
 
 ---
 

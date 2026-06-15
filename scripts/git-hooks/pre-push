@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+#
+# pre-push PII guard — block pushing commits whose MESSAGE, author, or
+# committer identity leaks the maintainer's personal email or an
+# operator-machine Windows user-profile path.
+#
+# This is the local complement to the CI `pii-guard.yml` workflow:
+#   * CI scans tracked FILE CONTENT on the server (the file-leak vector).
+#   * this hook scans pushed COMMIT MESSAGES + author/committer identity
+#     on your machine (the trailer / identity vector — the 2026-06 leak
+#     was 17 `Co-authored-by:` gmail trailers in commit bodies).
+# Recurrence guard for the 2026-06 PII remediation.
+#
+# Enable once per clone (the hook is committed but git does not run
+# hooks from a tracked directory automatically):
+#
+#     git config core.hooksPath scripts/git-hooks
+#
+# The forbidden patterns use regex character classes so the literal
+# strings never appear verbatim in this file — that keeps the CI
+# `pii-guard.yml` content scan (which fixed-string-matches the same
+# values) from flagging this hook.  `[i]` matches a literal `i`; `[\]`
+# matches a literal backslash.  Both are confirmed to match in `grep
+# -E` (a bare `\\` is NOT a reliable literal-backslash there).
+set -euo pipefail
+
+ZERO='0000000000000000000000000000000000000000'
+
+email_re='samuelr[i]pp09'
+path_re='C:[\]Users[\]user12'
+combined_re="${email_re}|${path_re}"
+
+fail=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    # Nothing to push for this ref (a branch delete).
+    [ "${local_sha}" = "${ZERO}" ] && continue
+
+    if [ "${remote_sha}" = "${ZERO}" ]; then
+        # New branch on the remote: only the commits not already on a
+        # remote-tracking branch, so shared history isn't re-scanned.
+        range_args="${local_sha} --not --remotes"
+    else
+        range_args="${remote_sha}..${local_sha}"
+    fi
+
+    # Scan author + committer identity AND the full commit message of
+    # every pushed commit.  (File content is the CI guard's job.)
+    hits=$(git log --format='%an <%ae>%n%cn <%ce>%n%B' ${range_args} 2>/dev/null \
+             | grep -nE "${combined_re}" || true)
+    if [ -n "${hits}" ]; then
+        echo "pre-push: leaked identifier in commits ${range_args}:" >&2
+        echo "${hits}" >&2
+        fail=1
+    fi
+done
+
+if [ "${fail}" -ne 0 ]; then
+    echo "" >&2
+    echo "pre-push: BLOCKED — a pushed commit's message or identity leaks" >&2
+    echo "a personal identifier or operator path (see matches above)." >&2
+    echo "Fix the author/committer (git config user.email) or amend the" >&2
+    echo "message, then re-push." >&2
+    exit 1
+fi
+
+exit 0

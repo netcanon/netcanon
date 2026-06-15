@@ -1,0 +1,60 @@
+name: PII guard
+
+# Recurrence guard for the 2026-06 PII remediation: fail the build if any
+# tracked file leaks the maintainer's personal email or an operator-machine
+# Windows user-profile path.  Runs on every PR and push to main.
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+# Read-only: this job only inspects the checked-out tree.
+permissions:
+  contents: read
+
+jobs:
+  scan-tracked-files:
+    name: No leaked personal identifiers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: git grep tracked files for leaked identifiers
+        run: |
+          # Scope: tracked files only.  The review dossier under
+          # docs/codebase-review/ intentionally quotes these values and is
+          # gitignored, so git grep never sees it.  Commit-message /
+          # Co-authored-by trailer hygiene is enforced locally by
+          # scripts/git-hooks/pre-push (see its header for how to enable it).
+          #
+          # The patterns use regex character classes (`[i]` = a literal
+          # `i`, `[\]` = a literal backslash) for two reasons:
+          #   1. The forbidden literals (the personal email and the
+          #      Windows user-profile path prefix) then never appear
+          #      verbatim ANYWHERE in this committed file — not even in
+          #      these comments — so the guard does not itself reintroduce
+          #      the very strings the remediation scrubs, and it does not
+          #      match its own text (no self-exclude needed).
+          #   2. `git grep -E` does NOT treat a bare `\\` as a reliable
+          #      literal backslash (it silently fails to match → the
+          #      guard would pass VACUOUSLY); a `[\]` class DOES match.
+          #      Both forms are verified against real operator-path
+          #      content.
+          #
+          # `git grep` exits 0 on match, 1 on no-match, 2 on error; we
+          # treat the error case as a FAILURE (fail closed), not "clean".
+          set +e
+          git grep -nI -E 'samuelr[i]pp09|C:[\]Users' -- .
+          rc=$?
+          set -e
+          if [ "${rc}" -eq 0 ]; then
+            echo "::error::A tracked file leaks a personal identifier or an operator-machine path (matches above). Redact it. (The review dossier that legitimately quotes these values is gitignored and is not scanned.)"
+            exit 1
+          elif [ "${rc}" -ne 1 ]; then
+            echo "::error::PII guard could not run (git grep exit ${rc}) — failing closed."
+            exit 1
+          fi
+          echo "PII guard: clean — no leaked identifiers in tracked files."
