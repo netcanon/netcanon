@@ -123,14 +123,14 @@ class AristaEOSCodec(CodecBase):
             "/snmp/contact",
             "/snmp/trap-host",
             "/snmp/v3-user",
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/password",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/local-users/user/role",
             "/vxlan-vnis/vni",                   # GAP 6 demoted
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
             "/routing-instances/instance",       # GAP 6 demoted
-            "/dhcp_servers/pool",                # Cluster E.1-A
+            "/dhcp-servers/pool",                # Cluster E.1-A
             # -- v0.2.0 Wave B (VRRP) -- per-codec wire-up landed --
             "/interfaces/interface/vrrp-groups/group",
             # -- v0.2.0 Wave C (VARP / anycast-gateway) --

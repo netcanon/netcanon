@@ -136,7 +136,7 @@ class ArubaAOSCXCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",
             "/interfaces/interface/ipv6/address/prefix-length",
-            "/interfaces/interface/vrf",
+            "/interfaces/interface/config/vrf",
             # VLANs — id + name + description (Phase 1)
             "/vlans/vlan/id",
             "/vlans/vlan/name",

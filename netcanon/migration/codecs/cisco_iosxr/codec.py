@@ -151,9 +151,9 @@ class CiscoIOSXRCodec(CodecBase):
             "/lags/lag/members",
             "/lags/lag/mode",
             # Phase 2 — local users (`username` block → group + secret)
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/password",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/local-users/user/role",
         ],
         lossy=[
             LossyPath(

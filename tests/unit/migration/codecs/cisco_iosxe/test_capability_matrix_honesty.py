@@ -283,7 +283,7 @@ class TestRenderCoverageHonesty:
         # `/<field>`.
         prefix_covered = {
             "vxlan_vnis": "/vxlan-vnis/",
-            "evpn_type5_routes": "/evpn-type5/",
+            "evpn_type5_routes": "/evpn-type5-routes/",
             "routing_instances": "/routing-instances/",
         }
 

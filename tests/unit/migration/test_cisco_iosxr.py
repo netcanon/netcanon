@@ -452,8 +452,8 @@ class TestCapabilityMatrix:
             "/lags/lag/name",
             "/lags/lag/members",
             "/lags/lag/mode",
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/role",
         ]:
             assert caps.classify(path) == "supported", path
         assert caps.classify("/routing-instances/instance") == "lossy"
