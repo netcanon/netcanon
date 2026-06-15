@@ -73,6 +73,21 @@ jobs:
           # (not git config); no git push from this job either.
           persist-credentials: false
 
+      # Refuse to build/attach an MSI for a tag that isn't on main (see
+      # pypi-publish.yml for rationale).  Covers both tag-push and the
+      # workflow_dispatch backfill path — `git rev-parse HEAD` is the
+      # checked-out tag's commit either way.
+      - name: Verify the build commit is on main
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$head_sha" FETCH_HEAD; then
+            echo "::error::Build commit $head_sha is not an ancestor of origin/main — refusing to publish."
+            exit 1
+          fi
+          echo "OK: build commit $head_sha is on origin/main."
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:

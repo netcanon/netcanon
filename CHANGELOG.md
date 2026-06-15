@@ -28,6 +28,15 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **Publish jobs refuse to release a tag that isn't on `main` (review finding
+  #19).**  The PyPI, Docker, and desktop-MSI publish workflows each gain an
+  early `git merge-base --is-ancestor` guard, so the "tag = publish" trigger
+  can no longer push an immutable PyPI release / move the Docker `:latest` /
+  attach an MSI from a tag cut on an arbitrary off-`main` commit.  The
+  PyPI-publish action is also re-pinned with a `# v1.14.0` comment (the SHA was
+  already that release's commit but was labelled as a branch ref, so Dependabot
+  wasn't tracking it for security bumps).
+
 * **Device-profile credentials are write-only over the API; backups resolve
   them server-side.**  The device-profile REST routes (`GET`/`LIST`/`POST`/`PUT
   /api/v1/devices`) now serialise through a new `DeviceProfilePublic` response
@@ -101,6 +110,18 @@ timestamp if your timezone matters for an audit.
   rendered output is for manual review/apply.
 
 ### Added
+
+* **Desktop MSI ships a third-party license notice (review finding #18).**  The
+  Windows installer redistributes PySide6/Qt (LGPLv3), paramiko (LGPL-2.1), and
+  pystray (LGPL-3.0) as binaries; `setup_desktop.py` now bundles
+  `THIRD-PARTY-NOTICES.txt` (component inventory + SPDX licenses + the LGPL
+  source-offer) and the project `LICENSE` next to the EXE, closing the
+  attribution gap on the distributed artifact.  (The PyPI wheel only declares
+  the deps, so it was never affected.)
+* **`.github/CODEOWNERS` (review finding #19).**  A version-controlled,
+  documented template for review ownership — the file makes the gate intent
+  explicit; the maintainer still wires the real owner handle + the
+  "require Code Owner review" branch-protection setting (noted in the header).
 
 * **VyOS codec — set-form input (`show configuration commands`).**  The
   `vyos` codec now accepts VyOS *set-form* configuration (the flat `set
