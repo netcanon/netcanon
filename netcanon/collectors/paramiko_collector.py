@@ -18,16 +18,19 @@ Security model
 --------------
 Netcanon is operator-trust-anchor by design: the operator who registers
 a backup target in the UI is asserting that the target's IP + port pair
-is the device they intend to reach.  Netcanon does not maintain a
-``known_hosts`` file or surface a host-key prompt — both the
-:class:`ParamikoShellCollector.collect` and ``.probe`` paths install
-``paramiko.AutoAddPolicy`` on the SSH client (lines 147 + 237).  This
-trades strict-TOFU for operator UX; the threat model assumes a trusted
-management VLAN between Netcanon and the devices it backs up.
+is the device they intend to reach.  Host-key verification is governed by
+``Settings.ssh_host_key_checking`` (see :mod:`netcanon.collectors.hostkey`):
+``auto_add`` (default) keeps the historical trust-on-first-use-without-
+persistence behaviour for a trusted management VLAN; ``tofu`` persists the
+first key under ``{data_dir}/known_hosts`` and rejects a later changed key;
+``reject`` only connects to already-known hosts.  Both
+:meth:`ParamikoShellCollector.collect` and ``.probe`` apply the configured
+policy + persist (TOFU) after a successful connect.
 
-A host-key store was scoped during the 2026-05-21 security-triage cycle
-and deferred — see ``docs/security-triage/2026-05-21/`` for the
-trade-off discussion and the AutoAddPolicy dismissal rationale.
+The opt-in TOFU store closes the AutoAddPolicy gap scoped during the
+2026-05-21 security-triage cycle and re-raised by the 2026-06-14 review
+(finding #11); ``docs/security-triage/2026-05-21/`` retains the original
+trade-off discussion.
 """
 
 from __future__ import annotations
@@ -38,9 +41,11 @@ import time
 
 import paramiko
 
+from ..config import Settings
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 from .base import BaseCollector
+from .hostkey import apply_paramiko_policy, persist_paramiko_host_keys
 from .probe import parse_probe_output
 
 logger = logging.getLogger(__name__)
@@ -159,11 +164,11 @@ class ParamikoShellCollector(BaseCollector):
                 ``_MAX_SECONDS``.
         """
         client = paramiko.SSHClient()
-        # AutoAddPolicy = trust-on-first-use without persistence.  Netcanon's
-        # threat model assumes a trusted management VLAN; operators register
-        # the target IP themselves.  See module docstring "Security model"
-        # + docs/security-triage/2026-05-21/ for the dismissal rationale.
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Host-key verification policy (see module "Security model" +
+        # netcanon.collectors.hostkey): auto_add (default, legacy) / tofu /
+        # reject, driven by Settings.ssh_host_key_checking.
+        settings = Settings()
+        apply_paramiko_policy(client, settings)
 
         logger.info("Connecting (Paramiko shell) to %s:%d", device.host, device.port)
         logger.debug(
@@ -181,6 +186,8 @@ class ParamikoShellCollector(BaseCollector):
             look_for_keys=False,
             allow_agent=False,
         )
+        # TOFU: persist the (possibly newly-learned) host key for next time.
+        persist_paramiko_host_keys(client, settings)
 
         try:
             shell = client.invoke_shell(width=220, height=50)
@@ -253,9 +260,10 @@ class ParamikoShellCollector(BaseCollector):
             return {}
 
         client = paramiko.SSHClient()
-        # Same trust anchor as collect() — see module docstring
-        # "Security model" and docs/security-triage/2026-05-21/.
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        # Same host-key policy as collect() — see module "Security model"
+        # and netcanon.collectors.hostkey.
+        settings = Settings()
+        apply_paramiko_policy(client, settings)
 
         logger.info(
             "Probing (Paramiko shell) %s:%d with command %r",
@@ -273,6 +281,7 @@ class ParamikoShellCollector(BaseCollector):
                 look_for_keys=False,
                 allow_agent=False,
             )
+            persist_paramiko_host_keys(client, settings)
         except Exception as exc:  # noqa: BLE001 — probe non-fatal
             logger.warning(
                 "Probe connect to %s failed: %s — continuing with "
