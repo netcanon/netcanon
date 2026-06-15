@@ -78,6 +78,17 @@ timestamp if your timezone matters for an audit.
   `aruba_aoscx`, `vyos`), generated from each codec's `CapabilityMatrix`, so
   §A now enumerates every codec's declared exceptions rather than only the
   original eight (also flagged by the 2026-06-14 review).
+* **Front-door honesty pass — vendor breadth + "certified" semantics (review
+  findings #14, #15).**  README / `docs/COMPARISON.md` / `docs/IDENTITY.md`
+  now describe the shipped breadth (twelve codecs across Cisco / Juniper /
+  Arista / Aruba / Fortinet / MikroTik / OPNsense / VyOS) instead of the stale
+  seven-vendor list, and `vyos` is added to the `pyproject.toml` keywords +
+  IDENTITY GitHub-topics so the new VyOS family is discoverable on PyPI /
+  GitHub.  The Tier-1 "every shipped codec renders these fully" line now
+  excepts the interfaces-only `cisco_iosxe` NETCONF stub.  `ARCHITECTURE.md`,
+  `docs/CAPABILITIES.md`, and `translator-plans.txt` decouple `certified`
+  (round-trip fidelity) from "deploy-ready": there is no deploy path today —
+  rendered output is for manual review/apply.
 
 ### Added
 

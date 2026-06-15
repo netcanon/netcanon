@@ -31,7 +31,7 @@ surface.
 ## GitHub repo description (extended)
 
 ```
-Multi-vendor network config translator — Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense. Cross-mesh audit catches silent translation errors before they ship.
+Multi-vendor network config translator — Cisco / Juniper / Fortinet / Aruba / Arista / MikroTik / OPNsense / VyOS. Cross-mesh audit catches silent translation errors before they ship.
 ```
 
 (Fits comfortably under GitHub's 350-char limit.  Names the vendor
@@ -56,6 +56,7 @@ aruba
 arista
 mikrotik
 opnsense
+vyos
 vendor-translation
 config-migration
 python

@@ -125,7 +125,9 @@ LAYER 4 — TRANSPORT
 --- CERTAINTY MODEL (per-codec) ---
 
   certified      — round-trip invariant tested against ≥3 real device
-                   captures from ≥2 OS versions.  Deploy-ready.
+                   captures from ≥2 OS versions.  Round-trip-validated;
+                   output is for manual review/apply (no deploy path
+                   ships today — Phase 2+ roadmap).
   best_effort    — round-trip invariant tested against synthetic
                    samples only.  Expected to work; needs human review.
   experimental   — parse-only, or incomplete render.  Output is a
