@@ -112,6 +112,25 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+* **Interactive validation report now sees every populated Tier-2 surface
+  (review finding #7).**  The shared canonical walker (`_walk_canonical`, reused
+  by 10 codecs' `iter_xpaths`) previously yielded xpaths only for system
+  scalars, interfaces, VLANs, static routes, and SNMP — so
+  `validate_against` was structurally blind to DHCP pools, LAGs, local users,
+  RADIUS servers, VXLAN/EVPN, routing-instances, and the per-interface
+  `mtu` / `vrf` / `lag-member-of` sub-fields.  A migration whose target codec
+  drops or lossy-converts one of those could read `severity: ok`.  The walker
+  now yields a granular hyphenated xpath for **every** populated surface
+  (guarded so an empty surface still yields nothing), so the report can flag
+  the loss before an operator commits.  This only ever makes the report *more*
+  conservative (more warn/block, never less); it does not touch parse/render
+  output, so the cross-mesh fidelity matrix is unchanged.  The stale "Phase 1
+  adds glob/prefix matching" promise in `CapabilityMatrix.classify` (never
+  built, not needed under the shared-vocabulary design) is removed from the
+  docstring.  New coverage guard:
+  `tests/unit/migration/codecs/cisco_iosxe_cli/test_walk_canonical_coverage.py`.
+  (Per-interface switchport sub-fields and the matrix-vocabulary normalisation
+  — review #8 — follow in a separate pass.)
 * **Documentation honesty pass (multi-lens review remediation).**  The README
   trust-signal now states the live `CODEC_BUG` residual (5 triaged-benign cells)
   and names `tests/fixtures/real/PHASE4_RECONCILIATION.md` as the authoritative

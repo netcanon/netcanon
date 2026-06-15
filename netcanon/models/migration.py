@@ -207,8 +207,17 @@ class CapabilityMatrix(BaseModel):
                not otherwise classified is assumed supported for
                adapters that choose to declare only the exceptions).
 
-        The Phase 0 implementation uses simple string equality; Phase 1
-        adds glob/prefix matching (e.g. a pattern ending in ``/**``).
+        Matching is exact string equality.  This is deliberate: the
+        canonical-tree walker (``_walk_canonical`` in
+        :mod:`netcanon.migration.codecs.cisco_iosxe_cli.codec`) and the
+        per-codec matrices share one granular hyphenated xpath
+        vocabulary, so an exact lookup reaches every declaration without
+        glob/prefix machinery.  A declared path that no walker yields is
+        simply unreachable by live validation — the registry-wide
+        honesty parity test guards against that drift.  (An earlier
+        docstring promised glob/prefix matching "in Phase 1"; it was
+        never built and is not needed under the shared-vocabulary
+        design — see the 2026-06 architecture review.)
         """
         for up in self.unsupported:
             if up.path == xpath:

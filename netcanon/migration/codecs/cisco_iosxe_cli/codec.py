@@ -495,7 +495,31 @@ _IOS_BANNER_HITS: tuple[tuple[str, int], ...] = (
 
 
 def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
-    """Yield schema xpaths from a CanonicalIntent for validation.
+    """Yield schema xpaths for every populated field of a CanonicalIntent.
+
+    This is the input to :func:`netcanon.services.migration_validate.
+    validate_against` — the validator classifies each yielded xpath
+    against the *target* codec's :class:`CapabilityMatrix` so the
+    interactive migration report can surface lossy / unsupported
+    surfaces before the operator commits.  The honesty contract
+    ("loss is visible in the report, not hidden") therefore depends on
+    this walker yielding an xpath for **every** populated surface — a
+    field the walker skips can never be flagged, no matter how the
+    target declares it.  So the walker covers all of Tier 1 + Tier 2:
+    system scalars, every interface sub-field, VLANs, static routes,
+    SNMP (incl. v3 sub-fields), DHCP pools, LAGs, local users, RADIUS
+    servers, VXLAN VNIs, EVPN Type-5 routes, and routing-instances.
+
+    Each yield is guarded on the field being populated, so the walker
+    emits xpaths only for data the source config actually carried — an
+    empty surface yields nothing and so classifies as neither lossy nor
+    unsupported (there is nothing to lose).
+
+    The xpath vocabulary is the granular hyphenated shape the codec
+    capability matrices declare (e.g. ``/lags/lag/mode``,
+    ``/local-users/user/role``); :meth:`CapabilityMatrix.classify` is
+    exact-string-match, so the walker and the matrices must speak the
+    same strings for a declaration to be reachable.
 
     Kept at module level (rather than relocating to :mod:`.parse` or
     :mod:`.render`) so that the
@@ -503,13 +527,25 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
     import surface every cross-codec ``iter_xpaths`` consumer relies
     on stays intact.  Used by the OPNsense / Aruba / FortiGate / Arista /
     Juniper / MikroTik / Cisco-NETCONF codecs.
+
+    Note: ``run_full_mesh.py``'s cross-mesh field-disposition matrix
+    does NOT consume this walker — it compares ``model_dump()`` output
+    and reads each matrix's ``unsupported`` declarations directly — so
+    expanding this walker affects only the live validation report.
     """
+    # ── Tier 1 — system scalars ──
     if intent.hostname:
         yield "/system/hostname"
+    if intent.domain:
+        yield "/system/domain"
     for _ in intent.dns_servers:
         yield "/system/dns-server"
     for _ in intent.ntp_servers:
         yield "/system/ntp-server"
+    if intent.timezone:
+        yield "/system/timezone"
+    for _ in intent.syslog_servers:
+        yield "/system/syslog-server"
     for iface in intent.interfaces:
         yield "/interfaces/interface/name"
         if iface.description:
@@ -532,6 +568,21 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/interfaces/interface/dhcp-client-v6"
         if iface.tunnel_type:
             yield "/interfaces/interface/tunnel-type"
+        if iface.mtu is not None:
+            yield "/interfaces/interface/config/mtu"
+        if iface.vrf:
+            yield "/interfaces/interface/config/vrf"
+        if iface.lag_member_of:
+            yield "/interfaces/interface/lag-member-of"
+        # NB: per-interface switchport fields (switchport-mode / access-vlan
+        # / trunk-vlans / native-vlan / voice-vlan) are intentionally NOT
+        # walked here.  L2 membership honesty is carried by the VLAN-centric
+        # ``/vlans/vlan/{tagged,untagged}-ports`` surface, and no codec yet
+        # declares a switchport disposition — so walking them would be inert
+        # (always classifies ``supported``).  Surfacing switchport loss for
+        # router / firewall targets requires those codecs to declare the
+        # paths ``unsupported`` first; deferred to the matrix-normalisation
+        # pass (review #8).
         for _ in iface.vrrp_groups:
             yield "/interfaces/interface/vrrp-groups/group"
     for _ in intent.vlans:
@@ -543,7 +594,7 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/routing/static-route/vrf"
     if intent.anycast_gateway_mac:
         yield "/anycast-gateway-mac"
-    # Tier 2 — emit only what's populated
+    # ── Tier 2 — emit only what's populated ──
     if intent.snmp is not None:
         if intent.snmp.community:
             yield "/snmp/community"
@@ -553,5 +604,50 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/snmp/contact"
         for _ in intent.snmp.trap_hosts:
             yield "/snmp/trap-host"
-        for _ in intent.snmp.v3_users:
+        for v3 in intent.snmp.v3_users:
             yield "/snmp/v3-user"
+            if v3.auth_passphrase:
+                yield "/snmp/v3-user/auth-passphrase"
+            if v3.engine_id:
+                yield "/snmp/v3-user/engine-id"
+    for _ in intent.dhcp_servers:
+        yield "/dhcp-servers/pool"
+    for _ in intent.lags:
+        yield "/lags/lag/name"
+        yield "/lags/lag/members"
+        yield "/lags/lag/mode"
+    for user in intent.local_users:
+        yield "/local-users/user/name"
+        if user.role:
+            yield "/local-users/user/role"
+        if user.hashed_password:
+            yield "/local-users/user/hashed-password"
+        yield "/local-users/user/privilege-level"
+    for _ in intent.radius_servers:
+        yield "/radius-servers/server/host"
+        yield "/radius-servers/server/key"
+    for vx in intent.vxlan_vnis:
+        yield "/vxlan-vnis/vni"
+        if vx.source_interface:
+            yield "/vxlan-vnis/source-interface"
+        if vx.mcast_group:
+            yield "/vxlan-vnis/mcast-group"
+        if vx.flood_list:
+            yield "/vxlan-vnis/flood-list"
+        yield "/vxlan-vnis/udp-port"
+        yield "/vxlan-vnis/vlan-id"
+    for _ in intent.evpn_type5_routes:
+        yield "/evpn-type5-routes/route"
+    for inst in intent.routing_instances:
+        yield "/routing-instances/instance"
+        yield "/routing-instances/instance/name"
+        if inst.description:
+            yield "/routing-instances/instance/description"
+        if inst.route_distinguisher:
+            yield "/routing-instances/instance/route-distinguisher"
+        if inst.rt_imports:
+            yield "/routing-instances/instance/rt-imports"
+        if inst.rt_exports:
+            yield "/routing-instances/instance/rt-exports"
+        if inst.l3_vni is not None:
+            yield "/routing-instances/instance/l3-vni"
