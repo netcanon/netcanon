@@ -128,7 +128,6 @@ class ArubaAOSCXCodec(CodecBase):
             "/system/hostname",
             # Interfaces — name + basic L3 (Phase 1)
             "/interfaces/interface/name",
-            "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/config/mtu",

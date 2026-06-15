@@ -123,6 +123,17 @@ class ArubaAOSSCodec(CodecBase):
             "/vlans/vlan/name",
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
+            # Per-interface switchport view — AOS-S models L2 membership
+            # VLAN-centrically (``vlan N / tagged|untagged <ports>``), but
+            # parse populates the transposed per-interface switchport_mode /
+            # access_vlan / trunk_* fields too (kept in sync via the VLAN
+            # projection), and the membership round-trips.  Declared
+            # ``supported`` so the canonical walker's switchport xpaths
+            # classify correctly.
+            "/interfaces/interface/switchport-mode",
+            "/interfaces/interface/access-vlan",
+            "/interfaces/interface/trunk-allowed-vlans",
+            "/interfaces/interface/trunk-native-vlan",
             "/routing/static-route",
             # Tier 2 — SNMP
             "/snmp/community",

@@ -124,7 +124,6 @@ class CiscoIOSXRCodec(CodecBase):
             "/system/hostname",
             # Interfaces — name + basic L3
             "/interfaces/interface/name",
-            "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/config/mtu",
