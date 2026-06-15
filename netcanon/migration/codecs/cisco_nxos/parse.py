@@ -879,7 +879,13 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
 
     def _note_header(name: str) -> None:
         if name.lower().startswith("port-channel"):
-            declared.add(name)
+            # Canonicalise stub-header casing to the channel-group-synthesised
+            # form (lowercase ``port-channel<N>``) so an upstream-rendered
+            # ``interface Port-Channel3`` stub and the ``channel-group 3``
+            # member binding collapse to ONE CanonicalLAG instead of two
+            # case-differing twins.
+            m = re.match(r"^port-channel(\d+)$", name, re.IGNORECASE)
+            declared.add(f"port-channel{int(m.group(1))}" if m else name.lower())
 
     for line in raw.splitlines():
         m = _IFACE_RE.match(line)

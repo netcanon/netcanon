@@ -1278,7 +1278,16 @@ def _parse_lags(raw: str, intent: CanonicalIntent) -> list[CanonicalLAG]:
         if m:
             current_iface = m.group(1)
             if current_iface.lower().startswith("port-channel"):
-                declared_lag_names.add(current_iface)
+                # Canonicalise stub-header casing to the channel-group-
+                # synthesised form (``Port-channel<N>``) so a case-variant
+                # stub (e.g. an upstream-rendered ``Port-Channel3``) and the
+                # member binding collapse to ONE CanonicalLAG.
+                pcm = re.match(
+                    r"^port-channel(\d+)$", current_iface, re.IGNORECASE
+                )
+                declared_lag_names.add(
+                    f"Port-channel{int(pcm.group(1))}" if pcm else current_iface
+                )
             continue
         if current_iface is None:
             continue
