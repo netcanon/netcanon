@@ -149,6 +149,18 @@ class TestResolveInputText:
         # The helper returns body.raw_text or "" → "".
         assert resolve_input_text(body, _DictStore()) == ""
 
+    def test_raw_text_over_cap_is_rejected(self):
+        """Defence-in-depth body cap (review #20): a ``raw_text`` far
+        past any real single-device config is rejected at the model
+        boundary rather than flowing into the parsers."""
+        from pydantic import ValidationError
+
+        too_big = "x" * (10_000_000 + 1)
+        with pytest.raises(ValidationError):
+            MigrationPlanRequest(
+                source="mock", target="mock", raw_text=too_big
+            )
+
 
 # ---------------------------------------------------------------------------
 # get_target_profiles

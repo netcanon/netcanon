@@ -416,6 +416,31 @@ class CiscoIOSXECLICodec(CodecBase):
         ):
             return None
 
+        # Defer to IOS-XR when an XR-EXCLUSIVE marker is present.  None of
+        # these appear in genuine IOS-XE running-config — the `!! IOS XR
+        # Configuration` banner, 4-segment physical ports
+        # (`GigabitEthernet0/0/0/0`; IOS-XE tops out at 3 segments),
+        # `MgmtEth` management ports, and the `route-policy` /
+        # `end-policy` / `prefix-set` routing DSL are all XR-only.
+        # Batfish-extracted XR captures otherwise share enough generic
+        # Cisco banners / interface shapes to tie IOS-XE here and lose
+        # the alphabetical tie-break, silently mis-detecting XR as XE
+        # (2026-06 review #21).  (The bare `ipv4 address` keyword is
+        # deliberately NOT in this list: Batfish's IOS-XE interface
+        # coverage fixture mixes it in, so it isn't reliably exclusive.)
+        if re.search(
+            r"^!!\s+IOS XR Configuration"
+            r"|^interface\s+(?:GigabitEthernet|TenGigE|HundredGigE|"
+            r"FortyGigE|TwentyFiveGigE|TwoHundredGigE|FourHundredGigE|"
+            r"FastEthernet)\d+/\d+/\d+/\d+\b"
+            r"|^interface\s+MgmtEth\d"
+            r"|^route-policy\s+\S+"
+            r"|^end-policy\s*$"
+            r"|^prefix-set\s+\S+",
+            raw_prefix, re.IGNORECASE | re.MULTILINE,
+        ):
+            return None
+
         # Cisco-specific banners — each unambiguous on its own.  The
         # ``show running-config`` echo is now ONLY a confidence
         # multiplier alongside one of these; on its own it's not

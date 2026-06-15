@@ -929,6 +929,18 @@ def _tokenise_blockform(raw: str) -> list[str]:
     return tokens
 
 
+#: Maximum curly-brace nesting depth accepted by the block-form
+#: pre-parser.  Real Junos configs nest only a handful of levels
+#: (``interfaces > unit > family > address`` is ~4 deep); 100 is far
+#: beyond any legitimate config while capping a hostile ``{{{{…``
+#: payload that would otherwise recurse one Python frame per brace and
+#: raise an opaque ``RecursionError`` (surfacing as an HTTP 500)
+#: instead of a clean ``ParseError``.  The VyOS walker uses an explicit
+#: stack and is immune; this guard gives the recursive Junos pre-parser
+#: the same bounded-failure behaviour without a rewrite.
+_MAX_BLOCK_DEPTH = 100
+
+
 def _blockform_to_setform(raw: str) -> str:
     """Convert Junos block-form config text to set-form.
 
@@ -953,8 +965,15 @@ def _blockform_to_setform(raw: str) -> str:
         line = "set " + " ".join(path_stack + words)
         out_lines.append(line)
 
-    def parse_block(is_top_level: bool) -> None:
+    def parse_block(is_top_level: bool, depth: int = 0) -> None:
         nonlocal pos
+        if depth > _MAX_BLOCK_DEPTH:
+            raise ParseError(
+                "juniper_junos: block-form nesting too deep "
+                f"(exceeded {_MAX_BLOCK_DEPTH} levels of `{{`) — refusing "
+                "to recurse further",
+                snippet=raw[:120],
+            )
         while True:
             if pos >= len(tokens):
                 # EOF inside a nested block is an unbalanced-braces
@@ -998,7 +1017,7 @@ def _blockform_to_setform(raw: str) -> str:
                 pos += 1
                 push_count = len(words)
                 path_stack.extend(words)
-                parse_block(is_top_level=False)
+                parse_block(is_top_level=False, depth=depth + 1)
                 for _ in range(push_count):
                     path_stack.pop()
             elif tokens[pos] == "}":

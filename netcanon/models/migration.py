@@ -656,7 +656,12 @@ class MigrationPlanRequest(BaseModel):
 
     source: str
     target: str
-    raw_text: str | None = None
+    # Bound the inline-paste path: even the largest real single-device
+    # config is well under a few MB, so a 10M-char cap rejects abusive
+    # bodies (a defence-in-depth complement to the VLAN-range clamp)
+    # without turning away any legitimate config.  The validator below
+    # still enforces exactly-one-of with ``source_filename``.
+    raw_text: str | None = Field(default=None, max_length=10_000_000)
     source_filename: str | None = None
     force: bool = False
     port_rename_map: dict[str, str | None] | None = None
