@@ -1,0 +1,1972 @@
+[
+ {
+  "codec": "arista_eos",
+  "rec": "fetch",
+  "file": "aristanetworks_avd_snmpv3_usm_host1_eos.conf",
+  "raw": "https://raw.githubusercontent.com/aristanetworks/avd/8510268901d4371ef636eae470ad4bc890a42fdc/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "src": "https://github.com/aristanetworks/avd/blob/devel/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "license": "Apache-2.0",
+  "os": "EOS-syntax stable 4.22-4.31+ (file is version-agnostic generated config; no !Software image version banner \u2014 uses modern combined snmp/aaa output, type-5 boot secret)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host",
+   "/snmp/contact",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "investigate",
+  "file": "gns3_autodeploy_arista_leaf1_snmpv3_eos.conf",
+  "raw": "https://raw.githubusercontent.com/evanrogers15/gns3_auto_deploy/2428052789b064ab4df3e057ddb6c5cc2c345c5e/modules/configs/arista/Old/arista-leaf1",
+  "src": "https://github.com/evanrogers15/gns3_auto_deploy/blob/master/modules/configs/arista/Old/arista-leaf1",
+  "license": "none (unlicensed public repo)",
+  "os": "Unstated; uses modern 'auth sha256 ... priv aes' + 'localized <engineid>' USM syntax consistent with EOS 4.27+",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "reject",
+  "file": "",
+  "raw": "",
+  "src": "https://github.com/ansible-collections/arista.eos/blob/main/docs/arista.eos.eos_snmp_server_module.rst",
+  "license": "GPL-3.0",
+  "os": "N/A",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host",
+   "/snmp/contact"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "fetch",
+  "file": "arista_avd_vrrp_varp_svi_eoscligen.cfg",
+  "raw": "https://raw.githubusercontent.com/aristanetworks/avd/devel/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "src": "https://github.com/aristanetworks/avd/blob/devel/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "license": "Apache-2.0",
+  "os": "EOS feature-model current (AVD devel branch; modern multi-line vrrp <id> ipv4 / priority-level / preempt / tracked-object syntax = 4.21.3F+, well within the 4.21-4.30 target window). No explicit version banner (generated intended-config, not a 'show run' capture).",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/ipv6/address/virtual-gateway-address",
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv4/address/virtual-gateway-mac",
+   "/interfaces/interface/ipv6/address/virtual-gateway-mac"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "investigate",
+  "file": "ceoslab_vrrp_gateway_pair_s1_fos434.cfg",
+  "raw": "https://raw.githubusercontent.com/pd1608/ANAproject/master/netapp/golden_configs/s1_golden_20251013_205730.cfg",
+  "src": "https://github.com/pd1608/ANAproject/blob/master/netapp/golden_configs/s1_golden_20251013_205730.cfg",
+  "license": "none (unlicensed public repo \u2014 factual device-output precedent, LOWER preference)",
+  "os": "EOS-4.34.2F (engineering build EOS-4.34.2F-43232954.4342F.1) on cEOSLab \u2014 explicit banner: '! device: s1 (cEOSLab, EOS-4.34.2F-...)'. NOTE: 4.34 is ABOVE the stated 4.21-4.30 target window, but the grammar (vrrp <id> priority-level + vrrp <id> ipv4) is identical to the 4.21.3F+ multi-line form the parser targets.",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/ipv4/address/ip"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "fetch",
+  "file": "arista_avd_eos_cli_config_gen_dhcp_tunnel_ipv6_host1.cfg",
+  "raw": "https://raw.githubusercontent.com/aristanetworks/avd/devel/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "src": "https://github.com/aristanetworks/avd/blob/devel/ansible_collections/arista/avd/extensions/molecule/eos_cli_config_gen/intended/configs/host1.cfg",
+  "license": "Apache-2.0",
+  "os": "EOS feature set 4.27+ (dhcp server mode GA 4.22+, tunnel modes + ipsec profile, ipv6 auto-config; no version banner in rendered .cfg)",
+  "fills": [
+   "/dhcp-servers/pool",
+   "/interfaces/interface/tunnel-type",
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "fetch",
+  "file": "arista_avd_dual_dc_l3ls_evpn_type5_ipvrf_dc1leaf1a.cfg",
+  "raw": "https://raw.githubusercontent.com/aristanetworks/avd/devel/ansible_collections/arista/avd/examples/dual-dc-l3ls/intended/configs/dc1-leaf1a.cfg",
+  "src": "https://github.com/aristanetworks/avd/blob/devel/ansible_collections/arista/avd/examples/dual-dc-l3ls/intended/configs/dc1-leaf1a.cfg",
+  "license": "Apache-2.0",
+  "os": "EOS 4.24+ (EVPN type-5 IP-VRF / symmetric IRB mature 4.24+; AVD-generated)",
+  "fills": [
+   "/evpn-type5-routes/route"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "arista_eos",
+  "rec": "investigate",
+  "file": "arista_avd_single_dc_l3ls_ipv6_underlay_dc1leaf1a.cfg",
+  "raw": "https://raw.githubusercontent.com/aristanetworks/avd/devel/ansible_collections/arista/avd/examples/single-dc-l3ls-ipv6/intended/configs/dc1-leaf1a.cfg",
+  "src": "https://github.com/aristanetworks/avd/blob/devel/ansible_collections/arista/avd/examples/single-dc-l3ls-ipv6/intended/configs/dc1-leaf1a.cfg",
+  "license": "Apache-2.0",
+  "os": "EOS 4.27+ (IPv6 underlay support; AVD-generated)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "oxidized_aruba6410_snmp_v2c_foscx1010.conf",
+  "raw": "https://raw.githubusercontent.com/ytti/oxidized/master/spec/model/data/aoscx%23R0X25A-6410_FL.10.10.1100%23output.txt",
+  "src": "https://github.com/ytti/oxidized/blob/master/spec/model/data/aoscx%23R0X25A-6410_FL.10.10.1100%23output.txt",
+  "license": "Apache-2.0",
+  "os": "ArubaOS-CX FL.10.10.1100 (FL. platform family, 10.10 train \u2014 squarely in the 10.06-10.14 target)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/location",
+   "/snmp/contact",
+   "/system/raw-sections/version-banner"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "netutils_aoscx_snmpv3_usm_glcx1009.conf",
+  "raw": "https://raw.githubusercontent.com/networktocode/netutils/develop/tests/unit/mock/config/parser/base/aruba_aoscx/aoscx_full_sent.txt",
+  "src": "https://github.com/networktocode/netutils/blob/develop/tests/unit/mock/config/parser/base/aruba_aoscx/aoscx_full_sent.txt",
+  "license": "Apache-2.0",
+  "os": "ArubaOS-CX GL.10.09.0010 (GL. platform family, 10.09 train)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/v3-user/auth-passphrase",
+   "/system/raw-sections/version-banner"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "oxidized_aruba6000_48g_snmp_v2c_plcx1008.conf",
+  "raw": "https://raw.githubusercontent.com/ytti/oxidized/master/spec/model/data/aoscx%23R8N85A-C6000-48G-CL4_PL.10.08.1010%23output.txt",
+  "src": "https://github.com/ytti/oxidized/blob/master/spec/model/data/aoscx%23R8N85A-C6000-48G-CL4_PL.10.08.1010%23output.txt",
+  "license": "Apache-2.0",
+  "os": "ArubaOS-CX PL.10.08.1010 (PL. platform family, 10.08 train \u2014 the pre-10.10 end of the target band)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/location",
+   "/snmp/contact",
+   "/system/raw-sections/version-banner"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "investigate",
+  "file": "datadog_aoscx_snmp_v2c_plcx1013.conf",
+  "raw": "https://raw.githubusercontent.com/DataDog/datadog-agent/main/pkg/networkconfigmanagement/profile/fixtures/aoscx/running/initial.txt",
+  "src": "https://github.com/DataDog/datadog-agent/blob/main/pkg/networkconfigmanagement/profile/fixtures/aoscx/running/initial.txt",
+  "license": "Apache-2.0",
+  "os": "ArubaOS-CX PL.10.13.0005 (PL. family, 10.13 train)",
+  "fills": [
+   "/snmp/community",
+   "/system/raw-sections/version-banner"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "investigate",
+  "file": "laketec_aoscx_leaf_snmpv3_sha_aes.conf",
+  "raw": "https://raw.githubusercontent.com/laketec/ansible-lab/main/backups/leaf1_20251203_180216.cfg",
+  "src": "https://github.com/laketec/ansible-lab/blob/main/backups/leaf1_20251203_180216.cfg",
+  "license": "none-detected (UNLICENSED public repo; device-output factual-precedent only)",
+  "os": "ArubaOS-CX (banner present; train not re-read \u2014 appeared in the auth-pass-ciphertext search hit set)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/v3-user/auth-passphrase",
+   "/snmp/location",
+   "/snmp/contact"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "cray_canu_aoscx_spine_vrf_dualstack_ipv6.cfg",
+  "raw": "https://raw.githubusercontent.com/Cray-HPE/canu/main/tests/data/golden_configs/full_configs_custom_1.7/sw-spine-001-ipv6.cfg",
+  "src": "https://github.com/Cray-HPE/canu/blob/main/tests/data/golden_configs/full_configs_custom_1.7/sw-spine-001-ipv6.cfg",
+  "license": "MIT",
+  "os": "CSM 1.7 golden config (template grammar maps to AOS-CX 10.x; no embedded !Version banner)",
+  "fills": [
+   "/routing-instances/instance/name",
+   "/interfaces/interface/config/vrf",
+   "/routing/static-route",
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "cray_canu_aoscx_spine2_vrf_dualstack_ipv6.cfg",
+  "raw": "https://raw.githubusercontent.com/Cray-HPE/canu/main/tests/data/golden_configs/full_configs_custom_1.7/sw-spine-002-ipv6.cfg",
+  "src": "https://github.com/Cray-HPE/canu/blob/main/tests/data/golden_configs/full_configs_custom_1.7/sw-spine-002-ipv6.cfg",
+  "license": "MIT",
+  "os": "CSM 1.7 golden config (AOS-CX 10.x grammar; no embedded !Version banner)",
+  "fills": [
+   "/routing-instances/instance/name",
+   "/interfaces/interface/config/vrf",
+   "/routing/static-route",
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "investigate",
+  "file": "oxidized_aoscx_8325_vrf_external_v6.txt",
+  "raw": "https://raw.githubusercontent.com/ytti/oxidized/master/spec/model/data/aoscx%238325H_HL.10.15.1020%23output.txt",
+  "src": "https://github.com/ytti/oxidized/blob/master/spec/model/data/aoscx%238325H_HL.10.15.1020%23output.txt",
+  "license": "Apache-2.0",
+  "os": "AOS-CX HL.10.15.1020 (banner: `!Version AOS-CX HL.10.15.1020`)",
+  "fills": [
+   "/routing-instances/instance/name",
+   "/interfaces/interface/config/vrf",
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length",
+   "/system/raw-sections/version-banner"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "fetch",
+  "file": "datadog_aoscx_running_pl1013.cfg",
+  "raw": "https://raw.githubusercontent.com/DataDog/datadog-agent/main/pkg/networkconfigmanagement/profile/fixtures/aoscx/running/initial.txt",
+  "src": "https://github.com/DataDog/datadog-agent/blob/main/pkg/networkconfigmanagement/profile/fixtures/aoscx/running/initial.txt",
+  "license": "Apache-2.0",
+  "os": "ArubaOS-CX PL.10.13.0005 (newer 10.13 train \u2014 confirmed in banner)",
+  "fills": [
+   "/system/raw-sections/version-banner",
+   "/snmp/community",
+   "/routing/static-route",
+   "/interfaces/interface/ipv4/address (interface vlan 42 ip address)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "investigate",
+  "file": "atm22_aoscx_access_6200_01.cfg",
+  "raw": "https://raw.githubusercontent.com/tchiapuziowong/atm22-roseville-cx/master/configs/Access-6200-01.txt",
+  "src": "https://github.com/tchiapuziowong/atm22-roseville-cx/blob/master/configs/Access-6200-01.txt",
+  "license": "forum-share / unlicensed-public-device-output (NO LICENSE file in repo \u2014 gh api returns 404; lower preference, factual-output precedent only)",
+  "os": "ArubaOS-CX ML.10.09.0002 (campus train but OLDER than the 10.13/10.14 Mission-C target)",
+  "fills": [
+   "/interfaces/interface/config/vrf (ubt zone ... vrf default; ntp vrf mgmt)",
+   "/system/raw-sections/version-banner",
+   "campus 6200 platform shape + LAG + dot1x/mac-auth port-access"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "investigate",
+  "file": "joeneville_aoscx_ipv6_vlan_fragments.cfg",
+  "raw": "https://raw.githubusercontent.com/Joe-Neville/CX-IPv6-Address-Options/master/CX-IPv6-Address-Options.md",
+  "src": "https://github.com/Joe-Neville/CX-IPv6-Address-Options/blob/master/CX-IPv6-Address-Options.md",
+  "license": "unlicensed-public (NO LICENSE file \u2014 gh api 404; lower preference)",
+  "os": "Not stated in a !Version banner (markdown writeup, not a captured running-config)",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoscx",
+  "rec": "reject",
+  "file": "",
+  "raw": "",
+  "src": "https://github.com/dservais0427/config-parse/blob/master/configs/ArubaCXConfig-1.txt",
+  "license": "GPL-3.0",
+  "os": "unknown (not fetched \u2014 license-rejected before fetch)",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "hpe_community_e5406_k1503_vrrp_intervlan.cfg",
+  "raw": "",
+  "src": "https://community.hpe.com/t5/hpe-aruba-networking-provision/vrrp-not-working-with-e5406/m-p/4777887/highlight/true",
+  "license": "forum-share",
+  "os": "K.15.03.0007 (K-train ProVision; pre-16.x, pre-IPv6-GA). Mission targets WC.16.10+/KB.16.x \u2014 this is OLDER.",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "mybenke_e5400_vrrp_master_backup.cfg",
+  "raw": "",
+  "src": "https://www.mybenke.org/2012/configure-vrrp-on-hp-networking-e5400-family/",
+  "license": "forum-share",
+  "os": "K-train (2012-era; pre-16.x, pre-IPv6-GA)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "",
+  "raw": "",
+  "src": "https://oneuptime.com/blog/post/2026-03-20-ipv6-hpe-aruba-switches/view",
+  "license": "forum-share",
+  "os": "Not stated; legacy ProVision train referenced",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "reject",
+  "file": "config_parse_arubaos_kb1604.conf",
+  "raw": "https://raw.githubusercontent.com/dservais0427/config-parse/master/configs/ArubaOSConfig-1.txt",
+  "src": "https://github.com/dservais0427/config-parse/blob/master/configs/ArubaOSConfig-1.txt",
+  "license": "GPL-3.0",
+  "os": "KB.16.04.0008",
+  "fills": [
+   "/system/ntp-server (via `sntp server priority 1 10.2.50.50` + `timesync sntp` + `sntp unicast`)",
+   "partial /snmp/v3-user (noAuthNoPriv form only \u2014 `snmpv3 user \"WANUSER\"` + `snmpv3 group managerpriv user \"WANUSER\" sec-model ver3`)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "reject",
+  "file": "galminyana_aoss_cheatsheet_placeholders.conf",
+  "raw": "https://raw.githubusercontent.com/galminyana/CheatSheets/main/Aruba_2930_3810_CheatSheet.md",
+  "src": "https://github.com/galminyana/CheatSheets/blob/main/Aruba_2930_3810_CheatSheet.md",
+  "license": "GPL-3.0",
+  "os": "AOS-Switch 16.x (unspecified; cheatsheet)",
+  "fills": [
+   "/snmp/v3-user (auth sha + priv aes form)",
+   "/snmp/location (`snmp-server contact \"EMAIL\" location \"LOCATION\"`)",
+   "/system/ntp-server (`sntp server priority 1 IP` + `timesync sntp` + `sntp unicast`)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "airheads_2930f_snmpv3_wc1611.conf",
+  "raw": "",
+  "src": "https://airheads.hpe.com/discussion/aruba-2930f-snmpv3-anomaly",
+  "license": "forum-share",
+  "os": "WC.16.11.0012",
+  "fills": [
+   "/snmp/v3-user (full auth sha + priv aes USM form, secrets already redacted to <removed>)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "reject",
+  "file": "lancs_sdq_accesssw2_partial.conf",
+  "raw": "https://raw.githubusercontent.com/lancs-net/SDQ/master/openflow_bandwidth/AccessSW2%20Previous%20config",
+  "src": "https://github.com/lancs-net/SDQ/blob/master/openflow_bandwidth/AccessSW2%20Previous%20config",
+  "license": "none (unlicensed public repo)",
+  "os": "firmware build 'Ver #05:19.ff.ff.3f.ef:cc' (older ProCurve image; not a 16.x WC/KB banner)",
+  "fills": [
+   "partial /snmp/v3-user (noAuthNoPriv only \u2014 `snmpv3 user \"NetPro\" sec-model ver3` + `snmpv3 group managerpriv user \"NetPro\" sec-model ver3`)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "reject",
+  "file": "netneutral_procurve_showrun_ttp.ttp",
+  "raw": "https://raw.githubusercontent.com/NetNeutralNetworks/network_infra_viewer/master/app/parsing/drivers/hp/ttp_templates/procurve/show_run.ttp",
+  "src": "https://github.com/NetNeutralNetworks/network_infra_viewer/blob/master/app/parsing/drivers/hp/ttp_templates/procurve/show_run.ttp",
+  "license": "GPL-3.0",
+  "os": "n/a",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "fetch",
+  "file": "hpe_community_2920_dhcp_server_pool_wb16.conf",
+  "raw": "",
+  "src": "https://community.hpe.com/t5/aruba-provision-based/how-to-create-dhcp-server-in-2920-procurve-switch/td-p/6752040",
+  "license": "forum-share",
+  "os": "AOS-Switch WB.16.xx (not version-stamped in thread; 2920 onboard DHCP server requires WB.16.0x+)",
+  "fills": [
+   "/dhcp-servers/pool"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "hpe_community_5406zl_dhcp_server_pool_k15.conf",
+  "raw": "",
+  "src": "https://community.hpe.com/t5/Aruba-ProVision-based/DHCP-Server-service-on-5406zl-switch/td-p/4276859",
+  "license": "forum-share",
+  "os": "AOS-Switch K15.14 or later (thread states onboard DHCP server requires K15.14+)",
+  "fills": [
+   "/dhcp-servers/pool"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "hpe_community_2930f_branch_multivlan_dhcp_wc16.conf",
+  "raw": "",
+  "src": "https://community.hpe.com/t5/aruba-provision-based/2930f-dhcp-server-vlan-setup/td-p/7084768",
+  "license": "forum-share",
+  "os": "AOS-Switch WC.16.xx (2930F; not explicitly stamped in thread)",
+  "fills": [
+   "/dhcp-servers/pool"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "reject",
+  "file": "",
+  "raw": "https://higherlogicdownload.s3.amazonaws.com/HPE/MigratedAssets/DHCP_config_PP.pdf",
+  "src": "https://higherlogicdownload.s3.amazonaws.com/HPE/MigratedAssets/DHCP_config_PP.pdf",
+  "license": "proprietary",
+  "os": "AOS-Switch 16.x (whitepaper era ~2015)",
+  "fills": [
+   "/dhcp-servers/pool"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "aruba_aoss",
+  "rec": "investigate",
+  "file": "aoss_global_ip_dns_domain_name.snippet",
+  "raw": "",
+  "src": "https://arubanetworking.hpe.com/techdocs/central/2.5.7/content/nms/aos-switch/cfg/conf_sys_params.htm",
+  "license": "proprietary",
+  "os": "AOS-Switch 16.x",
+  "fills": [
+   "/system/domain"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "imanassypov_catc_evpn_leaf_iosxe1715.cfg",
+  "raw": "https://raw.githubusercontent.com/imanassypov/CatalystCenter-BGP-EVPN-VXLAN/main/Node%20Configs/Config-Backup-032626/Leaf01.cfg",
+  "src": "https://github.com/imanassypov/CatalystCenter-BGP-EVPN-VXLAN/blob/main/Node%20Configs/Config-Backup-032626/Leaf01.cfg",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XE 17.15",
+  "fills": [
+   "/evpn-type5-routes/route"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "imanassypov_catc_evpn_border_iosxe1715.cfg",
+  "raw": "https://raw.githubusercontent.com/imanassypov/CatalystCenter-BGP-EVPN-VXLAN/main/Node%20Configs/Config-Backup-032626/Border01.cfg",
+  "src": "https://github.com/imanassypov/CatalystCenter-BGP-EVPN-VXLAN/blob/main/Node%20Configs/Config-Backup-032626/Border01.cfg",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XE 17.15",
+  "fills": [
+   "/evpn-type5-routes/route"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "reject",
+  "file": "n/a-reject-nxos",
+  "raw": "https://raw.githubusercontent.com/aninchat/learning-labs/54f399d3a54707e3f710657d3268f86a1f2fa096/cisco/symmetric-routing/configs/leaf4.txt",
+  "src": "https://github.com/aninchat/learning-labs/blob/54f399d3a54707e3f710657d3268f86a1f2fa096/cisco/symmetric-routing/configs/leaf4.txt",
+  "license": "unknown/unverified",
+  "os": "NX-OS 10.5.3.F",
+  "fills": [],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "fetch",
+  "file": "networklore_ansible_cisco_snmp_v3usm_iosxe.conf",
+  "raw": "https://raw.githubusercontent.com/networklore/ansible-cisco-snmp/master/README.md",
+  "src": "https://github.com/networklore/ansible-cisco-snmp/blob/master/README.md",
+  "license": "Apache-2.0",
+  "os": "Any IOS-XE 16.x/17.x; SHA/AES-128 grammar works on all releases",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/community"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "reject",
+  "file": "n/a",
+  "raw": "https://raw.githubusercontent.com/morneaup/CISCO-STIG-Templates/main/IOS%20XE%20RTR%20NDM%20STIG%20Template",
+  "src": "https://github.com/morneaup/CISCO-STIG-Templates/blob/main/IOS%20XE%20RTR%20NDM%20STIG%20Template",
+  "license": "none (unlicensed \u2014 repo has no LICENSE file; GitHub license API returned HTTP 404 Not Found)",
+  "os": "IOS-XE 16.x/17.x (STIG template, version-agnostic)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "reject",
+  "file": "n/a",
+  "raw": "https://raw.githubusercontent.com/mbworking/CISCO_Labs/master/SNMP%20v3%20(IOS%20vs%20ASA)/SNMP%20v3%20(IOS%20vs%20ASA).gns3",
+  "src": "https://github.com/mbworking/CISCO_Labs/blob/master/SNMP%20v3%20(IOS%20vs%20ASA)/SNMP%20v3%20(IOS%20vs%20ASA).gns3",
+  "license": "none (unlicensed \u2014 GitHub license API returned HTTP 404)",
+  "os": "Classic IOS (lab); not a 16.x/17.x IOS-XE capture",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "reject",
+  "file": "n/a",
+  "raw": "https://raw.githubusercontent.com/CiscoDevNet/cml-community/master/lab-topologies/sandbox-multiplatform-network/multi-platform-network.yaml",
+  "src": "https://github.com/CiscoDevNet/cml-community/blob/master/lab-topologies/sandbox-multiplatform-network/multi-platform-network.yaml",
+  "license": "BSD-3-Clause",
+  "os": "NX-OS / ASA (NOT IOS-XE)",
+  "fills": [],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "ciscocommunity_snmpv3_sha2_iosxe.conf",
+  "raw": "",
+  "src": "https://community.cisco.com/t5/network-management/how-to-configure-snmp-to-use-sha256-sha384-and-sha512-on-a-cisco/td-p/3768326",
+  "license": "forum-share (community.cisco.com operator paste \u2014 acceptable per precedent IF the running-config is genuinely pasted)",
+  "os": "unverified (thread 3768326 explicitly targets SHA-256/384/512 => IOS-XE 16.10+/17.x)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/trap-host"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "fetch",
+  "file": "epiecs_snippets_vrrp_afi_iosxe17.conf",
+  "raw": "https://raw.githubusercontent.com/epiecs/cisco-config-snippets/master/fhrp/vrrp.ios",
+  "src": "https://github.com/epiecs/cisco-config-snippets/blob/master/fhrp/vrrp.ios",
+  "license": "MIT",
+  "os": "IOS-XE 17.x-era (uses VRRPv3 'fhrp version vrrp v3' + nested address-family form introduced in 16.x/17.x)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group/address-family"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "fetch",
+  "file": "epiecs_snippets_ipv6_autoconfig_iosxe.conf",
+  "raw": "https://raw.githubusercontent.com/epiecs/cisco-config-snippets/master/ipv6/interface.ios",
+  "src": "https://github.com/epiecs/cisco-config-snippets/blob/master/ipv6/interface.ios",
+  "license": "MIT",
+  "os": "IOS 15.x / IOS-XE 16.x/17.x (ipv6 address autoconfig + ipv6 enable are stable across 15.x\u201317.x)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "netlab_ios_gateway_vrrp_afi_RENDERED.conf",
+  "raw": "https://raw.githubusercontent.com/ipspace/netlab/dev/netsim/ansible/templates/gateway/ios.j2",
+  "src": "https://github.com/ipspace/netlab/blob/dev/netsim/ansible/templates/gateway/ios.j2",
+  "license": "MIT",
+  "os": "IOS-XE 17.x (netlab targets modern IOS-XE; renders 'fhrp version vrrp v3' + nested address-family VRRP)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group/address-family",
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "ciscocomm_asr920_vrrpv3_ipv6_forumshare.conf",
+  "raw": "",
+  "src": "https://community.cisco.com/t5/ipv6/vrrpv3-on-ipv6-on-asr-920/td-p/3887996",
+  "license": "forum-share",
+  "os": "IOS-XE 16.x/17.x (ASR920 VRRPv3)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group/address-family"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "fetch",
+  "file": "ciscolive_brkops1104_evpn_leaf_fos1715.conf",
+  "raw": "https://raw.githubusercontent.com/StayFresh-NetworkBytes/CiscoLive-BRKOPS-1104-Lab/main/device_configs/cml-demo-lf1.txt",
+  "src": "https://github.com/StayFresh-NetworkBytes/CiscoLive-BRKOPS-1104-Lab/blob/main/device_configs/cml-demo-lf1.txt",
+  "license": "unlicensed-public-repo (factual device-output precedent; NO LICENSE file \u2014 GET /license returns 404)",
+  "os": "IOS-XE 17.15 (Bengaluru; GA 2024-08-09 LTS per endoflife.date)",
+  "fills": [
+   "/vlans/vlan/id",
+   "/routing/static-route/vrf (vrf definition + per-vrf BGP address-family; static vrf routes are richer on the sibling border.txt)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "fetch",
+  "file": "ciscolive_brkops1104_evpn_border_fos1715.conf",
+  "raw": "https://raw.githubusercontent.com/StayFresh-NetworkBytes/CiscoLive-BRKOPS-1104-Lab/main/device_configs/cml-demo-border.txt",
+  "src": "https://github.com/StayFresh-NetworkBytes/CiscoLive-BRKOPS-1104-Lab/blob/main/device_configs/cml-demo-border.txt",
+  "license": "unlicensed-public-repo (factual device-output precedent; NO LICENSE file)",
+  "os": "IOS-XE 17.15",
+  "fills": [
+   "/routing/static-route/vrf",
+   "/vlans/vlan/id"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "investigate",
+  "file": "ansible_workshop_c8000v_vrf_tunnel_fos1714.conf",
+  "raw": "https://raw.githubusercontent.com/beasleymd/Ansible_Workshop_Demo/main/Original%20RTR%20Configs%20-%20Workshop%20Labs/Orig_Golden_Configs_rtr1_02-12-2026.rtf",
+  "src": "https://github.com/beasleymd/Ansible_Workshop_Demo/tree/main/Original%20RTR%20Configs%20-%20Workshop%20Labs",
+  "license": "unlicensed-public-repo (factual device-output precedent; NO LICENSE file \u2014 .license null)",
+  "os": "IOS-XE 17.14 (Dublin; GA 2024-04-13 per endoflife.date)",
+  "fills": [
+   "/routing/static-route/vrf",
+   "/interfaces/interface/tunnel-type",
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxe_cli",
+  "rec": "reject",
+  "file": "REJECT_cisco_sample_code_license",
+  "raw": "",
+  "src": "https://github.com/kebaldwi/CATC-TEMPLATES/blob/master/CODE/ANSIBLE/10.0-Backup-My-Configs/config-backups/20260429-115211/Leaf01.cfg",
+  "license": "PROPRIETARY \u2014 CISCO CODE LICENSE Version 1.1 (Cisco Sample Code License)",
+  "os": "IOS-XE 17.15",
+  "fills": [
+   "/snmp/v3-user (PRESENT in these \u2014 they were the ONLY 17.15 hits combining snmp-server + vrf definition)",
+   "/vlans/vlan/id",
+   "/routing/static-route/vrf"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "investigate",
+  "file": "xrdtools_srv6_pe2.conf",
+  "raw": "https://raw.githubusercontent.com/ios-xr/xrd-tools/main/samples/xr_compose_topos/srv6-l3vpn/pe2.cfg",
+  "src": "https://github.com/ios-xr/xrd-tools/tree/main/samples/xr_compose_topos/srv6-l3vpn",
+  "license": "Apache-2.0",
+  "os": "IOS-XR (XRd container image; SRv6 L3VPN sample, no explicit version banner in file \u2014 XRd 7.x era)",
+  "fills": [
+   "/routing-instances/instance",
+   "/interfaces/interface/config/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "reject",
+  "file": "batfish_vpnv4_pe2.txt (ALREADY EXISTS in tests/fixtures/real/cisco_iosxr/)",
+  "raw": "https://raw.githubusercontent.com/batfish/lab-validation/main/snapshots/cisco_xr_ios_vpnv4/configs/PE2/show_running-config.txt",
+  "src": "https://github.com/batfish/lab-validation/tree/main/snapshots/cisco_xr_ios_vpnv4/configs/PE2",
+  "license": "Apache-2.0",
+  "os": "IOS XR Configuration 6.6.2",
+  "fills": [
+   "/routing-instances/instance",
+   "/routing/static-route/vrf",
+   "/routing/static-route",
+   "/interfaces/interface/config/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "fetch",
+  "file": "iosxr_design_cst_v5_pa3_bundle_active_on_dot1q_mtu_fos752.conf",
+  "raw": "https://raw.githubusercontent.com/ios-xr/design/master/Converged-SDN-Transport/v5/pa3.cfg",
+  "src": "https://github.com/ios-xr/design/blob/master/Converged-SDN-Transport/v5/pa3.cfg",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XR 7.5.2",
+  "fills": [
+   "/lags/lag/mode (BOTH active AND on=static in one file)",
+   "/lags/lag/members",
+   "/interfaces/interface/config/mtu (jumbo 9216)",
+   "/vlans/vlan/id (via encapsulation dot1q 200)",
+   "/interfaces/interface/4th-port-segment (Gi/Te 0/0/0/N)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "fetch",
+  "file": "iosxr_design_cst_v5_ag3_bundle_dot1q_qinq_mtu9216_fos752.conf",
+  "raw": "https://raw.githubusercontent.com/ios-xr/design/master/Converged-SDN-Transport/v5/ag3.cfg",
+  "src": "https://github.com/ios-xr/design/blob/master/Converged-SDN-Transport/v5/ag3.cfg",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XR 7.5.2",
+  "fills": [
+   "/lags/lag/mode (active)",
+   "/lags/lag/members",
+   "/interfaces/interface/config/mtu (9216 on three Bundle-Ether)",
+   "/vlans/vlan/id (encapsulation dot1q incl. Q-in-Q second-dot1q)",
+   "/interfaces/interface/4th-port-segment (Te0/0/0/N + physical-port .unit subifaces)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "fetch",
+  "file": "iosxr_design_agilemetro_a_pe2_ncs540_bundle_dot1q_mtu_fos2541.conf",
+  "raw": "https://raw.githubusercontent.com/ios-xr/design/master/Agile-Metro/cst-a-pe2",
+  "src": "https://github.com/ios-xr/design/blob/master/Agile-Metro/cst-a-pe2",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XR 25.4.1 (25.4.1.23I)",
+  "fills": [
+   "/lags/lag/mode (active)",
+   "/lags/lag/members",
+   "/interfaces/interface/config/mtu (9216)",
+   "/vlans/vlan/id (encapsulation dot1q on Bundle-Ether.<unit>)",
+   "/interfaces/interface/4th-port-segment (Gi / Te / HundredGigE 0/0/0/N)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "investigate",
+  "file": "iosxr_design_cst_v5_a_pe1_bundle_dot1q_mtu9216.conf",
+  "raw": "https://raw.githubusercontent.com/ios-xr/design/master/Converged-SDN-Transport/v5/a-pe1.cfg",
+  "src": "https://github.com/ios-xr/design/blob/master/Converged-SDN-Transport/v5/a-pe1.cfg",
+  "license": "unlicensed-device-output",
+  "os": "IOS-XR 7.5.x (Converged SDN Transport v5 train)",
+  "fills": [
+   "/lags/lag/mode (active)",
+   "/lags/lag/members",
+   "/interfaces/interface/config/mtu (9216)",
+   "/vlans/vlan/id (encapsulation dot1q 10/100/101 on Bundle-Ether.<unit>)",
+   "/interfaces/interface/4th-port-segment (Te / TwentyFiveGigE / HundredGigE 0/0/0/N)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "fetch",
+  "file": "ios_xr_cli2yang_ncs5500_users_mgmt_fxr652.config",
+  "raw": "https://raw.githubusercontent.com/ios-xr/cli2yang-tools/netconf_ztp_mix/ncs5500_final.config",
+  "src": "https://github.com/ios-xr/cli2yang-tools/blob/netconf_ztp_mix/ncs5500_final.config",
+  "license": "Apache-2.0",
+  "os": "IOS XR 6.5.2.28I",
+  "fills": [
+   "/local-users/user/name",
+   "/local-users/user/role",
+   "/local-users/user/hashed-password"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "investigate",
+  "file": "ios_xr_xrdtools_srv6l3vpn_p1_ipv6.cfg",
+  "raw": "https://raw.githubusercontent.com/ios-xr/xrd-tools/main/samples/xr_compose_topos/srv6-l3vpn/p1.cfg",
+  "src": "https://github.com/ios-xr/xrd-tools/blob/main/samples/xr_compose_topos/srv6-l3vpn/p1.cfg",
+  "license": "Apache-2.0",
+  "os": "IOS-XR XRd (no version header in file; SRv6-capable, 7.x-class image)",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "investigate",
+  "file": "ios_xr_karneliuk_batfishmvp_xr1_mtu_ipv6.cfg",
+  "raw": "https://raw.githubusercontent.com/karneliuk-com/batfish-mvp/main/snapshots/nat/configs/XR1.cfg",
+  "src": "https://github.com/karneliuk-com/batfish-mvp/blob/main/snapshots/nat/configs/XR1.cfg",
+  "license": "BSD-3-Clause",
+  "os": "IOS XR 6.5.1.34I",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/config/mtu"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_iosxr",
+  "rec": "reject",
+  "file": "",
+  "raw": "https://raw.githubusercontent.com/CiscoDevNet/XRd-Sandbox/main/topologies/segment-routing/xrd-1-startup.cfg",
+  "src": "https://github.com/CiscoDevNet/XRd-Sandbox/blob/main/topologies/segment-routing/xrd-1-startup.cfg",
+  "license": "Cisco Sample Code License v1.1 (REJECT)",
+  "os": "IOS-XR XRd (7.x-class image; SR/AAA sandbox)",
+  "fills": [
+   "/local-users/user/name",
+   "/local-users/user/role",
+   "/local-users/user/hashed-password"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "ntc_goldenconfig_nxos_snmp_mgmt_jcyspine01_fos93.conf",
+  "raw": "https://raw.githubusercontent.com/nautobot/demo-gc-backups/main/jersey-city/jcy-spine-01.infra.ntc.com.cfg",
+  "src": "https://github.com/nautobot/demo-gc-backups/blob/main/jersey-city/jcy-spine-01.infra.ntc.com.cfg",
+  "license": "none (unlicensed public repo \u2014 factual device-output precedent)",
+  "os": "NX-OS 9.3(3)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/contact",
+   "/snmp/location",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "ntc_goldenconfig_nxos_snmp_mgmt_jcyspine02_fos93.conf",
+  "raw": "https://raw.githubusercontent.com/nautobot/demo-gc-backups/main/jersey-city/jcy-spine-02.infra.ntc.com.cfg",
+  "src": "https://github.com/nautobot/demo-gc-backups/blob/main/jersey-city/jcy-spine-02.infra.ntc.com.cfg",
+  "license": "none (unlicensed public repo \u2014 factual device-output precedent)",
+  "os": "NX-OS 9.3(3)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/contact",
+   "/snmp/location",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "microsoft_sdn_nxos3132_snmp_tor1_fos60.conf",
+  "raw": "https://raw.githubusercontent.com/microsoft/SDN/master/SwitchConfigExamples/Cisco%20Nexus%203132%20-%20Redundant%20TOR/Cisco%20Nexus%203132-TOR1.cfg",
+  "src": "https://github.com/microsoft/SDN/blob/master/SwitchConfigExamples/Cisco%20Nexus%203132%20-%20Redundant%20TOR/Cisco%20Nexus%203132-TOR1.cfg",
+  "license": "MIT",
+  "os": "NX-OS 6.0(2)U6(1)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "reject",
+  "file": "(do-not-import) tti_nxos9372_snmp_fos70.conf",
+  "raw": "https://raw.githubusercontent.com/StrategicUser/TTI2/master/python/files/ttilgb_dc-9372_b-config.txt",
+  "src": "https://github.com/StrategicUser/TTI2/blob/master/python/files/ttilgb_dc-9372_b-config.txt",
+  "license": "none / unknown",
+  "os": "NX-OS 7.0(3)I4(2)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/contact",
+   "/snmp/location",
+   "/snmp/trap-host"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "batfish_nxos_ebgp_n9kv_r1.txt",
+  "raw": "https://raw.githubusercontent.com/batfish/lab-validation/main/snapshots/nxos_n9kv_ebgp/configs/r1/show_running-config.txt",
+  "src": "https://github.com/batfish/lab-validation/tree/main/snapshots/nxos_n9kv_ebgp/configs/r1",
+  "license": "Apache-2.0",
+  "os": "NX-OS 10.3(9)",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length",
+   "/routing/static-route/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "busterswt_nxos_evpn_xk32_1.txt",
+  "raw": "https://raw.githubusercontent.com/busterswt/spine-leaf-lab/main/with_ospf_bgp_evpn/ospf-bgp-evpn-xk32-1.txt",
+  "src": "https://github.com/busterswt/spine-leaf-lab/tree/main/with_ospf_bgp_evpn",
+  "license": "unlicensed (no LICENSE file)",
+  "os": "NX-OS 9.3(12)",
+  "fills": [
+   "/interfaces/interface/trunk-native-vlan",
+   "/routing/static-route/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "thadasaket_nxos_3548x_core1.txt",
+  "raw": "https://raw.githubusercontent.com/Thada-Saket/3-Tier-Network-lab/main/configurations/Core-1-CiscoNexus3548X.txt",
+  "src": "https://github.com/Thada-Saket/3-Tier-Network-lab/tree/main/configurations",
+  "license": "unlicensed (no LICENSE file)",
+  "os": "NX-OS 9.3(8)",
+  "fills": [
+   "/interfaces/interface/trunk-native-vlan",
+   "/routing/static-route/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "microsoft_sdn_nexus3132_tor1.conf",
+  "raw": "https://raw.githubusercontent.com/microsoft/SDN/master/SwitchConfigExamples/Cisco%20Nexus%203132%20-%20Redundant%20TOR/Cisco%20Nexus%203132-TOR1.cfg",
+  "src": "https://github.com/microsoft/SDN/tree/master/SwitchConfigExamples/Cisco%20Nexus%203132%20-%20Redundant%20TOR",
+  "license": "MIT",
+  "os": "NX-OS 6.0(2)U6(1)",
+  "fills": [
+   "/interfaces/interface/trunk-native-vlan"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "racc_nxos_n9k1_sbxao.txt",
+  "raw": "https://raw.githubusercontent.com/nickrusso42518/racc/master/samples_hash/n9k1_20230811T074823/show_running-config.txt",
+  "src": "https://github.com/nickrusso42518/racc/tree/master/samples_hash/n9k1_20230811T074823",
+  "license": "BSD-3-Clause",
+  "os": "NX-OS 9.3(3)",
+  "fills": [
+   "/routing/static-route/vrf"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "reject",
+  "file": "REJECT_catherinevee_nxos_notes.txt",
+  "raw": "https://raw.githubusercontent.com/catherinevee/networkreview/main/cisco-nx-os-l2-l3-commands.txt",
+  "src": "https://github.com/catherinevee/networkreview/blob/main/cisco-nx-os-l2-l3-commands.txt",
+  "license": "unknown (not verified -- rejected before license check)",
+  "os": "unspecified (didactic snippets)",
+  "fills": [
+   "/interfaces/interface/trunk-native-vlan",
+   "/routing-instances/instance/description",
+   "/interfaces/interface/ipv6/address/ip"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "akarneliuk_nexus_vxlan_mcast_underlay_nxos93.conf",
+  "raw": "https://raw.githubusercontent.com/akarneliuk/multivendor-network-labs/main/labs/cisco/04-nexus-evpn-vxlan/final_configs/c-1-l1.txt",
+  "src": "https://github.com/akarneliuk/multivendor-network-labs/blob/main/labs/cisco/04-nexus-evpn-vxlan/final_configs/c-1-l1.txt",
+  "license": "unlicensed (device-output / factual-output precedent)",
+  "os": "NX-OS 9.3(9) (banner: 'version 9.3(9) Bios:version')",
+  "fills": [
+   "/vxlan-vnis/mcast-group",
+   "/vxlan-vnis/source-interface",
+   "/vxlan-vnis/vni"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "networklessons_clab_vxlan_mcast_leaf2_nxos.conf",
+  "raw": "https://raw.githubusercontent.com/networklessons/labs/main/containerlab/labs/vxlan/cisco/vxlan-underlay-ebgp-two-as/clab-vxlan-underlay-ebgp-two-as/leaf2/config/startup-config.cfg",
+  "src": "https://github.com/networklessons/labs/blob/main/containerlab/labs/vxlan/cisco/vxlan-underlay-ebgp-two-as/clab-vxlan-underlay-ebgp-two-as/leaf2/config/startup-config.cfg",
+  "license": "unlicensed (device-output / factual-output precedent)",
+  "os": "NX-OS (containerlab vr-n9kv startup-config; version line not in the nve excerpt \u2014 likely 9.3/10.x n9kv image; verify full file header)",
+  "fills": [
+   "/vxlan-vnis/mcast-group",
+   "/vxlan-vnis/source-interface",
+   "/vxlan-vnis/vni"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "goldenbyte_nexus_vxlan_static_ir_leaf1.conf",
+  "raw": "https://raw.githubusercontent.com/GoldenbyteGH/GB_NetRepos/main/VXLAN/Static_Ingress_Replication_NLS/LEAF1",
+  "src": "https://github.com/GoldenbyteGH/GB_NetRepos/tree/main/VXLAN/Static_Ingress_Replication_NLS",
+  "license": "unlicensed (device-output / factual-output precedent)",
+  "os": "NX-OS (CLI config fragment; no 'version' banner in the file \u2014 these are partial config snippets, not a full 'show running-config')",
+  "fills": [
+   "/vxlan-vnis/flood-list",
+   "/vxlan-vnis/source-interface",
+   "/vxlan-vnis/vni"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "dejavudf_titanium_vxlan_mcast_l3vni_leaf01.conf",
+  "raw": "https://raw.githubusercontent.com/dejavudf/My_IP_Fabric_and_VXLAN_Labs/main/CISCO_TITANIUM/Underlay%20OSPF%20-%20Overlay%20MP-BGP/LEAF-01.txt",
+  "src": "https://github.com/dejavudf/My_IP_Fabric_and_VXLAN_Labs/blob/main/CISCO_TITANIUM/Underlay%20OSPF%20-%20Overlay%20MP-BGP/LEAF-01.txt",
+  "license": "unlicensed (device-output / factual-output precedent)",
+  "os": "NX-OS (Titanium = Nexus 9000v/Titanium emulator; version banner not in nve excerpt \u2014 verify file header)",
+  "fills": [
+   "/vxlan-vnis/mcast-group",
+   "/vxlan-vnis/source-interface",
+   "/vxlan-vnis/vni"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "reject",
+  "file": "",
+  "raw": "https://raw.githubusercontent.com/yakiimo-bsp/n9kv-evpn-vxlan-lab/main/configs/leaf1.cfg",
+  "src": "https://github.com/yakiimo-bsp/n9kv-evpn-vxlan-lab/blob/main/configs/leaf1.cfg",
+  "license": "BSD-3-Clause",
+  "os": "NX-OS 9000v (containerlab)",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "networklessons_labs_nxos_dag_symmetric_irb_fos1027.cfg",
+  "raw": "https://raw.githubusercontent.com/networklessons/labs/main/containerlab/labs/vxlan/cisco/research/vxlan-evpn-inter-vni-symmetric-irb/clab-vvxlan-evpn-inter-vni-symmetric-irb/leaf1/config/startup-config.cfg",
+  "src": "https://github.com/networklessons/labs/blob/main/containerlab/labs/vxlan/cisco/research/vxlan-evpn-inter-vni-symmetric-irb/clab-vvxlan-evpn-inter-vni-symmetric-irb/leaf1/config/startup-config.cfg",
+  "license": "unlicensed",
+  "os": "NX-OS 10.2(7)",
+  "fills": [
+   "/anycast-gateway-mac",
+   "/interfaces/interface/ipv4/address/virtual-gateway-address"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "fetch",
+  "file": "networklessons_labs_nxos_dag_l2vni_fos1027.cfg",
+  "raw": "https://raw.githubusercontent.com/networklessons/labs/main/containerlab/labs/vxlan/cisco/research/clab-vxlan-evpn-spine-leaf/leaf1/config/startup-config.cfg",
+  "src": "https://github.com/networklessons/labs/blob/main/containerlab/labs/vxlan/cisco/research/clab-vxlan-evpn-spine-leaf/leaf1/config/startup-config.cfg",
+  "license": "unlicensed",
+  "os": "NX-OS 10.2(7)",
+  "fills": [
+   "/anycast-gateway-mac",
+   "/interfaces/interface/ipv4/address/virtual-gateway-address"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "atr399_vxlan_evpn_journey_nxos_dag_fos1055.cfg",
+  "raw": "https://raw.githubusercontent.com/atr399/vxlan-evpn-journey/main/phase1-baseline/configs/leaf1-running.cfg",
+  "src": "https://github.com/atr399/vxlan-evpn-journey/blob/main/phase1-baseline/configs/leaf1-running.cfg",
+  "license": "unlicensed",
+  "os": "NX-OS 10.5(5)",
+  "fills": [
+   "/anycast-gateway-mac",
+   "/interfaces/interface/ipv4/address/virtual-gateway-address"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "cisco_nxos",
+  "rec": "investigate",
+  "file": "kousei_nxos_dag_tenant_a_fos1032.cfg",
+  "raw": "https://raw.githubusercontent.com/mmerioles/kousei/main/fixtures/nxos_001.cfg",
+  "src": "https://github.com/mmerioles/kousei/blob/main/fixtures/nxos_001.cfg",
+  "license": "unlicensed",
+  "os": "NX-OS 10.3(2)",
+  "fills": [
+   "/anycast-gateway-mac",
+   "/interfaces/interface/ipv4/address/virtual-gateway-address"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "fetch",
+  "file": "fortinet_community_vrrp_pair_197015.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/t5/FortiGate/Technical-Tip-FortiGate-VRRP-configuration-and-debug/ta-p/197015",
+  "license": "forum-share",
+  "os": "FortiOS (grammar stable 6.4-7.6; article version-agnostic)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips",
+   "/interfaces/interface/vrrp-groups/group/track-interfaces",
+   "/interfaces/interface/vrrp-groups/group/virtual-mac"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "fetch",
+  "file": "fortinet_community_vrrp_linkmon_214419.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/t5/FortiGate/Technical-Tip-VRRP-Active-failover-with-link-monitor/ta-p/214419",
+  "license": "forum-share",
+  "os": "FortiOS (version-agnostic; grammar stable)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips",
+   "/interfaces/interface/vrrp-groups/group/track-interfaces"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "fortinet_community_vrrp_vrdst_191882.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/t5/FortiGate/Technical-Tip-VRRP-Active-failover-with-VRDST-with-blackhole-routing/ta-p/191882",
+  "license": "forum-share",
+  "os": "FortiOS (version-agnostic)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips",
+   "/interfaces/interface/vrrp-groups/group/track-interfaces"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "fyzethh_blog_vrrp_pair_fortinet.conf",
+  "raw": "https://raw.githubusercontent.com/Fyzethh/fyzethh.github.io/main/_posts/2024-07-16-vrrp-firewalls-fortinet.md",
+  "src": "https://github.com/Fyzethh/fyzethh.github.io/blob/main/_posts/2024-07-16-vrrp-firewalls-fortinet.md",
+  "license": "MIT",
+  "os": "FortiOS (2024 post; version-agnostic grammar)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips",
+   "/interfaces/interface/vrrp-groups/group/virtual-mac"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "chermet90_kb_vrrp_fortinet_example.conf",
+  "raw": "https://raw.githubusercontent.com/CherMet90/kb/main/docs/Networks/VRRP/fortinet_example.md",
+  "src": "https://github.com/CherMet90/kb/blob/main/docs/Networks/VRRP/fortinet_example.md",
+  "license": "unlicensed-public-repo",
+  "os": "FortiOS (version-agnostic)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/vrrp-groups/group/virtual-ips",
+   "/interfaces/interface/vrrp-groups/group/track-interfaces"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "fetch",
+  "file": "jqproject_fgt40f_snmpv3_ntp_dns_fos744.conf",
+  "raw": "https://raw.githubusercontent.com/cqngzhi/JQ-project/a3c5352547b199159e0771794ff632bb1d140fa7/GIP%20Cybersecurity/FW/fortigate.conf",
+  "src": "https://github.com/cqngzhi/JQ-project/blob/a3c5352547b199159e0771794ff632bb1d140fa7/GIP%20Cybersecurity/FW/fortigate.conf",
+  "license": "unlicensed",
+  "os": "FortiOS 7.4.4 (build2662-240514)",
+  "fills": [
+   "/snmp/v3-user",
+   "/system/ntp-server",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "ensappinfra_fortiswitch_s124e_snmpv3_ntp_dns_fsw702.conf",
+  "raw": "https://raw.githubusercontent.com/SyahdanAzizITNS/EnsAppInfra/aac1ca7b47f75b2d156fa9f3b21a4d37a8daa78e/Samples/2026-02-04/DRC-DISTRI-SW_2026-02-04_15-24.conf",
+  "src": "https://github.com/SyahdanAzizITNS/EnsAppInfra/blob/aac1ca7b47f75b2d156fa9f3b21a4d37a8daa78e/Samples/2026-02-04/DRC-DISTRI-SW_2026-02-04_15-24.conf",
+  "license": "unlicensed",
+  "os": "FortiSwitchOS 7.0.2 (S124EN-7.02-FW-build539-250320)",
+  "fills": [
+   "/snmp/v3-user",
+   "/system/ntp-server",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "scitodk_fortigate_baseline_snmpv3_ntp_dns_fos76.conf",
+  "raw": "",
+  "src": "https://scito.dk/2025/09/21/fortigate-best-practices-cli-examples-7-6/",
+  "license": "proprietary",
+  "os": "FortiOS 7.6 (7.6.1+ referenced)",
+  "fills": [
+   "/snmp/v3-user",
+   "/system/ntp-server",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "fortinet_community_98184_snmpv3_aes256cisco_fos623.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/fortigate-3/technical-tip-how-to-fix-snmpv3-aes256-encryption-is-not-working-with-solarwinds-98184",
+  "license": "forum-share",
+  "os": "FortiOS 6.2.3",
+  "fills": [
+   "/snmp/v3-user"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "reject",
+  "file": "superiorsphere_fortios_generator_snmpv3_ntp.conf",
+  "raw": "https://raw.githubusercontent.com/BigJTheAdmin/superior-sphere/main/src/pages/free-tools/config-generator.astro",
+  "src": "https://github.com/BigJTheAdmin/superior-sphere/blob/b5e93298228febe356fb503802f5dfa517960974/src/pages/free-tools/config-generator.astro",
+  "license": "MIT",
+  "os": "unspecified (generator targets generic FortiOS)",
+  "fills": [
+   "/snmp/v3-user",
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "misc_oneliners_fgt_gre_tunnel_mtu.conf",
+  "raw": "https://raw.githubusercontent.com/Simone-Zabberoni/misc-one-liners/master/FORTIGATE.md",
+  "src": "https://github.com/Simone-Zabberoni/misc-one-liners/blob/master/FORTIGATE.md",
+  "license": "unlicensed",
+  "os": "unspecified",
+  "fills": [
+   "/interfaces/interface/tunnel-type",
+   "/interfaces/interface/config/mtu"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "fortinet_forum_dhcpv6pd_wan_ip6mode_dhcp.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/support-forum-92/incorrect-router-announcement-with-prefix-delegation-160935",
+  "license": "forum-share",
+  "os": "unspecified (modern FortiOS, multi-IAID PD)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "fortinet_techtip_internal6_static_ipv6.conf",
+  "raw": "",
+  "src": "https://community.fortinet.com/t5/FortiGate/Technical-Tip-How-to-setup-the-FortiGate-to-assign-IPv6/ta-p/194156",
+  "license": "forum-share",
+  "os": "unspecified",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "investigate",
+  "file": "mylesagray_fgt_jumbo_mtu_override.conf",
+  "raw": "https://raw.githubusercontent.com/mylesagray/blog/master/content/posts/2013-09-09-change-mtu-support-jumbo-frames-fortios/index.md",
+  "src": "https://github.com/mylesagray/blog/blob/master/content/posts/2013-09-09-change-mtu-support-jumbo-frames-fortios/index.md",
+  "license": "investigate",
+  "os": "FortiOS (post dated 2013; grammar stable across 6.4-7.6)",
+  "fills": [
+   "/interfaces/interface/config/mtu"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "fortigate_cli",
+  "rec": "reject",
+  "file": "n/a-rejected-cc-by",
+  "raw": "https://raw.githubusercontent.com/OneUptime/blog/master/posts/2026-03-20-ipv6-fortinet-fortigate/README.md",
+  "src": "https://github.com/OneUptime/blog/blob/master/posts/2026-03-20-ipv6-fortinet-fortigate/README.md",
+  "license": "CC-BY-4.0",
+  "os": "unspecified (2026 post - modern FortiOS)",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "fetch",
+  "file": "saidvandeklundert_rust_snmpv3_usm_fos172.conf",
+  "raw": "https://raw.githubusercontent.com/saidvandeklundert/rust/main/projects/jsc/config_17_set.txt",
+  "src": "https://github.com/saidvandeklundert/rust/blob/main/projects/jsc/config_17_set.txt",
+  "license": "MIT",
+  "os": "Junos 17.2R3.4 (set version 17.2R3.4)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "junos_vsrx_snmpv3_usm_contact_fos232.conf",
+  "raw": "https://raw.githubusercontent.com/meadows123/automation-test/main/network-backups/2026-03-16/vsrx-1773645999.cfg",
+  "src": "https://github.com/meadows123/automation-test/blob/main/network-backups/2026-03-16/vsrx-1773645999.cfg",
+  "license": "unlicensed-device-output",
+  "os": "Junos 23.2R2.21 (set version 23.2R2.21)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/contact",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "reject",
+  "file": "rendoaw_gist_snmpv3_usm_blockform.conf",
+  "raw": "https://gist.githubusercontent.com/rendoaw/541c41527d9c576305dd/raw",
+  "src": "https://gist.github.com/rendoaw/541c41527d9c576305dd",
+  "license": "no-license-gist",
+  "os": "unspecified (no 'version' line in excerpt)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "agantonov_junos_mx_irb_vrrp_bridgedomain.set",
+  "raw": "https://raw.githubusercontent.com/agantonov/juniper_config_example/master/bridge_domain_mx.md",
+  "src": "https://github.com/agantonov/juniper_config_example/blob/master/bridge_domain_mx.md",
+  "license": "UNLICENSED public repo (no LICENSE file; no SPDX header)",
+  "os": "unspecified (MX bridge-domain/irb era, ~Junos 15-18)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/subinterfaces/subinterface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "agantonov_junos_mx_vrrp_track_dot1q.set",
+  "raw": "https://raw.githubusercontent.com/agantonov/juniper_config_example/master/vrrp.md",
+  "src": "https://github.com/agantonov/juniper_config_example/blob/master/vrrp.md",
+  "license": "UNLICENSED public repo (no LICENSE file)",
+  "os": "unspecified (~Junos 15-18, L3VPN/vrrp-inet6 era)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/subinterfaces/subinterface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "kskrede_junos_ex_dhcp_local_server_irb.set",
+  "raw": "https://raw.githubusercontent.com/KSkrede/Networking/master/Juniper/Lab/Lab%204/lab%204%20switch%202%20config.txt",
+  "src": "https://github.com/KSkrede/Networking/blob/master/Juniper/Lab/Lab%204/lab%204%20switch%202%20config.txt",
+  "license": "UNLICENSED public repo (no LICENSE file)",
+  "os": "unspecified (modern dhcp-local-server grammar => ~Junos 15.1+/17.x+)",
+  "fills": [
+   "/dhcp-servers/pool",
+   "/interfaces/interface/subinterfaces/subinterface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "fetch",
+  "file": "batfish_juniper_vrrp_authkey.set",
+  "raw": "https://raw.githubusercontent.com/batfish/batfish/master/projects/batfish/src/test/resources/org/batfish/grammar/juniper/testconfigs/juniper-vrrp",
+  "src": "https://github.com/batfish/batfish/blob/master/projects/batfish/src/test/resources/org/batfish/grammar/juniper/testconfigs/juniper-vrrp",
+  "license": "Apache-2.0 (HIGH preference)",
+  "os": "version-agnostic Batfish grammar testconfig (VRRP + auth grammar)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/subinterfaces/subinterface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "jcoeder_qfx5100_mclag_irb_vrrp.set",
+  "raw": "https://raw.githubusercontent.com/jcoeder/juniper-configurations/master/qfx5100-mc-lag",
+  "src": "https://github.com/jcoeder/juniper-configurations/blob/master/qfx5100-mc-lag",
+  "license": "UNLICENSED public repo (no LICENSE file)",
+  "os": "Junos ~15.1R6 / 17.3R3 train (repo references these in sibling notes)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/subinterfaces/subinterface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "fetch",
+  "file": "jnprautomate_mnha_vsrx_st0_groups_junos.set",
+  "raw": "https://raw.githubusercontent.com/JNPRAutomate/mnha-ipsec-and-multiple-routing-instances/main/full-configurations/mnha-vsrx-a.set",
+  "src": "https://github.com/JNPRAutomate/mnha-ipsec-and-multiple-routing-instances/blob/main/full-configurations/mnha-vsrx-a.set",
+  "license": "MIT",
+  "os": "Junos (vSRX MNHA; version line not in this set-file but feature set = 22.x+ MNHA/ha-link-encryption \u2014 in target range)",
+  "fills": [
+   "/interfaces/interface/tunnel-type (st0 -> ipsec secure-tunnel)",
+   "/groups (set groups MNHA-SYNC + set apply-groups MNHA-SYNC)",
+   "routing-instances (PROD/VPN/ISP-2/HA-ICD virtual-router + vrf)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "fetch",
+  "file": "tsg8139_evpn_leaf_dhcpv6client_fos232.set",
+  "raw": "https://raw.githubusercontent.com/TsG8139/evpn-vxlan-implementation/main/srx/leaf02.txt",
+  "src": "https://github.com/TsG8139/evpn-vxlan-implementation/blob/main/srx/leaf02.txt",
+  "license": "MIT",
+  "os": "Junos 23.2R1.14 (leaf02.txt 'set version 23.2R1.14' \u2014 squarely in 19.x-23.x target range)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6 (family inet6 dhcpv6-client on fxp0 WAN/mgmt unit)",
+   "routing-instances (Tenant-A vrf + ICL virtual-router)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "fetch",
+  "file": "tsg8139_evpn_type5_ipprefixroutes_junos.set.conf",
+  "raw": "https://raw.githubusercontent.com/TsG8139/evpn-vxlan-implementation/main/DC1%20and%20DC2%20configs/DC-2_POD-1_Leaf_01.set.conf",
+  "src": "https://github.com/TsG8139/evpn-vxlan-implementation/blob/main/DC1%20and%20DC2%20configs/DC-2_POD-1_Leaf_01.set.conf",
+  "license": "MIT",
+  "os": "Junos 23.2R1.14-class (DC-2 fabric leaves in same repo as leaf02; EVPN ip-prefix-routes stable 19.x+)",
+  "fills": [
+   "/evpn-type5-routes/route (routing-instances <RI> protocols evpn ip-prefix-routes vni <N> \u2014 type-5 IP-prefix)",
+   "routing-instances (Tenant-1_ipvrf/Tenant-2_ipvrf vrf + macvrf)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "investigate",
+  "file": "fabferri_azpattern_srx_gre_st0_tunnel_junos.set",
+  "raw": "https://raw.githubusercontent.com/fabferri/az-pattern/master/overlay-network-srx/srx1-config.txt",
+  "src": "https://github.com/fabferri/az-pattern/blob/master/overlay-network-srx/srx1-config.txt",
+  "license": "forum-share",
+  "os": "Junos SRX (version not pinned in file; az-pattern repo targets modern SRX/vSRX images)",
+  "fills": [
+   "/interfaces/interface/tunnel-type (gr-0/0/0 -> gre AND st0 -> ipsec secure-tunnel, BOTH in one file)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "juniper_junos",
+  "rec": "reject",
+  "file": "tplisson_evpnmpls_srx_st0_groups_junos.set",
+  "raw": "https://raw.githubusercontent.com/tplisson/evpn-mpls-lab/main/testcase/0-BASELINE/TYPE5/SRX.set",
+  "src": "https://github.com/tplisson/evpn-mpls-lab/blob/main/testcase/0-BASELINE/TYPE5/SRX.set",
+  "license": "NONE",
+  "os": "Junos 15.1X49-D140.3 (OUTSIDE the 18.4-23.x preferred window; legacy)",
+  "fills": [
+   "/interfaces/interface/tunnel-type (st0 -> ipsec)",
+   "/groups (set groups node0/node1 + set apply-groups)"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "marfillaster_dualwan_routes_fos7.rsc",
+  "raw": "https://gist.githubusercontent.com/marfillaster/7a136ea826815ac22f2849e099a1c6a1/raw",
+  "src": "https://gist.github.com/marfillaster/7a136ea826815ac22f2849e099a1c6a1",
+  "license": "forum-share / factual-device-output (unlicensed gist)",
+  "os": "RouterOS 7 (v7-specific routing-table syntax; exact build not in header)",
+  "fills": [
+   "/routing/static-route",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "kcleong_kpn_fiber_v6_fos716.rsc",
+  "raw": "https://gist.githubusercontent.com/kcleong/426ae7a5c3c5ecb4870bb82966e80ef4/raw",
+  "src": "https://gist.github.com/kcleong/426ae7a5c3c5ecb4870bb82966e80ef4",
+  "license": "forum-share / factual-device-output (unlicensed gist)",
+  "os": "RouterOS 7.16",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length",
+   "/interfaces/interface/dhcp-client-v6",
+   "/system/dns-server",
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "mtrimarchi_fastweb_6rd_v6.rsc",
+  "raw": "https://gist.githubusercontent.com/mtrimarchi/c0381d694350ede974f00cea76f8781c/raw",
+  "src": "https://gist.github.com/mtrimarchi/c0381d694350ede974f00cea76f8781c",
+  "license": "forum-share / factual-device-output (unlicensed gist)",
+  "os": "RouterOS (6rd/6to4 form; explicit build not surfaced)",
+  "fills": [
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length",
+   "/interfaces/interface/tunnel-type"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "valeriansaliou_orange_livebox_v6_fos646.rsc",
+  "raw": "https://gist.githubusercontent.com/valeriansaliou/380ca483e295dc96efc51a2142187260/raw",
+  "src": "https://gist.github.com/valeriansaliou/380ca483e295dc96efc51a2142187260",
+  "license": "forum-share / factual-device-output (unlicensed gist)",
+  "os": "RouterOS 6.46.1",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6",
+   "/interfaces/interface/ipv6/address/ip",
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "reject",
+  "file": "",
+  "raw": "",
+  "src": "https://github.com/eworm-de/routeros-scripts",
+  "license": "GPL-3.0",
+  "os": "RouterOS 7",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "reject",
+  "file": "",
+  "raw": "",
+  "src": "https://github.com/floeff/routeros-configuration",
+  "license": "GPL-3.0",
+  "os": "RouterOS 7.x",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "feichay10_finaldegree_vrrp_ipv6_ros7.rsc",
+  "raw": "https://raw.githubusercontent.com/feichay10/Final-Degree-Project/5888bce9147682140dce4f35a5beb030cf55624b/config_devices/oficina_central_ipv6/CE1.rsc",
+  "src": "https://github.com/feichay10/Final-Degree-Project/blob/5888bce9147682140dce4f35a5beb030cf55624b/config_devices/oficina_central_ipv6/CE1.rsc",
+  "license": "CC-BY-SA-4.0",
+  "os": "RouterOS 7.x (uses version=3 v3-protocol=ipv6 \u2014 VRRPv3 IPv6, a 7.x-era construct)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/interfaces/interface/ipv6/address/ip",
+   "/interfaces/interface/ipv6/address/prefix-length"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "feichay10_finaldegree_vrrp_ipv4_master_ros7.rsc",
+  "raw": "https://raw.githubusercontent.com/feichay10/Final-Degree-Project/5888bce9147682140dce4f35a5beb030cf55624b/config_devices/oficina_central/CE1.rsc",
+  "src": "https://github.com/feichay10/Final-Degree-Project/blob/5888bce9147682140dce4f35a5beb030cf55624b/config_devices/oficina_central/CE1.rsc",
+  "license": "CC-BY-SA-4.0",
+  "os": "RouterOS 7.x (uses '/routing bgp connection add' \u2014 the ROS7 BGP CLI form)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "samsara_esnet_ha_vrrp_edge1_master.rsc",
+  "raw": "https://raw.githubusercontent.com/samsara-02/POC_ESNET_MikroTik_Proxmox_HA/ee1e1d73f09bdae044260e43054185c216cc7822/configs/mikrotik/edge-1.rsc",
+  "src": "https://github.com/samsara-02/POC_ESNET_MikroTik_Proxmox_HA/blob/ee1e1d73f09bdae044260e43054185c216cc7822/configs/mikrotik/edge-1.rsc",
+  "license": "none (unlicensed public repo \u2014 device-output precedent, LOWER preference)",
+  "os": "RouterOS 7.x (CHR; '/ip route add ... check-gateway=ping distance=' multi-path default \u2014 6.4x/7.x compatible syntax)",
+  "fills": [
+   "/interfaces/interface/vrrp-groups/group",
+   "/routing/static-route"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "reject",
+  "file": "REJECTED_svls_ha_mikrotik_template.rsc",
+  "raw": "https://raw.githubusercontent.com/svlsResearch/ha-mikrotik/master/HA_init.rsc",
+  "src": "https://github.com/svlsResearch/ha-mikrotik/blob/master/HA_init.rsc",
+  "license": "none (no LICENSE file)",
+  "os": "RouterOS 6.x-era (uses on-backup/on-master keywords + interval=1, pre-v3 style)",
+  "fills": [],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "fetch",
+  "file": "quangproo_fpt_mgmt_plane_snmpv3_ntp_dns_ros7.rsc",
+  "raw": "https://raw.githubusercontent.com/quangproo/fpt/main/switch.rsc",
+  "src": "https://github.com/quangproo/fpt/blob/main/switch.rsc",
+  "license": "none (unlicensed public repo \u2014 device-output /export, factual-output precedent)",
+  "os": "RouterOS 7.x (uses the ROS7 '/system ntp client servers add address=' multi-server form and SNMPv3 'authentication-protocol=SHA256' which is ROS7-era; SHA256 maxed at SHA1 on ROS6)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/location",
+   "/snmp/contact",
+   "/snmp/trap-host",
+   "/snmp/v3-user",
+   "/system/ntp-server",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "fetch",
+  "file": "quangproo_fpt_ntp_servers_dns_dualstack_ros7.rsc",
+  "raw": "https://raw.githubusercontent.com/quangproo/fpt/main/router.rsc",
+  "src": "https://github.com/quangproo/fpt/blob/main/router.rsc",
+  "license": "none (unlicensed public repo \u2014 device-output /export, factual-output precedent)",
+  "os": "RouterOS 7.x (ROS7 '/system ntp client servers add address=... iburst=yes' multi-server form + dual-stack '/ip dns set servers=' with IPv6 resolvers)",
+  "fills": [
+   "/system/ntp-server",
+   "/system/dns-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "investigate",
+  "file": "forum_mikrotik_t52181_snmp_export_trap.rsc",
+  "raw": "",
+  "src": "https://forum.mikrotik.com/viewtopic.php?t=52181",
+  "license": "forum-share",
+  "os": "RouterOS 6.x-era SNMP grammar (SHA1/DES; one quoted legacy variant noted as RouterOS 5.3-or-earlier with trap-version=1). Pre-dates ROS7 SHA256.",
+  "fills": [
+   "/snmp/community",
+   "/snmp/location",
+   "/snmp/contact",
+   "/snmp/trap-host",
+   "/snmp/v3-user"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "reject",
+  "file": "alani4837_enterprise_branch_snmpv2_ntp_ros6.rsc",
+  "raw": "https://raw.githubusercontent.com/alani4837/mikrotik-templates/main/BasicConfigurations/enterprise-branch.rsc",
+  "src": "https://github.com/alani4837/mikrotik-templates/blob/main/BasicConfigurations/enterprise-branch.rsc",
+  "license": "claimed MIT (UNVERIFIED \u2014 no LICENSE file present)",
+  "os": "RouterOS 6.x-style management plane (NTP uses the ROS6 'primary-ntp='/'secondary-ntp=' form, SNMP is v2c only \u2014 no authentication-protocol)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/contact",
+   "/snmp/trap-host",
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "mikrotik_routeros",
+  "rec": "reject",
+  "file": "REJECT_amit-nz_gpl3_snmpv3.rsc",
+  "raw": "https://raw.githubusercontent.com/amit-nz/mikrotik-scripts/master/mikrotik-provisioning.rsc",
+  "src": "https://github.com/amit-nz/mikrotik-scripts/blob/master/mikrotik-provisioning.rsc",
+  "license": "GPL-3.0",
+  "os": "RouterOS 7-era SNMPv3 grammar (SHA1/AES)",
+  "fills": [
+   "/snmp/community",
+   "/snmp/location",
+   "/snmp/contact",
+   "/snmp/v3-user"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "opnsense",
+  "rec": "reject",
+  "file": "n/a (rejected \u2014 wrong grammar)",
+  "raw": "https://raw.githubusercontent.com/zakaria-hammal/PFE_2026/main/Configs/Virtual_Network/OPNSenseConfig.xml",
+  "src": "https://github.com/zakaria-hammal/PFE_2026/blob/main/Configs/Virtual_Network/OPNSenseConfig.xml",
+  "license": "unlicensed (no LICENSE file / SPDX header found)",
+  "os": "OPNsense 24.x (modern net-snmp plugin; persisted_at epochs ~1774803300 \u2248 2026-03)",
+  "fills": [
+   "/snmp/location",
+   "/snmp/contact",
+   "/snmp/community"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "opnsense",
+  "rec": "reject",
+  "file": "n/a (rejected \u2014 stub)",
+  "raw": "https://raw.githubusercontent.com/mcree/vagrant-opnsense/master/config.xml",
+  "src": "https://github.com/mcree/vagrant-opnsense/blob/master/config.xml",
+  "license": "unknown / not stated for the config; repo focus is Vagrant tooling",
+  "os": "OPNsense (Vagrant base box default config)",
+  "fills": [],
+  "confirmed": false
+ },
+ {
+  "codec": "opnsense",
+  "rec": "reject",
+  "file": "n/a (rejected \u2014 stub)",
+  "raw": "https://raw.githubusercontent.com/Xieonie/secure-smart-home-infrastructure/main/network/firewall-rules/opnsense-config.xml.example",
+  "src": "https://github.com/Xieonie/secure-smart-home-infrastructure/blob/main/network/firewall-rules/opnsense-config.xml.example",
+  "license": "unknown (repo LICENSE not confirmed)",
+  "os": "OPNsense (example config, version not stated)",
+  "fills": [
+   "/snmp/community"
+  ],
+  "confirmed": false
+ },
+ {
+  "codec": "opnsense",
+  "rec": "investigate",
+  "file": "techknowledgeman_opnsense_dhcp6_track6.xml",
+  "raw": "https://raw.githubusercontent.com/Techknowledgeman/OPNsense/main/config.xml",
+  "src": "https://github.com/Techknowledgeman/OPNsense/blob/main/config.xml",
+  "license": "CC0-1.0",
+  "os": "Not stamped at config root (no <opnsense version=...>); plugin model versions present e.g. Nginx 1.20.0, Netflow 1.0.1 -- consistent with a ~23.x/24.x-era backup but version NOT confirmed",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "opnsense",
+  "rec": "investigate",
+  "file": "opnsense_docs_carp_master_bsd.xml",
+  "raw": "https://raw.githubusercontent.com/opnsense/docs/master/source/manual/how-tos/resources/Carp_example_master.xml",
+  "src": "https://docs.opnsense.org/manual/how-tos/carp.html",
+  "license": "BSD-2-Clause",
+  "os": "Config 'version' field reported 11.2 (internal config schema version, not the OPNsense release); the docs how-to targets a generic modern OPNsense -- release version NOT explicitly stamped",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "fetch",
+  "file": "vyos_forum_snmpv3_user_fos13.conf",
+  "raw": "",
+  "src": "https://forum.vyos.io/t/snmp-v3-unable-to-connect/6881",
+  "license": "forum-share",
+  "os": "VyOS 1.4-rolling-20210327 (set-form paste) + VyOS 1.3 equuleus build 202103 (curly `show service snmp v3` paste)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/v3-user/auth-passphrase",
+   "/snmp/v3-user/engine-id",
+   "/snmp/location"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "scottlaird_vyos_parser_ntp_community_fos15.conf",
+  "raw": "https://raw.githubusercontent.com/scottlaird/vyos-parser/main/parser/testdata/config.boot.1",
+  "src": "https://github.com/scottlaird/vyos-parser/blob/main/parser/testdata/config.boot.1",
+  "license": "Apache-2.0",
+  "os": "VyOS 1.5-rolling-202501060800 (// Release version comment in file)",
+  "fills": [
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "vyos_forum_snmpv3_trap_target.conf",
+  "raw": "",
+  "src": "https://forum.vyos.io/t/snmp-v3-trap-target-is-busted/17161",
+  "license": "forum-share",
+  "os": "VyOS 1.x (rolling; exact build not stated in paste, contemporaneous with T4093-era trap-target fix)",
+  "fills": [
+   "/snmp/v3-user/auth-passphrase",
+   "/snmp/v3-user/engine-id"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "reject",
+  "file": "uwwisaca_ccdc_vyos_stig_v3user.conf",
+  "raw": "https://raw.githubusercontent.com/uwwisaca/CCDC/5f32c7fb6b644680bc02674270e007f5b9d7403b/FR-VyOSRouter/VyOS-STIG-Configuration-Guide.txt",
+  "src": "https://github.com/uwwisaca/CCDC/blob/5f32c7fb6b644680bc02674270e007f5b9d7403b/FR-VyOSRouter/VyOS-STIG-Configuration-Guide.txt",
+  "license": "none (no LICENSE file in repo)",
+  "os": "unspecified (set-form template; `set system ntp server` => pre-1.5 system-tree NTP, so 1.3/1.4-era guidance)",
+  "fills": [
+   "/snmp/v3-user",
+   "/snmp/v3-user/auth-passphrase",
+   "/system/ntp-server"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "forum_vyos_vxlan_mcast_leaf_15x.conf",
+  "raw": "",
+  "src": "https://forum.vyos.io/t/spine-leaf-vxlan-multicast-not-working/14422",
+  "license": "forum-share",
+  "os": "VyOS 1.5.x (circinus) referenced; multicast vxlan grammar valid 1.4+",
+  "fills": [
+   "/vxlan-vnis/mcast-group",
+   "/vxlan-vnis/source-interface"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "forum_vyos_bonding_lacp_133.conf",
+  "raw": "",
+  "src": "https://forum.vyos.io/t/could-you-help-me-review-the-following-lacp-code-where-i-added-vlan-configurations/15774",
+  "license": "forum-share",
+  "os": "VyOS 1.3.3 (equuleus)",
+  "fills": [
+   "/lags/lag/name",
+   "/lags/lag/members",
+   "/lags/lag/mode",
+   "/interfaces/interface/lag-member-of"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "reject",
+  "file": "REJECTED_gpl_vyos_legacy_vxlan",
+  "raw": "",
+  "src": "https://github.com/vyos-legacy/vyos-vxlan",
+  "license": "GPL-2.0",
+  "os": "legacy (pre-1.2 Vyatta-era curly grammar)",
+  "fills": [
+   "/vxlan-vnis/mcast-group"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "reject",
+  "file": "REJECTED_unlicensed_vyos_docs",
+  "raw": "",
+  "src": "https://github.com/vyos/vyos-documentation",
+  "license": "no-license (rejected)",
+  "os": "VyOS 1.4/1.5/rolling",
+  "fills": [
+   "/vxlan-vnis/mcast-group",
+   "/vxlan-vnis/source-interface",
+   "/lags/lag/mode",
+   "/interfaces/interface/config/mtu"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "fetch",
+  "file": "houdev_dhcpv6_pd_client_wan.config.boot",
+  "raw": "https://raw.githubusercontent.com/Hou-dev/Vyos-Config/main/config.boot",
+  "src": "https://github.com/Hou-dev/Vyos-Config/blob/main/config.boot",
+  "license": "unlicensed-public-repo",
+  "os": "VyOS (no config-version header in file; grammar is 1.3/1.4/1.5-compatible \u2014 `address \"dhcpv6\"` quoted-value style + `rapid-commit { }` + offload block indicate 1.4/1.5)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "siketyan_flets_dhcpv6_pd_client.config.boot",
+  "raw": "",
+  "src": "https://gist.github.com/siketyan/a5d02d4c5d4f9118412748903087a02c",
+  "license": "unlicensed-public-repo",
+  "os": "VyOS (no config-version header; curly-brace grammar consistent with 1.3/1.4)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "problemofnetwork_fiber7_dhcpv6_pd_setform.conf",
+  "raw": "",
+  "src": "https://www.problemofnetwork.com/posts/updating-my-fiber7-vyos-config-to-1dot5/",
+  "license": "unlicensed-blog",
+  "os": "VyOS 1.5 (explicit in post; companion older post is 1.4)",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6"
+  ],
+  "confirmed": true
+ },
+ {
+  "codec": "vyos",
+  "rec": "investigate",
+  "file": "vanwerkhoven_pppoe_dhcpv6_pd_mtu_setform.conf",
+  "raw": "",
+  "src": "https://www.vanwerkhoven.org/blog/2024/vyos-from-scratch-with-vlan-and-zone-based-firewall/",
+  "license": "unlicensed-blog",
+  "os": "VyOS 1.5-rolling (upgraded from 1.4), post dated 2024-11-28",
+  "fills": [
+   "/interfaces/interface/dhcp-client-v6",
+   "/interfaces/interface/config/mtu"
+  ],
+  "confirmed": true
+ }
+]

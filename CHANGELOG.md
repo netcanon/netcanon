@@ -26,6 +26,26 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+* **Real-capture corpus: 7 gap-fill fixtures** closing **14 previously-unverified
+  capability-matrix surfaces** (identified by the `fixture-gap-hunt` analysis —
+  diffing `iter_xpaths()` over the existing corpus against each
+  `CapabilityMatrix.supported` list; see `docs/fixture-gap-analysis/2026-06-15/`).
+  Each parses, round-trips stably, and auto-detects to a unique codec; full
+  provenance + license + sanitization notes in `tests/fixtures/real/NOTICE.md`.
+    * **cisco_nxos** — `batfish_nxos_n9kv_ebgp_r1` (Apache-2.0; NX-OS **10.3(9)**,
+      first >9.2(3) data point — static IPv6 address + per-VRF static route) and
+      `nautobot_gc_nxos_snmp_spine01` (9.3(3) — `snmp-server community/contact/location/host`).
+    * **aruba_aoscx** — `netutils_aoscx_snmpv3` (Apache-2.0; SNMPv3 USM + per-interface
+      VRF + routing-instance).
+    * **juniper_junos** — `saidvandeklundert_snmpv3` (MIT; 17.2 — SNMPv3 USM + SNMP
+      location) and `tsg8139_evpn_leaf_dhcpv6` (MIT; **23.2**, fills the 19–23.x bridge
+      gap — DHCPv6 client).
+    * **vyos** — `houdev_vyos_dhcpv6_pd_client` (DHCPv6 client + Prefix-Delegation).
+    * **cisco_iosxe** — `ciscolive_brkops1104_evpn_leaf` (IOS-XE **17.15** version
+      anchor; no new canonical surface).
+
 ### Fixed
 
 * **Cross-vendor VLAN SVI L3 now survives translation to SVI-model

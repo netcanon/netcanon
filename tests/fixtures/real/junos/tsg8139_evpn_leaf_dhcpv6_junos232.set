@@ -1,0 +1,76 @@
+set version 23.2R1.14
+set system root-authentication encrypted-password "$6$fakeSalt$fakeHashExampleValueForFixtureOnlyNotARealCredential0000000000000000000000000000"
+set system services ssh root-login allow
+set system arp aging-timer 5
+set system syslog file interactive-commands interactive-commands any
+set system syslog file messages any notice
+set system syslog file messages authorization info
+set system processes dhcp-service traceoptions file dhcp_logfile
+set system processes dhcp-service traceoptions file size 10m
+set system processes dhcp-service traceoptions level all
+set system processes dhcp-service traceoptions flag packet
+set interfaces ge-0/0/0 vlan-tagging
+set interfaces ge-0/0/0 unit 54 vlan-id 54
+set interfaces ge-0/0/0 unit 54 family inet6
+set interfaces ge-0/0/0 unit 54 family mpls
+set interfaces ge-0/0/0 unit 55 vlan-id 55
+set interfaces ge-0/0/0 unit 55 family inet6
+set interfaces ge-0/0/1 vlan-tagging
+set interfaces ge-0/0/1 unit 54 vlan-id 54
+set interfaces ge-0/0/1 unit 54 family inet6
+set interfaces ge-0/0/1 unit 54 family mpls
+set interfaces ge-0/0/1 unit 55 vlan-id 55
+set interfaces ge-0/0/1 unit 55 family inet6
+set interfaces ge-0/0/9 unit 0 family inet6 address 2001:db8:1000:2::1/64
+set interfaces fxp0 unit 0 family inet dhcp vendor-id Juniper-ex9214-VM69765360D7
+set interfaces fxp0 unit 0 family inet6 dhcpv6-client client-type stateful
+set interfaces fxp0 unit 0 family inet6 dhcpv6-client client-ia-type ia-na
+set interfaces fxp0 unit 0 family inet6 dhcpv6-client client-identifier duid-type duid-ll
+set interfaces fxp0 unit 0 family inet6 dhcpv6-client vendor-id Juniper:ex9214:VM69765360D7
+set multi-chassis mc-lag consistency-check
+set forwarding-options load-balance per-flow hash-seed
+set policy-options policy-statement ECMP then load-balance per-flow
+set policy-options policy-statement export-icl term send from protocol bgp
+set policy-options policy-statement export-icl term send then accept
+set policy-options policy-statement export-icl then reject
+set routing-instances Cluster1_ICL instance-type virtual-router
+set routing-instances Cluster1_ICL routing-options router-id 192.0.2.2
+set routing-instances Cluster1_ICL routing-options autonomous-system 65000
+set routing-instances Cluster1_ICL protocols bgp group leafs type external
+set routing-instances Cluster1_ICL protocols bgp group leafs family inet6 unicast
+set routing-instances Cluster1_ICL protocols bgp group leafs export export-icl
+set routing-instances Cluster1_ICL protocols bgp group leafs peer-as 65001
+set routing-instances Cluster1_ICL protocols bgp group leafs as-override
+set routing-instances Cluster1_ICL protocols bgp group leafs dynamic-neighbor n peer-auto-discovery family inet6 ipv6-nd
+set routing-instances Cluster1_ICL protocols bgp group leafs dynamic-neighbor n peer-auto-discovery interface ge-0/0/0.55
+set routing-instances Cluster1_ICL protocols bgp group leafs dynamic-neighbor n peer-auto-discovery interface ge-0/0/1.55
+set routing-instances Cluster1_ICL interface ge-0/0/0.55
+set routing-instances Cluster1_ICL interface ge-0/0/1.55
+set routing-instances Tenant-A-1 instance-type vrf
+set routing-instances Tenant-A-1 route-distinguisher 192.0.2.2:100
+set routing-instances Tenant-A-1 vrf-target target:1000:100
+set routing-instances Tenant-A-2 instance-type vrf
+set routing-instances Tenant-A-2 interface ge-0/0/9.0
+set routing-instances Tenant-A-2 route-distinguisher 192.0.2.2:101
+set routing-instances Tenant-A-2 vrf-target target:1000:101
+set routing-instances Tenant-A-2 vrf-table-label
+set routing-options router-id 192.0.2.2
+set routing-options autonomous-system 65000
+set routing-options forwarding-table export ECMP
+set protocols router-advertisement interface fxp0.0 managed-configuration
+set protocols router-advertisement interface ge-0/0/0.54
+set protocols router-advertisement interface ge-0/0/1.54
+set protocols router-advertisement interface ge-0/0/0.55
+set protocols router-advertisement interface ge-0/0/1.55
+set protocols bgp group srx type external
+set protocols bgp group srx family inet6 unicast
+set protocols bgp group srx family inet6-vpn unicast
+set protocols bgp group srx peer-as 65001
+set protocols bgp group srx as-override
+set protocols bgp group srx dynamic-neighbor fw peer-auto-discovery family inet6 ipv6-nd
+set protocols bgp group srx dynamic-neighbor fw peer-auto-discovery interface ge-0/0/0.54
+set protocols bgp group srx dynamic-neighbor fw peer-auto-discovery interface ge-0/0/1.54
+set protocols mpls interface ge-0/0/0.54
+set protocols mpls interface ge-0/0/1.54
+set protocols lldp interface all
+set protocols lldp-med interface all
