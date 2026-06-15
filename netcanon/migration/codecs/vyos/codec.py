@@ -270,6 +270,16 @@ class VyOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Tier-1/2 surfaces this codec drops on render — declared so the
+            #    live validation report flags the loss instead of reporting
+            #    `severity: ok` (2026-06 adversarial review #9). ──
+            UnsupportedPath(path="/system/domain", reason="Render emits no system domain-name; intent.domain is dropped on migration."),
+            UnsupportedPath(path="/system/timezone", reason="Render emits no time-zone stanza; intent.timezone is dropped on migration."),
+            UnsupportedPath(path="/system/dns-server", reason="Render emits no name-server config; intent.dns_servers are dropped on migration."),
+            UnsupportedPath(path="/system/syslog-server", reason="Render emits no syslog config; intent.syslog_servers are dropped on migration."),
+            UnsupportedPath(path="/dhcp-servers/pool", reason="Render emits no DHCP server pool; intent.dhcp_servers are dropped on migration."),
+            UnsupportedPath(path="/radius-servers/server/host", reason="Render emits no RADIUS config; RADIUS host is dropped on migration."),
+            UnsupportedPath(path="/radius-servers/server/key", reason="Render emits no RADIUS config; the RADIUS shared secret is dropped on migration."),
             # VLAN database — VyOS has no top-level VLAN table.
             UnsupportedPath(
                 path="/vlans/vlan/id",

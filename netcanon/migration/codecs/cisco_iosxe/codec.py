@@ -238,6 +238,16 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Granular Tier-1/2 drops the walker now yields (2026-06
+            #    adversarial review #9): the stub already carries the
+            #    underscore field-markers below for run_full_mesh, but the
+            #    live classifier needs the exact granular walker strings. ──
+            UnsupportedPath(path="/system/domain", reason="Phase 0.5 stub render emits only interfaces; intent.domain dropped on render."),
+            UnsupportedPath(path="/system/timezone", reason="Phase 0.5 stub render emits only interfaces; intent.timezone dropped on render."),
+            UnsupportedPath(path="/system/syslog-server", reason="Phase 0.5 stub render emits only interfaces; intent.syslog_servers dropped on render."),
+            UnsupportedPath(path="/dhcp-servers/pool", reason="Phase 0.5 stub render emits only interfaces; intent.dhcp_servers dropped on render."),
+            UnsupportedPath(path="/radius-servers/server/host", reason="Phase 0.5 stub render emits only interfaces; RADIUS host dropped on render."),
+            UnsupportedPath(path="/radius-servers/server/key", reason="Phase 0.5 stub render emits only interfaces; RADIUS shared secret dropped on render."),
             # ── Granular xpaths (match _walk_canonical's emitted shapes
             # so validate_against classifies render-time leaves as
             # unsupported when source-side data is present). ──
