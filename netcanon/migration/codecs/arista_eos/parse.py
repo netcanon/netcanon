@@ -1381,10 +1381,14 @@ def _expand_vlan_list(spec: str) -> list[int]:
         if "-" in chunk:
             a, b = chunk.split("-", 1)
             try:
-                for n in range(int(a), int(b) + 1):
-                    out.append(n)
+                a_i, b_i = int(a), int(b)
             except ValueError:
                 continue
+            # Clamp to the valid VLAN space before materializing so a huge
+            # span cannot OOM the process (valid sub-range preserved).
+            a_i, b_i = max(1, a_i), min(4094, b_i)
+            if a_i <= b_i:
+                out.extend(range(a_i, b_i + 1))
         else:
             try:
                 out.append(int(chunk))

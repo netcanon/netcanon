@@ -60,10 +60,14 @@ FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
 ## The trust signal — and the invitation
 
 Across every supported vendor pair × every field declared as
-`supported`, the cross-mesh audit holds **zero `CODEC_BUG` cells**.
-That's not "we think it works"; that's every cell that should
-translate, does, by automated test against vendor-doc-grounded
-expectations.
+`supported`, the cross-mesh audit tracks `CODEC_BUG` drift cell by cell.
+The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md` —
+the authoritative count) currently reports a small number of residual
+high-severity cells (5 at last run), each triaged as a benign comparator
+artifact on a synthetic fixture rather than a translation error, and every
+one is enumerated in that file.  That's not "we think it works"; that's
+every cell that should translate, checked by automated test against
+vendor-doc-grounded expectations, with nothing swept under the rug.
 
 The honest follow-up: **the audit only covers cells we have fixtures
 for.**  Real-world configs exercise paths the synthetic fixtures
