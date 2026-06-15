@@ -647,10 +647,11 @@ class TestRegistry:
 # input that exercises the parse and render paths end-to-end.
 _VRRP_BASIC = """\
 hostname "vrrp-test"
+router vrrp
 vlan 100
    name "MGMT"
    ip address 10.0.100.1 255.255.255.0
-   ip vrrp vrid 10
+   vrrp vrid 10
       virtual-ip-address 10.0.100.254
       priority 110
       preempt
@@ -665,16 +666,17 @@ vlan 100
 # another, both inside the same ``vlan N`` body).
 _VRRP_MULTI = """\
 hostname "vrrp-multi"
+router vrrp
 vlan 200
    name "USERS"
    ip address 10.0.200.1/24
-   ip vrrp vrid 20
+   vrrp vrid 20
       virtual-ip-address 10.0.200.254
       priority 110
       preempt
       enable
       exit
-   ip vrrp vrid 21
+   vrrp vrid 21
       virtual-ip-address 10.0.200.253
       priority 90
       enable
@@ -689,7 +691,7 @@ class TestVRRPGroups:
     # ----------------------------- Parse -----------------------------
 
     def test_parse_basic_group_attaches_to_vlan_interface(self):
-        """A single ``ip vrrp vrid`` block inside a VLAN stanza
+        """A single ``vrrp vrid`` block inside a VLAN stanza
         surfaces as one CanonicalVRRPGroup on the synthesised
         Vlan<N> CanonicalInterface."""
         tree = ArubaAOSSCodec().parse(_VRRP_BASIC)
@@ -709,7 +711,7 @@ class TestVRRPGroups:
         raw = (
             'vlan 50\n'
             '   ip address 10.0.50.1/24\n'
-            '   ip vrrp vrid 5\n'
+            '   vrrp vrid 5\n'
             '      virtual-ip-address 10.0.50.254\n'
             '      enable\n'
             '      exit\n'
@@ -720,7 +722,7 @@ class TestVRRPGroups:
         assert svi.vrrp_groups[0].preempt is False
 
     def test_parse_multiple_groups_in_same_vlan(self):
-        """Two ``ip vrrp vrid`` blocks inside the same VLAN stanza
+        """Two ``vrrp vrid`` blocks inside the same VLAN stanza
         parse into two distinct CanonicalVRRPGroup records on the
         single Vlan<N> interface, ordered by source appearance."""
         tree = ArubaAOSSCodec().parse(_VRRP_MULTI)
@@ -739,7 +741,7 @@ class TestVRRPGroups:
         raw = (
             'vlan 30\n'
             '   ip address 10.0.30.1/24\n'
-            '   ip vrrp vrid 3\n'
+            '   vrrp vrid 3\n'
             '      virtual-ip-address 10.0.30.254\n'
             '      authentication mode plaintext-password "SECRET"\n'
             '      enable\n'
@@ -755,7 +757,7 @@ class TestVRRPGroups:
         raw = (
             'vlan 70\n'
             '   ip address 10.0.70.1/24\n'
-            '   ip vrrp vrid 7\n'
+            '   vrrp vrid 7\n'
             '      virtual-ip-address 10.0.70.254\n'
             '      enable\n'
             '      exit\n'
@@ -778,8 +780,8 @@ class TestVRRPGroups:
     # ----------------------------- Render -----------------------------
 
     def test_render_emits_nested_vrrp_block(self):
-        """Render emits ``ip vrrp vrid N`` + body + ``exit`` inside
-        the ``vlan N`` stanza."""
+        """Render emits a global ``router vrrp`` + ``vrrp vrid N`` +
+        body + ``exit`` inside the ``vlan N`` stanza."""
         tree = CanonicalIntent(
             vlans=[CanonicalVlan(
                 id=100, name="MGMT",
@@ -802,9 +804,12 @@ class TestVRRPGroups:
             )],
         )
         out = ArubaAOSSCodec().render(tree)
+        # The global enable must precede the VLAN-mounted instance.
+        assert "router vrrp" in out
+        assert out.index("router vrrp") < out.index("vlan 100")
         # The block must sit INSIDE the vlan stanza.
         assert "vlan 100" in out
-        assert "   ip vrrp vrid 10" in out
+        assert "   vrrp vrid 10" in out
         assert "      virtual-ip-address 10.0.100.254" in out
         assert "      priority 110" in out
         assert "      preempt" in out
@@ -894,7 +899,7 @@ class TestVRRPGroups:
     def test_render_anycast_mode_surfaces_review_comment(self):
         """AOS-S has NO anycast / HSRP / CARP grammar.  Groups with
         non-``vrrp`` mode emit a review comment and don't produce
-        an ``ip vrrp vrid`` block."""
+        a ``vrrp vrid`` block (nor the global ``router vrrp``)."""
         tree = CanonicalIntent(
             vlans=[CanonicalVlan(
                 id=60,
@@ -913,7 +918,8 @@ class TestVRRPGroups:
             )],
         )
         out = ArubaAOSSCodec().render(tree)
-        assert "ip vrrp vrid" not in out
+        assert "vrrp vrid" not in out
+        assert "router vrrp" not in out
         assert "review" in out
         assert "'anycast'" in out
 
@@ -963,7 +969,7 @@ class TestVRRPGroups:
         raw = (
             'vlan 30\n'
             '   ip address 10.0.30.1/24\n'
-            '   ip vrrp vrid 3\n'
+            '   vrrp vrid 3\n'
             '      virtual-ip-address 10.0.30.254\n'
             '      authentication mode plaintext-password "SECRET"\n'
             '      enable\n'
@@ -974,6 +980,79 @@ class TestVRRPGroups:
         tree2 = codec.parse(codec.render(tree1))
         svi = next(i for i in tree2.interfaces if i.name == "Vlan30")
         assert svi.vrrp_groups[0].authentication == "plain:SECRET"
+
+    # ------------------- Real-grammar regressions (gap-hunt) -------------------
+
+    def test_parse_real_grammar_vrrp_vrid_no_ip_prefix(self):
+        """Real AOS-S running-config emits ``router vrrp`` + ``vrrp vrid
+        N`` (NO ``ip`` prefix) — verified against the AOS-S 16.10 CLI
+        reference + four operator captures.  The pre-gap-hunt parser
+        required ``ip vrrp vrid`` and dropped every real VRRP block."""
+        raw = (
+            "router vrrp\n"
+            "vlan 1\n"
+            "   ip address 10.40.0.2 255.255.255.0\n"
+            "   vrrp vrid 1\n"
+            "      owner\n"
+            "      virtual-ip-address 10.40.0.1 255.255.255.0\n"
+            "      enable\n"
+            "      exit\n"
+            "   exit\n"
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan1")
+        assert len(svi.vrrp_groups) == 1
+        g = svi.vrrp_groups[0]
+        assert g.group_id == 1
+        # ``owner`` → canonical priority ceiling 254 (model caps at 254;
+        # 255 reserved-but-unrepresentable).  Legacy ``<ip> <mask>`` VIP
+        # keeps the bare IP (mask dropped, not carried on the canonical).
+        assert g.priority == 254
+        assert g.virtual_ips == ["10.40.0.1"]
+
+    def test_parse_legacy_ip_vrrp_vrid_still_accepted(self):
+        """Back-compat: the older / mis-documented ``ip vrrp vrid``
+        form (what the codec itself emitted through v0.1.8) still
+        parses, so existing stored configs don't regress."""
+        raw = (
+            "vlan 9\n"
+            "   ip address 10.0.9.1/24\n"
+            "   ip vrrp vrid 9\n"
+            "      virtual-ip-address 10.0.9.254\n"
+            "      enable\n"
+            "      exit\n"
+            "   exit\n"
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan9")
+        assert svi.vrrp_groups[0].group_id == 9
+
+    def test_owner_maps_to_max_priority_254_and_round_trips(self):
+        """``owner`` parses to the canonical priority ceiling 254 (255
+        is unrepresentable).  Render emits ``priority 254`` (AOS-S
+        accepts an explicit priority; the canonical can't distinguish a
+        254-from-owner from an explicit 254), which re-parses to 254 —
+        round-trip stable."""
+        raw = (
+            "router vrrp\n"
+            "vlan 7\n"
+            "   ip address 10.0.7.1/24\n"
+            "   vrrp vrid 7\n"
+            "      owner\n"
+            "      virtual-ip-address 10.0.7.254\n"
+            "      enable\n"
+            "      exit\n"
+            "   exit\n"
+        )
+        codec = ArubaAOSSCodec()
+        tree = codec.parse(raw)
+        svi = next(i for i in tree.interfaces if i.name == "Vlan7")
+        assert svi.vrrp_groups[0].priority == 254
+        out = codec.render(tree)
+        assert "      priority 254" in out
+        reparsed = codec.parse(out)
+        svi2 = next(i for i in reparsed.interfaces if i.name == "Vlan7")
+        assert svi2.vrrp_groups[0].priority == 254
 
     # ----------------------------- Capabilities -----------------------------
 
