@@ -64,6 +64,16 @@ timestamp if your timezone matters for an audit.
   underlying case-mismatch duplicate-LAG round-trip defect is tracked
   separately.)
 
+* **Shared device-profile registry is now lock-guarded across threads (review
+  finding #10).**  The backup worker thread persists a profile's
+  `detected_facts` while route handlers (which FastAPI runs in a threadpool for
+  sync endpoints) create / update / delete the same dict + on-disk files.  A
+  new `DEVICE_PROFILE_REGISTRY_LOCK` (in `storage/device_profile_store.py`)
+  serialises every read-modify-write-persist + delete critical section, and the
+  worker re-checks membership inside the lock before saving — so a
+  delete-then-save interleaving can no longer resurrect a just-deleted profile
+  to disk, and concurrent `detected_facts` updates can't be lost.
+
 ### Changed
 
 * **Documentation honesty pass (multi-lens review remediation).**  The README
