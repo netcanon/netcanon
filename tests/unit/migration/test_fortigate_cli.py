@@ -540,9 +540,22 @@ class TestProbe:
 
 class TestCrossAdapter:
     def test_fortigate_to_opnsense(self):
+        """FortiGate -> OPNsense.  The FortiGate fixture carries NTP
+        servers; OPNsense's render emits no ``<system><timeservers>``, so
+        it honestly declares ``/system/ntp-server`` unsupported (2026-06
+        validation-honesty sweep).  The migration therefore terminates as
+        ``partial`` with a ``block`` validation severity — the operator is
+        warned the NTP config is dropped — instead of the prior, blind
+        ``completed``.  The rest of the config (hostname, interfaces) still
+        renders."""
         raw = FIXTURES.joinpath("fortios_simple.conf").read_text()
         job = run_plan(FortiGateCLICodec(), OPNsenseCodec(), raw)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
+        assert any(
+            u.path == "/system/ntp-server" for u in job.validation.unsupported_paths
+        )
         assert "<hostname>fgt-edge-01</hostname>" in (job.rendered or "")
 
     def test_fortigate_to_iosxe_netconf(self):

@@ -208,6 +208,12 @@ class JunosCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Tier-1/2 surfaces this codec drops on render — declared so the
+            #    live validation report flags the loss instead of reporting
+            #    `severity: ok` (2026-06 adversarial review #9). ──
+            UnsupportedPath(path="/system/timezone", reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration."),
+            UnsupportedPath(path="/radius-servers/server/host", reason="Render emits no AAA radius-server config; RADIUS host is dropped on migration."),
+            UnsupportedPath(path="/radius-servers/server/key", reason="Render emits no AAA radius-server config; the RADIUS shared secret is dropped on migration."),
             UnsupportedPath(
                 path="/routing/bgp",
                 reason=(

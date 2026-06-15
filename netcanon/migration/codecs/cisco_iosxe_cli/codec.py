@@ -218,6 +218,11 @@ class CiscoIOSXECLICodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── Tier-1 surfaces this codec drops on render — declared so the
+            #    live validation report flags the loss instead of reporting
+            #    `severity: ok` (2026-06 adversarial review #9). ──
+            UnsupportedPath(path="/system/timezone", reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration."),
+            UnsupportedPath(path="/system/syslog-server", reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration."),
             UnsupportedPath(
                 path="/interfaces/interface/subinterfaces/subinterface/ipv6",
                 reason="Phase 0.5 scope — IPv4 only.",
@@ -607,8 +612,19 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/interfaces/interface/trunk-native-vlan"
         if iface.voice_vlan is not None:
             yield "/interfaces/interface/voice-vlan"
-        for _ in iface.vrrp_groups:
+        for grp in iface.vrrp_groups:
             yield "/interfaces/interface/vrrp-groups/group"
+            # Sub-field losses several codecs declare lossy (FortiGate /
+            # AOS-S keep one VIP + drop secondaries / virtual-mac / track
+            # objects).  Walk them only when the loss condition holds, so
+            # the lossy declaration actually fires in the live report
+            # instead of being unreachable (2026-06 adversarial review #9).
+            if len(grp.virtual_ips) > 1:
+                yield "/interfaces/interface/vrrp-groups/group/virtual-ips"
+            if grp.virtual_mac:
+                yield "/interfaces/interface/vrrp-groups/group/virtual-mac"
+            if grp.track_interfaces:
+                yield "/interfaces/interface/vrrp-groups/group/track-interfaces"
     for vlan in intent.vlans:
         yield "/vlans/vlan/id"
         yield "/vlans/vlan/name"

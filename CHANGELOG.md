@@ -112,6 +112,37 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+* **Live validation now declares the surfaces each codec silently drops
+  (validation-honesty completion; 2026-06 adversarial review of the keystone).**
+  An adversarial verification pass over the merged keystone (#60/#61/#62) found
+  that the walker now *sees* every Tier-2 surface but the codecs that DROP a
+  naming-independent surface on render still hadn't declared it — so
+  `validate_against` returned `severity: ok` while the render discarded the
+  data (a `{hostname, domain, dns, ntp, syslog, radius, dhcp}` config validated
+  "clean" against aruba_aoscx / cisco_nxos while 100% of those surfaces vanished;
+  a RADIUS shared secret was among the silently-dropped).  Every codec that
+  drops `domain` / `timezone` / `dns_servers` / `ntp_servers` / `syslog_servers`
+  / `dhcp_servers` / `radius_servers` / `routing_instances` on render now
+  declares the exact granular walker xpath (`/system/syslog-server`,
+  `/radius-servers/server/{host,key}`, `/dhcp-servers/pool`,
+  `/routing-instances/instance`, …) `unsupported`, so the loss is visible in the
+  report.  Corrected one supported-but-dropped lie: opnsense declared
+  `/system/ntp-server` supported but renders no timeservers — moved to
+  unsupported (so e.g. FortiGate→OPNsense now honestly reports `partial`/`block`
+  on a config with NTP).  Two new registry guards enforce this going forward —
+  a *total-drop ⇒ declared* check restricted to the false-positive-free
+  naming-independent surfaces, and a walker-grounded *rendered ⇒
+  not-unsupported* check at sub-field granularity — plus a model-field
+  completeness guard for the marker dict (the review found
+  `anycast_gateway_mac` / `interfaces` / `timezone` were missing).  The walker
+  also descends into VRRP group sub-fields (`virtual-ips` when >1 VIP,
+  `virtual-mac`, `track-interfaces`) so the FortiGate / AOS-S multi-VIP losses
+  they declare lossy finally surface, and the redundant aruba_aoss
+  VLAN-port double-yield + the codec-author guide's dead
+  `/interfaces/interface/config/name` example are cleaned up.  No parse/render
+  change; cross-mesh CODEC_BUG flat at 5 (the only matrix reshape is the
+  `/routing-instances/instance` declarations flipping four non-VRF targets'
+  cells to expected-unsupported).
 * **Registry-wide capability-matrix honesty guard + walker completion (review
   finding #9).**  The two-sided render/walker honesty invariant was enforced
   for exactly one codec (the cisco_iosxe NETCONF stub); the 11 production
