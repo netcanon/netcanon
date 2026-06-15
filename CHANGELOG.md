@@ -92,6 +92,26 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **IOS-XR configs no longer mis-detect as IOS-XE (2026-06 review #21).**  A new
+  parametrized detect-uniqueness test over the whole real-capture corpus
+  surfaced that every committed `cisco_iosxr` fixture (7 Batfish + 1 xrd-tools)
+  resolved to `cisco_iosxe_cli`: the Batfish XR captures carry generic Cisco
+  banners that tied IOS-XE at confidence 98, and `detect_codec`'s alphabetical
+  tie-break then silently picked `cisco_iosxe_cli`; the banner-less xrd config
+  lost outright (90 vs 75).  The IOS-XE probe now defers (returns no match) when
+  an XR-EXCLUSIVE marker is present — the `!! IOS XR Configuration` banner,
+  4-segment physical ports (`GigabitEthernet0/0/0/0`), `MgmtEth`, or the
+  `route-policy` / `end-policy` / `prefix-set` routing DSL — none of which can
+  appear in a genuine IOS-XE config, so real IOS-XE detection is unaffected.
+  Every real capture now detects to its own codec as the sole top scorer.
+
+* **Pathologically deep Junos block-form input fails cleanly (review #20).**  The
+  recursive block-form → set-form pre-parser (`juniper_junos`) used one Python
+  stack frame per `{` with no cap, so a hostile `{{{{…` payload raised an opaque
+  `RecursionError` (HTTP 500).  A depth guard (`_MAX_BLOCK_DEPTH = 100`, far
+  beyond any real config's ~4-deep nesting) now raises a clean `ParseError`
+  instead.  The VyOS walker's explicit stack was already immune.
+
 * **Deterministic LAG ordering in the cross-mesh certification artifact.**  The
   Cisco-family `_lag_sort_key` (`cisco_nxos`, `cisco_iosxe_cli`) now carries the
   verbatim LAG name as a final tiebreaker, so two case-variants of the same
@@ -111,6 +131,27 @@ timestamp if your timezone matters for an audit.
   to disk, and concurrent `detected_facts` updates can't be lost.
 
 ### Changed
+
+* **Hygiene cluster (2026-06 review lows #20/#21).**  Several small
+  defence-in-depth and reproducibility wins shipped together:
+  * `MigrationPlanRequest.raw_text` now carries a `max_length` of 10M chars —
+    a model-boundary body cap (any real single-device config is far smaller)
+    that complements the existing VLAN-range DoS clamp.
+  * The `CROSS_MESH_RESULTS.md` and `PHASE4_RECONCILIATION.md` headers no
+    longer embed a wall-clock timestamp (or, for Phase 4, the gitignored
+    mesh-run JSON filename).  Provenance is now the git commit that updates
+    the file, so `--matrix` / reconciliation regeneration is byte-reproducible
+    for a given tree — a non-empty `git diff` on those artifacts means real
+    drift, not a new run time.
+  * The fixture-directory → codec-name identity table (`_DIR_TO_CODEC_NAME`),
+    previously hand-replicated in `tools/run_full_mesh.py` and
+    `tests/.../test_real_captures.py` (and known to have drifted), is now a
+    single source of truth in `netcanon/migration/fixture_dirs.py` that both
+    import.
+  * The credential key-file write (`security/credentials.py`) documents the
+    real Windows confidentiality model honestly — the `os.chmod(0o600)` is a
+    no-op there; protection comes from the inherited user-profile ACL, and the
+    `NETCANON_FERNET_KEY` env var keeps the key off disk entirely.
 
 * **Live validation now declares the surfaces each codec silently drops
   (validation-honesty completion; 2026-06 adversarial review of the keystone).**
