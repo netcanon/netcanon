@@ -128,7 +128,6 @@ class VyOSCodec(CodecBase):
             # Interfaces — name + basic L3 (Phase 1; incl. vif VLAN
             # sub-interfaces modelled as ethN.<vid> interfaces).
             "/interfaces/interface/name",
-            "/interfaces/interface/config/name",
             "/interfaces/interface/config/description",
             "/interfaces/interface/config/enabled",
             "/interfaces/interface/config/mtu",

@@ -112,6 +112,36 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+* **Registry-wide capability-matrix honesty guard + walker completion (review
+  finding #9).**  The two-sided render/walker honesty invariant was enforced
+  for exactly one codec (the cisco_iosxe NETCONF stub); the 11 production
+  codecs were ungated, so a render expansion or matrix loosening could drift a
+  codec's declared capabilities from its real behaviour with no failing test.
+  New `tests/unit/migration/test_registry_capability_honesty.py` parametrises
+  over every bidirectional codec and enforces the two *false-positive-free*
+  directions of the invariant: **reverse-parity** (every declared `supported`
+  xpath must be one the shared canonical walker can emit — a path it can't is
+  unreachable by `validate_against` and so a dead declaration; review #8c) and
+  **rendered ⇒ not-unsupported** (a top-level field that survives a
+  render→re-parse round-trip must not be declared `unsupported` — a matrix that
+  calls a surface unsupported while round-tripping it would wrongly block/warn a
+  migration), plus a no-supported/unsupported-overlap check.  To make
+  reverse-parity pass, `_walk_canonical` is completed to yield the remaining
+  declared surfaces — VLAN `tagged-ports` / `untagged-ports` / `description`,
+  the per-interface switchport view (`switchport-mode` / `access-vlan` /
+  `trunk-allowed-vlans` / `trunk-native-vlan`, no-`config/` spelling matching
+  nxos/aoscx), `dhcp-client` (v4), and the IPv6 `virtual-gateway-address` /
+  `virtual-gateway-mac` (plus IPv4 `virtual-gateway-mac`) the IPv4 path already
+  carried — and the redundant `/interfaces/interface/config/name` declaration
+  (five codecs) is dropped in favour of the walkable `/interfaces/interface/name`.
+  aruba_aoss now declares its switchport view `supported` (it round-trips L2
+  membership) and mikrotik declares `/vlans/vlan/description` lossy (RouterOS
+  overloads the single per-VLAN comment).  No parse/render change, no
+  `unsupported` declaration changed → cross-mesh fidelity matrix untouched
+  (CODEC_BUG flat at 5).  (The third honesty direction — *dropped* ⇒
+  unsupported — stays covered by the per-codec round-trip tests + cross-mesh
+  audit; a single universal kitchen-sink can't detect drops without
+  vendor-naming false positives.)
 * **Capability-matrix xpath vocabularies normalised to one granular shape
   (review finding #8).**  Codecs declared the same canonical surface under two
   incompatible xpath spellings, so half of them were unreachable by the

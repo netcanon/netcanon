@@ -178,6 +178,16 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/vlans/vlan/description",
+                reason=(
+                    "RouterOS exposes a single per-VLAN ``comment`` field, "
+                    "which the parser maps to the VLAN name; a separate "
+                    "description collides with it on render and may be "
+                    "conflated with the name."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/dhcp-client-v6",
                 reason=(
                     "RouterOS exposes IPv6 DHCPv6 client config under "

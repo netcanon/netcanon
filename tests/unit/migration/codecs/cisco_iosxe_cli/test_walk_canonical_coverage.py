@@ -203,22 +203,22 @@ def test_every_top_level_field_is_walked():
 
 
 def test_per_interface_subfields_are_walked():
-    """The per-interface Tier-2 sub-fields with a real disposition
-    (mtu / vrf / lag-member-of) are walked.
-
-    Switchport sub-fields are deliberately NOT walked yet — see the
-    note in ``_walk_canonical`` (no codec declares a switchport
-    disposition, so walking them would be inert).  That arrives with
-    the matrix-normalisation pass (review #8)."""
+    """The per-interface Tier-2 sub-fields are walked — mtu / vrf /
+    lag-member-of / dhcp-client plus the switchport view (using the
+    no-``config/`` spelling that matches the nxos / aoscx matrix
+    declarations).  Switchport coverage landed with the registry
+    honesty guard (review #9)."""
     emitted = set(_walk_canonical(_kitchen_sink()))
     for xpath in (
         "/interfaces/interface/config/mtu",
         "/interfaces/interface/config/vrf",
         "/interfaces/interface/lag-member-of",
+        "/interfaces/interface/switchport-mode",
+        "/interfaces/interface/access-vlan",
+        "/interfaces/interface/trunk-allowed-vlans",
+        "/interfaces/interface/trunk-native-vlan",
     ):
         assert xpath in emitted, f"_walk_canonical drops {xpath!r}"
-    # Switchport paths are intentionally absent in this PR.
-    assert "/interfaces/interface/config/switchport-mode" not in emitted
 
 
 def test_snmp_v3_subfields_are_walked():
