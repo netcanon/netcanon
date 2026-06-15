@@ -1913,3 +1913,111 @@ class TestVARPAnycast:
         )
         # System MAC.
         assert intent.anycast_gateway_mac == "00:1c:73:00:dc:01"
+
+
+# ---------------------------------------------------------------------------
+# Round-trip fidelity regressions — surfaced by the AVD eos_cli_config_gen
+# ``host1.cfg`` kitchen-sink real capture (2026-06).  Each is a minimal
+# synthetic repro of one defect that broke parse->render->parse stability.
+# ---------------------------------------------------------------------------
+
+
+def _rt(raw: str) -> tuple[CanonicalIntent, CanonicalIntent]:
+    """parse -> render -> parse; return (first, second) intents."""
+    codec = AristaEOSCodec()
+    first = codec.parse(raw)
+    second = codec.parse(codec.render(first))
+    return first, second
+
+
+class TestRoundTripFixes:
+    def test_trunk_clears_stale_access_vlan(self):
+        """Defect 3: a port set to ``switchport access vlan N`` and THEN
+        made a trunk must not retain the access VLAN — render's trunk
+        branch never emits ``switchport access vlan`` so a lingering
+        value silently drops on round-trip (Port-Channel100 in the AVD
+        capture: access_vlan 200 -> None)."""
+        raw = (
+            "interface Port-Channel20\n"
+            "   switchport access vlan 200\n"
+            "   switchport trunk allowed vlan 10-11\n"
+            "!\n"
+        )
+        first, second = _rt(raw)
+        po = next(i for i in first.interfaces if i.name == "Port-Channel20")
+        assert po.switchport_mode == "trunk"
+        assert po.access_vlan is None  # cleared when the port became a trunk
+        # And the round-trip is stable on the interface set.
+        def ifaces(intent):
+            return sorted(
+                (i.name, i.switchport_mode, i.access_vlan,
+                 tuple(sorted(i.trunk_allowed_vlans)))
+                for i in intent.interfaces
+            )
+        assert ifaces(first) == ifaces(second)
+
+    def test_svi_description_vlan_name_and_macvrf_stable(self):
+        """Defect 1: an ``interface Vlan<N>`` whose only label is a
+        multi-word ``description`` (no ``vlan <N>`` stanza) folds the
+        description into the VLAN name; EOS names can't contain spaces so
+        render sanitises ``SVI Description`` -> ``SVI_Description``.  Parse
+        must apply the same normalisation, and the EVPN MAC-VRF name
+        derivation must be consistent across both parses so
+        routing_instances neither drift nor collapse."""
+        raw = (
+            "interface Vlan24\n"
+            "   description SVI Description\n"
+            "   ip address 10.0.24.1/24\n"
+            "!\n"
+            "interface Vlan25\n"
+            "   description SVI Description\n"
+            "   ip address 10.0.25.1/24\n"
+            "!\n"
+            "router bgp 65001\n"
+            "   vlan 24\n"
+            "      rd 1.1.1.1:24\n"
+            "      route-target both 65001:24\n"
+            "   !\n"
+            "   vlan 25\n"
+            "      rd 1.1.1.1:25\n"
+            "      route-target both 65001:25\n"
+            "   !\n"
+            "!\n"
+        )
+        first, second = _rt(raw)
+        # VLAN names are EOS-safe (no whitespace) already after parse.
+        for v in first.vlans:
+            assert " " not in v.name, f"vlan {v.id} name {v.name!r} has a space"
+        # The two distinct VLANs do NOT collapse their MAC-VRFs, and the
+        # routing-instance set is stable across the round-trip.
+        def ri_names(intent):
+            return sorted(r.name for r in intent.routing_instances)
+        assert ri_names(first) == ri_names(second)
+        assert len(first.routing_instances) == len(second.routing_instances)
+        def vlans(intent):
+            return sorted((v.id, v.name) for v in intent.vlans)
+        assert vlans(first) == vlans(second)
+
+    def test_radius_bare_host_lines_dont_bleed(self):
+        """Defect 2: a key-less ``radius-server host <ip>`` line (which
+        render emits for a server with no key) must not let the parse
+        regex consume the newline and bleed into the next line —
+        previously the ``\\s*`` tail ate the ``\\n`` and swallowed
+        entries / cross-attributed keys (12 -> 9 on the AVD capture)."""
+        raw = (
+            "radius-server host 10.10.11.156\n"
+            "radius-server host 10.10.11.156 key 7\n"
+            "radius-server host 10.10.11.156\n"
+            "radius-server host 10.10.10.249 key 0\n"
+        )
+        first, second = _rt(raw)
+        assert len(first.radius_servers) == 4
+        # No key bled across lines: the bare 156 lines stay key-less and
+        # the 249 server keeps its own key.
+        s249 = [s for s in first.radius_servers if s.host == "10.10.10.249"]
+        assert len(s249) == 1 and s249[0].key == "0"
+        assert sum(1 for s in first.radius_servers if s.host == "10.10.11.156") == 3
+        # Round-trip stable on (host, key).
+        def rad(intent):
+            return sorted((s.host, s.key) for s in intent.radius_servers)
+        assert rad(first) == rad(second)

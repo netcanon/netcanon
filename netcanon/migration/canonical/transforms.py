@@ -346,15 +346,31 @@ def project_svi_to_vlan(intent: CanonicalIntent) -> None:
         vid = int(m.group(1))
         existing = by_id.get(vid)
         if existing is None:
-            synthesised = CanonicalVlan(
-                id=vid,
-                name=iface.description,
-                ipv4_addresses=[
+            # Dedupe the copied addresses by (ip, prefix_length) — the
+            # same key the merge branch below uses.  Without this, an SVI
+            # carrying multiple addresses that reduce to the same
+            # (ip, prefix) pair (e.g. several VARP ``ip address virtual``
+            # entries that fold to empty-ip /N records) synthesises
+            # duplicate VLAN addresses on the first parse, while the merge
+            # branch dedupes them on the rendered-output re-parse — an
+            # asymmetry that breaks round-trip stability (observed on
+            # VLAN 83 of the Arista AVD kitchen-sink capture).
+            seen_synth: set[tuple[str, int]] = set()
+            synth_addrs: list[CanonicalIPv4Address] = []
+            for a in iface.ipv4_addresses:
+                pair = (a.ip, a.prefix_length)
+                if pair in seen_synth:
+                    continue
+                seen_synth.add(pair)
+                synth_addrs.append(
                     CanonicalIPv4Address(
                         ip=a.ip, prefix_length=a.prefix_length,
                     )
-                    for a in iface.ipv4_addresses
-                ],
+                )
+            synthesised = CanonicalVlan(
+                id=vid,
+                name=iface.description,
+                ipv4_addresses=synth_addrs,
             )
             intent.vlans.append(synthesised)
             by_id[vid] = synthesised

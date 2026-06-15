@@ -354,6 +354,14 @@ def test_real_capture_round_trips_stable(
             ("dhcp_servers", "network"),
             ("local_users", "name"),
             ("radius_servers", "host"),
+            # routing_instances order is cosmetic (a set of VRFs /
+            # MAC-VRFs has no inherent order), same class as the
+            # collections above.  A renderer may emit them in a
+            # different order than the source file — e.g. EVPN MAC-VRFs
+            # keyed off VLAN names whose synthesis order shifts on a
+            # re-parse of rendered output.  Sort by name so the
+            # comparison checks canonical *meaning*, not emission order.
+            ("routing_instances", "name"),
         ]:
             if key in d and isinstance(d[key], list):
                 d[key] = sorted(d[key], key=lambda x: x.get(id_key, ""))

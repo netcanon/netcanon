@@ -145,8 +145,16 @@ _USERNAME_RE = re.compile(
 # Form: ``radius-server host <ip> [auth-port N] [acct-port N] [key SECRET]``
 # Token order is fixed (host first) but the optional clauses may appear in
 # any order on the wire.  Match host + remainder, then post-extract.
+# NOTE the ``[^\S\n]`` (whitespace-except-newline) matchers, NOT ``\s``.
+# A bare ``radius-server host <ip>`` line (no trailing clauses — exactly
+# what render emits for a key-less server) followed by another
+# ``radius-server host ...`` line would, with a plain ``\s*`` before the
+# ``(.*)`` tail, let the ``\s*`` consume the newline and the ``(.*)``
+# bleed into the NEXT line — swallowing entries + cross-attributing keys
+# on a render->re-parse round-trip (same line-bleed hazard the username
+# regex documents above).  ``[^\S\n]*`` keeps the match on one line.
 _RADIUS_SERVER_RE = re.compile(
-    r"^radius-server\s+host\s+(\d+\.\d+\.\d+\.\d+)\s*(.*)$",
+    r"^radius-server[^\S\n]+host[^\S\n]+(\d+\.\d+\.\d+\.\d+)[^\S\n]*(.*)$",
     re.MULTILINE,
 )
 _RADIUS_AUTH_PORT_RE = re.compile(r"\bauth-port\s+(\d+)")
@@ -541,9 +549,6 @@ def parse_intent(raw: str) -> CanonicalIntent:
     #     current-stanza tracking, same pattern as cisco_iosxe_cli) ---
     _parse_stanzas(raw, intent)
 
-    # --- router bgp <asn> / vrf <name> / rd + route-target (GAP 6) ---
-    _parse_router_bgp(raw, intent)
-
     # SVI fold: ``interface Vlan<N> / ip address ...`` lines carry
     # the Layer-3 surface for VLAN <N>.  VLAN-centric renderers
     # (Aruba AOS-S, OPNsense) read the L3 off
@@ -551,11 +556,39 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # interface, so without this fold the SVI IP silently drops on
     # cross-vendor render.  Mirrors the same call in
     # ``cisco_iosxe_cli/parse.py``.  See translator-plans.txt BUG 1.
+    #
+    # Ordering (round-trip fix, 2026-06): the fold runs BEFORE
+    # ``_parse_router_bgp`` so the EVPN MAC-VRF name derivation
+    # (``router bgp / vlan N`` -> CanonicalRoutingInstance keyed by the
+    # matching CanonicalVlan.name) sees the SAME vlan names on the
+    # source parse and the rendered-output re-parse.  Previously the
+    # fold ran AFTER _parse_router_bgp, so a description-only SVI had no
+    # VLAN record yet on the source parse (MAC-VRF fell back to the
+    # synthetic ``VLAN<id>`` name) while the re-parse saw the
+    # render-emitted ``vlan N name <desc>`` stanza and keyed off the
+    # folded name -> routing_instances drifted + collapsed (20->18 on
+    # the AVD kitchen-sink capture).
     from ...canonical.transforms import (
         project_svi_to_vlan,
         project_switchport_to_vlan,
     )
     project_svi_to_vlan(intent)
+
+    # EOS VLAN names are whitespace-tokenised (no spaces permitted); the
+    # render path collapses each whitespace run in ``name`` to a single
+    # underscore (see ``render.py`` "VLANs" block).  Apply the SAME
+    # normalisation here so the canonical name produced by parse already
+    # equals what render will emit -- otherwise an SVI-description-folded
+    # name like ``SVI Description`` round-trips unstably (parse
+    # ``SVI Description`` -> render ``SVI_Description`` -> re-parse
+    # ``SVI_Description``).  Real ``vlan N name X`` stanzas are already
+    # single-token, so this is a no-op for them.
+    for _vlan in intent.vlans:
+        if _vlan.name:
+            _vlan.name = re.sub(r"\s+", "_", _vlan.name.strip())
+
+    # --- router bgp <asn> / vrf <name> / rd + route-target (GAP 6) ---
+    _parse_router_bgp(raw, intent)
 
     # Bug 3 transpose: mirror per-port switchport state into the
     # VLAN-centric tagged_ports / untagged_ports lists so VLAN-
@@ -1110,6 +1143,12 @@ def _apply_iface_subcommand(
     if line.startswith("switchport trunk allowed vlan "):
         # ``switchport trunk allowed vlan 10,20,30-35``
         iface.switchport_mode = "trunk"
+        # A trunk port has no access VLAN.  Clear any access_vlan set by
+        # an earlier (now-superseded) ``switchport access vlan`` line in
+        # the same stanza so the canonical is internally consistent —
+        # render's trunk branch never emits ``switchport access vlan``,
+        # so a lingering access_vlan would silently drop on round-trip.
+        iface.access_vlan = None
         tail = line.split(None, 4)[-1]
         iface.trunk_allowed_vlans = _expand_vlan_list(tail)
         return
@@ -1129,6 +1168,9 @@ def _apply_iface_subcommand(
         return
     if line == "switchport mode trunk":
         iface.switchport_mode = "trunk"
+        # Trunk ports carry no access VLAN — clear a stale access_vlan
+        # (see the ``switchport trunk allowed vlan`` handler above).
+        iface.access_vlan = None
         return
     if line == "switchport mode access":
         iface.switchport_mode = "access"

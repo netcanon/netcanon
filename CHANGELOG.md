@@ -26,6 +26,36 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+* **arista_eos round-trip fidelity (3 defects).**  Surfaced while
+  diffing `parse(render(parse(x)))` against `parse(x)` on an Arista AVD
+  `eos_cli_config_gen` golden config during the 2026-06-15
+  `fixture-gap-hunt`; each broke parse→render→parse stability and is now
+  covered by a focused regression test.
+    1. **SVI-description / VLAN-name fold.**  The shared
+       `project_svi_to_vlan` transform folds an `interface Vlan<N>`
+       `description` into the synthesised VLAN name.  arista parse now
+       (a) normalises VLAN names to the EOS-safe form render emits
+       (`\s+`→`_`), so a multi-word `SVI Description` no longer drifts to
+       `SVI_Description` on the re-parse, and (b) runs the SVI fold
+       *before* the EVPN `router bgp / vlan N` pass so MAC-VRF names key
+       off the same VLAN names on both parses (previously
+       `routing_instances` drifted and collapsed 20→18).  The
+       synthesised-VLAN branch of `project_svi_to_vlan` now also dedupes
+       copied addresses, matching its merge branch.
+    2. **RADIUS line-bleed.**  `_RADIUS_SERVER_RE` no longer lets a bare
+       `radius-server host <ip>` line (what render emits for a key-less
+       server) consume the trailing newline and bleed into the next
+       line, which had swallowed entries / cross-attributed keys on
+       round-trip (12→9).
+    3. **Trunk stale access-VLAN.**  A port made a trunk now clears any
+       earlier `switchport access vlan` (render's trunk branch never
+       emits it, so a lingering value silently dropped on round-trip).
+  The real-capture round-trip harness now also sorts `routing_instances`
+  by name (cosmetic order, consistent with the 7 collections it already
+  sorts).
+
 ## [0.1.8] - 2026-06-15
 
 ### Security
