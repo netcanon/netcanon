@@ -53,6 +53,17 @@ Netcanon ships in two deployment shapes:
    controls (nginx + auth_request, Caddy + basic-auth, Cloudflare
    Access, etc.) and restrict ingress at the network layer.
 
+   For this shape you can also set `NETCANON_BLOCK_PRIVATE_EGRESS=true`
+   (default `false`): the backup entry points then refuse any target
+   that resolves to a loopback or link-local address — including the
+   `169.254.169.254` cloud-metadata endpoint — so a reachable
+   non-operator can't turn the (unauthenticated) backup engine into an
+   internal port-scanner / metadata probe.  RFC-1918 ranges stay
+   allowed (real managed devices live there).  The check runs at the
+   request / schedule entry point, not at SSH-connect time, so it does
+   not fully defeat a DNS-rebinding attacker who controls a hostname;
+   connect-time re-validation is a noted follow-up.
+
 | Actor | Trust level |
 |-------|-------------|
 | Local user running the desktop app | Fully trusted |
