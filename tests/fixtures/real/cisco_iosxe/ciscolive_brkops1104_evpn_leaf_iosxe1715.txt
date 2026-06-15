@@ -1,0 +1,266 @@
+Building configuration...
+
+Current configuration : 6018 bytes
+!
+! Last configuration change at 16:16:02 UTC Sun Jun 1 2025 by netadmin
+!
+version 17.15
+service timestamps debug datetime msec
+service timestamps log datetime msec
+!
+hostname cml-demo-lf1
+!
+boot-start-marker
+boot-end-marker
+!
+!
+vrf definition cml_demo
+ rd 200:1
+ !
+ address-family ipv4
+  route-target export 200:1
+  route-target import 200:1
+  route-target export 200:1 stitching
+  route-target import 200:1 stitching
+ exit-address-family
+!
+vrf definition management
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family ipv6
+ exit-address-family
+!
+no logging console
+no aaa new-model
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+ip audit notify log
+ip audit po max-events 100
+ip multicast-routing
+ip cef
+login on-success log
+no ipv6 cef
+!
+!
+!
+!
+!
+!
+!
+vtp mode transparent
+l2vpn evpn
+ replication-type static
+ router-id Loopback0
+ default-gateway advertise
+ route-target auto vni
+!
+l2vpn evpn instance 1 vlan-based
+ encapsulation vxlan
+!
+!
+crypto pki trustpoint TP-self-signed-131184794
+ enrollment selfsigned
+ subject-name cn=IOS-Self-Signed-Certificate-131184794
+ revocation-check none
+ rsakeypair TP-self-signed-131184794
+ hash sha512
+!
+!
+crypto pki certificate chain TP-self-signed-131184794
+ certificate self-signed 01
+  3082032E 30820216 A0030201 02020101 300D0609 2A864886 F70D0101 0D050030
+  30312E30 2C060355 04030C25 494F532D 53656C66 2D536967 6E65642D 43657274
+  69666963 6174652D 31333131 38343739 34301E17 0D323530 34323032 33343434
+  365A170D 33353034 32303233 34343436 5A303031 2E302C06 03550403 0C25494F
+  532D5365 6C662D53 69676E65 642D4365 72746966 69636174 652D3133 31313834
+  37393430 82012230 0D06092A 864886F7 0D010101 05000382 010F0030 82010A02
+  82010100 BE2CE78D 20E7B70E 640FCC4E AA0548A9 A5B5D28E 8EF29E12 85E7A19B
+  AFBA3C09 F04E5B97 6D23C93F D8922957 B5C7B82C 8800E582 2B038A78 C16761B7
+  333B1518 FF25BDA0 374BDC1E 29182212 EA40155C 9F265066 C6727BF6 48E924BC
+  354195C2 83AD7CED 71D48CAF BE7BADCF 54FD511A 8419D5A0 FF464624 8D00F5AD
+  7F377412 0DB57468 257452A9 EE9478E7 2E32B0BB 1E67707F 8C25D2C5 9DD8EA05
+  0EE28FE9 9792F935 43D3289E 57A2831C 2761144F C177D6C9 F04BF74B CBF46ADC
+  9C415178 311A9E2A FE92EA02 12AE72FC 88D85654 9274B0C6 16A5454E 7DC4F251
+  DEBA755C D1F71F08 A590D4E3 747B7D8F 86A15F24 F2DE16E1 5C40B4AA B6918F8E
+  6E86D64F 02030100 01A35330 51301D06 03551D0E 04160414 689D3DA5 42F2BDFA
+  B602EBC2 B198CB52 304E6CBC 301F0603 551D2304 18301680 14689D3D A542F2BD
+  FAB602EB C2B198CB 52304E6C BC300F06 03551D13 0101FF04 05300301 01FF300D
+  06092A86 4886F70D 01010D05 00038201 01003D7B CED77CDD BBDDC045 9B208B56
+  6E325328 F24B866D 492C3F11 2114B466 7F94980A FF3CA55A EE81BF58 A0A2F197
+  A9DC8771 145B22CC E68EA76A 5C41CCE7 888186A5 F8F106AC 31A14EA7 4697B3B5
+  E54F43FA D689255C 815E975F FB5E3F32 1F17E913 5B526781 0B284649 935D799D
+  68014570 DF1F621D DFFAE032 A42C0CD1 C5B2D6FC 43386FF3 0F036BCF BF0E3219
+  DF05BCEE 80FCEEB2 37A6A728 2FDA196A 84CCE2B9 44034B4B 50F52BF0 6BF8C9C5
+  29E91155 5528E8FF 550D2B44 8DD06E10 8032B67D 944518AA 0AC2BD37 8304D508
+  44868C2F 72160E72 5B127AD5 8AD4D4FC FF19CF73 CD959354 FC2E2B99 20E5944F
+  A63511D1 24781001 E23BC6BC 684FC5F0 88F5
+  	quit
+!
+!
+memory free low-watermark processor 79593
+!
+!
+spanning-tree mode rapid-pvst
+spanning-tree extend system-id
+!
+username netadmin privilege 15 secret 9 $9$fakeSaltFakeSalt$fakeScryptHashExampleValueForFixtureOnly00.
+!
+!
+vlan configuration 100
+ member evpn-instance 1 vni 100100
+vlan configuration 200
+ member vni 100200
+vlan internal allocation policy ascending
+!
+vlan 100
+ name Servers
+!
+vlan 200
+ name CML_tenant
+!
+!
+!
+!
+!
+interface Loopback0
+ ip address 192.168.100.101 255.255.255.255
+ ip router isis VXLAN_UNDERLAY
+ ip pim sparse-mode
+ ip ospf 100 area 0
+!
+interface Loopback2
+ ip address 10.168.100.101 255.255.255.255
+ ip pim sparse-mode
+ ip ospf 100 area 0
+!
+interface Ethernet0/0
+ description Alpine Server
+ switchport access vlan 100
+ switchport mode access
+ spanning-tree portfast
+!
+interface Ethernet0/1
+!
+interface Ethernet0/2
+!
+interface Ethernet0/3
+!
+interface Ethernet1/0
+ no switchport
+ ip unnumbered Loopback0
+ ip pim sparse-mode
+ ip ospf network point-to-point
+ ip ospf 100 area 0
+!
+interface Ethernet1/1
+ no switchport
+ ip unnumbered Loopback0
+ ip pim sparse-mode
+ ip ospf network point-to-point
+ ip ospf 100 area 0
+!
+interface Ethernet1/2
+!
+interface Ethernet1/3
+ no switchport
+ vrf forwarding management
+ ip address 10.255.255.101 255.255.255.0
+!
+interface Vlan1
+ no ip address
+ shutdown
+!
+interface Vlan100
+ vrf forwarding cml_demo
+ ip address 172.16.1.254 255.255.255.0
+!
+interface Vlan200
+ vrf forwarding cml_demo
+ ip unnumbered Loopback2
+ no autostate
+!
+interface nve1
+ no ip address
+ source-interface Loopback2
+ host-reachability protocol bgp
+ member vni 100100 mcast-group 239.0.0.100
+ member vni 100200 vrf cml_demo
+!
+router ospf 100
+!
+router isis VXLAN_UNDERLAY
+!
+router bgp 65000
+ bgp log-neighbor-changes
+ bgp update-delay 1
+ bgp graceful-restart
+ no bgp default ipv4-unicast
+ neighbor 192.168.100.201 remote-as 65000
+ neighbor 192.168.100.201 update-source Loopback0
+ neighbor 192.168.100.202 remote-as 65000
+ neighbor 192.168.100.202 update-source Loopback0
+ !
+ address-family ipv4
+ exit-address-family
+ !
+ address-family l2vpn evpn
+  neighbor 192.168.100.201 activate
+  neighbor 192.168.100.201 send-community both
+  neighbor 192.168.100.202 activate
+  neighbor 192.168.100.202 send-community both
+ exit-address-family
+ !
+ address-family ipv4 vrf cml_demo
+  advertise l2vpn evpn
+  redistribute connected
+  redistribute static
+ exit-address-family
+!
+ip forward-protocol nd
+!
+!
+ip tcp mss 1280
+ip tcp window-size 212000
+ip http server
+ip http secure-server
+ip pim rp-address 192.0.2.1 15
+ip pim ssm range 10
+ip ssh bulk-mode 131072
+!
+no logging btrace
+ip access-list standard 10
+ 10 permit 232.0.0.0 0.255.255.255
+ip access-list standard 15
+ 10 permit 224.0.0.0 15.255.255.255
+!
+!
+!
+control-plane
+!
+!
+!
+line con 0
+ exec-timeout 0 0
+ logging synchronous
+ login local
+line aux 0
+line vty 0 4
+ exec-timeout 0 0
+ login local
+ transport input ssh
+!
+!
+end
