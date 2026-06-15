@@ -47,6 +47,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from pydantic import SecretStr
 
 # ``get_collector`` is imported here — and only here — to preserve the
 # documented mock-point ``netcanon.api.routes.backups.get_collector``.
@@ -57,7 +58,7 @@ from ...config import MAX_BACKUP_CONCURRENCY
 from ...definitions.loader import DefinitionLoader
 from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, JobStatus
-from ...models.device import BackupRequest
+from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
 from ...models.device_profile import DeviceProfile
 from ...services.backup_runner import run_backup_job
 from ...storage.base import BaseConfigStore
@@ -76,6 +77,64 @@ from ..deps import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/backups", tags=["backups"])
+
+
+def _resolve_credentials(
+    devices: list[DeviceTarget],
+    device_profiles: dict[str, DeviceProfile],
+) -> list[DeviceTarget]:
+    """Fill missing per-device credentials from the linked profile, server-side.
+
+    A device may omit inline ``credentials`` when it carries a
+    ``device_profile_id`` that resolves to a stored profile — the credentials
+    are then read from that profile (decrypted in memory, never sent to or
+    received from the client).  This mirrors the scheduled-trigger path in
+    :mod:`netcanon.api.routes.schedules` and lets the web "run backup now"
+    flows operate without the plaintext password ever crossing the API
+    boundary.  Inline credentials, when present, win (ad-hoc backup or an
+    explicit per-run override).
+
+    Args:
+        devices: The request's device targets (credentials may be ``None``).
+        device_profiles: In-memory profile registry (``app.state``).
+
+    Returns:
+        A new list of ``DeviceTarget`` with ``credentials`` populated.
+
+    Raises:
+        HTTPException 422: A device has neither inline credentials nor a
+            resolvable ``device_profile_id``.
+    """
+    resolved: list[DeviceTarget] = []
+    for idx, device in enumerate(devices):
+        if device.credentials is not None:
+            resolved.append(device)
+            continue
+        profile = (
+            device_profiles.get(device.device_profile_id)
+            if device.device_profile_id
+            else None
+        )
+        if profile is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    f"devices[{idx}] (host={device.host!r}): no credentials "
+                    "supplied and no resolvable device_profile_id. Provide "
+                    "credentials inline or reference an existing device profile."
+                ),
+            )
+        creds = DeviceCredentials(
+            username=profile.username,
+            password=SecretStr(profile.password),
+            enable_password=(
+                SecretStr(profile.enable_password)
+                if profile.enable_password
+                else None
+            ),
+        )
+        resolved.append(device.model_copy(update={"credentials": creds}))
+    return resolved
 
 
 @router.post(
@@ -127,11 +186,19 @@ def create_backup(
             ),
         )
 
+    # Resolve any omitted credentials from the linked device profile,
+    # server-side — so callers (notably the web "run backup now" flows)
+    # never have to fetch or relay the plaintext password.  Raises 422 for
+    # any device with neither inline credentials nor a resolvable profile.
+    resolved_request = BackupRequest(
+        devices=_resolve_credentials(request_body.devices, device_profiles)
+    )
+
     job = BackupJob(
         id=str(uuid.uuid4()),
         status=JobStatus.pending,
         created_at=datetime.now(timezone.utc),
-        total_devices=len(request_body.devices),
+        total_devices=len(resolved_request.devices),
     )
     jobs[job.id] = job
     max_workers = getattr(
@@ -140,7 +207,7 @@ def create_backup(
     background_tasks.add_task(
         run_backup_job,
         job,
-        request_body,
+        resolved_request,
         definitions,
         storage,
         job_store,

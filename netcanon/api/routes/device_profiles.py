@@ -12,7 +12,12 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from ...models.device_profile import DeviceProfile, DeviceProfileCreate, DeviceProfileUpdate
+from ...models.device_profile import (
+    DeviceProfile,
+    DeviceProfileCreate,
+    DeviceProfilePublic,
+    DeviceProfileUpdate,
+)
 from ...storage.device_profile_store import FileDeviceProfileStore
 from ..deps import get_device_profile_store, get_device_profiles
 
@@ -22,19 +27,23 @@ router = APIRouter(prefix="/devices", tags=["device-profiles"])
 
 @router.get(
     "/",
-    response_model=list[DeviceProfile],
+    response_model=list[DeviceProfilePublic],
     summary="List all device profiles",
 )
 def list_device_profiles(
     device_profiles: dict[str, DeviceProfile] = Depends(get_device_profiles),
 ) -> list[DeviceProfile]:
-    """Return all device profiles sorted newest-first."""
+    """Return all device profiles sorted newest-first.
+
+    Credentials are stripped by the ``DeviceProfilePublic`` response model —
+    they are never serialised over the API.
+    """
     return sorted(device_profiles.values(), key=lambda p: p.created_at, reverse=True)
 
 
 @router.get(
     "/{profile_id}",
-    response_model=DeviceProfile,
+    response_model=DeviceProfilePublic,
     summary="Get a device profile by ID",
 )
 def get_device_profile(
@@ -59,7 +68,7 @@ def get_device_profile(
 @router.post(
     "/",
     status_code=201,
-    response_model=DeviceProfile,
+    response_model=DeviceProfilePublic,
     summary="Create a device profile",
 )
 def create_device_profile(
@@ -91,7 +100,7 @@ def create_device_profile(
 
 @router.put(
     "/{profile_id}",
-    response_model=DeviceProfile,
+    response_model=DeviceProfilePublic,
     summary="Update a device profile",
 )
 def update_device_profile(

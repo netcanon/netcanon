@@ -37,9 +37,15 @@ class DeviceTarget(BaseModel):
             definition (e.g. ``"Cisco"``, ``"Fortigate"``).
         host: Hostname or IP address (IPv4, IPv6, or RFC-1123 hostname).
         port: SSH port number.  Defaults to 22.
-        credentials: Login credentials.
+        credentials: Login credentials.  Optional: omit them when
+            ``device_profile_id`` references a stored profile, in which
+            case the backup endpoint resolves credentials server-side from
+            that profile (so the plaintext password never has to be sent
+            from the browser).  When supplied inline, they win — used for
+            ad-hoc backups or to override a profile's stored credentials.
         device_profile_id: UUID of the linked DeviceProfile, or None for
-            ad-hoc backups.
+            ad-hoc backups.  When set and ``credentials`` is omitted, the
+            endpoint fills credentials from this profile.
         os_version: Optional pin for version-specific definition
             overlay selection (e.g. ``"17.12"``).  When set, the
             backup pipeline resolves the matching overlay via
@@ -54,7 +60,7 @@ class DeviceTarget(BaseModel):
     type_key: str = Field(..., description="Must match a loaded definition type_key")
     host: str
     port: int = Field(22, ge=1, le=65535)
-    credentials: DeviceCredentials
+    credentials: DeviceCredentials | None = None
     device_profile_id: str | None = None
     os_version: str | None = None
     model: str | None = None
