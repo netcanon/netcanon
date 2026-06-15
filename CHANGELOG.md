@@ -28,6 +28,23 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **PII-recurrence guard (Phase 0 of the 2026-06 PII remediation).**  A new
+  `.github/workflows/pii-guard.yml` job `git grep`s the tracked tree on every
+  PR / push and fails the build if any file leaks the maintainer's personal
+  email or an operator-machine Windows user-profile path.  A committed
+  local hook (`scripts/git-hooks/pre-push`, opt in with
+  `git config core.hooksPath scripts/git-hooks`) covers the
+  commit-message / `Co-authored-by:`-trailer / author-identity vector before
+  a push leaves the machine.  Both guards assemble or self-exclude their own
+  patterns so they don't match themselves, and the gitignored review dossier
+  (which legitimately quotes the values) is never scanned.  This phase also
+  redacted the one residual operator path that the original pre-launch sweep
+  missed (a committed review doc, `docs/project-review/.../01-investigation-CE-god-file.md`)
+  and corrected that sweep's stale "zero hits" assertion.  *Phase 1 (the
+  destructive history rewrite that scrubs the 17 `Co-authored-by:` gmail
+  trailers baked into pre-existing tags) is tracked separately; this is the
+  non-destructive recurrence guard only.*
+
 * **Opt-in SSH host-key verification for the backup collectors (review finding
   #11).**  Both collectors previously installed paramiko `AutoAddPolicy` —
   trusting any host key unconditionally, so a man-in-the-middle on the
@@ -3777,8 +3794,12 @@ of the file explaining the situation honestly.
 Verified clean:
 
 * No maintainer name / email variants present in the tracked tree
-* No operator-machine path leaks (Windows `C:\Users\...` /
-  Linux `/home/<user>/` — zero hits)
+* No operator-machine path leaks (Windows user-profile or Linux
+  home-directory paths).  *Correction (see the "PII-recurrence guard"
+  entry under [Unreleased]): this sweep was incomplete — one residual
+  operator path survived in a committed review doc and was missed
+  here; it has since been redacted and a CI guard now enforces the
+  invariant on every push.*
 * All sample IPs in tracked content are RFC1918 (`192.168.x` /
   `10.x.x.x` / `172.16.x.x`) or RFC5737 (`192.0.2.x` /
   `198.51.100.x` / `203.0.113.x`) docs ranges — no real WAN IPs

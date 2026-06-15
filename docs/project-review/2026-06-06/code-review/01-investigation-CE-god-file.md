@@ -1,7 +1,7 @@
 # 01 — Investigation CE — God-File / Cohesion / SRP Assessment
 
 *Reviewer lens: CE. Read-only, review-grade. Commit `b08040c` (v0.1.2).*
-*Repo root: `C:\Users\user12\Desktop\Test fgopn\.claude\worktrees\gifted-swirles`.*
+*Repo root: `<repo>` (operator-machine path redacted).*
 
 ---
 
