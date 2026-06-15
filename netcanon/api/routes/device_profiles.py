@@ -18,7 +18,10 @@ from ...models.device_profile import (
     DeviceProfilePublic,
     DeviceProfileUpdate,
 )
-from ...storage.device_profile_store import FileDeviceProfileStore
+from ...storage.device_profile_store import (
+    DEVICE_PROFILE_REGISTRY_LOCK,
+    FileDeviceProfileStore,
+)
 from ..deps import get_device_profile_store, get_device_profiles
 
 logger = logging.getLogger(__name__)
@@ -90,8 +93,11 @@ def create_device_profile(
             detail="Maximum device profile limit reached (1000). Delete unused profiles first.",
         )
     profile = DeviceProfile(**body.model_dump())
-    device_profiles[profile.id] = profile
-    device_profile_store.save(profile)
+    # Serialise dict-mutate + persist against the backup worker thread and
+    # the other route mutators (review finding #10).
+    with DEVICE_PROFILE_REGISTRY_LOCK:
+        device_profiles[profile.id] = profile
+        device_profile_store.save(profile)
     logger.info(
         "Created device profile '%s' (id=%s)", profile.name, profile.id[:8]
     )
@@ -124,15 +130,18 @@ def update_device_profile(
     Raises:
         HTTPException 404: If no profile with *profile_id* exists.
     """
-    if profile_id not in device_profiles:
-        raise HTTPException(
-            status_code=404, detail=f"Device profile not found: {profile_id!r}"
-        )
-    profile = device_profiles[profile_id]
-    updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    updated_profile = profile.model_copy(update=updates)
-    device_profiles[profile_id] = updated_profile
-    device_profile_store.save(updated_profile)
+    # Hold the lock across the existence check + mutate + persist so a
+    # concurrent delete can't slip between them (review finding #10).
+    with DEVICE_PROFILE_REGISTRY_LOCK:
+        if profile_id not in device_profiles:
+            raise HTTPException(
+                status_code=404, detail=f"Device profile not found: {profile_id!r}"
+            )
+        profile = device_profiles[profile_id]
+        updates = {k: v for k, v in body.model_dump().items() if v is not None}
+        updated_profile = profile.model_copy(update=updates)
+        device_profiles[profile_id] = updated_profile
+        device_profile_store.save(updated_profile)
     logger.info(
         "Updated device profile '%s' (id=%s)", updated_profile.name, profile_id[:8]
     )
@@ -160,22 +169,26 @@ def delete_device_profile(
     Raises:
         HTTPException 404: If no profile with *profile_id* exists.
     """
-    if profile_id not in device_profiles:
-        raise HTTPException(
-            status_code=404, detail=f"Device profile not found: {profile_id!r}"
-        )
-    # Warn if any schedules reference this profile.
-    referencing = [
-        s.name
-        for s in request.app.state.schedules.values()
-        if profile_id in s.target_device_ids
-    ]
-    if referencing:
-        logger.warning(
-            "Deleting profile %s which is referenced by schedules: %s",
-            profile_id[:8],
-            referencing,
-        )
-    del device_profiles[profile_id]
-    device_profile_store.delete(profile_id)
+    # Hold the lock across the existence check + delete + file removal so it
+    # can't interleave with the backup worker's detected_facts save and
+    # resurrect the profile on disk (review finding #10).
+    with DEVICE_PROFILE_REGISTRY_LOCK:
+        if profile_id not in device_profiles:
+            raise HTTPException(
+                status_code=404, detail=f"Device profile not found: {profile_id!r}"
+            )
+        # Warn if any schedules reference this profile.
+        referencing = [
+            s.name
+            for s in request.app.state.schedules.values()
+            if profile_id in s.target_device_ids
+        ]
+        if referencing:
+            logger.warning(
+                "Deleting profile %s which is referenced by schedules: %s",
+                profile_id[:8],
+                referencing,
+            )
+        del device_profiles[profile_id]
+        device_profile_store.delete(profile_id)
     logger.info("Deleted device profile %s", profile_id[:8])
