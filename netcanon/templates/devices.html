@@ -117,7 +117,9 @@
   {% for profile in device_profiles %}
   <div class="device-card" data-testid="device-card"
        data-device-id="{{ profile.id }}"
-       data-profile="{{ profiles_safe[profile.id] | tojson }}">
+       data-type-key="{{ profile.type_key }}"
+       data-host="{{ profile.host }}"
+       data-port="{{ profile.port }}">
 
     <div class="device-card-header" data-testid="device-card-header"
          onclick="toggleDevice(this)">
@@ -404,20 +406,14 @@ deviceForm.addEventListener('submit', async function(e) {
 
 /* ── Run backup now for a single profile ── */
 async function runDeviceBackup(profileId) {
-  /* Fetch the full profile (including credentials) from the API rather than
-     reading from a DOM attribute, so passwords are never embedded in the page. */
-  var fullProfile;
-  try {
-    var pr = await fetch('/api/v1/devices/' + encodeURIComponent(profileId));
-    if (!pr.ok) { showToast('Could not load device credentials.', 'error'); return; }
-    fullProfile = await pr.json();
-  } catch (e) {
-    showToast('Network error: ' + e.message, 'error');
-    return;
-  }
-
-  var credentials = { username: fullProfile.username, password: fullProfile.password };
-  if (fullProfile.enable_password) credentials.enable_password = fullProfile.enable_password;
+  /* Send only the profile id plus the non-secret connection fields (read
+     from the card's credential-free data-* attributes).  The backup
+     endpoint resolves the password server-side from the stored profile,
+     so the plaintext credential never reaches the browser. */
+  var card = document.querySelector(
+    '.device-card[data-device-id="' + profileId + '"]'
+  );
+  if (!card) { showToast('Could not find this device.', 'error'); return; }
 
   try {
     var res = await fetch('/api/v1/backups', {
@@ -425,11 +421,10 @@ async function runDeviceBackup(profileId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         devices: [{
-          type_key: fullProfile.type_key,
-          host:     fullProfile.host,
-          port:     fullProfile.port,
-          credentials: credentials,
-          device_profile_id: fullProfile.id,
+          type_key: card.dataset.typeKey,
+          host:     card.dataset.host,
+          port:     parseInt(card.dataset.port, 10) || 22,
+          device_profile_id: profileId,
         }],
       }),
     });

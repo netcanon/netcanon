@@ -172,31 +172,39 @@ function initRow(row) {
        updateRemoveButtons();
      });
   var profileSel = row.querySelector('[name="device_profile_id"]');
+  var pwInput = row.querySelector('[name="password"]');
+  /* Password is required only when entering a brand-new device; when an
+     existing profile is selected the server resolves credentials from it. */
+  if (pwInput) pwInput.required = !(profileSel && profileSel.value);
   if (profileSel) {
-    profileSel.addEventListener('change', async function() {
+    profileSel.addEventListener('change', function() {
       var opt = profileSel.options[profileSel.selectedIndex];
+      var ep = row.querySelector('[name="enable_password"]');
       if (opt.value) {
-        row.querySelector('[name="type_key"]').value   = opt.dataset.typeKey || '';
-        row.querySelector('[name="host"]').value       = opt.dataset.host || '';
-        row.querySelector('[name="port"]').value       = opt.dataset.port || '22';
-        row.querySelector('[name="username"]').value   = opt.dataset.username || '';
-        /* Clear credential fields while we fetch — never read from DOM */
-        row.querySelector('[name="password"]').value   = '';
-        var ep = row.querySelector('[name="enable_password"]');
+        /* Existing profile: prefill the non-secret connection fields from
+           the option's data-* attributes.  Credentials are NOT fetched —
+           the backup endpoint resolves them server-side, so the plaintext
+           password never reaches the browser. */
+        row.querySelector('[name="type_key"]').value = opt.dataset.typeKey || '';
+        row.querySelector('[name="host"]').value     = opt.dataset.host || '';
+        row.querySelector('[name="port"]').value     = opt.dataset.port || '22';
+        row.querySelector('[name="username"]').value = opt.dataset.username || '';
+        if (pwInput) {
+          pwInput.value = '';
+          pwInput.required = false;
+          pwInput.placeholder = 'using stored credentials — leave blank';
+        }
         if (ep) ep.value = '';
-        try {
-          var r = await fetch('/api/v1/devices/' + encodeURIComponent(opt.value));
-          if (r.ok) {
-            var p = await r.json();
-            row.querySelector('[name="password"]').value = p.password || '';
-            if (ep) ep.value = p.enable_password || '';
-          }
-        } catch (_) { /* non-fatal: user can type credentials manually */ }
         var ng = row.querySelector('.profile-name-group');
         if (ng) ng.style.display = 'none';
       } else {
-        var ng = row.querySelector('.profile-name-group');
-        if (ng) ng.style.display = '';
+        /* New device: the operator must type credentials. */
+        if (pwInput) {
+          pwInput.required = true;
+          pwInput.placeholder = '';
+        }
+        var ng2 = row.querySelector('.profile-name-group');
+        if (ng2) ng2.style.display = '';
       }
       updateEnableGroup(row);
     });
@@ -277,16 +285,24 @@ form.addEventListener('submit', async function(e) {
       }
     }
 
+    var pwVal = g('password');
     var deviceObj = {
       type_key: g('type_key'),
       host:     g('host'),
       port:     parseInt(g('port'), 10) || 22,
-      credentials: Object.assign(
-        { username: g('username'), password: g('password') },
-        ep ? { enable_password: ep } : {}
-      ),
     };
-    if (deviceProfileId) deviceObj.device_profile_id = deviceProfileId;
+    if (deviceProfileId && !pwVal) {
+      /* Existing profile, no typed override → let the server resolve
+         credentials from the stored profile; nothing secret is sent. */
+      deviceObj.device_profile_id = deviceProfileId;
+    } else {
+      /* New device, or an explicit per-run password override. */
+      deviceObj.credentials = Object.assign(
+        { username: g('username'), password: pwVal },
+        ep ? { enable_password: ep } : {}
+      );
+      if (deviceProfileId) deviceObj.device_profile_id = deviceProfileId;
+    }
     devices.push(deviceObj);
   }
 

@@ -553,3 +553,106 @@ class TestGetJob:
         job_id = _post_backup(client).json()["id"]
         resp = client.get(f"/api/v1/backups/{job_id}")
         assert len(resp.json()["results"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# Server-side credential resolution (2026-06 review finding #1)
+# ---------------------------------------------------------------------------
+
+
+class _CredCapturingCollector:
+    """Collector that records the resolved credentials it was handed."""
+
+    def __init__(self) -> None:
+        self.seen: list[tuple[str, str, str | None]] = []
+
+    def collect(self, device, definition):  # noqa: ARG002
+        c = device.credentials
+        self.seen.append(
+            (
+                c.username,
+                c.password.get_secret_value(),
+                c.enable_password.get_secret_value()
+                if c.enable_password
+                else None,
+            )
+        )
+        return "! config for " + device.host
+
+
+class TestServerSideCredentialResolution:
+    """A backup may omit inline credentials and reference a stored profile;
+    the endpoint resolves the password server-side so the plaintext value
+    never has to be sent from (or returned to) the client."""
+
+    def test_profile_backup_resolves_credentials_server_side(self, test_app):
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
+
+        collector = _CredCapturingCollector()
+        with patch(
+            "netcanon.api.routes.backups.get_collector",
+            return_value=collector,
+        ):
+            with TestClient(test_app, raise_server_exceptions=True) as c:
+                profile = c.post(
+                    "/api/v1/devices/",
+                    json={
+                        "name": "Core",
+                        "type_key": "Cisco",
+                        "host": "10.9.9.9",
+                        "username": "netops",
+                        "password": "s3cr3t",
+                        "enable_password": "en4ble",
+                    },
+                ).json()
+                # No inline credentials — only the profile reference.
+                resp = c.post(
+                    "/api/v1/backups",
+                    json={
+                        "devices": [
+                            {
+                                "type_key": "Cisco",
+                                "host": "10.9.9.9",
+                                "port": 22,
+                                "device_profile_id": profile["id"],
+                            }
+                        ]
+                    },
+                )
+                assert resp.status_code == 202
+
+        # The collector was handed the profile's stored credentials,
+        # resolved entirely server-side.
+        assert collector.seen == [("netops", "s3cr3t", "en4ble")]
+
+    def test_no_credentials_and_no_profile_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/backups",
+            json={
+                "devices": [{"type_key": "Cisco", "host": "10.0.0.1", "port": 22}]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_unknown_profile_id_without_credentials_returns_422(self, client):
+        resp = client.post(
+            "/api/v1/backups",
+            json={
+                "devices": [
+                    {
+                        "type_key": "Cisco",
+                        "host": "10.0.0.1",
+                        "port": 22,
+                        "device_profile_id": "does-not-exist",
+                    }
+                ]
+            },
+        )
+        assert resp.status_code == 422
+
+    def test_inline_credentials_still_accepted(self, client):
+        """The ad-hoc path (inline credentials, no profile) is unchanged."""
+        job = _post_and_get(client)
+        assert job["status"] == "completed"

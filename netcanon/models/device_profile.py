@@ -70,6 +70,40 @@ class DeviceProfile(BaseModel):
         return _validate_host(v)
 
 
+class DeviceProfilePublic(BaseModel):
+    """Read-side view of a :class:`DeviceProfile` with credentials removed.
+
+    Used as the ``response_model`` for every device-profile API route so
+    ``password`` / ``enable_password`` — decrypted in memory for backup
+    use — are never serialised back to a client.  Credentials are
+    *write-only* over the API: supplied in create / update request bodies,
+    never echoed in any response.
+
+    The web "run backup now" flows no longer need credentials returned: the
+    backup endpoint resolves them server-side from the stored profile (see
+    :func:`netcanon.api.routes.backups._resolve_credentials`), so the
+    plaintext password never crosses the API boundary at all.
+
+    This model lists every non-credential ``DeviceProfile`` field; a guard
+    test (``tests/unit/test_device_profile_public.py``) asserts the field
+    set is exactly ``DeviceProfile``'s minus ``{password, enable_password}``
+    so a future field added to ``DeviceProfile`` cannot silently fail to
+    surface in the read API.
+    """
+
+    id: str
+    name: str
+    type_key: str
+    host: str
+    port: int
+    username: str
+    notes: str | None = None
+    os_version: str | None = None
+    model: str | None = None
+    detected_facts: dict[str, str] | None = None
+    created_at: datetime
+
+
 class DeviceProfileCreate(BaseModel):
     """Request body for ``POST /api/v1/devices/``.
 
