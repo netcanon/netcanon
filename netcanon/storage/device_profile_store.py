@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from ..models.device_profile import DeviceProfile
@@ -26,6 +27,22 @@ from ..security.credentials import encrypt
 from ..security.migration import migrate_credential_fields
 
 logger = logging.getLogger(__name__)
+
+#: Guards cross-thread access to the in-memory device-profile registry
+#: (``app.state.device_profiles``) **together with** its on-disk store.
+#: The backup worker thread mutates a profile's ``detected_facts`` and
+#: re-saves it (:func:`netcanon.services.backup_runner._process_one_device`)
+#: while route handlers create / update / delete the same dict + files —
+#: and FastAPI runs sync ``def`` endpoints in a threadpool, so these are
+#: genuinely different threads.  Without serialisation a delete-then-save
+#: interleaving can resurrect a just-deleted profile to disk, and
+#: concurrent ``detected_facts`` updates can be lost.  Hold this lock around
+#: every registry read-modify-write-persist (and delete) critical section.
+#: Process-wide by design: the registry is effectively process-global (one
+#: app per process), and the lock is only ever held for the brief
+#: dict-mutation + file-write — never across an ``await`` or an SSH call —
+#: so it cannot deadlock or serialise the backup hot path.
+DEVICE_PROFILE_REGISTRY_LOCK = threading.Lock()
 
 
 class FileDeviceProfileStore:
