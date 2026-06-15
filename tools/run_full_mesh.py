@@ -182,7 +182,13 @@ _AUDITED_FIELDS: tuple[str, ...] = (
 # ``/vxlan-vnis/source-interface`` + ``/vxlan-vnis/udp-port``).
 _FIELD_TO_XPATH_PREFIX: dict[str, str] = {
     "vxlan_vnis": "/vxlan-vnis/",
-    "evpn_type5_routes": "/evpn-type5/",
+    # NB: the EVPN prefix must include the ``-routes`` segment — every
+    # codec declares ``/evpn-type5-routes/route`` (the canonical
+    # vocabulary), so the old ``/evpn-type5/`` prefix matched nothing
+    # and the field fell through to the exact ``/evpn_type5_routes``
+    # field-marker fallback.  Normalised in the 2026-06 vocab pass
+    # (review #8) so the prefix actually catches the granular shape.
+    "evpn_type5_routes": "/evpn-type5-routes/",
     "routing_instances": "/routing-instances/",
     # Other fields don't have a stable xpath-prefix convention in the
     # current matrix — leave them keyed only by direct equality below.

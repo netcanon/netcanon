@@ -209,7 +209,7 @@ matrix flags the gap honestly rather than masquerading as drift.
 | `/snmp/{community,location,contact,trap-host,v3-user}` | Unsupported |
 | `/vxlan-vnis/{vni,source-interface,udp-port}` | Unsupported |
 | `/routing-instances/instance` | Unsupported |
-| `/evpn-type5/route` | Unsupported |
+| `/evpn-type5-routes/route` | Unsupported |
 | `/interfaces/interface/vrrp-groups/group` | Unsupported (ship-before-wire v0.2.0 Wave B; stub renders interfaces only) |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported (ship-before-wire v0.2.0 Wave C) |

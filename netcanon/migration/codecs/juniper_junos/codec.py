@@ -139,9 +139,9 @@ class JunosCodec(CodecBase):
             "/snmp/location",
             "/snmp/contact",
             "/snmp/v3-user",
-            "/aaa/authentication/users/user/config/username",
-            "/aaa/authentication/users/user/config/password",
-            "/aaa/authentication/users/user/config/role",
+            "/local-users/user/name",
+            "/local-users/user/hashed-password",
+            "/local-users/user/role",
             "/vxlan-vnis/vni",                   # GAP 6
             "/vxlan-vnis/source-interface",      # GAP-EVPN-2
             "/vxlan-vnis/udp-port",              # GAP-EVPN-2
