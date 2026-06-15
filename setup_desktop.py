@@ -100,6 +100,13 @@ build_exe_options: dict = {
         (str(DEFINITIONS_DIR), "definitions"),
         # Jinja2 templates bundled with the netcanon package.
         (str(HERE / "netcanon" / "templates"), "lib/netcanon/templates"),
+        # License + third-party notices.  The MSI redistributes PySide6/Qt
+        # (LGPLv3), paramiko (LGPL-2.1), and pystray (LGPL-3.0) as binaries,
+        # which carry an attribution + source-offer obligation; ship the
+        # notices next to the EXE so the installed app satisfies it
+        # (2026-06-14 review finding #18).
+        (str(HERE / "LICENSE"), "LICENSE.txt"),
+        (str(HERE / "THIRD-PARTY-NOTICES.txt"), "THIRD-PARTY-NOTICES.txt"),
     ],
     # Exclude large packages that are not needed at runtime to keep the
     # installer size reasonable.

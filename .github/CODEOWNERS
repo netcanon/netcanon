@@ -1,0 +1,25 @@
+# CODEOWNERS — version-controls who must review changes to which paths.
+#
+# ⚠️ SETUP REQUIRED — this file is a template.  For it to actually gate
+# merges you must, in the GitHub repo settings, BOTH:
+#   1. Replace `@netcanon/maintainers` below with a real team or user that
+#      exists (e.g. `@your-handle`).  An unknown owner makes the rule inert
+#      (GitHub shows a "code owner not found" notice and enforces nothing).
+#   2. Enable branch protection / a Ruleset on `main` with
+#      "Require review from Code Owners" + "Require status checks to pass".
+#      CODEOWNERS alone does NOT block merges — branch protection does.
+#
+# Rationale: the 2026-06-14 review (finding #19) noted that "CI gates
+# merges" depended on invisible repo settings with no version-controlled
+# CODEOWNERS.  This file makes the review intent explicit and reviewable;
+# the two settings above are the half that lives in repo configuration.
+
+# Default owner for everything in the repo.
+* @netcanon/maintainers
+
+# Security-sensitive surfaces — call them out explicitly so a future
+# split of ownership keeps these gated even if the catch-all changes.
+/.github/workflows/   @netcanon/maintainers
+/netcanon/security/   @netcanon/maintainers
+/netcanon/api/        @netcanon/maintainers
+/setup_desktop.py     @netcanon/maintainers
