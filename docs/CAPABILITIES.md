@@ -45,6 +45,11 @@ authoring guide and the live `/definitions` page in the running app
 for the per-vendor inventory.  RESULTS.md is the source of truth for
 current certification — this table summarises but does not gate.
 
+> **Certified ≠ deploy-ready.**  The `certainty` label rates *round-trip
+> fidelity* (how reliably a config survives parse → render), not deploy
+> automation.  Netcanon has no deploy path today — rendered output is for
+> manual review and apply; the deploy endpoints remain on the roadmap.
+
 ---
 
 ## Translation tiers

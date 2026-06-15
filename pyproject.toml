@@ -29,6 +29,7 @@ keywords = [
     "mikrotik",
     "opnsense",
     "arista",
+    "vyos",
     "vendor-translation",
     "config-migration",
     "python",
