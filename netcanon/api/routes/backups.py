@@ -60,6 +60,7 @@ from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, JobStatus
 from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
 from ...models.device_profile import DeviceProfile
+from ...services.egress import EgressBlocked, assert_egress_allowed
 from ...services.backup_runner import run_backup_job
 from ...storage.base import BaseConfigStore
 from ...storage.device_profile_store import FileDeviceProfileStore
@@ -193,6 +194,16 @@ def create_backup(
     resolved_request = BackupRequest(
         devices=_resolve_credentials(request_body.devices, device_profiles)
     )
+
+    # Egress allow-list (opt-in via Settings.block_private_egress): refuse
+    # targets that resolve to loopback / link-local (incl. the cloud
+    # metadata endpoint) to blunt the SSRF surface (review finding #3).
+    if request.app.state.settings.block_private_egress:
+        for device in resolved_request.devices:
+            try:
+                assert_egress_allowed(device.host)
+            except EgressBlocked as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job = BackupJob(
         id=str(uuid.uuid4()),

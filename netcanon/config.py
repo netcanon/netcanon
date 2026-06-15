@@ -59,6 +59,16 @@ class Settings(BaseSettings):
             by ID via the registry's transparent disk lazy-load.  Default
             1000 caps memory at ~5 MB.  Set to 0 to disable in-memory
             caching entirely (every read hits disk).
+        block_private_egress: When ``True``, the backup entry points
+            reject targets that resolve to loopback (``127.0.0.0/8``,
+            ``::1``) or link-local (``169.254.0.0/16`` — which includes the
+            cloud metadata endpoint ``169.254.169.254`` — and ``fe80::/10``)
+            addresses.  Defaults to ``False`` so the desktop / trusted
+            management-VLAN deployments see no behaviour change; turn it on
+            (``NETCANON_BLOCK_PRIVATE_EGRESS=true``) for a network-exposed
+            web deployment to blunt the SSRF surface noted in SECURITY.md.
+            RFC-1918 ranges stay allowed — that is where real managed
+            devices live.
     """
 
     definitions_dir: Path = Path("definitions")
@@ -71,6 +81,7 @@ class Settings(BaseSettings):
     backup_concurrency: int = Field(default=MAX_BACKUP_CONCURRENCY,
                                     ge=1, le=MAX_BACKUP_CONCURRENCY)
     max_memory_jobs: int = Field(default=1000, ge=0)
+    block_private_egress: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="NETCANON_",
