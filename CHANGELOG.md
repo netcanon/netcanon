@@ -28,6 +28,24 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Real-capture corpus: akarneliuk NX-OS EVPN-VXLAN leaf fixture** —
+  `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939` from
+  [akarneliuk/multivendor-network-labs](https://github.com/akarneliuk/multivendor-network-labs)
+  (NX-OS 9.3(9); unlicensed device-output, factual-output precedent).  A
+  **double regression witness**: the **inline `member vni <vni>
+  mcast-group 239.11.11.x` form** of the mcast-group parse (complements
+  the `leaf2` own-sub-line form) *and* the dual-AF route-target
+  de-duplication fix above — its tenant `vrf context` blocks carry
+  `route-target both auto [evpn]` across both address-families with an
+  asymmetric inter-tenant `route-target import 65000:<vni>` route-leak,
+  the exact shape that previously drifted `rt_imports`.  Also exercises
+  `associate-vrf` L3VNI, anycast-gateway SVIs, vn-segment L2VNI, `nve1`
+  VTEP, vPC/port-channel LAGs, ULA IPv6 SVIs, OSPF/PIM/BGP-EVPN (Tier-3).
+  Parses, round-trips stably, auto-detects uniquely; cross-mesh-neutral
+  (CODEC_BUG flat at 5).  Secrets (OSPF key-chain / PIM ah-md5 / BGP
+  template password) sanitized to synthetic same-format values; all IPs
+  RFC1918 / ULA / admin-scoped multicast.
+
 * **Real-capture corpus: aruba_aoscx VRF / IPv6 spine fixture** —
   `canu_csm17_spine001_ipv6_vrf` from HPE Cray's open-source
   [`canu`](https://github.com/Cray-HPE/canu) fabric-config generator (MIT; CSM 1.7
