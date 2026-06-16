@@ -695,6 +695,27 @@ ip route 0.0.0.0/0 192.0.2.254
 """
 
 
+# A tenant VRF the way real NX-OS EVPN-VXLAN leaves write it: the same RT
+# value repeats across the ipv4-unicast / ipv6-unicast address-families
+# AND the ``... evpn`` scope, with an asymmetric import-only route-leak
+# mixed in.  Mirrors the akarneliuk multivendor-network-labs leaf
+# (c-1-l1) that surfaced the rt_imports round-trip drift.
+_VRF_DUAL_AF_RT_CONFIG = """\
+!Command: show running-config
+hostname VRFDUP
+vrf context TENANT-DUAL
+  vni 901001
+  rd auto
+  address-family ipv4 unicast
+    route-target both auto
+    route-target both auto evpn
+    route-target import 65000:901002
+  address-family ipv6 unicast
+    route-target both auto
+    route-target both auto evpn
+"""
+
+
 class TestPhase3VRF:
     @pytest.fixture
     def tree(self, codec):
@@ -794,6 +815,42 @@ class TestPhase3VRF:
         )
         assert t2.rt_imports == ["65001:1"]
         assert t2.rt_exports == ["65001:1"]
+
+    def test_dual_af_route_targets_deduped(self, codec):
+        """The same RT value repeated across ipv4-unicast / ipv6-unicast /
+        ``evpn`` scopes collapses to a single canonical entry (the flat
+        per-direction list carries no AF / evpn dimension, so the repeats
+        are artefacts).  First-seen order is preserved, so the asymmetric
+        import-only route-leak follows the single ``auto``."""
+        t = next(
+            r for r in codec.parse(_VRF_DUAL_AF_RT_CONFIG).routing_instances
+            if r.name == "TENANT-DUAL"
+        )
+        assert t.rt_imports == ["auto", "65000:901002"]
+        assert t.rt_exports == ["auto"]
+
+    def test_dual_af_asymmetric_rt_round_trips_stable(self, codec):
+        """Regression (akarneliuk EVPN-VXLAN leaf): an asymmetric
+        import-only RT interleaved among ``both`` lines must not drift
+        ``rt_imports`` order on a parse->render->parse round-trip.  Before
+        the parse-side dedup the renderer emitted the import-only RT after
+        the (duplicated) ``both`` RTs, so the re-parse saw a different
+        order and the round-trip was unstable."""
+        first = codec.parse(_VRF_DUAL_AF_RT_CONFIG)
+        second = codec.parse(codec.render(first))
+        a = next(r for r in first.routing_instances if r.name == "TENANT-DUAL")
+        b = next(r for r in second.routing_instances if r.name == "TENANT-DUAL")
+        assert a.rt_imports == b.rt_imports == ["auto", "65000:901002"]
+        assert a.rt_exports == b.rt_exports == ["auto"]
+
+    def test_dual_af_render_is_idiomatic_not_duplicated(self, codec):
+        """The deduped RTs render as one compact ``both auto`` plus the
+        import-only leak — not the four duplicate ``both auto`` lines the
+        pre-dedup flatten produced."""
+        out = codec.render(codec.parse(_VRF_DUAL_AF_RT_CONFIG))
+        block = out.split("vrf context TENANT-DUAL", 1)[1]
+        assert block.count("route-target both auto") == 1
+        assert "    route-target import 65000:901002" in block
 
     def test_defensive_vrf_context_for_orphan_per_vrf_route(self, codec):
         """A per-VRF static route whose VRF has NO routing-instance record
