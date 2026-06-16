@@ -63,6 +63,7 @@ from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
+    _parse_vlan_list,
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
@@ -1053,29 +1054,6 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         tunnel_type=raw.get("tunnel_type", ""),
         vrrp_groups=vrrp_groups,
     )
-
-
-def _parse_vlan_list(text: str) -> list[int]:
-    """Parse a Cisco VLAN list like '10,20,30-40' into a flat list of ints."""
-    result: list[int] = []
-    for part in text.split(","):
-        part = part.strip()
-        if "-" in part:
-            lo, hi = part.split("-", 1)
-            try:
-                lo_i, hi_i = int(lo.strip()), int(hi.strip())
-            except ValueError:
-                continue
-            # Clamp to the valid VLAN space BEFORE materializing the range so
-            # an out-of-bounds span (e.g. `1-9999999999`) cannot OOM the
-            # process; the valid sub-range is preserved (lossless vs the
-            # downstream 1..4094 filter).
-            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
-            if lo_i <= hi_i:
-                result.extend(range(lo_i, hi_i + 1))
-        elif part.isdigit():
-            result.append(int(part))
-    return result
 
 
 def _parse_vlans(raw: str) -> list[CanonicalVlan]:

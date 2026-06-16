@@ -66,7 +66,11 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex
+from .._helpers import (
+    _is_link_local_v6,
+    _normalise_mac_to_colon_hex,
+    _parse_vlan_list,
+)
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 
@@ -941,28 +945,6 @@ def _parse_lags(raw: str) -> list[CanonicalLAG]:
             lag.mode = mode_by_lag[lag_name]
         lags.append(lag)
     return lags
-
-
-def _parse_vlan_list(text: str) -> list[int]:
-    """Parse an NX-OS VLAN id-list like ``1,10,2000`` or ``10-20`` into a
-    flat list of ints.  Ranges are expanded inclusively."""
-    result: list[int] = []
-    for part in text.split(","):
-        part = part.strip()
-        if "-" in part:
-            lo, hi = part.split("-", 1)
-            try:
-                lo_i, hi_i = int(lo.strip()), int(hi.strip())
-            except ValueError:
-                continue
-            # Clamp to the valid VLAN space before materializing so a huge
-            # span cannot OOM the process (valid sub-range preserved).
-            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
-            if lo_i <= hi_i:
-                result.extend(range(lo_i, hi_i + 1))
-        elif part.isdigit():
-            result.append(int(part))
-    return result
 
 
 def _parse_vlans(raw: str) -> list[CanonicalVlan]:
