@@ -357,13 +357,17 @@ per_field_expectation:
     references: [opnsense-interfaces]
 
   interfaces[].ipv4_addresses:
-    disposition: good
-    note: >
+    disposition: lossy
+    reason: >
       Junos's ``unit 0 family inet address X/N`` (CIDR form)
       converts mechanically to OPNsense ``<ipaddr>X</ipaddr>`` +
       ``<subnet>N</subnet>``.  Multiple Junos IPv4 addresses
       (``set address X/N`` repeated) collapse to the primary on
-      OPNsense — canonical takes one address.
+      OPNsense — canonical takes one address.  The single-address case
+      round-trips losslessly; only multi-address interfaces such as the
+      MNHA capture's 3-address ``lo0.10`` loopback lose the extras
+      (hence lossy, not good — the note already documented the collapse
+      but the disposition mislabelled it).
     references: [junos-iface-fundamentals, opnsense-interfaces]
 
   interfaces[].ipv6_addresses:
