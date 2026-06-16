@@ -28,6 +28,25 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Real-capture corpus: 4 more gap-fill fixtures** from the 2026-06-15
+  `fixture-gap-hunt` acquisition wave — each fetched from a license-vetted
+  public source, sanitized (real secrets → synthetic same-format, real
+  public IPs → RFC5737/RFC3849), smoke-tested through its codec, and
+  cross-mesh-neutral (CODEC_BUG flat at 5).
+    * **cisco_nxos** — `busterswt_spine_leaf_xk32_1` (NX-OS 9.3(12) — trunk
+      native-VLAN incl. the previously-unwitnessed **port-channel** case +
+      per-VRF static route) and `networklessons_clab_dag_symmetric_irb_leaf1`
+      (10.2(7) — the corpus's **first real IPv4 distributed-anycast-gateway**
+      capture: `anycast-gateway-mac` + per-SVI `virtual-gateway-address`,
+      previously synthetic-only).
+    * **cisco_iosxr** — `iosxr_design_cst_pa3` (IOS-XR 7.5.2, Cisco's
+      `ios-xr/design` repo) closing the **4-segment interface-name** gap
+      (`TenGigE0/0/0/0`, `HundredGigE0/0/1/0`, `MgmtEth0/RP0/CPU0/0`, dot1q
+      `.200` sub-interface) plus the rare `bundle … mode on` static LAG.
+    * **vyos** — `vyos_forum_snmpv3_user_eq13` (forum-share; VyOS 1.3) closing
+      the four **SNMPv3 USM** surfaces (`/snmp/v3-user` + auth-passphrase +
+      engine-id + location) the v2c-community-only corpus left unverified.
+
 * **Real-capture corpus: 7 gap-fill fixtures** closing **14 previously-unverified
   capability-matrix surfaces** (identified by the `fixture-gap-hunt` analysis —
   diffing `iter_xpaths()` over the existing corpus against each
