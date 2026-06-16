@@ -319,6 +319,16 @@ timestamp if your timezone matters for an audit.
   fixture or test exercises it, so the audit is unaffected.  fortigate
   keeps its own `_prefix_to_mask` (distinct message, no range pre-check).
 
+* **Dead-code & dead-test removal.**  Removed an empty
+  `if TYPE_CHECKING: pass` block (and its now-unused import) from
+  `netcanon/api/deps.py` — every annotation there uses a runtime import.
+  Deleted two permanently-`@pytest.mark.skip`-marked e2e tests in
+  `tests/e2e/test_migrate_rename_modal.py`
+  (`test_loopback_appears_as_warning_row`,
+  `test_keep_verbatim_re_includes_auto_dropped_row`) whose premise died
+  when Aruba gained loopback support (commit 5f4855a) — both skip reasons
+  already noted the surfaces are covered by sibling tests.
+
 ## [0.1.8] - 2026-06-15
 
 ### Security

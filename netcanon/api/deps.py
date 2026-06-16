@@ -13,8 +13,6 @@ Usage::
         ...
 """
 
-from typing import TYPE_CHECKING
-
 from fastapi import Request
 
 from ..definitions.loader import DefinitionLoader
@@ -27,9 +25,6 @@ from ..storage.device_profile_store import FileDeviceProfileStore
 from ..storage.job_registry import BackupJobRegistry
 from ..storage.job_store import FileJobStore
 from ..storage.schedule_store import FileScheduleStore
-
-if TYPE_CHECKING:
-    pass
 
 
 def get_definitions(request: Request) -> dict[str, DeviceDefinition]:

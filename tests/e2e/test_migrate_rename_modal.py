@@ -99,35 +99,6 @@ class TestRenameModalContent:
         # Row contains the auto-target cell showing "1/1".
         expect(gi1_row).to_contain_text("1/1")
 
-    @pytest.mark.skip(
-        reason=(
-            "Stale premise: this test was written when Aruba AOS-S could not "
-            "render Cisco Loopback0 (so the row carried a warning + the "
-            "section auto-opened).  Commit 5f4855a (May 2026) added Aruba "
-            "loopback support — Loopback0 now translates cleanly to "
-            "loopback1, no warning is emitted, and the loopback `<details>` "
-            "section is rendered collapsed by default (so the row inside is "
-            "hidden).  Reported by Wave 11-A and Wave 7c-G as a pre-existing "
-            "deterministic failure.  Wave-12 task: re-author this test "
-            "around a target codec that genuinely cannot render loopbacks "
-            "(or delete it; the no-warning branch is already covered by "
-            "test_table_shows_physical_section_with_renamed_ports)."
-        )
-    )
-    def test_loopback_appears_as_warning_row(
-        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
-    ):
-        page.locator('[data-testid="migrate-rename-open-btn"]').click()
-        loop = page.locator('[data-testid="migrate-rename-section-loopback"]')
-        expect(loop).to_be_visible()
-        row = page.locator(
-            '[data-testid="migrate-rename-row-Loopback0"]'
-        )
-        expect(row).to_be_visible()
-        # Row has the has-warning class (yellow background).
-        cls = row.get_attribute("class") or ""
-        assert "has-warning" in cls
-
 
 class TestRenameModalApply:
     def test_override_updates_preview_and_apply_regenerates_output(
@@ -203,47 +174,6 @@ class TestRenameModalDrop:
         # "1/1" check is stricter than needed — Aruba's Trk1 rendering
         # contains "1/1" as part of trunk port lists — so just assert
         # the Gi1/0/1 interface STANZA doesn't appear.
-
-    @pytest.mark.skip(
-        reason=(
-            "Same dead premise as test_loopback_appears_as_warning_row "
-            "(skip-marked above).  Test was authored when Aruba had no "
-            "loopback support, so Cisco Loopback0 was auto-dropped on "
-            "the cisco→aruba target — the drop link rendered as 'keep "
-            "verbatim'.  Commit 5f4855a (May 2026) added Aruba "
-            "loopback support; Loopback0 now translates cleanly to "
-            "loopback1, no auto-drop happens, no 'keep verbatim' link "
-            "appears, locator resolves empty.  Flagged by CLEANUP-B "
-            "(commit 7ffa1c5) as sharing the dead-premise failure mode "
-            "with the loopback-warning-row sibling.  Wave-12 task: "
-            "re-author against a target codec that genuinely cannot "
-            "render loopbacks (or delete; the auto-drop UI surface is "
-            "exercised by other tests in this module)."
-        )
-    )
-    def test_keep_verbatim_re_includes_auto_dropped_row(
-        self, migrate_with_cisco_to_aruba: MigratePage, page: Page,
-    ):
-        # Default auto-drop hides Loopback0.  Operator wants to KEEP
-        # it anyway (e.g. to carry it through for manual cleanup in
-        # the target config).  The drop link on an auto-dropped row
-        # says "keep verbatim" and clicking it un-drops the row.
-        page.locator('[data-testid="migrate-rename-open-btn"]').click()
-        keep_link = page.locator(
-            '[data-testid="migrate-rename-drop-Loopback0"]'
-        )
-        expect(keep_link).to_be_visible()
-        expect(keep_link).to_contain_text("keep verbatim")
-        keep_link.click()
-        page.locator('[data-testid="migrate-rename-apply-btn"]').click()
-        expect(
-            page.locator('[data-testid="migrate-rename-status"]')
-        ).to_contain_text("Applied", timeout=5_000)
-        page.locator('[data-testid="migrate-rename-modal-close"]').click()
-        # Loopback0 now appears verbatim in rendered output
-        # (the user explicitly asked for it).
-        output = page.locator('[data-testid="migrate-output"]')
-        assert "Loopback0" in (output.text_content() or "")
 
 
 class TestRenameModalTargetProfileTwoStage:
