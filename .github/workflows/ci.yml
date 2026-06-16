@@ -25,6 +25,41 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+        with:
+          # No package build here (ruff only) so setuptools_scm tags
+          # aren't needed; shallow checkout is fine.  Clear the
+          # token-in-.git/config default — this job never pushes.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install ruff
+        # Keep this constraint in sync with the `ruff` pin in the
+        # pyproject.toml [project.optional-dependencies] dev extra.  A
+        # ruff minor bump can add or change rules, so pinning keeps this
+        # gate deterministic across otherwise-unrelated PRs.
+        run: |
+          python -m pip install --upgrade pip
+          pip install "ruff>=0.15,<0.16"
+
+      - name: Run ruff
+        # Scope: the shipping package + its tests, driven lint-clean in
+        # the v0.2.0 Stage-1 tooling baseline.  tools/ and
+        # netcanon_desktop/ are not yet clean; broadening the scope is a
+        # follow-up.  Config (rule set, ignores, line-length) lives in
+        # pyproject.toml [tool.ruff].
+        run: ruff check netcanon tests
+
   test:
     name: Tests (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
