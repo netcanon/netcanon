@@ -495,7 +495,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         # Don't accumulate duplicates if the same LAG already exists
         # (defensive for groups + apply-groups composition).
         existing = next(
-            (l for l in intent.lags if l.name == ae_name), None,
+            (lag for lag in intent.lags if lag.name == ae_name), None,
         )
         if existing is None:
             intent.lags.append(
@@ -620,9 +620,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         # (Aruba / OPNsense render paths) see the full anycast
         # surface.
         irb_v4_anycast = irb_entry.get("ipv4_anycast", {})
-        irb_v6_anycast = irb_entry.get("ipv6_anycast", {})
         irb_v4_mac = irb_entry.get("v4_mac", "")
-        irb_v6_mac = irb_entry.get("v6_mac", "")
         for ip, prefix in irb_entry.get("ipv4", []):
             existing_addrs = {
                 (a.ip, a.prefix_length) for a in vlan.ipv4_addresses
@@ -852,7 +850,7 @@ def _looks_like_blockform(raw: str) -> bool:
     # detection on block-form configs that lead with a comment).
     cleaned = _BLOCKFORM_COMMENT_RE.sub("", raw)
     stripped = cleaned.lstrip()
-    if stripped.startswith("set ") or stripped.startswith("version "):
+    if stripped.startswith(("set ", "version ")):
         return False
     # At least one opening curly on a line that isn't a comment.
     has_open_brace = bool(re.search(r"\{\s*$", cleaned, re.MULTILINE))
@@ -2026,30 +2024,29 @@ def _apply_routing_instances(
     # ``discard`` / ``reject`` and explicit ``rib <name>`` forms are not
     # modelled, same as the global routing table.  (v0.2.0 — graduates
     # /routing/static-route/vrf from lossy to supported.)
-    if head == "routing-options":
-        if (
-            len(rest) >= 6
-            and rest[1] == "static"
-            and rest[2] == "route"
-            and "/" in rest[3]
-            and rest[4] == "next-hop"
-        ):
-            dest = rest[3]
-            gateway = rest[5]
-            already = any(
-                r.destination == dest
-                and r.gateway == gateway
-                and r.vrf == ri_name
-                for r in intent.static_routes
-            )
-            if not already:
-                intent.static_routes.append(CanonicalStaticRoute(
-                    destination=dest,
-                    gateway=gateway,
-                    interface="",
-                    vrf=ri_name,
-                ))
-            return
+    if head == "routing-options" and (
+        len(rest) >= 6
+        and rest[1] == "static"
+        and rest[2] == "route"
+        and "/" in rest[3]
+        and rest[4] == "next-hop"
+    ):
+        dest = rest[3]
+        gateway = rest[5]
+        already = any(
+            r.destination == dest
+            and r.gateway == gateway
+            and r.vrf == ri_name
+            for r in intent.static_routes
+        )
+        if not already:
+            intent.static_routes.append(CanonicalStaticRoute(
+                destination=dest,
+                gateway=gateway,
+                interface="",
+                vrf=ri_name,
+            ))
+        return
         # Non-static routing-options (``rib`` / ``autonomous-system`` /
         # etc.) fall through to routing-instance materialisation +
         # parse-and-ignore below — unchanged from prior behaviour.
@@ -2286,7 +2283,6 @@ def _apply_snmp_v3(tokens: list[str], intent: CanonicalIntent) -> None:
     ):
         name = tokens[3]
         attr = tokens[4]
-        value = tokens[5] if len(tokens) >= 6 else ""
         # Drop the trailing ``authentication-key`` / ``privacy-key``
         # sentinel if present (``authentication-sha
         # authentication-key "<hash>"`` lands as 6 tokens).
@@ -2488,7 +2484,7 @@ def _infer_iface_type(name: str) -> str:
         return "ianaift:softwareLoopback"
     if lower.startswith("ae"):
         return "ianaift:ieee8023adLag"
-    if lower.startswith("irb") or lower.startswith("vlan."):
+    if lower.startswith(("irb", "vlan.")):
         return "ianaift:l3ipvlan"
     if lower.startswith(("gr-", "ip-", "st0")):
         return "ianaift:tunnel"

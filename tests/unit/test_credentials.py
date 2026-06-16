@@ -49,7 +49,6 @@ def reset_module():
 class TestKeyInitialisation:
     def test_generates_key_when_none_exists(self):
         """First run: no key in keyring → new key generated and stored."""
-        key = _make_fernet_key()
         with (
             patch("keyring.get_password", return_value=None),
             patch("keyring.set_password") as mock_set,

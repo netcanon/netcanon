@@ -128,7 +128,7 @@ class TestSimpleRename:
         matches.  ``applied`` captures the rewrite anyway (semantic
         parity with the sibling orchestrators)."""
         intent = _tree_with_snmp(community="public")
-        result = translate_snmp_community(
+        translate_snmp_community(
             intent, rename_map={"public": "public"},
         )
         # No collision warning — single-slot domain.  applied is

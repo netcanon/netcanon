@@ -99,7 +99,7 @@ class TestBannerPaletteTokens:
         # request returns the error path but the <style> block is still
         # in the response.  Fall back to a direct template route check
         # if the diff endpoint requires real records.
-        resp = client.get("/configs")  # configs.html doesn't have diff CSS
+        client.get("/configs")  # configs.html doesn't have diff CSS
         # Instead, check the underlying diff.html template via a route
         # that triggers it.  The diff route is /configs/{left}/vs/{right}
         # which 404s without records — but the response body still

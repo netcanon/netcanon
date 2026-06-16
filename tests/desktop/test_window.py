@@ -48,7 +48,6 @@ class TestWebViewWindowCreate:
         win, ns = created_win
         view_instance = ns.QWebEngineView.return_value
         view_instance.load.assert_called_once()
-        url_arg = view_instance.load.call_args[0][0]
         # QUrl was called with the correct URL string
         ns.QUrl.assert_called_once_with("http://127.0.0.1:8765")
 

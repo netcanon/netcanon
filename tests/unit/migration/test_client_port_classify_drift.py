@@ -133,9 +133,7 @@ def _py_looks_like_uplink(name: str) -> bool:
         return True
     if re.match(r"^(sfp|sfp-sfpplus|sfpplus|qsfpplus)\d", name, re.IGNORECASE):
         return True
-    if re.match(r"^wan\d*$", name, re.IGNORECASE):
-        return True
-    return False
+    return bool(re.match(r"^wan\d*$", name, re.IGNORECASE))
 
 
 # ---------------------------------------------------------------------------

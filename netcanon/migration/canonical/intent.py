@@ -165,7 +165,9 @@ class CanonicalIPv6Address(BaseModel):
 
 
 class CanonicalInterface(BaseModel):
-    """A network interface — physical, VLAN SVI, LAG, loopback, tunnel (Tier 1 — auto-translatable cross-vendor primitive).
+    """A network interface — physical, VLAN SVI, LAG, loopback, tunnel.
+
+    Tier 1 — auto-translatable cross-vendor primitive.
 
     Attributes:
         name: Vendor-native name (opaque).  For renamed MikroTik ports
@@ -359,7 +361,9 @@ class CanonicalDHCPPool(BaseModel):
 
 
 class CanonicalSNMPv3User(BaseModel):
-    """An SNMPv3 User-based Security Model (USM) user (Tier 2 — translate-with-review; per-vendor hash + key grammar diverges).
+    """An SNMPv3 User-based Security Model (USM) user.
+
+    Tier 2 — translate-with-review; per-vendor hash + key grammar diverges.
 
     The v3 identity unit — where SNMPv1/v2c identity is a shared
     community string, v3 identity is a named user with per-user
@@ -484,7 +488,9 @@ class CanonicalLAG(BaseModel):
 
 
 class CanonicalVRRPGroup(BaseModel):
-    """A classic FHRP redundancy group on an interface — VRRP / HSRP / CARP (Tier 2 — FHRP redundancy; cross-vendor grammar diverges).
+    """A classic FHRP redundancy group on an interface — VRRP / HSRP / CARP.
+
+    Tier 2 — FHRP redundancy; cross-vendor grammar diverges.
 
     Models the universal L3 redundancy primitive across the shipped
     bidirectional codecs.  Every vendor has equivalent grammar; the

@@ -394,7 +394,8 @@ end
         second = c.parse(c.render(first))
         def norm(i):
             d = i.model_dump()
-            for k in ('source_vendor','source_format','source_version'): d.pop(k,None)
+            for k in ('source_vendor', 'source_format', 'source_version'):
+                d.pop(k, None)
             return d
         assert norm(first) == norm(second)
 

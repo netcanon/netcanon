@@ -53,7 +53,7 @@ from __future__ import annotations
 
 import re
 
-from .intent import CanonicalIntent, CanonicalVlan
+from .intent import CanonicalIntent, CanonicalInterface, CanonicalVlan
 
 # Splits a port name into a tuple of (str, int, str, int, ...) for
 # natural sort.  Used by :func:`project_vlan_to_switchport` so
@@ -154,8 +154,7 @@ def project_switchport_to_vlan(intent: CanonicalIntent) -> None:
         elif mode == "trunk":
             allowed_set = set(iface.trunk_allowed_vlans)
             is_trunk_all = (
-                allowed_set == _TRUNK_ALL_RANGE_FULL
-                or allowed_set == _TRUNK_ALL_RANGE_OPERATIONAL
+                allowed_set in (_TRUNK_ALL_RANGE_FULL, _TRUNK_ALL_RANGE_OPERATIONAL)
             )
             if is_trunk_all:
                 # Trunk-all sentinel: do NOT synthesise 4094 phantom

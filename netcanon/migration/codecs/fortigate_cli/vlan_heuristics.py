@@ -80,9 +80,7 @@ def looks_like_vlan_iface(name: str) -> bool:
     if _VLAN_NAME_RE.match(name):
         return True
     m = _DOTTED_VLAN_RE.match(name)
-    if m and not _NON_VLAN_DOTTED_PARENT_RE.match(m.group(1)):
-        return True
-    return False
+    return bool(m and not _NON_VLAN_DOTTED_PARENT_RE.match(m.group(1)))
 
 
 def vlan_id_for(
@@ -162,7 +160,7 @@ def infer_iface_type(name: str) -> str:
     lower = name.lower()
     if _ETHERNET_NAME_RE.match(lower):
         return "ianaift:ethernetCsmacd"
-    if lower.startswith("agg") or lower.startswith("trunk"):
+    if lower.startswith(("agg", "trunk")):
         return "ianaift:ieee8023adLag"
     if lower.startswith("loopback"):
         return "ianaift:softwareLoopback"

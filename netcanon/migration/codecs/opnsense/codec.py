@@ -141,7 +141,8 @@ class OPNsenseCodec(CodecBase):
             "/interfaces/interface/ipv4/address/prefix-length",
             "/interfaces/interface/ipv6/address/ip",         # GAP-EVPN-3
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
-            "/interfaces/interface/dhcp-client-v6",          # OPNsense <ipaddrv6>{dhcp6|slaac|track6|6rd|6to4}</ipaddrv6>
+            # OPNsense <ipaddrv6>{dhcp6|slaac|track6|6rd|6to4}</ipaddrv6>
+            "/interfaces/interface/dhcp-client-v6",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             # Tier 2 — SNMP (OPNsense snmpd plugin)
@@ -209,10 +210,23 @@ class OPNsenseCodec(CodecBase):
             #    `severity: ok` (2026-06 adversarial review #9).  NB: domain +
             #    dns DO round-trip (declared supported); ntp does NOT (render
             #    emits no timeservers), so it moves here from supported. ──
-            UnsupportedPath(path="/system/timezone", reason="Render emits no time-zone stanza; intent.timezone is dropped on migration."),
-            UnsupportedPath(path="/system/ntp-server", reason="Render emits no <system><timeservers>; intent.ntp_servers are dropped on migration."),
-            UnsupportedPath(path="/system/syslog-server", reason="Render emits no remote-syslog config; intent.syslog_servers are dropped on migration."),
-            UnsupportedPath(path="/routing-instances/instance", reason="Render emits no VRF/routing-instance construct; intent.routing_instances are dropped on migration."),
+            UnsupportedPath(
+                path="/system/timezone",
+                reason="Render emits no time-zone stanza; intent.timezone is dropped on migration.",
+            ),
+            UnsupportedPath(
+                path="/system/ntp-server",
+                reason="Render emits no <system><timeservers>; intent.ntp_servers are dropped on migration.",
+            ),
+            UnsupportedPath(
+                path="/system/syslog-server",
+                reason="Render emits no remote-syslog config; intent.syslog_servers are dropped on migration.",
+            ),
+            UnsupportedPath(
+                path="/routing-instances/instance",
+                reason="Render emits no VRF/routing-instance construct; "
+                "intent.routing_instances are dropped on migration.",
+            ),
             UnsupportedPath(
                 path="/filter/rule",
                 reason=(

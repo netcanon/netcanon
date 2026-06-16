@@ -581,7 +581,7 @@ def _vlan_parent_default(intent: CanonicalIntent) -> str:
         lname = iface.name.lower()
         if lname.startswith("vlan"):
             continue
-        if lname.startswith("loopback") or lname.startswith("lo"):
+        if lname.startswith(("loopback", "lo")):
             continue
         if iface.name == "oobm":
             continue

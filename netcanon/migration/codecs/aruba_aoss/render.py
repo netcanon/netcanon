@@ -168,9 +168,7 @@ def _has_renderable_body(iface: Any) -> bool:
         return True
     if iface.voice_vlan is not None:
         return True
-    if iface.lag_member_of:
-        return True
-    return False
+    return bool(iface.lag_member_of)
 
 
 #: Hash algorithms AOS-S accepts in the ``password manager user-name
@@ -289,9 +287,7 @@ def _is_collapsible_aos_prefix(prefix: str) -> bool:
         return True
     if re.match(r"^\d+/[A-Za-z]?$", prefix):
         return True
-    if prefix.lower() == "trk":
-        return True
-    return False
+    return prefix.lower() == "trk"
 
 
 def _format_port_list(ports: list[str]) -> str:
@@ -339,7 +335,7 @@ def _format_port_list(ports: list[str]) -> str:
         run_start = nums[0]
         prev = nums[0]
         run: list[int] = [nums[0]]
-        def flush(start: int, end: int) -> str:
+        def flush(start: int, end: int, prefix: str) -> str:
             if start == end:
                 return f"{prefix}{start}"
             return f"{prefix}{start}-{prefix}{end}"
@@ -348,11 +344,11 @@ def _format_port_list(ports: list[str]) -> str:
                 run.append(n)
                 prev = n
             else:
-                parts.append(flush(run_start, prev))
+                parts.append(flush(run_start, prev, prefix))
                 run_start = n
                 prev = n
                 run = [n]
-        parts.append(flush(run_start, prev))
+        parts.append(flush(run_start, prev, prefix))
     return ",".join(parts)
 
 
@@ -619,11 +615,10 @@ def render_intent(tree: Any) -> str:
             if addrs:
                 absorbed_iface_names.add(svi_iface.name)
         id_match = iface_by_vlan_id.get(vlan.id)
-        if not addrs:
-            if id_match is not None:
-                addrs = list(id_match.ipv4_addresses)
-                if addrs:
-                    absorbed_iface_names.add(id_match.name)
+        if not addrs and id_match is not None:
+            addrs = list(id_match.ipv4_addresses)
+            if addrs:
+                absorbed_iface_names.add(id_match.name)
         for addr in addrs:
             lines.append(
                 f"   ip address {addr.ip}/{addr.prefix_length}"
@@ -768,9 +763,8 @@ def render_intent(tree: Any) -> str:
         # need post-deploy editing.  Native-shape names with empty
         # bodies are KEPT for round-trip stability (matches Junos
         # treatment of ``ge-0/0/0``-shape stubs).
-        if not _IS_AOS_PHYSICAL_PORT_RE.match(iface.name):
-            if not _has_renderable_body(iface):
-                continue
+        if not _IS_AOS_PHYSICAL_PORT_RE.match(iface.name) and not _has_renderable_body(iface):
+            continue
         physical_ifaces.append(iface)
     seen_names: dict[str, list[Any]] = {}
     name_order: list[str] = []

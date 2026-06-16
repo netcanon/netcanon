@@ -59,7 +59,7 @@ def resolve_adapter_or_422(name: str, side: str):
         raise HTTPException(
             status_code=422,
             detail=f"unknown {side} adapter: {exc}",
-        )
+        ) from exc
 
 
 def resolve_input_text(
@@ -86,11 +86,11 @@ def resolve_input_text(
         return body.raw_text or ""
     try:
         return storage.get_content(body.source_filename or "")
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         raise HTTPException(
             status_code=404,
             detail=f"source_filename not found: {body.source_filename!r}",
-        )
+        ) from exc
 
 
 def get_target_profiles(request: Request) -> dict[str, TargetProfile]:

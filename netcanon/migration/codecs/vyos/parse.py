@@ -436,10 +436,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     for raw_line in raw.splitlines():
         line = raw_line.strip()
         if (
-            not line
-            or line.startswith("//")
-            or line.startswith("/*")
-            or line.startswith("*")
+            not line or line.startswith(("//", "/*", "*"))
         ):
             continue
 

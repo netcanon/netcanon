@@ -49,7 +49,7 @@ spanning-tree mode mstp
 !
 no aaa root
 !
-username admin privilege 15 secret sha512 $6$fakehash$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+username admin privilege 15 secret sha512 $6$fakehash$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 !
 vlan 100
    name Tenant_100

@@ -9,7 +9,6 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e.helpers import (
-    ConfigsPage,
     DefinitionsPage,
 )
 
@@ -51,7 +50,6 @@ class TestConfigsPage:
     def test_empty_configs_message(self, page: Page, base_url: str):
         """On a fresh server the configs page shows the empty-state message."""
         page.goto("/configs")
-        configs_page = ConfigsPage(page)
         # The live server is session-scoped, so other tests may have already
         # added configs — we just check the page renders without errors.
         expect(page.locator("h1")).to_have_text("Stored Configurations")

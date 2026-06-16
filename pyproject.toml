@@ -201,6 +201,18 @@ ignore = [
     # prose; RUF002/RUF003 would demand replacing every one of them.
     "RUF002",
     "RUF003",
+    # `try/except: pass` is idiomatic and often clearer (and faster) than
+    # `contextlib.suppress`; not worth churning the codebase for.
+    "SIM105",
+    # Ternary-over-if/else frequently hurts readability for non-trivial arms.
+    "SIM108",
+    # Naming an unpacked-but-unused value can document intent; the `_`-prefix
+    # demand is pure cosmetics.
+    "RUF059",
+    # `class X(str, Enum)` -> `StrEnum` changes `str(member)` semantics across
+    # Python versions; these enums feed render output, so the mixin form is
+    # deliberate. Do NOT auto-migrate.
+    "UP042",
 ]
 
 [tool.ruff.lint.isort]
@@ -225,3 +237,13 @@ extend-immutable-calls = [
 # Package re-exports: `from .codec import XCodec` is intentional even when
 # the symbol is only surfaced via `__all__`.
 "__init__.py" = ["F401"]
+# Test-scaffold conventions differ from production standards:
+#   RUF012 - mutable class attrs on throwaway fake/helper classes
+#   B905   - `zip()` in assertions (lengths are fixture-controlled)
+#   B017   - `pytest.raises(Exception)` is sometimes the intended assertion
+#   RUF043 - `pytest.raises(match=...)` non-raw patterns
+#   E741   - single-letter loop vars (`l`) in compact test bodies
+"tests/**" = ["RUF012", "B905", "B017", "RUF043", "E741"]
+# Swagger-UI customization page: the body is a large embedded CSS/HTML
+# blob where long style rules are intrinsic, not code to wrap.
+"netcanon/api/routes/docs.py" = ["E501"]

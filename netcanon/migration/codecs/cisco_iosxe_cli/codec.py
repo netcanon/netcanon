@@ -222,8 +222,14 @@ class CiscoIOSXECLICodec(CodecBase):
             # ── Tier-1 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
-            UnsupportedPath(path="/system/timezone", reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration."),
-            UnsupportedPath(path="/system/syslog-server", reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration."),
+            UnsupportedPath(
+                path="/system/timezone",
+                reason="Render emits no clock/timezone stanza; intent.timezone is dropped on migration.",
+            ),
+            UnsupportedPath(
+                path="/system/syslog-server",
+                reason="Render emits no logging/syslog config; intent.syslog_servers are dropped on migration.",
+            ),
             UnsupportedPath(
                 path="/interfaces/interface/subinterfaces/subinterface/ipv6",
                 reason="Phase 0.5 scope — IPv4 only.",

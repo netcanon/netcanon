@@ -72,11 +72,11 @@ def _mask_to_prefix(mask_str: str, *, vendor: str) -> int:
     """
     try:
         addr = ipaddress.IPv4Address(mask_str)
-    except ipaddress.AddressValueError:
+    except ipaddress.AddressValueError as e:
         raise ParseError(
             f"{vendor}: invalid subnet mask {mask_str!r}",
             snippet=mask_str,
-        )
+        ) from e
     bits = bin(int(addr))[2:].zfill(32)
     if "01" in bits:
         raise ParseError(

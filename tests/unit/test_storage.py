@@ -181,7 +181,7 @@ class TestStartupMigration:
     def test_flat_files_content_preserved_after_migration(self, tmp_path: Path):
         flat = tmp_path / "Cisco_10-0-0-1_20260414_120000.cfg"
         flat.write_text("preserved content", encoding="utf-8")
-        store = FileConfigStore(tmp_path)
+        FileConfigStore(tmp_path)
         moved = tmp_path / "Cisco" / "10-0-0-1" / "Cisco_10-0-0-1_20260414_120000.cfg"
         assert moved.read_text(encoding="utf-8") == "preserved content"
 

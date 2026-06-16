@@ -238,9 +238,8 @@ def _parse_blocks(raw: str) -> list[_ConfigBlock]:
     # Any unclosed containers at EOF — best-effort rescue.
     while stack:
         top = stack.pop()
-        if isinstance(top, _ConfigBlock):
-            if not stack:
-                blocks.append(top)
+        if isinstance(top, _ConfigBlock) and not stack:
+            blocks.append(top)
 
     return blocks
 

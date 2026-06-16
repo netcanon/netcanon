@@ -22,10 +22,14 @@ from .migration import (
 
 __all__ = [
     "BackupJob",
-    "BackupResult",
     "BackupRequest",
+    "BackupResult",
+    "CapabilityMatrix",
+    # Migration models (Phase 0)
+    "CodecInfo",
     "CompatibilityReport",
     "ConfigRecord",
+    "DeviceClass",
     "DeviceCredentials",
     "DeviceTarget",
     "DiffGroup",
@@ -33,10 +37,6 @@ __all__ = [
     "DiffReport",
     "DiffRequest",
     "JobStatus",
-    # Migration models (Phase 0)
-    "CodecInfo",
-    "CapabilityMatrix",
-    "DeviceClass",
     "LossyPath",
     "MigrationJob",
     "MigrationJobStatus",

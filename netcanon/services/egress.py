@@ -48,9 +48,7 @@ def _is_blocked_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     if ip.is_loopback or ip.is_link_local:
         return True
     mapped = getattr(ip, "ipv4_mapped", None)
-    if mapped is not None and (mapped.is_loopback or mapped.is_link_local):
-        return True
-    return False
+    return bool(mapped is not None and (mapped.is_loopback or mapped.is_link_local))
 
 
 def assert_egress_allowed(host: str) -> None:

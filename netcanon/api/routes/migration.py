@@ -168,7 +168,7 @@ def get_codec_capabilities(name: str) -> CapabilityMatrix:
     try:
         adapter = get_codec(name)
     except LookupError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return adapter.capabilities
 
 
@@ -619,11 +619,11 @@ def detect_source_codec(
     else:
         try:
             raw = storage.get_content(body.source_filename or "")
-        except FileNotFoundError:
+        except FileNotFoundError as exc:
             raise HTTPException(
                 status_code=404,
                 detail=f"source_filename not found: {body.source_filename!r}",
-            )
+            ) from exc
     return detect_codec(raw, min_confidence=body.min_confidence)
 
 

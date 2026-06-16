@@ -366,7 +366,7 @@ def _render_service(snmp) -> list[str]:
     body.extend(_render_snmp_v3(snmp.v3_users))
     if not body:
         return []
-    return ["service {", "    snmp {"] + body + ["    }", "}"]
+    return ["service {", "    snmp {", *body, "    }", "}"]
 
 
 def _render_vrf(instances: list) -> list[str]:

@@ -70,11 +70,11 @@ class TestDeviceCredentials:
 
 class TestDeviceTarget:
     def _make(self, **kwargs) -> DeviceTarget:
-        defaults = dict(
-            type_key="Cisco",
-            host="192.168.1.1",
-            credentials=DeviceCredentials(username="admin", password="pw"),
-        )
+        defaults = {
+            "type_key": "Cisco",
+            "host": "192.168.1.1",
+            "credentials": DeviceCredentials(username="admin", password="pw"),
+        }
         defaults.update(kwargs)
         return DeviceTarget(**defaults)
 
@@ -303,12 +303,12 @@ class TestBackupResult:
 
 class TestBackupJob:
     def _make_job(self, **kwargs) -> BackupJob:
-        defaults = dict(
-            id="test-uuid-1234",
-            status=JobStatus.pending,
-            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
-            total_devices=2,
-        )
+        defaults = {
+            "id": "test-uuid-1234",
+            "status": JobStatus.pending,
+            "created_at": datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
+            "total_devices": 2,
+        }
         defaults.update(kwargs)
         return BackupJob(**defaults)
 

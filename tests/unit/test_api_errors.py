@@ -258,12 +258,12 @@ def test_netmiko_timeout_peeks_gaierror_under_chain():
     try:
         try:
             raise underlying
-        except socket.gaierror:
+        except socket.gaierror as chain:
             # This mirrors Netmiko's own raise-inside-except, which
             # sets __context__ to ``underlying`` automatically.
             raise NetmikoTimeoutException(
                 "TCP connection to device failed.\n\nCommon causes..."
-            )
+            ) from chain
     except NetmikoTimeoutException as exc:
         out = translate_backup_error(exc, host="not.a.real.host.invalid")
     assert "DNS lookup failed" in out
@@ -283,10 +283,10 @@ def test_netmiko_timeout_peeks_noValidConnectionsError_under_chain():
     try:
         try:
             raise underlying
-        except paramiko.ssh_exception.NoValidConnectionsError:
+        except paramiko.ssh_exception.NoValidConnectionsError as chain:
             raise NetmikoTimeoutException(
                 "TCP connection to device failed.\n\nCommon causes..."
-            )
+            ) from chain
     except NetmikoTimeoutException as exc:
         out = translate_backup_error(exc, host="127.0.0.1")
     assert "Connection refused" in out
@@ -303,10 +303,10 @@ def test_netmiko_timeout_peeks_TimeoutError_under_chain():
     try:
         try:
             raise underlying
-        except TimeoutError:
+        except TimeoutError as chain:
             raise NetmikoTimeoutException(
                 "TCP connection to device failed.\n\nCommon causes..."
-            )
+            ) from chain
     except NetmikoTimeoutException as exc:
         out = translate_backup_error(exc, host="192.0.2.1")
     # Both messages mention "timed out"; the precise distinction is
