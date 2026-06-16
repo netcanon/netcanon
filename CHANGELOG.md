@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Real-capture corpus: aruba_aoscx VRF / IPv6 spine fixture** —
+  `canu_csm17_spine001_ipv6_vrf` from HPE Cray's open-source
+  [`canu`](https://github.com/Cray-HPE/canu) fabric-config generator (MIT; CSM 1.7
+  golden config).  The **first AOS-CX real capture** to close the **routing-instance**
+  (`vrf CSM` / `vrf keepalive`), **per-interface VRF** (`vrf attach`), **static default
+  route** (`ip route 0.0.0.0/0`), and **interface IPv6 address**
+  (`ipv6 address 2001:db8:100::2/64`) surfaces — the prior aoscx corpus was
+  L2-EVPN-only.  Bannerless (no `!Version` line), so it only detects unambiguously
+  after the recent IOS-XE-probe NX-OS/AOS-CX deferral; parses, round-trips stably,
+  auto-detects to a unique codec, cross-mesh-neutral (CODEC_BUG flat at 5).  All IPs
+  RFC1918 / RFC3849-doc, MACs synthetic, no secrets — zero sanitization needed.
+
 * **Real-capture corpus: 4 more gap-fill fixtures** from the 2026-06-15
   `fixture-gap-hunt` acquisition wave — each fetched from a license-vetted
   public source, sanitized (real secrets → synthetic same-format, real
