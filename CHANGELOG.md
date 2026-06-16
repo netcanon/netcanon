@@ -109,6 +109,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **cisco_nxos VXLAN static head-end replication (flood-list) now parses +
+  renders.** `/vxlan-vnis/flood-list` was declared **supported** in the
+  capability matrix, but `_parse_vxlan` never read the `interface nve1 /
+  member vni N / ingress-replication protocol static / peer-ip X` lines (and
+  the renderer's docstring even claimed ingress-replication was "not modelled,
+  declared lossy" — contradicting the matrix).  A real static-IR VTEP lost
+  100% of its flood-list on parse while the matrix advertised support — the
+  silent-drop honesty defect class, and the deferred sibling of the
+  `member vni` mcast-group fix.  Parse now harvests the `peer-ip` list onto
+  `CanonicalVxlan.flood_list`; render emits the `ingress-replication protocol
+  static` / `peer-ip` block (mutually exclusive with `mcast-group` per VNI).
+  Round-trips stably; cross-mesh-neutral (CODEC_BUG flat at 5 — no committed
+  fixture exercised it).  Surfaced by a post-fix-phase gap-recheck
+  (declared-supported xpaths minus what any real fixture exercises).
+
 * **Cross-vendor fidelity honesty: five over-optimistic junos→target
   expectations corrected, two via the *right* mechanism rather than
   papering the docs.** Surfaced by the JNPRAutomate MNHA vSRX capture
