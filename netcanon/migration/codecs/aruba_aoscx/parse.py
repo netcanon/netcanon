@@ -85,6 +85,7 @@ from ...canonical.intent import (
 )
 from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex, _parse_vlan_list
 from .._input_shape import detect_input_shape
+from .._scanner import scan_stanzas
 from ..base import ParseError
 from . import port_names as _port_names
 
@@ -483,52 +484,28 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     config container — a later phase), mirroring cisco_nxos's ``nve1``
     interception.
     """
-    lines = raw.splitlines()
-    interfaces: list[CanonicalInterface] = []
-    current: dict | None = None
-
-    def _flush() -> None:
-        if current is not None:
-            interfaces.append(_build_canonical_interface(current))
-
     def _open(m: re.Match) -> dict | None:
         """Return a fresh scratch for an interface header, or None for the
-        ``vxlan`` kind (a later phase)."""
+        ``vxlan`` kind (a later phase).  Returning None leaves the stanza
+        open-but-unmaterialised so the scanner skips its body lines —
+        mirroring cisco_nxos's ``nve1`` interception."""
         name = _iface_name(m)
         if name.lower().startswith("vxlan "):
             return None
         return _new_iface_scratch(name)
 
-    for line in lines:
-        m = _IFACE_RE.match(line)
-        if m:
-            _flush()
-            current = _open(m)
-            continue
-
-        if current is None:
-            continue
-
-        # Non-indented line closes the current stanza.
-        if line and not line[0].isspace():
-            _flush()
-            current = None
-            m = _IFACE_RE.match(line)
-            if m:
-                current = _open(m)
-            continue
-
+    def _on_line(line: str, current: dict) -> None:
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
-            continue
+            return
 
         if _SHUTDOWN_RE.match(line):
             current["enabled"] = False
-            continue
+            return
         if _NO_SHUTDOWN_RE.match(line):
             current["enabled"] = True
-            continue
+            return
 
         mm = _MTU_RE.match(line)
         if mm:
@@ -536,7 +513,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 current["mtu"] = int(mm.group(1))
             except ValueError:
                 pass
-            continue
+            return
 
         im = _IP_CIDR_RE.match(line)
         if im:
@@ -548,7 +525,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ValueError:
                 pass
-            continue
+            return
 
         v6m = _IPV6_CIDR_RE.match(line)
         if v6m:
@@ -567,38 +544,38 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ValueError:
                 pass
-            continue
+            return
 
         vm = _VRF_ATTACH_RE.match(line)
         if vm:
             current["vrf"] = vm.group(1)
-            continue
+            return
 
         # ── Active-gateway anycast (Phase 3) ──
         # The `active-gateway ip mac` line is consumed here (the MAC is
         # harvested at intent level); `active-gateway ip <vip>` sets the
         # SVI's virtual gateway.
         if _ACTIVE_GW_MAC_RE.match(line):
-            continue
+            return
         agi = _ACTIVE_GW_IP_RE.match(line)
         if agi:
             current["active_gw_ip"] = agi.group(1)
-            continue
+            return
 
         # ── L2 switchport (Phase 2) ──
         if _NO_ROUTING_RE.match(line):
             # The L2 marker; the mode is set by the vlan lines below.
-            continue
+            return
         am = _VLAN_ACCESS_RE.match(line)
         if am:
             current["switchport_mode"] = "access"
             current["access_vlan"] = int(am.group(1))
-            continue
+            return
         tnm = _VLAN_TRUNK_NATIVE_RE.match(line)
         if tnm:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_native"] = int(tnm.group(1))
-            continue
+            return
         tam = _VLAN_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
@@ -606,19 +583,31 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             current["trunk_allowed"] = (
                 [] if val.lower() == "all" else _parse_vlan_list(val)
             )
-            continue
+            return
 
         # ── LAG membership (Phase 2) ── ``lag N`` on a physical port.
         lm = _LAG_MEMBER_RE.match(line)
         if lm:
             current["lag_member_of"] = f"lag {int(lm.group(1))}"
-            continue
+            return
 
         # Any other indented line (lacp mode / spanning-tree / ip mtu /
         # active-gateway / ...) is deferred — parse-and-ignore.
 
-    _flush()
-    return interfaces
+    # Loop skeleton (open on `interface`, close on dedent, flush at EOF)
+    # is the shared codecs/_scanner helper; the vendor regex cascade above
+    # stays here, and ``_open`` returning None handles the ``interface
+    # vxlan`` interception.  The terminator replicates the former
+    # hand-rolled rule exactly: only a non-indented (column-0) line closes
+    # a stanza.  Behaviour-identical to the previous loop.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_IFACE_RE.match,
+        open_scratch=_open,
+        on_line=_on_line,
+        build=_build_canonical_interface,
+        is_terminator=lambda line: bool(line) and not line[0].isspace(),
+    )
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
