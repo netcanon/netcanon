@@ -588,38 +588,15 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     and :func:`_parse_radius_servers`: open on the header regex, absorb
     indented sub-lines, close on the first non-indented / ``!`` line.
     """
-    instances: list[CanonicalRoutingInstance] = []
-    current: CanonicalRoutingInstance | None = None
-
-    for line in raw.splitlines():
-        header = _VRF_DEFINITION_RE.match(line)
-        if header:
-            if current is not None:
-                instances.append(current)
-            current = CanonicalRoutingInstance(name=header.group(1))
-            continue
-
-        if current is None:
-            continue
-
-        # Stanza terminator: blank-after-block ``!`` or any line that
-        # isn't indented (i.e. a sibling top-level stanza).  Cisco's
-        # ``exit-address-family`` is itself indented so it doesn't
-        # close the VRF stanza, only the inner address-family block —
-        # which we don't track separately.
-        if line.startswith("!") or (line and not line[0].isspace()):
-            instances.append(current)
-            current = None
-            continue
-
+    def _on_line(line: str, current: CanonicalRoutingInstance) -> None:
         dm = _VRF_DESCRIPTION_RE.match(line)
         if dm:
             current.description = dm.group(1).strip()
-            continue
+            return
         rm = _VRF_RD_RE.match(line)
         if rm:
             current.route_distinguisher = rm.group(1)
-            continue
+            return
         rtm = _VRF_RT_RE.match(line)
         if rtm:
             direction = rtm.group(1).lower()
@@ -628,11 +605,23 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
                 current.rt_imports.append(rt)
             if direction in ("export", "both"):
                 current.rt_exports.append(rt)
-            continue
+            return
 
-    if current is not None:
-        instances.append(current)
-    return instances
+    # Loop skeleton (open on `vrf definition`, close on `!`/dedent, flush
+    # at EOF) is the shared codecs/_scanner helper; the vendor regex
+    # cascade above stays here.  The scratch IS the canonical record, so
+    # ``build`` is the identity.  Cisco's ``exit-address-family`` is itself
+    # indented so it doesn't close the VRF stanza (only the inner
+    # address-family block, which we don't track) — the terminator
+    # replicates the former rule exactly.  Behaviour-identical.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_VRF_DEFINITION_RE.match,
+        open_scratch=lambda m: CanonicalRoutingInstance(name=m.group(1)),
+        on_line=_on_line,
+        build=lambda ri: ri,
+        is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
+    )
 
 
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
@@ -1351,43 +1340,27 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
     leave ``start_ip``/``end_ip`` empty; a future pass can derive them
     from excluded-address lines if needed.
     """
-    pools: list[CanonicalDHCPPool] = []
-    current: CanonicalDHCPPool | None = None
-
-    for line in raw.splitlines():
-        header = _DHCP_POOL_HEADER_RE.match(line)
-        if header:
-            if current is not None:
-                pools.append(current)
-            current = CanonicalDHCPPool()
-            continue
-        if current is None:
-            continue
-        if line.startswith("!") or (line and not line[0].isspace()):
-            pools.append(current)
-            current = None
-            continue
-
+    def _on_line(line: str, current: CanonicalDHCPPool) -> None:
         nm = _DHCP_NETWORK_RE.match(line)
         if nm:
             ip_str, mask = nm.group(1), nm.group(2)
             prefix = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
             current.network = f"{ip_str}/{prefix}"
-            continue
+            return
         gm = _DHCP_DEFAULT_ROUTER_RE.match(line)
         if gm:
             current.gateway = gm.group(1)
-            continue
+            return
         dm = _DHCP_DNS_SERVER_RE.match(line)
         if dm:
             # Cisco allows multiple DNS servers space-separated.
             servers = dm.group(1).split()
             current.dns_servers.extend(servers)
-            continue
+            return
         dnm = _DHCP_DOMAIN_NAME_RE.match(line)
         if dnm:
             current.domain_name = dnm.group(1)
-            continue
+            return
         lm = _DHCP_LEASE_RE.match(line)
         if lm:
             lease_val = lm.group(1).lower()
@@ -1405,9 +1378,20 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
                 except ValueError:
                     pass  # Unparseable; leave default
 
-    if current is not None:
-        pools.append(current)
-    return pools
+    # Loop skeleton (open on `ip dhcp pool`, close on `!`/dedent, flush at
+    # EOF) is the shared codecs/_scanner helper; the vendor regex cascade
+    # above stays here.  The pool name is not captured into the model
+    # (existing behaviour), so ``open_scratch`` ignores the match; the
+    # scratch IS the canonical record, so ``build`` is the identity.
+    # Terminator replicates the former rule verbatim.  Behaviour-identical.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_DHCP_POOL_HEADER_RE.match,
+        open_scratch=lambda m: CanonicalDHCPPool(),
+        on_line=_on_line,
+        build=lambda pool: pool,
+        is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
+    )
 
 
 # Modern IOS-XE RADIUS: named stanza
