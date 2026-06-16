@@ -490,41 +490,17 @@ def _parse_routing_instances(
     the header regex, absorb indented sub-lines, close on the first
     non-indented line.
     """
-    instances: list[CanonicalRoutingInstance] = []
     per_vrf_routes: list[CanonicalStaticRoute] = []
-    current: CanonicalRoutingInstance | None = None
 
-    for line in raw.splitlines():
-        header = _VRF_CONTEXT_RE.match(line)
-        if header:
-            if current is not None:
-                instances.append(current)
-            current = CanonicalRoutingInstance(name=header.group(1))
-            continue
-
-        if current is None:
-            continue
-
-        # Stanza terminator: any non-indented line (a sibling top-level
-        # stanza).  NX-OS does not bracket VRF blocks with ``!``.
-        if line and not line[0].isspace():
-            instances.append(current)
-            current = None
-            # A top-level line that opens a new vrf context: re-check the
-            # header here since we've already consumed the line.
-            header = _VRF_CONTEXT_RE.match(line)
-            if header:
-                current = CanonicalRoutingInstance(name=header.group(1))
-            continue
-
+    def _on_line(line: str, current: CanonicalRoutingInstance) -> None:
         dm = _VRF_DESCRIPTION_RE.match(line)
         if dm:
             current.description = dm.group(1).strip()
-            continue
+            return
         rm = _VRF_RD_RE.match(line)
         if rm:
             current.route_distinguisher = rm.group(1)
-            continue
+            return
         rtm = _VRF_RT_RE.match(line)
         if rtm:
             direction = rtm.group(1).lower()
@@ -533,7 +509,7 @@ def _parse_routing_instances(
                 current.rt_imports.append(rt)
             if direction in ("export", "both"):
                 current.rt_exports.append(rt)
-            continue
+            return
         route_m = _VRF_IP_ROUTE_RE.match(line)
         if route_m:
             per_vrf_routes.append(_make_static_route(
@@ -541,20 +517,33 @@ def _parse_routing_instances(
                 route_m.group(3), route_m.group(4),
                 vrf=current.name,
             ))
-            continue
+            return
         vnim = _VRF_VNI_RE.match(line)
         if vnim:
             # ``vni <N>`` → the VRF's L3VNI (Phase 4 symmetric IRB).
             current.l3_vni = int(vnim.group(1))
-            continue
+            return
         if _VRF_AF_RE.match(line):
             # ``address-family ... unicast`` — wire framing only; the
             # route-target lines it brackets are matched above by indent.
-            continue
+            return
         # Anything else inside the block — parse-and-ignore.
 
-    if current is not None:
-        instances.append(current)
+    # Loop skeleton (open on `vrf context`, close on dedent, flush at EOF)
+    # is the shared codecs/_scanner helper; the vendor regex cascade above
+    # stays here.  The nested ``ip route`` lines feed a side-channel
+    # ``per_vrf_routes`` list (closed over by ``_on_line``), and the scratch
+    # IS the canonical record so ``build`` is the identity.  NX-OS does not
+    # bracket VRF blocks with ``!``, so the terminator replicates the former
+    # rule exactly: only a non-indented line closes a stanza.
+    instances = scan_stanzas(
+        raw.splitlines(),
+        is_header=_VRF_CONTEXT_RE.match,
+        open_scratch=lambda m: CanonicalRoutingInstance(name=m.group(1)),
+        on_line=_on_line,
+        build=lambda ri: ri,
+        is_terminator=lambda line: bool(line) and not line[0].isspace(),
+    )
 
     # Deduplicate each instance's route-targets, preserving first-seen
     # order.  The same RT value routinely appears under several
