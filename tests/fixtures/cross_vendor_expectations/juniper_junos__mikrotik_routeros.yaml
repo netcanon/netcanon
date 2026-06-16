@@ -331,11 +331,15 @@ per_field_expectation:
     references: [junos-iface-naming, mikrotik-iface-naming]
 
   interfaces[].description:
-    disposition: good
-    note: >
-      Both vendors accept free-form descriptions; Junos quotes when
-      whitespace present.  Junos ``description "X"`` -> RouterOS
-      ``comment="X"``.
+    disposition: lossy
+    reason: >
+      Ordinary interface descriptions round-trip 1:1 (Junos
+      ``description "X"`` -> RouterOS ``comment="X"``).  The lossy case
+      is secure-tunnel interfaces (Junos ``st0``): RouterOS has no
+      direct equivalent, so the render injects a ``review:`` placeholder
+      comment guiding the operator to set the tunnel endpoints, which
+      re-parses as a description the source did not carry.  Surfaced by
+      the MNHA vSRX capture's ``st0`` units.
 
   interfaces[].enabled:
     disposition: good

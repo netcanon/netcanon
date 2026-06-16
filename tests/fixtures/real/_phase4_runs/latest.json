@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-16T04:29:47+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260616T042946Z.json",
-  "mesh_run_started_utc": "2026-06-16T04:29:40+00:00",
-  "cells_total": 1212,
+  "started_utc": "2026-06-16T05:08:12+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260616T050810Z.json",
+  "mesh_run_started_utc": "2026-06-16T05:08:04+00:00",
+  "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -302,6 +302,11 @@
     },
     {
       "fixture": "tests/fixtures/real/junos/buraglio_netlab_junos184.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
       "source_codec": "juniper_junos",
       "target_codec": "juniper_junos"
     },
@@ -2728,6 +2733,26 @@
       "target_codec": "vyos"
     },
     {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "vyos"
+    },
+    {
       "fixture": "tests/fixtures/real/junos/ksator_labmgmt_ex4550_junos151.set",
       "source_codec": "juniper_junos",
       "target_codec": "aruba_aoscx"
@@ -4109,27 +4134,27 @@
     }
   ],
   "aggregate": {
-    "ALIGNED": 1557,
+    "ALIGNED": 1569,
     "CODEC_BUG": 5,
-    "EXPECTED_LOSSY": 1192,
-    "EXPECTED_UNSUPPORTED": 714,
-    "METHODOLOGY_ISSUE_under": 915,
+    "EXPECTED_LOSSY": 1226,
+    "EXPECTED_UNSUPPORTED": 729,
+    "METHODOLOGY_ISSUE_under": 933,
     "METHODOLOGY_ISSUE_over": 25,
-    "STRUCTURAL_ONLY": 1127,
-    "TRIVIAL_EMPTY": 9290,
-    "fields_total": 14825,
+    "STRUCTURAL_ONLY": 1194,
+    "TRIVIAL_EMPTY": 9539,
+    "fields_total": 15220,
     "severity_high": 5,
-    "severity_medium": 110,
-    "severity_low": 1957,
-    "severity_ok": 12753
+    "severity_medium": 111,
+    "severity_low": 2041,
+    "severity_ok": 13063
   },
   "severity_matrix": {
     "arista_eos": {
       "cisco_iosxe_cli": 2
     },
     "juniper_junos": {
-      "aruba_aoss": 1,
-      "fortigate_cli": 1
+      "cisco_iosxe_cli": 1,
+      "aruba_aoss": 1
     },
     "cisco_iosxe": {
       "cisco_iosxe_cli": 1
@@ -4153,7 +4178,7 @@
     },
     {
       "source_codec": "juniper_junos",
-      "target_codec": "fortigate_cli",
+      "target_codec": "cisco_iosxe_cli",
       "codec_bug_count": 1
     }
   ],
@@ -4221,7 +4246,6 @@
                   {
                     "ip": "172.31.255.5",
                     "prefix_length": 31,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -4298,7 +4322,6 @@
                   {
                     "ip": "172.31.255.5",
                     "prefix_length": 31,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -5106,7 +5129,6 @@
                   {
                     "ip": "172.31.255.5",
                     "prefix_length": 31,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -5183,7 +5205,6 @@
                   {
                     "ip": "172.31.255.5",
                     "prefix_length": 31,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -5989,6 +6010,795 @@
         "severity_medium": 0,
         "severity_low": 1,
         "severity_ok": 18
+      }
+    },
+    {
+      "fixture": "tests/fixtures/real/junos/jnprautomate_mnha_vsrx_a_junos.set",
+      "source_codec": "juniper_junos",
+      "target_codec": "cisco_iosxe_cli",
+      "fixture_kind": "real",
+      "render_status": "ok",
+      "roundtrip_parse_status": "ok",
+      "expectation_yaml": "tests/fixtures/cross_vendor_expectations/juniper_junos__cisco_iosxe_cli.yaml",
+      "field_variances": {
+        "hostname": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "domain": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "dns_servers": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "ntp_servers": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "timezone": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "syslog_servers": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].name": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "interfaces[].description": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "interfaces[].enabled": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "interfaces[].interface_type": {
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "subfield": "interface_type",
+            "per_record": {
+              "interfaces[0] {'name': 'fxp0'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[1] {'name': 'ge-0/0/0'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[2] {'name': 'ge-0/0/1'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[3] {'name': 'ge-0/0/2'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[4] {'name': 'ge-0/0/3'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[5] {'name': 'ge-0/0/4'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[6] {'name': 'ge-0/0/5'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[7] {'name': 'ge-0/0/6'}": {
+                "source": "ianaift:ethernetCsmacd",
+                "target": "ianaift:other"
+              },
+              "interfaces[8] {'name': 'lo0'}": {
+                "source": "ianaift:softwareLoopback",
+                "target": "ianaift:other"
+              },
+              "interfaces[9] {'name': 'lo0.10'}": {
+                "source": "ianaift:softwareLoopback",
+                "target": "ianaift:other"
+              },
+              "interfaces[10] {'name': 'lo0.2'}": {
+                "source": "ianaift:softwareLoopback",
+                "target": "ianaift:other"
+              },
+              "interfaces[11] {'name': 'lo0.20'}": {
+                "source": "ianaift:softwareLoopback",
+                "target": "ianaift:other"
+              },
+              "interfaces[12] {'name': 'st0'}": {
+                "source": "ianaift:tunnel",
+                "target": "ianaift:other"
+              },
+              "interfaces[13] {'name': 'st0.100'}": {
+                "source": "ianaift:tunnel",
+                "target": "ianaift:other"
+              },
+              "interfaces[14] {'name': 'st0.200'}": {
+                "source": "ianaift:tunnel",
+                "target": "ianaift:other"
+              }
+            }
+          }
+        },
+        "interfaces[].mtu": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].ipv4_addresses": {
+          "actual": "drifted",
+          "expected": "good",
+          "variance": "CODEC_BUG",
+          "severity": "high",
+          "drift_detail": {
+            "subfield": "ipv4_addresses",
+            "per_record": {
+              "interfaces[9] {'name': 'lo0.10'}": {
+                "source": [
+                  {
+                    "ip": "10.165.251.200",
+                    "prefix_length": 32,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  },
+                  {
+                    "ip": "203.0.113.100",
+                    "prefix_length": 32,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  },
+                  {
+                    "ip": "10.165.251.222",
+                    "prefix_length": 32,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ],
+                "target": [
+                  {
+                    "ip": "10.165.251.200",
+                    "prefix_length": 32,
+                    "is_secondary": false,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  },
+                  {
+                    "ip": "203.0.113.100",
+                    "prefix_length": 32,
+                    "is_secondary": true,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  },
+                  {
+                    "ip": "10.165.251.222",
+                    "prefix_length": 32,
+                    "is_secondary": true,
+                    "virtual_gateway_address": "",
+                    "virtual_gateway_mac": ""
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "interfaces[].ipv6_addresses": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].switchport_mode": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].access_vlan": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].trunk_allowed_vlans": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].trunk_native_vlan": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].voice_vlan": {
+          "actual": "trivially_preserved",
+          "expected": "not_applicable",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].lag_member_of": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "interfaces[].dhcp_client": {
+          "actual": "preserved",
+          "expected": "good",
+          "variance": "ALIGNED",
+          "severity": "ok"
+        },
+        "interfaces[].vrf": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "vlans[].id": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vlans[].name": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vlans[].description": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vlans[].tagged_ports": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vlans[].untagged_ports": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vlans[].ipv4_addresses": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "static_routes": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "dhcp_servers": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "snmp.community": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "snmp.location": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "snmp.contact": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "snmp.trap_hosts": {
+          "actual": "trivially_preserved",
+          "expected": "good",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "snmp.v3_users": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "lags": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "local_users": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "radius_servers": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vlan_id": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].vni": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].mcast_group": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].flood_list": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].source_interface": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "vxlan_vnis[].udp_port": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "evpn_type5_routes": {
+          "actual": "trivially_preserved",
+          "expected": "unsupported",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "routing_instances": {
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              {
+                "name": "HA-ICD",
+                "instance_type": "virtual-router",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              {
+                "name": "ISP-2",
+                "instance_type": "virtual-router",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              {
+                "name": "PROD",
+                "instance_type": "virtual-router",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              "... and 2 more"
+            ],
+            "target": [
+              {
+                "name": "HA-ICD",
+                "instance_type": "vrf",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              {
+                "name": "ISP-2",
+                "instance_type": "vrf",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              {
+                "name": "PROD",
+                "instance_type": "vrf",
+                "route_distinguisher": "",
+                "rt_imports": [],
+                "rt_exports": [],
+                "description": "",
+                "l3_vni": null
+              },
+              "... and 2 more"
+            ],
+            "drift": {
+              "routing_instances[0] {'name': 'HA-ICD'}": {
+                "instance_type": {
+                  "source": "virtual-router",
+                  "target": "vrf"
+                }
+              },
+              "routing_instances[1] {'name': 'ISP-2'}": {
+                "instance_type": {
+                  "source": "virtual-router",
+                  "target": "vrf"
+                }
+              },
+              "routing_instances[2] {'name': 'PROD'}": {
+                "instance_type": {
+                  "source": "virtual-router",
+                  "target": "vrf"
+                }
+              },
+              "routing_instances[3] {'name': 'VPN'}": {
+                "instance_type": {
+                  "source": "virtual-router",
+                  "target": "vrf"
+                }
+              }
+            },
+            "source_count": 5,
+            "target_count": 5
+          }
+        },
+        "routing_instances[].name": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "routing_instances[].instance_type": {
+          "actual": "drifted",
+          "expected": "lossy",
+          "variance": "EXPECTED_LOSSY",
+          "severity": "ok",
+          "drift_detail": {
+            "subfield": "instance_type",
+            "per_record": {
+              "routing_instances[0] {'name': 'HA-ICD'}": {
+                "source": "virtual-router",
+                "target": "vrf"
+              },
+              "routing_instances[1] {'name': 'ISP-2'}": {
+                "source": "virtual-router",
+                "target": "vrf"
+              },
+              "routing_instances[2] {'name': 'PROD'}": {
+                "source": "virtual-router",
+                "target": "vrf"
+              },
+              "routing_instances[3] {'name': 'VPN'}": {
+                "source": "virtual-router",
+                "target": "vrf"
+              }
+            }
+          }
+        },
+        "routing_instances[].route_distinguisher": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "routing_instances[].rt_imports": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "routing_instances[].rt_exports": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "routing_instances[].description": {
+          "actual": "preserved",
+          "expected": "lossy",
+          "variance": "METHODOLOGY_ISSUE_under",
+          "severity": "low"
+        },
+        "routing_instances[].l3_vni": {
+          "actual": "trivially_preserved",
+          "expected": "lossy",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "raw_sections": {
+          "actual": "trivially_preserved",
+          "expected": "not_applicable",
+          "variance": "TRIVIAL_EMPTY",
+          "severity": "ok"
+        },
+        "source_vendor": {
+          "actual": "missing",
+          "expected": "not_applicable",
+          "variance": "MISSING_PHASE1",
+          "severity": "low"
+        },
+        "source_format": {
+          "actual": "missing",
+          "expected": "not_applicable",
+          "variance": "MISSING_PHASE1",
+          "severity": "low"
+        },
+        "source_version": {
+          "actual": "missing",
+          "expected": "not_applicable",
+          "variance": "MISSING_PHASE1",
+          "severity": "low"
+        },
+        "apply_groups": {
+          "actual": "drifted",
+          "expected": "unsupported",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
+          "drift_detail": {
+            "source": [
+              "MNHA-SYNC"
+            ],
+            "target": [],
+            "drift": "all 1 apply_groups dropped",
+            "source_count": 1,
+            "target_count": 0
+          }
+        },
+        "group_content": {
+          "actual": "drifted",
+          "expected": "unsupported",
+          "variance": "EXPECTED_UNSUPPORTED",
+          "severity": "ok",
+          "drift_detail": {
+            "source": {
+              "MNHA-SYNC": [
+                [
+                  "security",
+                  "ike",
+                  "proposal",
+                  "IKE-PROP-1",
+                  "description",
+                  "MNHA-IKE-PROPOSAL_for_ICL"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "proposal",
+                  "IKE-PROP-1",
+                  "authentication-method",
+                  "pre-shared-keys"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "proposal",
+                  "IKE-PROP-1",
+                  "dh-group",
+                  "group14"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "proposal",
+                  "IKE-PROP-1",
+                  "encryption-algorithm",
+                  "aes-256-gcm"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "proposal",
+                  "IKE-PROP-1",
+                  "lifetime-seconds",
+                  "28800"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "policy",
+                  "ICL",
+                  "description",
+                  "MNHA-IKE-POLICY_for_ICL"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "policy",
+                  "ICL",
+                  "proposals",
+                  "IKE-PROP-1"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "policy",
+                  "ICL",
+                  "pre-shared-key",
+                  "ascii-text",
+                  "$9$FakeIcl0SyncPsk00000000000"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "gateway",
+                  "ICL",
+                  "ike-policy",
+                  "ICL"
+                ],
+                [
+                  "security",
+                  "ike",
+                  "gateway",
+                  "ICL",
+                  "version",
+                  "v2-only"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "proposal",
+                  "IPSEC_PROP-1",
+                  "description",
+                  "MNHA-IPSEC-PROPOSAL_for_ICL"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "proposal",
+                  "IPSEC_PROP-1",
+                  "protocol",
+                  "esp"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "proposal",
+                  "IPSEC_PROP-1",
+                  "encryption-algorithm",
+                  "aes-256-gcm"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "proposal",
+                  "IPSEC_PROP-1",
+                  "lifetime-seconds",
+                  "3600"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "policy",
+                  "MNHA-POL",
+                  "description",
+                  "IPSEC-POLICY_for_ICL"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "policy",
+                  "MNHA-POL",
+                  "proposals",
+                  "IPSEC_PROP-1"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "vpn",
+                  "ICL",
+                  "ha-link-encryption"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "vpn",
+                  "ICL",
+                  "ike",
+                  "gateway",
+                  "ICL"
+                ],
+                [
+                  "security",
+                  "ipsec",
+                  "vpn",
+                  "ICL",
+                  "ike",
+                  "ipsec-policy",
+                  "MNHA-POL"
+                ]
+              ]
+            },
+            "target": {},
+            "drift": {
+              "only_in_source": [
+                "MNHA-SYNC"
+              ],
+              "only_in_target": [],
+              "value_drift_keys": []
+            },
+            "source_count": 1,
+            "target_count": 0
+          }
+        }
+      },
+      "summary": {
+        "ALIGNED": 4,
+        "CODEC_BUG": 1,
+        "EXPECTED_LOSSY": 3,
+        "EXPECTED_UNSUPPORTED": 2,
+        "METHODOLOGY_ISSUE_under": 6,
+        "METHODOLOGY_ISSUE_over": 0,
+        "STRUCTURAL_ONLY": 0,
+        "TRIVIAL_EMPTY": 40,
+        "fields_total": 56,
+        "missing_in_phase1": 3,
+        "severity_high": 1,
+        "severity_medium": 0,
+        "severity_low": 6,
+        "severity_ok": 49
       }
     },
     {
@@ -6925,1288 +7735,6 @@
       }
     },
     {
-      "fixture": "tests/fixtures/real/junos/ksator_labmgmt_qfx10k2_junos173.set",
-      "source_codec": "juniper_junos",
-      "target_codec": "fortigate_cli",
-      "fixture_kind": "real",
-      "render_status": "ok",
-      "roundtrip_parse_status": "ok",
-      "expectation_yaml": "tests/fixtures/cross_vendor_expectations/juniper_junos__fortigate_cli.yaml",
-      "field_variances": {
-        "hostname": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "domain": {
-          "actual": "trivially_preserved",
-          "expected": "good",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "dns_servers": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "ntp_servers": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "timezone": {
-          "actual": "trivially_preserved",
-          "expected": "lossy",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "syslog_servers": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              "172.25.45.6",
-              "172.25.90.135"
-            ],
-            "target": [],
-            "drift": "all 2 syslog_servers dropped",
-            "source_count": 2,
-            "target_count": 0
-          }
-        },
-        "interfaces[].name": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "interfaces[].description": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "interfaces[].enabled": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "interfaces[].interface_type": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "interface_type",
-            "per_record": {
-              "interfaces[10] {'name': 'irb'}": {
-                "source": "ianaift:l3ipvlan",
-                "target": "ianaift:ethernetCsmacd"
-              },
-              "interfaces[17] {'name': 'lo0'}": {
-                "source": "ianaift:softwareLoopback",
-                "target": "ianaift:ethernetCsmacd"
-              },
-              "interfaces[18] {'name': 'lo0.100'}": {
-                "source": "ianaift:softwareLoopback",
-                "target": "ianaift:l3ipvlan"
-              },
-              "interfaces[19] {'name': 'lo0.2'}": {
-                "source": "ianaift:softwareLoopback",
-                "target": "ianaift:l3ipvlan"
-              },
-              "interfaces[20] {'name': 'lo0.3'}": {
-                "source": "ianaift:softwareLoopback",
-                "target": "ianaift:l3ipvlan"
-              }
-            }
-          }
-        },
-        "interfaces[].mtu": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "interfaces[].ipv4_addresses": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "ipv4_addresses",
-            "per_record": {
-              "interfaces[11] {'name': 'irb.2021'}": {
-                "source": [
-                  {
-                    "ip": "10.221.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.221.0.1",
-                    "virtual_gateway_mac": "02:00:21:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.221.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[12] {'name': 'irb.2022'}": {
-                "source": [
-                  {
-                    "ip": "10.222.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.222.0.1",
-                    "virtual_gateway_mac": "02:00:22:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.222.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[13] {'name': 'irb.2023'}": {
-                "source": [
-                  {
-                    "ip": "10.223.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.223.0.1",
-                    "virtual_gateway_mac": "02:00:23:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.223.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[14] {'name': 'irb.2024'}": {
-                "source": [
-                  {
-                    "ip": "10.224.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.224.0.1",
-                    "virtual_gateway_mac": "02:00:24:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.224.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[15] {'name': 'irb.2025'}": {
-                "source": [
-                  {
-                    "ip": "10.225.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.225.0.1",
-                    "virtual_gateway_mac": "02:00:25:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.225.0.5",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[16] {'name': 'irb.2031'}": {
-                "source": [
-                  {
-                    "ip": "10.231.0.7",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "10.231.0.1",
-                    "virtual_gateway_mac": "02:00:31:00:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "10.231.0.7",
-                    "prefix_length": 16,
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "interfaces[].ipv6_addresses": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "ipv6_addresses",
-            "per_record": {
-              "interfaces[11] {'name': 'irb.2021'}": {
-                "source": [
-                  {
-                    "ip": "fd20:2021::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2021::1",
-                    "virtual_gateway_mac": "02:00:21:06:00:01"
-                  },
-                  {
-                    "ip": "fe80:2021::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fd20:2021::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[12] {'name': 'irb.2022'}": {
-                "source": [
-                  {
-                    "ip": "fd20:2022::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2022::1",
-                    "virtual_gateway_mac": "02:00:22:06:00:01"
-                  },
-                  {
-                    "ip": "fe80:2022::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fd20:2022::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[13] {'name': 'irb.2023'}": {
-                "source": [
-                  {
-                    "ip": "fd20:2023::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2023::1",
-                    "virtual_gateway_mac": "02:00:23:06:00:01"
-                  },
-                  {
-                    "ip": "fe80:2023::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fd20:2023::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[14] {'name': 'irb.2024'}": {
-                "source": [
-                  {
-                    "ip": "fd20:2024::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2024::1",
-                    "virtual_gateway_mac": "02:00:24:06:00:01"
-                  },
-                  {
-                    "ip": "fe80:2024::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fd20:2024::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[15] {'name': 'irb.2025'}": {
-                "source": [
-                  {
-                    "ip": "fd20:2025::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2025::1",
-                    "virtual_gateway_mac": "02:00:25:06:00:01"
-                  },
-                  {
-                    "ip": "fe80:2025::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fd20:2025::5",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              },
-              "interfaces[16] {'name': 'irb.2031'}": {
-                "source": [
-                  {
-                    "ip": "fe80:2031::1",
-                    "prefix_length": 64,
-                    "scope": "link-local",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  },
-                  {
-                    "ip": "fd20:2031::7",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "fd20:2031::1",
-                    "virtual_gateway_mac": "02:00:31:06:00:01"
-                  }
-                ],
-                "target": [
-                  {
-                    "ip": "fe80:2031::1",
-                    "prefix_length": 64,
-                    "scope": "global",
-                    "is_secondary": false,
-                    "virtual_gateway_address": "",
-                    "virtual_gateway_mac": ""
-                  }
-                ]
-              }
-            }
-          }
-        },
-        "interfaces[].switchport_mode": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "switchport_mode",
-            "per_record": {
-              "interfaces[0] {'name': 'ae1'}": {
-                "source": "trunk",
-                "target": null
-              },
-              "interfaces[1] {'name': 'ae2'}": {
-                "source": "trunk",
-                "target": null
-              }
-            }
-          }
-        },
-        "interfaces[].access_vlan": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "access_vlan",
-            "per_record": {
-              "interfaces[22] {'name': 'xe-0/0/6:2.10'}": {
-                "source": 10,
-                "target": null
-              },
-              "interfaces[23] {'name': 'xe-0/0/6:2.100'}": {
-                "source": 100,
-                "target": null
-              },
-              "interfaces[24] {'name': 'xe-0/0/6:2.30'}": {
-                "source": 30,
-                "target": null
-              }
-            }
-          }
-        },
-        "interfaces[].trunk_allowed_vlans": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "trunk_allowed_vlans",
-            "per_record": {
-              "interfaces[0] {'name': 'ae1'}": {
-                "source": [
-                  2021,
-                  2022,
-                  2023
-                ],
-                "target": []
-              },
-              "interfaces[1] {'name': 'ae2'}": {
-                "source": [
-                  2024,
-                  2025,
-                  2031
-                ],
-                "target": []
-              }
-            }
-          }
-        },
-        "interfaces[].trunk_native_vlan": {
-          "actual": "trivially_preserved",
-          "expected": "unsupported",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "interfaces[].voice_vlan": {
-          "actual": "trivially_preserved",
-          "expected": "not_applicable",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "interfaces[].lag_member_of": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "interfaces[].dhcp_client": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "interfaces[].vrf": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "vrf",
-            "per_record": {
-              "interfaces[8] {'name': 'et-0/0/24'}": {
-                "source": "INTERNET",
-                "target": ""
-              },
-              "interfaces[9] {'name': 'et-0/0/30'}": {
-                "source": "INTERNET",
-                "target": ""
-              },
-              "interfaces[11] {'name': 'irb.2021'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[12] {'name': 'irb.2022'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[13] {'name': 'irb.2023'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[14] {'name': 'irb.2024'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[15] {'name': 'irb.2025'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[18] {'name': 'lo0.100'}": {
-                "source": "DCI-VRF",
-                "target": ""
-              },
-              "interfaces[19] {'name': 'lo0.2'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[20] {'name': 'lo0.3'}": {
-                "source": "INTERNET",
-                "target": ""
-              },
-              "interfaces[22] {'name': 'xe-0/0/6:2.10'}": {
-                "source": "APP3",
-                "target": ""
-              },
-              "interfaces[23] {'name': 'xe-0/0/6:2.100'}": {
-                "source": "DCI-VRF",
-                "target": ""
-              },
-              "interfaces[24] {'name': 'xe-0/0/6:2.30'}": {
-                "source": "INTERNET",
-                "target": ""
-              }
-            }
-          }
-        },
-        "vlans[].id": {
-          "actual": "drifted",
-          "expected": "good",
-          "variance": "CODEC_BUG",
-          "severity": "high",
-          "drift_detail": {
-            "subfield": "id",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)"
-          }
-        },
-        "vlans[].name": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "name",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)",
-            "structural_owner": "vlans[].id"
-          }
-        },
-        "vlans[].description": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "description",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)",
-            "structural_owner": "vlans[].id"
-          }
-        },
-        "vlans[].tagged_ports": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "tagged_ports",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)",
-            "structural_owner": "vlans[].id"
-          }
-        },
-        "vlans[].untagged_ports": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "untagged_ports",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)",
-            "structural_owner": "vlans[].id"
-          }
-        },
-        "vlans[].ipv4_addresses": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "ipv4_addresses",
-            "drift_summary": "count drift: 6 \u2192 9 (vlans)",
-            "structural_owner": "vlans[].id"
-          }
-        },
-        "static_routes": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "dhcp_servers": {
-          "actual": "trivially_preserved",
-          "expected": "lossy",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "snmp.community": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "snmp.location": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "snmp.contact": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "snmp.trap_hosts": {
-          "actual": "preserved",
-          "expected": "good",
-          "variance": "ALIGNED",
-          "severity": "ok"
-        },
-        "snmp.v3_users": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "lags": {
-          "actual": "preserved",
-          "expected": "lossy",
-          "variance": "METHODOLOGY_ISSUE_under",
-          "severity": "low"
-        },
-        "local_users": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "name": "lab",
-                "privilege_level": 15,
-                "hashed_password": "junos:$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T.",
-                "role": "super-user"
-              }
-            ],
-            "target": [
-              {
-                "name": "lab",
-                "privilege_level": 15,
-                "hashed_password": "",
-                "role": "super_admin"
-              }
-            ],
-            "drift": {
-              "local_users[0] {'name': 'lab'}": {
-                "hashed_password": {
-                  "source": "junos:$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T.",
-                  "target": ""
-                },
-                "role": {
-                  "source": "super-user",
-                  "target": "super_admin"
-                }
-              }
-            },
-            "source_count": 1,
-            "target_count": 1
-          }
-        },
-        "radius_servers": {
-          "actual": "trivially_preserved",
-          "expected": "lossy",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "vxlan_vnis": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "vlan_id": 2021,
-                "vni": 22021,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "lo0.0",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 2022,
-                "vni": 22022,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "lo0.0",
-                "udp_port": 4789
-              },
-              {
-                "vlan_id": 2023,
-                "vni": 22023,
-                "mcast_group": "",
-                "flood_list": [],
-                "source_interface": "lo0.0",
-                "udp_port": 4789
-              },
-              "... and 3 more"
-            ],
-            "target": [],
-            "drift": "all 6 vxlan_vnis dropped",
-            "source_count": 6,
-            "target_count": 0
-          }
-        },
-        "vxlan_vnis[].vlan_id": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "vlan_id",
-            "drift_summary": "all 6 vxlan_vnis dropped"
-          }
-        },
-        "vxlan_vnis[].vni": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "vni",
-            "drift_summary": "all 6 vxlan_vnis dropped",
-            "structural_owner": "vxlan_vnis[].vlan_id"
-          }
-        },
-        "vxlan_vnis[].mcast_group": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "mcast_group",
-            "drift_summary": "all 6 vxlan_vnis dropped",
-            "structural_owner": "vxlan_vnis[].vlan_id"
-          }
-        },
-        "vxlan_vnis[].flood_list": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "flood_list",
-            "drift_summary": "all 6 vxlan_vnis dropped",
-            "structural_owner": "vxlan_vnis[].vlan_id"
-          }
-        },
-        "vxlan_vnis[].source_interface": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "source_interface",
-            "drift_summary": "all 6 vxlan_vnis dropped",
-            "structural_owner": "vxlan_vnis[].vlan_id"
-          }
-        },
-        "vxlan_vnis[].udp_port": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "udp_port",
-            "drift_summary": "all 6 vxlan_vnis dropped",
-            "structural_owner": "vxlan_vnis[].vlan_id"
-          }
-        },
-        "evpn_type5_routes": {
-          "actual": "trivially_preserved",
-          "expected": "unsupported",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "routing_instances": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              {
-                "name": "APP3",
-                "instance_type": "vrf",
-                "route_distinguisher": "191.168.100.1:2",
-                "rt_imports": [
-                  "65100:100"
-                ],
-                "rt_exports": [
-                  "65100:100"
-                ],
-                "description": "",
-                "l3_vni": 20004
-              },
-              {
-                "name": "DCI-VRF",
-                "instance_type": "vrf",
-                "route_distinguisher": "191.168.100.1:100",
-                "rt_imports": [
-                  "65100:1"
-                ],
-                "rt_exports": [
-                  "65100:1"
-                ],
-                "description": "",
-                "l3_vni": 20100
-              },
-              {
-                "name": "INTERNET",
-                "instance_type": "vrf",
-                "route_distinguisher": "191.168.100.1:1",
-                "rt_imports": [
-                  "65100:1000"
-                ],
-                "rt_exports": [
-                  "65100:1000"
-                ],
-                "description": "",
-                "l3_vni": 20200
-              }
-            ],
-            "target": [],
-            "drift": "all 3 routing_instances dropped",
-            "source_count": 3,
-            "target_count": 0
-          }
-        },
-        "routing_instances[].name": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "EXPECTED_UNSUPPORTED",
-          "severity": "ok",
-          "drift_detail": {
-            "subfield": "name",
-            "drift_summary": "all 3 routing_instances dropped"
-          }
-        },
-        "routing_instances[].instance_type": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "instance_type",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "routing_instances[].route_distinguisher": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "route_distinguisher",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "routing_instances[].rt_imports": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "rt_imports",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "routing_instances[].rt_exports": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "rt_exports",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "routing_instances[].description": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "description",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "routing_instances[].l3_vni": {
-          "actual": "drifted",
-          "expected": "unsupported",
-          "variance": "STRUCTURAL_ONLY",
-          "severity": "low",
-          "drift_detail": {
-            "subfield": "l3_vni",
-            "drift_summary": "all 3 routing_instances dropped",
-            "structural_owner": "routing_instances[].name"
-          }
-        },
-        "raw_sections": {
-          "actual": "trivially_preserved",
-          "expected": "not_applicable",
-          "variance": "TRIVIAL_EMPTY",
-          "severity": "ok"
-        },
-        "source_vendor": {
-          "actual": "missing",
-          "expected": "not_applicable",
-          "variance": "MISSING_PHASE1",
-          "severity": "low"
-        },
-        "source_format": {
-          "actual": "missing",
-          "expected": "not_applicable",
-          "variance": "MISSING_PHASE1",
-          "severity": "low"
-        },
-        "source_version": {
-          "actual": "missing",
-          "expected": "not_applicable",
-          "variance": "MISSING_PHASE1",
-          "severity": "low"
-        },
-        "apply_groups": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "source": [
-              "POC_Lab"
-            ],
-            "target": [],
-            "drift": "all 1 apply_groups dropped",
-            "source_count": 1,
-            "target_count": 0
-          }
-        },
-        "group_content": {
-          "actual": "drifted",
-          "expected": "lossy",
-          "variance": "EXPECTED_LOSSY",
-          "severity": "ok",
-          "drift_detail": {
-            "source": {
-              "POC_Lab": [
-                [
-                  "system",
-                  "host-name",
-                  "QFX10K2-182"
-                ],
-                [
-                  "system",
-                  "backup-router",
-                  "172.25.90.1"
-                ],
-                [
-                  "system",
-                  "authentication-order",
-                  "radius"
-                ],
-                [
-                  "system",
-                  "authentication-order",
-                  "password"
-                ],
-                [
-                  "system",
-                  "root-authentication",
-                  "encrypted-password",
-                  "$1$sQLo8BZS$TS53zGHrfgZIv58G3PQjN1"
-                ],
-                [
-                  "system",
-                  "name-server",
-                  "172.29.131.60"
-                ],
-                [
-                  "system",
-                  "login",
-                  "message",
-                  "\\n \\n System is in use for a customer POC testing \\n \\n *** Please do not make changes before contacting the Herndon POC admins *** \\n\\n"
-                ],
-                [
-                  "system",
-                  "login",
-                  "user",
-                  "lab",
-                  "uid",
-                  "2002"
-                ],
-                [
-                  "system",
-                  "login",
-                  "user",
-                  "lab",
-                  "class",
-                  "super-user"
-                ],
-                [
-                  "system",
-                  "login",
-                  "user",
-                  "lab",
-                  "authentication",
-                  "encrypted-password",
-                  "$1$w5XgsGVE$fS5XemjBWddcXyG7QzS1T."
-                ],
-                [
-                  "system",
-                  "services",
-                  "ftp"
-                ],
-                [
-                  "system",
-                  "services",
-                  "ssh",
-                  "protocol-version",
-                  "v2"
-                ],
-                [
-                  "system",
-                  "services",
-                  "telnet"
-                ],
-                [
-                  "system",
-                  "services",
-                  "xnm-clear-text"
-                ],
-                [
-                  "system",
-                  "services",
-                  "netconf",
-                  "ssh"
-                ],
-                [
-                  "system",
-                  "syslog",
-                  "host",
-                  "172.25.45.6",
-                  "authorization",
-                  "any"
-                ],
-                [
-                  "system",
-                  "ntp",
-                  "server",
-                  "66.129.255.62",
-                  "prefer"
-                ],
-                [
-                  "chassis",
-                  "fpc",
-                  "0",
-                  "pic",
-                  "0",
-                  "port",
-                  "3",
-                  "channel-speed",
-                  "10g"
-                ],
-                [
-                  "interfaces",
-                  "em0",
-                  "unit",
-                  "0",
-                  "family",
-                  "inet",
-                  "address",
-                  "172.25.90.174/24"
-                ],
-                [
-                  "snmp",
-                  "community",
-                  "public"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.255.255.0/24",
-                  "next-hop",
-                  "172.25.90.1"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.255.255.0/24",
-                  "retain"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.255.255.0/24",
-                  "no-readvertise"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.161.0.0/16",
-                  "next-hop",
-                  "172.25.90.1"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.161.0.0/16",
-                  "retain"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "10.161.0.0/16",
-                  "no-readvertise"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "172.16.0.0/12",
-                  "next-hop",
-                  "172.25.90.1"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "172.16.0.0/12",
-                  "retain"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "172.16.0.0/12",
-                  "no-readvertise"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "192.168.0.0/16",
-                  "next-hop",
-                  "172.25.90.1"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "192.168.0.0/16",
-                  "retain"
-                ],
-                [
-                  "routing-options",
-                  "static",
-                  "route",
-                  "192.168.0.0/16",
-                  "no-readvertise"
-                ]
-              ]
-            },
-            "target": {},
-            "drift": {
-              "only_in_source": [
-                "POC_Lab"
-              ],
-              "only_in_target": [],
-              "value_drift_keys": []
-            },
-            "source_count": 1,
-            "target_count": 0
-          }
-        }
-      },
-      "summary": {
-        "ALIGNED": 8,
-        "CODEC_BUG": 1,
-        "EXPECTED_LOSSY": 7,
-        "EXPECTED_UNSUPPORTED": 8,
-        "METHODOLOGY_ISSUE_under": 8,
-        "METHODOLOGY_ISSUE_over": 0,
-        "STRUCTURAL_ONLY": 16,
-        "TRIVIAL_EMPTY": 8,
-        "fields_total": 56,
-        "missing_in_phase1": 3,
-        "severity_high": 1,
-        "severity_medium": 0,
-        "severity_low": 24,
-        "severity_ok": 31
-      }
-    },
-    {
       "fixture": "tests/fixtures/synthetic/cisco_iosxe/kitchen_sink.xml",
       "source_codec": "cisco_iosxe",
       "target_codec": "cisco_iosxe_cli",
@@ -8269,7 +7797,6 @@
                   {
                     "ip": "198.51.100.1",
                     "prefix_length": 30,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8279,7 +7806,6 @@
                     "ip": "2001:db8:cafe::1",
                     "prefix_length": 64,
                     "scope": "global",
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8308,21 +7834,18 @@
                   {
                     "ip": "10.0.10.1",
                     "prefix_length": 24,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   },
                   {
                     "ip": "10.0.11.1",
                     "prefix_length": 24,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   },
                   {
                     "ip": "10.0.12.1",
                     "prefix_length": 24,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8377,7 +7900,6 @@
                   {
                     "ip": "198.51.100.1",
                     "prefix_length": 30,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8387,7 +7909,6 @@
                     "ip": "2001:db8:cafe::1",
                     "prefix_length": 64,
                     "scope": "global",
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8416,21 +7937,18 @@
                   {
                     "ip": "10.0.10.1",
                     "prefix_length": 24,
-                    "is_secondary": false,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   },
                   {
                     "ip": "10.0.11.1",
                     "prefix_length": 24,
-                    "is_secondary": true,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   },
                   {
                     "ip": "10.0.12.1",
                     "prefix_length": 24,
-                    "is_secondary": true,
                     "virtual_gateway_address": "",
                     "virtual_gateway_mac": ""
                   }
@@ -8919,6 +8437,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 1212
+    "cells_total_in_run": 1224
   }
 }

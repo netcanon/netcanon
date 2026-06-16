@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Real-capture corpus: JNPRAutomate MNHA vSRX fixture** —
+  `jnprautomate_mnha_vsrx_a_junos.set` from
+  [JNPRAutomate/mnha-ipsec-and-multiple-routing-instances](https://github.com/JNPRAutomate/mnha-ipsec-and-multiple-routing-instances)
+  (MIT).  The densest Junos fixture (637 lines) and the first with
+  **multiple routing-instances carrying descriptions** (virtual-router +
+  vrf mix), a **3-address loopback** (`lo0.10`), **`st0` secure-tunnel**
+  units, and IPsec/IKE + MNHA `apply-groups`.  As a cross-mesh source it
+  exposed five over-optimistic expectation cells, all corrected honestly
+  in the same change (see *Fixed* below) so it lands at CODEC_BUG flat 5.
+  Sanitized: `secondary-dns 8.8.8.8` → RFC5737; IKE/IPsec/RADIUS secrets
+  are upstream `$9$Fake…` placeholders (non-secret, kept verbatim).
+
 * **Real-capture corpus: akarneliuk NX-OS EVPN-VXLAN leaf fixture** —
   `akarneliuk_evpn_vxlan_mcast_leaf_c1l1_nxos939` from
   [akarneliuk/multivendor-network-labs](https://github.com/akarneliuk/multivendor-network-labs)
@@ -96,6 +108,35 @@ timestamp if your timezone matters for an audit.
       anchor; no new canonical surface).
 
 ### Fixed
+
+* **Cross-vendor fidelity honesty: five over-optimistic junos→target
+  expectations corrected, two via the *right* mechanism rather than
+  papering the docs.** Surfaced by the JNPRAutomate MNHA vSRX capture
+  (above), which as a cross-mesh source exposed five fields the
+  expectation YAMLs declared `good` but that genuinely don't round-trip:
+    * **Comparator** — `is_secondary` is now treated as a cosmetic,
+      target-determined subfield in the cross-vendor address comparison
+      (`tools/run_full_mesh.py`).  IOS-XE *must* mark all-but-one
+      interface address `secondary`; a Junos 3-address loopback renders
+      1 primary + 2 secondary with **every address preserved**, so the
+      flag difference was a false CODEC_BUG, not data loss.  Genuine
+      address *drops* (e.g. OPNsense keeping one IPv4) still flag.
+    * **fortigate_cli** — the dotted-form VLAN heuristic
+      (`vlan_heuristics.py`) no longer classifies **loopback / tunnel
+      logical units** (`lo0.2`, `st0.100`, `gr-…`) as dot1q VLANs, so the
+      render stops synthesising phantom `config system interface` VLAN
+      entries (and phantom re-parsed `vlans`) from a Junos source's
+      loopback/tunnel units.  Genuine dot1q forms (`port1.10`,
+      `LAG_INTERNAL.100`) are unaffected.
+    * **Expectation YAMLs** — three declarations corrected to `lossy`
+      with mechanism notes: arista `routing_instances[].description`
+      (EOS `vrf instance` has no description command), opnsense
+      `interfaces[].ipv4_addresses` (one IPv4 per interface — the note
+      already documented the collapse), and mikrotik
+      `interfaces[].description` (tunnel interfaces get a `review:`
+      placeholder the source didn't carry).
+  CODEC_BUG stays flat at 5; the change adds focused unit tests for the
+  comparator and the FortiGate heuristic.
 
 * **cisco_nxos VRF route-targets are de-duplicated so EVPN-VXLAN tenant
   VRFs round-trip stably.** A tenant `vrf context` typically repeats the

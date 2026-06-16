@@ -241,6 +241,52 @@ def _set_equal_lists(a: list[Any], b: list[Any]) -> bool:
     return norm_a == norm_b
 
 
+#: Per-list-field nested subfields that are TARGET-DETERMINED rendering
+#: artifacts rather than operator intent, and so must NOT count as drift
+#: in a cross-vendor comparison.  ``interfaces`` IPv4/IPv6 address records
+#: carry ``is_secondary``: IOS-XE *must* mark all-but-one address on an
+#: interface ``secondary`` (``ip address A`` + ``ip address B secondary``),
+#: while Junos / others have no primary/secondary concept.  The same
+#: address SET round-trips losslessly across vendors — only the flag
+#: differs — so comparing it false-flagged CODEC_BUG (a junos 3-address
+#: loopback → IOS-XE renders 1 primary + 2 secondary; every IP survives).
+#: The mesh only ever compares cross-vendor pairs (intra-vendor self-pairs
+#: are skipped), so the flag is never the carrier of real intent here.
+_COSMETIC_LIST_SUBFIELDS: dict[str, dict[str, tuple[str, ...]]] = {
+    "interfaces": {
+        "ipv4_addresses": ("is_secondary",),
+        "ipv6_addresses": ("is_secondary",),
+    },
+}
+
+
+def _strip_cosmetic_subfields(field: str, records: list[Any]) -> list[Any]:
+    """Return a copy of *records* with target-determined cosmetic
+    subfields removed (see :data:`_COSMETIC_LIST_SUBFIELDS`), so the
+    cross-vendor field comparison reflects operator intent rather than a
+    target codec's mandatory rendering choices.  Non-matching fields and
+    non-dict rows pass through untouched."""
+    spec = _COSMETIC_LIST_SUBFIELDS.get(field)
+    if not spec:
+        return records
+    out: list[Any] = []
+    for rec in records:
+        if not isinstance(rec, dict):
+            out.append(rec)
+            continue
+        rec = dict(rec)
+        for nested_key, drop in spec.items():
+            nested = rec.get(nested_key)
+            if isinstance(nested, list):
+                rec[nested_key] = [
+                    {k: v for k, v in item.items() if k not in drop}
+                    if isinstance(item, dict) else item
+                    for item in nested
+                ]
+        out.append(rec)
+    return out
+
+
 def _scalar_summary(value: Any) -> Any:
     """Render a scalar / list / dict value into a JSON-friendly summary.
 
@@ -316,14 +362,20 @@ def compute_field_disposition(
 
         if isinstance(src_val, list) and isinstance(tgt_val, list):
             id_keys = _LIST_ID_KEYS.get(field, [])
+            # Drop target-determined cosmetic subfields (e.g. the IOS-XE
+            # ``is_secondary`` address flag) before comparing, so a
+            # losslessly round-tripped address SET isn't false-flagged as
+            # drift just because the target had to mark secondaries.
+            cmp_src = _strip_cosmetic_subfields(field, src_val)
+            cmp_tgt = _strip_cosmetic_subfields(field, tgt_val)
             if id_keys:
-                norm_src = _normalise_records(src_val, id_keys)
-                norm_tgt = _normalise_records(tgt_val, id_keys)
+                norm_src = _normalise_records(cmp_src, id_keys)
+                norm_tgt = _normalise_records(cmp_tgt, id_keys)
                 preserved = norm_src == norm_tgt
                 src_disp, tgt_disp = norm_src, norm_tgt
             else:
-                preserved = _set_equal_lists(src_val, tgt_val)
-                src_disp, tgt_disp = src_val, tgt_val
+                preserved = _set_equal_lists(cmp_src, cmp_tgt)
+                src_disp, tgt_disp = cmp_src, cmp_tgt
             record["preserved"] = preserved
             record["source_count"] = len(src_val)
             record["target_count"] = len(tgt_val)
@@ -338,7 +390,7 @@ def compute_field_disposition(
             # drives the cascade.
             if src_val or tgt_val:
                 record["subfields_with_data"] = _subfields_with_data(
-                    src_val, tgt_val,
+                    cmp_src, cmp_tgt,
                 )
             if preserved and not src_val and not tgt_val:
                 # Both lists empty — preservation is trivial; the YAML's

@@ -45,6 +45,21 @@ from ...canonical.intent import CanonicalInterface, CanonicalVlan
 _VLAN_NAME_RE = re.compile(r"^vlan(\d+)$", re.IGNORECASE)
 #: Dotted form: ``<parent>.<id>`` (``port1.10``, ``LAG_INTERNAL.100``).
 _DOTTED_VLAN_RE = re.compile(r"^([A-Za-z0-9_-]+)\.(\d+)$")
+#: Parents that are LOOPBACK or TUNNEL pseudo-interfaces — never dot1q
+#: VLAN parents.  A ``<parent>.<unit>`` name whose parent matches these
+#: is a logical UNIT of a loopback/tunnel (e.g. Junos ``lo0.2`` loopback
+#: unit, ``st0.100`` secure-tunnel unit, ``gr-0/0/0.0`` GRE unit), NOT a
+#: VLAN sub-interface, so it must not be classified as a VLAN nor
+#: rendered ``set type vlan`` / ``set vlanid``.  Without this guard the
+#: render synthesised bogus FortiGate VLAN interfaces (and re-parsed
+#: phantom ``vlans`` records) from a Junos source's loopback/tunnel
+#: units — surfaced by the JNPRAutomate MNHA vSRX capture's ``lo0.N`` /
+#: ``st0.N`` logical units.
+_NON_VLAN_DOTTED_PARENT_RE = re.compile(
+    r"^(lo|lo\d+|loopback\d*|st|st\d+|gr-.*|ip-.*|vt-.*|lt-.*|mt-.*"
+    r"|tunnel\d*|tun\d*|irb)$",
+    re.IGNORECASE,
+)
 #: Ethernet-style names for ifType inference.
 _ETHERNET_NAME_RE = re.compile(
     r"^(port|ethernet|internal|wan|lan|dmz)\d*$"
@@ -65,7 +80,8 @@ def looks_like_vlan_iface(name: str) -> bool:
     """
     if _VLAN_NAME_RE.match(name):
         return True
-    if _DOTTED_VLAN_RE.match(name):
+    m = _DOTTED_VLAN_RE.match(name)
+    if m and not _NON_VLAN_DOTTED_PARENT_RE.match(m.group(1)):
         return True
     return False
 
@@ -90,7 +106,7 @@ def vlan_id_for(
     if m1:
         return int(m1.group(1))
     m2 = _DOTTED_VLAN_RE.match(name)
-    if m2:
+    if m2 and not _NON_VLAN_DOTTED_PARENT_RE.match(m2.group(1)):
         return int(m2.group(2))
     for v in vlans:
         if v.name == name:

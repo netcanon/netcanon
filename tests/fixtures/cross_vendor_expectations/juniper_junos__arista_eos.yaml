@@ -459,8 +459,8 @@ per_field_expectation:
     note: "Same shape as rt_imports; Arista 'route-target export evpn N:M'."
 
   routing_instances[].description:
-    disposition: good
-    note: "Junos 'set routing-instances X description Y' maps to Arista's per-VRF description directive."
+    disposition: lossy
+    reason: "Arista EOS 'vrf instance X' has no per-VRF description command (unlike Junos 'set routing-instances X description Y'), so the description string drops on render — the VRF itself (name + RD/RT) survives, only the human label is lost.  Surfaced by the MNHA vSRX capture's 'mgmt_junos' VRF."
 
   routing_instances[].l3_vni:
     disposition: good

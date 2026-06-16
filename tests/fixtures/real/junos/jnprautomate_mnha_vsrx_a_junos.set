@@ -1,0 +1,638 @@
+set groups global
+set groups MNHA-SYNC security ike proposal IKE-PROP-1 description MNHA-IKE-PROPOSAL_for_ICL
+set groups MNHA-SYNC security ike proposal IKE-PROP-1 authentication-method pre-shared-keys
+set groups MNHA-SYNC security ike proposal IKE-PROP-1 dh-group group14
+set groups MNHA-SYNC security ike proposal IKE-PROP-1 encryption-algorithm aes-256-gcm
+set groups MNHA-SYNC security ike proposal IKE-PROP-1 lifetime-seconds 28800
+set groups MNHA-SYNC security ike policy ICL description MNHA-IKE-POLICY_for_ICL
+set groups MNHA-SYNC security ike policy ICL proposals IKE-PROP-1
+set groups MNHA-SYNC security ike policy ICL pre-shared-key ascii-text "$9$FakeIcl0SyncPsk00000000000"
+set groups MNHA-SYNC security ike gateway ICL ike-policy ICL
+set groups MNHA-SYNC security ike gateway ICL version v2-only
+set groups MNHA-SYNC security ipsec proposal IPSEC_PROP-1 description MNHA-IPSEC-PROPOSAL_for_ICL
+set groups MNHA-SYNC security ipsec proposal IPSEC_PROP-1 protocol esp
+set groups MNHA-SYNC security ipsec proposal IPSEC_PROP-1 encryption-algorithm aes-256-gcm
+set groups MNHA-SYNC security ipsec proposal IPSEC_PROP-1 lifetime-seconds 3600
+set groups MNHA-SYNC security ipsec policy MNHA-POL description IPSEC-POLICY_for_ICL
+set groups MNHA-SYNC security ipsec policy MNHA-POL proposals IPSEC_PROP-1
+set groups MNHA-SYNC security ipsec vpn ICL ha-link-encryption
+set groups MNHA-SYNC security ipsec vpn ICL ike gateway ICL
+set groups MNHA-SYNC security ipsec vpn ICL ike ipsec-policy MNHA-POL
+set groups mnha-sync security ipsec policy ipsec-policy perfect-forward-secrecy keys group14
+set apply-groups MNHA-SYNC
+
+set system host-name MNHA-VSRX-A
+
+set system services web-management http port 8080
+set system services web-management http interface fxp0.0
+set system services web-management https pki-local-certificate MNHA-RA-VPN
+set system services web-management https interface fxp0.0
+set system services web-management https interface lo0.10
+
+set chassis high-availability local-id 1
+set chassis high-availability local-id local-ip 100.64.0.9
+set chassis high-availability local-id local-forwarding-ip 100.64.10.9
+set chassis high-availability peer-id 2 peer-ip 100.64.0.10
+set chassis high-availability peer-id 2 interface ge-0/0/5.0
+set chassis high-availability peer-id 2 routing-instance PROD
+set chassis high-availability peer-id 2 vpn-profile ICL
+set chassis high-availability peer-id 2 peer-forwarding-ip 100.64.10.10
+set chassis high-availability peer-id 2 peer-forwarding-ip interface ge-0/0/6.0
+set chassis high-availability peer-id 2 peer-forwarding-ip liveness-detection minimum-interval 400
+set chassis high-availability peer-id 2 peer-forwarding-ip liveness-detection multiplier 5
+set chassis high-availability peer-id 2 liveness-detection minimum-interval 400
+set chassis high-availability peer-id 2 liveness-detection multiplier 5
+set chassis high-availability services-redundancy-group 1 deployment-type routing
+set chassis high-availability services-redundancy-group 1 peer-id 2
+set chassis high-availability services-redundancy-group 1 activeness-probe dest-ip 192.168.251.2
+set chassis high-availability services-redundancy-group 1 activeness-probe dest-ip src-ip 192.168.251.1
+set chassis high-availability services-redundancy-group 1 monitor interface ge-0/0/4
+set chassis high-availability services-redundancy-group 1 active-signal-route 169.254.200.1
+set chassis high-availability services-redundancy-group 1 backup-signal-route 169.254.200.2
+set chassis high-availability services-redundancy-group 1 prefix-list IKE-GW-VPN-1 routing-instance PROD
+set chassis high-availability services-redundancy-group 1 managed-services ipsec
+set chassis high-availability services-redundancy-group 1 process-packet-on-backup
+set chassis high-availability services-redundancy-group 1 activeness-priority 200
+set chassis high-availability services-redundancy-group 2 deployment-type hybrid
+set chassis high-availability services-redundancy-group 2 peer-id 2
+set chassis high-availability services-redundancy-group 2 virtual-ip 1 ip 192.168.97.1/24
+set chassis high-availability services-redundancy-group 2 virtual-ip 1 interface ge-0/0/3.0
+set chassis high-availability services-redundancy-group 2 virtual-ip 2 ip 192.168.252.1/24
+set chassis high-availability services-redundancy-group 2 virtual-ip 2 interface ge-0/0/0.0
+set chassis high-availability services-redundancy-group 2 virtual-ip 31 ip 192.168.99.129/24
+set chassis high-availability services-redundancy-group 2 virtual-ip 31 interface ge-0/0/1.0
+set chassis high-availability services-redundancy-group 2 virtual-ip 32 ip 192.168.98.129/24
+set chassis high-availability services-redundancy-group 2 virtual-ip 32 interface ge-0/0/2.0
+set chassis high-availability services-redundancy-group 2 monitor interface ge-0/0/1
+set chassis high-availability services-redundancy-group 2 active-signal-route 169.254.200.3
+set chassis high-availability services-redundancy-group 2 backup-signal-route 169.254.200.4
+set chassis high-availability services-redundancy-group 2 prefix-list IKE-GW-RA-VPN routing-instance PROD
+set chassis high-availability services-redundancy-group 2 managed-services ipsec
+set chassis high-availability services-redundancy-group 2 process-packet-on-backup
+set chassis high-availability services-redundancy-group 2 activeness-priority 200
+
+set security pki ca-profile WINLAB-DC1-CA_1 ca-identity WINLAB-DC1-CA_1
+
+set security ike proposal IKE-PROP authentication-method pre-shared-keys
+set security ike proposal IKE-PROP dh-group group14
+set security ike proposal IKE-PROP authentication-algorithm sha-256
+set security ike proposal IKE-PROP encryption-algorithm aes-128-cbc
+set security ike proposal IKE-PROP lifetime-seconds 28800
+set security ike proposal IKE-PROP-CERT authentication-method rsa-signatures
+set security ike proposal IKE-PROP-CERT dh-group group14
+set security ike proposal IKE-PROP-CERT authentication-algorithm sha-256
+set security ike proposal IKE-PROP-CERT encryption-algorithm aes-128-cbc
+set security ike proposal IKE-PROP-CERT lifetime-seconds 28800
+set security ike policy IKE-POLICY proposals IKE-PROP
+set security ike policy IKE-POLICY pre-shared-key ascii-text "$9$FakeIkePolicyPsk0000000"
+set security ike policy IKE-POLICY-2 proposals IKE-PROP
+set security ike policy IKE-POLICY-2 pre-shared-key ascii-text "$9$FakeIkePolicy2Psk0000000000000"
+set security ike policy MNHA-RA-VPN proposals IKE-PROP-CERT
+set security ike policy MNHA-RA-VPN certificate local-certificate MNHA-RA-VPN
+set security ike policy MNHA-RA-VPN certificate trusted-ca ca-profile WINLAB-DC1_1
+set security ike gateway IKE-GW-VPN-1 ike-policy IKE-POLICY-2
+set security ike gateway IKE-GW-VPN-1 address 10.177.177.77
+set security ike gateway IKE-GW-VPN-1 dead-peer-detection optimized
+set security ike gateway IKE-GW-VPN-1 dead-peer-detection interval 10
+set security ike gateway IKE-GW-VPN-1 dead-peer-detection threshold 5
+set security ike gateway IKE-GW-VPN-1 external-interface lo0.10
+set security ike gateway IKE-GW-VPN-1 local-address 10.165.251.200
+set security ike gateway IKE-GW-VPN-1 version v2-only
+set security ike gateway MNHA-RA-VPN ike-policy MNHA-RA-VPN
+set security ike gateway MNHA-RA-VPN dynamic hostname client.ra-vpn.winlab.local
+set security ike gateway MNHA-RA-VPN dynamic connections-limit 25
+set security ike gateway MNHA-RA-VPN dynamic ike-user-type group-ike-id
+set security ike gateway MNHA-RA-VPN dead-peer-detection optimized
+set security ike gateway MNHA-RA-VPN dead-peer-detection interval 10
+set security ike gateway MNHA-RA-VPN dead-peer-detection threshold 5
+set security ike gateway MNHA-RA-VPN nat-keepalive 10
+set security ike gateway MNHA-RA-VPN local-identity inet 203.0.113.100
+set security ike gateway MNHA-RA-VPN external-interface lo0.10
+set security ike gateway MNHA-RA-VPN local-address 203.0.113.100
+set security ike gateway MNHA-RA-VPN aaa access-profile USER-AUTH
+set security ike gateway MNHA-RA-VPN version v2-only
+set security ike gateway MNHA-RA-VPN tcp-encap-profile SSL-RA-VPN-PROF
+set security ipsec vpn VPN-1 bind-interface st0.200
+set security ipsec vpn VPN-1 ike gateway IKE-GW-VPN-1
+set security ipsec vpn VPN-1 ike ipsec-policy IPSEC-POLICY
+set security ipsec vpn VPN-1 traffic-selector 192.168.252.0_192.168.249.0 local-ip 192.168.252.0/24
+set security ipsec vpn VPN-1 traffic-selector 192.168.252.0_192.168.249.0 remote-ip 192.168.249.0/24
+set security ipsec vpn VPN-1 traffic-selector 192.168.97.0_192.168.249.0 local-ip 192.168.97.0/24
+set security ipsec vpn VPN-1 traffic-selector 192.168.97.0_192.168.249.0 remote-ip 192.168.249.0/24
+set security ipsec vpn VPN-1 establish-tunnels immediately
+set security ipsec vpn MNHA-RA-VPN bind-interface st0.100
+set security ipsec vpn MNHA-RA-VPN df-bit clear
+set security ipsec vpn MNHA-RA-VPN copy-outer-dscp
+set security ipsec vpn MNHA-RA-VPN ike gateway MNHA-RA-VPN
+set security ipsec vpn MNHA-RA-VPN ike ipsec-policy IPSEC-POLICY
+set security ipsec vpn MNHA-RA-VPN traffic-selector ts-1 local-ip 0.0.0.0/0
+set security ipsec vpn MNHA-RA-VPN traffic-selector ts-1 remote-ip 0.0.0.0/0
+set security remote-access profile mnha-ra-vpn.winlab.local ipsec-vpn MNHA-RA-VPN
+set security remote-access profile mnha-ra-vpn.winlab.local access-profile USER-AUTH
+set security remote-access profile mnha-ra-vpn.winlab.local client-config JCS-RAS-VPN
+set security remote-access client-config JCS-RAS-VPN connection-mode manual
+set security remote-access client-config JCS-RAS-VPN dead-peer-detection interval 60
+set security remote-access client-config JCS-RAS-VPN dead-peer-detection threshold 5
+set security remote-access client-config JCS-RAS-VPN no-eap-tls
+set security remote-access client-config JCS-RAS-VPN certificate no-pin-request-per-connection
+set security remote-access client-config JCS-RAS-VPN certificate warn-before-expiry 60
+set security remote-access client-config JCS-RAS-VPN credentials password 
+
+set security address-book global address N192.168.252.0s24 192.168.252.0/24
+
+
+set security address-book global address H192.168.99.1 description EXT-BGP-SPEAKER
+set security address-book global address H192.168.99.1 192.168.99.1/32
+set security address-book global address H192.168.99.9 description SRX-OUTSIDE-INTERFACE
+set security address-book global address H192.168.99.9 192.168.99.9/32
+set security address-book global address N192.168.251.0s24 192.168.251.0/25
+set security address-book global address N192.168.97.0s24 192.168.97.0/24
+set security address-book global address 10.0.0.3/32 10.0.0.3/32
+set security address-book global address 10.12.12.12/32 10.12.12.12/32
+set security address-book global address H203.0.113.100 description LO-FOR-RA-VPN-TERMINATION
+set security address-book global address H203.0.113.100 203.0.113.100/32
+set security address-book global address H10.177.177.77 description IKE-GW-VPN-1-REMOTE-PUB-IP
+set security address-book global address H10.177.177.77 10.177.177.77/32
+set security address-book global address H10.165.251.200 description IKE-GW-VPN-1-LOCAL-PUB-IP
+set security address-book global address H10.165.251.200 10.165.251.200/32
+set security address-book global address 10.13.13.13/32 10.13.13.13/32
+set security address-book global address N192.168.2.0s24 192.168.2.0/24
+set security address-book global address N192.168.3.0s24 192.168.3.0/24
+set security address-book global address N192.168.4.0s24 192.168.4.0/24
+set security address-book global address N192.168.5.0s24 192.168.5.0/24
+set security address-book global address H192.168.100.33 description VSRX-TRANSIT-PUB-INTERFACE
+set security address-book global address H192.168.100.33 192.168.100.33/32
+set security address-book global address N192.168.249.0s24 192.168.249.0/24
+set security address-book global address-set REMOTE-ACCESS-VPN address N192.168.2.0s24
+set security address-book global address-set REMOTE-ACCESS-VPN address N192.168.3.0s24
+set security address-book global address-set REMOTE-ACCESS-VPN address N192.168.4.0s24
+set security address-book global address-set REMOTE-ACCESS-VPN address N192.168.5.0s24
+set security address-book global address-set SITE-TO-SITE-VPN-1 address N192.168.249.0s24
+
+set security nat source pool NAT-POOL-ISP-1_192-168-99-230 address 192.168.99.230/32 to 192.168.99.231/32
+set security nat source pool NAT-POOL-ISP-1_192-168-99-232 address 192.168.99.232/32 to 192.168.99.232/32
+set security nat source pool NAT-POOL-ISP-2_192-168-98-230 address 192.168.98.230/32 to 192.168.98.231/32
+set security nat source pool NAT-POOL-ISP-2_192-168-98-232 address 192.168.98.232/32 to 192.168.98.232/32
+set security nat source pool NAT-POOL-ISP-2_192-168-98-233 address 192.168.98.233/32 to 192.168.98.233/32
+
+set security nat source pool NAT-POOL-ISP-1_VPN address 203.0.113.25/32 to 203.0.113.49/32
+set security nat source pool NAT-POOL-ISP-2_VPN address 203.0.113.50/32 to 203.0.113.99/32
+set security nat source address-persistent
+
+set security nat source rule-set SNAT-ISP-1 from zone INT
+set security nat source rule-set SNAT-ISP-1 to zone EXT
+set security nat source rule-set SNAT-ISP-1 rule MNHA-ISP-1 match source-address 192.168.252.99/32
+set security nat source rule-set SNAT-ISP-1 rule MNHA-ISP-1 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-1 rule MNHA-ISP-1 then source-nat pool NAT-POOL-ISP-1_VPN
+set security nat source rule-set SNAT-ISP-1 rule SNAT-POOL-99-232-ISP-1 match source-address 192.168.252.100/32
+set security nat source rule-set SNAT-ISP-1 rule SNAT-POOL-99-232-ISP-1 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-1 rule SNAT-POOL-99-232-ISP-1 then source-nat pool NAT-POOL-ISP-1_192-168-99-232
+
+set security nat source rule-set SNAT-ISP-2 from zone INT
+set security nat source rule-set SNAT-ISP-2 to zone EXT-2
+set security nat source rule-set SNAT-ISP-2 rule MNHA-ISP-2 match source-address 192.168.252.99/32
+set security nat source rule-set SNAT-ISP-2 rule MNHA-ISP-2 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-2 rule MNHA-ISP-2 then source-nat pool NAT-POOL-ISP-1_VPN
+set security nat source rule-set SNAT-ISP-2 rule SNAT-POOL-98-232-ISP-2 match source-address 192.168.252.100/32
+set security nat source rule-set SNAT-ISP-2 rule SNAT-POOL-98-232-ISP-2 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-2 rule SNAT-POOL-98-232-ISP-2 then source-nat pool NAT-POOL-ISP-2_192-168-98-232
+
+set security nat source rule-set SELF-SNAT-ISP-1 from zone junos-host
+set security nat source rule-set SELF-SNAT-ISP-1 to zone EXT
+set security nat source rule-set SELF-SNAT-ISP-1 rule ANY-ISP-1 match source-address 0.0.0.0/0
+set security nat source rule-set SELF-SNAT-ISP-1 rule ANY-ISP-1 then source-nat interface
+set security nat source rule-set SELF-SNAT-ISP-2 from zone junos-host
+set security nat source rule-set SELF-SNAT-ISP-2 to zone EXT-2
+set security nat source rule-set SELF-SNAT-ISP-2 rule NO-NAT-BGP match source-address 10.12.12.12/32
+set security nat source rule-set SELF-SNAT-ISP-2 rule NO-NAT-BGP match destination-address 10.0.0.3/32
+set security nat source rule-set SELF-SNAT-ISP-2 rule NO-NAT-BGP then source-nat off
+set security nat source rule-set SELF-SNAT-ISP-2 rule ANY-ISP-2 match source-address 0.0.0.0/0
+set security nat source rule-set SELF-SNAT-ISP-2 rule ANY-ISP-2 then source-nat interface
+
+set security nat source rule-set SNAT-ISP-2-VPN from zone RA-VPN
+set security nat source rule-set SNAT-ISP-2-VPN to zone EXT-2
+set security nat source rule-set SNAT-ISP-2-VPN rule SNAT-POOL-99-252_253-ISP-2 match source-address 192.168.4.0/24
+set security nat source rule-set SNAT-ISP-2-VPN rule SNAT-POOL-99-252_253-ISP-2 match source-address 192.168.5.0/24
+set security nat source rule-set SNAT-ISP-2-VPN rule SNAT-POOL-99-252_253-ISP-2 match source-address 192.168.6.0/24
+set security nat source rule-set SNAT-ISP-2-VPN rule SNAT-POOL-99-252_253-ISP-2 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-2-VPN rule SNAT-POOL-99-252_253-ISP-2 then source-nat pool NAT-POOL-ISP-2_VPN
+
+set security nat source rule-set SNAT-ISP-1-VPN from zone RA-VPN
+set security nat source rule-set SNAT-ISP-1-VPN to zone EXT
+set security nat source rule-set SNAT-ISP-1-VPN rule SNAT-POOL-99-252_253-ISP-1 match source-address 192.168.4.0/24
+set security nat source rule-set SNAT-ISP-1-VPN rule SNAT-POOL-99-252_253-ISP-1 match source-address 192.168.5.0/24
+set security nat source rule-set SNAT-ISP-1-VPN rule SNAT-POOL-99-252_253-ISP-1 match source-address 192.168.6.0/24
+set security nat source rule-set SNAT-ISP-1-VPN rule SNAT-POOL-99-252_253-ISP-1 match destination-address 0.0.0.0/0
+set security nat source rule-set SNAT-ISP-1-VPN rule SNAT-POOL-99-252_253-ISP-1 then source-nat pool NAT-POOL-ISP-1_VPN
+
+set security nat source rule-set ASYM-TEST from zone EXT
+set security nat source rule-set ASYM-TEST to zone EXT
+set security nat source rule-set ASYM-TEST to zone EXT-2
+set security nat source rule-set ASYM-TEST rule ASYM-TEST-249 match source-address 192.168.249.0/24
+set security nat source rule-set ASYM-TEST rule ASYM-TEST-249 match destination-address 0.0.0.0/0
+set security nat source rule-set ASYM-TEST rule ASYM-TEST-249 then source-nat pool NAT-POOL-ISP-2_VPN
+
+set security nat static rule-set STATIC-NAT from zone EXT
+set security nat static rule-set STATIC-NAT rule PUB-STATIC-HOSTING match destination-address 192.168.99.243/32
+set security nat static rule-set STATIC-NAT rule PUB-STATIC-HOSTING then static-nat prefix 192.168.97.100/32
+
+set security nat proxy-arp interface ge-0/0/2.0 address 192.168.98.230/32
+set security nat proxy-arp interface ge-0/0/2.0 address 192.168.98.231/32
+set security nat proxy-arp interface ge-0/0/2.0 address 192.168.98.232/32
+set security nat proxy-arp interface ge-0/0/2.0 address 192.168.98.233/32
+
+set security nat proxy-arp interface ge-0/0/1.0 address 192.168.99.230/32
+set security nat proxy-arp interface ge-0/0/1.0 address 192.168.99.231/32
+set security nat proxy-arp interface ge-0/0/1.0 address 192.168.99.232/32
+set security nat proxy-arp interface ge-0/0/1.0 address 192.168.99.243/32
+
+set security policies from-zone HA-ICL to-zone HA-ICL policy ANY-ANY match source-address any
+set security policies from-zone HA-ICL to-zone HA-ICL policy ANY-ANY match destination-address any
+set security policies from-zone HA-ICL to-zone HA-ICL policy ANY-ANY match application any
+set security policies from-zone HA-ICL to-zone HA-ICL policy ANY-ANY then permit
+set security policies from-zone HA-ICL to-zone HA-ICL policy ANY-ANY then count
+
+set security policies from-zone HA-ICD to-zone HA-ICD policy ANY-ANY match source-address any
+set security policies from-zone HA-ICD to-zone HA-ICD policy ANY-ANY match destination-address any
+set security policies from-zone HA-ICD to-zone HA-ICD policy ANY-ANY match application any
+set security policies from-zone HA-ICD to-zone HA-ICD policy ANY-ANY then permit
+set security policies from-zone HA-ICD to-zone HA-ICD policy ANY-ANY then count
+
+set security policies from-zone EXT to-zone EXT policy IKE-ESP match source-address H10.177.177.77
+set security policies from-zone EXT to-zone EXT policy IKE-ESP match destination-address H10.165.251.200
+set security policies from-zone EXT to-zone EXT policy IKE-ESP match application junos-ike
+set security policies from-zone EXT to-zone EXT policy IKE-ESP match application ESP
+set security policies from-zone EXT to-zone EXT policy IKE-ESP then permit
+set security policies from-zone EXT to-zone EXT policy IKE-ESP then log session-init
+set security policies from-zone EXT to-zone EXT policy IKE-ESP then count
+
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY match source-address any
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY match destination-address any
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY match application any
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY then permit
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY then log session-init
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY then log session-close
+set security policies from-zone RA-VPN to-zone INT policy VPN-ANY then count
+
+set security policies global policy ASYM-PUB-TEST-249 match source-address N192.168.249.0s24
+set security policies global policy ASYM-PUB-TEST-249 match destination-address any
+set security policies global policy ASYM-PUB-TEST-249 match application any
+set security policies global policy ASYM-PUB-TEST-249 match dynamic-application any
+set security policies global policy ASYM-PUB-TEST-249 match from-zone EXT
+set security policies global policy ASYM-PUB-TEST-249 match to-zone EXT
+set security policies global policy ASYM-PUB-TEST-249 match to-zone EXT-2
+set security policies global policy ASYM-PUB-TEST-249 then permit application-services idp-policy DEMO
+set security policies global policy ASYM-PUB-TEST-249 then permit application-services utm-policy RECOMMENDED-SAFE-INET
+set security policies global policy ASYM-PUB-TEST-249 then permit application-services security-intelligence-policy SECINTEL_PROFILE_GROUP_DROP_ALL
+set security policies global policy ASYM-PUB-TEST-249 then permit application-services advanced-anti-malware-policy ANTI-MALWARE-PROFILE
+set security policies global policy ASYM-PUB-TEST-249 then permit application-services anti-virus-policy FB-AV-PROFILE
+set security policies global policy ASYM-PUB-TEST-249 then log session-init
+set security policies global policy ASYM-PUB-TEST-249 then count
+
+set security policies global policy DEFAULT-INET match source-address any
+set security policies global policy DEFAULT-INET match destination-address any
+set security policies global policy DEFAULT-INET match application any
+set security policies global policy DEFAULT-INET match source-identity any
+set security policies global policy DEFAULT-INET match dynamic-application any
+set security policies global policy DEFAULT-INET match from-zone INT
+set security policies global policy DEFAULT-INET match from-zone RA-VPN
+set security policies global policy DEFAULT-INET match to-zone EXT
+set security policies global policy DEFAULT-INET match to-zone EXT-2
+set security policies global policy DEFAULT-INET then permit application-services idp-policy DEMO
+set security policies global policy DEFAULT-INET then permit application-services security-intelligence-policy SECINTEL_PROFILE_GROUP_DROP_ALL
+set security policies global policy DEFAULT-INET then permit application-services advanced-anti-malware-policy ANTI-MALWARE-PROFILE
+set security policies global policy DEFAULT-INET then permit application-services anti-virus-policy FB-AV-PROFILE
+set security policies global policy DEFAULT-INET then log session-init
+set security policies global policy DEFAULT-INET then count
+
+set security policies default-policy deny-all
+
+set security policies policy-rematch extensive
+set security policies pre-id-default-policy then log session-close
+set security tcp-encap profile SSL-RA-VPN-PROF ssl-profile SSL-RA-VPN-TERM-PROF
+set security tcp-encap profile SSL-RA-VPN-PROF log
+
+set security zones functional-zone management
+
+set security zones security-zone INT tcp-rst
+set security zones security-zone INT host-inbound-traffic system-services all
+set security zones security-zone INT host-inbound-traffic protocols pim
+set security zones security-zone INT host-inbound-traffic protocols igmp
+set security zones security-zone INT host-inbound-traffic protocols bfd
+set security zones security-zone INT interfaces ge-0/0/0.0
+set security zones security-zone INT application-tracking
+
+set security zones security-zone VPN host-inbound-traffic system-services ping
+set security zones security-zone VPN host-inbound-traffic system-services ike
+set security zones security-zone VPN host-inbound-traffic system-services https
+set security zones security-zone VPN interfaces st0.200
+
+set security zones security-zone DMZ host-inbound-traffic system-services ping
+set security zones security-zone DMZ host-inbound-traffic system-services traceroute
+set security zones security-zone DMZ host-inbound-traffic protocols pim
+set security zones security-zone DMZ interfaces ge-0/0/3.0
+
+set security zones security-zone HA-ICL host-inbound-traffic system-services ping
+set security zones security-zone HA-ICL host-inbound-traffic system-services ike
+set security zones security-zone HA-ICL host-inbound-traffic system-services ssh
+set security zones security-zone HA-ICL host-inbound-traffic system-services high-availability
+set security zones security-zone HA-ICL host-inbound-traffic protocols bgp
+set security zones security-zone HA-ICL host-inbound-traffic protocols bfd
+set security zones security-zone HA-ICL interfaces ge-0/0/5.0
+
+set security zones security-zone HA-ICD host-inbound-traffic system-services ping
+set security zones security-zone HA-ICD host-inbound-traffic protocols bgp
+set security zones security-zone HA-ICD host-inbound-traffic protocols bfd
+set security zones security-zone HA-ICD interfaces ge-0/0/6.0
+
+set security zones security-zone EXT screen UNTRUST-INGRESS-DEMO
+set security zones security-zone EXT host-inbound-traffic system-services ping
+set security zones security-zone EXT host-inbound-traffic system-services ike
+set security zones security-zone EXT host-inbound-traffic system-services ntp
+set security zones security-zone EXT host-inbound-traffic protocols bgp
+set security zones security-zone EXT host-inbound-traffic protocols bfd
+set security zones security-zone EXT interfaces ge-0/0/4.0
+set security zones security-zone EXT interfaces lo0.10 host-inbound-traffic system-services ike
+set security zones security-zone EXT interfaces lo0.10 host-inbound-traffic system-services ping
+set security zones security-zone EXT interfaces lo0.10 host-inbound-traffic system-services https
+set security zones security-zone EXT interfaces ge-0/0/1.0
+set security zones security-zone EXT application-tracking
+
+set security zones security-zone RA-VPN host-inbound-traffic system-services all
+set security zones security-zone RA-VPN host-inbound-traffic protocols all
+set security zones security-zone RA-VPN interfaces st0.100
+set security zones security-zone RA-VPN application-tracking
+
+set security zones security-zone EXT-2 host-inbound-traffic system-services ike
+set security zones security-zone EXT-2 host-inbound-traffic system-services ntp
+set security zones security-zone EXT-2 host-inbound-traffic protocols bfd
+set security zones security-zone EXT-2 host-inbound-traffic protocols bgp
+set security zones security-zone EXT-2 interfaces ge-0/0/2.0
+set security zones security-zone EXT-2 interfaces lo0.2
+set security zones security-zone EXT-2 application-tracking
+
+set interfaces ge-0/0/0 unit 0 description INT
+set interfaces ge-0/0/0 unit 0 family inet address 192.168.252.9/24
+set interfaces ge-0/0/1 unit 0 description ISP-1_UPLINK
+set interfaces ge-0/0/1 unit 0 family inet address 192.168.99.9/24
+set interfaces ge-0/0/2 unit 0 description ISP-2_UPLINK
+set interfaces ge-0/0/2 unit 0 family inet address 192.168.98.9/24
+set interfaces ge-0/0/3 unit 0 description DMZ
+set interfaces ge-0/0/3 unit 0 family inet address 192.168.97.9/24
+set interfaces ge-0/0/4 unit 0 description EXTRANET_RTR-A
+set interfaces ge-0/0/4 unit 0 family inet address 192.168.251.1/25
+set interfaces ge-0/0/5 description MNHA-ICL
+set interfaces ge-0/0/5 unit 0 family inet address 100.64.0.9/27
+set interfaces ge-0/0/6 description MNHA-ICD
+set interfaces ge-0/0/6 unit 0 family inet address 100.64.10.9/27
+set interfaces fxp0 unit 0 family inet filter input MGT-ALLOW
+set interfaces fxp0 unit 0 family inet address 192.168.100.24/24
+set interfaces lo0 unit 0 description SRX-SERVICES_SELF-TRAFFIC
+set interfaces lo0 unit 0 family inet address 10.0.0.33/32
+set interfaces lo0 unit 2 family inet address 10.12.12.12/32
+set interfaces lo0 unit 10 description PROD_LOOPBACKS
+set interfaces lo0 unit 10 family inet address 10.165.251.200/32
+set interfaces lo0 unit 10 family inet address 203.0.113.100/32
+set interfaces lo0 unit 10 family inet address 10.165.251.222/32
+set interfaces st0 unit 100 description REMOTE_ACCESS_VPN
+set interfaces st0 unit 100 family inet mtu 1420
+set interfaces st0 unit 200 description SITE-TO-SITE-VPN_PROD
+set interfaces st0 unit 200 family inet mtu 1420
+
+set policy-options prefix-list BGP-NH-ISP-1 192.168.99.9/32
+set policy-options prefix-list BGP-NH-ISP-2 10.0.0.3/32
+set policy-options prefix-list BGP-NH-ISP-2 192.168.98.11/32
+set policy-options prefix-list DEFAULT-ROUTE 0.0.0.0/0
+set policy-options prefix-list DMZ-PREFIXES 192.168.97.0/24
+set policy-options prefix-list IKE-GW-RA-VPN 203.0.113.100/32
+set policy-options prefix-list IKE-GW-VPN-1 10.165.251.200/32
+set policy-options prefix-list INTERNAL-ISP-PREFIXES 203.0.113.0/24
+set policy-options prefix-list INTERNAL-PREFIXES 10.165.251.200/32
+set policy-options prefix-list INTERNAL-PREFIXES 192.168.97.0/24
+set policy-options prefix-list INTERNAL-PREFIXES 192.168.251.0/25
+set policy-options prefix-list INTERNAL-PREFIXES 192.168.252.0/24
+set policy-options prefix-list LOOP-0 10.0.0.33/32
+set policy-options prefix-list PROD-S2S-PREFIXES 192.168.97.0/24
+set policy-options prefix-list PROD-S2S-PREFIXES 192.168.252.0/24
+set policy-options prefix-list REMOTE-IKE-GATEWAYS 10.177.177.77/32
+set policy-options prefix-list S2S-PROD-VPN-1_ST0-200 192.168.249.0/24
+set policy-options prefix-list SNAT-POOL-COMMON-203 203.0.113.0/24
+set policy-options prefix-list VPN-SNAT-POOL-ISP-1 192.168.99.130/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-1 192.168.99.131/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-1 192.168.99.230/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-1 192.168.99.231/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-1 192.168.99.232/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-2 192.168.98.230/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-2 192.168.98.231/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-2 192.168.98.232/32
+set policy-options prefix-list VPN-SNAT-POOL-ISP-2 192.168.98.233/32
+
+set policy-options policy-statement ECMP then load-balance per-flow
+set policy-options policy-statement ECMP then accept
+set policy-options policy-statement EXT-IKE-GW term 10 from instance master
+
+set policy-options policy-statement EXT-IKE-GW term 10 from prefix-list REMOTE-IKE-GATEWAYS
+set policy-options policy-statement EXT-IKE-GW term 10 then accept
+set policy-options policy-statement EXT-IKE-GW term 900 then reject
+set policy-options policy-statement INET-0-BGP_NextHops term 10 from instance PROD
+set policy-options policy-statement INET-0-BGP_NextHops term 10 from prefix-list BGP-NH-ISP-1
+set policy-options policy-statement INET-0-BGP_NextHops term 10 then accept
+set policy-options policy-statement INET-0-BGP_NextHops term 20 from instance ISP-2
+set policy-options policy-statement INET-0-BGP_NextHops term 20 from prefix-list BGP-NH-ISP-2
+set policy-options policy-statement INET-0-BGP_NextHops term 20 then accept
+set policy-options policy-statement INT-IKE-GWS term 10 from prefix-list IKE-GW-RA-VPN
+set policy-options policy-statement INT-IKE-GWS term 10 from prefix-list IKE-GATEWAYS
+set policy-options policy-statement INT-IKE-GWS term 10 then accept
+set policy-options policy-statement INT-IKE-GWS term 900 then reject
+set policy-options policy-statement INTERNAL-PREFIXES-PREPEND from prefix-list INTERNAL-PREFIXES
+set policy-options policy-statement INTERNAL-PREFIXES-PREPEND then add-path send-count 3
+set policy-options policy-statement INTERNAL-PREFIXES-PREPEND then as-path-prepend 65020
+set policy-options policy-statement ISP-2-DEFAULT-ROUTE term 10 from instance ISP-2
+set policy-options policy-statement ISP-2-DEFAULT-ROUTE term 10 from protocol bgp
+set policy-options policy-statement ISP-2-DEFAULT-ROUTE term 10 from prefix-list DEFAULT-ROUTE
+set policy-options policy-statement ISP-2-DEFAULT-ROUTE term 10 then local-preference 50
+set policy-options policy-statement ISP-2-DEFAULT-ROUTE term 10 then accept
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 10 from instance PROD
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 10 from protocol bgp
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 10 from neighbor 192.168.99.1
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 10 from prefix-list DEFAULT-ROUTE
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 10 then accept
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 20 from instance ISP-2
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 20 from protocol bgp
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 20 from neighbor 10.0.0.3
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 20 from prefix-list DEFAULT-ROUTE
+set policy-options policy-statement ISP-DEFAULT-ROUTES term 20 then accept
+set policy-options policy-statement ISP-DEFAULT-ROUTES term DENY-ALL then reject
+
+set policy-options policy-statement MNHA_ROUTE_POLICY term 10 from prefix-list INTERNAL-PREFIXES
+set policy-options policy-statement MNHA_ROUTE_POLICY term 10 from condition ACTIVE_ROUTE_EXISTS_SRG1
+set policy-options policy-statement MNHA_ROUTE_POLICY term 10 then metric 10
+set policy-options policy-statement MNHA_ROUTE_POLICY term 10 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY term 20 from prefix-list INTERNAL-PREFIXES
+set policy-options policy-statement MNHA_ROUTE_POLICY term 20 from condition BACKUP_ROUTE_EXISTS_SRG1
+set policy-options policy-statement MNHA_ROUTE_POLICY term 20 then metric 20
+set policy-options policy-statement MNHA_ROUTE_POLICY term 20 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY term 100 from prefix-list DEFAULT-ROUTE
+set policy-options policy-statement MNHA_ROUTE_POLICY term 100 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY term default then reject
+
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 25 from prefix-list IKE-GW-RA-VPN
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 25 from condition BACKUP_ROUTE_EXISTS_SRG2
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 25 then as-path-prepend "65020 65020 65020 65020"
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 25 then next-hop 192.168.99.129
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 25 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 10 from prefix-list SNAT-POOL-COMMON-203
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 10 from prefix-list DMZ-PREFIXES
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 10 from prefix-list VPN-SNAT-POOL-ISP-1
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 10 then next-hop 192.168.99.129
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 10 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 15 from prefix-list IKE-GW-RA-VPN
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 15 from condition ACTIVE_ROUTE_EXISTS_SRG2
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 15 then next-hop 192.168.99.129
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term 15 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP term default then reject
+
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 from prefix-list IKE-GW-RA-VPN
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 from prefix-list SNAT-POOL-COMMON-203
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 from prefix-list DMZ-PREFIXES
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 from prefix-list VPN-SNAT-POOL-ISP-2
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 then as-path-prepend "65020 65020 65020 65020"
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term 10 then accept
+set policy-options policy-statement MNHA_ROUTE_POLICY_ISP_BACKUP term default then reject
+
+set policy-options policy-statement PROD-EXT term 5 from instance PROD
+set policy-options policy-statement PROD-EXT term 5 from prefix-list IKE-GW-RA-VPN
+set policy-options policy-statement PROD-EXT term 5 then accept
+set policy-options policy-statement PROD-EXT term 10 from instance PROD
+set policy-options policy-statement PROD-EXT term 10 from prefix-list SNAT-POOL-COMMON-203
+set policy-options policy-statement PROD-EXT term 10 then accept
+set policy-options policy-statement PROD-EXT term 20 from instance PROD
+set policy-options policy-statement PROD-EXT term 20 from prefix-list DMZ-PREFIXES
+set policy-options policy-statement PROD-EXT term 20 then accept
+set policy-options policy-statement PROD-EXT term 999 then reject
+
+set policy-options policy-statement PROD-S2S-VPN term 10 from instance PROD
+set policy-options policy-statement PROD-S2S-VPN term 10 from prefix-list PROD-S2S-PREFIXES
+set policy-options policy-statement PROD-S2S-VPN term 10 then accept
+set policy-options policy-statement PROD-S2S-VPN term 900 then reject
+
+set policy-options policy-statement S2S-PROD-VPN-1 term 10 from instance VPN
+set policy-options policy-statement S2S-PROD-VPN-1 term 10 from prefix-list S2S-PROD-VPN-1_ST0-200
+set policy-options policy-statement S2S-PROD-VPN-1 term 10 then accept
+
+set policy-options policy-statement SNAT-POOL-COMMON-203 term 10 from prefix-list SNAT-POOL-COMMON-203
+set policy-options policy-statement SNAT-POOL-COMMON-203 term 10 then next-hop 192.168.99.129
+set policy-options policy-statement SNAT-POOL-COMMON-203 term 10 then accept
+set policy-options policy-statement SNAT-POOL-COMMON-203 term 100 then reject
+
+set policy-options policy-statement SRX-SERVICES term LOOP-0 from instance master
+set policy-options policy-statement SRX-SERVICES term LOOP-0 from prefix-list LOOP-0
+set policy-options policy-statement SRX-SERVICES term LOOP-0 then accept
+
+set policy-options condition ACTIVE_ROUTE_EXISTS_SRG1 if-route-exists address-family inet 169.254.200.1/32
+set policy-options condition ACTIVE_ROUTE_EXISTS_SRG1 if-route-exists address-family inet table inet.0
+set policy-options condition ACTIVE_ROUTE_EXISTS_SRG2 if-route-exists address-family inet 169.254.200.3/32
+set policy-options condition ACTIVE_ROUTE_EXISTS_SRG2 if-route-exists address-family inet table inet.0
+set policy-options condition BACKUP_ROUTE_EXISTS_SRG1 if-route-exists address-family inet 169.254.200.2/32
+set policy-options condition BACKUP_ROUTE_EXISTS_SRG1 if-route-exists address-family inet table inet.0
+set policy-options condition BACKUP_ROUTE_EXISTS_SRG2 if-route-exists address-family inet 169.254.200.4/32
+set policy-options condition BACKUP_ROUTE_EXISTS_SRG2 if-route-exists address-family inet table inet.0
+
+set access radius-server 192.168.99.100 port 1812
+set access radius-server 192.168.99.100 accounting-port 1813
+set access radius-server 192.168.99.100 secret "$9$FakeRadiusServerSecret00000000000"
+set access radius-server 192.168.99.100 timeout 2
+set access radius-server 192.168.99.100 retry 3
+set access radius-server 192.168.99.100 source-address 192.168.99.9
+set access profile USER-AUTH authentication-order radius
+set access profile USER-AUTH authentication-order password
+set access address-assignment pool 192_168_2_0-24 family inet network 192.168.2.0/24
+set access address-assignment pool 192_168_2_0-24 family inet xauth-attributes primary-dns 192.168.99.100/32
+set access address-assignment pool 192_168_2_0-24 family inet xauth-attributes secondary-dns 192.0.2.53/32
+set access address-assignment pool 192_168_3_0-24 family inet network 192.168.3.0/24
+set access address-assignment pool 192_168_3_0-24 family inet xauth-attributes primary-dns 192.168.99.100/32
+set access address-assignment pool 192_168_3_0-24 family inet xauth-attributes secondary-dns 192.0.2.53/32
+set access address-assignment pool 192_168_4_0-24 family inet network 192.168.4.0/24
+set access address-assignment pool 192_168_4_0-24 family inet xauth-attributes primary-dns 192.168.99.100/32
+set access address-assignment pool 192_168_4_0-24 family inet xauth-attributes secondary-dns 192.0.2.53/32
+set access address-assignment pool 192_168_5_0-24 family inet network 192.168.5.0/24
+set access address-assignment pool 192_168_5_0-24 family inet xauth-attributes primary-dns 192.168.99.100/32
+set access address-assignment pool 192_168_5_0-24 family inet xauth-attributes secondary-dns 192.0.2.53/32
+set access firewall-authentication web-authentication default-profile USER-AUTH
+
+set routing-instances HA-ICD instance-type virtual-router
+set routing-instances HA-ICD interface ge-0/0/6.0
+set routing-instances HA-ICD interface lo0.20
+
+set routing-instances ISP-2 instance-type virtual-router
+set routing-instances ISP-2 routing-options static route 10.0.0.3/32 next-hop 192.168.98.1
+set routing-instances ISP-2 routing-options instance-import SRX-SERVICES
+set routing-instances ISP-2 routing-options instance-import PROD-EXT
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 local-address 192.168.98.9
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 hold-time 30
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 log-updown
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 export MNHA_ROUTE_POLICY_ISP_BACKUP
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 local-as 65020
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 multipath multiple-as
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 bfd-liveness-detection minimum-interval 500
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 bfd-liveness-detection minimum-receive-interval 500
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 bfd-liveness-detection multiplier 3
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 bfd-liveness-detection session-mode automatic
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 neighbor 10.0.0.3 multihop
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 neighbor 10.0.0.3 local-address 10.12.12.12
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 neighbor 10.0.0.3 peer-as 65003
+set routing-instances ISP-2 protocols bgp group ISP-2-AS65020-AS65003 neighbor 10.0.0.3 multipath multiple-as
+set routing-instances ISP-2 interface ge-0/0/2.0
+set routing-instances ISP-2 interface lo0.2
+
+set routing-instances PROD instance-type virtual-router
+set routing-instances PROD routing-options static route 203.0.113.0/24 discard
+set routing-instances PROD routing-options instance-import SRX-SERVICES
+set routing-instances PROD routing-options instance-import ISP-2-DEFAULT-ROUTE
+set routing-instances PROD routing-options instance-import S2S-PROD-VPN-1
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 local-address 192.168.251.1
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 hold-time 30
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 log-updown
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 export MNHA_ROUTE_POLICY
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 local-as 65020
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 multipath multiple-as
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 bfd-liveness-detection minimum-interval 500
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 bfd-liveness-detection minimum-receive-interval 500
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 bfd-liveness-detection multiplier 3
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 bfd-liveness-detection session-mode automatic
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 neighbor 192.168.251.2 peer-as 65200
+set routing-instances PROD protocols bgp group EXT-AS65020-AS65200 neighbor 192.168.251.2 multipath multiple-as
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 local-address 192.168.99.9
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 hold-time 30
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 log-updown
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 export MNHA_ROUTE_POLICY_ISP
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 local-as 65020
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 multipath multiple-as
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 bfd-liveness-detection minimum-interval 500
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 bfd-liveness-detection minimum-receive-interval 500
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 bfd-liveness-detection multiplier 3
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 bfd-liveness-detection session-mode automatic
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 neighbor 192.168.99.1 multihop
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 neighbor 192.168.99.1 peer-as 65002
+set routing-instances PROD protocols bgp group ISP-1-AS65020-AS65002 neighbor 192.168.99.1 multipath multiple-as
+set routing-instances PROD interface ge-0/0/0.0
+set routing-instances PROD interface ge-0/0/1.0
+set routing-instances PROD interface ge-0/0/3.0
+set routing-instances PROD interface ge-0/0/4.0
+set routing-instances PROD interface ge-0/0/5.0
+set routing-instances PROD interface lo0.10
+set routing-instances PROD interface st0.100
+
+set routing-instances VPN instance-type virtual-router
+set routing-instances VPN routing-options instance-import PROD-S2S-VPN
+set routing-instances VPN interface st0.200
+
+set routing-instances mgmt_junos routing-options static route 0.0.0.0/0 next-hop 192.168.100.1
+set routing-instances mgmt_junos routing-options static route 0.0.0.0/0 retain
+set routing-instances mgmt_junos routing-options static route 0.0.0.0/0 no-readvertise
+set routing-instances mgmt_junos description MANAGEMENT_VRF
+
+set protocols bgp multipath multiple-as
+set routing-options instance-import INET-0-BGP_NextHops
+set routing-options instance-import ISP-DEFAULT-ROUTES
+set routing-options forwarding-table export ECMP

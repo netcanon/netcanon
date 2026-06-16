@@ -165,6 +165,74 @@ def test_partial_record_drift_drills_into_field() -> None:
     assert "primary" in flat
 
 
+def test_is_secondary_address_flag_is_cosmetic_cross_vendor() -> None:
+    """An interface whose IPv4 address SET is identical but whose
+    ``is_secondary`` flags differ must compare PRESERVED.
+
+    ``is_secondary`` is a target-determined rendering artifact: IOS-XE
+    *must* mark all-but-one address on an interface ``secondary``
+    (``ip address A`` + ``ip address B secondary``), while Junos and
+    others have no primary/secondary concept.  A Junos 3-address
+    loopback → IOS-XE renders 1 primary + 2 secondary, so the same
+    addresses survive losslessly; only the flag differs.  The mesh only
+    compares cross-vendor pairs, so the flag is never the carrier of
+    real intent and must not false-flag CODEC_BUG.
+    """
+    src = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="lo0.10",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=32, is_secondary=False),
+                CanonicalIPv4Address(ip="10.0.0.2", prefix_length=32, is_secondary=False),
+                CanonicalIPv4Address(ip="10.0.0.3", prefix_length=32, is_secondary=False),
+            ],
+        )],
+    )
+    tgt = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="lo0.10",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=32, is_secondary=False),
+                CanonicalIPv4Address(ip="10.0.0.2", prefix_length=32, is_secondary=True),
+                CanonicalIPv4Address(ip="10.0.0.3", prefix_length=32, is_secondary=True),
+            ],
+        )],
+    )
+    out = compute_field_disposition(src, tgt)
+    assert out["interfaces"]["preserved"], (
+        "interfaces differing only in is_secondary must compare preserved "
+        "(the flag is a target rendering artifact, not cross-vendor intent)"
+    )
+
+
+def test_dropped_secondary_address_is_still_drift() -> None:
+    """The cosmetic-flag stripping must NOT hide a genuinely dropped
+    address: an interface that loses its 2nd/3rd IPv4 (e.g. OPNsense
+    keeping only the primary) must still compare DRIFTED.  Guards
+    against the ``is_secondary`` normalisation over-reaching into
+    address presence."""
+    src = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="lo0.10",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=32),
+                CanonicalIPv4Address(ip="10.0.0.2", prefix_length=32),
+                CanonicalIPv4Address(ip="10.0.0.3", prefix_length=32),
+            ],
+        )],
+    )
+    tgt = CanonicalIntent(
+        interfaces=[CanonicalInterface(
+            name="lo0.10",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=32),
+            ],
+        )],
+    )
+    out = compute_field_disposition(src, tgt)
+    assert out["interfaces"]["preserved"] is False
+
+
 def test_list_order_change_does_not_register_as_drift() -> None:
     """Order is cosmetic for list-fields with a natural identity key.
     Mirrors the round-trip test's _compare semantics."""
