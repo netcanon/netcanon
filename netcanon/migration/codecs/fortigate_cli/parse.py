@@ -477,6 +477,14 @@ def _apply_system_interface(
                         priority = int(priority_tokens[0])
                     except ValueError:
                         pass
+                # FortiOS permits VRRP priority 1-255; 255 is the
+                # address-owner sentinel that ``CanonicalVRRPGroup.priority``
+                # caps at 254 (``le=254`` — 255 is RFC-reserved /
+                # unrepresentable).  Clamp into [1, 254] so a legitimate
+                # ``set priority 255`` master config does NOT raise a raw
+                # pydantic ValidationError (a 500-class parse crash) —
+                # mirrors the aruba_aoss ``owner`` -> 254 mapping.
+                priority = max(1, min(priority, 254))
                 preempt_tokens = vrrp_edit.settings.get("preempt")
                 # FortiOS default for preempt is ``enable`` when the knob
                 # is absent — matches the canonical default (``True``).

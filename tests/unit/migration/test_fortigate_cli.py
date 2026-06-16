@@ -638,6 +638,30 @@ end
         assert group.preempt is True
         assert group.advertisement_interval == 1
 
+    def test_priority_255_master_clamped_not_crash(self):
+        """A legitimate FortiOS VRRP master (``set priority 255`` — the
+        address-owner sentinel; FortiOS permits 1-255) must parse without
+        raising.  ``CanonicalVRRPGroup.priority`` caps at 254 (``le=254``),
+        so the parser clamps 255 -> 254 rather than letting pydantic raise
+        a 500-class ValidationError."""
+        raw = """\
+config system interface
+    edit "vlan20"
+        set ip 10.0.20.1 255.255.255.0
+        config vrrp
+            edit 5
+                set vrip 10.0.20.254
+                set priority 255
+                set preempt enable
+            next
+        end
+    next
+end
+"""
+        tree = FortiGateCLICodec().parse(raw)  # must NOT raise
+        iface = next(i for i in tree.interfaces if i.name == "vlan20")
+        assert iface.vrrp_groups[0].priority == 254
+
     def test_preempt_disable_maps_to_false(self):
         raw = """\
 config system interface
