@@ -58,6 +58,7 @@ from ...canonical.intent import (
 )
 from .._helpers import _mask_to_prefix
 from .._input_shape import detect_input_shape
+from .._scanner import scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -260,55 +261,38 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
     cisco_iosxe_cli, fortigate_cli (interface field carries the
     operator-chosen pool identifier on Cisco-derived grammars).
     """
-    pools: list[CanonicalDHCPPool] = []
-    current: CanonicalDHCPPool | None = None
-
-    for line in raw.splitlines():
-        header = _DHCP_POOL_HEADER_RE.match(line)
-        if header:
-            if current is not None:
-                pools.append(current)
-            current = CanonicalDHCPPool(interface=header.group(1))
-            continue
-        if current is None:
-            continue
-        # End-of-stanza: ``!`` marker or a non-indented top-level line.
-        if line.startswith("!") or (line and not line[0].isspace()):
-            pools.append(current)
-            current = None
-            continue
-
+    def _on_line(line: str, current: CanonicalDHCPPool) -> None:
         nm = _DHCP_NETWORK_DOTTED_RE.match(line)
         if nm:
             ip_str, mask = nm.group(1), nm.group(2)
             try:
                 prefix = _mask_to_prefix(mask, vendor="arista_eos")
             except ParseError:
-                continue
+                return
             current.network = f"{ip_str}/{prefix}"
-            continue
+            return
         nm = _DHCP_NETWORK_CIDR_RE.match(line)
         if nm:
             current.network = f"{nm.group(1)}/{nm.group(2)}"
-            continue
+            return
         rm = _DHCP_RANGE_RE.match(line)
         if rm:
             current.start_ip = rm.group(1)
             current.end_ip = rm.group(2)
-            continue
+            return
         gm = _DHCP_DEFAULT_ROUTER_RE.match(line)
         if gm:
             current.gateway = gm.group(1)
-            continue
+            return
         dm = _DHCP_DNS_SERVER_RE.match(line)
         if dm:
             servers = dm.group(1).split()
             current.dns_servers.extend(servers)
-            continue
+            return
         dnm = _DHCP_DOMAIN_NAME_RE.match(line)
         if dnm:
             current.domain_name = dnm.group(1)
-            continue
+            return
         lm = _DHCP_LEASE_RE.match(line)
         if lm:
             lease_val = lm.group(1).lower()
@@ -325,9 +309,20 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
                 except ValueError:
                     pass
 
-    if current is not None:
-        pools.append(current)
-    return pools
+    # Loop skeleton (open on `ip dhcp pool`, close on `!`/dedent, flush at
+    # EOF) is the shared codecs/_scanner helper; the vendor regex cascade
+    # above stays here.  The scratch IS the canonical record, so `build`
+    # is the identity.  The terminator replicates the former hand-rolled
+    # rule verbatim (a column-0 `!` or any non-indented line closes the
+    # stanza).  Behaviour-identical to the previous loop.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_DHCP_POOL_HEADER_RE.match,
+        open_scratch=lambda m: CanonicalDHCPPool(interface=m.group(1)),
+        on_line=_on_line,
+        build=lambda pool: pool,
+        is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
+    )
 
 
 # ---------------------------------------------------------------------------
