@@ -61,6 +61,15 @@ dependencies = [
     "python-multipart>=0.0.9",
     "aiofiles>=23.0.0",
     "apscheduler>=3.10.4",
+    # Hard runtime dep of apscheduler (imported at scheduler startup).
+    # Declared explicitly — and pinned away from the yanked 5.4.2 — so a
+    # bad upstream tzlocal release can't silently break app boot through
+    # the transitive path.  5.4.2 was yanked upstream ("didn't work": a
+    # ~4.8 KB stub wheel that installs but imports as ModuleNotFoundError)
+    # and, being the highest version, briefly broke CI before the yank
+    # propagated.  TODO(post-release app-wide dependency review): re-check
+    # for a newer valid tzlocal and relax/raise this constraint.
+    "tzlocal>=5.0,!=5.4.2",
     "cryptography>=41.0.0",
     "keyring>=24.0.0",
     # XML parsing of operator-uploaded configs (OPNsense config.xml +
