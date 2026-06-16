@@ -1429,7 +1429,11 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
                         days * 86400 + hours * 3600 + minutes * 60
                     )
                 except ValueError:
-                    pass  # Unparseable; leave default
+                    logger.debug(
+                        "cisco_iosxe_cli: unparseable DHCP lease-time %r; "
+                        "leaving canonical default",
+                        lease_val,
+                    )
 
     if current is not None:
         pools.append(current)
