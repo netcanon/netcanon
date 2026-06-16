@@ -319,7 +319,7 @@ timestamp if your timezone matters for an audit.
   fixture or test exercises it, so the audit is unaffected.  fortigate
   keeps its own `_prefix_to_mask` (distinct message, no range pre-check).
 
-* **Dead-code & silent-swallow hygiene.**  Removed an empty
+* **Dead-code & dead-test removal.**  Removed an empty
   `if TYPE_CHECKING: pass` block (and its now-unused import) from
   `netcanon/api/deps.py` — every annotation there uses a runtime import.
   Deleted two permanently-`@pytest.mark.skip`-marked e2e tests in
@@ -327,12 +327,7 @@ timestamp if your timezone matters for an audit.
   (`test_loopback_appears_as_warning_row`,
   `test_keep_verbatim_re_includes_auto_dropped_row`) whose premise died
   when Aruba gained loopback support (commit 5f4855a) — both skip reasons
-  already noted the surfaces are covered by sibling tests.  Added a
-  `logger.debug` to the two DHCP lease-time `except ValueError` handlers
-  (arista_eos / cisco_iosxe_cli parse) that previously swallowed an
-  unparseable value silently — debug-level, so no production log noise,
-  and parse output is unchanged (cross-mesh CODEC_BUG flat at 5, the
-  committed audit artifacts are byte-identical).
+  already noted the surfaces are covered by sibling tests.
 
 ## [0.1.8] - 2026-06-15
 
