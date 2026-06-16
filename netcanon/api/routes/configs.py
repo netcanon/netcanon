@@ -84,9 +84,11 @@ def get_config(
         content = storage.get_content(filename)
         logger.debug("Served config %r (%d bytes)", filename, len(content))
         return content
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         logger.warning("Config not found: %r", filename)
-        raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
+        raise HTTPException(
+            status_code=404, detail=f"Config not found: {filename!r}"
+        ) from exc
 
 
 @router.delete(
@@ -109,9 +111,11 @@ def delete_config(
     try:
         storage.delete(filename)
         logger.info("Deleted config %r", filename)
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         logger.warning("Delete requested for missing config: %r", filename)
-        raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
+        raise HTTPException(
+            status_code=404, detail=f"Config not found: {filename!r}"
+        ) from exc
 
 
 @router.post(
@@ -167,9 +171,11 @@ def open_config(
 
     try:
         path = storage.resolve_path(filename)
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         logger.warning("Open requested for missing config: %r", filename)
-        raise HTTPException(status_code=404, detail=f"Config not found: {filename!r}")
+        raise HTTPException(
+            status_code=404, detail=f"Config not found: {filename!r}"
+        ) from exc
 
     try:
         if sys.platform == "win32":
@@ -182,7 +188,7 @@ def open_config(
             import subprocess
             subprocess.run(["xdg-open", str(path)], check=True)
         logger.info("Opened config %r in default editor", filename)
-    except NotImplementedError:
+    except NotImplementedError as exc:
         # os.startfile is Windows-only; the linux/darwin branches above use
         # subprocess so this typically fires only on exotic platforms.
         raise HTTPException(
@@ -192,7 +198,7 @@ def open_config(
                 f"platform ({sys.platform!r}).  Use the download link to "
                 f"fetch the file instead."
             ),
-        )
+        ) from exc
     except Exception as exc:
         # Full exception detail is logged server-side (exc_info=True).
         # Don't echo raw OS exception text to the HTTP client — operator
@@ -204,7 +210,7 @@ def open_config(
                 f"The OS refused to open {filename!r} in the default "
                 f"editor.  Check the server log for the underlying error."
             ),
-        )
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ def _intent_with_v3(*names: str) -> CanonicalIntent:
     only rename is visibly distinct from attribute mutation."""
     intent = CanonicalIntent()
     intent.snmp = CanonicalSNMP()
-    for i, name in enumerate(names):
+    for _i, name in enumerate(names):
         intent.snmp.v3_users.append(CanonicalSNMPv3User(
             name=name,
             group=f"grp-{name}",

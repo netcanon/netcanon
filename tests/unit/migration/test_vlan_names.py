@@ -141,7 +141,7 @@ class TestDropSemantics:
                 voice_vlan=200,
             ),
         ]
-        result = translate_vlan_ids(intent, rename_map={200: None})
+        translate_vlan_ids(intent, rename_map={200: None})
         iface = intent.interfaces[0]
         assert iface.voice_vlan is None
         assert iface.access_vlan == 50  # untouched

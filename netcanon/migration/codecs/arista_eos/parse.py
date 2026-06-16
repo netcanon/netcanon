@@ -641,7 +641,6 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     }
 
     current_iface: CanonicalInterface | None = None
-    current_iface_is_l3 = False   # set via ``no switchport``
     current_vlan: CanonicalVlan | None = None
 
     lines = raw.splitlines()
@@ -651,7 +650,6 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         if not stripped or stripped.startswith("!"):
             # End-of-stanza delimiter.  Close whichever is open.
             current_iface = None
-            current_iface_is_l3 = False
             current_vlan = None
             continue
 
@@ -678,7 +676,6 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                     sentinel = CanonicalInterface(name=name, enabled=True)
                     sentinel.interface_type = _infer_iface_type(name)
                     current_iface = sentinel
-                    current_iface_is_l3 = False
                     current_vlan = None
                     continue
                 iface = iface_by_name.get(name)
@@ -690,7 +687,6 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                     iface_by_name[name] = iface
                     intent.interfaces.append(iface)
                 current_iface = iface
-                current_iface_is_l3 = False
                 current_vlan = None
                 continue
             if vlan_m:
@@ -714,13 +710,8 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                 current_iface, stripped, lag_members, intent,
                 vxlan_state,
             )
-            # Track L3 flip so subsequent ``ip address`` lines are
-            # understood as routed rather than SVI-like.
-            if stripped == "no switchport":
-                current_iface_is_l3 = True
-        elif current_vlan is not None:
-            if stripped.startswith("name "):
-                current_vlan.name = stripped.split(None, 1)[1].strip()
+        elif current_vlan is not None and stripped.startswith("name "):
+            current_vlan.name = stripped.split(None, 1)[1].strip()
 
     # GAP-EVPN-2 post-pass: stamp every CanonicalVxlan record we
     # produced with the switch-level source-interface + udp-port we
@@ -745,7 +736,7 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     for chan_id, members in lag_members.items():
         lag_name = f"Port-Channel{chan_id}"
         existing = next(
-            (l for l in intent.lags if l.name == lag_name), None,
+            (lag for lag in intent.lags if lag.name == lag_name), None,
         )
         if existing is None:
             intent.lags.append(CanonicalLAG(
@@ -1180,7 +1171,7 @@ def _apply_iface_subcommand(
     # ``docs/v0.2.0-planning/01-vrrp-canonical/03-parse-render-
     # touchpoints.md`` § "2. arista_eos" for the field-by-field
     # mapping.
-    if line.startswith("vrrp ") or line.startswith("no vrrp "):
+    if line.startswith(("vrrp ", "no vrrp ")):
         # ``vrrp <gid> ipv4 <ip>`` (modern) or ``vrrp <gid> ip <ip>`` (legacy).
         m = re.match(
             r"^vrrp\s+(\d+)\s+(?:ipv4|ip)\s+(\S+)\s*$", line,

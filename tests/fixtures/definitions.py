@@ -31,91 +31,91 @@ def make_cisco_definition(**overrides) -> DeviceDefinition:
 
         defn = make_cisco_definition(priority=99)
     """
-    kwargs: dict = dict(
-        vendor="Cisco",
-        os="IOS-XE",
-        type_key="Cisco",
-        priority=10,
-        file_extension="cfg",
-        connection=ConnectionConfig(needs_enable=True, cisco_more_paging=True),
-        commands=CommandConfig(
+    kwargs: dict = {
+        "vendor": "Cisco",
+        "os": "IOS-XE",
+        "type_key": "Cisco",
+        "priority": 10,
+        "file_extension": "cfg",
+        "connection": ConnectionConfig(needs_enable=True, cisco_more_paging=True),
+        "commands": CommandConfig(
             pre=[],
             config="show running-config",
             post=[],
         ),
-        prompts=PromptConfig(trailing=[r"^\S+[#>]\s*$"]),
-        collector=CollectorConfig(
+        "prompts": PromptConfig(trailing=[r"^\S+[#>]\s*$"]),
+        "collector": CollectorConfig(
             strategy="netmiko",
             netmiko_device_type="cisco_xe",
         ),
-        notes="Cisco IOS-XE test definition.",
-    )
+        "notes": "Cisco IOS-XE test definition.",
+    }
     kwargs.update(overrides)
     return DeviceDefinition(**kwargs)
 
 
 def make_fortigate_definition(**overrides) -> DeviceDefinition:
     """Return a minimal valid Fortigate FortiOS ``DeviceDefinition``."""
-    kwargs: dict = dict(
-        vendor="Fortigate",
-        os="FortiOS",
-        type_key="Fortigate",
-        priority=10,
-        file_extension="cfg",
-        connection=ConnectionConfig(),
-        commands=CommandConfig(
+    kwargs: dict = {
+        "vendor": "Fortigate",
+        "os": "FortiOS",
+        "type_key": "Fortigate",
+        "priority": 10,
+        "file_extension": "cfg",
+        "connection": ConnectionConfig(),
+        "commands": CommandConfig(
             pre=["config system console", "set output standard", "end"],
             config="show full-configuration",
             post=["config system console", "set output more", "end"],
         ),
-        prompts=PromptConfig(trailing=[r"^\S+\s+[#]\s*$"]),
-        collector=CollectorConfig(
+        "prompts": PromptConfig(trailing=[r"^\S+\s+[#]\s*$"]),
+        "collector": CollectorConfig(
             strategy="netmiko",
             netmiko_device_type="fortinet",
         ),
-        notes="Fortigate FortiOS test definition.",
-    )
+        "notes": "Fortigate FortiOS test definition.",
+    }
     kwargs.update(overrides)
     return DeviceDefinition(**kwargs)
 
 
 def make_opnsense_definition(**overrides) -> DeviceDefinition:
     """Return a minimal valid OPNsense ``DeviceDefinition``."""
-    kwargs: dict = dict(
-        vendor="OPNsense",
-        os="OPNsense",
-        type_key="OPNsense",
-        priority=10,
-        file_extension="xml",
-        connection=ConnectionConfig(opnsense_shell_menu=True),
-        commands=CommandConfig(
+    kwargs: dict = {
+        "vendor": "OPNsense",
+        "os": "OPNsense",
+        "type_key": "OPNsense",
+        "priority": 10,
+        "file_extension": "xml",
+        "connection": ConnectionConfig(opnsense_shell_menu=True),
+        "commands": CommandConfig(
             config="cat /conf/config.xml",
             post=["exit"],
         ),
-        prompts=PromptConfig(trailing=[r"^root@\S+:.*[#$]\s*$"]),
-        collector=CollectorConfig(strategy="paramiko_shell"),
-        notes="OPNsense test definition.",
-    )
+        "prompts": PromptConfig(trailing=[r"^root@\S+:.*[#$]\s*$"]),
+        "collector": CollectorConfig(strategy="paramiko_shell"),
+        "notes": "OPNsense test definition.",
+    }
     kwargs.update(overrides)
     return DeviceDefinition(**kwargs)
 
 
 def make_mikrotik_definition(**overrides) -> DeviceDefinition:
     """Return a minimal valid MikroTik RouterOS ``DeviceDefinition``."""
-    kwargs: dict = dict(
-        vendor="MikroTik",
-        os="RouterOS",
-        type_key="MikroTik",
-        priority=10,
-        file_extension="rsc",
-        connection=ConnectionConfig(),
-        commands=CommandConfig(config="/export verbose"),
-        prompts=PromptConfig(trailing=[r"^\[.+\]\s*>\s*$"]),
-        collector=CollectorConfig(
+    kwargs: dict = {
+        "vendor": "MikroTik",
+        "os": "RouterOS",
+        "type_key": "MikroTik",
+        "priority": 10,
+        "file_extension": "rsc",
+        "connection": ConnectionConfig(),
+        "commands": CommandConfig(config="/export verbose"),
+        "prompts": PromptConfig(trailing=[r"^\[.+\]\s*>\s*$"]),
+        "collector": CollectorConfig(
             strategy="netmiko",
             netmiko_device_type="mikrotik_routeros",
         ),
-        notes="MikroTik RouterOS test definition.",
-    )
+        "notes": "MikroTik RouterOS test definition.",
+    }
     kwargs.update(overrides)
     return DeviceDefinition(**kwargs)

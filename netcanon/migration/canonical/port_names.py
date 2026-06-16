@@ -529,7 +529,7 @@ def _strip_dropped_ports(
         vlan.untagged_ports = [
             p for p in vlan.untagged_ports if p not in dropped
         ]
-    intent.lags = [l for l in intent.lags if l.name not in dropped]
+    intent.lags = [lag for lag in intent.lags if lag.name not in dropped]
     for lag in intent.lags:
         lag.members = [m for m in lag.members if m not in dropped]
     intent.static_routes = [

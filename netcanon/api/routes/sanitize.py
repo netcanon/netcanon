@@ -67,7 +67,7 @@ async def post_sanitize(
         raise HTTPException(
             status_code=400,
             detail=f"Failed to parse upload as {source_vendor!r}: {e}",
-        )
+        ) from e
 
     if dry_run:
         return JSONResponse({

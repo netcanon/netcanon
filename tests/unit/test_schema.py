@@ -130,17 +130,17 @@ class TestPromptConfig:
 
 def _valid_definition_kwargs() -> dict:
     """Return keyword arguments for a valid Cisco DeviceDefinition."""
-    return dict(
-        vendor="Cisco",
-        os="IOS-XE",
-        type_key="Cisco",
-        connection=ConnectionConfig(needs_enable=True),
-        commands=CommandConfig(config="show running-config"),
-        collector=CollectorConfig(
+    return {
+        "vendor": "Cisco",
+        "os": "IOS-XE",
+        "type_key": "Cisco",
+        "connection": ConnectionConfig(needs_enable=True),
+        "commands": CommandConfig(config="show running-config"),
+        "collector": CollectorConfig(
             strategy="netmiko",
             netmiko_device_type="cisco_xe",
         ),
-    )
+    }
 
 
 class TestDeviceDefinition:

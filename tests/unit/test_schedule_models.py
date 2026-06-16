@@ -25,12 +25,12 @@ pytestmark = pytest.mark.unit
 
 class TestScheduleDevice:
     def _make(self, **kwargs) -> ScheduleDevice:
-        defaults = dict(
-            type_key="Cisco",
-            host="192.168.1.1",
-            username="admin",
-            password="secret",
-        )
+        defaults = {
+            "type_key": "Cisco",
+            "host": "192.168.1.1",
+            "username": "admin",
+            "password": "secret",
+        }
         defaults.update(kwargs)
         return ScheduleDevice(**defaults)
 
@@ -165,11 +165,11 @@ class TestBackupSchedule:
         )
 
     def _make(self, **kwargs) -> BackupSchedule:
-        defaults = dict(
-            name="Weekly Backup",
-            interval_minutes=10080,
-            devices=[self._make_device()],
-        )
+        defaults = {
+            "name": "Weekly Backup",
+            "interval_minutes": 10080,
+            "devices": [self._make_device()],
+        }
         defaults.update(kwargs)
         return BackupSchedule(**defaults)
 
@@ -220,12 +220,12 @@ class TestBackupSchedule:
 
 class TestBackupJobScheduleFields:
     def _make_job(self, **kwargs) -> BackupJob:
-        defaults = dict(
-            id="test-uuid-abcd",
-            status=JobStatus.pending,
-            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
-            total_devices=1,
-        )
+        defaults = {
+            "id": "test-uuid-abcd",
+            "status": JobStatus.pending,
+            "created_at": datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
+            "total_devices": 1,
+        }
         defaults.update(kwargs)
         return BackupJob(**defaults)
 

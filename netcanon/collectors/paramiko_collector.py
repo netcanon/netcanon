@@ -195,14 +195,15 @@ class ParamikoShellCollector(BaseCollector):
             initial = self._drain(shell)
 
             # OPNsense console menu — send "8" to enter shell
-            if definition.connection.opnsense_shell_menu:
-                if "8) Shell" in initial or "Enter an option:" in initial:
-                    logger.debug(
-                        "OPNsense menu detected on %s — sending '8'", device.host
-                    )
-                    shell.send("8\n")
-                    time.sleep(3)
-                    self._drain(shell)
+            if definition.connection.opnsense_shell_menu and (
+                "8) Shell" in initial or "Enter an option:" in initial
+            ):
+                logger.debug(
+                    "OPNsense menu detected on %s — sending '8'", device.host
+                )
+                shell.send("8\n")
+                time.sleep(3)
+                self._drain(shell)
 
             for cmd in definition.commands.pre:
                 logger.debug("Pre-command: %s", cmd)
@@ -296,16 +297,17 @@ class ParamikoShellCollector(BaseCollector):
             time.sleep(2)
             initial = self._drain(shell)
 
-            if definition.connection.opnsense_shell_menu:
-                if "8) Shell" in initial or "Enter an option:" in initial:
-                    logger.debug(
-                        "OPNsense menu detected on %s during probe — "
-                        "sending '8'",
-                        device.host,
-                    )
-                    shell.send("8\n")
-                    time.sleep(3)
-                    self._drain(shell)
+            if definition.connection.opnsense_shell_menu and (
+                "8) Shell" in initial or "Enter an option:" in initial
+            ):
+                logger.debug(
+                    "OPNsense menu detected on %s during probe — "
+                    "sending '8'",
+                    device.host,
+                )
+                shell.send("8\n")
+                time.sleep(3)
+                self._drain(shell)
 
             time.sleep(1)
             self._drain(shell)

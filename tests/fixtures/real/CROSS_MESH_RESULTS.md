@@ -9778,7 +9778,7 @@ One section per non-OK synthetic cell (133 total).  Sections are ordered by sour
 Traceback (most recent call last):
   File "tools\run_full_mesh.py", line 666, in process_cell
     rendered = target_codec.render(canonical_source)
-  File "netcanon\migration\codecs\cisco_iosxe_cli\codec.py", line 343, in render
+  File "netcanon\migration\codecs\cisco_iosxe_cli\codec.py", line 349, in render
     return render_intent(tree)
   File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 546, in render_intent
     dest, mask = _cidr_to_dest_mask(route.destination)
@@ -9821,9 +9821,9 @@ netcanon.migration.codecs.base.RenderError: cisco_iosxe_cli: prefix length 48 ou
 Traceback (most recent call last):
   File "tools\run_full_mesh.py", line 666, in process_cell
     rendered = target_codec.render(canonical_source)
-  File "netcanon\migration\codecs\fortigate_cli\codec.py", line 335, in render
+  File "netcanon\migration\codecs\fortigate_cli\codec.py", line 346, in render
     return render_intent(tree)
-  File "netcanon\migration\codecs\fortigate_cli\render.py", line 949, in render_intent
+  File "netcanon\migration\codecs\fortigate_cli\render.py", line 950, in render_intent
     dst_mask = _prefix_to_mask(dst_prefix)
   File "netcanon\migration\codecs\fortigate_cli\parse.py", line 88, in _prefix_to_mask
     raise RenderError(

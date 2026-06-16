@@ -812,12 +812,12 @@ def _parse_ip_address(
         ip_str, prefix_str = addr.split("/", 1)
         try:
             prefix_len = int(prefix_str)
-        except ValueError:
+        except ValueError as e:
             raise ParseError(
                 f"mikrotik_routeros: invalid CIDR prefix {prefix_str!r}",
                 path=f"/ip address/{iface_name}",
                 snippet=line[:120],
-            )
+            ) from e
         # Route VIP rows to the VRRP scratch — don't materialise a
         # phantom CanonicalInterface for ``vrrpN`` pseudo-names.
         if vrrp_scratch is not None and iface_name in vrrp_scratch:
@@ -1223,9 +1223,7 @@ def _looks_like_vlan_iface(name: str) -> bool:
         return True
     # Subinterface unit form: anything with a dot followed by digits.
     # Junos `ge-0/0/0.10`, IOS `GigabitEthernet0/0/0.100`, etc.
-    if re.search(r"\.\d+$", name):
-        return True
-    return False
+    return bool(re.search(r"\.\d+$", name))
 
 
 def _looks_like_bridge_iface(name: str) -> bool:

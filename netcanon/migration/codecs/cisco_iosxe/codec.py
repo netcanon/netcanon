@@ -85,7 +85,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 from xml.etree import ElementTree as ET
 
 from defusedxml.common import DefusedXmlException
@@ -110,6 +110,9 @@ from ....models.migration import (
 )
 from ..base import CodecBase, ParseError, RenderError
 from ..registry import register
+
+if TYPE_CHECKING:
+    from ...canonical.intent import CanonicalIntent, CanonicalInterface
 
 logger = logging.getLogger(__name__)
 
@@ -244,12 +247,30 @@ class CiscoIOSXECodec(CodecBase):
             #    adversarial review #9): the stub already carries the
             #    underscore field-markers below for run_full_mesh, but the
             #    live classifier needs the exact granular walker strings. ──
-            UnsupportedPath(path="/system/domain", reason="Phase 0.5 stub render emits only interfaces; intent.domain dropped on render."),
-            UnsupportedPath(path="/system/timezone", reason="Phase 0.5 stub render emits only interfaces; intent.timezone dropped on render."),
-            UnsupportedPath(path="/system/syslog-server", reason="Phase 0.5 stub render emits only interfaces; intent.syslog_servers dropped on render."),
-            UnsupportedPath(path="/dhcp-servers/pool", reason="Phase 0.5 stub render emits only interfaces; intent.dhcp_servers dropped on render."),
-            UnsupportedPath(path="/radius-servers/server/host", reason="Phase 0.5 stub render emits only interfaces; RADIUS host dropped on render."),
-            UnsupportedPath(path="/radius-servers/server/key", reason="Phase 0.5 stub render emits only interfaces; RADIUS shared secret dropped on render."),
+            UnsupportedPath(
+                path="/system/domain",
+                reason="Phase 0.5 stub render emits only interfaces; intent.domain dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/system/timezone",
+                reason="Phase 0.5 stub render emits only interfaces; intent.timezone dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/system/syslog-server",
+                reason="Phase 0.5 stub render emits only interfaces; intent.syslog_servers dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/dhcp-servers/pool",
+                reason="Phase 0.5 stub render emits only interfaces; intent.dhcp_servers dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/radius-servers/server/host",
+                reason="Phase 0.5 stub render emits only interfaces; RADIUS host dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/radius-servers/server/key",
+                reason="Phase 0.5 stub render emits only interfaces; RADIUS shared secret dropped on render.",
+            ),
             # ── Granular xpaths (match _walk_canonical's emitted shapes
             # so validate_against classifies render-time leaves as
             # unsupported when source-side data is present). ──
@@ -802,7 +823,7 @@ def _find_interfaces(root: ET.Element) -> ET.Element | None:
     if _strip_ns(root.tag) == "interfaces":
         return root
     # Dig through common NETCONF envelopes.
-    for path in ("./data/interfaces", "./{*}data/{*}interfaces"):
+    for _path in ("./data/interfaces", "./{*}data/{*}interfaces"):
         # ElementTree's wildcard `{*}` requires Python 3.8+ for findall,
         # but stability matters — fall back to hand-walk.
         pass
@@ -900,12 +921,12 @@ def _parse_config(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
         elif tag == "mtu":
             try:
                 out["mtu"] = int((child.text or "0").strip())
-            except ValueError:
+            except ValueError as e:
                 raise ParseError(
                     f"cisco_iosxe: non-integer mtu {child.text!r}",
                     path=f"/interfaces/interface[{iface_idx}]/config/mtu",
                     snippet=(child.text or "")[:120],
-                )
+                ) from e
     return out
 
 
@@ -966,13 +987,13 @@ def _parse_ipv4(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
                         )
                         try:
                             pl = int(pl_text)
-                        except ValueError:
+                        except ValueError as e:
                             raise ParseError(
                                 f"cisco_iosxe: non-integer prefix-length "
                                 f"{c.text!r}",
                                 path=pl_path,
                                 snippet=pl_text[:120],
-                            )
+                            ) from e
                         # IPv4 prefix length is a YANG inet:ipv4-prefix,
                         # formally 0..32.  Silently accepting 99 or -1
                         # lets a bogus input reach render time where
@@ -1030,13 +1051,13 @@ def _parse_ipv6(el: ET.Element, iface_idx: int = 0) -> dict[str, Any]:
                         )
                         try:
                             pl = int(pl_text)
-                        except ValueError:
+                        except ValueError as e:
                             raise ParseError(
                                 f"cisco_iosxe: non-integer ipv6 "
                                 f"prefix-length {c.text!r}",
                                 path=pl_path,
                                 snippet=pl_text[:120],
-                            )
+                            ) from e
                         if not 0 <= pl <= 128:
                             raise ParseError(
                                 f"cisco_iosxe: prefix-length {pl} out of "
@@ -1198,7 +1219,7 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> CanonicalInterface:
 #: the name suffix.  Mirrors the cisco_iosxe_cli sibling parser's
 #: ``_SVI_NAME_RE``; kept independently here to avoid a cross-codec
 #: import.
-import re as _re
+import re as _re  # noqa: E402
 
 _SVI_NAME_RE = _re.compile(r"^Vlan(\d+)$", _re.IGNORECASE)
 

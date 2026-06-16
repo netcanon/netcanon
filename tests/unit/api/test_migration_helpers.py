@@ -63,8 +63,8 @@ class _DictStore(BaseConfigStore):
     def get_content(self, filename: str) -> str:
         try:
             return self._files[filename]
-        except KeyError:
-            raise FileNotFoundError(filename)
+        except KeyError as e:
+            raise FileNotFoundError(filename) from e
 
     def delete(self, filename: str) -> None:  # pragma: no cover - unused
         raise NotImplementedError

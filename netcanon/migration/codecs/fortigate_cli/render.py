@@ -874,9 +874,10 @@ def render_intent(tree: Any) -> str:
                     algorithm, _payload = classify_hash(
                         user.hashed_password,
                     )
-                    out.append(
-                        f"        {format_review_comment(user.name, algorithm, comment_syntax='hash', target_label='FortiOS')}"
+                    review_comment = format_review_comment(
+                        user.name, algorithm, comment_syntax="hash", target_label="FortiOS"
                     )
+                    out.append(f"        {review_comment}")
             # Map canonical privilege back to accprofile.
             accprofile = (
                 "super_admin" if user.privilege_level == 15

@@ -548,12 +548,12 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
                 ip=ipaddr_el.text.strip(),
                 prefix_length=int(subnet_el.text.strip()),
             ))
-        except ValueError:
+        except ValueError as e:
             raise ParseError(
                 f"opnsense: non-integer <subnet> {subnet_el.text!r}",
                 path=f"/interfaces/{el.tag}/subnet",
                 snippet=(subnet_el.text or "")[:120],
-            )
+            ) from e
     # GAP-EVPN-3: ``<ipaddrv6>X</ipaddrv6>`` + ``<subnetv6>N</subnetv6>``.
     # OPNsense uses the same shape as IPv4 but with the v6 suffix.
     # Non-static keywords (``dhcp6``, ``track6``, ``slaac``, ``6rd``,
@@ -593,12 +593,12 @@ def _parse_interface_zone_canonical(el: ET.Element) -> CanonicalInterface | None
                 prefix_length=int(subnetv6_el.text.strip()),
                 scope=scope,
             ))
-        except ValueError:
+        except ValueError as e:
             raise ParseError(
                 f"opnsense: non-integer <subnetv6> {subnetv6_el.text!r}",
                 path=f"/interfaces/{el.tag}/subnetv6",
                 snippet=(subnetv6_el.text or "")[:120],
-            )
+            ) from e
     return iface
 
 
@@ -629,12 +629,12 @@ def _parse_interface_zone(el: ET.Element) -> dict[str, Any] | None:
                 continue
             try:
                 iface["subnet"] = int(text)
-            except ValueError:
+            except ValueError as e:
                 raise ParseError(
                     f"opnsense: non-integer <subnet> {text!r}",
                     path=f"/interfaces/{el.tag}/subnet",
                     snippet=text[:120],
-                )
+                ) from e
             found_any = True
         elif py_key == "enable":
             # OPNsense uses an empty <enable/> element as a flag (no

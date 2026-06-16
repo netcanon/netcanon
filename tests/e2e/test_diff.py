@@ -73,7 +73,7 @@ class TestDiffPageUI:
         ensure_n_configs_of_type(page, "Cisco", 1)
         ensure_n_configs_of_type(page, "OPNsense", 1)
         records = page.request.get("/api/v1/configs/").json()
-        cisco = [r for r in records if r["device_type"] == "Cisco"][0]
+        cisco = next(r for r in records if r["device_type"] == "Cisco")
         page.goto("/configs")
         ConfigsPage(page).open_compare_for(cisco["filename"])
         picker = ComparePicker(page)
@@ -107,8 +107,8 @@ class TestDiffPageContent:
         ensure_n_configs_of_type(page, "Cisco", 1)
         ensure_n_configs_of_type(page, "OPNsense", 1)
         records = page.request.get("/api/v1/configs/").json()
-        cisco = [r for r in records if r["device_type"] == "Cisco"][0]
-        opn = [r for r in records if r["device_type"] == "OPNsense"][0]
+        cisco = next(r for r in records if r["device_type"] == "Cisco")
+        opn = next(r for r in records if r["device_type"] == "OPNsense")
         page.goto(f"/configs/{cisco['filename']}/vs/{opn['filename']}")
         diff = DiffPage(page)
         assert diff.banner_severity() == "block"
@@ -118,8 +118,8 @@ class TestDiffPageContent:
         ensure_n_configs_of_type(page, "Cisco", 1)
         ensure_n_configs_of_type(page, "OPNsense", 1)
         records = page.request.get("/api/v1/configs/").json()
-        cisco = [r for r in records if r["device_type"] == "Cisco"][0]
-        opn = [r for r in records if r["device_type"] == "OPNsense"][0]
+        cisco = next(r for r in records if r["device_type"] == "Cisco")
+        opn = next(r for r in records if r["device_type"] == "OPNsense")
         page.goto(
             f"/configs/{cisco['filename']}/vs/{opn['filename']}?force=true"
         )

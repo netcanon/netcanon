@@ -106,7 +106,7 @@ def compute_diff(
         compat = CompatibilityReport(
             compatible=False,
             severity="block",
-            reasons=compat.reasons + ["force=true override applied by caller"],
+            reasons=[*compat.reasons, "force=true override applied by caller"],
         )
 
     left_lines = left_text.splitlines()
