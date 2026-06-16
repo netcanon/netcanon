@@ -26,6 +26,61 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-16
+
+Internal maintenance + refactor release.  **No change to migration
+output** — the codec work below is behaviour-preserving: the cross-mesh
+fidelity audit is unchanged (CODEC_BUG flat at 5; every
+`CROSS_MESH_RESULTS.md` / `PHASE4_RECONCILIATION.md` cell byte-identical
+across all 1224 source→target pairs), and each refactor PR was gated on
+that invariant plus a green unit + integration suite.  The one
+user-facing change is the `tzlocal` dependency fix.
+
+### Fixed
+
+* **`tzlocal` dependency — a fresh install could fail at startup** (#97).
+  `apscheduler` (the backup scheduler) imports `tzlocal` at startup, but
+  `tzlocal` was only an *undeclared transitive* dependency.  When the
+  broken `tzlocal 5.4.2` was published upstream — a ~4.8 KB stub wheel
+  that installs but imports as `ModuleNotFoundError: No module named
+  'tzlocal'` — a fresh `pip install` selected it as the highest version
+  (PEP 440: `5.4.2 > 5.4`) and the app failed to boot.  `tzlocal` is now a
+  **direct dependency pinned `>=5.0,!=5.4.2`**, so the build no longer
+  depends on the upstream yank that has since neutralised 5.4.2.  Existing
+  environments with a working `tzlocal` were unaffected.  An inline
+  `pyproject.toml` TODO flags re-checking for a newer valid `tzlocal`
+  during a future app-wide dependency review.
+
+### Changed
+
+* **Codec parsing internals — shared stanza-scan utility** (#89, #90, #91,
+  #92, #93, #94, #95, #96, #98, #99).  Five CLI codecs (`cisco_iosxr`,
+  `cisco_nxos`, `cisco_iosxe_cli`, `arista_eos`, `aruba_aoscx`) previously
+  hand-rolled the same control-flow skeleton in every stanza parser —
+  *open on a header line, accumulate indented sub-lines, close on a `!` or
+  a dedent, flush at end-of-input*.  That skeleton is now a single
+  composable function, `codecs/_scanner.scan_stanzas`, and the per-codec
+  parsers delegate to it while keeping their vendor-specific regex
+  cascades verbatim (the scanner carries zero canonical-model knowledge,
+  so its output is identical to the loop it replaces).  Eight parse loops
+  adopted it — interface, VRF / routing-instance, and DHCP-pool stanzas.
+  Shared VLAN id-list helpers (`_parse_vlan_list` / `_coalesce_vlan_ids`)
+  were also lifted into `codecs/_helpers.py` behind a golden-equivalence
+  test (#89) before any inline copy was deleted (#90).  Codecs whose
+  grammar does not fit the flat open/accumulate/close shape — `arista_eos`'s
+  fused interface/VLAN/Vxlan scanner, the LAG accumulators, and the
+  brace / set-form / XML codecs — intentionally keep their bespoke loops.
+
+* **Developer tooling — `ruff` linting baseline** (#85, #86, #87, #88).
+  Adopted a `ruff` configuration (`[tool.ruff]`: rule set
+  `F,E,W,I,UP,B,C4,PIE,SIM,RUF`; line-length 120; **linter only — no
+  autoformatter / mass reflow**) pinned to `ruff>=0.15,<0.16`; applied its
+  safe auto-fixes; resolved the remaining findings by hand; added `from
+  __future__ import annotations` across the remaining modules; and wired a
+  **`Lint (ruff)`** CI gate over `netcanon` + `tests`.  No runtime change.
+  (The `tools/` and `netcanon_desktop/` trees are not yet in the gate's
+  scope — a deferred follow-up.)
+
 ## [0.1.9] - 2026-06-16
 
 ### Added
