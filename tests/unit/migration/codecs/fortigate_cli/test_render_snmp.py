@@ -136,6 +136,58 @@ def test_fortigate_renders_snmp_v3_user_no_priv() -> None:
     assert "        set auth-proto md5" in out
 
 
+def test_fortigate_renders_snmp_v3_user_sha224_preserved() -> None:
+    """Regression: FortiOS natively accepts the full SHA-2 auth family,
+    so a canonical ``auth_protocol='sha224'`` must render as
+    ``set auth-proto sha224`` — NOT be silently upgraded to sha256.
+
+    The render map previously coerced ``sha224 -> sha256``, which
+    contradicted both the parse map (``sha224 -> sha224``) and the
+    declared junos->fortigate expectation, mangling the value on a
+    same-vendor round-trip."""
+    intent = CanonicalIntent()
+    intent.snmp = CanonicalSNMP(
+        v3_users=[
+            CanonicalSNMPv3User(
+                name="sha224user",
+                auth_protocol="sha224",
+                auth_passphrase="ENC opaque-auth-blob",
+                priv_protocol="aes256",
+                priv_passphrase="ENC opaque-priv-blob",
+            ),
+        ],
+    )
+    out = render_intent(intent)
+
+    assert "        set auth-proto sha224" in out
+    assert "        set auth-proto sha256" not in out
+
+
+def test_fortigate_snmp_v3_sha224_round_trips() -> None:
+    """End-to-end: a FortiGate config carrying ``set auth-proto sha224``
+    survives parse -> render -> parse with the auth protocol intact."""
+    cfg = (
+        "config system snmp user\n"
+        '    edit "sha224user"\n'
+        "        set security-level auth-priv\n"
+        "        set auth-proto sha224\n"
+        '        set auth-pwd "ENC opaque-auth-blob"\n'
+        "        set priv-proto aes256\n"
+        '        set priv-pwd "ENC opaque-priv-blob"\n'
+        "    next\n"
+        "end\n"
+    )
+    intent = parse_intent(cfg)
+    assert intent.snmp is not None
+    assert intent.snmp.v3_users[0].auth_protocol == "sha224"
+
+    rendered = render_intent(intent)
+    assert "        set auth-proto sha224" in rendered
+
+    back = parse_intent(rendered)
+    assert back.snmp.v3_users[0].auth_protocol == "sha224"
+
+
 def test_fortigate_no_snmp_emits_nothing() -> None:
     """Regression guard: when ``intent.snmp`` is None the renderer
     must NOT emit any ``config system snmp`` block."""

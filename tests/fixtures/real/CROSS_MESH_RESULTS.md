@@ -8984,7 +8984,7 @@ Traceback (most recent call last):
     rendered = target_codec.render(canonical_source)
   File "netcanon\migration\codecs\fortigate_cli\codec.py", line 334, in render
     return render_intent(tree)
-  File "netcanon\migration\codecs\fortigate_cli\render.py", line 944, in render_intent
+  File "netcanon\migration\codecs\fortigate_cli\render.py", line 946, in render_intent
     dst_mask = _prefix_to_mask(dst_prefix)
   File "netcanon\migration\codecs\fortigate_cli\parse.py", line 87, in _prefix_to_mask
     raise RenderError(
