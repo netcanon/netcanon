@@ -346,6 +346,30 @@ tests use these exclusively — never CSS classes or element structure.  See
 
 ---
 
+## Ultracode runs (multi-agent reviews)
+
+Multi-agent reviews, audits, and research follow netcanon's two-stage process:
+**read-only agents each write one report into `docs/reviews/<UTC-date>-<slug>/`
+→ the main thread reconciles into a synthesis + fix-plan and is the sole actor
+that verifies and commits.** The full process, run-folder convention, seed
+template, cluster taxonomy, and dispatch heuristics live in
+[`docs/agent-workflow.md`](docs/agent-workflow.md) (the
+[`docs/security-triage/`](docs/security-triage/) and
+[`docs/docs-audit/`](docs/docs-audit/) processes are worked instances).
+
+**Ultracode runs use the reusable file-per-agent blackboard runner**
+([`.claude/workflows/blackboard.js`](.claude/workflows/blackboard.js), via the
+`Workflow` tool with `scriptPath: .claude/workflows/blackboard.js`) — never
+hand-rolled. Each agent writes ONE long-form report under the run dir, reads
+peers' reports for cross-phase comms, and returns only a short pointer/summary;
+the main thread writes the `00-blackboard.md` seed up front and the
+`99-synthesis.md` reconciliation after, then actuates under the Hard Rules
+above (pseudonym identity, explicit staging, the cross-mesh proof bar,
+confirm-before-merge). The runner bakes the read-only contract in so it can't
+drift. See [`docs/agent-workflow.md`](docs/agent-workflow.md) § Ultracode runs.
+
+---
+
 ## See also
 
 - [`README.md`](README.md) — project orientation and quickstart
@@ -361,6 +385,7 @@ tests use these exclusively — never CSS classes or element structure.  See
 - [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md) — operator-facing narrative of the cross-mesh audit + 8-class variance taxonomy; update if a new test layer or audit category lands
 - [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — diagnostic flowchart for "my translation didn't go cleanly" (Tier-3 vs Lossy vs CODEC_BUG)
 - [`BUG_REPORTING.md`](BUG_REPORTING.md) — operator-facing fixture-submission + bug-report workflow (sanitise → verify → submit); references the Phase 4.5 sanitiser
+- [`docs/agent-workflow.md`](docs/agent-workflow.md) — the binding multi-agent / ultracode process (read-only agents → orchestrator synthesis → main-thread actuation) + the reusable `.claude/workflows/blackboard.js` runner; security-triage and docs-audit are worked instances
 - [`docs/security-triage/`](docs/security-triage/) — process + per-run evidence trail for triaging Code Scanning / Dependabot / secret-scanning alert waves; cluster taxonomy + read-only Stage-1 agents + orchestrator-applied dismissals
 - [`docs/docs-audit/`](docs/docs-audit/) — sister process to security-triage applied to documentation hygiene; 6-cluster taxonomy (interlinking / user-docs / developer-docs / codec-docstrings / platform-docstrings / tests-changelog); read-only Stage-1 Opus 4.7 1M agents + orchestrator-executed Stage-2 fixes
 - [`tests/README.md`](tests/README.md) — test-suite layout and mocking strategy

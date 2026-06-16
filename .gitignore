@@ -27,8 +27,13 @@ configs/
 .fernet_key
 **/.fernet_key
 
-# AI-assistant tooling — local session state, never committed
-.claude/
+# AI-assistant tooling — local session state, never committed.
+# EXCEPTION: .claude/workflows/ holds reusable, version-controlled Workflow
+# scripts (the ultracode blackboard runner) — shared tooling, not session
+# state, so it IS tracked.  User-local config (settings.local.json,
+# launch.json) stays ignored via the .claude/* glob.
+.claude/*
+!.claude/workflows/
 .cursor/
 .aider*/
 
