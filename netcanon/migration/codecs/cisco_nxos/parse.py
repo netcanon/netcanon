@@ -569,6 +569,29 @@ def _parse_routing_instances(
 
     if current is not None:
         instances.append(current)
+
+    # Deduplicate each instance's route-targets, preserving first-seen
+    # order.  The same RT value routinely appears under several
+    # ``address-family`` sub-blocks (``ipv4 unicast`` + ``ipv6 unicast``)
+    # and in both the unicast and ``... evpn`` scopes — e.g. a tenant VRF
+    # with ``route-target both auto`` under ipv4-unicast, ipv6-unicast,
+    # AND ``route-target both auto evpn`` yields three identical ``auto``
+    # imports.  The canonical model carries a single flat per-direction
+    # list with no address-family / evpn dimension (that scope is the
+    # already-declared-lossy part), so those repeats are artefacts that
+    # carry no canonical information.  Collapsing them (a) matches the
+    # set-semantics NX-OS itself applies — importing an RT twice is
+    # idempotent — and (b) keeps the same-vendor round-trip STABLE: the
+    # renderer emits the compact ``both``/``import``/``export`` form, and
+    # without dedup an asymmetric import-only RT interleaved between
+    # ``both`` lines gets re-ordered to the tail on re-parse, drifting
+    # ``rt_imports`` order (real defect surfaced by the akarneliuk
+    # EVPN-VXLAN leaf capture, whose VRFs mix ``both auto`` with an
+    # ``import <asn>:<vni>`` route-leak).
+    for ri in instances:
+        ri.rt_imports = list(dict.fromkeys(ri.rt_imports))
+        ri.rt_exports = list(dict.fromkeys(ri.rt_exports))
+
     return instances, per_vrf_routes
 
 

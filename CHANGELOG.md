@@ -79,6 +79,24 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **cisco_nxos VRF route-targets are de-duplicated so EVPN-VXLAN tenant
+  VRFs round-trip stably.** A tenant `vrf context` typically repeats the
+  same route-target value across the `ipv4 unicast` / `ipv6 unicast`
+  address-families and the `... evpn` scope; the flat canonical
+  `rt_imports` / `rt_exports` lists carry no address-family / evpn
+  dimension, so those repeats were retained as artefacts (e.g.
+  `rt_imports: ["auto", "auto"]`).  When an asymmetric import-only
+  route-leak was mixed in (inter-tenant leaking — `route-target import
+  <asn>:<vni>`), the renderer emitted that import-only RT *after* the
+  duplicated `both` lines, so a parse→render→parse round-trip drifted
+  `rt_imports` order and the round-trip was unstable.  Parse now
+  de-duplicates each direction (order-preserving), matching NX-OS's own
+  idempotent route-target semantics, emitting idiomatic non-duplicated
+  output, and stabilising the round-trip.  Cross-mesh-neutral (CODEC_BUG
+  flat at 5; a few cross-vendor cells improve as the cleaner canonical
+  aligns with targets that already emit a single RT).  Surfaced by the
+  akarneliuk EVPN-VXLAN leaf capture.
+
 * **fortigate_cli VRRP `set priority 255` no longer crashes the parser.**
   FortiOS permits VRRP priority 1-255 (255 is the address-owner
   sentinel), but `CanonicalVRRPGroup.priority` caps at 254 (`le=254` —
