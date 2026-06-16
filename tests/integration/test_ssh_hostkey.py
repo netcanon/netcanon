@@ -32,10 +32,10 @@ class _AcceptingServer(paramiko.ServerInterface):
     """Accepts any password; we only need the transport + auth to complete
     so the client performs host-key verification."""
 
-    def check_auth_password(self, username, password):  # noqa: ARG002
+    def check_auth_password(self, username, password):
         return paramiko.AUTH_SUCCESSFUL
 
-    def get_allowed_auths(self, username):  # noqa: ARG002
+    def get_allowed_auths(self, username):
         return "password"
 
 
@@ -70,7 +70,7 @@ class _SSHServerStub:
             self._transports.append(transport)
             try:
                 transport.start_server(server=_AcceptingServer())
-            except Exception:  # noqa: BLE001 — test server, best effort
+            except Exception:
                 pass
 
     def close(self) -> None:
@@ -78,11 +78,11 @@ class _SSHServerStub:
         for transport in self._transports:
             try:
                 transport.close()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         try:
             self._sock.close()
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
 

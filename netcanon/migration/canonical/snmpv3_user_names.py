@@ -59,7 +59,8 @@ crypto configuration, dropping a user erases it.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -97,7 +98,7 @@ class SnmpV3UserRenameResult(BaseModel):
 
 
 def translate_snmpv3_users(
-    intent: "CanonicalIntent",
+    intent: CanonicalIntent,
     rename_map: dict[str, str | None] | None = None,
 ) -> SnmpV3UserRenameResult:
     """Apply *rename_map* to ``intent.snmp.v3_users`` in-place and
@@ -242,7 +243,7 @@ def translate_snmpv3_users(
 def build_snmpv3_user_rename_transform(
     rename_map: dict[str, str | None] | None = None,
 ) -> tuple[
-    Callable[["CanonicalIntent"], "CanonicalIntent"],
+    Callable[[CanonicalIntent], CanonicalIntent],
     SnmpV3UserRenameResult,
 ]:
     """Return a pipeline-compatible transform + a result accumulator.
@@ -265,7 +266,7 @@ def build_snmpv3_user_rename_transform(
     """
     result = SnmpV3UserRenameResult()
 
-    def _transform(intent: "CanonicalIntent") -> "CanonicalIntent":
+    def _transform(intent: CanonicalIntent) -> CanonicalIntent:
         outcome = translate_snmpv3_users(
             intent, rename_map=rename_map,
         )

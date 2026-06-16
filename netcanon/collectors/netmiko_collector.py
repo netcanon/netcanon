@@ -199,7 +199,7 @@ class NetmikoCollector(BaseCollector):
                     strip_command=True,
                     strip_prompt=True,
                 )
-        except Exception as exc:  # noqa: BLE001 — probe failures non-fatal
+        except Exception as exc:
             logger.warning(
                 "Probe of %s failed: %s — continuing with family-base "
                 "definition",

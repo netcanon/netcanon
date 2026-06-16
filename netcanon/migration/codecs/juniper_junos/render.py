@@ -72,8 +72,8 @@ from ..._user_secrets import (
     format_review_comment,
     is_migratable,
 )
-from ..base import RenderError
 from ...canonical.intent import CanonicalIntent
+from ..base import RenderError
 
 logger = logging.getLogger(__name__)
 

@@ -48,7 +48,7 @@ JUNOS_DEF_PATH = REPO_ROOT / "definitions" / "juniper" / "junos" / "22.x.yaml"
 class _NoopCollector(BaseCollector):
     """Returns a single line — collector is patched out for the smoke test."""
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         return "set system host-name junos-noop\n"
 
 
@@ -81,9 +81,8 @@ def junos_desktop_client(junos_desktop_settings):
     with patch(
         "netcanon.api.routes.backups.get_collector",
         return_value=_NoopCollector(),
-    ):
-        with TestClient(app, raise_server_exceptions=True) as c:
-            yield c
+    ), TestClient(app, raise_server_exceptions=True) as c:
+        yield c
 
 
 class TestJunosDefinitionServedByDesktopServer:

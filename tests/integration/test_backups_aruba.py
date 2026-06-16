@@ -99,9 +99,8 @@ def aruba_client(aruba_app):
     with patch(
         "netcanon.api.routes.backups.get_collector",
         return_value=fake,
-    ):
-        with TestClient(aruba_app, raise_server_exceptions=True) as c:
-            yield c
+    ), TestClient(aruba_app, raise_server_exceptions=True) as c:
+        yield c
 
 
 def _aruba_device(host: str = "192.168.50.10") -> dict:
@@ -216,7 +215,7 @@ class TestArubaBackupFileLanding:
 
 
 class _RaisingCollector:
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         raise RuntimeError("simulated AOS-S SSH timeout")
 
 
@@ -225,13 +224,12 @@ class TestArubaBackupFailureSurface:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=_RaisingCollector(),
-        ):
-            with TestClient(aruba_app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups", json={"devices": [_aruba_device()]}
-                )
-                assert resp.status_code == 202
-                job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+        ), TestClient(aruba_app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups", json={"devices": [_aruba_device()]}
+            )
+            assert resp.status_code == 202
+            job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
 
         # Single device, single failure → job-level status is "failed".
         assert job["status"] == "failed"

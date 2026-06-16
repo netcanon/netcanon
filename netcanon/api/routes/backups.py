@@ -44,7 +44,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import SecretStr
@@ -60,8 +60,8 @@ from ...definitions.schema import DeviceDefinition
 from ...models.backup import BackupJob, JobStatus
 from ...models.device import BackupRequest, DeviceCredentials, DeviceTarget
 from ...models.device_profile import DeviceProfile
-from ...services.egress import EgressBlocked, assert_egress_allowed
 from ...services.backup_runner import run_backup_job
+from ...services.egress import EgressBlocked, assert_egress_allowed
 from ...storage.base import BaseConfigStore
 from ...storage.device_profile_store import FileDeviceProfileStore
 from ...storage.job_registry import BackupJobRegistry
@@ -208,7 +208,7 @@ def create_backup(
     job = BackupJob(
         id=str(uuid.uuid4()),
         status=JobStatus.pending,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         total_devices=len(resolved_request.devices),
     )
     jobs[job.id] = job

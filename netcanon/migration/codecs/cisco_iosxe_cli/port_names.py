@@ -55,7 +55,6 @@ import re
 
 from ...canonical.port_names import PortIdentity
 
-
 # ---------------------------------------------------------------------------
 # Cisco port-prefix ↔ canonical speed-hint mappings.
 # Used by classify_port_name / format_port_identity to round-trip port

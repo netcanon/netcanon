@@ -36,8 +36,8 @@ from __future__ import annotations
 import pytest
 
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
 )
 from netcanon.migration.codecs.arista_eos import AristaEOSCodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec

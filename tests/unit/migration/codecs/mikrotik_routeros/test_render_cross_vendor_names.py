@@ -14,15 +14,14 @@ sections, and confirm the round-trip preserves attributes.
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
     CanonicalIPv4Address,
 )
 from netcanon.migration.codecs.mikrotik_routeros.parse import parse_intent
 from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
-
-
 
 pytestmark = pytest.mark.unit
 

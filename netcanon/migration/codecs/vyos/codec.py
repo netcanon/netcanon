@@ -52,7 +52,8 @@ VyOS set-form from Junos set-form (which the ``juniper_junos`` codec owns).
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 
 from ....models.migration import (
     CapabilityMatrix,

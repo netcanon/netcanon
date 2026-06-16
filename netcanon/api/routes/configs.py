@@ -174,13 +174,13 @@ def open_config(
     try:
         if sys.platform == "win32":
             import os
-            os.startfile(str(path))  # noqa: S606
+            os.startfile(str(path))
         elif sys.platform == "darwin":
             import subprocess
-            subprocess.run(["open", str(path)], check=True)  # noqa: S603,S607
+            subprocess.run(["open", str(path)], check=True)
         else:
             import subprocess
-            subprocess.run(["xdg-open", str(path)], check=True)  # noqa: S603,S607
+            subprocess.run(["xdg-open", str(path)], check=True)
         logger.info("Opened config %r in default editor", filename)
     except NotImplementedError:
         # os.startfile is Windows-only; the linux/darwin branches above use
@@ -193,7 +193,7 @@ def open_config(
                 f"fetch the file instead."
             ),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Full exception detail is logged server-side (exc_info=True).
         # Don't echo raw OS exception text to the HTTP client — operator
         # can't act on it and it leaks internal paths.

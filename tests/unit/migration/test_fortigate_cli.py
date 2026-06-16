@@ -20,8 +20,13 @@ from pathlib import Path
 import pytest
 
 import netcanon.migration  # noqa: F401
-
-from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalStaticRoute,
+    CanonicalVRRPGroup,
+)
 from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
@@ -32,13 +37,6 @@ from netcanon.migration.codecs.fortigate_cli.codec import (
     _prefix_to_mask,
 )
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
-from netcanon.migration.canonical.intent import (
-    CanonicalIntent,
-    CanonicalIPv4Address,
-    CanonicalInterface,
-    CanonicalStaticRoute,
-    CanonicalVRRPGroup,
-)
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
 

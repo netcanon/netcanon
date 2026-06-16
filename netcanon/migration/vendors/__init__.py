@@ -73,7 +73,7 @@ def load_vendors(
                 )
             vendors[vendor.id] = vendor
             logger.debug("Loaded vendor %r from %s", vendor.id, path.name)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(
                 "CORRUPT VENDOR FILE SKIPPED: %s — %s", path.name, exc
             )

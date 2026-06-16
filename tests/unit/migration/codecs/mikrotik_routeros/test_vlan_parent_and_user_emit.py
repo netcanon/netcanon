@@ -53,9 +53,10 @@ These tests pin:
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalLocalUser,
     CanonicalVlan,
@@ -64,8 +65,6 @@ from netcanon.migration.codecs.mikrotik_routeros.render import (
     _routeros_group_for_privilege,
     render_intent,
 )
-
-
 
 pytestmark = pytest.mark.unit
 

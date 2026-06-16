@@ -6,8 +6,8 @@ from .backup import BackupJob, BackupResult, ConfigRecord, JobStatus
 from .device import BackupRequest, DeviceCredentials, DeviceTarget
 from .diff import CompatibilityReport, DiffGroup, DiffLine, DiffReport, DiffRequest
 from .migration import (
-    CodecInfo,
     CapabilityMatrix,
+    CodecInfo,
     DeviceClass,
     LossyPath,
     MigrationJob,

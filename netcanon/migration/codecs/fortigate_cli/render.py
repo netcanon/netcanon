@@ -45,7 +45,6 @@ import ipaddress
 import re
 from typing import Any
 
-from ..base import RenderError
 from ..._user_secrets import (
     classify_hash,
     format_review_comment,
@@ -56,6 +55,7 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
 )
+from ..base import RenderError
 from .parse import (
     _CANONICAL_MODE_TO_FORTIGATE_LACP,
     _prefix_to_mask,
@@ -63,10 +63,13 @@ from .parse import (
 )
 from .vlan_heuristics import (
     looks_like_vlan_iface as _looks_like_vlan_iface,
+)
+from .vlan_heuristics import (
     parent_for_vlan_iface as _parent_for_vlan_iface_fallback,
+)
+from .vlan_heuristics import (
     vlan_id_for as _vlan_id_for,
 )
-
 
 # RFC1918 private-IPv4 prefixes — used by the LAN-preference scorer
 # in ``_parent_for_vlan_iface`` to spot canonical interfaces that

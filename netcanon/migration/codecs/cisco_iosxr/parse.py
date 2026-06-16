@@ -85,9 +85,9 @@ from ...canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
 )
+from .._helpers import _is_link_local_v6, _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .._helpers import _is_link_local_v6, _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 

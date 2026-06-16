@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import pytest
 
-from netcanon.migration.codecs.arista_eos import AristaEOSCodec
-from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
-    CanonicalIPv4Address,
     CanonicalInterface,
+    CanonicalIPv4Address,
 )
+from netcanon.migration.codecs.arista_eos import AristaEOSCodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
 pytestmark = pytest.mark.unit
 

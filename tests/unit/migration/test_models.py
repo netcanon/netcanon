@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 
 from netcanon.models.migration import (
-    CodecInfo,
     CapabilityMatrix,
+    CodecInfo,
     LossyPath,
     MigrationJob,
     MigrationJobStatus,

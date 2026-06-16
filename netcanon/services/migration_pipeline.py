@@ -101,8 +101,9 @@ Pure function — no I/O, no global state.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from ..migration.codecs.base import CodecBase, ParseError, RenderError
 from ..models.migration import (
@@ -190,7 +191,7 @@ def run_plan(
             + " ".join(class_compat.reasons)
             + " Pass force=True to override (NOT recommended)."
         )
-        job.completed_at = datetime.now(timezone.utc)
+        job.completed_at = datetime.now(UTC)
         # WARNING rather than ERROR — the guard working as designed
         # isn't a system fault; operator may have legitimately made
         # a picker mistake the UI surfaces back to them.  Logs give
@@ -252,7 +253,7 @@ def run_plan(
             "run_plan %s: render failed for %s → %s",
             job.id[:8], source.name, target.name,
         )
-    except Exception as exc:  # noqa: BLE001 — honest catch-all
+    except Exception as exc:
         # Preserve the stage the job was in at the moment of failure —
         # ``job.status`` holds the in-progress enum when the exception
         # fires, so capture it BEFORE reassigning to ``failed``.
@@ -280,7 +281,7 @@ def run_plan(
         else:
             job.status = MigrationJobStatus.completed
 
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     logger.debug(
         "run_plan %s: terminal status=%s (rendered=%d bytes, "
         "validation=%s)",

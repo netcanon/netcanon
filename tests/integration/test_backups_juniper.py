@@ -24,17 +24,14 @@ is serialised before the BackgroundTask runs and always shows
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.config import Settings
-from netcanon.definitions.schema import DeviceDefinition
 from netcanon.main import create_app
 
 pytestmark = pytest.mark.integration
@@ -76,7 +73,7 @@ JUNOS_FAKE_OUTPUT = (
 class JunosFakeCollector(BaseCollector):
     """Returns the canned Junos `display set` capture for any device."""
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         return JUNOS_FAKE_OUTPUT
 
 
@@ -119,9 +116,8 @@ def junos_client(junos_app):
     with patch(
         "netcanon.api.routes.backups.get_collector",
         return_value=JunosFakeCollector(),
-    ):
-        with TestClient(junos_app, raise_server_exceptions=True) as c:
-            yield c
+    ), TestClient(junos_app, raise_server_exceptions=True) as c:
+        yield c
 
 
 # ---------------------------------------------------------------------------

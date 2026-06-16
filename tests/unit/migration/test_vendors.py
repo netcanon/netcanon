@@ -11,8 +11,6 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from netcanon.migration.vendors import load_vendors
@@ -162,7 +160,6 @@ class TestCodecVendorLinkage:
         """Each shipped codec's ``vendor_id`` must resolve to a loaded
         vendor — otherwise the API returns an empty display_name and
         the UI shows a blank."""
-        import netcanon.migration  # side-effect: register codecs
         from netcanon.migration.codecs.registry import get_codec, list_codecs
 
         vendors = load_vendors()

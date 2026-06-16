@@ -95,22 +95,20 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-
 from pydantic import BaseModel, Field
 
 from ...migration.codecs.registry import get_codec
+from ...migration.target_profiles import TargetProfile
 from ...models.migration import (
-    CodecInfo,
     CapabilityMatrix,
+    CodecInfo,
     MigrationJob,
     MigrationPlanRequest,
 )
-from ...migration.target_profiles import TargetProfile
 from ...services.migration_detect import DetectCandidate, detect_codec
 from ...services.migration_pipeline import (
     run_plan,
     run_plan_with_overrides,
-    run_plan_with_rename,
 )
 from ...storage.base import BaseConfigStore
 from ..deps import get_storage

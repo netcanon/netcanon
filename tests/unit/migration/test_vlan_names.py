@@ -22,7 +22,6 @@ from netcanon.migration.canonical.intent import (
     CanonicalVlan,
 )
 from netcanon.migration.canonical.vlan_names import (
-    VlanRenameResult,
     build_vlan_rename_transform,
     translate_vlan_ids,
 )

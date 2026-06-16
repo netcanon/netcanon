@@ -40,7 +40,6 @@ import re
 
 from ...canonical.port_names import PortIdentity
 
-
 # ---------------------------------------------------------------------------
 # Regex patterns — module-level so they compile once per import
 # ---------------------------------------------------------------------------

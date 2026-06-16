@@ -7,7 +7,7 @@ module-level ``app = create_app()`` call at import time.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -200,7 +200,7 @@ class TestBackupSchedule:
         assert schedule.last_job_id is None
 
     def test_created_at_preserved(self):
-        ts = datetime(2026, 4, 14, 9, 0, 0, tzinfo=timezone.utc)
+        ts = datetime(2026, 4, 14, 9, 0, 0, tzinfo=UTC)
         schedule = self._make(created_at=ts)
         assert schedule.created_at == ts
 
@@ -223,7 +223,7 @@ class TestBackupJobScheduleFields:
         defaults = dict(
             id="test-uuid-abcd",
             status=JobStatus.pending,
-            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
             total_devices=1,
         )
         defaults.update(kwargs)

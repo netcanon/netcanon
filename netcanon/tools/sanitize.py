@@ -89,11 +89,9 @@ from __future__ import annotations
 import ipaddress
 import re
 from dataclasses import dataclass, field
-from typing import Any
 
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.registry import get_codec
-
 
 # ---------------------------------------------------------------------------
 # Public API — dataclasses

@@ -21,6 +21,7 @@ mikrotik_routeros target round-trip via the canonical tree).
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
@@ -34,8 +35,6 @@ from netcanon.migration.codecs.mikrotik_routeros import (
 )
 from netcanon.migration.codecs.mikrotik_routeros.parse import parse_intent
 from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
-
-
 
 pytestmark = pytest.mark.unit
 

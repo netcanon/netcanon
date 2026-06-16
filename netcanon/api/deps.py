@@ -19,7 +19,6 @@ from fastapi import Request
 
 from ..definitions.loader import DefinitionLoader
 from ..definitions.schema import DeviceDefinition
-from ..models.backup import BackupJob
 from ..models.device_profile import DeviceProfile
 from ..models.schedule import BackupSchedule
 from ..storage.base import BaseConfigStore

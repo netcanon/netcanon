@@ -41,7 +41,6 @@ from ..._user_secrets import (
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
-
 # Arista-local emit-form vocabulary: maps the algorithm tokens
 # emitted by :func:`classify_hash` to the matching ``secret <N>``
 # type-tag tokens for the EOS CLI:

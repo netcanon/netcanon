@@ -28,12 +28,6 @@ from pathlib import Path
 import pytest
 
 from netcanon.migration.target_profiles import (
-    ProfileLoadError,
-    TargetLAGCaps,
-    TargetModule,
-    TargetPort,
-    TargetProfile,
-    load_profile_file,
     load_profiles_dir,
 )
 from tests.fixtures.module_variants import MODULE_VARIANT_PROFILES
@@ -125,6 +119,7 @@ class TestRealProfilesShipped:
         from tests.fixtures.module_variants import (
             MODULE_VARIANT_PROFILES as CANONICAL,
         )
+
         # Lazy-import the integration-tier class to avoid pulling the
         # full FastAPI TestClient graph into unit-test collection.
         from tests.integration.test_migration_target_profiles_api import (

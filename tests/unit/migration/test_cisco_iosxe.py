@@ -454,7 +454,6 @@ class TestPipelineIntegration:
         that mock intersects iosxe, here we just prove the guard is
         wired in by checking the job reached a terminal success state
         when classes DO intersect."""
-        from netcanon.migration.codecs._mock import MockCodec
         src = CiscoIOSXECodec()
         tgt = MockCodec()
         raw = FIXTURES.joinpath("get_config_simple.xml").read_text()
@@ -507,7 +506,6 @@ class TestPipelineIntegration:
 
 class TestRegistry:
     def test_cisco_iosxe_in_registry(self):
-        import netcanon.migration  # side-effect import
         from netcanon.migration.codecs.registry import list_codecs
         assert "cisco_iosxe" in list_codecs()
 

@@ -16,7 +16,8 @@ from pathlib import Path
 import pytest
 
 from netcanon.cli import main as cli_main
-from netcanon.tools.demo import SCENARIOS, main as demo_main
+from netcanon.tools.demo import SCENARIOS
+from netcanon.tools.demo import main as demo_main
 
 pytestmark = pytest.mark.unit
 

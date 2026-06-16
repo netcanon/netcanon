@@ -35,14 +35,15 @@ from __future__ import annotations
 import ipaddress
 import logging
 import re
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,

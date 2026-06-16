@@ -55,10 +55,10 @@ from typing import Any
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRoutingInstance,
@@ -111,7 +111,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             raw = _blockform_to_setform(raw)
         except ParseError:
             raise
-        except Exception as e:  # noqa: BLE001
+        except Exception as e:
             raise ParseError(
                 "juniper_junos: block-form input conversion "
                 "failed.  Consider running `show configuration "
@@ -752,7 +752,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
     # so we can apply a 1-to-1 fallback when the operator authored
     # ONE pool + ONE dhcp-local-server group with mismatched names.
     _modern_pool_keys = [
-        k for k in dhcp_pool_state.keys() if not k.startswith("_legacy:")
+        k for k in dhcp_pool_state if not k.startswith("_legacy:")
     ]
     _single_group_iface = (
         next(iter(dhcp_group_iface.values()))
@@ -1818,14 +1818,14 @@ def _apply_switch_options(tokens: list[str], intent: CanonicalIntent) -> None:
     head = tokens[0]
     if head == "vtep-source-interface":
         # Stash on intent for the post-pass to consume.
-        setattr(intent, "_pending_vxlan_source_interface", tokens[1])
+        intent._pending_vxlan_source_interface = tokens[1]
         return
     if head == "vxlan-port":
         try:
             port = int(tokens[1])
         except ValueError:
             return
-        setattr(intent, "_pending_vxlan_udp_port", port)
+        intent._pending_vxlan_udp_port = port
         return
     # Other switch-options paths — parse-and-ignore.
 

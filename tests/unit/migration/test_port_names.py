@@ -27,17 +27,16 @@ from __future__ import annotations
 import pytest
 
 from netcanon.migration.canonical.intent import (
+    CanonicalDHCPPool,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalLAG,
     CanonicalStaticRoute,
-    CanonicalDHCPPool,
     CanonicalVlan,
 )
 from netcanon.migration.canonical.port_names import (
-    PortIdentity,
-    translate_port_names,
     build_port_rename_transform,
+    translate_port_names,
 )
 from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
@@ -358,7 +357,8 @@ class TestSviAbsorption:
 
     def test_svi_warning_suppressed_when_target_absorbs(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[
@@ -402,7 +402,8 @@ class TestSviAbsorption:
         target_absorbs` for absorbing targets — both paths suppress
         the warning, just for different reasons."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="Vlan99")],
@@ -422,8 +423,12 @@ class TestDropSemantic:
 
     def _build_cat9300ish_intent(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface, CanonicalLAG,
-            CanonicalVlan, CanonicalStaticRoute, CanonicalDHCPPool,
+            CanonicalDHCPPool,
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalLAG,
+            CanonicalStaticRoute,
+            CanonicalVlan,
         )
         return CanonicalIntent(
             interfaces=[
@@ -495,7 +500,9 @@ class TestDropSemantic:
 
     def test_drop_cascades_to_lag_membership(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface, CanonicalLAG,
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalLAG,
         )
         intent = CanonicalIntent(
             interfaces=[
@@ -522,7 +529,8 @@ class TestDropSemantic:
         equivalent' (which DOES warn).  Warning noise is the whole
         point of having explicit drop."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="Loopback0")],
@@ -747,7 +755,8 @@ class TestAutoDropUnmappable:
 
     def test_auto_drops_unmappable_by_default(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[
@@ -784,7 +793,8 @@ class TestAutoDropUnmappable:
         leave-verbatim behaviour.  Used by API callers that need
         to inspect unmapped names before deciding what to do."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1")],
@@ -805,7 +815,8 @@ class TestAutoDropUnmappable:
         verbatim can supply a no-op rename (``{name: name}``) — the
         user map wins over auto-drop."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface,
+            CanonicalIntent,
+            CanonicalInterface,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="FortyGigabitEthernet1/1/1")],
@@ -823,7 +834,9 @@ class TestAutoDropUnmappable:
         are a special case — neither warned nor auto-dropped.  The
         L3 data still reaches the target via the VLAN render path."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface, CanonicalVlan,
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalVlan,
         )
         intent = CanonicalIntent(
             interfaces=[CanonicalInterface(name="Vlan11")],
@@ -856,6 +869,7 @@ class TestCat9300ToAruba:
 
     def test_run_plan_with_rename_produces_aruba_port_names(self):
         from pathlib import Path
+
         from netcanon.services.migration_pipeline import run_plan_with_rename
 
         raw = Path(self.FIXTURE_PATH).read_text(encoding="utf-8")
@@ -888,6 +902,7 @@ class TestCat9300ToAruba:
         auto-resolve, the user can supply a rename_map entry to pin
         the target name.  The warning for that port goes away."""
         from pathlib import Path
+
         from netcanon.services.migration_pipeline import run_plan_with_rename
 
         raw = Path(self.FIXTURE_PATH).read_text(encoding="utf-8")

@@ -81,8 +81,9 @@ class TestMainLifespanCallSites:
     """
 
     def test_main_uses_effective_data_dir(self):
-        from netcanon import main as main_module
         from inspect import getsource
+
+        from netcanon import main as main_module
 
         src = getsource(main_module)
         # The lifespan should refer to effective_data_dir at least once

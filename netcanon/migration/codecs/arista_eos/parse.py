@@ -41,24 +41,24 @@ from typing import Any
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
+    CanonicalLocalUser,
     CanonicalRADIUSServer,
     CanonicalRoutingInstance,
-    CanonicalVRRPGroup,
-    CanonicalVxlan,
-    CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
     CanonicalVlan,
+    CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
+from .._helpers import _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .._helpers import _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 

@@ -30,7 +30,8 @@ implementing the two methods; zero edits here.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable, Literal
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import BaseModel, Field
 
@@ -223,10 +224,10 @@ class PortRenameResult(BaseModel):
 
 
 def translate_port_names(
-    intent: "CanonicalIntent",
-    source_codec: "CodecBase",
-    target_codec: "CodecBase",
-    rename_map: "dict[str, str | None] | None" = None,
+    intent: CanonicalIntent,
+    source_codec: CodecBase,
+    target_codec: CodecBase,
+    rename_map: dict[str, str | None] | None = None,
     strip_unmappable: bool = True,
 ) -> PortRenameResult:
     """Rewrite every port-name reference in *intent* from source-vendor
@@ -494,7 +495,7 @@ def translate_port_names(
 
 
 def _strip_dropped_ports(
-    intent: "CanonicalIntent", dropped: set[str]
+    intent: CanonicalIntent, dropped: set[str]
 ) -> None:
     """Remove every reference to *dropped* port names from *intent*.
 
@@ -540,11 +541,11 @@ def _strip_dropped_ports(
 
 
 def build_port_rename_transform(
-    source_codec: "CodecBase",
-    target_codec: "CodecBase",
-    rename_map: "dict[str, str | None] | None" = None,
+    source_codec: CodecBase,
+    target_codec: CodecBase,
+    rename_map: dict[str, str | None] | None = None,
     strip_unmappable: bool = True,
-) -> tuple[Callable[["CanonicalIntent"], "CanonicalIntent"], PortRenameResult]:
+) -> tuple[Callable[[CanonicalIntent], CanonicalIntent], PortRenameResult]:
     """Return a pipeline-compatible transform + a result accumulator
     for cross-vendor port-name rewriting.
 
@@ -597,7 +598,7 @@ def build_port_rename_transform(
     """
     result = PortRenameResult()
 
-    def transform(intent: "CanonicalIntent") -> "CanonicalIntent":
+    def transform(intent: CanonicalIntent) -> CanonicalIntent:
         outcome = translate_port_names(
             intent, source_codec, target_codec, rename_map,
             strip_unmappable=strip_unmappable,

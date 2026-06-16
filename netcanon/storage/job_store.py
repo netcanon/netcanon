@@ -64,7 +64,7 @@ class FileJobStore:
                     path.read_text(encoding="utf-8")
                 )
                 jobs[job.id] = job
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error(
                     "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
                 )
@@ -97,7 +97,7 @@ class FileJobStore:
             return BackupJob.model_validate_json(
                 path.read_text(encoding="utf-8")
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.error(
                 "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
             )

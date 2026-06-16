@@ -216,8 +216,8 @@ class TestStageOrdering:
         job MUST fail with the class-guard error, not a parser error.
         If parse ran first we'd get 'malformed XML'; getting the
         class-guard message instead proves stage 0 is really first."""
-        from tests.unit.migration.test_device_class import _make_adapter
         from netcanon.models.migration import DeviceClass
+        from tests.unit.migration.test_device_class import _make_adapter
 
         sw = _make_adapter("sw_only", [DeviceClass.switch])
         fw = _make_adapter("fw_only", [DeviceClass.firewall])

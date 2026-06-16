@@ -7,7 +7,6 @@ readiness polling without mocking Uvicorn internals.
 from __future__ import annotations
 
 import socket
-import time
 
 import pytest
 from starlette.applications import Starlette

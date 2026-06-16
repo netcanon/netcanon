@@ -36,7 +36,6 @@ import re
 
 from ...canonical.intent import CanonicalInterface, CanonicalVlan
 
-
 # ---------------------------------------------------------------------------
 # Regex patterns — module-level so they compile once per import
 # ---------------------------------------------------------------------------

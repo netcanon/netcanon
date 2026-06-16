@@ -31,7 +31,6 @@ from netcanon.migration.canonical.intent import (
     CanonicalSNMPv3User,
 )
 
-
 pytestmark = pytest.mark.unit
 
 

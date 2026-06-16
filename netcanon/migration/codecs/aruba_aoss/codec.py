@@ -28,7 +28,8 @@ purely for backwards compatibility.
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 
 from ....models.migration import (
     CapabilityMatrix,

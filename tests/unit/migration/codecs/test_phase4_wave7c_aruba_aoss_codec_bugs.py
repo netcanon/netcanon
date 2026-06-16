@@ -236,7 +236,9 @@ def test_arista_render_projects_vlan_to_switchport_on_bare_intent() -> None:
     The output must contain ``switchport access vlan N`` lines on
     each port."""
     from netcanon.migration.canonical.intent import (
-        CanonicalIntent, CanonicalInterface, CanonicalVlan,
+        CanonicalIntent,
+        CanonicalInterface,
+        CanonicalVlan,
     )
 
     intent = CanonicalIntent(

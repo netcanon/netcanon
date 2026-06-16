@@ -9,7 +9,7 @@ automatic backups survive server restarts.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -68,7 +68,7 @@ class BackupSchedule(BaseModel):
     target_type_keys: list[str] = []   # back up all profiles of these type_keys
     target_device_ids: list[str] = []  # back up these specific profile UUIDs
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
     )
     last_run_at: datetime | None = None
     next_run_at: datetime | None = None
@@ -95,7 +95,7 @@ class ScheduleCreate(BaseModel):
     target_device_ids: list[str] = []
 
     @model_validator(mode="after")
-    def _at_least_one_target(self) -> "ScheduleCreate":
+    def _at_least_one_target(self) -> ScheduleCreate:
         if not self.target_type_keys and not self.target_device_ids:
             raise ValueError(
                 "At least one of target_type_keys or target_device_ids must be non-empty"

@@ -29,9 +29,9 @@ from pydantic import BaseModel
 
 from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
     CanonicalSNMP,

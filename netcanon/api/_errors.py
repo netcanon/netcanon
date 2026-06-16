@@ -54,7 +54,7 @@ the only shape that reaches the right code path.
 from __future__ import annotations
 
 import socket
-from typing import Callable
+from collections.abc import Callable
 
 import paramiko
 import paramiko.ssh_exception
@@ -62,7 +62,6 @@ from netmiko import (
     NetmikoAuthenticationException,
     NetmikoTimeoutException,
 )
-
 
 __all__ = ["translate_backup_error"]
 

@@ -32,7 +32,6 @@ from netcanon.collectors.base import BaseCollector
 from netcanon.definitions.schema import DeviceDefinition
 from netcanon.main import create_app
 from netcanon.models.device import DeviceTarget
-
 from tests.conftest import CISCO_FAKE_OUTPUT
 
 pytestmark = pytest.mark.integration
@@ -213,9 +212,8 @@ class TestProbeFailureIsNonFatal:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                job = _post_backup_with_profile(client)
+        ), TestClient(probing_app) as client:
+            job = _post_backup_with_profile(client)
         # Backup reached terminal-success even though probe raised.
         assert job["status"] == "completed"
         # Family-base definition was used (no overlay — no detected
@@ -232,9 +230,8 @@ class TestProbeFailureIsNonFatal:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                job = _post_backup_with_profile(client)
+        ), TestClient(probing_app) as client:
+            job = _post_backup_with_profile(client)
         assert job["status"] == "completed"
 
 
@@ -244,12 +241,11 @@ class TestDetectedFactsPersistence:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                profile = _make_profile(client)
-                _post_backup_with_profile(client, profile_id=profile["id"])
-                # GET the profile — detected_facts should be populated.
-                refreshed = client.get(f"/api/v1/devices/{profile['id']}").json()
+        ), TestClient(probing_app) as client:
+            profile = _make_profile(client)
+            _post_backup_with_profile(client, profile_id=profile["id"])
+            # GET the profile — detected_facts should be populated.
+            refreshed = client.get(f"/api/v1/devices/{profile['id']}").json()
         facts = refreshed.get("detected_facts") or {}
         # Regex captures major.minor ("17.12") — not the full
         # 17.12.03 patch level — so the overlay lookup lands.
@@ -264,9 +260,8 @@ class TestDetectedFactsPersistence:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                job = _post_backup_with_profile(client, profile_id=None)
+        ), TestClient(probing_app) as client:
+            job = _post_backup_with_profile(client, profile_id=None)
         # Job completes normally; there's no profile to inspect.
         assert job["status"] == "completed"
 
@@ -278,9 +273,8 @@ class TestLayeredResolveFromDetectedFacts:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                _post_backup_with_profile(client)
+        ), TestClient(probing_app) as client:
+            _post_backup_with_profile(client)
         # Overlay's distinct config command is the signal.
         assert collector.last_definition is not None
         assert collector.last_definition.commands.config == (
@@ -296,9 +290,8 @@ class TestLayeredResolveFromDetectedFacts:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                _post_backup_with_profile(client)
+        ), TestClient(probing_app) as client:
+            _post_backup_with_profile(client)
         assert collector.last_definition.commands.config == (
             "show running-config"
         )
@@ -310,9 +303,8 @@ class TestLayeredResolveFromDetectedFacts:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(probing_app) as client:
-                _post_backup_with_profile(client, os_version_pin="17.12")
+        ), TestClient(probing_app) as client:
+            _post_backup_with_profile(client, os_version_pin="17.12")
         # Pin selects the overlay even though the probe said 17.09.
         assert collector.last_definition.commands.config == (
             "show running-config brief"
@@ -335,19 +327,18 @@ class TestLegacyDefinitionsUnchanged:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as client:
-                resp = client.post(
-                    "/api/v1/backups",
-                    json={"devices": [{
-                        "type_key": "Cisco",
-                        "host": "192.168.1.1",
-                        "credentials": {"username": "u", "password": "p"},
-                    }]},
-                )
-                assert resp.status_code == 202
-                job_id = resp.json()["id"]
-                job = client.get(f"/api/v1/backups/{job_id}").json()
+        ), TestClient(test_app) as client:
+            resp = client.post(
+                "/api/v1/backups",
+                json={"devices": [{
+                    "type_key": "Cisco",
+                    "host": "192.168.1.1",
+                    "credentials": {"username": "u", "password": "p"},
+                }]},
+            )
+            assert resp.status_code == 202
+            job_id = resp.json()["id"]
+            job = client.get(f"/api/v1/backups/{job_id}").json()
         assert job["status"] == "completed"
 
 

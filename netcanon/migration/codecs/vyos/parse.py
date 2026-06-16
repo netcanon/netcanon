@@ -88,13 +88,12 @@ single-device SVD ``vlan-to-vni``, per-VRF static routes (``vrf name
 from __future__ import annotations
 
 import logging
-import re
 
 from ...canonical.intent import (
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRoutingInstance,

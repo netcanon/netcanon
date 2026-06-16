@@ -161,7 +161,7 @@ class _SelectiveFailCollector:
     def __init__(self, fail_hosts: set[str]) -> None:
         self._fail_hosts = fail_hosts
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         if device.host in self._fail_hosts:
             raise RuntimeError(f"Simulated failure for {device.host}")
         return "! config for " + device.host
@@ -179,14 +179,13 @@ class TestJobTerminalStatus:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [_device_payload(host=h) for h in hosts]},
-                )
-                assert resp.status_code == 202
-                return c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host=h) for h in hosts]},
+            )
+            assert resp.status_code == 202
+            return c.get(f"/api/v1/backups/{resp.json()['id']}").json()
 
     def test_all_success_marks_job_completed(self, test_app):
         job = self._run(test_app, fail_hosts=set(), hosts=["1.1.1.1", "2.2.2.2"])
@@ -236,7 +235,7 @@ class _ObservingCollector:
         self._fail = fail_hosts or set()
         self.snapshots: list[list[dict]] = []
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         # capture the only in-progress job's results verbatim
         running_job = next(iter(self._app.state.jobs.values()))
         self.snapshots.append(
@@ -253,25 +252,25 @@ class TestDeviceStatusLifecycle:
     def test_first_device_is_running_others_queued_mid_flight(self, test_app):
         """While device N is being collected, N is 'running' and N+1..end are 'queued'."""
         from unittest.mock import patch
+
         from fastapi.testclient import TestClient
 
         collector = _ObservingCollector(test_app)
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={
-                        "devices": [
-                            _device_payload(host="1.1.1.1"),
-                            _device_payload(host="2.2.2.2"),
-                            _device_payload(host="3.3.3.3"),
-                        ]
-                    },
-                )
-                assert resp.status_code == 202
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={
+                    "devices": [
+                        _device_payload(host="1.1.1.1"),
+                        _device_payload(host="2.2.2.2"),
+                        _device_payload(host="3.3.3.3"),
+                    ]
+                },
+            )
+            assert resp.status_code == 202
 
         # 3 devices → 3 snapshots, one taken at the start of each collect.
         assert len(collector.snapshots) == 3
@@ -330,7 +329,7 @@ class _BarrierCollector:
         self._active = 0
         self._lock = threading.Lock()
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         with self._lock:
             self._active += 1
             if self._active > self.max_observed_concurrent:
@@ -357,6 +356,7 @@ class TestBackupConcurrency:
     def test_three_devices_run_concurrently_when_concurrency_3(self, test_settings):
         """Barrier(3) only opens if 3 workers arrive simultaneously."""
         from unittest.mock import patch
+
         from fastapi.testclient import TestClient
 
         app = _build_parallel_app(test_settings, concurrency=3)
@@ -365,18 +365,17 @@ class TestBackupConcurrency:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [
-                        _device_payload(host="1.1.1.1"),
-                        _device_payload(host="2.2.2.2"),
-                        _device_payload(host="3.3.3.3"),
-                    ]},
-                )
-                assert resp.status_code == 202
-                job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [
+                    _device_payload(host="1.1.1.1"),
+                    _device_payload(host="2.2.2.2"),
+                    _device_payload(host="3.3.3.3"),
+                ]},
+            )
+            assert resp.status_code == 202
+            job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
 
         # All devices succeeded (barrier opened, no timeout).
         assert job["status"] == "completed"
@@ -389,6 +388,7 @@ class TestBackupConcurrency:
         assert MAX_BACKUP_CONCURRENCY == 10
         # Pydantic rejects out-of-range values at Settings construction.
         import pytest
+
         from netcanon.config import Settings
         with pytest.raises(Exception):  # ValidationError
             Settings(
@@ -405,6 +405,7 @@ class TestBackupConcurrency:
         import threading
         import time
         from unittest.mock import patch
+
         from fastapi.testclient import TestClient
 
         app = _build_parallel_app(test_settings, concurrency=5)
@@ -421,7 +422,7 @@ class TestBackupConcurrency:
                 self.active = 0
                 self.peak = 0
 
-            def collect(self, device, definition):  # noqa: ARG002
+            def collect(self, device, definition):
                 with self.lock:
                     self.active += 1
                     if self.active > self.peak:
@@ -437,16 +438,15 @@ class TestBackupConcurrency:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [
-                        _device_payload(host=f"10.0.0.{i}") for i in range(1, 13)
-                    ]},
-                )
-                assert resp.status_code == 202
-                job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [
+                    _device_payload(host=f"10.0.0.{i}") for i in range(1, 13)
+                ]},
+            )
+            assert resp.status_code == 202
+            job = c.get(f"/api/v1/backups/{resp.json()['id']}").json()
 
         assert job["status"] == "completed"
         assert len(job["results"]) == 12
@@ -458,15 +458,15 @@ class TestBackupConcurrency:
 
     def test_single_device_job_uses_serial_fast_path(self, test_settings):
         """Single-device jobs skip the pool entirely (no thread overhead)."""
-        from unittest.mock import patch
-        from fastapi.testclient import TestClient
-
         # Sentinel collector: records the name of the thread that called it.
         import threading
+        from unittest.mock import patch
+
+        from fastapi.testclient import TestClient
         thread_names: list[str] = []
 
         class ThreadNameCollector:
-            def collect(self, device, definition):  # noqa: ARG002
+            def collect(self, device, definition):
                 thread_names.append(threading.current_thread().name)
                 return "! config"
 
@@ -474,12 +474,11 @@ class TestBackupConcurrency:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=ThreadNameCollector(),
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                c.post(
-                    "/api/v1/backups",
-                    json={"devices": [_device_payload(host="1.1.1.1")]},
-                )
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="1.1.1.1")]},
+            )
 
         assert len(thread_names) == 1
         # Serial path runs in the caller's thread, not a "backup-…" worker.
@@ -566,7 +565,7 @@ class _CredCapturingCollector:
     def __init__(self) -> None:
         self.seen: list[tuple[str, str, str | None]] = []
 
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         c = device.credentials
         self.seen.append(
             (
@@ -594,34 +593,33 @@ class TestServerSideCredentialResolution:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app, raise_server_exceptions=True) as c:
-                profile = c.post(
-                    "/api/v1/devices/",
-                    json={
-                        "name": "Core",
-                        "type_key": "Cisco",
-                        "host": "10.9.9.9",
-                        "username": "netops",
-                        "password": "s3cr3t",
-                        "enable_password": "en4ble",
-                    },
-                ).json()
-                # No inline credentials — only the profile reference.
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={
-                        "devices": [
-                            {
-                                "type_key": "Cisco",
-                                "host": "10.9.9.9",
-                                "port": 22,
-                                "device_profile_id": profile["id"],
-                            }
-                        ]
-                    },
-                )
-                assert resp.status_code == 202
+        ), TestClient(test_app, raise_server_exceptions=True) as c:
+            profile = c.post(
+                "/api/v1/devices/",
+                json={
+                    "name": "Core",
+                    "type_key": "Cisco",
+                    "host": "10.9.9.9",
+                    "username": "netops",
+                    "password": "s3cr3t",
+                    "enable_password": "en4ble",
+                },
+            ).json()
+            # No inline credentials — only the profile reference.
+            resp = c.post(
+                "/api/v1/backups",
+                json={
+                    "devices": [
+                        {
+                            "type_key": "Cisco",
+                            "host": "10.9.9.9",
+                            "port": 22,
+                            "device_profile_id": profile["id"],
+                        }
+                    ]
+                },
+            )
+            assert resp.status_code == 202
 
         # The collector was handed the profile's stored credentials,
         # resolved entirely server-side.
@@ -664,7 +662,7 @@ class TestServerSideCredentialResolution:
 
 
 class _OkCollector:
-    def collect(self, device, definition):  # noqa: ARG002
+    def collect(self, device, definition):
         return "! config for " + device.host
 
 
@@ -689,12 +687,11 @@ class TestEgressAllowlist:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=_OkCollector(),
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [_device_payload(host="127.0.0.1")]},
-                )
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="127.0.0.1")]},
+            )
         assert resp.status_code == 400
         assert "block" in resp.json()["detail"].lower()
 
@@ -707,12 +704,11 @@ class TestEgressAllowlist:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=_OkCollector(),
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [_device_payload(host="169.254.169.254")]},
-                )
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="169.254.169.254")]},
+            )
         assert resp.status_code == 400
 
     def test_public_target_allowed_when_enabled(self, test_settings):
@@ -724,12 +720,11 @@ class TestEgressAllowlist:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=_OkCollector(),
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                resp = c.post(
-                    "/api/v1/backups",
-                    json={"devices": [_device_payload(host="8.8.8.8")]},
-                )
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            resp = c.post(
+                "/api/v1/backups",
+                json={"devices": [_device_payload(host="8.8.8.8")]},
+            )
         assert resp.status_code == 202
 
     def test_loopback_allowed_when_disabled(self, client):

@@ -214,10 +214,10 @@ class TestOrchestratorDebugUniformity:
     """
 
     def test_port_rename_emits_entry_debug(self, caplog):
+        from netcanon.migration.canonical.intent import CanonicalIntent
         from netcanon.migration.canonical.port_names import (
             translate_port_names,
         )
-        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
             "DEBUG", logger="netcanon.migration.canonical.port_names",
@@ -239,10 +239,10 @@ class TestOrchestratorDebugUniformity:
         """Uses an EMPTY map so the no-op early-return fires — the
         entry log must still appear (this is exactly the scenario
         the prior exit-only log regressed on)."""
+        from netcanon.migration.canonical.intent import CanonicalIntent
         from netcanon.migration.canonical.vlan_names import (
             translate_vlan_ids,
         )
-        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
             "DEBUG", logger="netcanon.migration.canonical.vlan_names",
@@ -256,10 +256,10 @@ class TestOrchestratorDebugUniformity:
         assert entries, "expected entry DEBUG on no-op call"
 
     def test_local_user_rename_emits_entry_debug(self, caplog):
+        from netcanon.migration.canonical.intent import CanonicalIntent
         from netcanon.migration.canonical.local_user_names import (
             translate_local_user_names,
         )
-        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
             "DEBUG",
@@ -276,10 +276,10 @@ class TestOrchestratorDebugUniformity:
     def test_snmp_rename_emits_entry_debug(self, caplog):
         """Entry log fires EVEN on the empty-map / no-snmp-block
         no-op path — same uniformity guarantee as the siblings."""
+        from netcanon.migration.canonical.intent import CanonicalIntent
         from netcanon.migration.canonical.snmp_names import (
             translate_snmp_community,
         )
-        from netcanon.migration.canonical.intent import CanonicalIntent
 
         with caplog.at_level(
             "DEBUG", logger="netcanon.migration.canonical.snmp_names",
@@ -297,11 +297,12 @@ class TestOrchestratorDebugUniformity:
         entry AND exit DEBUG records should fire, with exit carrying
         applied/dropped/warnings counts.  Uses snmp since the happy
         path is most compact (single-row scalar rename)."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalSNMP,
+        )
         from netcanon.migration.canonical.snmp_names import (
             translate_snmp_community,
-        )
-        from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalSNMP,
         )
 
         intent = CanonicalIntent(snmp=CanonicalSNMP(community="public"))

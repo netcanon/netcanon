@@ -28,8 +28,8 @@ import pytest
 
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
-    CanonicalIPv4Address,
     CanonicalInterface,
+    CanonicalIPv4Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalVlan,
@@ -210,11 +210,11 @@ class TestIssue2PortCollision:
         the disambiguator only kicks in when module > 0 (or stack >
         1) so single-stack/base-module Cisco sources don't see a
         breaking change."""
-        from netcanon.migration.codecs.fortigate_cli.port_names import (
-            format_port_identity,
-        )
         from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
+        )
+        from netcanon.migration.codecs.fortigate_cli.port_names import (
+            format_port_identity,
         )
         ident = cisco_classify("TenGigabitEthernet1/0/24")
         assert ident.stack == 1 and ident.module == 0 and ident.port == 24
@@ -222,11 +222,11 @@ class TestIssue2PortCollision:
 
     def test_module_one_uses_disambiguated_name(self) -> None:
         """Cisco Gi1/1/1 (module=1) must produce port-1-1-1."""
-        from netcanon.migration.codecs.fortigate_cli.port_names import (
-            format_port_identity,
-        )
         from netcanon.migration.codecs.cisco_iosxe_cli.port_names import (
             classify_port_name as cisco_classify,
+        )
+        from netcanon.migration.codecs.fortigate_cli.port_names import (
+            format_port_identity,
         )
         ident = cisco_classify("GigabitEthernet1/1/1")
         assert ident.module == 1

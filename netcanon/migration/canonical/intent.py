@@ -72,10 +72,7 @@ Schema extensions (wire-through in same commit as schema):
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # Tier 1 — auto-translatable

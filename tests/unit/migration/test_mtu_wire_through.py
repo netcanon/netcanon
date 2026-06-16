@@ -23,8 +23,8 @@ from __future__ import annotations
 import pytest
 
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
     CanonicalIPv4Address,
 )
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec

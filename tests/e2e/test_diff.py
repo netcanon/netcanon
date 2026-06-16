@@ -9,17 +9,9 @@ import pytest
 from playwright.sync_api import Page, expect
 
 from tests.e2e.helpers import (
-    BackupFormPage,
     ComparePicker,
     ConfigsPage,
-    ConfigViewer,
-    DefinitionsPage,
     DiffPage,
-    JobProgressPanel,
-    JobsTable,
-    MigratePage,
-    NavBar,
-    ensure_cisco_config,
     ensure_n_configs_of_type,
 )
 

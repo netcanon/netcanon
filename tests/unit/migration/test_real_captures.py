@@ -45,7 +45,6 @@ from typing import Any
 import pytest
 
 from netcanon.migration.canonical.intent import CanonicalIntent
-from netcanon.migration.codecs.base import ParseError
 
 # Side-effect imports to auto-register every codec with the registry
 # so ``get_codec(name)`` below can look them up by name.  If you add a
@@ -62,6 +61,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     opnsense,
     vyos,
 )
+from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.registry import get_codec
 
 pytestmark = pytest.mark.unit
@@ -309,7 +309,7 @@ def test_real_capture_round_trips_stable(
 
     try:
         rendered = codec.render(first)
-    except Exception as exc:  # noqa: BLE001 — we want any render surprise
+    except Exception as exc:
         pytest.fail(
             f"{codec_key}.render() blew up on the parsed-from-real intent: {exc}"
         )

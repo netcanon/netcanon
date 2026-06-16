@@ -37,9 +37,10 @@ that ships SFP28 (CCR2004-1G-12S+2XS).
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
 )
 from netcanon.migration.canonical.port_names import (
     PortIdentity,
@@ -55,8 +56,6 @@ from netcanon.migration.codecs.mikrotik_routeros.port_names import (
 from netcanon.migration.codecs.mikrotik_routeros.render import (
     render_intent,
 )
-
-
 
 pytestmark = pytest.mark.unit
 

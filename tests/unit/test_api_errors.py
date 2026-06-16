@@ -29,7 +29,6 @@ from netmiko import (
 
 from netcanon.api._errors import translate_backup_error
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -237,7 +236,7 @@ def test_socket_timeout_alias_for_TimeoutError():
     (we require ≥3.11 per pyproject.toml), so a raw ``socket.timeout()``
     instance must hit the TimeoutError mapping just like a direct
     ``TimeoutError()`` would."""
-    exc = socket.timeout()  # equivalent to TimeoutError() on 3.10+
+    exc = TimeoutError()  # equivalent to TimeoutError() on 3.10+
     out = translate_backup_error(exc, host="10.0.0.5")
     assert "Connection timed out" in out
 

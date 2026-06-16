@@ -5,8 +5,7 @@ All I/O is directed to pytest's ``tmp_path`` — no network, no shared state.
 """
 from __future__ import annotations
 
-import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -25,7 +24,7 @@ def _ts(
     second: int = 0,
 ) -> datetime:
     """Return a UTC datetime for use as a stable timestamp in tests."""
-    return datetime(year, month, day, hour, minute, second, tzinfo=timezone.utc)
+    return datetime(year, month, day, hour, minute, second, tzinfo=UTC)
 
 
 # ---------------------------------------------------------------------------

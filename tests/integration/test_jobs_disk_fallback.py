@@ -22,7 +22,7 @@ swap didn't break any of the contracts they relied on.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -39,7 +39,7 @@ def _make_job(
     return BackupJob(
         id=job_id or str(uuid.uuid4()),
         status=JobStatus.completed,
-        created_at=created_at or datetime.now(timezone.utc),
+        created_at=created_at or datetime.now(UTC),
         total_devices=1,
     )
 
@@ -60,7 +60,7 @@ class TestBoundedMemory:
             store, max_memory_jobs=3, warm_cache=False,
         )
         # Insert 5 jobs (cap is 3 → 2 oldest evict from memory).
-        base = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        base = datetime(2026, 5, 1, tzinfo=UTC)
         jobs = [
             _make_job(created_at=base + timedelta(hours=i))
             for i in range(5)
@@ -102,7 +102,7 @@ class TestDiskFallback:
         # Confirm the targeted job is no longer in memory.
         assert evicted.id not in list(client.app.state.jobs.keys())
         # But GET /api/v1/backups/{id} still returns it (disk fallback).
-        resp = client.get("/api/v1/backups/{}".format(evicted.id))
+        resp = client.get(f"/api/v1/backups/{evicted.id}")
         assert resp.status_code == 200
         assert resp.json()["id"] == evicted.id
         client.app.state.jobs = registry
@@ -111,7 +111,7 @@ class TestDiskFallback:
         """A job ID that doesn't exist in memory OR on disk should
         still return 404 — disk fallback doesn't make the API too
         permissive."""
-        resp = client.get("/api/v1/backups/{}".format(uuid.uuid4()))
+        resp = client.get(f"/api/v1/backups/{uuid.uuid4()}")
         assert resp.status_code == 404
 
 

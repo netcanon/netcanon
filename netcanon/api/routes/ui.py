@@ -190,8 +190,8 @@ async def diff_page(
     render the page so the user sees WHY the diff was blocked and
     can click the "Compare anyway" override button if appropriate.
     """
-    from ...services.diff import check_compatibility, compute_diff, fold_context
     from ...models.diff import DiffReport
+    from ...services.diff import check_compatibility, compute_diff, fold_context
 
     storage = request.app.state.storage
     records_by_name = {r.filename: r for r in storage.list_configs()}

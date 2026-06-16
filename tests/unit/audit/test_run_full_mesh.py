@@ -28,7 +28,6 @@ from netcanon.migration.canonical.intent import (
     CanonicalVxlan,
 )
 
-
 pytestmark = pytest.mark.unit
 
 

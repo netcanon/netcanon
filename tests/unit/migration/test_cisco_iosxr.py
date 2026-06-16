@@ -34,7 +34,6 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
-    CanonicalStaticRoute,
 )
 from netcanon.migration.canonical.port_names import PortIdentity
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
@@ -384,7 +383,9 @@ class TestRoundTrip:
         """A tree carrying surfaces XR Phase 1 doesn't emit (VLANs, LAGs,
         SNMP) renders cleanly, omitting them, without crashing."""
         from netcanon.migration.canonical.intent import (
-            CanonicalLAG, CanonicalSNMP, CanonicalVlan,
+            CanonicalLAG,
+            CanonicalSNMP,
+            CanonicalVlan,
         )
         tree = CanonicalIntent(
             hostname="X",

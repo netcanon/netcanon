@@ -52,10 +52,10 @@ import logging
 import re
 
 from ...canonical.intent import (
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRoutingInstance,
@@ -66,9 +66,9 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex
 
 logger = logging.getLogger(__name__)
 

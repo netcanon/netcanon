@@ -51,9 +51,8 @@ import pytest
 
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
-    CanonicalIPv4Address,
     CanonicalInterface,
-    CanonicalLAG,
+    CanonicalIPv4Address,
     CanonicalVlan,
 )
 from netcanon.migration.canonical.port_names import (

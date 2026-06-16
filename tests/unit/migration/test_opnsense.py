@@ -16,7 +16,7 @@ from netcanon.migration.codecs._mock import MockCodec
 from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
-from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.models.migration import DeviceClass
 from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
@@ -935,6 +935,5 @@ class TestCARPGroups:
 
 class TestRegistry:
     def test_opnsense_in_registry(self):
-        import netcanon.migration  # side-effect import
         from netcanon.migration.codecs.registry import list_codecs
         assert "opnsense" in list_codecs()

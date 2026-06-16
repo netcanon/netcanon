@@ -117,8 +117,8 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
     """``netcanon sanitize`` subcommand handler."""
     # Lazy import — keeps `netcanon --help` fast and avoids loading
     # the migration codec graph for non-sanitize subcommands.
-    from .tools.sanitize import sanitize_text
     from .migration.codecs.base import ParseError
+    from .tools.sanitize import sanitize_text
 
     raw = Path(args.input).read_text(encoding="utf-8", errors="replace")
 

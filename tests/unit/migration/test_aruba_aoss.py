@@ -19,7 +19,14 @@ from pathlib import Path
 import pytest
 
 import netcanon.migration  # noqa: F401
-
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalStaticRoute,
+    CanonicalVlan,
+    CanonicalVRRPGroup,
+)
 from netcanon.migration.codecs._mock import MockCodec
 from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 from netcanon.migration.codecs.aruba_aoss.codec import (
@@ -29,14 +36,6 @@ from netcanon.migration.codecs.aruba_aoss.codec import (
 from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netcanon.migration.canonical.intent import (
-    CanonicalIntent,
-    CanonicalIPv4Address,
-    CanonicalInterface,
-    CanonicalStaticRoute,
-    CanonicalVlan,
-    CanonicalVRRPGroup,
-)
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
 

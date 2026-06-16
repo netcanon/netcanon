@@ -60,7 +60,8 @@ on the client side before posting.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -93,7 +94,7 @@ class VlanRenameResult(BaseModel):
 
 
 def translate_vlan_ids(
-    intent: "CanonicalIntent",
+    intent: CanonicalIntent,
     rename_map: dict[int, int | None] | None = None,
 ) -> VlanRenameResult:
     """Apply *rename_map* to *intent* in-place and return a summary.
@@ -332,7 +333,7 @@ def _merge_vlan(dest, src) -> None:
 
 def build_vlan_rename_transform(
     rename_map: dict[int, int | None] | None = None,
-) -> tuple[Callable[["CanonicalIntent"], "CanonicalIntent"], VlanRenameResult]:
+) -> tuple[Callable[[CanonicalIntent], CanonicalIntent], VlanRenameResult]:
     """Return a pipeline-compatible transform + a result accumulator.
 
     Pattern mirrors :func:`build_port_rename_transform`.  The pipeline
@@ -350,7 +351,7 @@ def build_vlan_rename_transform(
     """
     result = VlanRenameResult()
 
-    def _transform(intent: "CanonicalIntent") -> "CanonicalIntent":
+    def _transform(intent: CanonicalIntent) -> CanonicalIntent:
         outcome = translate_vlan_ids(intent, rename_map=rename_map)
         # Copy outcome fields into the shared result so the caller can
         # inspect them after the pipeline completes.  Transforms are

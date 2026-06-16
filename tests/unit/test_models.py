@@ -5,7 +5,7 @@ Pure Pydantic model construction / validation — no I/O or network.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import SecretStr, ValidationError
@@ -206,7 +206,7 @@ class TestConfigRecord:
         return ConfigRecord(
             device_type="Cisco",
             host="192.168.1.1",
-            timestamp=datetime(2026, 4, 14, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
             filename="Cisco_192-168-1-1_20260414_120000.cfg",
             file_extension="cfg",
             size_bytes=1234,
@@ -238,7 +238,7 @@ class TestBackupResult:
             config_record=ConfigRecord(
                 device_type="Cisco",
                 host="192.168.1.1",
-                timestamp=datetime(2026, 4, 14, 12, 0, 0, tzinfo=timezone.utc),
+                timestamp=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
                 filename="Cisco_192-168-1-1_20260414_120000.cfg",
                 file_extension="cfg",
                 size_bytes=100,
@@ -306,7 +306,7 @@ class TestBackupJob:
         defaults = dict(
             id="test-uuid-1234",
             status=JobStatus.pending,
-            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=timezone.utc),
+            created_at=datetime(2026, 4, 14, 12, 0, 0, tzinfo=UTC),
             total_devices=2,
         )
         defaults.update(kwargs)
