@@ -87,6 +87,7 @@ from ...canonical.intent import (
 )
 from .._helpers import _is_link_local_v6, _mask_to_prefix
 from .._input_shape import detect_input_shape
+from .._scanner import scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -338,43 +339,21 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     handled by :func:`_parse_dot1q_vlans` (a separate scan) — it falls
     through this loop harmlessly.
     """
-    interfaces: list[CanonicalInterface] = []
-    current: dict | None = None
-
-    def _flush() -> None:
-        if current is not None:
-            interfaces.append(_build_canonical_interface(current))
-
-    for line in raw.splitlines():
-        m = _IFACE_RE.match(line)
-        if m:
-            _flush()
-            current = _new_iface_scratch(m.group(1))
-            continue
-
-        if current is None:
-            continue
-
-        # `!` terminator or any non-indented line closes the stanza.
-        if line.strip() == "!" or (line and not line[0].isspace()):
-            _flush()
-            current = None
-            continue
-
+    def _on_line(line: str, current: dict) -> None:
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
-            continue
+            return
         if _SHUTDOWN_RE.match(line):
             current["enabled"] = False
-            continue
+            return
         mm = _MTU_RE.match(line)
         if mm:
             try:
                 current["mtu"] = int(mm.group(1))
             except ValueError:
                 pass
-            continue
+            return
         im = _IPV4_RE.match(line)
         if im:
             try:
@@ -385,7 +364,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ParseError:
                 pass
-            continue
+            return
         v6m = _IPV6_RE.match(line)
         if v6m:
             addr = v6m.group(1)
@@ -403,18 +382,26 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ValueError:
                 pass
-            continue
+            return
         bm = _BUNDLE_ID_RE.match(line)
         if bm:
             current["lag_member_of"] = f"Bundle-Ether{int(bm.group(1))}"
-            continue
+            return
         vm = _INDENTED_VRF_RE.match(line)
         if vm:
             current["vrf"] = vm.group(1)
-            continue
+            return
 
-    _flush()
-    return interfaces
+    # Loop skeleton (open on `interface`, close on `!`/dedent, flush at EOF)
+    # is the shared codecs/_scanner helper; the vendor regex cascade above
+    # stays here.  Behaviour-identical to the former hand-rolled loop.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_IFACE_RE.match,
+        open_scratch=lambda m: _new_iface_scratch(m.group(1)),
+        on_line=_on_line,
+        build=_build_canonical_interface,
+    )
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
