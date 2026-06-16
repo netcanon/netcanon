@@ -175,11 +175,11 @@ class TestMaskHelpers:
     def test_mask_to_prefix_roundtrip(self):
         for prefix in (0, 8, 16, 24, 30, 32):
             mask = _prefix_to_mask(prefix)
-            assert _mask_to_prefix(mask) == prefix
+            assert _mask_to_prefix(mask, vendor="fortigate_cli") == prefix
 
     def test_non_contiguous_mask_rejected(self):
         with pytest.raises(ParseError, match="non-contiguous"):
-            _mask_to_prefix("255.0.255.0")
+            _mask_to_prefix("255.0.255.0", vendor="fortigate_cli")
 
     def test_invalid_cidr_rejected(self):
         from netcanon.migration.codecs.base import RenderError

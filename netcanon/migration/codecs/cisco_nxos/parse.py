@@ -68,6 +68,7 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex
 
 logger = logging.getLogger(__name__)
 
@@ -221,21 +222,6 @@ _FABRIC_AG_MODE_RE = re.compile(
 )
 
 
-def _normalise_mac_to_colon_hex(mac: str) -> str:
-    """Normalise a MAC representation to canonical colon-hex.
-
-    Accepts dotted-triplet (``0001.c73a.0000`` — NX-OS native), colon-hex,
-    or dash-hex; returns lower-case ``aa:bb:cc:dd:ee:ff``.  Returns empty
-    string for input it can't classify (caller skips population rather
-    than poisoning the field).  Forked from cisco_iosxe_cli per the
-    duplicate-rather-than-lift convention.
-    """
-    if not mac:
-        return ""
-    hex_only = re.sub(r"[^0-9a-f]", "", mac.strip().lower())
-    if len(hex_only) != 12:
-        return ""
-    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
 _VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
@@ -342,19 +328,6 @@ def _infer_type(iface_name: str) -> str:
         if lower.startswith(prefix):
             return iftype
     return "ianaift:other"
-
-
-def _is_link_local_v6(addr: str) -> bool:
-    """Return True iff *addr* is in the IPv6 link-local prefix fe80::/10.
-
-    Mirrors ``cisco_iosxe_cli.parse._is_link_local_v6`` — the prefix is
-    vendor-neutral (RFC 4291 §2.4), so scope can be recovered even when
-    the operator omits the ``link-local`` keyword.
-    """
-    if not addr:
-        return False
-    lo = addr.lower()
-    return len(lo) >= 3 and lo[:2] == "fe" and lo[2] in ("8", "9", "a", "b")
 
 
 def _is_mgmt_vrf(vrf_name: str) -> bool:

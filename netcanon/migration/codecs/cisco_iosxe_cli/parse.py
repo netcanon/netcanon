@@ -61,6 +61,11 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import (
+    _is_link_local_v6,
+    _mask_to_prefix,
+    _normalise_mac_to_colon_hex,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -196,29 +201,6 @@ _FABRIC_AG_MODE_RE = re.compile(
 )
 
 
-def _normalise_mac_to_colon_hex(mac: str) -> str:
-    """Normalise a vendor MAC representation to canonical colon-hex.
-
-    Accepts the three common forms an operator might paste:
-
-    * dotted-triplet (Cisco / NX-OS native): ``0001.c73a.0000``
-    * colon-hex (canonical / Unix): ``00:01:c7:3a:00:00``
-    * dash-hex (Windows / IEEE): ``00-01-C7-3A-00-00``
-
-    Returns the lower-case ``aa:bb:cc:dd:ee:ff`` form.  Returns empty
-    string for input the function can't classify — leaves the caller
-    to skip the canonical population rather than poison the field
-    with malformed data.
-    """
-    if not mac:
-        return ""
-    raw = mac.strip().lower()
-    # Strip every separator and keep only hex digits.
-    hex_only = re.sub(r"[^0-9a-f]", "", raw)
-    if len(hex_only) != 12:
-        return ""
-    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
-
 #: Interface-name prefix → IANA ifType hint.
 _TYPE_HINTS: dict[str, str] = {
     "gigabitethernet": "ianaift:ethernetCsmacd",
@@ -243,63 +225,6 @@ def _infer_type(iface_name: str) -> str:
         if lower.startswith(prefix):
             return iftype
     return "ianaift:other"
-
-
-def _is_link_local_v6(addr: str) -> bool:
-    """Return True iff *addr* is in the IPv6 link-local prefix
-    fe80::/10 (RFC 4291 §2.4).
-
-    Per IANA the link-local prefix covers the range fe80:: through
-    febf::: the first byte is 0xfe and the second nibble is 8/9/a/b
-    (binary 1111111010 — ten leading 1s).  Cisco / Arista classically
-    require the operator to add the ``link-local`` keyword on the
-    interface line, but the prefix itself is unambiguous regardless
-    of vendor decoration; this lets us recover the correct scope on
-    raw fe80:: lines that omit the keyword.
-
-    Returns False for malformed inputs (the caller has the
-    responsibility for downstream parse-time validation; here we just
-    classify scope and leave the ipaddress library to reject the
-    address at canonical-build time if needed).  Accepts the
-    too-many-``::`` shape ``FE80:A8::2DA::1689`` that some NTC
-    fixtures contain — we only inspect the leading characters.
-
-    Args:
-        addr: The bare IPv6 address token (no prefix length).
-
-    Returns:
-        True when *addr* lower-cases to ``fe[89ab]...``; False
-        otherwise.  Empty / non-string inputs return False.
-    """
-    if not addr:
-        return False
-    lo = addr.lower()
-    return (
-        len(lo) >= 3
-        and lo[:2] == "fe"
-        and lo[2] in ("8", "9", "a", "b")
-    )
-
-
-def _mask_to_prefix(mask_str: str) -> int:
-    """Convert a dotted-decimal subnet mask to a CIDR prefix length.
-
-    Raises ParseError for non-contiguous masks.
-    """
-    try:
-        addr = ipaddress.IPv4Address(mask_str)
-    except ipaddress.AddressValueError:
-        raise ParseError(
-            f"cisco_iosxe_cli: invalid subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    bits = bin(int(addr))[2:]
-    if "01" in bits:
-        raise ParseError(
-            f"cisco_iosxe_cli: non-contiguous subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    return bits.count("1")
 
 
 _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
@@ -784,7 +709,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if im:
             ip_str = im.group(1)
             mask_str = im.group(2)
-            prefix_len = _mask_to_prefix(mask_str)
+            prefix_len = _mask_to_prefix(mask_str, vendor="cisco_iosxe_cli")
             # IOS-XE accepts one primary + multiple secondary addresses
             # per interface (``ip address X.X.X.X MASK [secondary]``).
             # The render-side companion in :mod:`.render` re-derives the
@@ -1351,7 +1276,7 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
             dest_ip = m.group(2)
             mask = m.group(3)
             gw_or_iface = m.group(4)
-            prefix_len = _mask_to_prefix(mask)
+            prefix_len = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
             dest = f"{dest_ip}/{prefix_len}"
             # Gateway could be an IP or an interface name.
             gateway = ""
@@ -1472,7 +1397,7 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
         nm = _DHCP_NETWORK_RE.match(line)
         if nm:
             ip_str, mask = nm.group(1), nm.group(2)
-            prefix = _mask_to_prefix(mask)
+            prefix = _mask_to_prefix(mask, vendor="cisco_iosxe_cli")
             current.network = f"{ip_str}/{prefix}"
             continue
         gm = _DHCP_DEFAULT_ROUTER_RE.match(line)

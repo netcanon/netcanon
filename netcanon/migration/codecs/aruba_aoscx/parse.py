@@ -85,6 +85,7 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _is_link_local_v6, _normalise_mac_to_colon_hex
 from . import port_names as _port_names
 
 logger = logging.getLogger(__name__)
@@ -241,22 +242,6 @@ _VXLAN_VNI_RE = re.compile(r"^\s+vni\s+(\d+)\s*$", re.IGNORECASE)
 _VXLAN_VLAN_MAP_RE = re.compile(r"^\s+vlan\s+(\d+)\s*$", re.IGNORECASE)
 
 
-def _normalise_mac_to_colon_hex(mac: str) -> str:
-    """Normalise a MAC to canonical lower-case colon-hex.
-
-    AOS-CX emits colon-hex already (``02:00:0a:01:65:01``); this also
-    tolerates dotted-triplet / dash forms.  Returns empty string for
-    input it can't classify.  Forked from cisco_nxos per the
-    duplicate-rather-than-lift convention.
-    """
-    if not mac:
-        return ""
-    hex_only = re.sub(r"[^0-9a-f]", "", mac.strip().lower())
-    if len(hex_only) != 12:
-        return ""
-    return ":".join(hex_only[i:i + 2] for i in range(0, 12, 2))
-
-
 #: ``vrf <name>`` opens a top-level VRF declaration (single token, whole
 #: line).  Distinct from the interface-level ``vrf attach`` (indented) and
 #: from ``ssh server vrf mgmt`` / ``ntp vrf mgmt`` (different leading
@@ -307,19 +292,6 @@ def _default_enabled(iface_name: str) -> bool:
     ``shutdown`` / ``no shutdown`` line in the stanza overrides this.
     """
     return _port_names.classify_port_name(iface_name).kind == "loopback"
-
-
-def _is_link_local_v6(addr: str) -> bool:
-    """Return True iff *addr* is in the IPv6 link-local prefix fe80::/10.
-
-    Mirrors ``cisco_nxos.parse._is_link_local_v6`` — the prefix is
-    vendor-neutral (RFC 4291 §2.4), so scope can be recovered even when
-    the operator omits the ``link-local`` keyword.
-    """
-    if not addr:
-        return False
-    lo = addr.lower()
-    return len(lo) >= 3 and lo[:2] == "fe" and lo[2] in ("8", "9", "a", "b")
 
 
 def _parse_vlan_list(text: str) -> list[int]:
