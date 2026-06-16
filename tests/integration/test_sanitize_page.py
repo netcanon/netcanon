@@ -9,8 +9,9 @@ the underlying API; the page just renders + posts FormData.
 
 from __future__ import annotations
 
-import pytest
+from datetime import UTC
 
+import pytest
 
 pytestmark = pytest.mark.integration
 
@@ -65,7 +66,7 @@ class TestSanitizePageRoute:
         resp = client.get("/sanitize")
         missing = [
             tid for tid in SYNC_TESTIDS
-            if 'data-testid="{}"'.format(tid) not in resp.text
+            if f'data-testid="{tid}"' not in resp.text
         ]
         assert not missing, (
             "missing testids on /sanitize: " + ", ".join(missing)
@@ -126,20 +127,20 @@ class TestStoredConfigDropdown:
         both filenames appear as ``<option>`` entries in the
         san-filename select.  Bypasses the backup pipeline (no SSH
         mock plumbing needed for a UI test)."""
-        from datetime import datetime, timezone
+        from datetime import datetime
 
         storage = client.app.state.storage
         storage.save(
             device_type="Cisco",
             host="10.0.0.1",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             extension="cfg",
             content="hostname r1\n!",
         )
         storage.save(
             device_type="OPNsense",
             host="10.0.0.2",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             extension="xml",
             content="<?xml version='1.0'?>\n<opnsense/>",
         )

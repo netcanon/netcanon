@@ -51,15 +51,14 @@ RouterOS doc references (cited in render.py comments):
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
-    CanonicalInterface,
     CanonicalIntent,
+    CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalStaticRoute,
 )
 from netcanon.migration.codecs.mikrotik_routeros.render import render_intent
-
-
 
 pytestmark = pytest.mark.unit
 

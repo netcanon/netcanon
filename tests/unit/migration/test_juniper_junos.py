@@ -16,9 +16,9 @@ import pytest
 
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
+    CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
-    CanonicalInterface,
     CanonicalLocalUser,
     CanonicalSNMP,
     CanonicalStaticRoute,
@@ -1513,11 +1513,13 @@ class TestVxlanSwitchOptions:
             assert rec.source_interface == "lo0.0"
 
     def test_render_emits_switch_options_when_set(self):
-        from netcanon.migration.canonical.intent import CanonicalVxlan
         from netcanon.migration.canonical.intent import (
             CanonicalIntent as _CI,
+        )
+        from netcanon.migration.canonical.intent import (
             CanonicalVlan as _CV,
         )
+        from netcanon.migration.canonical.intent import CanonicalVxlan
         intent = _CI(
             vlans=[_CV(id=100, name="V100")],
             vxlan_vnis=[CanonicalVxlan(
@@ -1532,11 +1534,13 @@ class TestVxlanSwitchOptions:
         assert "set switch-options vxlan-port" not in out
 
     def test_render_emits_non_default_udp_port(self):
-        from netcanon.migration.canonical.intent import CanonicalVxlan
         from netcanon.migration.canonical.intent import (
             CanonicalIntent as _CI,
+        )
+        from netcanon.migration.canonical.intent import (
             CanonicalVlan as _CV,
         )
+        from netcanon.migration.canonical.intent import CanonicalVxlan
         intent = _CI(
             vlans=[_CV(id=100, name="V100")],
             vxlan_vnis=[CanonicalVxlan(

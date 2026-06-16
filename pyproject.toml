@@ -81,6 +81,10 @@ dev = [
     "pytest-xdist>=3.5.0",
     "coverage>=7.4.0",
     "pytest-cov>=4.1.0",
+    # Linting (v0.2.0 tooling baseline).  Pinned to a minor range so a
+    # ruff release that adds/changes a rule can't silently turn the CI
+    # `ruff check` gate red on an unrelated PR.
+    "ruff>=0.15,<0.16",
 ]
 desktop = [
     "PySide6>=6.7.0",
@@ -161,3 +165,63 @@ omit = ["tests/*", "netcanon/templates/*"]
 [tool.coverage.report]
 show_missing = true
 skip_covered = false
+
+# ---------------------------------------------------------------------------
+# ruff — linter (v0.2.0 tooling baseline).  Linter only: the `ruff format`
+# auto-formatter is deliberately NOT adopted (it would reflow the whole tree
+# in one diff).  Line-length is enforced at 120, matching the codebase's
+# de-facto width; the handful of intentionally longer lines (URLs, prose)
+# carry an inline `# noqa: E501`.
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+# setuptools_scm-generated; gitignored, never hand-edited.
+extend-exclude = ["netcanon/_version.py"]
+
+[tool.ruff.lint]
+select = [
+    "F",    # pyflakes — unused imports/vars, undefined names
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "I",    # isort — import ordering
+    "UP",   # pyupgrade — modern-Python syntax
+    "B",    # flake8-bugbear — likely-bug patterns
+    "C4",   # flake8-comprehensions
+    "PIE",  # flake8-pie — misc lints
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = [
+    # FastAPI's `Depends()`/`Query()`/... dependency-injection markers are
+    # the canonical way to declare params and are evaluated once at import;
+    # B008 would flag every route handler.
+    "B008",
+    # The docstrings/comments deliberately use em-dashes and curly quotes as
+    # prose; RUF002/RUF003 would demand replacing every one of them.
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+# Lock in the v0.2.0 Stage-1(a) sweep: every module must carry the future
+# import.  ruff skips empty/comment-only files automatically.
+required-imports = ["from __future__ import annotations"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Header",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.Cookie",
+    "fastapi.File",
+    "fastapi.Security",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Package re-exports: `from .codec import XCodec` is intentional even when
+# the symbol is only surfaced via `__all__`.
+"__init__.py" = ["F401"]

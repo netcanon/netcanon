@@ -27,7 +27,8 @@ re-exports are purely for backwards compatibility.
 from __future__ import annotations
 
 import re
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 
 from ....models.migration import (
     CapabilityMatrix,
@@ -52,9 +53,9 @@ from .render import render_intent
 # structural contract (see module docstring).
 __all__ = [
     "FortiGateCLICodec",
+    "_mask_to_prefix",
     "_parse_blocks",
     "_prefix_to_mask",
-    "_mask_to_prefix",
 ]
 
 

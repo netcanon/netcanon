@@ -5,7 +5,7 @@ pystray and Pillow are mocked so these run without a display or OS tray service.
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 

@@ -84,8 +84,11 @@ Round-trip invariant (proven in unit tests):
 from __future__ import annotations
 
 import logging
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 from xml.etree import ElementTree as ET
+
+from defusedxml.common import DefusedXmlException
 
 # Safe XML parsing for operator-uploaded NETCONF/OpenConfig input.
 # `defusedxml.ElementTree.fromstring` is an exact API drop-in for
@@ -98,7 +101,6 @@ from xml.etree import ElementTree as ET
 # stdlib since they don't consume untrusted input.  See
 # docs/security-triage/2026-05-21/01-investigation-A.md alerts #14/#15.
 from defusedxml.ElementTree import fromstring as _safe_fromstring
-from defusedxml.common import DefusedXmlException
 
 from ....models.migration import (
     CapabilityMatrix,
@@ -547,7 +549,7 @@ class CiscoIOSXECodec(CodecBase):
     # Parse
     # -----------------------------------------------------------------
 
-    def parse(self, raw: str) -> "CanonicalIntent":
+    def parse(self, raw: str) -> CanonicalIntent:
         """Parse a NETCONF ``<get-config>`` response (or bare openconfig
         ``<interfaces>`` fragment) into a :class:`CanonicalIntent`.
 
@@ -566,9 +568,7 @@ class CiscoIOSXECodec(CodecBase):
                 root isn't findable.
         """
         from ...canonical.intent import (
-            CanonicalIPv4Address,
             CanonicalIntent,
-            CanonicalInterface,
         )
         try:
             root = _safe_fromstring(raw)
@@ -1141,7 +1141,7 @@ _LIST_WRAPPERS = {
 }
 
 
-def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
+def _iface_dict_to_canonical(raw: dict[str, Any]) -> CanonicalInterface:
     """Convert one parsed-interface dict into a :class:`CanonicalInterface`.
 
     The NETCONF parser builds a nested dict matching the OpenConfig
@@ -1150,9 +1150,9 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
     one-liner.
     """
     from ...canonical.intent import (
+        CanonicalInterface,
         CanonicalIPv4Address,
         CanonicalIPv6Address,
-        CanonicalInterface,
     )
     cfg = raw.get("config", {})
     iface = CanonicalInterface(
@@ -1199,10 +1199,11 @@ def _iface_dict_to_canonical(raw: dict[str, Any]) -> "CanonicalInterface":
 #: ``_SVI_NAME_RE``; kept independently here to avoid a cross-codec
 #: import.
 import re as _re
+
 _SVI_NAME_RE = _re.compile(r"^Vlan(\d+)$", _re.IGNORECASE)
 
 
-def _synthesize_vlans_from_svis(intent: "CanonicalIntent") -> None:
+def _synthesize_vlans_from_svis(intent: CanonicalIntent) -> None:
     """Populate ``intent.vlans`` from ``Vlan<N>`` SVI CanonicalInterfaces.
 
     See module-level :meth:`CiscoIOSXECodec.parse` callsite for
@@ -1215,7 +1216,7 @@ def _synthesize_vlans_from_svis(intent: "CanonicalIntent") -> None:
       SVI's IPs in.
     """
     from ...canonical.intent import CanonicalVlan
-    existing_by_id: dict[int, "CanonicalVlan"] = {
+    existing_by_id: dict[int, CanonicalVlan] = {
         v.id: v for v in intent.vlans
     }
     for iface in intent.interfaces:

@@ -117,7 +117,7 @@ class FileDeviceProfileStore:
                     )
 
                 profiles[p.id] = p
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.error(
                     "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
                 )

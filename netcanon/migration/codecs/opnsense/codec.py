@@ -41,7 +41,8 @@ same list-of-pools shape every other codec uses.
 
 from __future__ import annotations
 
-from typing import Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import Any, ClassVar
 
 from ....models.migration import (
     CapabilityMatrix,

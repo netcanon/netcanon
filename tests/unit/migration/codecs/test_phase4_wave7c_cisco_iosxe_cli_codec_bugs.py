@@ -204,7 +204,9 @@ def test_arista_render_emits_trunk_native_vlan() -> None:
     ``trunk_native_vlan=10`` must render to text containing the
     ``switchport trunk native vlan 10`` directive."""
     from netcanon.migration.canonical.intent import (
-        CanonicalIntent, CanonicalInterface, CanonicalVlan,
+        CanonicalIntent,
+        CanonicalInterface,
+        CanonicalVlan,
     )
     intent = CanonicalIntent(
         hostname="sw1",

@@ -282,7 +282,7 @@ class ParamikoShellCollector(BaseCollector):
                 allow_agent=False,
             )
             persist_paramiko_host_keys(client, settings)
-        except Exception as exc:  # noqa: BLE001 — probe non-fatal
+        except Exception as exc:
             logger.warning(
                 "Probe connect to %s failed: %s — continuing with "
                 "family-base definition",
@@ -312,7 +312,7 @@ class ParamikoShellCollector(BaseCollector):
 
             shell.send(f"{definition.probe.command}\n")
             output = self._collect_probe_output(shell, device.host)
-        except Exception as exc:  # noqa: BLE001 — probe non-fatal
+        except Exception as exc:
             logger.warning(
                 "Probe session on %s failed: %s — continuing with "
                 "family-base definition",

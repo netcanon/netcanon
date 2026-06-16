@@ -26,7 +26,7 @@ registry-specific ``total_disk_count`` / ``max_memory_jobs``.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -56,7 +56,7 @@ def _make_job(
     return BackupJob(
         id=job_id or str(uuid.uuid4()),
         status=status,
-        created_at=created_at or datetime.now(timezone.utc),
+        created_at=created_at or datetime.now(UTC),
         total_devices=1,
     )
 
@@ -267,7 +267,7 @@ class TestWarmCache:
     ):
         """Seed 5 jobs on disk, instantiate registry with cap=3,
         warm_cache=True → cache contains 3 most-recent."""
-        base = datetime(2026, 5, 1, tzinfo=timezone.utc)
+        base = datetime(2026, 5, 1, tzinfo=UTC)
         jobs = [
             _make_job(created_at=base + timedelta(hours=i))
             for i in range(5)

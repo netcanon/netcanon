@@ -15,7 +15,6 @@ import pytest
 
 from netcanon.migration.codecs._input_shape import detect_input_shape
 
-
 pytestmark = pytest.mark.unit
 
 
@@ -156,11 +155,11 @@ class TestBoundedScan:
     def test_default_max_lines_5_stops_after_5_nonempty(self):
         # 10 non-empty junk lines, then real XML on line 11 — should
         # NOT be detected (we only scan first 5 non-empty by default).
-        raw = "\n".join(["junk{}".format(i) for i in range(10)]) + "\n<?xml?>"
+        raw = "\n".join([f"junk{i}" for i in range(10)]) + "\n<?xml?>"
         assert detect_input_shape(raw) is None
 
     def test_higher_max_lines_finds_it(self):
-        raw = "\n".join(["junk{}".format(i) for i in range(10)]) + "\n<?xml?>"
+        raw = "\n".join([f"junk{i}" for i in range(10)]) + "\n<?xml?>"
         assert detect_input_shape(raw, max_lines=20) == "xml"
 
     def test_empty_lines_dont_count_toward_max_lines(self):

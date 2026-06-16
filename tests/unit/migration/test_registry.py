@@ -29,10 +29,10 @@ class _DummyAdapter(CodecBase):
     def capabilities(self) -> CapabilityMatrix:
         return CapabilityMatrix(adapter=self.name)
 
-    def parse(self, raw: str):  # noqa: D401
+    def parse(self, raw: str):
         return {}
 
-    def render(self, tree) -> str:  # noqa: D401
+    def render(self, tree) -> str:
         return ""
 
 
@@ -166,6 +166,7 @@ class TestAutoDiscovery:
     def test_discovery_is_idempotent(self):
         """Re-importing the package must not duplicate or reject registrations."""
         import importlib
+
         import netcanon.migration
         before = set(list_codecs())
         importlib.reload(netcanon.migration)

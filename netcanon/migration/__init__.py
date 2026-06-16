@@ -74,4 +74,4 @@ _discover_and_register_codecs()
 # Vendor declarations are loaded lazily via load_vendors() at app
 # startup, NOT at import time — so tests can run without the YAML
 # files.
-from .vendors import load_vendors  # noqa: E402,F401 — re-export
+from .vendors import load_vendors  # noqa: E402 — re-export

@@ -36,6 +36,5 @@ def client(test_app) -> TestClient:
     with patch(
         "netcanon.api.routes.backups.get_collector",
         return_value=fake,
-    ):
-        with TestClient(test_app, raise_server_exceptions=True) as c:
-            yield c
+    ), TestClient(test_app, raise_server_exceptions=True) as c:
+        yield c

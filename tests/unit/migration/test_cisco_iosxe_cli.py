@@ -17,10 +17,9 @@ from pathlib import Path
 import pytest
 
 from netcanon.migration.codecs.base import ParseError, RenderError
-from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netcanon.migration.codecs._mock import MockCodec
-from netcanon.models.migration import DeviceClass, MigrationJobStatus
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.models.migration import MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
@@ -647,7 +646,8 @@ class TestRenderSynthesisesInterfacesFromVlanMembership:
 
     def test_synthesises_access_ports_from_vlan_untagged_list(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalVlan,
+            CanonicalIntent,
+            CanonicalVlan,
         )
         intent = CanonicalIntent(hostname="sw")
         intent.vlans.append(CanonicalVlan(
@@ -662,7 +662,8 @@ class TestRenderSynthesisesInterfacesFromVlanMembership:
 
     def test_synthesises_trunk_ports_from_vlan_tagged_list(self):
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalVlan,
+            CanonicalIntent,
+            CanonicalVlan,
         )
         intent = CanonicalIntent(hostname="sw")
         intent.vlans.append(CanonicalVlan(
@@ -906,7 +907,6 @@ class TestDefaultGatewayParse:
 class TestRegistry:
     def test_cli_codec_in_registry(self):
         from netcanon.migration.codecs.registry import list_codecs
-        import netcanon.migration  # side-effect
         assert "cisco_iosxe_cli" in list_codecs()
 
     def test_two_codecs_for_same_vendor(self):
@@ -1365,7 +1365,9 @@ class TestAnycastGateway:
         gateway`` line ONCE — it's a per-interface marker, not per-
         address."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface, CanonicalIPv4Address,
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalIPv4Address,
         )
         intent = CanonicalIntent(hostname="sw")
         intent.interfaces.append(CanonicalInterface(
@@ -1419,7 +1421,9 @@ class TestAnycastGateway:
         has no equivalent — the renderer must emit a ``! review:``
         comment rather than silently dropping the discrepancy."""
         from netcanon.migration.canonical.intent import (
-            CanonicalIntent, CanonicalInterface, CanonicalIPv4Address,
+            CanonicalIntent,
+            CanonicalInterface,
+            CanonicalIPv4Address,
         )
         intent = CanonicalIntent(hostname="sw")
         intent.interfaces.append(CanonicalInterface(

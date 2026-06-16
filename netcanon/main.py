@@ -23,13 +23,15 @@ configures the lifespan.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from importlib.metadata import PackageNotFoundError, version as _pkg_version
-from pathlib import Path
-from typing import AsyncIterator
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
 
 from fastapi import FastAPI, Request
 
+# Side-effect import — registers all built-in migration adapters.
+from . import migration as _migration_pkg  # noqa: F401
 from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
@@ -40,15 +42,8 @@ from .api.routes import migration as migration_router
 from .api.routes import sanitize as sanitize_router
 from .api.routes import schedules as schedules_router
 from .api.routes import ui as ui_router
-# Side-effect import — registers all built-in migration adapters.
-from . import migration as _migration_pkg  # noqa: F401
 from .config import Settings
 from .definitions.loader import DefinitionLoader
-from .storage.device_profile_store import FileDeviceProfileStore
-from .storage.file_store import FileConfigStore
-from .storage.job_registry import BackupJobRegistry
-from .storage.job_store import FileJobStore
-from .storage.schedule_store import FileScheduleStore
 
 # Configure application-level logging once, at module import time.  The
 # ``configure_logging`` helper (netcanon/logging_config.py) is idempotent
@@ -59,6 +54,12 @@ from .storage.schedule_store import FileScheduleStore
 # the migration pipeline's "Migration plan X: src -> tgt = status" line)
 # were silently dropped by the default WARNING threshold.
 from .logging_config import configure_logging
+from .storage.device_profile_store import FileDeviceProfileStore
+from .storage.file_store import FileConfigStore
+from .storage.job_registry import BackupJobRegistry
+from .storage.job_store import FileJobStore
+from .storage.schedule_store import FileScheduleStore
+
 configure_logging(level="INFO")
 
 
@@ -88,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         """Initialise shared state on startup; clean up on shutdown."""
         from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
         from .api.routes.schedules import register_schedule_job
 
         logger.info(

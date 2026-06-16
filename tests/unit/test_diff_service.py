@@ -7,7 +7,7 @@ These tests feed synthetic inputs directly to ``compute_diff`` and
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,7 +27,7 @@ def _record(
     return ConfigRecord(
         device_type=device_type,
         host=host,
-        timestamp=datetime(2026, 4, 16, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 4, 16, 12, 0, 0, tzinfo=UTC),
         filename=filename or f"{device_type}_{host}_20260416_120000.{ext}",
         file_extension=ext,
         size_bytes=100,

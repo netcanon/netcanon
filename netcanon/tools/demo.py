@@ -36,7 +36,6 @@ from dataclasses import dataclass
 from ..migration.codecs.registry import get_codec
 from ..services.migration_pipeline import run_plan
 
-
 # ---------------------------------------------------------------------------
 # Scenarios
 # ---------------------------------------------------------------------------

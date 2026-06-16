@@ -14,7 +14,7 @@ so the in-memory representation is always ready to use.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -62,7 +62,7 @@ class DeviceProfile(BaseModel):
     os_version: str | None = None
     model: str | None = None
     detected_facts: dict[str, str] | None = None
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     @field_validator("host")
     @classmethod

@@ -13,7 +13,7 @@ Same design as :mod:`netcanon.services.diff`.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from ..migration.codecs.base import CodecBase
 from ..models.diff import CompatibilityReport

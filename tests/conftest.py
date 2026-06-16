@@ -21,7 +21,6 @@ from netcanon.config import Settings
 from netcanon.definitions.schema import DeviceDefinition
 from netcanon.models.device import DeviceTarget
 
-
 # ---------------------------------------------------------------------------
 # Canned YAML strings written to tmp directories
 # ---------------------------------------------------------------------------
@@ -108,8 +107,8 @@ class FakeCollector(BaseCollector):
 
     def collect(
         self,
-        device: DeviceTarget,  # noqa: ARG002
-        definition: DeviceDefinition,  # noqa: ARG002
+        device: DeviceTarget,
+        definition: DeviceDefinition,
     ) -> str:
         """Return the canned output regardless of device or definition."""
         return self._output

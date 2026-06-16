@@ -32,7 +32,6 @@ of this file is human-readable.
 
 from __future__ import annotations
 
-
 MODULE_VARIANT_PROFILES: frozenset[str] = frozenset({
     "cisco_iosxe/C9300-24P",
     "cisco_iosxe/C9300-24U",

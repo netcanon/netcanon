@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import logging
 from collections import OrderedDict
-from typing import Iterator, ValuesView
+from collections.abc import Iterator, ValuesView
 
 from ..models.backup import BackupJob
 from .job_store import FileJobStore
@@ -87,7 +87,7 @@ class BackupJobRegistry:
     ) -> None:
         if max_memory_jobs < 0:
             raise ValueError(
-                "max_memory_jobs must be >= 0, got {!r}".format(max_memory_jobs)
+                f"max_memory_jobs must be >= 0, got {max_memory_jobs!r}"
             )
         self._store = job_store
         self._max = max_memory_jobs

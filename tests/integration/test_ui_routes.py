@@ -11,9 +11,10 @@ Covers:
 """
 from __future__ import annotations
 
+from unittest.mock import patch
+
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch
 
 from netcanon.main import create_app
 from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector

@@ -22,8 +22,6 @@ These tests validate the API-observable contract:
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 from fastapi.testclient import TestClient
 

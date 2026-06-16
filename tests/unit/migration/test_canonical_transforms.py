@@ -208,8 +208,8 @@ class TestCiscoToArubaSwitchport:
     survive into Aruba's VLAN-centric output."""
 
     def test_access_ports_appear_in_aruba_vlan_untagged(self):
-        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
         from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
         raw = """\
 hostname sw1
@@ -252,8 +252,8 @@ end
         assert "GigabitEthernet1/0/3" in aruba_out
 
     def test_trunk_port_appears_in_aruba_vlan_tagged(self):
-        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
         from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
+        from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 
         raw = """\
 hostname sw1

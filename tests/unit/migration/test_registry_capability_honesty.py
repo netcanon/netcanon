@@ -67,8 +67,6 @@ from netcanon.migration.canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from netcanon.migration.codecs.cisco_iosxe_cli.codec import _walk_canonical
-from netcanon.migration.codecs.registry import get_codec, list_codecs
 
 # Explicit imports so every codec is registered when this module runs
 # standalone (mirrors run_full_mesh.py / test_cross_mesh_overrides.py).
@@ -86,6 +84,8 @@ from netcanon.migration.codecs import (  # noqa: F401
     opnsense,
     vyos,
 )
+from netcanon.migration.codecs.cisco_iosxe_cli.codec import _walk_canonical
+from netcanon.migration.codecs.registry import get_codec, list_codecs
 
 pytestmark = pytest.mark.unit
 

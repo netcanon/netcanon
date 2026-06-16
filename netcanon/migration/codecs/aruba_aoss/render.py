@@ -35,7 +35,6 @@ from ..._user_secrets import classify_hash, is_migratable
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
-
 # ---------------------------------------------------------------------------
 # Render-only constants and helpers
 # ---------------------------------------------------------------------------

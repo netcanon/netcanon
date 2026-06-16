@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..definitions.schema import ProbeConfig
 
@@ -100,7 +100,7 @@ def parse_probe_output(
     # Attach a timestamp only on successful extractions so an empty
     # result doesn't masquerade as "probe ran and found nothing".
     if results:
-        results[PROBE_TIMESTAMP_KEY] = datetime.now(timezone.utc).isoformat(
+        results[PROBE_TIMESTAMP_KEY] = datetime.now(UTC).isoformat(
             timespec="seconds"
         )
 

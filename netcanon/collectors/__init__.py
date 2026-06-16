@@ -21,7 +21,7 @@ from .paramiko_collector import ParamikoShellCollector
 
 __all__ = [
     "BaseCollector",
-    "get_collector",
     "NetmikoCollector",
     "ParamikoShellCollector",
+    "get_collector",
 ]

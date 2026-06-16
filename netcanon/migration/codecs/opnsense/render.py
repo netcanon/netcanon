@@ -46,7 +46,6 @@ from ..._user_secrets import (
 from ...canonical.intent import CanonicalIntent
 from ..base import RenderError
 
-
 # ---------------------------------------------------------------------------
 # Top-level render entry — codec.render() is a one-line delegator to this.
 # ---------------------------------------------------------------------------

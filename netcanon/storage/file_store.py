@@ -61,7 +61,7 @@ import json
 import logging
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from ..models.backup import ConfigRecord
@@ -226,7 +226,7 @@ class FileConfigStore(BaseConfigStore):
                         try:
                             meta = json.loads(meta_path.read_text(encoding="utf-8"))
                             record.device_profile_id = meta.get("device_profile_id")
-                        except Exception:  # noqa: BLE001
+                        except Exception:
                             logger.warning(
                                 "Could not read sidecar metadata %s", meta_path.name,
                                 exc_info=True,
@@ -323,7 +323,7 @@ class FileConfigStore(BaseConfigStore):
                 shutil.move(str(path), str(dest))
                 moved += 1
                 logger.debug("Migrated %r → %s", path.name, dest_dir)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning(
                     "Could not migrate %r to subdirectory", path.name, exc_info=True
                 )
@@ -342,7 +342,7 @@ class FileConfigStore(BaseConfigStore):
             return None
         try:
             timestamp = datetime.strptime(m.group("ts"), _TS_FORMAT).replace(
-                tzinfo=timezone.utc
+                tzinfo=UTC
             )
         except ValueError:
             return None

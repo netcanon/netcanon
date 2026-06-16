@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -69,11 +68,11 @@ class TestCheatsheetTestids:
     def test_all_testids_present(self, client, route):
         resp = client.get(route)
         assert resp.status_code == 200, (
-            "{} returned {}".format(route, resp.status_code)
+            f"{route} returned {resp.status_code}"
         )
         missing = [
             tid for tid in SYNC_TESTIDS
-            if 'data-testid="{}"'.format(tid) not in resp.text
+            if f'data-testid="{tid}"' not in resp.text
         ]
         assert not missing, (
             "missing cheatsheet testids on {}: {}".format(

@@ -68,6 +68,8 @@ import logging
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from defusedxml.common import DefusedXmlException
+
 # Safe XML parsing for operator-uploaded input.  `defusedxml.ElementTree.
 # fromstring` is an exact API drop-in for `ET.fromstring` that rejects
 # entity-bomb / quadratic-blowup payloads (billion-laughs class) and
@@ -77,14 +79,13 @@ from xml.etree import ElementTree as ET
 # FastAPI worker on a 5-line billion-laughs payload.  See
 # docs/security-triage/2026-05-21/01-investigation-A.md alerts #14/#15.
 from defusedxml.ElementTree import fromstring as _safe_fromstring
-from defusedxml.common import DefusedXmlException
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,

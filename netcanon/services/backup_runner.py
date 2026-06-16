@@ -54,7 +54,7 @@ from __future__ import annotations
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from ..config import MAX_BACKUP_CONCURRENCY
 from ..definitions.loader import DefinitionLoader
@@ -160,7 +160,7 @@ def _process_one_device(
     if family_base.probe.command and definition_loader is not None:
         try:
             detected_facts = base_collector.probe(device, family_base)
-        except Exception as exc:  # noqa: BLE001 — probe NEVER fails the backup
+        except Exception as exc:
             logger.warning(
                 "Probe of %s raised unexpectedly; continuing with "
                 "family-base definition: %s",
@@ -215,7 +215,7 @@ def _process_one_device(
                 if profile is not None:
                     profile.detected_facts = detected_facts
                     device_profile_store.save(profile)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning(
                 "Failed to persist detected_facts for profile %s: %s",
                 device.device_profile_id,
@@ -234,7 +234,7 @@ def _process_one_device(
         record = storage.save(
             device_type=device.type_key,
             host=device.host,
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             extension=definition.file_extension,
             content=raw_output,
             device_profile_id=device.device_profile_id,
@@ -249,7 +249,7 @@ def _process_one_device(
             device.host,
             record.filename,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         # Route the raw exception through the operator-error translator
         # before persisting on the result row.  ``str(exc)`` pre-Round-3
         # produced wildly varying quality (good for in-house ValueError,
@@ -392,7 +392,7 @@ def run_backup_job(
                         job.id, exc, exc_info=exc,
                     )
 
-    job.completed_at = datetime.now(timezone.utc)
+    job.completed_at = datetime.now(UTC)
     success = sum(1 for r in job.results if r.status == "success")
     failed_hosts = [r.host for r in job.results if r.status == "failed"]
     # Terminal-state logic: all-success=completed, all-fail=failed, mixed=partial.

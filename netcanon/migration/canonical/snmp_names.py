@@ -68,7 +68,8 @@ Rename semantics quirk (single-value field):
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -109,7 +110,7 @@ class SnmpRenameResult(BaseModel):
 
 
 def translate_snmp_community(
-    intent: "CanonicalIntent",
+    intent: CanonicalIntent,
     rename_map: dict[str, str | None] | None = None,
 ) -> SnmpRenameResult:
     """Apply *rename_map* to ``intent.snmp.community`` in-place and
@@ -240,7 +241,7 @@ def translate_snmp_community(
 def build_snmp_community_rename_transform(
     rename_map: dict[str, str | None] | None = None,
 ) -> tuple[
-    Callable[["CanonicalIntent"], "CanonicalIntent"],
+    Callable[[CanonicalIntent], CanonicalIntent],
     SnmpRenameResult,
 ]:
     """Return a pipeline-compatible transform + a result accumulator.
@@ -261,7 +262,7 @@ def build_snmp_community_rename_transform(
     """
     result = SnmpRenameResult()
 
-    def _transform(intent: "CanonicalIntent") -> "CanonicalIntent":
+    def _transform(intent: CanonicalIntent) -> CanonicalIntent:
         outcome = translate_snmp_community(
             intent, rename_map=rename_map,
         )

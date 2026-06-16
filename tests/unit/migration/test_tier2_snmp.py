@@ -16,16 +16,15 @@ from __future__ import annotations
 import pytest
 
 import netcanon.migration  # noqa: F401
-
+from netcanon.migration.canonical.intent import (
+    CanonicalIntent,
+    CanonicalSNMP,
+)
 from netcanon.migration.codecs.aruba_aoss import ArubaAOSSCodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.migration.codecs.fortigate_cli import FortiGateCLICodec
 from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
-from netcanon.migration.canonical.intent import (
-    CanonicalIntent,
-    CanonicalSNMP,
-)
 
 pytestmark = pytest.mark.unit
 

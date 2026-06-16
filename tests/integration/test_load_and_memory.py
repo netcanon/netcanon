@@ -34,7 +34,6 @@ test suite.
 from __future__ import annotations
 
 import gc
-import threading
 import tracemalloc
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from unittest.mock import patch
@@ -59,7 +58,7 @@ _BIG_CONFIG = (
     + "\n!\nend\n"
 )
 assert 95_000 < len(_BIG_CONFIG) < 110_000, (
-    "expected ~100KB synthetic config, got {} bytes".format(len(_BIG_CONFIG))
+    f"expected ~100KB synthetic config, got {len(_BIG_CONFIG)} bytes"
 )
 
 
@@ -113,32 +112,31 @@ class TestSustainedLoad:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as c:
-                original_registry = _swap_registry(test_app, max_memory_jobs=10)
-                try:
-                    job_ids = []
-                    for i in range(50):
-                        resp = c.post(
-                            "/api/v1/backups",
-                            json={"devices": [_device_payload(host=f"10.0.0.{i}")]},
-                        )
-                        assert resp.status_code == 202, resp.text
-                        job_ids.append(resp.json()["id"])
-                    # Registry memory bounded by the cap.
-                    assert len(test_app.state.jobs) == 10
-                    # All 50 persist to disk.
-                    disk_ids = test_app.state.job_store.list_job_ids()
-                    assert len(disk_ids) == 50
-                    assert set(disk_ids) == set(job_ids)
-                    # Every job is queryable by ID (transparent disk
-                    # fallback for evicted ones).
-                    for jid in job_ids:
-                        resp = c.get(f"/api/v1/backups/{jid}")
-                        assert resp.status_code == 200, jid
-                        assert resp.json()["status"] == "completed"
-                finally:
-                    test_app.state.jobs = original_registry
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=10)
+            try:
+                job_ids = []
+                for i in range(50):
+                    resp = c.post(
+                        "/api/v1/backups",
+                        json={"devices": [_device_payload(host=f"10.0.0.{i}")]},
+                    )
+                    assert resp.status_code == 202, resp.text
+                    job_ids.append(resp.json()["id"])
+                # Registry memory bounded by the cap.
+                assert len(test_app.state.jobs) == 10
+                # All 50 persist to disk.
+                disk_ids = test_app.state.job_store.list_job_ids()
+                assert len(disk_ids) == 50
+                assert set(disk_ids) == set(job_ids)
+                # Every job is queryable by ID (transparent disk
+                # fallback for evicted ones).
+                for jid in job_ids:
+                    resp = c.get(f"/api/v1/backups/{jid}")
+                    assert resp.status_code == 200, jid
+                    assert resp.json()["status"] == "completed"
+            finally:
+                test_app.state.jobs = original_registry
 
     def test_job_completion_survives_eviction(self, test_app):
         """Submit a job, evict it from memory by flooding new jobs,
@@ -149,34 +147,33 @@ class TestSustainedLoad:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as c:
-                original_registry = _swap_registry(test_app, max_memory_jobs=3)
-                try:
-                    # First job — should complete, get persisted, then
-                    # be evicted by subsequent submissions.
-                    first = c.post(
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=3)
+            try:
+                # First job — should complete, get persisted, then
+                # be evicted by subsequent submissions.
+                first = c.post(
+                    "/api/v1/backups",
+                    json={"devices": [_device_payload(host="10.0.0.0")]},
+                ).json()
+                # Flood enough jobs to push the first one out.
+                for i in range(5):
+                    c.post(
                         "/api/v1/backups",
-                        json={"devices": [_device_payload(host="10.0.0.0")]},
-                    ).json()
-                    # Flood enough jobs to push the first one out.
-                    for i in range(5):
-                        c.post(
-                            "/api/v1/backups",
-                            json={"devices": [_device_payload(host=f"10.0.0.{i + 1}")]},
-                        )
-                    # First job is no longer in memory.
-                    assert first["id"] not in list(test_app.state.jobs.keys())
-                    # But its persisted state is intact + reachable.
-                    resp = c.get(f"/api/v1/backups/{first['id']}")
-                    assert resp.status_code == 200
-                    payload = resp.json()
-                    assert payload["id"] == first["id"]
-                    assert payload["status"] == "completed"
-                    assert len(payload["results"]) == 1
-                    assert payload["results"][0]["status"] == "success"
-                finally:
-                    test_app.state.jobs = original_registry
+                        json={"devices": [_device_payload(host=f"10.0.0.{i + 1}")]},
+                    )
+                # First job is no longer in memory.
+                assert first["id"] not in list(test_app.state.jobs.keys())
+                # But its persisted state is intact + reachable.
+                resp = c.get(f"/api/v1/backups/{first['id']}")
+                assert resp.status_code == 200
+                payload = resp.json()
+                assert payload["id"] == first["id"]
+                assert payload["status"] == "completed"
+                assert len(payload["results"]) == 1
+                assert payload["results"][0]["status"] == "success"
+            finally:
+                test_app.state.jobs = original_registry
 
 
 # ---------------------------------------------------------------------------
@@ -204,30 +201,29 @@ class TestConcurrentBackups:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as c:
-                original_registry = _swap_registry(test_app, max_memory_jobs=100)
-                try:
-                    def submit(idx: int) -> tuple[int, str]:
-                        resp = c.post(
-                            "/api/v1/backups",
-                            json={"devices": [_device_payload(host=f"10.0.{idx}.1")]},
-                        )
-                        return resp.status_code, resp.json().get("id", "")
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=100)
+            try:
+                def submit(idx: int) -> tuple[int, str]:
+                    resp = c.post(
+                        "/api/v1/backups",
+                        json={"devices": [_device_payload(host=f"10.0.{idx}.1")]},
+                    )
+                    return resp.status_code, resp.json().get("id", "")
 
-                    with ThreadPoolExecutor(max_workers=10) as pool:
-                        futures = [pool.submit(submit, i) for i in range(20)]
-                        results = [f.result() for f in as_completed(futures)]
-                    # Every request succeeded.
-                    assert all(code == 202 for code, _ in results)
-                    # Every job ID is unique.
-                    ids = {jid for _, jid in results if jid}
-                    assert len(ids) == 20
-                    # And every job persisted.
-                    disk_ids = set(test_app.state.job_store.list_job_ids())
-                    assert ids.issubset(disk_ids)
-                finally:
-                    test_app.state.jobs = original_registry
+                with ThreadPoolExecutor(max_workers=10) as pool:
+                    futures = [pool.submit(submit, i) for i in range(20)]
+                    results = [f.result() for f in as_completed(futures)]
+                # Every request succeeded.
+                assert all(code == 202 for code, _ in results)
+                # Every job ID is unique.
+                ids = {jid for _, jid in results if jid}
+                assert len(ids) == 20
+                # And every job persisted.
+                disk_ids = set(test_app.state.job_store.list_job_ids())
+                assert ids.issubset(disk_ids)
+            finally:
+                test_app.state.jobs = original_registry
 
     def test_multi_device_backup_under_concurrency(self, test_app):
         """The "10 devices × 100KB × concurrent backups" scenario from
@@ -238,37 +234,36 @@ class TestConcurrentBackups:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as c:
-                original_registry = _swap_registry(test_app, max_memory_jobs=100)
-                try:
-                    # 3 concurrent jobs, each with 10 devices.
-                    def submit_burst(batch: int) -> dict:
-                        devices = [
-                            _device_payload(host=f"172.16.{batch}.{i}")
-                            for i in range(10)
-                        ]
-                        resp = c.post(
-                            "/api/v1/backups",
-                            json={"devices": devices},
-                        )
-                        return resp.json()
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=100)
+            try:
+                # 3 concurrent jobs, each with 10 devices.
+                def submit_burst(batch: int) -> dict:
+                    devices = [
+                        _device_payload(host=f"172.16.{batch}.{i}")
+                        for i in range(10)
+                    ]
+                    resp = c.post(
+                        "/api/v1/backups",
+                        json={"devices": devices},
+                    )
+                    return resp.json()
 
-                    with ThreadPoolExecutor(max_workers=3) as pool:
-                        jobs = list(pool.map(submit_burst, range(3)))
-                    # All 3 jobs accepted.
-                    assert len(jobs) == 3
-                    # GET each job → all completed with 10 results each.
-                    for j in jobs:
-                        resp = c.get(f"/api/v1/backups/{j['id']}")
-                        payload = resp.json()
-                        assert payload["status"] == "completed", payload
-                        assert len(payload["results"]) == 10
-                        assert all(
-                            r["status"] == "success" for r in payload["results"]
-                        )
-                finally:
-                    test_app.state.jobs = original_registry
+                with ThreadPoolExecutor(max_workers=3) as pool:
+                    jobs = list(pool.map(submit_burst, range(3)))
+                # All 3 jobs accepted.
+                assert len(jobs) == 3
+                # GET each job → all completed with 10 results each.
+                for j in jobs:
+                    resp = c.get(f"/api/v1/backups/{j['id']}")
+                    payload = resp.json()
+                    assert payload["status"] == "completed", payload
+                    assert len(payload["results"]) == 10
+                    assert all(
+                        r["status"] == "success" for r in payload["results"]
+                    )
+            finally:
+                test_app.state.jobs = original_registry
 
 
 # ---------------------------------------------------------------------------
@@ -307,35 +302,34 @@ class TestMemoryBound:
         with patch(
             "netcanon.api.routes.backups.get_collector",
             return_value=collector,
-        ):
-            with TestClient(test_app) as c:
-                original_registry = _swap_registry(test_app, max_memory_jobs=5)
-                try:
-                    baseline = self._count_backup_jobs()
-                    for i in range(30):
-                        resp = c.post(
-                            "/api/v1/backups",
-                            json={"devices": [_device_payload(host=f"10.1.0.{i}")]},
-                        )
-                        assert resp.status_code == 202
-                    after_load = self._count_backup_jobs()
-                    delta = after_load - baseline
-                    # Generous ceiling: cap (5) plus reasonable slack
-                    # for in-flight response objects, recent disk-load
-                    # cache entries, and TestClient internals holding
-                    # short-lived references.  Pre-R8 the delta would
-                    # have been ~30 (one per submitted job).  Post-R8
-                    # the registry caps growth.
-                    assert delta <= 20, (
-                        "BackupJob instance delta {} exceeds 20-instance "
-                        "ceiling — load is causing unbounded growth (cap=5 "
-                        "+ slack expected)".format(delta)
+        ), TestClient(test_app) as c:
+            original_registry = _swap_registry(test_app, max_memory_jobs=5)
+            try:
+                baseline = self._count_backup_jobs()
+                for i in range(30):
+                    resp = c.post(
+                        "/api/v1/backups",
+                        json={"devices": [_device_payload(host=f"10.1.0.{i}")]},
                     )
-                    # Registry's own count is exact regardless of test
-                    # pollution.
-                    assert len(test_app.state.jobs) == 5
-                finally:
-                    test_app.state.jobs = original_registry
+                    assert resp.status_code == 202
+                after_load = self._count_backup_jobs()
+                delta = after_load - baseline
+                # Generous ceiling: cap (5) plus reasonable slack
+                # for in-flight response objects, recent disk-load
+                # cache entries, and TestClient internals holding
+                # short-lived references.  Pre-R8 the delta would
+                # have been ~30 (one per submitted job).  Post-R8
+                # the registry caps growth.
+                assert delta <= 20, (
+                    f"BackupJob instance delta {delta} exceeds 20-instance "
+                    "ceiling — load is causing unbounded growth (cap=5 "
+                    "+ slack expected)"
+                )
+                # Registry's own count is exact regardless of test
+                # pollution.
+                assert len(test_app.state.jobs) == 5
+            finally:
+                test_app.state.jobs = original_registry
 
     def test_tracemalloc_peak_under_load(self, test_app):
         """End-to-end memory: tracemalloc snapshot before vs after
@@ -349,20 +343,19 @@ class TestMemoryBound:
             with patch(
                 "netcanon.api.routes.backups.get_collector",
                 return_value=collector,
-            ):
-                with TestClient(test_app) as c:
-                    original_registry = _swap_registry(test_app, max_memory_jobs=10)
-                    try:
-                        snap_before = tracemalloc.take_snapshot()
-                        for i in range(20):
-                            c.post(
-                                "/api/v1/backups",
-                                json={"devices": [_device_payload(host=f"10.2.0.{i}")]},
-                            )
-                        gc.collect()
-                        snap_after = tracemalloc.take_snapshot()
-                    finally:
-                        test_app.state.jobs = original_registry
+            ), TestClient(test_app) as c:
+                original_registry = _swap_registry(test_app, max_memory_jobs=10)
+                try:
+                    snap_before = tracemalloc.take_snapshot()
+                    for i in range(20):
+                        c.post(
+                            "/api/v1/backups",
+                            json={"devices": [_device_payload(host=f"10.2.0.{i}")]},
+                        )
+                    gc.collect()
+                    snap_after = tracemalloc.take_snapshot()
+                finally:
+                    test_app.state.jobs = original_registry
             stats = snap_after.compare_to(snap_before, "filename")
             total_delta = sum(s.size_diff for s in stats)
             # 20 jobs × 100KB ≈ 2 MB worst case for serialisation
@@ -370,8 +363,8 @@ class TestMemoryBound:
             # BackupJob instances are ~50 KB total.  Use 5 MB as
             # a generous ceiling that flags > 10× regressions.
             assert total_delta < 5_000_000, (
-                "tracemalloc delta {} bytes exceeds 5 MB ceiling "
-                "— suggests an allocation regression".format(total_delta)
+                f"tracemalloc delta {total_delta} bytes exceeds 5 MB ceiling "
+                "— suggests an allocation regression"
             )
         finally:
             tracemalloc.stop()

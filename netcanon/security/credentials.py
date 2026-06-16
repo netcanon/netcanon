@@ -106,7 +106,7 @@ def _write_keyring(key: str) -> bool:
     try:
         keyring.set_password(_SERVICE, _ACCOUNT, key)
         return True
-    except Exception as e:  # noqa: BLE001 — backend variety; any failure → fall through
+    except Exception as e:
         logger.debug(
             "Keyring write failed (%s); falling through to file fallback",
             type(e).__name__,
@@ -183,7 +183,7 @@ def _resolve_key() -> str:
             )
             return candidate
         # Read succeeded but write failed — unusual; fall through.
-    except Exception as e:  # noqa: BLE001 — backend variety; NoKeyringError + friends
+    except Exception as e:
         logger.debug(
             "OS keyring unavailable (%s); falling back to file storage",
             type(e).__name__,
@@ -263,7 +263,7 @@ def decrypt_field(value: str) -> tuple[str, bool]:
         return value, False
 
 
-def reset_fernet() -> None:  # noqa: D401
+def reset_fernet() -> None:
     """Reset the cached Fernet instance (test helper only)."""
     global _fernet
     _fernet = None

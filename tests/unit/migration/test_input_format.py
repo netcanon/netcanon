@@ -23,7 +23,7 @@ from netcanon.migration.codecs._mock import MockCodec
 from netcanon.migration.codecs.base import INPUT_FORMATS, CodecBase
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
-from netcanon.migration.codecs.registry import list_codecs, get_codec
+from netcanon.migration.codecs.registry import get_codec, list_codecs
 from netcanon.models.migration import CapabilityMatrix
 
 pytestmark = pytest.mark.unit
@@ -98,7 +98,6 @@ class TestConcreteAdapterDeclarations:
         Using 'unknown' is acceptable (and tested above) but a typo like
         'xml-netcon' would silently break the UI's format-hint lookup.
         This test catches the typo at CI time."""
-        import netcanon.migration  # side-effect: register all built-ins
 
         for name in list_codecs():
             adapter = get_codec(name)

@@ -32,7 +32,6 @@ from itertools import product
 import pytest
 
 import netcanon.migration  # noqa: F401 — side-effect: register codecs
-
 from netcanon.migration.codecs.registry import get_codec, list_codecs
 from netcanon.models.migration import MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan

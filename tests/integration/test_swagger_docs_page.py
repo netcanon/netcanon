@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import pytest
 
-
 pytestmark = pytest.mark.integration
 
 
@@ -61,7 +60,7 @@ class TestDocsPageBoot:
             "--nav-fg",
             "--accent",
         ):
-            assert token in resp.text, "missing token: {}".format(token)
+            assert token in resp.text, f"missing token: {token}"
 
     def test_dark_theme_overrides_defined(self, client):
         resp = client.get("/docs")
@@ -92,8 +91,8 @@ class TestDocsNavBar:
     ])
     def test_page_nav_links(self, client, testid, href):
         resp = client.get("/docs")
-        assert 'data-testid="{}"'.format(testid) in resp.text
-        assert 'href="{}"'.format(href) in resp.text
+        assert f'data-testid="{testid}"' in resp.text
+        assert f'href="{href}"' in resp.text
 
     def test_api_docs_link_marked_active(self, client):
         """The nav-api-docs link should carry class="active" since
@@ -175,7 +174,7 @@ class TestSwaggerDarkOverrides:
         # overrides add another ~20.  Pin a conservative floor.
         assert important_count >= 20, (
             "expected !important throughout Swagger overrides; "
-            "found only {}".format(important_count)
+            f"found only {important_count}"
         )
 
     def test_inputs_themed(self, client):

@@ -46,10 +46,10 @@ from typing import Any
 
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
@@ -59,13 +59,13 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
-from .._input_shape import detect_input_shape
-from ..base import ParseError
 from .._helpers import (
     _is_link_local_v6,
     _mask_to_prefix,
     _normalise_mac_to_colon_hex,
 )
+from .._input_shape import detect_input_shape
+from ..base import ParseError
 
 logger = logging.getLogger(__name__)
 

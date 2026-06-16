@@ -30,8 +30,8 @@ from __future__ import annotations
 import pytest
 
 from netcanon.migration.canonical.intent import (
-    CanonicalIPv4Address,
     CanonicalInterface,
+    CanonicalIPv4Address,
 )
 from netcanon.migration.codecs.aruba_aoss.codec import ArubaAOSSCodec
 from netcanon.migration.codecs.cisco_iosxe_cli.codec import (

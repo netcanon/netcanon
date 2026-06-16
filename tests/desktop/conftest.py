@@ -9,12 +9,10 @@ calls resolve to MagicMocks.
 """
 from __future__ import annotations
 
-import threading
-from typing import Generator
+from collections.abc import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ---------------------------------------------------------------------------
 # Low-level library mocks (applied for the whole session so imports resolve)

@@ -27,8 +27,8 @@ import pytest
 
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
-    CanonicalIPv4Address,
     CanonicalInterface,
+    CanonicalIPv4Address,
     CanonicalVlan,
 )
 from netcanon.migration.canonical.port_names import translate_port_names
@@ -37,7 +37,6 @@ from netcanon.migration.codecs.fortigate_cli.render import (
     _parent_for_vlan_iface,
 )
 from netcanon.migration.codecs.opnsense import OPNsenseCodec
-
 
 pytestmark = pytest.mark.unit
 

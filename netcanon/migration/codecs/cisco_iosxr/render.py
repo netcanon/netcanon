@@ -37,11 +37,9 @@ BGP grammar (neighbors, address-families, policies) stays unsupported.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
-from ..base import RenderError
 from .._helpers import _prefix_to_mask
 from . import port_names as _port_names
 

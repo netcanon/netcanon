@@ -50,15 +50,12 @@ import re
 import shlex
 from typing import ClassVar
 
-from .._input_shape import detect_input_shape
-from ..base import ParseError
-from .._helpers import _mask_to_prefix
 from ...canonical.intent import (
     CanonicalDHCPPool,
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
@@ -67,6 +64,9 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from .._helpers import _mask_to_prefix
+from .._input_shape import detect_input_shape
+from ..base import ParseError
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
 
 logger = logging.getLogger(__name__)
@@ -135,9 +135,9 @@ class _ConfigBlock:
     def __init__(self, config_path: str) -> None:
         self.config_path: str = config_path
         self.settings: dict[str, list[str]] = {}
-        self.edits: list["_EditBlock"] = []
+        self.edits: list[_EditBlock] = []
         # Nested config-subtables at the config level.
-        self.sub_blocks: list["_ConfigBlock"] = []
+        self.sub_blocks: list[_ConfigBlock] = []
 
 
 class _EditBlock:
@@ -147,7 +147,7 @@ class _EditBlock:
         self.edit_id: str = edit_id
         self.settings: dict[str, list[str]] = {}
         # Nested config-subtables (e.g. per-policy sub-tables).
-        self.sub_blocks: list["_ConfigBlock"] = []
+        self.sub_blocks: list[_ConfigBlock] = []
 
 
 _CONFIG_HEADER_RE = re.compile(r"^config\s+(.+?)\s*$", re.IGNORECASE)

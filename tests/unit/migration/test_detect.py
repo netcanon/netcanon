@@ -8,7 +8,6 @@ from __future__ import annotations
 import pytest
 
 import netcanon.migration  # noqa: F401 — side-effect: register codecs
-
 from netcanon.migration.codecs._mock import MockCodec
 from netcanon.migration.codecs.base import CodecBase
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
@@ -35,7 +34,7 @@ class TestBaseProbe:
         class Silent(CodecBase):
             name = "silent-test"
             @property
-            def capabilities(self): return None  # noqa: ANN201
+            def capabilities(self): return None
             def parse(self, raw): return raw
             def render(self, tree): return ""
         assert Silent.probe("anything") is None

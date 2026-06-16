@@ -18,12 +18,11 @@ All severity fields use the same three-step convention introduced by
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
-
 
 # ---------------------------------------------------------------------------
 # DeviceClass — coarse category of the target network function
@@ -476,7 +475,7 @@ class MigrationJob(BaseModel):
     target_codec: str
     transforms: list[TransformSpec] = Field(default_factory=list)
     created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
+        default_factory=lambda: datetime.now(UTC)
     )
     completed_at: datetime | None = None
     validation: ValidationReport | None = None

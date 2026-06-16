@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import pytest
 
-from netcanon.migration.codecs.cisco_iosxe.codec import CiscoIOSXECodec
 from netcanon.migration.canonical.port_names import PortIdentity
+from netcanon.migration.codecs.cisco_iosxe.codec import CiscoIOSXECodec
 
 pytestmark = pytest.mark.unit
 

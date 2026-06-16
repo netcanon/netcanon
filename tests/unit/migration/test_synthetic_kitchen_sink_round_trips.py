@@ -45,7 +45,6 @@ from typing import Any
 import pytest
 
 from netcanon.migration.canonical.intent import CanonicalIntent
-from netcanon.migration.codecs.base import ParseError
 
 # Side-effect imports to register every codec.  Mirrors
 # ``test_real_captures.py`` so synthetic discovery sees the same
@@ -64,6 +63,7 @@ from netcanon.migration.codecs import (  # noqa: F401
     opnsense,
     vyos,
 )
+from netcanon.migration.codecs.base import ParseError
 from netcanon.migration.codecs.registry import get_codec, list_codecs
 
 pytestmark = pytest.mark.unit
@@ -256,7 +256,7 @@ def test_synthetic_round_trips_stable(
 
     try:
         rendered = codec.render(first)
-    except Exception as exc:  # noqa: BLE001 — surface any render issue
+    except Exception as exc:
         pytest.fail(
             f"{codec_name}.render() blew up on parsed synthetic intent: "
             f"{exc}"

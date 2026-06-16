@@ -18,6 +18,7 @@ the path Phase 4b flagged for SNMP fidelity audits.
 from __future__ import annotations
 
 import pytest
+
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalSNMP,
@@ -29,8 +30,6 @@ from netcanon.migration.codecs.fortigate_cli.render import render_intent
 from netcanon.migration.codecs.juniper_junos.parse import (
     parse_intent as junos_parse,
 )
-
-
 
 pytestmark = pytest.mark.unit
 

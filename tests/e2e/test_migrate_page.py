@@ -17,7 +17,7 @@ from __future__ import annotations
 import pytest
 from playwright.sync_api import Page, expect
 
-from tests.e2e.helpers import MigratePage, NavBar
+from tests.e2e.helpers import MigratePage
 
 pytestmark = pytest.mark.e2e
 

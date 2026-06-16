@@ -15,7 +15,6 @@ from unittest.mock import patch
 import pytest
 
 from netcanon.config import Settings
-from netcanon.storage.file_store import FileConfigStore
 
 pytestmark = pytest.mark.integration
 
@@ -164,9 +163,8 @@ class TestOpenConfig:
         fake = FakeCollector(output=CISCO_FAKE_OUTPUT)
         with patch(
             "netcanon.api.routes.backups.get_collector", return_value=fake
-        ):
-            with TestClient(app, raise_server_exceptions=True) as c:
-                yield c
+        ), TestClient(app, raise_server_exceptions=True) as c:
+            yield c
 
     def test_open_returns_403_when_disabled(self, client):
         """Default ``test_settings`` has ``open_in_editor=False``."""

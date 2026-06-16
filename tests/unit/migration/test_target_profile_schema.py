@@ -17,18 +17,13 @@ profiles that ship under ``definitions/target_profiles/``.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from netcanon.migration.target_profiles import (
-    ProfileLoadError,
     TargetLAGCaps,
     TargetModule,
     TargetPort,
     TargetProfile,
-    load_profile_file,
-    load_profiles_dir,
 )
 
 pytestmark = pytest.mark.unit

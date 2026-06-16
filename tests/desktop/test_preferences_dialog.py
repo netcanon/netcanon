@@ -35,7 +35,7 @@ class _SignalStub:
     def __init__(self) -> None:
         self.handlers: list = []
 
-    def connect(self, handler) -> None:  # noqa: D401
+    def connect(self, handler) -> None:
         self.handlers.append(handler)
 
     def emit(self, *args, **kwargs):

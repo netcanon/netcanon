@@ -40,15 +40,14 @@ parser's structural contract (``_parse_port_list``,
 
 from __future__ import annotations
 
-import ipaddress
 import logging
 import re
 
 from ...canonical.intent import (
-    CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalIntent,
     CanonicalInterface,
+    CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLAG,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
@@ -58,9 +57,9 @@ from ...canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from .._helpers import _mask_to_prefix
 from .._input_shape import detect_input_shape
 from ..base import ParseError
-from .._helpers import _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 

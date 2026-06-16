@@ -32,7 +32,6 @@ from netcanon.models.backup import ConfigRecord
 from netcanon.models.migration import MigrationPlanRequest
 from netcanon.storage.base import BaseConfigStore
 
-
 pytestmark = pytest.mark.unit
 
 

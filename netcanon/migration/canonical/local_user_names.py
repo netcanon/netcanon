@@ -51,7 +51,8 @@ Intentionally NOT in scope:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Callable
+from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
 
@@ -84,7 +85,7 @@ class LocalUserRenameResult(BaseModel):
 
 
 def translate_local_user_names(
-    intent: "CanonicalIntent",
+    intent: CanonicalIntent,
     rename_map: dict[str, str | None] | None = None,
 ) -> LocalUserRenameResult:
     """Apply *rename_map* to *intent* in-place and return a summary.
@@ -224,7 +225,7 @@ def translate_local_user_names(
     return result
 
 
-def _merge_user(dest: "CanonicalLocalUser", src: "CanonicalLocalUser") -> None:
+def _merge_user(dest: CanonicalLocalUser, src: CanonicalLocalUser) -> None:
     """Merge *src* into *dest* in-place.
 
     Rules:
@@ -244,7 +245,7 @@ def _merge_user(dest: "CanonicalLocalUser", src: "CanonicalLocalUser") -> None:
 def build_local_user_rename_transform(
     rename_map: dict[str, str | None] | None = None,
 ) -> tuple[
-    Callable[["CanonicalIntent"], "CanonicalIntent"],
+    Callable[[CanonicalIntent], CanonicalIntent],
     LocalUserRenameResult,
 ]:
     """Return a pipeline-compatible transform + a result accumulator.
@@ -265,7 +266,7 @@ def build_local_user_rename_transform(
     """
     result = LocalUserRenameResult()
 
-    def _transform(intent: "CanonicalIntent") -> "CanonicalIntent":
+    def _transform(intent: CanonicalIntent) -> CanonicalIntent:
         outcome = translate_local_user_names(intent, rename_map=rename_map)
         result.applied.update(outcome.applied)
         result.dropped.extend(outcome.dropped)

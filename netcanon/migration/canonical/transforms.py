@@ -55,7 +55,6 @@ import re
 
 from .intent import CanonicalIntent, CanonicalVlan
 
-
 # Splits a port name into a tuple of (str, int, str, int, ...) for
 # natural sort.  Used by :func:`project_vlan_to_switchport` so
 # synthesis order is deterministic + operator-natural across vendors.
@@ -391,7 +390,7 @@ def project_svi_to_vlan(intent: CanonicalIntent) -> None:
 
 def synthesize_svis_from_vlan_l3(
     intent: CanonicalIntent,
-) -> list["CanonicalInterface"]:
+) -> list[CanonicalInterface]:
     """Inverse of :func:`project_svi_to_vlan`: materialise a synthetic
     ``interface Vlan<N>`` SVI for every VLAN carrying Layer-3
     (``ipv4_addresses``) that has NO matching ``Vlan<N>`` interface in
@@ -426,7 +425,7 @@ def synthesize_svis_from_vlan_l3(
     audit compares), and dedupes on ``(ip, prefix_length)`` for the same
     reason the fold does.
     """
-    from .intent import CanonicalIPv4Address, CanonicalInterface
+    from .intent import CanonicalInterface, CanonicalIPv4Address
 
     existing_svi_ids: set[int] = set()
     for iface in intent.interfaces:

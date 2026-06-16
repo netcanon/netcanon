@@ -26,7 +26,8 @@ registry; instances are stateless unless documented otherwise.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, ClassVar, Iterable
+from collections.abc import Iterable
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from ...models.migration import CapabilityMatrix
 
@@ -282,7 +283,7 @@ class CodecBase(ABC):
     # codecs keep working while new ones land.
     # ------------------------------------------------------------------
 
-    def classify_port_name(self, name: str) -> "PortIdentity":
+    def classify_port_name(self, name: str) -> PortIdentity:
         """Parse a vendor-native port name into a :class:`PortIdentity`.
 
         Subclasses override to recognise THIS vendor's naming
@@ -306,7 +307,7 @@ class CodecBase(ABC):
         from ..canonical.port_names import PortIdentity
         return PortIdentity(kind="unknown", original=name)
 
-    def format_port_identity(self, identity: "PortIdentity") -> str | None:
+    def format_port_identity(self, identity: PortIdentity) -> str | None:
         """Format a :class:`PortIdentity` as THIS vendor's port name.
 
         Inverse of :meth:`classify_port_name`.  The identity was

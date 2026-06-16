@@ -14,12 +14,6 @@ from pathlib import Path
 
 import pytest
 
-from netcanon.migration.codecs._mock import MockCodec
-from netcanon.migration.codecs.base import ParseError, RenderError
-from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
-from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
-from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
-from netcanon.migration.codecs.opnsense import OPNsenseCodec
 from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
@@ -29,6 +23,12 @@ from netcanon.migration.canonical.intent import (
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
+from netcanon.migration.codecs._mock import MockCodec
+from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
+from netcanon.migration.codecs.mikrotik_routeros import MikroTikRouterOSCodec
+from netcanon.migration.codecs.opnsense import OPNsenseCodec
 from netcanon.models.migration import DeviceClass, MigrationJobStatus
 from netcanon.services.migration_pipeline import run_plan
 
@@ -1130,13 +1130,11 @@ class TestVRRPGroups:
 
 class TestRegistry:
     def test_mikrotik_in_registry(self):
-        import netcanon.migration  # side-effect
         from netcanon.migration.codecs.registry import list_codecs
         assert "mikrotik_routeros" in list_codecs()
 
     def test_four_codecs_registered(self):
         """The canonical-bridged codec ecosystem has 4 real codecs now."""
-        import netcanon.migration  # side-effect
         from netcanon.migration.codecs.registry import list_codecs
         codecs = list_codecs()
         assert "cisco_iosxe" in codecs

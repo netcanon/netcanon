@@ -15,10 +15,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
-    CanonicalIPv6Address,
     CanonicalLocalUser,
-    CanonicalSNMP,
-    CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
 )

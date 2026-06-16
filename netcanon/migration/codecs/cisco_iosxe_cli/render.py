@@ -41,7 +41,6 @@ cross sibling boundaries.
 
 from __future__ import annotations
 
-import ipaddress
 import re
 from typing import Any
 
@@ -56,8 +55,8 @@ from ...canonical.intent import (
     CanonicalInterface,
     CanonicalLAG,
 )
-from ..base import RenderError
 from .._helpers import _prefix_to_mask
+from ..base import RenderError
 
 
 def render_intent(tree: Any) -> str:

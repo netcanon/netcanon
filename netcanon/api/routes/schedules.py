@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
@@ -22,7 +22,7 @@ from ...models.backup import BackupJob, JobStatus
 from ...models.schedule import BackupSchedule, ScheduleCreate
 from ...storage.job_store import FileJobStore
 from ...storage.schedule_store import FileScheduleStore
-from ..deps import get_job_store, get_schedule_store, get_schedules, get_scheduler
+from ..deps import get_schedule_store, get_scheduler, get_schedules
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/schedules", tags=["schedules"])
@@ -209,7 +209,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
     job = BackupJob(
         id=str(uuid.uuid4()),
         status=JobStatus.pending,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
         total_devices=len(devices),
         schedule_id=schedule.id,
         schedule_name=schedule.name,
@@ -241,7 +241,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
         getattr(app.state, "device_profile_store", None),
     )
 
-    schedule.last_run_at = datetime.now(timezone.utc)
+    schedule.last_run_at = datetime.now(UTC)
     schedule.last_job_id = job.id
 
     # Refresh next_run_at from the live scheduler
