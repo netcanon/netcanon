@@ -66,6 +66,7 @@ from .._helpers import (
     _parse_vlan_list,
 )
 from .._input_shape import detect_input_shape
+from .._scanner import scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -636,67 +637,51 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
 
 def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     """Extract interface stanzas from IOS config text."""
-    lines = raw.splitlines()
-    interfaces: list[CanonicalInterface] = []
-    current: dict[str, Any] | None = None
+    def _open(m: re.Match[str]) -> dict[str, Any]:
+        iface_name = m.group(1)
+        return {
+            "name": iface_name,
+            "description": "",
+            "enabled": True,
+            "type": _infer_type(iface_name),
+            "ipv4": [],
+            "switchport_mode": None,
+            "access_vlan": None,
+            "trunk_allowed": [],
+            "trunk_native": None,
+            "lag_member_of": None,
+            "mtu": None,
+            "ipv6": [],
+            "vrf": "",
+            "kind": "",
+            "dhcp_client_v6": "",
+            "tunnel_type": "",
+            # VRRP groups: dict keyed by group_id so multiple sub-
+            # commands on the same VRID converge on the same scratch
+            # record.  Materialised into list[CanonicalVRRPGroup] at
+            # :func:`_build_canonical_interface` time.
+            "vrrp_groups": {},
+            # SD-Access anycast-gateway flag.  ``fabric forwarding
+            # mode anycast-gateway`` inside this interface stanza
+            # sets the flag; at stanza-close time every primary IPv4
+            # address gets ``virtual_gateway_address = ip`` (the
+            # NX-OS / IOS-XE SD-Access mirror semantic).
+            "fabric_forwarding_anycast": False,
+        }
 
-    for line in lines:
-        m = _IFACE_RE.match(line)
-        if m:
-            if current is not None:
-                interfaces.append(_build_canonical_interface(current))
-            iface_name = m.group(1)
-            current = {
-                "name": iface_name,
-                "description": "",
-                "enabled": True,
-                "type": _infer_type(iface_name),
-                "ipv4": [],
-                "switchport_mode": None,
-                "access_vlan": None,
-                "trunk_allowed": [],
-                "trunk_native": None,
-                "lag_member_of": None,
-                "mtu": None,
-                "ipv6": [],
-                "vrf": "",
-                "kind": "",
-                "dhcp_client_v6": "",
-                "tunnel_type": "",
-                # VRRP groups: dict keyed by group_id so multiple sub-
-                # commands on the same VRID converge on the same scratch
-                # record.  Materialised into list[CanonicalVRRPGroup] at
-                # :func:`_build_canonical_interface` time.
-                "vrrp_groups": {},
-                # SD-Access anycast-gateway flag.  ``fabric forwarding
-                # mode anycast-gateway`` inside this interface stanza
-                # sets the flag; at stanza-close time every primary IPv4
-                # address gets ``virtual_gateway_address = ip`` (the
-                # NX-OS / IOS-XE SD-Access mirror semantic).
-                "fabric_forwarding_anycast": False,
-            }
-            continue
-
-        if current is None:
-            continue
-
-        if line.startswith("!") or (line and not line[0].isspace()):
-            interfaces.append(_build_canonical_interface(current))
-            current = None
-            continue
-
+    def _on_line(line: str, current: dict[str, Any]) -> None:
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
-            continue
+            return
 
         if _SHUTDOWN_RE.match(line):
             current["enabled"] = False
-            continue
+            return
 
         if _NO_SHUTDOWN_RE.match(line):
             current["enabled"] = True
-            continue
+            return
 
         mm = _MTU_RE.match(line)
         if mm:
@@ -704,7 +689,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 current["mtu"] = int(mm.group(1))
             except ValueError:
                 pass
-            continue
+            return
 
         im = _IP_RE.match(line)
         if im:
@@ -729,7 +714,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                     "is_secondary": im.group(3) is not None,
                 },
             )
-            continue
+            return
 
         # GAP-EVPN-3: IPv6 address.  IOS-XE uses CIDR form natively
         # (``ipv6 address 2001:db8::1/64``) — unlike its dotted-mask
@@ -754,10 +739,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # literal.
         if _IPV6_ADDRESS_DHCP_RE.match(line):
             current["dhcp_client_v6"] = "dhcp6"
-            continue
+            return
         if _IPV6_ADDRESS_AUTOCONFIG_RE.match(line):
             current["dhcp_client_v6"] = "slaac"
-            continue
+            return
 
         # Tunnel-mode discriminator.  ``tunnel mode <encap>`` only
         # appears inside an ``interface Tunnel<N>`` stanza; the
@@ -770,7 +755,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             # canonical model doesn't separately track address-family
             # for tunnel encap.
             current["tunnel_type"] = "ipip" if mode == "ipv6ip" else mode
-            continue
+            return
 
         v6m = _IPV6_RE.match(line)
         if v6m:
@@ -801,32 +786,32 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                     "prefix_length": 64,
                     "scope": "link-local",
                 })
-            continue
+            return
 
         sm = _SWITCHPORT_MODE_RE.match(line)
         if sm:
             current["switchport_mode"] = sm.group(1).lower()
-            continue
+            return
 
         am = _SWITCHPORT_ACCESS_RE.match(line)
         if am:
             current["access_vlan"] = int(am.group(1))
-            continue
+            return
 
         tm = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tm:
             current["trunk_allowed"] = _parse_vlan_list(tm.group(1).strip())
-            continue
+            return
 
         nm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
         if nm:
             current["trunk_native"] = int(nm.group(1))
-            continue
+            return
 
         cgm = _CHANNEL_GROUP_RE.match(line)
         if cgm:
             current["lag_member_of"] = f"Port-channel{int(cgm.group(1))}"
-            continue
+            return
 
         vfm = _IFACE_VRF_FORWARDING_RE.match(line)
         if vfm:
@@ -855,7 +840,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 ident = _port_names.classify_port_name(current["name"])
                 if ident.kind == "physical":
                     current["kind"] = "mgmt"
-            continue
+            return
 
         # ── VRRP dispatch (classic single-line per-attribute form) ──
         # Each sub-command updates the per-VRID scratch dict on
@@ -865,7 +850,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # description / auth / track / timers regexes are mutually
         # exclusive so order between them doesn't matter.
         if _dispatch_vrrp_line(line, current):
-            continue
+            return
 
         # ── SD-Access anycast-gateway per-SVI discriminator ──
         # ``fabric forwarding mode anycast-gateway`` marks the SVI's
@@ -876,12 +861,23 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         # the anycast IP).
         if _FABRIC_AG_MODE_RE.match(line):
             current["fabric_forwarding_anycast"] = True
-            continue
+            return
 
-    if current is not None:
-        interfaces.append(_build_canonical_interface(current))
-
-    return interfaces
+    # Loop skeleton (open on `interface`, close on `!`-comment / dedent,
+    # flush at EOF) is the shared codecs/_scanner helper; the vendor regex
+    # cascade above — including the per-VRID VRRP scratch state threaded
+    # through _dispatch_vrrp_line — stays here.  The terminator replicates
+    # the former hand-rolled rule verbatim (a column-0 `!` or any
+    # non-indented line closes the stanza).  Behaviour-identical to the
+    # previous loop.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_IFACE_RE.match,
+        open_scratch=_open,
+        on_line=_on_line,
+        build=_build_canonical_interface,
+        is_terminator=lambda line: line.startswith("!") or (line and not line[0].isspace()),
+    )
 
 
 def _dispatch_vrrp_line(line: str, current: dict[str, Any]) -> bool:
