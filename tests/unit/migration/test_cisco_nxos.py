@@ -871,6 +871,37 @@ interface nve1
 """
 
 
+# Exercises BOTH real NX-OS multicast grammars in one capture: the inline
+# ``member vni N mcast-group X`` (vni 10010) and the own-sub-line form
+# where ``mcast-group`` lands on the next indented line (vni 10020), plus
+# an ``associate-vrf`` L3VNI member (50001) that must NOT acquire an
+# mcast-group or become an L2 record.
+_VXLAN_MCAST_CONFIG = """\
+!Command: show running-config
+hostname MCAST1
+feature nv overlay
+feature vn-segment-vlan-based
+vlan 10
+  name WEB
+  vn-segment 10010
+vlan 20
+  name APP
+  vn-segment 10020
+vrf context TENANT-A
+  vni 50001
+interface loopback0
+  ip address 10.255.0.1/32
+interface nve1
+  no shutdown
+  host-reachability protocol bgp
+  source-interface loopback0
+  member vni 10010 mcast-group 239.1.1.10
+  member vni 10020
+    mcast-group 239.1.1.20
+  member vni 50001 associate-vrf
+"""
+
+
 class TestPhase4VXLAN:
     @pytest.fixture
     def tree(self, codec):
@@ -945,6 +976,37 @@ class TestPhase4VXLAN:
         out = codec.render(tree)
         assert "  member vni 10030" in out
         assert "    mcast-group 239.1.1.30" in out
+
+    def test_mcast_group_parse_inline(self, codec):
+        # Regression (gap-hunt): the inline ``member vni N mcast-group X``
+        # form was never harvested — a matrix-`supported` surface lost
+        # 100% of its data on parse.
+        tree = codec.parse(_VXLAN_MCAST_CONFIG)
+        v = next(v for v in tree.vxlan_vnis if v.vni == 10010)
+        assert v.mcast_group == "239.1.1.10"
+
+    def test_mcast_group_parse_own_subline(self, codec):
+        # The own-sub-line form (``mcast-group`` on the next indented
+        # line) must harvest to the preceding ``member vni`` too.
+        tree = codec.parse(_VXLAN_MCAST_CONFIG)
+        v = next(v for v in tree.vxlan_vnis if v.vni == 10020)
+        assert v.mcast_group == "239.1.1.20"
+
+    def test_associate_vrf_member_carries_no_mcast(self, codec):
+        # The L3VNI ``member vni 50001 associate-vrf`` must not become an
+        # L2 vxlan record nor steal an mcast-group from a sibling.
+        tree = codec.parse(_VXLAN_MCAST_CONFIG)
+        assert 50001 not in {v.vni for v in tree.vxlan_vnis}
+
+    def test_mcast_group_round_trips(self, codec):
+        tree = codec.parse(_VXLAN_MCAST_CONFIG)
+        second = codec.parse(codec.render(tree))
+
+        def mc(t):
+            return sorted((v.vni, v.mcast_group) for v in t.vxlan_vnis)
+
+        assert mc(tree) == [(10010, "239.1.1.10"), (10020, "239.1.1.20")]
+        assert mc(second) == mc(tree)
 
     def test_phase4_matrix_graduated(self, codec):
         caps = codec.capabilities

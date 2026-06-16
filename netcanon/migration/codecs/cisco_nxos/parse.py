@@ -280,6 +280,23 @@ _VN_SEGMENT_RE = re.compile(r"^\s+vn-segment\s+(\d+)\s*$", re.IGNORECASE)
 _NVE_SOURCE_IF_RE = re.compile(
     r"^\s+source-interface\s+(\S+)\s*$", re.IGNORECASE,
 )
+#: ``member vni <vni> [mcast-group <ip>]`` inside ``interface nve1`` → an
+#: L2 VNI's overlay multicast group.  Two real grammar forms exist: the
+#: inline form (group 2 captures the address on the same line) and the
+#: own-sub-line form where ``mcast-group`` lands on the next indented line
+#: (see _NVE_MCAST_RE).  ``member vni N associate-vrf`` (the L3VNI binding)
+#: matches with group 2 empty and is skipped — the L3VNI is harvested from
+#: ``vrf context X / vni N`` instead.
+_NVE_MEMBER_VNI_RE = re.compile(
+    r"^\s+member\s+vni\s+(\d+)"
+    r"(?:\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)|\s+associate-vrf)?\s*$",
+    re.IGNORECASE,
+)
+#: ``mcast-group <ip>`` on its own indented line, following a ``member vni``
+#: line (the own-sub-line form) → attaches to the current member VNI.
+_NVE_MCAST_RE = re.compile(
+    r"^\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
+)
 #: ``vlan 1,10,2000`` / ``vlan 10-20`` — comma + range list (unique to
 #: NX-OS / Arista in this codebase).
 _VLAN_TOP_RE = re.compile(r"^vlan\s+([\d,\-]+)\s*$", re.IGNORECASE)
@@ -1090,9 +1107,13 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     CanonicalVxlan per-switch convention).  L3VNIs (``vrf context X /
     vni N``) are NOT L2 records — they live on
     :attr:`CanonicalRoutingInstance.l3_vni` (harvested by
-    :func:`_parse_routing_instances`).  The ``interface nve1`` member-vni
-    / suppress-arp / ingress-replication sub-flags are parse-discard (v1
-    assumes modern BGP-EVPN head-end replication; declared lossy).
+    :func:`_parse_routing_instances`).  The ``interface nve1`` ``member
+    vni N`` lines carry the L2 overlay multicast group (``mcast-group``),
+    harvested onto :attr:`CanonicalVxlan.mcast_group` in either the inline
+    (``member vni N mcast-group X``) or the own-sub-line form; the
+    ``suppress-arp`` / ``ingress-replication`` sub-flags remain
+    parse-discard (v1 assumes modern BGP-EVPN head-end replication;
+    declared lossy).
     """
     # Pass 1: vlan_id → vni from ``vlan N / vn-segment <vni>``.
     vn_by_vlan: dict[int, int] = {}
@@ -1111,25 +1132,51 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
             if line and not line[0].isspace():
                 current_id = None
 
-    # Pass 2: switch-level VTEP source-interface from ``interface nve1``.
+    # Pass 2: switch-level VTEP source-interface + per-VNI overlay
+    # multicast group from ``interface nve1``.  ``member vni N`` carries
+    # the L2 ``mcast-group`` in either the inline form or an own-sub-line
+    # ``mcast-group X``; ``member vni N associate-vrf`` is the L3VNI
+    # binding and is skipped here (harvested from ``vrf context``).
     source_iface = ""
+    mcast_by_vni: dict[int, str] = {}
     in_nve = False
+    current_member_vni: int | None = None
     for line in raw.splitlines():
         im = _IFACE_RE.match(line)
         if im:
             in_nve = im.group(1).lower().startswith("nve")
+            current_member_vni = None
             continue
         if line and not line[0].isspace():
             in_nve = False
+            current_member_vni = None
             continue
-        if in_nve:
-            sm = _NVE_SOURCE_IF_RE.match(line)
-            if sm:
-                source_iface = sm.group(1)
+        if not in_nve:
+            continue
+        sm = _NVE_SOURCE_IF_RE.match(line)
+        if sm:
+            source_iface = sm.group(1)
+            continue
+        mm = _NVE_MEMBER_VNI_RE.match(line)
+        if mm:
+            if mm.group(2):  # inline ``member vni N mcast-group X``
+                mcast_by_vni[int(mm.group(1))] = mm.group(2)
+                current_member_vni = int(mm.group(1))
+            elif "associate-vrf" in line.lower():  # L3VNI — not an L2 record
+                current_member_vni = None
+            else:  # bare L2 member; an mcast-group may follow on the next line
+                current_member_vni = int(mm.group(1))
+            continue
+        cm = _NVE_MCAST_RE.match(line)
+        if cm and current_member_vni is not None:
+            mcast_by_vni[current_member_vni] = cm.group(1)
 
     return [
         CanonicalVxlan(
-            vlan_id=vid, vni=vn_by_vlan[vid], source_interface=source_iface,
+            vlan_id=vid,
+            vni=vn_by_vlan[vid],
+            source_interface=source_iface,
+            mcast_group=mcast_by_vni.get(vn_by_vlan[vid], ""),
         )
         for vid in sorted(vn_by_vlan)
     ]

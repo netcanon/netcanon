@@ -48,6 +48,22 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **cisco_nxos VXLAN `mcast-group` now harvested on parse.**  The
+  capability matrix declared `/vxlan-vnis/mcast-group` **supported** and
+  the renderer emitted `member vni <vni>` + `mcast-group <ip>`, but the
+  parser's `_parse_vxlan` never read the `member vni` lines — so the L2
+  overlay multicast group was dropped 100% on the first parse, and a
+  supported surface silently round-tripped to empty.  Parse now harvests
+  `mcast-group` onto `CanonicalVxlan.mcast_group` in **both** real NX-OS
+  grammar forms (inline `member vni N mcast-group X` and the own-sub-line
+  `mcast-group X`), skipping `member vni N associate-vrf` (the L3VNI
+  binding, harvested from `vrf context`).  Surfaced + verified during the
+  2026-06-15 `fixture-gap-hunt` codec-bug verification pass; parse-side
+  fix, CODEC_BUG flat at 5 and every cross-mesh artifact byte-identical
+  (no existing NX-OS fixture carries `mcast-group`).  Unblocks importing
+  the akarneliuk / networklessons real VXLAN multicast captures the gap
+  report identified.
+
 * **fortigate_cli SNMPv3 `auth-proto sha224` no longer silently
   upgraded to `sha256`.**  The FortiGate render map coerced canonical
   `auth_protocol="sha224"` to the FortiOS token `sha256`, even though
