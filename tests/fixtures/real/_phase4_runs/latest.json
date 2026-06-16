@@ -1,8 +1,8 @@
 {
-  "started_utc": "2026-06-15T22:25:08+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260615T222507Z.json",
-  "mesh_run_started_utc": "2026-06-15T22:25:01+00:00",
-  "cells_total": 1128,
+  "started_utc": "2026-06-16T02:06:26+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260616T020625Z.json",
+  "mesh_run_started_utc": "2026-06-16T02:06:19+00:00",
+  "cells_total": 1176,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
     {
@@ -191,6 +191,11 @@
       "target_codec": "cisco_iosxr"
     },
     {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxr"
+    },
+    {
       "fixture": "tests/fixtures/real/cisco_iosxr/xrdtools_isis_r1.cfg",
       "source_codec": "cisco_iosxr",
       "target_codec": "cisco_iosxr"
@@ -241,7 +246,17 @@
       "target_codec": "cisco_nxos"
     },
     {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_nxos"
+    },
+    {
       "fixture": "tests/fixtures/real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
       "source_codec": "cisco_nxos",
       "target_codec": "cisco_nxos"
     },
@@ -402,6 +417,11 @@
     },
     {
       "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "vyos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
       "source_codec": "vyos",
       "target_codec": "vyos"
     },
@@ -1638,6 +1658,61 @@
       "target_codec": "vyos"
     },
     {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_iosxr/iosxr_design_cst_pa3_xr752.cfg",
+      "source_codec": "cisco_iosxr",
+      "target_codec": "vyos"
+    },
+    {
       "fixture": "tests/fixtures/real/cisco_iosxr/xrdtools_isis_r1.cfg",
       "source_codec": "cisco_iosxr",
       "target_codec": "arista_eos"
@@ -2188,6 +2263,61 @@
       "target_codec": "vyos"
     },
     {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/busterswt_spine_leaf_xk32_1_nxos9312.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "vyos"
+    },
+    {
       "fixture": "tests/fixtures/real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt",
       "source_codec": "cisco_nxos",
       "target_codec": "arista_eos"
@@ -2239,6 +2369,61 @@
     },
     {
       "fixture": "tests/fixtures/real/cisco_nxos/nautobot_gc_nxos_snmp_spine01_nxos933.txt",
+      "source_codec": "cisco_nxos",
+      "target_codec": "vyos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
+      "source_codec": "cisco_nxos",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/cisco_nxos/networklessons_clab_dag_symmetric_irb_leaf1_nxos1027.cfg",
       "source_codec": "cisco_nxos",
       "target_codec": "vyos"
     },
@@ -3194,6 +3379,61 @@
     },
     {
       "fixture": "tests/fixtures/real/vyos/scottlaird-vyos-parser.conf",
+      "source_codec": "vyos",
+      "target_codec": "opnsense"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "arista_eos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoscx"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "aruba_aoss"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxe_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_iosxr"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "cisco_nxos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "fortigate_cli"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "juniper_junos"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
+      "source_codec": "vyos",
+      "target_codec": "mikrotik_routeros"
+    },
+    {
+      "fixture": "tests/fixtures/real/vyos/vyos_forum_snmpv3_user_eq13.conf",
       "source_codec": "vyos",
       "target_codec": "opnsense"
     },
@@ -8499,6 +8739,6 @@
     "note": "Committed mirror \u2014 high-severity CODEC_BUG cells only (the Phase 4b 'investigate first' set).  Lower-severity methodology / structural / ok cells are summarised in the full top-level `aggregate` block above; their per-cell detail is in the gitignored <timestamp>.json beside this file (regenerate with tools/run_phase4_reconciliation.py).",
     "filter": "summary.severity_high > 0  (CODEC_BUG cells)",
     "cells_committed": 5,
-    "cells_total_in_run": 1128
+    "cells_total_in_run": 1176
   }
 }
