@@ -5,6 +5,8 @@ Centralised here so that ``device.py`` and ``device_profile.py`` share
 the same hostname/IP validation logic without duplication.
 """
 
+from __future__ import annotations
+
 import ipaddress
 import re
 

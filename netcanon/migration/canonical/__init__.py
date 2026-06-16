@@ -9,3 +9,5 @@ was not adopted — ``loader.py`` remains an unused stub kept for a stable
 import path — so validation is the model's own Pydantic constraints,
 not external YANG-schema validation.
 """
+
+from __future__ import annotations

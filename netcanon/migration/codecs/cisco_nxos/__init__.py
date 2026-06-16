@@ -24,6 +24,8 @@ Certainty: ``certified`` — all four phases complete (L1/L3 + L2
     remain unsupported.  See ``docs/v0.2.0-planning/03-nxos-codec/``.
 """
 
+from __future__ import annotations
+
 from .codec import CiscoNXOSCodec
 
 __all__ = ["CiscoNXOSCodec"]

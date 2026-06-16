@@ -13,6 +13,8 @@ exercising the full parse → validate → render loop end-to-end without
 requiring libyang or any real device.
 """
 
+from __future__ import annotations
+
 from .codec import MockCodec
 
 __all__ = ["MockCodec"]

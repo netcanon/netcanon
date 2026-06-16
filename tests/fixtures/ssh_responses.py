@@ -10,6 +10,8 @@ the underlying SSH transport — including the trailing prompt line that a
 prompt-stripping layer would remove.
 """
 
+from __future__ import annotations
+
 CISCO_RUNNING_CONFIG = """\
 Building configuration...
 

@@ -24,3 +24,5 @@ Or programmatically (e.g. in tests):
     from netcanon.config import Settings
     app = create_app(Settings(configs_dir=tmp_path))
 """
+
+from __future__ import annotations

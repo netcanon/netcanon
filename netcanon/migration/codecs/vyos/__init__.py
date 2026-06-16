@@ -31,6 +31,8 @@ Certainty: ``certified`` — Phase 1 (Tier-1: ``system host-name``;
     ``config`` input follows in a later phase.
 """
 
+from __future__ import annotations
+
 from .codec import VyOSCodec
 
 __all__ = ["VyOSCodec"]

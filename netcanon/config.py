@@ -9,6 +9,8 @@ prefix, e.g.::
 Pydantic-settings automatically reads ``.env`` files if present.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal
 

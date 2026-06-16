@@ -10,6 +10,8 @@ and the web UI.
 See ``definitions/README.md`` for the file format and extension guide.
 """
 
+from __future__ import annotations
+
 from .loader import DefinitionLoader
 from .schema import (
     CollectorConfig,

@@ -48,6 +48,8 @@ RouterOS doc references (cited in render.py comments):
   https://wiki.mikrotik.com/wiki/Manual:IP/Route
 """
 
+from __future__ import annotations
+
 import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalInterface,

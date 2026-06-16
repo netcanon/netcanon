@@ -32,6 +32,8 @@ Certainty: ``certified`` — Phase 1 (Tier-1: hostname, basic-L3
     ``docs/fixture-research-2015/11-aruba_aoscx.md``.
 """
 
+from __future__ import annotations
+
 from .codec import ArubaAOSCXCodec
 
 __all__ = ["ArubaAOSCXCodec"]

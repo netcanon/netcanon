@@ -27,6 +27,8 @@ Certainty: ``certified`` — validated against real-capture fixtures;
     see ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
+from __future__ import annotations
+
 from .codec import CiscoIOSXECLICodec
 
 __all__ = ["CiscoIOSXECLICodec"]

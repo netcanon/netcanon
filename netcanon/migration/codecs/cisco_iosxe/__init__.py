@@ -36,6 +36,8 @@ Certainty: ``best_effort`` — Phase-0.5 NETCONF stub; render covers
     ``tests/fixtures/real/RESULTS.md`` for the under-development matrix.
 """
 
+from __future__ import annotations
+
 from .codec import CiscoIOSXECodec
 
 __all__ = ["CiscoIOSXECodec"]

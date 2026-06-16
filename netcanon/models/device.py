@@ -6,6 +6,8 @@ They are accepted as request bodies from API callers and the interactive
 web form, never persisted to disk (credentials are in-memory only).
 """
 
+from __future__ import annotations
+
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from .validators import validate_host as _validate_host

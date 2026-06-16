@@ -7,6 +7,8 @@ each device is processed.  Callers poll ``GET /api/v1/backups/{job_id}``
 for status.
 """
 
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
 from typing import Literal

@@ -50,6 +50,8 @@ These tests pin:
    has no global domain command.
 """
 
+from __future__ import annotations
+
 import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalInterface,

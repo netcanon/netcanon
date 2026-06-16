@@ -7,6 +7,8 @@ is the default for v1.  Future implementations (database, object storage)
 only need to satisfy the same interface.
 """
 
+from __future__ import annotations
+
 from .base import BaseConfigStore
 from .file_store import FileConfigStore
 
