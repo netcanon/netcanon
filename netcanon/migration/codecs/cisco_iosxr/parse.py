@@ -461,64 +461,56 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     A small ``rt_mode`` state machine collects the RT values that sit on
     their own lines inside each import/export block (terminated by ``!``).
     """
-    instances: list[CanonicalRoutingInstance] = []
-    current: CanonicalRoutingInstance | None = None
-    rt_mode: str | None = None  # None | "import" | "export"
+    # Scratch wraps the record plus the transient import/export RT-block
+    # state-machine flag (``rt_mode``); a pydantic model can't carry that
+    # parse-time state, and the dict is fresh per stanza so the flag resets
+    # naturally on each open.  ``build`` unwraps the record.
+    def _open(m: re.Match[str]) -> dict:
+        return {"ri": CanonicalRoutingInstance(name=m.group(1)), "rt_mode": None}
 
-    for line in raw.splitlines():
-        header = _VRF_TOP_RE.match(line)
-        if header:
-            if current is not None:
-                instances.append(current)
-            current = CanonicalRoutingInstance(name=header.group(1))
-            rt_mode = None
-            continue
-
-        if current is None:
-            continue
-
-        # Any non-indented line closes the stanza (a sibling top-level
-        # stanza or a ``!`` separator at column 0).
-        if line and not line[0].isspace():
-            instances.append(current)
-            current = None
-            rt_mode = None
-            header = _VRF_TOP_RE.match(line)
-            if header:
-                current = CanonicalRoutingInstance(name=header.group(1))
-            continue
-
+    def _on_line(line: str, current: dict) -> None:
         if _IMPORT_RT_RE.match(line):
-            rt_mode = "import"
-            continue
+            current["rt_mode"] = "import"
+            return
         if _EXPORT_RT_RE.match(line):
-            rt_mode = "export"
-            continue
+            current["rt_mode"] = "export"
+            return
 
         stripped = line.strip()
-        if rt_mode is not None:
+        if current["rt_mode"] is not None:
             if stripped == "!":
-                rt_mode = None
-                continue
+                current["rt_mode"] = None
+                return
             rtm = _RT_VALUE_RE.match(stripped)
             if rtm:
                 rt = rtm.group(1)
-                if rt_mode == "import":
-                    current.rt_imports.append(rt)
+                if current["rt_mode"] == "import":
+                    current["ri"].rt_imports.append(rt)
                 else:
-                    current.rt_exports.append(rt)
+                    current["ri"].rt_exports.append(rt)
             # Any other line inside an RT block — ignore (stay in mode).
-            continue
+            return
 
         dm = _VRF_DESC_RE.match(line)
         if dm:
-            current.description = dm.group(1).strip()
-            continue
+            current["ri"].description = dm.group(1).strip()
+            return
         # ``address-family`` framing / ``!`` separators / other — ignore.
 
-    if current is not None:
-        instances.append(current)
-    return instances
+    # Loop skeleton (open on `vrf`, close on dedent, flush at EOF) is the
+    # shared codecs/_scanner helper; the vendor cascade + the intra-stanza
+    # RT-block state machine stay here.  A column-0 ``!`` separator closes
+    # the stanza; an indented ``!`` (the RT-block terminator) is handled in
+    # _on_line — so the terminator replicates the former rule exactly (only
+    # a non-indented line closes a stanza).  Behaviour-identical.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_VRF_TOP_RE.match,
+        open_scratch=_open,
+        on_line=_on_line,
+        build=lambda s: s["ri"],
+        is_terminator=lambda line: bool(line) and not line[0].isspace(),
+    )
 
 
 def _parse_bgp_rd(raw: str) -> dict[str, str]:
