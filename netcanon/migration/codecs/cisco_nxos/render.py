@@ -329,10 +329,13 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
     associate-vrf``).  ``source-interface`` is the switch-level VTEP
     source (broadcast across every CanonicalVxlan record; falls back to
     ``loopback0`` when undeclared).  ``host-reachability protocol bgp`` is
-    the constant modern BGP-EVPN head-end default — legacy
-    flood-and-learn + the per-VNI ``suppress-arp`` / ``ingress-
-    replication`` sub-flags are not modelled (declared lossy).  Returns
-    an empty list when the switch carries no overlay.
+    the constant modern BGP-EVPN head-end default.  Per-VNI flooding is
+    emitted from the canonical record: ``mcast-group`` (multicast
+    flood-and-learn) when set, else a ``ingress-replication protocol
+    static`` / ``peer-ip`` block when ``flood_list`` is set (static
+    head-end replication).  The per-VNI ``suppress-arp`` sub-flag is not
+    modelled (declared lossy).  Returns an empty list when the switch
+    carries no overlay.
     """
     l3_vnis = sorted(
         ri.l3_vni for ri in tree.routing_instances if ri.l3_vni is not None
@@ -352,6 +355,10 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
         block.append(f"  member vni {v.vni}")
         if v.mcast_group:
             block.append(f"    mcast-group {v.mcast_group}")
+        elif v.flood_list:
+            block.append("    ingress-replication protocol static")
+            for peer in v.flood_list:
+                block.append(f"      peer-ip {peer}")
     for l3 in l3_vnis:
         block.append(f"  member vni {l3} associate-vrf")
     return block

@@ -297,6 +297,14 @@ _NVE_MEMBER_VNI_RE = re.compile(
 _NVE_MCAST_RE = re.compile(
     r"^\s+mcast-group\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
 )
+#: ``peer-ip <ip>`` inside a ``member vni N / ingress-replication protocol
+#: static`` sub-block → a static head-end-replication flood-list entry for
+#: the current member VNI (the alternative to multicast flood-and-learn).
+#: The ``ingress-replication protocol static`` marker line itself carries no
+#: data and falls through; the peer-ip lines below it are the flood-list.
+_NVE_PEER_IP_RE = re.compile(
+    r"^\s+peer-ip\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE,
+)
 #: ``vlan 1,10,2000`` / ``vlan 10-20`` — comma + range list (unique to
 #: NX-OS / Arista in this codebase).
 _VLAN_TOP_RE = re.compile(r"^vlan\s+([\d,\-]+)\s*$", re.IGNORECASE)
@@ -1133,10 +1141,11 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     :func:`_parse_routing_instances`).  The ``interface nve1`` ``member
     vni N`` lines carry the L2 overlay multicast group (``mcast-group``),
     harvested onto :attr:`CanonicalVxlan.mcast_group` in either the inline
-    (``member vni N mcast-group X``) or the own-sub-line form; the
-    ``suppress-arp`` / ``ingress-replication`` sub-flags remain
-    parse-discard (v1 assumes modern BGP-EVPN head-end replication;
-    declared lossy).
+    (``member vni N mcast-group X``) or the own-sub-line form.  Static
+    head-end replication (``member vni N / ingress-replication protocol
+    static / peer-ip X``) is harvested onto :attr:`CanonicalVxlan.flood_list`
+    (the multicast alternative).  The ``suppress-arp`` sub-flag remains
+    parse-discard (declared lossy).
     """
     # Pass 1: vlan_id → vni from ``vlan N / vn-segment <vni>``.
     vn_by_vlan: dict[int, int] = {}
@@ -1162,6 +1171,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
     # binding and is skipped here (harvested from ``vrf context``).
     source_iface = ""
     mcast_by_vni: dict[int, str] = {}
+    flood_by_vni: dict[int, list[str]] = {}
     in_nve = False
     current_member_vni: int | None = None
     for line in raw.splitlines():
@@ -1193,6 +1203,11 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
         cm = _NVE_MCAST_RE.match(line)
         if cm and current_member_vni is not None:
             mcast_by_vni[current_member_vni] = cm.group(1)
+            continue
+        pm = _NVE_PEER_IP_RE.match(line)
+        if pm and current_member_vni is not None:
+            # Static head-end replication flood-list entry for this VNI.
+            flood_by_vni.setdefault(current_member_vni, []).append(pm.group(1))
 
     return [
         CanonicalVxlan(
@@ -1200,6 +1215,7 @@ def _parse_vxlan(raw: str) -> list[CanonicalVxlan]:
             vni=vn_by_vlan[vid],
             source_interface=source_iface,
             mcast_group=mcast_by_vni.get(vn_by_vlan[vid], ""),
+            flood_list=flood_by_vni.get(vn_by_vlan[vid], []),
         )
         for vid in sorted(vn_by_vlan)
     ]

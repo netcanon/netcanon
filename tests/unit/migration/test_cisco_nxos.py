@@ -1065,6 +1065,61 @@ class TestPhase4VXLAN:
         assert mc(tree) == [(10010, "239.1.1.10"), (10020, "239.1.1.20")]
         assert mc(second) == mc(tree)
 
+    # ── static head-end replication (flood-list) — gap-hunt follow-up ──
+    # `/vxlan-vnis/flood-list` was matrix-`supported` but parse never read
+    # the `ingress-replication protocol static / peer-ip` lines (the
+    # deferred sibling of the mcast-group fix), so a real static-IR VTEP
+    # lost 100% of its flood-list on parse.
+    _FLOOD_CONFIG = """\
+!Command: show running-config
+hostname LEAF-IR
+feature nv overlay
+feature vn-segment-vlan-based
+vlan 10
+  vn-segment 10010
+vlan 20
+  vn-segment 10020
+interface nve1
+  no shutdown
+  source-interface loopback0
+  member vni 10010
+    ingress-replication protocol static
+      peer-ip 192.0.2.11
+      peer-ip 192.0.2.12
+  member vni 10020 mcast-group 239.1.1.20
+"""
+
+    def test_flood_list_parse(self, codec):
+        tree = codec.parse(self._FLOOD_CONFIG)
+        v = next(v for v in tree.vxlan_vnis if v.vni == 10010)
+        assert v.flood_list == ["192.0.2.11", "192.0.2.12"]
+        assert v.mcast_group == ""
+
+    def test_flood_list_and_mcast_are_mutually_exclusive(self, codec):
+        # A multicast VNI carries no flood-list; a static-IR VNI carries no
+        # mcast-group — the render emits one or the other, never both.
+        tree = codec.parse(self._FLOOD_CONFIG)
+        mc = next(v for v in tree.vxlan_vnis if v.vni == 10020)
+        assert mc.mcast_group == "239.1.1.20"
+        assert mc.flood_list == []
+
+    def test_flood_list_render(self, codec):
+        out = codec.render(codec.parse(self._FLOOD_CONFIG))
+        assert "  member vni 10010" in out
+        assert "    ingress-replication protocol static" in out
+        assert "      peer-ip 192.0.2.11" in out
+        assert "      peer-ip 192.0.2.12" in out
+
+    def test_flood_list_round_trips(self, codec):
+        tree = codec.parse(self._FLOOD_CONFIG)
+        second = codec.parse(codec.render(tree))
+
+        def fl(t):
+            return sorted((v.vni, tuple(v.flood_list)) for v in t.vxlan_vnis)
+
+        assert fl(tree) == [(10010, ("192.0.2.11", "192.0.2.12")), (10020, ())]
+        assert fl(second) == fl(tree)
+
     def test_phase4_matrix_graduated(self, codec):
         caps = codec.capabilities
         for path in [
