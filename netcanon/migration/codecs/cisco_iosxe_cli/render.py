@@ -57,6 +57,7 @@ from ...canonical.intent import (
     CanonicalLAG,
 )
 from ..base import RenderError
+from .._helpers import _prefix_to_mask
 
 
 def render_intent(tree: Any) -> str:
@@ -296,7 +297,7 @@ def render_intent(tree: Any) -> str:
         # Round-trips with the parse-side companion that drops the
         # ``secondary`` token before storing in the canonical list.
         for idx, addr in enumerate(iface.ipv4_addresses):
-            mask = _prefix_to_mask(addr.prefix_length)
+            mask = _prefix_to_mask(addr.prefix_length, vendor="cisco_iosxe_cli")
             suffix = " secondary" if idx > 0 else ""
             body.append(f" ip address {addr.ip} {mask}{suffix}")
         # SD-Access anycast-gateway per-SVI marker.  When any IPv4
@@ -717,24 +718,6 @@ def _mac_to_dotted_triplet(mac: str) -> str:
     return f"{hex_only[0:4]}.{hex_only[4:8]}.{hex_only[8:12]}"
 
 
-def _prefix_to_mask(prefix: int) -> str:
-    """Convert a CIDR prefix length to a dotted-decimal subnet mask.
-
-    Inverse of :func:`netcanon.migration.codecs.cisco_iosxe_cli.parse._mask_to_prefix`.
-    Used by render() because Cisco IOS-XE's ``ip address X Y`` form
-    requires dotted-decimal — every other shipped codec uses CIDR
-    natively, so the canonical tree holds prefix lengths and we
-    expand on render.
-    """
-    if not (0 <= prefix <= 32):
-        raise RenderError(
-            f"cisco_iosxe_cli: prefix length {prefix} out of range",
-            yang_path="/interfaces/interface/ipv4/address/prefix-length",
-        )
-    mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF if prefix else 0
-    return str(ipaddress.IPv4Address(mask_int))
-
-
 def _cidr_to_dest_mask(cidr: str) -> tuple[str, str]:
     """Split a ``X.X.X.X/N`` CIDR into ``(network, dotted_mask)``.
 
@@ -756,7 +739,7 @@ def _cidr_to_dest_mask(cidr: str) -> tuple[str, str]:
         prefix = int(prefix_str)
     except ValueError:
         return (dest, "255.255.255.255")
-    return (dest, _prefix_to_mask(prefix))
+    return (dest, _prefix_to_mask(prefix, vendor="cisco_iosxe_cli"))
 
 
 def _extract_lag_number(lag_name: str) -> int | None:

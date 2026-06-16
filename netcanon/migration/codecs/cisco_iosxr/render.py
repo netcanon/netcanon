@@ -42,6 +42,7 @@ import re
 
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
 from ..base import RenderError
+from .._helpers import _prefix_to_mask
 from . import port_names as _port_names
 
 #: Synthesised IOS-XR release stamped into the banner.  Cosmetic — the
@@ -60,23 +61,6 @@ _CANON_TO_IOSXR_BUNDLE_MODE = {
 #: Fallback BGP ASN when no route-distinguisher exposes a numeric
 #: administrator field (e.g. all RDs are IP-based ``<ip>:<nn>``).
 _FALLBACK_BGP_ASN = "65000"
-
-
-def _prefix_to_mask(prefix: int) -> str:
-    """Convert a CIDR prefix length to a dotted-decimal subnet mask.
-
-    Forked from ``cisco_iosxe_cli.render._prefix_to_mask`` (render-only,
-    small enough to duplicate per the architecture doc).  IOS-XR's
-    ``ipv4 address X Y`` form requires the dotted mask; the canonical
-    tree holds prefix lengths, so we expand on render.
-    """
-    if not (0 <= prefix <= 32):
-        raise RenderError(
-            f"cisco_iosxr: prefix length {prefix} out of range",
-            yang_path="/interfaces/interface/ipv4/address/prefix-length",
-        )
-    mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF if prefix else 0
-    return str(ipaddress.IPv4Address(mask_int))
 
 
 def render_intent(tree: CanonicalIntent) -> str:
@@ -289,7 +273,7 @@ def _render_interface(iface, vlan_ids: set, lag_mode_by_name: dict) -> list[str]
         if unit is not None and unit in vlan_ids:
             block.append(f" encapsulation dot1q {unit}")
     for addr in iface.ipv4_addresses:
-        line = f" ipv4 address {addr.ip} {_prefix_to_mask(addr.prefix_length)}"
+        line = f" ipv4 address {addr.ip} {_prefix_to_mask(addr.prefix_length, vendor='cisco_iosxr')}"
         if addr.is_secondary:
             line += " secondary"
         block.append(line)

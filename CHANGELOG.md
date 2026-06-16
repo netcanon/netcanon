@@ -296,6 +296,29 @@ timestamp if your timezone matters for an audit.
   by name (cosmetic order, consistent with the 7 collections it already
   sorts).
 
+### Internal
+
+* **Shared codec helpers — de-duplicated four vendor-neutral functions
+  into `netcanon/migration/codecs/_helpers.py`.**  Four small pure helpers
+  had been copy-pasted across the CLI / text codecs (the older
+  "duplicate rather than lift" convention); they are now defined once and
+  imported: `_normalise_mac_to_colon_hex` (was in cisco_iosxe_cli /
+  cisco_nxos / aruba_aoscx), `_is_link_local_v6` (cisco_iosxe_cli /
+  cisco_iosxr / cisco_nxos / aruba_aoscx), `_mask_to_prefix`
+  (cisco_iosxe_cli / cisco_iosxr / arista_eos / aruba_aoss /
+  fortigate_cli), and `_prefix_to_mask` (cisco_iosxe_cli / cisco_iosxr).
+  Net −254 lines.  The two fallible helpers take a keyword-only `vendor=`
+  so the raised `ParseError` / `RenderError` messages stay byte-identical
+  (the cross-mesh report's render-error text is unchanged).
+  Behaviour-preserving: the full unit + integration gate is green and the
+  cross-mesh audit holds **CODEC_BUG flat at 5**.  The consolidated
+  `_mask_to_prefix` adopts cisco_iosxr's already-correct 32-bit
+  zero-padded contiguity check for all five copies, incidentally fixing a
+  latent edge case where a mask whose leading octet is zero (e.g. the
+  non-contiguous `0.255.0.0`) was mis-counted rather than rejected — no
+  fixture or test exercises it, so the audit is unaffected.  fortigate
+  keeps its own `_prefix_to_mask` (distinct message, no range pre-check).
+
 ## [0.1.8] - 2026-06-15
 
 ### Security

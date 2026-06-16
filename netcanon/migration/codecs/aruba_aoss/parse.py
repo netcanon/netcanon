@@ -60,6 +60,7 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -320,24 +321,6 @@ def _unquote(s: str) -> str:
     return s
 
 
-def _mask_to_prefix(mask: str) -> int:
-    """Convert dotted-decimal mask to CIDR prefix length."""
-    try:
-        addr = ipaddress.IPv4Address(mask)
-    except ipaddress.AddressValueError:
-        raise ParseError(
-            f"aruba_aoss: invalid subnet mask {mask!r}",
-            snippet=mask,
-        )
-    bits = bin(int(addr))[2:]
-    if "01" in bits:
-        raise ParseError(
-            f"aruba_aoss: non-contiguous subnet mask {mask!r}",
-            snippet=mask,
-        )
-    return bits.count("1")
-
-
 def _dest_to_cidr(dest: str) -> str:
     """Accept either ``A.B.C.D/N`` or just ``A.B.C.D``; default /32."""
     if "/" in dest:
@@ -552,7 +535,7 @@ def _parse_vlan_stanza(
         if ip_mask:
             vlan.ipv4_addresses.append(CanonicalIPv4Address(
                 ip=ip_mask.group(1),
-                prefix_length=_mask_to_prefix(ip_mask.group(2)),
+                prefix_length=_mask_to_prefix(ip_mask.group(2), vendor="aruba_aoss"),
             ))
             i += 1
             continue
@@ -756,7 +739,7 @@ def _parse_interface_stanza(
         if ip_mask:
             iface.ipv4_addresses.append(CanonicalIPv4Address(
                 ip=ip_mask.group(1),
-                prefix_length=_mask_to_prefix(ip_mask.group(2)),
+                prefix_length=_mask_to_prefix(ip_mask.group(2), vendor="aruba_aoss"),
             ))
             i += 1
             continue
@@ -967,7 +950,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
             dest, mask, gateway = rt.group(1), rt.group(2), rt.group(3)
             if mask is not None:
                 try:
-                    prefix = _mask_to_prefix(mask)
+                    prefix = _mask_to_prefix(mask, vendor="aruba_aoss")
                 except Exception:
                     # Non-contiguous mask — unusual; fall back to
                     # /32 host-route semantic so render still

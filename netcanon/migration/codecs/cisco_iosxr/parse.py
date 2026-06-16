@@ -87,6 +87,7 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _is_link_local_v6, _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -213,43 +214,6 @@ def _infer_type(iface_name: str) -> str:
         if lower.startswith(prefix):
             return iftype
     return "ianaift:other"
-
-
-def _is_link_local_v6(addr: str) -> bool:
-    """Return True iff *addr* is in the IPv6 link-local prefix fe80::/10.
-
-    Forked from ``cisco_iosxe_cli.parse._is_link_local_v6`` — the prefix
-    is vendor-neutral (RFC 4291 §2.4), so scope can be recovered even
-    when the operator omits the ``link-local`` keyword.
-    """
-    if not addr:
-        return False
-    lo = addr.lower()
-    return len(lo) >= 3 and lo[:2] == "fe" and lo[2] in ("8", "9", "a", "b")
-
-
-def _mask_to_prefix(mask_str: str) -> int:
-    """Convert a dotted-decimal subnet mask to a CIDR prefix length.
-
-    Forked from ``cisco_iosxe_cli.parse._mask_to_prefix`` (per the
-    architecture doc's "duplicate rather than lift" guidance — the
-    helper is small and parse-only).  Raises :class:`ParseError` for a
-    non-contiguous mask.
-    """
-    try:
-        addr = ipaddress.IPv4Address(mask_str)
-    except ipaddress.AddressValueError:
-        raise ParseError(
-            f"cisco_iosxr: invalid subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    bits = bin(int(addr))[2:].zfill(32)
-    if "01" in bits:
-        raise ParseError(
-            f"cisco_iosxr: non-contiguous subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    return bits.count("1")
 
 
 def _fmt_secret(hash_type: str | None, payload: str) -> str:
@@ -416,7 +380,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             try:
                 current["ipv4"].append({
                     "ip": im.group(1),
-                    "prefix_length": _mask_to_prefix(im.group(2)),
+                    "prefix_length": _mask_to_prefix(im.group(2), vendor="cisco_iosxr"),
                     "is_secondary": im.group(3) is not None,
                 })
             except ParseError:

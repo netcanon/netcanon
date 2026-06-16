@@ -58,6 +58,7 @@ from ...canonical.intent import (
 )
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _mask_to_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -281,7 +282,7 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
         if nm:
             ip_str, mask = nm.group(1), nm.group(2)
             try:
-                prefix = _mask_to_prefix(mask)
+                prefix = _mask_to_prefix(mask, vendor="arista_eos")
             except ParseError:
                 continue
             current.network = f"{ip_str}/{prefix}"
@@ -327,28 +328,6 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
     if current is not None:
         pools.append(current)
     return pools
-
-
-def _mask_to_prefix(mask_str: str) -> int:
-    """Convert a dotted-decimal subnet mask to a CIDR prefix length.
-
-    Local copy of the cisco_iosxe_cli helper — keeping it in-codec
-    avoids a cross-codec import for one regex helper.
-    """
-    try:
-        addr = ipaddress.IPv4Address(mask_str)
-    except ipaddress.AddressValueError:
-        raise ParseError(
-            f"arista_eos: invalid subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    bits = bin(int(addr))[2:]
-    if "01" in bits:
-        raise ParseError(
-            f"arista_eos: non-contiguous subnet mask {mask_str!r}",
-            snippet=mask_str,
-        )
-    return bits.count("1")
 
 
 # ---------------------------------------------------------------------------

@@ -52,6 +52,7 @@ from typing import ClassVar
 
 from .._input_shape import detect_input_shape
 from ..base import ParseError
+from .._helpers import _mask_to_prefix
 from ...canonical.intent import (
     CanonicalDHCPPool,
     CanonicalIPv4Address,
@@ -90,24 +91,6 @@ def _prefix_to_mask(prefix: int) -> str:
         )
     mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
     return str(ipaddress.IPv4Address(mask_int))
-
-
-def _mask_to_prefix(mask: str) -> int:
-    """Convert dotted-decimal mask to CIDR prefix length."""
-    try:
-        addr = ipaddress.IPv4Address(mask)
-    except ipaddress.AddressValueError:
-        raise ParseError(
-            f"fortigate_cli: invalid subnet mask {mask!r}",
-            snippet=mask,
-        )
-    bits = bin(int(addr))[2:]
-    if "01" in bits:
-        raise ParseError(
-            f"fortigate_cli: non-contiguous subnet mask {mask!r}",
-            snippet=mask,
-        )
-    return bits.count("1")
 
 
 def _split_cidr(destination: str) -> tuple[str, int]:
@@ -337,7 +320,7 @@ def _apply_system_interface(
             ip, mask = ip_tokens[0], ip_tokens[1]
             iface.ipv4_addresses.append(CanonicalIPv4Address(
                 ip=ip,
-                prefix_length=_mask_to_prefix(mask),
+                prefix_length=_mask_to_prefix(mask, vendor="fortigate_cli"),
             ))
 
         # IPv6 dynamic-address mode: ``set ip6-mode {static|dhcp|
@@ -676,7 +659,7 @@ def _apply_router_static(
             # keep the scope narrow for now.
             continue
         ip, mask = dst[0], dst[1]
-        destination = f"{ip}/{_mask_to_prefix(mask)}"
+        destination = f"{ip}/{_mask_to_prefix(mask, vendor='fortigate_cli')}"
         gateway_tokens = edit.settings.get("gateway") or [""]
         device_tokens = edit.settings.get("device") or [""]
         # FortiOS `set comment "<text>"` (singular) is the per-route
@@ -825,7 +808,7 @@ def _apply_system_dhcp_server(
             # network address.
             try:
                 gw = ipaddress.IPv4Interface(
-                    f"{gw_tokens[0]}/{_mask_to_prefix(netmask_tokens[0])}"
+                    f"{gw_tokens[0]}/{_mask_to_prefix(netmask_tokens[0], vendor='fortigate_cli')}"
                 )
                 pool.network = str(gw.network)
             except (ipaddress.AddressValueError, ValueError):

@@ -9780,12 +9780,12 @@ Traceback (most recent call last):
     rendered = target_codec.render(canonical_source)
   File "netcanon\migration\codecs\cisco_iosxe_cli\codec.py", line 342, in render
     return render_intent(tree)
-  File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 546, in render_intent
+  File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 547, in render_intent
     dest, mask = _cidr_to_dest_mask(route.destination)
                  ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
-  File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 759, in _cidr_to_dest_mask
-    return (dest, _prefix_to_mask(prefix))
-                  ~~~~~~~~~~~~~~~^^^^^^^^
+  File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 742, in _cidr_to_dest_mask
+    return (dest, _prefix_to_mask(prefix, vendor="cisco_iosxe_cli"))
+                  ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 netcanon.migration.codecs.base.RenderError: cisco_iosxe_cli: prefix length 48 out of range
 ```
 
@@ -9825,7 +9825,7 @@ Traceback (most recent call last):
     return render_intent(tree)
   File "netcanon\migration\codecs\fortigate_cli\render.py", line 946, in render_intent
     dst_mask = _prefix_to_mask(dst_prefix)
-  File "netcanon\migration\codecs\fortigate_cli\parse.py", line 87, in _prefix_to_mask
+  File "netcanon\migration\codecs\fortigate_cli\parse.py", line 88, in _prefix_to_mask
     raise RenderError(
     ...<2 lines>...
     )

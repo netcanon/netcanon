@@ -1,7 +1,7 @@
 {
-  "started_utc": "2026-06-16T05:34:37+00:00",
-  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260616T053436Z.json",
-  "mesh_run_started_utc": "2026-06-16T05:34:30+00:00",
+  "started_utc": "2026-06-16T07:03:04+00:00",
+  "mesh_json": "tests/fixtures/real/_cross_mesh_runs/20260616T070302Z.json",
+  "mesh_run_started_utc": "2026-06-16T07:02:56+00:00",
   "cells_total": 1224,
   "expectation_yamls_loaded": 56,
   "intra_vendor_cells_skipped": [
