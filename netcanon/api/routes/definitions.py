@@ -6,6 +6,8 @@ refresh the in-memory registry after editing YAML files without
 restarting the server.
 """
 
+from __future__ import annotations
+
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request

@@ -13,6 +13,8 @@ Usage::
         ...
 """
 
+from __future__ import annotations
+
 from fastapi import Request
 
 from ..definitions.loader import DefinitionLoader

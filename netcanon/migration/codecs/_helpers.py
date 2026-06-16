@@ -16,6 +16,8 @@ whose input was malformed (preserving the diagnostics that the previous
 per-codec copies emitted).
 """
 
+from __future__ import annotations
+
 import ipaddress
 import re
 

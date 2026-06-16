@@ -11,6 +11,8 @@ interface that isn't already owned by the VLAN, bridge, or LAG
 sections, and confirm the round-trip preserves attributes.
 """
 
+from __future__ import annotations
+
 import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalInterface,

@@ -11,3 +11,5 @@ sanitization rules track codec evolution automatically: a new field
 on :class:`netcanon.migration.canonical.intent.CanonicalIntent` becomes
 visible to the sanitizer in the same wave it ships.
 """
+
+from __future__ import annotations

@@ -21,6 +21,8 @@ defence-in-depth.  Single-token CamelCase keys (``Cisco``, ``Aruba``,
 ``Juniper`` ...) are the established convention.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
 from typing import Literal
 

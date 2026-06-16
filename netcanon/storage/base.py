@@ -5,6 +5,8 @@ Any storage backend must implement all four methods.  The interface is
 intentionally narrow to keep implementations simple and swappable.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from datetime import datetime
 from pathlib import Path

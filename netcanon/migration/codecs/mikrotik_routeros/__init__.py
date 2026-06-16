@@ -35,6 +35,8 @@ Certainty: ``certified`` — validated against real-capture fixtures
     ``tests/fixtures/real/RESULTS.md`` for the per-fixture matrix.
 """
 
+from __future__ import annotations
+
 from .codec import MikroTikRouterOSCodec
 
 __all__ = ["MikroTikRouterOSCodec"]

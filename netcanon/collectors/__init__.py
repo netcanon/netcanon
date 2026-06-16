@@ -13,6 +13,8 @@ Adding a new strategy
 4. Document the strategy in ``collectors/README.md``.
 """
 
+from __future__ import annotations
+
 from .base import BaseCollector, get_collector
 from .netmiko_collector import NetmikoCollector
 from .paramiko_collector import ParamikoShellCollector

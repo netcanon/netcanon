@@ -47,6 +47,8 @@ Certainty: ``certified`` — three real captures across FortiOS 7.2.13
     ``tests/fixtures/real/RESULTS.md``.
 """
 
+from __future__ import annotations
+
 from .codec import FortiGateCLICodec
 
 __all__ = ["FortiGateCLICodec"]

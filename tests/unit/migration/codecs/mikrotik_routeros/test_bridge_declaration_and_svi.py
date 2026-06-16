@@ -34,6 +34,8 @@ must exist before the child is committed.  See RouterOS VLAN docs:
 https://help.mikrotik.com/docs/spaces/ROS/pages/328068/VLAN
 """
 
+from __future__ import annotations
+
 import pytest
 from netcanon.migration.canonical.port_names import PortIdentity
 from netcanon.migration.canonical.intent import (

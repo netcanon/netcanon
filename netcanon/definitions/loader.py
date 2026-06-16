@@ -51,6 +51,8 @@ Usage::
     definition = loader.resolve("Cisco", os_version="17.12")  # overlay-aware
 """
 
+from __future__ import annotations
+
 import logging
 from pathlib import Path
 

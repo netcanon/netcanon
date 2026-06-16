@@ -34,6 +34,8 @@ the per-PORT numbering (the bit before the dash) is still flat.
 that ships SFP28 (CCR2004-1G-12S+2XS).
 """
 
+from __future__ import annotations
+
 import pytest
 from netcanon.migration.canonical.intent import (
     CanonicalInterface,

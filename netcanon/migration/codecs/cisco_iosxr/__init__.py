@@ -28,6 +28,8 @@ Certainty: ``certified`` — all four phases complete: interfaces +
     round-trips cleanly.  See ``docs/v0.2.0-planning/04-iosxr-codec/``.
 """
 
+from __future__ import annotations
+
 from .codec import CiscoIOSXRCodec
 
 __all__ = ["CiscoIOSXRCodec"]

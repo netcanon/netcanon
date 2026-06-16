@@ -55,6 +55,8 @@ skips files matching ``*.meta.json`` so they aren't enumerated as
 configs in their own right.
 """
 
+from __future__ import annotations
+
 import json
 import logging
 import re
