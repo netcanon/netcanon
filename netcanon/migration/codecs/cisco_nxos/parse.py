@@ -72,6 +72,7 @@ from .._helpers import (
     _parse_vlan_list,
 )
 from .._input_shape import detect_input_shape
+from .._scanner import scan_stanzas
 from ..base import ParseError
 
 logger = logging.getLogger(__name__)
@@ -620,51 +621,28 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
     / trunk-native) + LAG membership (``channel-group``).  The
     management-VRF heuristic promotes a physical-named port bound to the
     ``management`` VRF to ``kind="mgmt"`` (mgmt0 already classifies mgmt
-    by name).
+    by name).  ``interface nve1`` is intercepted as a VXLAN config
+    container and not materialised here (see ``_open``).
     """
-    lines = raw.splitlines()
-    interfaces: list[CanonicalInterface] = []
-    current: dict | None = None
+    def _open(m: re.Match[str]) -> dict | None:
+        # VTEP (``interface nve1``) is a VXLAN config container, not a
+        # routed/switched port: its source-interface + member-vni
+        # sub-commands are harvested by :func:`_parse_vxlan` (L2) and
+        # :func:`_parse_routing_instances` (L3VNI).  Returning None leaves
+        # the stanza open-but-unmaterialised so its indented body lines
+        # fall through the scanner's ``current is None`` skip — mirrors
+        # arista_eos's ``Vxlan1`` interception.
+        name = m.group(1)
+        if name.lower().startswith("nve"):
+            return None
+        return _new_iface_scratch(name)
 
-    def _flush() -> None:
-        if current is not None:
-            interfaces.append(_build_canonical_interface(current))
-
-    for line in lines:
-        m = _IFACE_RE.match(line)
-        if m:
-            _flush()
-            name = m.group(1)
-            if name.lower().startswith("nve"):
-                # VTEP (``interface nve1``) is a VXLAN config container,
-                # not a routed/switched port: its source-interface +
-                # member-vni sub-commands are harvested by
-                # :func:`_parse_vxlan` (L2) and
-                # :func:`_parse_routing_instances` (L3VNI).  Don't
-                # materialise it as an interface — mirrors arista_eos's
-                # ``Vxlan1`` interception; the indented body lines fall
-                # through the ``current is None`` guard below.
-                current = None
-                continue
-            current = _new_iface_scratch(name)
-            continue
-
-        if current is None:
-            continue
-
-        # Non-indented line closes the current stanza.
-        if line and not line[0].isspace():
-            _flush()
-            current = None
-            # The closing line might itself open a new interface.
-            m = _IFACE_RE.match(line)
-            if m:
-                current = _new_iface_scratch(m.group(1))
-            continue
-
+    def _on_line(line: str, current: dict) -> None:
         # ── HSRP nested block (Phase 2c) ──
         # ``hsrp <N>`` opens a group; its sub-commands are further-indented
-        # (>= 4 spaces).  Any shallower indented line ends the block.
+        # (>= 4 spaces).  Any shallower indented line ends the block.  This
+        # nested-block state lives in the scratch (``_hsrp_gid``), so it
+        # stays in this cascade rather than the shared scanner.
         hg = _HSRP_GROUP_RE.match(line)
         if hg:
             gid = int(hg.group(1))
@@ -675,51 +653,51 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 "authentication": "",
             })
             current["_hsrp_gid"] = gid
-            continue
+            return
         if _HSRP_VERSION_RE.match(line):
             # ``hsrp version 2`` is interface-level; not modelled.
             current["_hsrp_gid"] = None
-            continue
+            return
         _gid = current["_hsrp_gid"]
         if _gid is not None and (len(line) - len(line.lstrip())) >= 4:
             g = current["hsrp_groups"][_gid]
             him = _HSRP_IP_RE.match(line)
             if him:
                 g["virtual_ips"].append(him.group(1))
-                continue
+                return
             hpm = _HSRP_PRIORITY_RE.match(line)
             if hpm:
                 g["priority"] = int(hpm.group(1))
-                continue
+                return
             hpe = _HSRP_PREEMPT_RE.match(line)
             if hpe:
                 g["preempt"] = not bool(hpe.group(1))   # ``no preempt`` -> False
-                continue
+                return
             ham = _HSRP_AUTH_MD5_RE.match(line)
             if ham:
                 g["authentication"] = f"md5:{ham.group(1)}"
-                continue
+                return
             hat = _HSRP_AUTH_TEXT_RE.match(line)
             if hat:
                 g["authentication"] = f"plain:{hat.group(1)}"
-                continue
+                return
             # Unknown hsrp sub-command (timers / mac-address / track) —
             # consume it; still inside the group block.
-            continue
+            return
         # Any other indented line ends the active hsrp group block.
         current["_hsrp_gid"] = None
 
         dm = _DESC_RE.match(line)
         if dm:
             current["description"] = dm.group(1).strip()
-            continue
+            return
 
         if _SHUTDOWN_RE.match(line):
             current["enabled"] = False
-            continue
+            return
         if _NO_SHUTDOWN_RE.match(line):
             current["enabled"] = True
-            continue
+            return
 
         mm = _MTU_RE.match(line)
         if mm:
@@ -727,7 +705,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 current["mtu"] = int(mm.group(1))
             except ValueError:
                 pass
-            continue
+            return
 
         im = _IP_CIDR_RE.match(line)
         if im:
@@ -739,7 +717,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ValueError:
                 pass
-            continue
+            return
 
         v6m = _IPV6_CIDR_RE.match(line)
         if v6m:
@@ -758,50 +736,63 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
                 })
             except ValueError:
                 pass
-            continue
+            return
 
         vm = _VRF_MEMBER_RE.match(line)
         if vm:
             current["vrf"] = vm.group(1)
-            continue
+            return
 
         # ── Distributed Anycast Gateway per-SVI marker ──
         if _FABRIC_AG_MODE_RE.match(line):
             current["fabric_forwarding_anycast"] = True
-            continue
+            return
 
         # ── L2 switchport (Phase 2) ──
         if _NO_SWITCHPORT_RE.match(line):
             # Routed port — leave switchport_mode None (render emits
             # ``no switchport`` for a physical/LAG port carrying an IP).
-            continue
+            return
         sm = _SWITCHPORT_MODE_RE.match(line)
         if sm:
             current["switchport_mode"] = sm.group(1).lower()
-            continue
+            return
         am = _SWITCHPORT_ACCESS_RE.match(line)
         if am:
             current["switchport_mode"] = current["switchport_mode"] or "access"
             current["access_vlan"] = int(am.group(1))
-            continue
+            return
         tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_allowed"] = _parse_vlan_list(tam.group(1).strip())
-            continue
+            return
         tnm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
         if tnm:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
             current["trunk_native"] = int(tnm.group(1))
-            continue
+            return
 
         cgm = _CHANNEL_GROUP_RE.match(line)
         if cgm:
             current["lag_member_of"] = f"port-channel{int(cgm.group(1))}"
-            continue
+            return
 
-    _flush()
-    return interfaces
+    # Loop skeleton (open on `interface`, close on dedent, flush at EOF)
+    # is the shared codecs/_scanner helper; the vendor regex cascade above
+    # — including the in-scratch HSRP sub-block state — stays here.  The
+    # terminator replicates the former hand-rolled rule exactly: only a
+    # non-indented (column-0) line closes a stanza, so an indented ``!``
+    # is consumed as body (not a separator).  Behaviour-identical to the
+    # previous loop.
+    return scan_stanzas(
+        raw.splitlines(),
+        is_header=_IFACE_RE.match,
+        open_scratch=_open,
+        on_line=_on_line,
+        build=_build_canonical_interface,
+        is_terminator=lambda line: bool(line) and not line[0].isspace(),
+    )
 
 
 def _build_canonical_interface(raw: dict) -> CanonicalInterface:
