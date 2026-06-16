@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-06-16
+
 ### Added
 
 * **Real-capture corpus: JNPRAutomate MNHA vSRX fixture** —
