@@ -67,6 +67,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **cisco_iosxe_cli no longer mis-detects bannerless NX-OS / AOS-CX
+  configs as IOS-XE.**  A containerlab / golden-config capture lacking
+  its vendor banner (`!Command: show running-config` for NX-OS,
+  `!Version ArubaOS-CX` for AOS-CX) caps its own structural probe at
+  confidence 90 and **ties** the IOS-XE probe's generic `no shutdown` /
+  `interface loopback` / `switchport` markers at 90 — then loses the
+  alphabetical tie-break and silently mis-detects as `cisco_iosxe_cli`.
+  Same hazard + fix pattern as the IOS-XR deferral: the IOS-XE probe now
+  DEFERS (returns `None`) when an NX-OS-exclusive marker (`feature nv
+  overlay` / `feature vn-segment-vlan-based` / `nv overlay evpn` /
+  `vn-segment <vni>`) or an AOS-CX-exclusive marker (`interface lag <N>`
+  / per-interface `vrf attach`) is present.  `interface nve1` is
+  deliberately excluded (IOS-XE Catalyst VXLAN-EVPN uses it too).
+  Zero IOS-XE regression (a real IOS-XE 17.15 EVPN-leaf fixture still
+  detects); unblocks the bannerless NX-OS containerlab fixture added
+  below.  Surfaced during the 2026-06-15 `fixture-gap-hunt` acquisition
+  wave.
+    * **cisco_nxos** — adds `networklessons_clab_vxlan_mcast_leaf2_nxos`
+      (the regression witness for the #73 `mcast-group` parse fix via the
+      **own-sub-line** form), now landable thanks to the deferral above;
+      cross-mesh-neutral, CODEC_BUG flat at 5.
+
 * **cisco_nxos VXLAN `mcast-group` now harvested on parse.**  The
   capability matrix declared `/vxlan-vnis/mcast-group` **supported** and
   the renderer emitted `member vni <vni>` + `mcast-group <ip>`, but the

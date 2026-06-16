@@ -441,6 +441,40 @@ class CiscoIOSXECLICodec(CodecBase):
         ):
             return None
 
+        # Same alphabetical-tie-break hazard as the XR block above, but for
+        # NX-OS and AOS-CX: a bannerless containerlab / golden-config
+        # capture (no ``!Command: show running-config`` NX-OS banner, no
+        # ``!Version ArubaOS-CX`` banner) caps its own vendor's structural
+        # probe at 90 and TIES IOS-XE's generic ``no shutdown`` /
+        # ``interface loopback`` / ``switchport`` markers at 90 — then
+        # loses the alphabetical tie-break (``cisco_iosxe_cli`` <
+        # ``cisco_nxos``) and silently mis-detects as IOS-XE.  Each marker
+        # below is exclusive to the other vendor and never appears in
+        # genuine IOS-XE running-config, so deferring (return None) cannot
+        # regress IOS-XE detection:
+        #   NX-OS  — ``feature nv overlay`` / ``feature vn-segment-vlan-
+        #            based`` (IOS-XE has no ``feature`` command at all),
+        #            ``nv overlay evpn`` (IOS-XE uses ``l2vpn evpn``), and
+        #            the ``vn-segment <vni>`` VLAN→VNI binding (IOS-XE uses
+        #            ``vlan configuration N / member vni``).
+        #   AOS-CX — ``interface lag <N>`` (IOS-XE uses ``Port-channel``) and
+        #            the per-interface ``vrf attach`` (IOS-XE uses ``vrf
+        #            forwarding``).
+        # ``interface nve1`` is deliberately NOT in this list: IOS-XE
+        # Catalyst VXLAN-EVPN also uses ``interface nve1`` + ``member vni``,
+        # so it is shared, not NX-OS-exclusive (a real IOS-XE EVPN leaf
+        # fixture carries it).
+        if re.search(
+            r"^feature\s+nv\s+overlay\b"
+            r"|^feature\s+vn-segment-vlan-based\b"
+            r"|^nv\s+overlay\s+evpn\b"
+            r"|^\s+vn-segment\s+\d+"
+            r"|^interface\s+lag\s+\d"
+            r"|^\s+vrf\s+attach\b",
+            raw_prefix, re.IGNORECASE | re.MULTILINE,
+        ):
+            return None
+
         # Cisco-specific banners — each unambiguous on its own.  The
         # ``show running-config`` echo is now ONLY a confidence
         # multiplier alongside one of these; on its own it's not
