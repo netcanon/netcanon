@@ -103,3 +103,71 @@ def _prefix_to_mask(prefix: int, *, vendor: str) -> str:
         )
     mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF if prefix else 0
     return str(ipaddress.IPv4Address(mask_int))
+
+
+def _parse_vlan_list(text: str) -> list[int]:
+    """Parse a VLAN id-list like ``1,10,2000`` or ``10-20`` into a flat
+    list of ints.  Ranges are expanded inclusively.
+
+    Shared by the codecs whose id-lists use the Cisco-style comma/hyphen
+    grammar (``cisco_nxos``, ``cisco_iosxe_cli``, ``aruba_aoscx`` each
+    previously carried a byte-identical private copy).  The valid VLAN
+    space is clamped BEFORE the range is materialised so an out-of-bounds
+    span (e.g. ``1-9999999999``) cannot OOM the process; the valid
+    sub-range is preserved (lossless vs the downstream 1..4094 filter).
+    Non-numeric tokens are skipped.  The inverse is
+    :func:`_coalesce_vlan_ids`.
+    """
+    result: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if "-" in part:
+            lo, hi = part.split("-", 1)
+            try:
+                lo_i, hi_i = int(lo.strip()), int(hi.strip())
+            except ValueError:
+                continue
+            lo_i, hi_i = max(1, lo_i), min(4094, hi_i)
+            if lo_i <= hi_i:
+                result.extend(range(lo_i, hi_i + 1))
+        elif part.isdigit():
+            result.append(int(part))
+    return result
+
+
+def _run_token(lo: int, hi: int) -> str:
+    """Format a single consecutive run for :func:`_coalesce_vlan_ids`.
+
+    A two-wide run (``10,11``) stays comma-separated rather than
+    ``10-11`` — both re-parse identically, but the comma form matches the
+    show-output convention for adjacent pairs.
+    """
+    if hi == lo:
+        return str(lo)
+    if hi == lo + 1:
+        return f"{lo},{hi}"
+    return f"{lo}-{hi}"
+
+
+def _coalesce_vlan_ids(ids: list[int]) -> str:
+    """Coalesce a sorted, de-duplicated VLAN-id list into comma/hyphen form.
+
+    ``[1, 10, 11, 12, 20]`` → ``"1,10-12,20"``.  Consecutive runs of three
+    or more collapse to ``lo-hi``; the inverse of :func:`_parse_vlan_list`
+    so a ``vlan trunk allowed`` / id-list round-trips.  Shared by the
+    codecs that previously carried a byte-identical private copy
+    (``cisco_nxos``, ``aruba_aoscx``).  The caller is responsible for
+    sorting and de-duplicating *ids* first.
+    """
+    if not ids:
+        return ""
+    parts: list[str] = []
+    run_start = prev = ids[0]
+    for vid in ids[1:]:
+        if vid == prev + 1:
+            prev = vid
+            continue
+        parts.append(_run_token(run_start, prev))
+        run_start = prev = vid
+    parts.append(_run_token(run_start, prev))
+    return ",".join(parts)
