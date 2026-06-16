@@ -32,6 +32,7 @@ from __future__ import annotations
 import re
 
 from ...canonical.intent import CanonicalIntent, CanonicalRoutingInstance
+from .._helpers import _coalesce_vlan_ids
 from . import port_names as _port_names
 
 #: Synthesised NX-OS release stamped into the banner.  Cosmetic — the
@@ -457,27 +458,6 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     return block
 
 
-def _coalesce_vlan_ids(ids: list[int]) -> str:
-    """Coalesce a sorted, de-duplicated VLAN-id list into NX-OS form.
-
-    ``[1, 10, 11, 12, 20]`` → ``"1,10-12,20"``.  Consecutive runs of
-    three or more collapse to ``lo-hi``; the inverse of
-    :func:`parse._parse_vlan_list` so the id-list round-trips.
-    """
-    if not ids:
-        return ""
-    parts: list[str] = []
-    run_start = prev = ids[0]
-    for vid in ids[1:]:
-        if vid == prev + 1:
-            prev = vid
-            continue
-        parts.append(_run_token(run_start, prev))
-        run_start = prev = vid
-    parts.append(_run_token(run_start, prev))
-    return ",".join(parts)
-
-
 def _mac_to_dotted_triplet(mac: str) -> str:
     """Convert a canonical colon-hex MAC to NX-OS dotted-triplet form.
 
@@ -493,20 +473,6 @@ def _mac_to_dotted_triplet(mac: str) -> str:
     if len(hex_only) != 12:
         return ""
     return f"{hex_only[0:4]}.{hex_only[4:8]}.{hex_only[8:12]}"
-
-
-def _run_token(lo: int, hi: int) -> str:
-    """Format a single run for :func:`_coalesce_vlan_ids`.
-
-    A two-wide run (``10,11``) stays comma-separated rather than
-    ``10-11`` — both re-parse identically, but the comma form matches
-    NX-OS show-output convention for adjacent pairs.
-    """
-    if hi == lo:
-        return str(lo)
-    if hi == lo + 1:
-        return f"{lo},{hi}"
-    return f"{lo}-{hi}"
 
 
 #: Interface-kind render order (``02-codec-architecture.md`` § 4.1):

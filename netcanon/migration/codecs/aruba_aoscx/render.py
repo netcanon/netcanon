@@ -45,6 +45,7 @@ import ipaddress
 import re
 
 from ...canonical.intent import CanonicalIntent
+from .._helpers import _coalesce_vlan_ids
 
 #: Synthesised AOS-CX release stamped into the ``!Version`` banner.
 #: Cosmetic — the parsed ``source_version`` is metadata only and not
@@ -316,42 +317,6 @@ def _render_interface(
             block.append(f"    lacp mode {mode}")
 
     return block
-
-
-def _coalesce_vlan_ids(ids: list[int]) -> str:
-    """Coalesce a sorted, de-duplicated VLAN-id list into AOS-CX form.
-
-    ``[1, 10, 11, 12, 20]`` → ``"1,10-12,20"``.  Consecutive runs of
-    three or more collapse to ``lo-hi``; the inverse of
-    :func:`parse._parse_vlan_list` so the ``vlan trunk allowed`` list
-    round-trips.
-    """
-    if not ids:
-        return ""
-    parts: list[str] = []
-    run_start = prev = ids[0]
-    for vid in ids[1:]:
-        if vid == prev + 1:
-            prev = vid
-            continue
-        parts.append(_run_token(run_start, prev))
-        run_start = prev = vid
-    parts.append(_run_token(run_start, prev))
-    return ",".join(parts)
-
-
-def _run_token(lo: int, hi: int) -> str:
-    """Format a single run for :func:`_coalesce_vlan_ids`.
-
-    A two-wide run (``10,11``) stays comma-separated rather than
-    ``10-11`` — both re-parse identically, but the comma form matches the
-    show-output convention for adjacent pairs.
-    """
-    if hi == lo:
-        return str(lo)
-    if hi == lo + 1:
-        return f"{lo},{hi}"
-    return f"{lo}-{hi}"
 
 
 #: Interface-kind render order: SVIs, then physical, then LAGs, then the
