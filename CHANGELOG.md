@@ -67,6 +67,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **fortigate_cli VRRP `set priority 255` no longer crashes the parser.**
+  FortiOS permits VRRP priority 1-255 (255 is the address-owner
+  sentinel), but `CanonicalVRRPGroup.priority` caps at 254 (`le=254` —
+  255 is RFC-reserved / unrepresentable).  The parser passed the raw int
+  straight into the model, so a legitimate master config carrying `set
+  priority 255` raised an unhandled pydantic `ValidationError` (a
+  500-class parse crash) rather than parsing cleanly.  Parse now clamps
+  the priority into `[1, 254]`, mirroring the aruba_aoss `owner` → 254
+  mapping.  Surfaced during the 2026-06-15 `fixture-gap-hunt` while
+  smoke-testing a real FortiGate VRRP pair; +1 regression test,
+  cross-mesh-neutral (CODEC_BUG flat at 5).
+
 * **cisco_iosxe_cli no longer mis-detects bannerless NX-OS / AOS-CX
   configs as IOS-XE.**  A containerlab / golden-config capture lacking
   its vendor banner (`!Command: show running-config` for NX-OS,
