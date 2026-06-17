@@ -63,13 +63,29 @@ from .schema import DeviceDefinition
 
 logger = logging.getLogger(__name__)
 
+#: Immediate-child directory names under ``definitions_dir`` that hold
+#: YAML owned by a *different* loader and a *different* schema, and must
+#: NOT be validated as ``DeviceDefinition`` files.  ``target_profiles/``
+#: holds Tier-3 port-rename profiles loaded by
+#: :func:`netcanon.migration.target_profiles.load_profiles_dir` (a
+#: ``TargetProfile`` is shaped nothing like a ``DeviceDefinition`` — no
+#: ``os`` / ``type_key`` / ``connection`` / ``commands``).  Because
+#: ``load_all`` scans recursively, without this exclusion every
+#: target-profile file fails ``DeviceDefinition`` validation and emits a
+#: spurious WARNING at boot — noise that would mask a genuine bad
+#: definition.  See ``netcanon/main.py`` where both loaders are wired to
+#: the same ``definitions_dir`` root.
+_RESERVED_SUBDIRS: frozenset[str] = frozenset({"target_profiles"})
+
 
 class DefinitionLoader:
     """Loads and validates device definitions from a YAML file tree.
 
     Args:
         definitions_dir: Root of the definition tree.  All ``*.yaml``
-            files found recursively are candidates for loading.
+            files found recursively are candidates for loading, except
+            those under a reserved sibling subdirectory (see
+            :data:`_RESERVED_SUBDIRS`, e.g. ``target_profiles/``).
 
     Raises:
         FileNotFoundError: If ``definitions_dir`` does not exist.
@@ -89,7 +105,12 @@ class DefinitionLoader:
         This keeps backwards compatibility with callers that treat
         ``load_all()`` as "one entry per type_key".
 
-        Files are parsed in two passes:
+        Files under a reserved sibling subdirectory (see
+        :data:`_RESERVED_SUBDIRS`, e.g. ``target_profiles/``) are skipped
+        entirely — they belong to a different loader/schema and would
+        otherwise log spurious validation warnings at boot.
+
+        Remaining files are parsed in two passes:
 
         1. All files are read and validated against ``DeviceDefinition``.
            Failures emit a ``WARNING`` log and are skipped.
@@ -113,7 +134,11 @@ class DefinitionLoader:
                 f"Definitions directory not found: {self._dir.resolve()}"
             )
 
-        yaml_files = sorted(self._dir.rglob("*.yaml"))
+        yaml_files = [
+            path
+            for path in sorted(self._dir.rglob("*.yaml"))
+            if not self._in_reserved_subdir(path)
+        ]
         if not yaml_files:
             raise RuntimeError(
                 f"No *.yaml definition files found under: {self._dir.resolve()}"
@@ -272,6 +297,23 @@ class DefinitionLoader:
 
         definition.source_file = path
         return definition
+
+    def _in_reserved_subdir(self, path: Path) -> bool:
+        """True when *path* lives under a reserved sibling subdirectory.
+
+        Reserved subdirs (see :data:`_RESERVED_SUBDIRS`) hold YAML owned
+        by a different loader/schema and must be skipped so they don't
+        fail ``DeviceDefinition`` validation.  Matching is on any path
+        component relative to ``self._dir``, so an arbitrarily nested
+        ``target_profiles/.../x.yaml`` is excluded too.
+        """
+        try:
+            rel = path.relative_to(self._dir)
+        except ValueError:
+            # Not under our root (shouldn't happen for rglob results) —
+            # don't exclude it.
+            return False
+        return any(part in _RESERVED_SUBDIRS for part in rel.parts)
 
 
 def _highest_priority(
