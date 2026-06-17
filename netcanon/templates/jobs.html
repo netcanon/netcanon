@@ -58,7 +58,9 @@
      id="job-{{ job.id }}">
 
   <div class="job-card-header" data-testid="job-card-header"
-       onclick="toggleJob(this)">
+       role="button" tabindex="0" aria-expanded="false"
+       onclick="toggleJob(this)"
+       onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();toggleJob(this);}">
 
     <span class="job-id" data-testid="job-id-text">{{ job.id[:8] }}&hellip;</span>
 
@@ -160,6 +162,7 @@ function toggleJob(header) {
   var open    = body.style.display === 'none';
   body.style.display = open ? '' : 'none';
   chevron.classList.toggle('open', open);
+  header.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 /* Open the job that matches the URL hash (e.g. /jobs#<full-job-id>).

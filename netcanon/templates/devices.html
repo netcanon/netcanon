@@ -122,7 +122,9 @@
        data-port="{{ profile.port }}">
 
     <div class="device-card-header" data-testid="device-card-header"
-         onclick="toggleDevice(this)">
+         role="button" tabindex="0" aria-expanded="false"
+         onclick="toggleDevice(this)"
+         onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();toggleDevice(this);}">
 
       <strong data-testid="device-name">{{ profile.name }}</strong>
       <span class="badge" data-testid="device-type"
@@ -348,6 +350,7 @@ function toggleDevice(header) {
   var open    = body.style.display === 'none';
   body.style.display = open ? '' : 'none';
   chevron.classList.toggle('open', open);
+  header.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 /* ── Toggle inline edit panel ── */
