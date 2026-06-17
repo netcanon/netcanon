@@ -26,6 +26,16 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-06-17
+
+### Added
+
+* **CHANGELOG/version guard test** (`tests/unit/test_changelog.py`).  Asserts
+  every stable `vX.Y.Z` release tag has a matching `## [X.Y.Z]` section, plus
+  unique + strictly-descending + dated headers and an `[Unreleased]` anchor.
+  Closes the gap that let the `[0.2.0]` header get silently dropped in the
+  v0.3.0 cut (restored in #111) with no test to catch it.
+
 ### Changed
 
 * **VyOS backup definition graduated from provisional to live-validated**
