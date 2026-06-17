@@ -131,7 +131,7 @@
       </td>
       <td data-testid="schedule-interval">{{ format_interval(sched.interval_minutes) }}</td>
       <td>
-        <button onclick="toggleSchedule('{{ sched.id }}')"
+        <button onclick="toggleSchedule('{{ sched.id }}', this)"
                 data-testid="schedule-toggle-btn"
                 class="badge {% if sched.enabled %}enabled-badge{% else %}disabled-badge{% endif %}"
                 style="border:none;cursor:pointer;padding:.25rem .6rem">
@@ -156,7 +156,7 @@
       </td>
       <td data-testid="schedule-last-job">
         {% if sched.last_job_id %}
-          <a href="/jobs#{{ sched.last_job_id[:8] }}"
+          <a href="/jobs#{{ sched.last_job_id }}"
              style="font-family:monospace;font-size:.82rem">
             {{ sched.last_job_id[:8] }}&hellip;
           </a>
@@ -171,7 +171,7 @@
         <span class="sched-confirm" style="display:none;gap:.35rem">
           Delete?
           <button data-testid="schedule-delete-confirm-btn"
-                  onclick="confirmDeleteSchedule('{{ sched.id }}')"
+                  onclick="confirmDeleteSchedule('{{ sched.id }}', this)"
                   class="btn-danger" style="font-size:.8rem">Yes</button>
           <button data-testid="schedule-delete-cancel-btn"
                   onclick="cancelDeleteSchedule(this)"
@@ -254,17 +254,20 @@ schedForm.addEventListener('submit', async function(e) {
 });
 
 /* ── Toggle enable/disable ── */
-async function toggleSchedule(schedId) {
+async function toggleSchedule(schedId, btn) {
+  if (btn) btn.disabled = true;  // guard against double-click while in flight
   try {
     var res = await fetch('/api/v1/schedules/' + schedId + '/toggle', { method: 'POST' });
     if (!res.ok) {
       var d = await res.json().catch(function() { return {}; });
       showToast('Error: ' + formatApiError(d, res.statusText), 'error');
+      if (btn) btn.disabled = false;
       return;
     }
-    window.location.reload();
+    window.location.reload();  // success path reloads; no need to re-enable
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -281,10 +284,13 @@ function cancelDeleteSchedule(btn) {
   confirm.previousElementSibling.style.display = '';
 }
 
-async function confirmDeleteSchedule(schedId) {
+async function confirmDeleteSchedule(schedId, btn) {
+  if (btn) btn.disabled = true;  // guard against double-click while in flight
   try {
     var res = await fetch('/api/v1/schedules/' + schedId, { method: 'DELETE' });
-    if (res.status === 204) {
+    // 404 after a successful delete (double-click / already gone) is a
+    // success, not a failure — the schedule is no longer there either way.
+    if (res.status === 204 || res.status === 404) {
       showToast('Schedule deleted', 'success');
       var row = document.querySelector('[data-schedule-id="' + schedId + '"]');
       if (row) row.remove();
@@ -293,9 +299,11 @@ async function confirmDeleteSchedule(schedId) {
     } else {
       var d = await res.json().catch(function() { return {}; });
       showToast('Error: ' + formatApiError(d, res.statusText), 'error');
+      if (btn) btn.disabled = false;
     }
   } catch (err) {
     showToast('Network error: ' + err.message, 'error');
+    if (btn) btn.disabled = false;
   }
 }
 </script>

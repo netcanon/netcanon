@@ -153,12 +153,15 @@ function attachDeleteListener(btn) {
 
     confirmEl.querySelector('[data-testid="config-delete-confirm-btn"]')
       .addEventListener('click', async function() {
+        this.disabled = true;  // guard against double-click while in flight
         try {
           var res = await fetch(
             '/api/v1/configs/' + encodeURIComponent(fn),
             { method: 'DELETE' }
           );
-          if (res.ok || res.status === 204) {
+          // 404 after a successful delete (double-click / already gone) is a
+          // success, not a failure — the file is no longer there either way.
+          if (res.ok || res.status === 204 || res.status === 404) {
             self.closest('tr').remove();
             if (!document.querySelector('[data-testid="config-row"]')) {
               location.reload();

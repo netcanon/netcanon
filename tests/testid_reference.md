@@ -198,7 +198,7 @@ dispatches `CustomEvent`s on `document` that page-level code can listen for:
 | `job-progress-device-duration`   | `<span>`   | "N.Ns" once device reaches terminal state |
 | `job-progress-device-error`      | `<div>`    | Only rendered when `data-status="failed"`; truncated error with `title` |
 | `job-progress-footer`            | `<div>`    | Appears only after job reaches terminal state |
-| `job-progress-view-link`         | `<a>`      | Deep link to `/jobs#<job-id-short>` |
+| `job-progress-view-link`         | `<a>`      | Deep link to `/jobs#<full-job-id>` |
 | `job-progress-dismiss`           | `<button>` | Hides panel AND clears the localStorage key |
 
 ## Config viewer modal (`base.html` — global)
@@ -314,7 +314,7 @@ The page exposes four sections — one `section-*` testid per container.
 | `data-testid`             | Element | Notes |
 |---------------------------|---------|-------|
 | `no-jobs-msg`             | `<p>`   | Shown when no jobs exist |
-| `job-card`                | `<div>` | One collapsible card per job; also has `data-job-id` and `id="job-{id[:8]}"` for anchor linking |
+| `job-card`                | `<div>` | One collapsible card per job; also has `data-job-id` and `id="job-{full-id}"` for anchor linking |
 | `job-card-header`         | `<div>` | Clickable header row; calls `toggleJob()` to expand/collapse body |
 | `job-id-text`             | `<span>`| First 8 chars of job UUID + "…" |
 | `job-status`              | `<span>`| Status badge (`pending`, `running`, `completed`, `partial`, `failed`) |
@@ -385,7 +385,7 @@ exist yet.
 | `schedule-toggle-btn`          | `<button>` | Styled badge; click to toggle enabled/disabled; reloads page |
 | `schedule-next-run`            | `<td>`  | Next scheduled run (localised by JS); also has `data-utc` |
 | `schedule-last-run`            | `<td>`  | Last run timestamp (localised by JS); "Never" when never run; also has `data-utc` |
-| `schedule-last-job`            | `<td>`  | Link to last job card (`/jobs#{id[:8]}`); "—" if none |
+| `schedule-last-job`            | `<td>`  | Link to last job card (`/jobs#{full-id}`, shows first 8 chars); "—" if none |
 | `schedule-delete-btn`          | `<button>` | Shows inline confirm — does NOT call `confirm()` |
 | `schedule-delete-confirm-btn`  | `<button>` | "Yes" — confirms deletion |
 | `schedule-delete-cancel-btn`   | `<button>` | "No" — cancels and restores Delete button |

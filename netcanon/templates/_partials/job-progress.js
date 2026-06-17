@@ -117,7 +117,7 @@
 
       if (isTerminal(job.status)) {
         footEl.style.display = 'flex';
-        viewEl.href = '/jobs#' + job.id.substring(0, 8);
+        viewEl.href = '/jobs#' + job.id;  // full id — the /jobs deep-link matches on the complete job id
       } else {
         footEl.style.display = 'none';
       }
