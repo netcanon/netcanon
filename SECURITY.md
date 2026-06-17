@@ -167,6 +167,37 @@ transparent and logged at `INFO`.
 concern only.  Credential fields are **never logged** (verified by
 `tests/unit/test_logging_config.py`).
 
+### Backup artifacts are stored in plaintext (deliberate; use an encrypted volume)
+
+Credential *fields* are encrypted (above), but the **fetched device
+configurations themselves** are written to `configs/<type>/<host>/*.{ext}`
+**verbatim, in plaintext** (`netcanon/services/backup_runner.py`).  A running
+config routinely contains device-side secrets — `$9$` / type-7 / `$6$` password
+hashes, SNMP / RADIUS / IKE keys.  This is deliberate: a backup is only useful
+if it is the real, complete config, and the directory is meant to be
+human-readable / diffable.  Netcanon does **not** encrypt or redact stored
+backups at rest (the sanitiser is an on-demand, bug-reporting-only tool — it
+never runs on the backup-write path).
+
+**Recommended at-rest control: an OS-level encrypted volume** — BitLocker (on by
+default on the Windows 11 desktop target), LUKS, or an encrypted cloud volume
+(EBS / PV) holding `NETCANON_DATA_DIR`.  One layer covers `configs/`, the
+credential JSON, **and** the Tier-3 `.fernet_key`, with no application
+complexity.  Its ceiling is honest: an encrypted volume protects an **offline**
+copy (stolen disk, leaked volume tarball) — it does *not* defend a read by a
+process on the live, mounted host, nor a config an operator deliberately copies
+off the box.
+
+> **Why not SOPS / app-level file encryption?**  SOPS's value is keeping the
+> decryption key on a *different host* than the ciphertext (the model the sibling
+> Kontroll project uses for its multi-service control plane).  Netcanon is a
+> local-first single app — desktop / server / Docker / MSI all co-locate the
+> process, the key, and the ciphertext on one machine — so SOPS cannot deliver
+> that separation, and the one decoupled posture it could offer (an off-host key)
+> is exactly what Tier 1 (`NETCANON_FERNET_KEY`) already provides.  SOPS is an
+> operator-side delivery option for the Tier-1 key, **not** a netcanon feature.
+> (Evaluated 2026-06-17 — see `docs/reviews/2026-06-17-sops-evaluation/`.)
+
 ---
 
 ## Credential Exposure in the Browser
@@ -503,6 +534,7 @@ regulated environments.
 | SSH host-key not verified by default | A MITM on the management path could harvest the SSH password + enable secret on first connect | Yes (default) / opt-in hardening available | Default `ssh_host_key_checking=auto_add` trusts any key (legacy; assumes a trusted management VLAN).  Set `NETCANON_SSH_HOST_KEY_CHECKING=tofu` (record first key under `{data_dir}/known_hosts`, reject later changes) or `reject` (only known hosts) to harden.  Netmiko collectors map the strict modes onto the OS `~/.ssh/known_hosts` (no custom-store API). |
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
 | IPv6-public redaction not implemented | Operator-submitted public IPv6 addresses pass through verbatim | Documented | v0.1.0 limitation; sanitiser is IPv4-only.  Hand-redact public IPv6 before submission. |
+| Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
 
 ---
 
