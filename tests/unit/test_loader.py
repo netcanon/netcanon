@@ -6,6 +6,7 @@ two-pass loader: parse → sort by priority → apply in order.
 """
 from __future__ import annotations
 
+import logging
 import textwrap
 from pathlib import Path
 
@@ -95,6 +96,19 @@ MISSING_COMMANDS = textwrap.dedent("""\
     collector:
       strategy: netmiko
       netmiko_device_type: bad_device
+""")
+
+# Shaped like a real definitions/target_profiles/*.yaml — a TargetProfile,
+# NOT a DeviceDefinition (no os/type_key/connection/commands).  Validating
+# it as a DeviceDefinition would fail; the loader must skip it instead.
+TARGET_PROFILE = textwrap.dedent("""\
+    vendor: opnsense
+    model: generic
+    display_name: "OPNsense generic"
+    device_class: firewall
+    ports:
+      - {id: "em0", kind: physical}
+      - {id: "em1", kind: physical}
 """)
 
 
@@ -451,3 +465,70 @@ class TestResolveLongestMatch:
         # tier-2 match (os_version=17.12, model=None) is preferred.
         assert hit is not None
         assert hit.notes == "overlay 17.12"
+
+
+# ---------------------------------------------------------------------------
+# Reserved sibling subdirectories (target_profiles/) are skipped
+# ---------------------------------------------------------------------------
+
+
+class TestLoaderReservedSubdirs:
+    """``target_profiles/`` under the definitions root holds TargetProfile
+    YAML owned by a different loader/schema.  ``load_all`` scans
+    recursively, so without an explicit exclusion those files fail
+    ``DeviceDefinition`` validation and emit a WARNING per file at boot.
+    The loader must skip the reserved subdir silently."""
+
+    def test_target_profiles_subdir_is_skipped(self, tmp_path: Path):
+        (tmp_path / "cisco.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        tp = tmp_path / "target_profiles"
+        tp.mkdir()
+        (tp / "opnsense_generic.yaml").write_text(TARGET_PROFILE, encoding="utf-8")
+        profiles = DefinitionLoader(tmp_path).load_all()
+        # The real device def loads; the target profile is not mistaken
+        # for one (its vendor would key as "opnsense" / etc.).
+        assert "Cisco" in profiles
+        assert "opnsense" not in profiles
+        assert "generic" not in profiles
+
+    def test_target_profiles_emit_no_validation_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ):
+        (tmp_path / "cisco.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        tp = tmp_path / "target_profiles"
+        tp.mkdir()
+        for i in range(3):
+            (tp / f"profile{i}.yaml").write_text(TARGET_PROFILE, encoding="utf-8")
+        with caplog.at_level(logging.WARNING, logger="netcanon.definitions.loader"):
+            DefinitionLoader(tmp_path).load_all()
+        assert "Validation error" not in caplog.text
+        assert "target_profiles" not in caplog.text
+
+    def test_nested_target_profiles_also_skipped(self, tmp_path: Path):
+        (tmp_path / "cisco.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        nested = tmp_path / "target_profiles" / "vendor"
+        nested.mkdir(parents=True)
+        (nested / "deep.yaml").write_text(TARGET_PROFILE, encoding="utf-8")
+        profiles = DefinitionLoader(tmp_path).load_all()
+        assert "Cisco" in profiles
+        assert "opnsense" not in profiles
+
+    def test_only_target_profiles_raises_no_valid_definitions(
+        self, tmp_path: Path
+    ):
+        """A root holding *only* reserved-subdir files has no device
+        definitions — same RuntimeError as a genuinely empty tree."""
+        tp = tmp_path / "target_profiles"
+        tp.mkdir()
+        (tp / "opnsense_generic.yaml").write_text(TARGET_PROFILE, encoding="utf-8")
+        with pytest.raises(RuntimeError, match=r"No \*.yaml"):
+            DefinitionLoader(tmp_path).load_all()
+
+    def test_non_reserved_subdir_still_loads(self, tmp_path: Path):
+        """Exclusion is scoped to the reserved name only — other nested
+        dirs (e.g. cisco/ios-xe/) keep loading recursively."""
+        sub = tmp_path / "cisco" / "ios-xe"
+        sub.mkdir(parents=True)
+        (sub / "17.x.yaml").write_text(VALID_CISCO, encoding="utf-8")
+        profiles = DefinitionLoader(tmp_path).load_all()
+        assert "Cisco" in profiles
