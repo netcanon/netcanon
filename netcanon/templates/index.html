@@ -13,7 +13,8 @@
       <div class="form-row device-entry" data-testid="device-entry">
         <div class="form-group" style="flex:0 0 auto;min-width:160px">
           <label>Device Profile</label>
-          <select name="device_profile_id" data-testid="device-profile-select">
+          <select name="device_profile_id" data-testid="device-profile-select"
+                  aria-label="Device Profile">
             <option value="">— new device —</option>
             {% for profile in device_profiles %}
             <option value="{{ profile.id }}"
@@ -29,6 +30,7 @@
         <div class="form-group">
           <label>Device Type</label>
           <select name="type_key" data-testid="device-type-select"
+                  aria-label="Device Type"
                   title="Vendor + OS family that determines how Netcanon connects (Paramiko shell vs Netmiko), what config command to run, and how to parse the output.">
             {% for key, def in definitions.items() | sort %}
             <option value="{{ key }}"
@@ -42,18 +44,21 @@
           <label>Host / IP</label>
           <input name="host" type="text" placeholder="192.168.1.1"
                  data-testid="device-host-input" required
+                 aria-label="Host or IP address"
                  title="IPv4 (192.168.1.1), IPv6 (2001:db8::1), or RFC-1123 hostname (core-sw-01.example.com).">
         </div>
         <div class="form-group">
           <label>Username</label>
           <input name="username" type="text" placeholder="admin"
                  data-testid="device-username-input" required
+                 aria-label="Username"
                  title="SSH login. Common defaults: admin (most vendors), netadmin (Aruba), root (OPNsense). Use a service account in production.">
         </div>
         <div class="form-group">
           <label>Password</label>
           <input name="password" type="password"
                  data-testid="device-password-input" required
+                 aria-label="Password"
                  title="SSH password. Encrypted at rest with Fernet — see SECURITY.md → Credential Storage for the resolution chain.">
         </div>
         <!-- Enable password: shown only when the selected definition requires it -->
@@ -61,6 +66,7 @@
           <label>Enable Password</label>
           <input name="enable_password" type="password"
                  placeholder="optional" data-testid="device-enable-input"
+                 aria-label="Enable Password"
                  title="Privileged-mode (enable / superuser) password. Only required when the selected Device Type's definition sets needs_enable=true (Cisco IOS, FortiOS, …). Auto-shows when needed.">
         </div>
         <!-- Port collapsed under Advanced; rarely needs changing from 22 -->
@@ -106,7 +112,7 @@
          {% if not recent_jobs %}style="display:none"{% endif %}>
     <thead>
       <tr>
-        <th>Job ID</th><th>Status</th><th>Success / Total</th><th>Created</th>
+        <th scope="col">Job ID</th><th scope="col">Status</th><th scope="col">Success / Total</th><th scope="col">Created</th>
       </tr>
     </thead>
     <tbody id="jobs-tbody">
