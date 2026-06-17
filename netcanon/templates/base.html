@@ -554,7 +554,10 @@
        style="display:none">
     <div id="_job-progress-header"
          data-testid="job-progress-header"
-         onclick="toggleJobProgress()">
+         role="button" tabindex="0" aria-expanded="true"
+         aria-controls="_job-progress-body"
+         onclick="toggleJobProgress()"
+         onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===this){event.preventDefault();toggleJobProgress();}">
       <strong id="_job-progress-job-id"
               data-testid="job-id-display"></strong>
       <span id="_job-progress-summary"

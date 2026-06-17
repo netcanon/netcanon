@@ -315,7 +315,7 @@ The page exposes four sections — one `section-*` testid per container.
 |---------------------------|---------|-------|
 | `no-jobs-msg`             | `<p>`   | Shown when no jobs exist |
 | `job-card`                | `<div>` | One collapsible card per job; also has `data-job-id` and `id="job-{full-id}"` for anchor linking |
-| `job-card-header`         | `<div>` | Clickable header row; calls `toggleJob()` to expand/collapse body |
+| `job-card-header`         | `<div>` | Disclosure header row (`role="button"`, focusable, `aria-expanded`); click or Enter/Space calls `toggleJob()` to expand/collapse body |
 | `job-id-text`             | `<span>`| First 8 chars of job UUID + "…" |
 | `job-status`              | `<span>`| Status badge (`pending`, `running`, `completed`, `partial`, `failed`) |
 | `job-success-count`       | `<span>`| `success / total` with ✓ (all-success), ⚠ (partial) or ✗ (all-fail) indicator |
@@ -417,7 +417,7 @@ exist yet.
 | `devices-section`              | `<section>` | Wraps all device cards |
 | `no-devices-msg`               | `<p>` | Shown when no profiles exist |
 | `device-card`                  | `<div>` | One collapsible card per profile; also has `data-device-id` and `data-profile` (JSON) |
-| `device-card-header`           | `<div>` | Clickable header; `toggleDevice()` to show/hide config history |
+| `device-card-header`           | `<div>` | Disclosure header (`role="button"`, focusable, `aria-expanded`); click or Enter/Space calls `toggleDevice()` to show/hide config history |
 | `device-name`                  | `<strong>` | Profile name |
 | `device-type`                  | `<span>` | Type key badge |
 | `device-host`                  | `<span>` | Host / IP |

@@ -125,6 +125,7 @@
 
     /** Expand/collapse the body section. */
     window.toggleJobProgress = function() {
+      var header  = document.getElementById('_job-progress-header');
       var body    = document.getElementById('_job-progress-body');
       var foot    = document.getElementById('_job-progress-footer');
       var chevron = document.getElementById('_job-progress-chevron');
@@ -135,6 +136,7 @@
       if (!open) foot.style.display = 'none';
       else if (foot.getAttribute('data-should-show') === '1') foot.style.display = 'flex';
       chevron.classList.toggle('open', open);
+      if (header) header.setAttribute('aria-expanded', open ? 'true' : 'false');
     };
 
     /** Dismiss the panel; clears persisted state. */

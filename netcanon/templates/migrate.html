@@ -2352,6 +2352,9 @@
       return;
     }
     var modal = document.getElementById('mig-rename-modal');
+    // Remember what opened the modal so focus can return there on close
+    // (keyboard/SR users land back where they were).
+    modal._returnFocus = document.activeElement;
     modal.classList.add('open');
     modal.style.display = 'flex';
     // Restore persisted overrides for this (source, target, hostname)
@@ -2395,13 +2398,38 @@
     renderPerPaneFitCheck();
     renderRenamePreview();
     renderRenameSummary();
+    // Move focus into the dialog so SR announces it and keyboard users
+    // can Tab through + Esc out (mirrors kbd-cheatsheet.js).
+    var closeBtn = modal.querySelector(
+      '[data-testid="migrate-rename-modal-close"]'
+    );
+    if (closeBtn) closeBtn.focus();
   };
 
   window.closeRenameModal = function() {
     var modal = document.getElementById('mig-rename-modal');
     modal.classList.remove('open');
     modal.style.display = 'none';
+    // Return focus to whatever opened the modal (a11y: don't strand
+    // keyboard/SR focus on the now-hidden dialog).
+    var ret = modal._returnFocus;
+    modal._returnFocus = null;
+    if (ret && typeof ret.focus === 'function') {
+      try { ret.focus(); } catch (_) { /* element gone — ignore */ }
+    }
   };
+
+  // Esc closes the rename modal.  Focus management only — the modal is
+  // intentionally non-blocking + draggable (aria-modal="false"), so we
+  // deliberately do NOT install a focus trap.
+  document.addEventListener('keydown', function(e) {
+    if (e.key !== 'Escape') return;
+    var modal = document.getElementById('mig-rename-modal');
+    if (modal && modal.classList.contains('open')) {
+      e.preventDefault();
+      closeRenameModal();
+    }
+  });
 
   window.renameModalResetAll = function() {
     _renameUserMap = {};
