@@ -1,0 +1,69 @@
+# Cisco NX-OS 9.x / 10.x  (Nexus 3000 / 9000 series)
+#
+# Pairs with the migration codec at netcanon/migration/codecs/cisco_nxos.
+# This file is what the backup pipeline uses to *fetch* the running-config
+# from a live Nexus switch so the codec has real text to round-trip.
+#
+# type_key is CiscoNXOS — NOT "Cisco".  The IOS-XE family base already owns
+# the "Cisco" type_key, and type_keys must be unique across the family-base
+# set (a collision would silently drop one definition).  NX-OS is a distinct
+# NOS with its own session behaviour, so it gets its own key.
+#
+# Paging — netmiko's `cisco_nxos` driver disables paging itself at session
+# setup (NX-OS supports `terminal length 0` natively, unlike classic IOS/
+# IOS-XE).  cisco_more_paging (our SPACE-injection mechanism) is documented
+# as IOS/IOS-XE-only and is ignored by the netmiko collector, so it stays
+# false here.  Do NOT add `terminal length 0` to commands.pre — netmiko owns
+# paging, and the AGENTS.md hard rule forbids us issuing it ourselves.
+
+vendor: Cisco
+os: NX-OS
+version_match: "^(9|10)\\."   # advisory/future; covers the current 9.x + 10.x trains
+type_key: CiscoNXOS
+priority: 10
+
+file_extension: cfg
+
+connection:
+  needs_enable: false         # NX-OS logs the admin role straight into '#'; no enable mode
+  cisco_more_paging: false    # netmiko cisco_nxos disables paging natively
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+[#>]\s*$'          # switch#  /  switch(config)#  (no spaces → \S+ matches)
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: cisco_nxos
+
+probe:
+  # Pre-backup `show version` probe.  Populates DeviceProfile.detected_facts
+  # and feeds DefinitionLoader.resolve() so a future version overlay (e.g.
+  # 10.3.yaml) is picked when the device reports it.  Failure is non-fatal.
+  command: "show version"
+  patterns:
+    # Modern NX-OS reports `  NXOS: version 10.3(2)`; older boxes report
+    # `  system:    version 7.0(3)I7(8)`.  Capture major.minor only so it
+    # matches an overlay's `os_version: "10.3"` pin.
+    detected_os_version: '(?:NXOS|system):\s+version\s+(\d+\.\d+)'
+    # Chassis SKU from the `cisco Nexus9000 C93180YC-EX Chassis` line.
+    detected_model: 'cisco Nexus\S*\s+(\S+)\s+[Cc]hassis'
+    # Serial from the `Processor Board ID FDO12345ABC` line (asset audit).
+    detected_serial: 'Processor Board ID\s+(\S+)'
+
+notes: >
+  ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
+  (netmiko driver, config command, prompt patterns, probe regexes) is
+  verified in code and against sample `show version` output only, never
+  run against real hardware.  Treat as provisional and confirm on a real
+  switch before relying on it.  Cisco NX-OS 9.x / 10.x (Nexus 3000 / 9000).
+  Pairs with the cisco_nxos migration codec for round-tripping
+  `show running-config`.  netmiko's `cisco_nxos` driver handles paging
+  natively (it sends `terminal length 0` at session setup); no enable
+  mode on NX-OS.

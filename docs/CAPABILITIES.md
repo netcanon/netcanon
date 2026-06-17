@@ -38,8 +38,15 @@ tests.  Backup-side device definitions are listed under
 | `opnsense`        | OPNsense      | `config.xml`              | bidirectional | certified |
 | `vyos`            | VyOS          | `config.boot` curly-brace **or** `set`-form text | bidirectional | certified (Phases 1-6 — `system host-name` + ethernet / loopback / dummy interfaces (address IPv4+IPv6 CIDR / `dhcp` / description / `disable` / mtu) + `vif` VLAN sub-interfaces (`ethN.<vid>`) + `protocols static` routes + `system login` local users + `system`/`service` ntp servers (bare + 1.4 block form) + `bonding` LAGs (`mode 802.3ad` LACP + both member forms) + `service snmp` (v1/v2c community / location / contact + v3 USM users) + VRF (`vrf name` routing-instances + per-interface `vrf` binding) + `interfaces vxlan` netdevs (one VNI each — vni / source / mcast or remote / port); round-trip-validated against a 10-config real corpus from 4 sources spanning VyOS 1.3/1.4/1.5 (`cisagov/prescup-challenges` MIT IPv4/OSPF + IPv6/BGP, `zhouleyan/wcni-kind` Apache-2.0 VXLAN pair, `scottlaird/vyos-parser` + `rapid7/metasploit-framework` for `service snmp`); accepts BOTH the native curly-brace `config.boot` AND `set`-form input (`show configuration commands`, converted to curly-brace up front; the probe disambiguates VyOS set-form from the `set`-form `juniper_junos` codec); per-VRF static routes + symmetric-IRB L3VNI remain later phases) |
 
-Backup-side device-definition YAMLs ship for the same vendor families
-plus per-OS-version overlays.  See
+Backup-side device-definition YAMLs ship for every codec family above
+(plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
+separate definitions — `Cisco` (IOS-XE) + `CiscoNXOS` + `CiscoIOSXR`, and
+`Aruba` (AOS-S) + `ArubaCX` (AOS-CX) — keyed distinctly because `type_key`
+must be unique.  **`CiscoNXOS`, `CiscoIOSXR`, `ArubaCX`, and `VyOS` are
+provisional**: their backup wiring is verified in code and against sample
+`show version` output, but has not yet been run against a live device —
+the `/definitions` Notes column flags each with a "NOT YET VALIDATED"
+warning.  See
 [`../definitions/README.md`](../definitions/README.md) for the
 authoring guide and the live `/definitions` page in the running app
 for the per-vendor inventory.  RESULTS.md is the source of truth for

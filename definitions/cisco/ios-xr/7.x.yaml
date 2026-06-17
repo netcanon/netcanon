@@ -1,0 +1,64 @@
+# Cisco IOS-XR 7.x  (ASR 9000 / NCS service-provider routers)
+#
+# Pairs with the migration codec at netcanon/migration/codecs/cisco_iosxr.
+# This file is what the backup pipeline uses to *fetch* the running-config
+# from a live IOS-XR router.
+#
+# type_key is CiscoIOSXR — NOT "Cisco" (owned by the IOS-XE family base).
+# type_keys must be unique across the family-base set; IOS-XR is a distinct
+# NOS and gets its own key.
+#
+# Paging — netmiko's `cisco_xr` driver disables paging itself at session
+# setup (IOS-XR supports `terminal length 0` natively).  cisco_more_paging
+# (our SPACE-injection mechanism) is IOS/IOS-XE-only and ignored by the
+# netmiko collector, so it stays false.  Do NOT add `terminal length 0` to
+# commands.pre — netmiko owns paging.
+
+vendor: Cisco
+os: IOS-XR
+version_match: "^7\\."        # advisory/future; current IOS-XR 7.x train
+type_key: CiscoIOSXR
+priority: 10
+
+file_extension: cfg
+
+connection:
+  needs_enable: false         # IOS-XR SSH lands in exec mode; no enable-mode escalation
+  cisco_more_paging: false    # netmiko cisco_xr disables paging natively
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^RP/\S+:\S+#\s*$'      # RP/0/RP0/CPU0:hostname#
+    - '^\S+[#>]\s*$'          # generic fallback
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: cisco_xr
+
+probe:
+  # Pre-backup `show version` probe.  Populates DeviceProfile.detected_facts
+  # and feeds DefinitionLoader.resolve().  Failure is non-fatal.
+  command: "show version"
+  patterns:
+    # `Cisco IOS XR Software, Version 7.5.2` (XR7 adds a trailing ` LNT`).
+    # Capture major.minor only to match an overlay's `os_version: "7.5"` pin.
+    detected_os_version: 'Cisco IOS XR Software, Version\s+(\d+\.\d+)'
+    # Platform from the leading `cisco ASR9K Series ...` / `cisco NCS-5501 ...`
+    # processor line.  Anchored multiline; first token after `cisco`.
+    detected_model: '^cisco\s+(\S+)'
+
+notes: >
+  ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
+  (netmiko driver, config command, prompt patterns, probe regexes) is
+  verified in code and against sample `show version` output only, never
+  run against real hardware.  Treat as provisional and confirm on a real
+  router before relying on it.  Cisco IOS-XR 7.x (ASR 9000 / NCS SP
+  routers).  Pairs with the cisco_iosxr migration codec for round-tripping
+  `show running-config`.  netmiko's `cisco_xr` driver handles paging
+  natively; IOS-XR has no enable mode (privilege is task-group based).
