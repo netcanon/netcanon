@@ -26,25 +26,111 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-16
+
+The user-facing counterpart to v0.2.0's internal refactor: a web-UI
+accessibility + usability pass (informed by a wide UI/UX review),
+browser-friendly error pages, a backup-coverage expansion to every
+migration-codec vendor, and a startup-log cleanup.  **No change to
+migration output** — no codec parse/render code changed, so the
+cross-mesh fidelity audit is identical to 0.2.0 (CODEC_BUG flat at 5).
+
 ### Added
-- **Backup device definitions for NX-OS, IOS-XR, AOS-CX, and VyOS** —
-  closes the backup-vs-migrate coverage gap.  These four vendors had a
-  migration codec but no `definitions/` entry, so configs could be
-  *migrated* but not *backed up* from a live device.  New family bases:
-  `definitions/cisco/nx-os/10.x.yaml` (`type_key: CiscoNXOS`,
-  netmiko `cisco_nxos`), `definitions/cisco/ios-xr/7.x.yaml`
-  (`CiscoIOSXR`, `cisco_xr`), `definitions/aruba/aos-cx/10.x.yaml`
-  (`ArubaCX`, `aruba_aoscx`), and `definitions/vyos/vyos/1.x.yaml`
-  (`VyOS`, `vyos`, fetching `show configuration commands` set-form which
-  the vyos codec accepts).  Distinct `type_key`s avoid colliding with the
-  existing `Cisco` (IOS-XE) and `Aruba` (AOS-S) family bases.  Every
-  migration codec family now has a backup definition.  Each ships a
-  tested `show version` probe; per-definition unit tests under
-  `tests/unit/definitions/` lock in the collector wiring + probe regexes.
-  These four are **provisional**: the collection wiring is verified in
-  code and against sample output but has not yet been run against a live
-  device, so each carries a "NOT YET VALIDATED" marker in its `notes`
-  (surfaced in the `/definitions` Notes column).
+
+* **Themed 404 / 500 error pages** (#106).  A mistyped URL or an
+  unhandled server error previously returned raw `{"detail":"Not Found"}`
+  JSON with no navigation.  Browser navigations (`Accept: text/html`,
+  non-`/api/` path) now get a styled `error.html` carrying the status
+  code, a generic message, and a link back to the dashboard; the page
+  never echoes the exception detail.  API / `/api/` requests keep their
+  JSON contract unchanged.  Registered via
+  `ui.register_exception_handlers(app)` so the desktop shell (shared
+  `create_app`) inherits it.
+
+* **Backup device definitions for NX-OS, IOS-XR, AOS-CX, and VyOS**
+  (#110).  These four vendors had a migration codec but no `definitions/`
+  entry, so configs could be *migrated* but not *backed up* from a live
+  device.  New family bases: `definitions/cisco/nx-os/10.x.yaml`
+  (`type_key: CiscoNXOS`, netmiko `cisco_nxos`),
+  `definitions/cisco/ios-xr/7.x.yaml` (`CiscoIOSXR`, `cisco_xr`),
+  `definitions/aruba/aos-cx/10.x.yaml` (`ArubaCX`, `aruba_aoscx`), and
+  `definitions/vyos/vyos/1.x.yaml` (`VyOS`, `vyos`, fetching
+  `show configuration commands` set-form which the vyos codec accepts).
+  Distinct `type_key`s avoid colliding with the existing `Cisco`
+  (IOS-XE) and `Aruba` (AOS-S) family bases — every migration-codec
+  family now has a backup definition.  Each ships a tested
+  `show version` probe; per-definition unit tests lock in the collector
+  wiring + probe regexes.  **Provisional**: the collection wiring is
+  verified in code and against sample output but has **not yet been run
+  against a live device**, so each carries a "NOT YET VALIDATED" marker
+  in its `notes`, surfaced in the `/definitions` Notes column.
+
+* **Skip-to-content link + screen-reader utility** (#108).  A
+  visually-hidden skip link (revealed on focus) jumps keyboard /
+  screen-reader users straight to `<main>`, and a reusable `.sr-only`
+  class backs accessible-name text elsewhere.
+
+* **Jobs page manual Refresh** (#105).  The jobs list does not
+  auto-update; it now has an explicit Refresh button and a hint saying
+  so, rather than leaving operators wondering whether a running job is
+  stuck.
+
+### Changed
+
+* **Web-UI accessibility pass** (#103, #104, #107, #108).  Driven by a
+  wide UI/UX review (evidence at `docs/reviews/2026-06-16-ux-review/`,
+  20 must-fixes).  Highlights: AA-contrast text token + a dedicated
+  `--focus-ring` token in both themes; the three disclosure headers
+  (jobs / devices / job-progress) and the rename modal are now fully
+  keyboard-operable (`role="button"` + `tabindex` + Enter/Space +
+  `aria-expanded`; modal Esc-to-close, focus-on-open, focus-restore);
+  `scope="col"` on every data table; `aria-label`s on icon-only buttons
+  and the dashboard controls; and the error-toast announces via
+  `role="alert"` / `aria-live="assertive"`.  No behavioural change to
+  the flows themselves.
+
+* **Microcopy honesty + terminology** (#103, #104, #108).  The Migrate
+  page's source / target selectors are relabelled "adapter" → "vendor"
+  (matching how the rest of the UI speaks); the validation-OK banner
+  now states plainly that Netcanon has no deploy path; the unsupported-
+  category banner drops the internal `raw_sections` jargon; and the
+  Configs page gained a one-line intro.
+
+* **Developer tooling** (#101, #67).  Added a reusable "ultracode
+  blackboard" multi-agent workflow runner under `.claude/workflows/`
+  (read-only reviewer agents each write one report; the main thread
+  actuates) plus its `docs/agent-workflow.md` doctrine; the wide UI/UX
+  review above was its first run.  Bumped pinned CI actions
+  (`actions/checkout`, `github/codeql-action`) via Dependabot.
+
+### Fixed
+
+* **`/sanitize` rendered an empty scaffold on first load** (#103).  The
+  result container relied on a `.hidden` class that had no CSS rule, so
+  the (empty) result region painted on initial page load instead of
+  staying hidden until a sanitize ran.  Switched to an inline
+  `display:none` toggled by the existing reveal logic.
+
+* **Async edges in list / detail flows** (#105).  Delete / config-open
+  controls across Configs, Schedules, and Jobs now disable themselves
+  in-flight (no double-submit), treat a `404` after a delete as success
+  (the row is already gone), and deep-link with the **full** job id
+  (`/jobs#<id>`) with a not-found toast when the anchor target is
+  absent.
+
+* **Startup log spammed 54 spurious validation warnings** (#109).
+  `DefinitionLoader.load_all` scanned the definitions tree with
+  `rglob("*.yaml")` and so descended into
+  `definitions/target_profiles/`, validating each Tier-3 rename profile
+  against the `DeviceDefinition` schema and logging a `WARNING` for
+  every one.  A documented `_RESERVED_SUBDIRS` exclusion now skips that
+  sibling subdir (it is owned by
+  `migration.target_profiles.load_profiles_dir`); recursion for genuine
+  nested per-vendor definitions is unchanged.  Cosmetic only — no
+  definition was ever dropped — but the noise had masked any real bad
+  definition at boot.
+
+## [0.2.0] - 2026-06-16
 
 Internal maintenance + refactor release.  **No change to migration
 output** — the codec work below is behaviour-preserving: the cross-mesh
