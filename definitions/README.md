@@ -200,6 +200,9 @@ only via `resolve()`.
   ``show running-config``.
 
 ### Cisco NX-OS 9.x / 10.x
+- ⚠ **Not yet validated on live hardware** — the collection wiring is
+  verified in code and against sample `show version` output only; the
+  `/definitions` Notes column flags it.  Confirm on a real switch.
 - `type_key: CiscoNXOS` — **not** `Cisco`.  The IOS-XE family base owns
   the `Cisco` key, and `type_key`s must be unique (a collision silently
   drops one definition).  NX-OS is a separate NOS, so it gets its own key.
@@ -217,6 +220,9 @@ only via `resolve()`.
 - Pairs with the `cisco_nxos` migration codec.
 
 ### Cisco IOS-XR 7.x
+- ⚠ **Not yet validated on live hardware** — collection wiring verified in
+  code + against sample output only (Notes column flags it).  Confirm on a
+  real router.
 - `type_key: CiscoIOSXR` — distinct from `Cisco`/`CiscoNXOS` for the same
   uniqueness reason.
 - `collector.netmiko_device_type: cisco_xr` — netmiko disables paging
@@ -230,6 +236,9 @@ only via `resolve()`.
 - Pairs with the `cisco_iosxr` migration codec (ASR 9000 / NCS SP routers).
 
 ### Aruba AOS-CX 10.x
+- ⚠ **Not yet validated on live hardware** — collection wiring verified in
+  code + against sample output only (Notes column flags it).  Confirm on a
+  real switch.
 - `type_key: ArubaCX` — **not** `Aruba`.  `Aruba` belongs to the AOS-S
   (ex-ProCurve) family base, a completely different NOS; AOS-CX is the
   modern Linux-based switch OS.
@@ -243,6 +252,9 @@ only via `resolve()`.
 - Pairs with the `aruba_aoscx` migration codec.
 
 ### VyOS 1.3 / 1.4
+- ⚠ **Not yet validated on live hardware** — collection wiring verified in
+  code + against sample output only (Notes column flags it).  Confirm on a
+  real router.
 - `collector.netmiko_device_type: vyos` — netmiko's VyOS driver lands in
   operational mode and disables the pager itself.
 - `connection.needs_enable: false` — no enable equivalent on VyOS.

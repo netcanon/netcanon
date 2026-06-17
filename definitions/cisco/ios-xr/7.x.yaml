@@ -54,7 +54,11 @@ probe:
     detected_model: '^cisco\s+(\S+)'
 
 notes: >
-  Cisco IOS-XR 7.x (ASR 9000 / NCS SP routers).  Pairs with the cisco_iosxr
-  migration codec for round-tripping `show running-config`.  netmiko's
-  `cisco_xr` driver handles paging natively; IOS-XR has no enable mode
-  (privilege is task-group based).
+  ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
+  (netmiko driver, config command, prompt patterns, probe regexes) is
+  verified in code and against sample `show version` output only, never
+  run against real hardware.  Treat as provisional and confirm on a real
+  router before relying on it.  Cisco IOS-XR 7.x (ASR 9000 / NCS SP
+  routers).  Pairs with the cisco_iosxr migration codec for round-tripping
+  `show running-config`.  netmiko's `cisco_xr` driver handles paging
+  natively; IOS-XR has no enable mode (privilege is task-group based).

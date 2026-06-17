@@ -51,7 +51,12 @@ probe:
     detected_os_version: 'Version\s*:\s*[A-Z]{2}\.(\d+\.\d+)'
 
 notes: >
-  Aruba AOS-CX 10.x (CX 6000/8000/10000) — the modern Linux-based switch OS,
-  distinct from AOS-S (ex-ProCurve, the "Aruba" type_key).  Pairs with the
-  aruba_aoscx migration codec for round-tripping `show running-config`.
-  netmiko's `aruba_aoscx` driver handles paging natively; no enable mode.
+  ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
+  (netmiko driver, config command, prompt patterns, probe regex) is
+  verified in code and against sample `show version` output only, never
+  run against real hardware.  Treat as provisional and confirm on a real
+  switch before relying on it.  Aruba AOS-CX 10.x (CX 6000/8000/10000) —
+  the modern Linux-based switch OS, distinct from AOS-S (ex-ProCurve, the
+  "Aruba" type_key).  Pairs with the aruba_aoscx migration codec for
+  round-tripping `show running-config`.  netmiko's `aruba_aoscx` driver
+  handles paging natively; no enable mode.

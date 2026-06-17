@@ -77,6 +77,13 @@ class TestSchemaCompliance:
     def test_file_extension_cfg(self):
         assert _load_definition().file_extension == "cfg"
 
+    def test_notes_flag_not_validated_on_live_hardware(self):
+        """Honesty marker: the backup actuation has never been run against
+        a real device, only verified in code + against sample output.  The
+        Notes column surfaces this in the /definitions UI (warning-first so
+        it survives truncation).  Locked in so it can't silently drop."""
+        assert "NOT YET VALIDATED" in _load_definition().notes
+
     def test_loaded_via_definition_loader(self):
         defs = DefinitionLoader(_REPO_ROOT / "definitions").load_all()
         assert "CiscoNXOS" in defs, sorted(defs.keys())

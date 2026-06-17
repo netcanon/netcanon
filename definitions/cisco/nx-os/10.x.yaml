@@ -58,7 +58,12 @@ probe:
     detected_serial: 'Processor Board ID\s+(\S+)'
 
 notes: >
-  Cisco NX-OS 9.x / 10.x (Nexus 3000 / 9000).  Pairs with the cisco_nxos
-  migration codec for round-tripping `show running-config`.  netmiko's
-  `cisco_nxos` driver handles paging natively (it sends `terminal length 0`
-  at session setup); no enable mode on NX-OS.
+  ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
+  (netmiko driver, config command, prompt patterns, probe regexes) is
+  verified in code and against sample `show version` output only, never
+  run against real hardware.  Treat as provisional and confirm on a real
+  switch before relying on it.  Cisco NX-OS 9.x / 10.x (Nexus 3000 / 9000).
+  Pairs with the cisco_nxos migration codec for round-tripping
+  `show running-config`.  netmiko's `cisco_nxos` driver handles paging
+  natively (it sends `terminal length 0` at session setup); no enable
+  mode on NX-OS.

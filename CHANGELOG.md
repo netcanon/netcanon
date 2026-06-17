@@ -41,6 +41,10 @@ timestamp if your timezone matters for an audit.
   migration codec family now has a backup definition.  Each ships a
   tested `show version` probe; per-definition unit tests under
   `tests/unit/definitions/` lock in the collector wiring + probe regexes.
+  These four are **provisional**: the collection wiring is verified in
+  code and against sample output but has not yet been run against a live
+  device, so each carries a "NOT YET VALIDATED" marker in its `notes`
+  (surfaced in the `/definitions` Notes column).
 
 Internal maintenance + refactor release.  **No change to migration
 output** — the codec work below is behaviour-preserving: the cross-mesh
