@@ -34,9 +34,13 @@
   .btn-link-btn:hover { background:var(--btn-secondary-bg-hover); }
 </style>
 
-<div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1.25rem">
+<div style="display:flex;align-items:baseline;gap:1rem;margin-bottom:1.25rem;flex-wrap:wrap">
   <h1 style="margin-bottom:0">Backup Jobs</h1>
   <span style="font-size:.85rem;color:var(--text-faint)">{{ jobs|length }} job{{ 's' if jobs|length != 1 else '' }}</span>
+  <button type="button" class="btn-secondary" data-testid="jobs-refresh-btn"
+          onclick="window.location.reload()"
+          style="font-size:.8rem;padding:.25rem .7rem">&#8635; Refresh</button>
+  <span style="font-size:.78rem;color:var(--text-faint)">This list does not auto-update &mdash; refresh to see new results.</span>
 </div>
 
 {% if not jobs %}
@@ -51,7 +55,7 @@
 {% set duration_secs = ((job.completed_at - job.created_at).total_seconds() | int) if job.completed_at else none %}
 
 <div class="job-card" data-testid="job-card" data-job-id="{{ job.id }}"
-     id="job-{{ job.id[:8] }}">
+     id="job-{{ job.id }}">
 
   <div class="job-card-header" data-testid="job-card-header"
        onclick="toggleJob(this)">
@@ -119,7 +123,7 @@
                     data-testid="job-config-download-btn"
                     class="btn-link-btn">Download</button>
             {% if open_in_editor %}
-            <button onclick="openJobConfig('{{ result.config_record.filename }}')"
+            <button onclick="openJobConfig('{{ result.config_record.filename }}', this)"
                     data-testid="job-config-open-btn"
                     class="btn-link-btn">Open</button>
             {% endif %}
@@ -158,7 +162,10 @@ function toggleJob(header) {
   chevron.classList.toggle('open', open);
 }
 
-/* Open all jobs that match the URL hash (e.g. /jobs#a1b2c3d4) */
+/* Open the job that matches the URL hash (e.g. /jobs#<full-job-id>).
+ * The fragment carries the FULL id so it is unambiguous; a miss means
+ * the job aged out of the in-memory store, so we say so rather than
+ * silently no-op. */
 document.addEventListener('DOMContentLoaded', function() {
   var hash = window.location.hash.replace('#', '');
   if (hash) {
@@ -167,18 +174,23 @@ document.addEventListener('DOMContentLoaded', function() {
       var header = card.querySelector('[data-testid="job-card-header"]');
       if (header) toggleJob(header);
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      showToast('Job ' + hash.substring(0, 8) + '… not found — it may have '
+        + 'aged out of the in-memory job store.', 'info');
     }
   }
 });
 
 {% if open_in_editor %}
-function openJobConfig(filename) {
+function openJobConfig(filename, btn) {
+  if (btn) btn.disabled = true;  // guard against double-click while in flight
   fetch('/api/v1/configs/' + encodeURIComponent(filename) + '/open', { method: 'POST' })
     .then(function(r) {
       if (r.status === 204) showToast('Opened ' + filename, 'success');
       else r.json().then(function(d) { showToast('Error: ' + formatApiError(d, r.statusText), 'error'); });
     })
-    .catch(function(e) { showToast('Network error: ' + e.message, 'error'); });
+    .catch(function(e) { showToast('Network error: ' + e.message, 'error'); })
+    .finally(function() { if (btn) btn.disabled = false; });
 }
 {% endif %}
 </script>
