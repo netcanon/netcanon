@@ -42,11 +42,12 @@ Backup-side device-definition YAMLs ship for every codec family above
 (plus per-OS-version overlays).  Cisco and Aruba each span two NOSes with
 separate definitions — `Cisco` (IOS-XE) + `CiscoNXOS` + `CiscoIOSXR`, and
 `Aruba` (AOS-S) + `ArubaCX` (AOS-CX) — keyed distinctly because `type_key`
-must be unique.  **`CiscoNXOS`, `CiscoIOSXR`, `ArubaCX`, and `VyOS` are
+must be unique.  **`CiscoNXOS`, `CiscoIOSXR`, and `ArubaCX` are
 provisional**: their backup wiring is verified in code and against sample
 `show version` output, but has not yet been run against a live device —
 the `/definitions` Notes column flags each with a "NOT YET VALIDATED"
-warning.  See
+warning.  (`VyOS` was provisional too until it was live-validated against a
+real VyOS rolling instance — backup run end-to-end — and graduated.)  See
 [`../definitions/README.md`](../definitions/README.md) for the
 authoring guide and the live `/definitions` page in the running app
 for the per-vendor inventory.  RESULTS.md is the source of truth for

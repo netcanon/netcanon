@@ -95,3 +95,8 @@ tests/fixtures/real/_phase4_runs/*.json
 # private GitHub repo or non-git cloud for long-term retention.
 _pr-archive-pre-public.json
 _pr-archive-pre-public.md
+
+# Dogfood/scratch-VM lab — mirrors Kontroll's gitignored `local/` paradigm.
+# Holds pulled SSH keys, any decrypted secrets, the scratch-VM ledger, and the
+# PVE build/watch/destroy scripts. NEVER commit — contains credentials.
+/local/

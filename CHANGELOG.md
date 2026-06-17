@@ -26,6 +26,19 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Changed
+
+* **VyOS backup definition graduated from provisional to live-validated**
+  (`definitions/vyos/vyos/1.x.yaml`).  The backup-collection wiring (netmiko
+  `vyos` driver, `show configuration commands`, prompt patterns, `show
+  version` probe) shipped in #110 flagged "NOT YET VALIDATED" — verified in
+  code only.  It has now been run end-to-end against a real VyOS rolling
+  instance: a backup job completed and pulled the set-form running config, so
+  the honesty marker is dropped (def notes + `/definitions` Notes column +
+  CAPABILITIES.md), and the def's test now asserts the marker is absent.  The
+  other three backup defs from #110 (`CiscoNXOS`, `CiscoIOSXR`, `ArubaCX`)
+  remain provisional — no free emulator to validate against.
+
 ## [0.3.0] - 2026-06-16
 
 The user-facing counterpart to v0.2.0's internal refactor: a web-UI
