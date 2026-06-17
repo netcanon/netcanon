@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ status_code }} {{ status_text }} — Netcanon{% endblock %}
+
+{% block content %}
+{# Minimal themed error page (404 / 500) so a mistyped URL or an
+   uncaught server error keeps the operator inside the nav-wrapped
+   shell instead of dropping them onto a raw JSON body.  The message
+   is generic by design — we never echo exception detail here (the
+   full traceback lives in the server log). #}
+<div data-testid="error-page"
+     style="max-width:640px;margin:3rem auto;text-align:center">
+  <div data-testid="error-status-code"
+       style="font-size:3.5rem;font-weight:700;font-family:monospace;
+              color:var(--text-faint);line-height:1">{{ status_code }}</div>
+  <h1 style="margin:.5rem 0 .25rem">{{ status_text }}</h1>
+  <p style="color:var(--text-muted);margin:.5rem 0 1.5rem">{{ message }}</p>
+  <a href="/" class="btn-primary" data-testid="error-home-link"
+     style="display:inline-block;text-decoration:none;
+            padding:.5rem 1.1rem;border-radius:4px">
+    &#8592; Back to Dashboard
+  </a>
+</div>
+{% endblock %}

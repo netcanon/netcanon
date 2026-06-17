@@ -18,11 +18,13 @@ from __future__ import annotations
 import heapq
 import logging
 from collections import defaultdict
+from http import HTTPStatus
 from pathlib import Path
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +71,100 @@ def _format_interval(minutes: int) -> str:
 
 
 _templates.env.globals["format_interval"] = _format_interval
+
+
+# ---------------------------------------------------------------------------
+# Error pages (404 / 500)
+# ---------------------------------------------------------------------------
+#
+# A mistyped URL or an uncaught server error used to drop the operator
+# onto a raw JSON body (``{"detail":"Not Found"}``) with no nav and no
+# theme.  These handlers render a themed ``error.html`` (extends
+# ``base.html``) for *browser* navigations while preserving the JSON
+# contract for the API surface and programmatic clients.
+
+_ERROR_MESSAGES = {
+    404: (
+        "We couldn't find that page. It may have moved, or the link "
+        "was mistyped."
+    ),
+    500: (
+        "Something went wrong on our end. The error has been logged; "
+        "try again, or head back to the dashboard."
+    ),
+}
+_DEFAULT_ERROR_MESSAGE = "An unexpected error occurred."
+
+
+def _wants_html(request: Request) -> bool:
+    """True when the themed error page (not JSON) is the right response.
+
+    Browser navigations to a non-API path send ``Accept: text/html``;
+    they get the page.  Anything under ``/api/`` — and any programmatic
+    client whose ``Accept`` is ``*/*`` or ``application/json`` (incl.
+    the test harness's default) — keeps the JSON ``{"detail": ...}``
+    contract untouched.
+    """
+    if request.url.path.startswith("/api/"):
+        return False
+    return "text/html" in request.headers.get("accept", "")
+
+
+def _status_phrase(status_code: int) -> str:
+    """Human phrase for an HTTP status (``404`` → ``"Not Found"``)."""
+    try:
+        return HTTPStatus(status_code).phrase
+    except ValueError:
+        return "Error"
+
+
+def _render_error_page(request: Request, status_code: int) -> Response:
+    return _templates.TemplateResponse(
+        request,
+        "error.html",
+        {
+            "status_code": status_code,
+            "status_text": _status_phrase(status_code),
+            "message": _ERROR_MESSAGES.get(status_code, _DEFAULT_ERROR_MESSAGE),
+        },
+        status_code=status_code,
+    )
+
+
+def register_exception_handlers(app: FastAPI) -> None:
+    """Wire the themed 404/500 handlers onto *app*.
+
+    Called from ``create_app`` after the routers are mounted.  Lives
+    here (not in ``main.py``) so it can reuse this module's configured
+    ``Jinja2Templates`` instance and its registered globals.
+    """
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> Response:
+        if _wants_html(request):
+            return _render_error_page(request, exc.status_code)
+        # Preserve FastAPI's default JSON shape for the API surface.
+        return JSONResponse(
+            {"detail": exc.detail},
+            status_code=exc.status_code,
+            headers=getattr(exc, "headers", None),
+        )
+
+    @app.exception_handler(Exception)
+    async def _unhandled_exception_handler(
+        request: Request, exc: Exception
+    ) -> Response:
+        # The traceback is logged here (with the request path) and again
+        # by the framework when it re-raises; we never echo it to the
+        # client.
+        logger.exception("Unhandled error serving %s", request.url.path)
+        if _wants_html(request):
+            return _render_error_page(request, 500)
+        return JSONResponse(
+            {"detail": "Internal Server Error"}, status_code=500
+        )
 
 
 # ---------------------------------------------------------------------------

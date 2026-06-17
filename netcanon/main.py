@@ -305,6 +305,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(docs_router.router)  # custom Swagger UI at /docs (no prefix)
     app.include_router(ui_router.router)  # UI routes at root (/, /jobs, …)
 
+    # Themed 404/500 pages for browser navigations (API surface keeps
+    # its JSON error contract — see ui._wants_html).  Registered last so
+    # it wraps the fully-mounted router set.
+    ui_router.register_exception_handlers(app)
+
     return app
 
 
