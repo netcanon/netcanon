@@ -34,6 +34,7 @@
       <button onclick="downloadConfig('{{ cfg.filename }}')"
               class="btn-secondary" data-testid="config-download-btn"
               style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+              aria-label="Download {{ cfg.filename }}"
               title="Download {{ cfg.filename }}">&#8595;</button>
       <button class="btn-secondary compare-btn"
               data-testid="config-compare-btn"
@@ -41,6 +42,7 @@
               data-type-key="{{ cfg.device_type }}"
               data-ext="{{ cfg.file_extension }}"
               style="font-size:.8rem;padding:.3rem .6rem;margin-left:.3rem"
+              aria-label="Compare {{ cfg.filename }} with another config"
               title="Compare this config with another">&#8644;</button>
       {% if open_in_editor %}
       <button class="btn-secondary"
