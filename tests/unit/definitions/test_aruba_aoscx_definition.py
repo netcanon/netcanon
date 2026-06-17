@@ -132,6 +132,14 @@ class TestProbeRegexes:
         facts = parse_probe_output(_SHOW_VERSION_AOSCX, _load_definition().probe)
         assert facts.get("detected_os_version") == "10.10"
 
+    def test_extracts_version_from_simulator_virtual_prefix(self):
+        """The CX Switch Simulator prints ``Version : Virtual.10.13.1110``; the
+        widened prefix branch captures ``10.13`` (hardware FL./GL. still matches).
+        Sim banner per documented sim output, not yet live-run."""
+        sim = "Version      : Virtual.10.13.1110\n"
+        facts = parse_probe_output(sim, _load_definition().probe)
+        assert facts.get("detected_os_version") == "10.13"
+
     def test_probe_timestamp_attached(self):
         facts = parse_probe_output(_SHOW_VERSION_AOSCX, _load_definition().probe)
         assert PROBE_TIMESTAMP_KEY in facts

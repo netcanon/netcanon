@@ -39,6 +39,16 @@ timestamp if your timezone matters for an audit.
   other three backup defs from #110 (`CiscoNXOS`, `CiscoIOSXR`, `ArubaCX`)
   remain provisional — no free emulator to validate against.
 
+* **AOS-CX backup `show version` probe now also matches the CX Switch Simulator**
+  (`definitions/aruba/aos-cx/10.x.yaml`).  The probe captured the OS version only
+  from the two-letter hardware platform prefix (`FL.`/`GL.`); the free AOS-CX
+  *Switch Simulator* reports `Virtual.10.x`, which the old regex silently missed
+  (the job goes green while `detected_os_version` stays empty).  Widened the
+  prefix to `(?:[A-Z]{2}|Virtual)\.` so the version probe fires on both hardware
+  and the simulator (hardware contract unchanged).  Surfaced by the virtual-NOS
+  viability research (`docs/reviews/2026-06-17-virtual-nos-viability/`); the
+  `ArubaCX` def itself stays provisional until run against a real device.
+
 ## [0.3.0] - 2026-06-16
 
 The user-facing counterpart to v0.2.0's internal refactor: a web-UI

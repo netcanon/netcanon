@@ -48,7 +48,8 @@ probe:
   # non-fatal.
   command: "show version"
   patterns:
-    detected_os_version: 'Version\s*:\s*[A-Z]{2}\.(\d+\.\d+)'
+    # FL./GL. on hardware; the CX Switch Simulator prints 'Virtual.' — accept both.
+    detected_os_version: 'Version\s*:\s*(?:[A-Z]{2}|Virtual)\.(\d+\.\d+)'
 
 notes: >
   ⚠ NOT YET VALIDATED on a live device — the backup-collection wiring
