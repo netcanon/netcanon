@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
         with:
           # Full history so the on-main ancestry guard below can run a
           # merge-base against origin/main (shallow clone lacks the graph).
@@ -156,7 +156,7 @@ jobs:
           exit-code: '0'
 
       - name: Upload Trivy SARIF to Code Scanning
-        uses: github/codeql-action/upload-sarif@v4.36.0
+        uses: github/codeql-action/upload-sarif@v4.36.2
         if: always()      # upload even if Trivy failed, so partial findings still surface
         with:
           sarif_file: trivy-image.sarif
