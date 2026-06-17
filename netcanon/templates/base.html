@@ -529,6 +529,16 @@
     }
     #_job-progress-footer a { color:var(--accent); text-decoration:none; margin-right:auto; }
     #_job-progress-footer a:hover { text-decoration:underline; }
+    /* Toast container.  z-index sits ABOVE the config-viewer modal
+       (10000) so a toast fired while the viewer is open is not painted
+       behind it; shadow uses the theme token so it stays visible in
+       dark mode.  display is left to the inline style.display toggle in
+       showToast (hidden initially via the element's inline display:none). */
+    #_toast {
+      position:fixed; bottom:1.5rem; right:1.5rem; max-width:360px;
+      z-index:10001; padding:.75rem 1rem; border-radius:6px;
+      box-shadow:var(--shadow-lift); font-size:.9rem; line-height:1.4;
+    }
     /* Toast variants: theme-aware colour pairs driven by CSS vars
        so dark mode inherits the same semantic hues.  The showToast
        JS assigns one of these classes instead of setting inline
@@ -548,8 +558,7 @@
       <strong id="_job-progress-job-id"
               data-testid="job-id-display"></strong>
       <span id="_job-progress-summary"
-            data-testid="job-progress-summary"
-            aria-label="Job progress summary"></span>
+            data-testid="job-progress-summary"></span>
       <span id="_job-progress-status"
             data-testid="job-status-display"
             style="display:none"></span>
@@ -572,9 +581,7 @@
 
   <!-- Toast notification -->
   <div id="_toast" data-testid="toast" role="status" aria-live="polite" aria-atomic="true"
-       style="position:fixed;bottom:1.5rem;right:1.5rem;max-width:360px;z-index:9999;display:none;
-              padding:.75rem 1rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.25);
-              font-size:.9rem;line-height:1.4">
+       style="display:none">
     <span id="_toast-msg"></span>
   </div>
 
@@ -596,6 +603,15 @@
     var msgEl = document.getElementById('_toast-msg');
     toast.classList.remove('toast-info', 'toast-error', 'toast-success');
     toast.classList.add('toast-' + variant);
+    // Errors must interrupt the screen reader rather than queue behind
+    // polite output; info/success stay polite.  Toggle per message.
+    if (variant === 'error') {
+      toast.setAttribute('role', 'alert');
+      toast.setAttribute('aria-live', 'assertive');
+    } else {
+      toast.setAttribute('role', 'status');
+      toast.setAttribute('aria-live', 'polite');
+    }
     msgEl.textContent = msg;
     toast.style.display = '';
     clearTimeout(toast._t);
