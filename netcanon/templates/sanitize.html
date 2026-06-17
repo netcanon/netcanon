@@ -124,8 +124,11 @@
   </div>
 </form>
 
-<!-- Results region -->
-<div id="san-result" data-testid="sanitize-result" class="hidden">
+<!-- Results region.  Hidden via inline style (not a `.hidden` class —
+     there is no global `.hidden{display:none}` rule, which previously
+     left the empty result scaffold visible on first load).  The JS
+     reveal below flips `style.display`, mirroring migrate's #mig-result. -->
+<div id="san-result" data-testid="sanitize-result" style="display:none">
   <div class="san-result-section">
     <div id="san-status-summary" data-testid="sanitize-status-summary"
          style="font-family:monospace;font-size:.82rem;color:var(--text-faint);margin-bottom:.5rem"></div>
@@ -381,7 +384,7 @@
       // Both succeeded — render.
       var auditJson = await auditResp.json();
       var sanitizedText = outputResp ? await outputResp.text() : null;
-      result.classList.remove('hidden');
+      result.style.display = '';
       var dt = (performance.now() - t0).toFixed(0);
       statusSum.textContent =
         'Sanitized in ' + dt + 'ms — ' + auditJson.total

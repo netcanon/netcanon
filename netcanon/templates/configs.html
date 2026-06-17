@@ -3,6 +3,11 @@
 
 {% block content %}
 <h1>Stored Configurations</h1>
+<p style="color:var(--text-muted);font-size:.9rem;margin:.25rem 0 1rem">
+  Configs captured from your devices (via Backup) or uploaded here. This is
+  the hub that feeds the rest of the app — view or download any file, compare
+  two with Diff, or send one through Migrate to translate it to another vendor.
+</p>
 
 {% if configs %}
 <table data-testid="configs-table">

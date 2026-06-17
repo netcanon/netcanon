@@ -472,6 +472,12 @@
                 title="Download as file">&#8595; Download</button>
       </div>
     </div>
+    <p data-testid="migrate-output-review-note"
+       style="color:var(--text-muted);font-size:.8rem;margin:0 0 .5rem">
+      Review before applying — Netcanon translates configs but does not
+      deploy them, and only fields with a supported path on the target are
+      carried across.
+    </p>
     <pre class="mig-output" id="mig-output"
          data-testid="migrate-output"></pre>
   </div>
@@ -1513,7 +1519,9 @@
     var v = job.validation;
     if (!v) return '<em>No validation report.</em>';
     if (v.severity === 'ok') {
-      return '<div>&#10003; Validation OK — every path round-trips cleanly.</div>';
+      return '<div>&#10003; Validation OK — every field that translates maps '
+           + 'to a supported path on the target. Review before applying; '
+           + 'Netcanon has no deploy path.</div>';
     }
     var lines = v.reasons.map(function(r) {
       return '<li>' + escapeHtml(r) + '</li>';

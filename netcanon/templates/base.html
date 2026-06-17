@@ -50,7 +50,10 @@
       --surface-hover:  #d0d0d8;
       --text-primary:   #222222;
       --text-muted:     #555555;
-      --text-faint:     #888888;
+      /* Faint text is still information-bearing (empty-state "what
+         next" messages, job metadata, timestamps).  #6e6e6e clears
+         WCAG-AA (5.1:1 on white); the old #888888 was 3.5:1. */
+      --text-faint:     #6e6e6e;
       --border:         #eeeeee;
       --border-strong:  #cccccc;
 
@@ -63,9 +66,15 @@
       --nav-accent:     #7eb8f7;
       --nav-accent-hov: #a8d0ff;
 
-      /* Accent + focus ring — same colour the nav uses for its
-         active-page underline; shared with input:focus outlines. */
+      /* Accent — the nav's active-page underline colour.  Light
+         (#7eb8f7) on white is only ~2:1, so it is NOT used for the
+         focus ring (see --focus-ring below). */
       --accent:         #7eb8f7;
+      /* Focus ring — dedicated token that clears the WCAG 3:1 UI
+         minimum against the input surface.  Light mode needs a
+         darker blue (#2563eb ≈ 5.2:1 on white); dark mode keeps the
+         light accent (~7.5:1 on the dark surface). */
+      --focus-ring:     #2563eb;
 
       /* Primary button — shares the nav's dark navy. */
       --btn-primary-bg:       #1a1a2e;
@@ -123,7 +132,9 @@
       --surface-hover:  #333344;
       --text-primary:   #e8e8ea;
       --text-muted:     #b0b0b8;
-      --text-faint:     #808088;
+      /* Lifted to clear WCAG-AA (~6:1 on the dark surface); old
+         #808088 was ~3.6:1.  See light-mode --text-faint note. */
+      --text-faint:     #9a9aa4;
       --border:         #333338;
       --border-strong:  #555560;
 
@@ -134,6 +145,9 @@
       --nav-accent-hov: #a8d0ff;
 
       --accent:         #7eb8f7;
+      /* On the dark surface the light accent itself clears 3:1
+         (~7.5:1), so the focus ring reuses it. */
+      --focus-ring:     #7eb8f7;
 
       --btn-primary-bg:       #2e2e50;   /* lifted for visibility */
       --btn-primary-bg-hover: #3e3e68;
@@ -254,7 +268,7 @@
     .form-group { display: flex; flex-direction: column; gap: .25rem; }
     label { font-size: .8rem; font-weight: 600; color: var(--text-muted); }
     input, select, textarea { padding: .4rem .6rem; border: 1px solid var(--border-strong); border-radius: 4px; font-size: .9rem; background: var(--surface); color: var(--text-primary); }
-    input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    input:focus, select:focus, textarea:focus { outline: 2px solid var(--focus-ring); border-color: transparent; }
     button { padding: .45rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: .9rem; font-weight: 600; }
     button:disabled { opacity: .6; cursor: not-allowed; }
     .btn-primary { background: var(--btn-primary-bg); color: var(--btn-primary-fg); }
