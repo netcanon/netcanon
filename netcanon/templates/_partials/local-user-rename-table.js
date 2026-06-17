@@ -71,10 +71,10 @@
     table.setAttribute('data-testid', 'migrate-rename-local-users-table');
     var thead = document.createElement('thead');
     thead.innerHTML = '<tr>'
-      + '<th>Source username</th>'
-      + '<th>Auto target</th>'
-      + '<th>Override</th>'
-      + '<th style="width:1.5rem">⚠</th>'
+      + '<th scope="col">Source username</th>'
+      + '<th scope="col">Auto target</th>'
+      + '<th scope="col">Override</th>'
+      + '<th scope="col" style="width:1.5rem">⚠</th>'
       + '</tr>';
     table.appendChild(thead);
 

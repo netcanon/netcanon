@@ -357,9 +357,25 @@
     }
     .kbd-sep { color:var(--text-faint); font-size:.75rem;
                padding:0 .1rem; }
+    /* Visually-hidden-until-focused utility + the skip-link that uses
+       it.  The skip-link is the first focusable element on every page
+       so keyboard users can jump past the 10-link nav straight to the
+       page content. */
+    .sr-only {
+      position:absolute; width:1px; height:1px; padding:0; margin:-1px;
+      overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0;
+    }
+    .skip-link:focus {
+      position:fixed; top:.5rem; left:.5rem; width:auto; height:auto;
+      margin:0; padding:.5rem .9rem; clip:auto; overflow:visible;
+      z-index:10002; background:var(--surface); color:var(--text-primary);
+      border:2px solid var(--focus-ring); border-radius:4px;
+      text-decoration:none; font-weight:600;
+    }
   </style>
 </head>
 <body>
+  <a href="#main" class="sr-only skip-link" data-testid="skip-link">Skip to main content</a>
   <nav data-testid="nav">
     <a href="/" class="brand" data-testid="nav-brand">Netcanon</a>
     <a href="/"            data-testid="nav-home"        {% if active_page == 'home' %}class="active" aria-current="page"{% endif %}>Dashboard</a>
@@ -390,7 +406,7 @@
       <span class="sun"  aria-hidden="true">&#x2600;</span>
     </button>
   </nav>
-  <main>
+  <main id="main">
     {% block content %}{% endblock %}
   </main>
 

@@ -327,14 +327,14 @@
 <form id="mig-form" class="mig-form" data-testid="migrate-form">
   <div class="mig-pair-row">
     <div class="form-group">
-      <label for="mig-source">Source adapter</label>
+      <label for="mig-source">Source vendor</label>
       <select id="mig-source" name="source"
               data-testid="migrate-source-select" required
               title="What format your input is in. Cisco IOS-XE expects CLI text (show running-config); OPNsense expects XML (config.xml); Junos expects 'set'-form or block-form; FortiOS expects CLI (show full-configuration)."></select>
     </div>
     <span class="mig-arrow" aria-hidden="true">&rarr;</span>
     <div class="form-group">
-      <label for="mig-target">Target adapter</label>
+      <label for="mig-target">Target vendor</label>
       <select id="mig-target" name="target"
               data-testid="migrate-target-select" required
               title="What format Netcanon renders. Same-vendor (round-trip) and cross-vendor both supported. Capability gaps + Tier-3 sections that don't translate are surfaced inline after the run."></select>
@@ -372,13 +372,13 @@
     <textarea class="mig-raw" id="mig-raw" name="raw_text"
               data-testid="migrate-raw-input"
               spellcheck="false"
-              placeholder="Pick a source adapter above and a matching sample will appear here."></textarea>
+              placeholder="Pick a source vendor above and a matching sample will appear here."></textarea>
     <div style="display:flex;gap:.5rem;margin-top:.35rem">
       <button type="button" class="btn-secondary"
               data-testid="migrate-load-sample-btn"
               onclick="loadSampleForSourceAdapter()"
               style="font-size:.75rem;padding:.2rem .6rem">
-        Load sample for source adapter
+        Load sample for source vendor
       </button>
       <span style="font-size:.72rem;color:var(--text-faint);align-self:center">
         overwrites the textarea
@@ -1001,7 +1001,7 @@
   function applyPlaceholder(entry) {
     var ta = document.getElementById('mig-raw');
     ta.placeholder = entry.sample
-      ? 'Sample for this source adapter — click "Load sample" below to populate.'
+      ? 'Sample for this source vendor — click "Load sample" below to populate.'
       : 'No sample available for this input format.';
   }
 
@@ -1032,7 +1032,7 @@
     if (compatExts.length === 0) {
       warnEl.style.display = '';
       warnEl.innerHTML =
-        '⚠ Source adapter <code>' + escapeHtml(entry.codec)
+        '⚠ Source vendor <code>' + escapeHtml(entry.codec)
         + '</code> does not read files from the backup store. Pasting '
         + 'via the textarea is likely to work better.';
       return;
