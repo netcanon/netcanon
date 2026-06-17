@@ -199,6 +199,62 @@ only via `resolve()`.
   `netcanon/migration/codecs/arista_eos` for round-tripping
   ``show running-config``.
 
+### Cisco NX-OS 9.x / 10.x
+- `type_key: CiscoNXOS` — **not** `Cisco`.  The IOS-XE family base owns
+  the `Cisco` key, and `type_key`s must be unique (a collision silently
+  drops one definition).  NX-OS is a separate NOS, so it gets its own key.
+- `collector.netmiko_device_type: cisco_nxos` — netmiko disables paging
+  natively (NX-OS supports `terminal length 0`, unlike classic IOS/IOS-XE).
+- `connection.needs_enable: false` — the admin role lands straight in `#`.
+- `connection.cisco_more_paging: false` — the SPACE-injection flag is
+  IOS/IOS-XE-only and is ignored by the netmiko collector; do NOT add
+  `terminal length 0` to `commands.pre` (AGENTS.md hard rule — netmiko owns
+  paging).
+- `probe.command: show version` — captures `major.minor` from the modern
+  `NXOS: version 10.3(2)` / legacy `system: version 7.0(3)...` line, the
+  chassis SKU from the `cisco Nexus9000 <SKU> Chassis` line, and the
+  serial from `Processor Board ID`.
+- Pairs with the `cisco_nxos` migration codec.
+
+### Cisco IOS-XR 7.x
+- `type_key: CiscoIOSXR` — distinct from `Cisco`/`CiscoNXOS` for the same
+  uniqueness reason.
+- `collector.netmiko_device_type: cisco_xr` — netmiko disables paging
+  natively.
+- `connection.needs_enable: false` — IOS-XR has no enable mode (privilege
+  is task-group based); SSH lands in exec mode.
+- `connection.cisco_more_paging: false` — same rationale as NX-OS.
+- `probe.command: show version` — captures `major.minor` from
+  `Cisco IOS XR Software, Version 7.5.2` and the platform from the leading
+  `cisco ASR9K Series` / `cisco NCS-5501` processor line.
+- Pairs with the `cisco_iosxr` migration codec (ASR 9000 / NCS SP routers).
+
+### Aruba AOS-CX 10.x
+- `type_key: ArubaCX` — **not** `Aruba`.  `Aruba` belongs to the AOS-S
+  (ex-ProCurve) family base, a completely different NOS; AOS-CX is the
+  modern Linux-based switch OS.
+- `collector.netmiko_device_type: aruba_aoscx` — netmiko disables paging
+  natively (`no page`).
+- `connection.needs_enable: false` — SSH lands in manager `#`.
+- `connection.cisco_more_paging: false` — IOS/IOS-XE-only flag, ignored here.
+- `probe.command: show version` — captures `major.minor` from the
+  platform-prefixed `Version : FL.10.10.1000` line.  Model is not in
+  AOS-CX `show version` (it lives in `show system`), so it is not probed.
+- Pairs with the `aruba_aoscx` migration codec.
+
+### VyOS 1.3 / 1.4
+- `collector.netmiko_device_type: vyos` — netmiko's VyOS driver lands in
+  operational mode and disables the pager itself.
+- `connection.needs_enable: false` — no enable equivalent on VyOS.
+- `commands.config: "show configuration commands"` — emits flat `set ...`
+  lines (set-form).  The `vyos` migration codec accepts set-form natively
+  (its Phase-6 front-end converts it to the curly-brace tree before
+  parsing); `cat /config/config.boot` is an equivalent the codec also reads.
+- `file_extension: conf` — matches the `.conf` convention of the vyos
+  real-capture fixtures.
+- `probe.command: show version` — captures `major.minor` from
+  `Version: VyOS 1.4.0`, plus `Hardware model:` and `Hardware S/N:`.
+
 ---
 
 ## See also

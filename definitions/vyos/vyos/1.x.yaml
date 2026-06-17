@@ -1,0 +1,60 @@
+# VyOS 1.3 (equuleus) / 1.4 (sagitta)
+#
+# Pairs with the migration codec at netcanon/migration/codecs/vyos.  This
+# file is what the backup pipeline uses to *fetch* the configuration from a
+# live VyOS router/firewall (the OSS Vyatta-successor NOS).
+#
+# Config form — netmiko's `vyos` driver lands in operational mode.  We run
+# `show configuration commands`, which emits the config as flat `set ...`
+# lines (set-form).  The vyos codec accepts set-form natively (its Phase-6
+# `_setform_to_brace` front-end converts it before the brace-stack walker
+# runs), so the backup pairs cleanly with the codec.  `cat /config/config.boot`
+# (the curly-brace form) is an equivalent alternative the codec also accepts,
+# but `show configuration commands` is operational-mode-native and makes no
+# filesystem-path assumption.
+#
+# Paging — netmiko's `vyos` driver disables the operational pager itself.
+# cisco_more_paging (SPACE-injection) is IOS/IOS-XE-only and stays false.
+
+vendor: VyOS
+os: VyOS
+version_match: "^1\\."        # advisory/future; VyOS 1.3 / 1.4
+type_key: VyOS
+priority: 10
+
+file_extension: conf          # matches the .conf convention used by the vyos real-capture fixtures
+
+connection:
+  needs_enable: false         # VyOS SSH lands in operational mode ('$'); no enable equivalent
+  cisco_more_paging: false    # netmiko vyos disables the operational pager natively
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show configuration commands"   # set-form; the vyos codec accepts it (Phase 6)
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+@\S+:.*[$#]\s*$'   # vyos@hostname:~$  (operational mode; '#' if logged in as root)
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: vyos
+
+probe:
+  # Pre-backup `show version` probe.  VyOS reports the release on a
+  # `Version:          VyOS 1.4.0` line and the platform on `Hardware model:`.
+  # Capture major.minor so a future overlay (`os_version: "1.4"`) resolves.
+  # Failure is non-fatal.
+  command: "show version"
+  patterns:
+    detected_os_version: 'Version:\s+VyOS\s+(\d+\.\d+)'
+    detected_model: '^Hardware model:\s+(.+?)\s*$'
+    detected_serial: '^Hardware S/N:\s+(\S+)'
+
+notes: >
+  VyOS 1.3 (equuleus) / 1.4 (sagitta).  Pairs with the vyos migration codec.
+  Backup uses `show configuration commands` (set-form) over netmiko's `vyos`
+  driver in operational mode; the codec converts set-form to its curly-brace
+  tree on parse.  No enable mode on VyOS.

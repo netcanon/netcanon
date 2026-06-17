@@ -1,0 +1,57 @@
+# Aruba AOS-CX 10.x  (CX 6000 / 8000 / 10000 series)
+#
+# Pairs with the migration codec at netcanon/migration/codecs/aruba_aoscx.
+# This file is what the backup pipeline uses to *fetch* the running-config
+# from a live AOS-CX switch.
+#
+# type_key is ArubaCX — NOT "Aruba".  The "Aruba" type_key belongs to the
+# AOS-S (ex-ProCurve) family base, which is a completely different NOS.
+# AOS-CX is the modern Linux-based switch OS and gets its own key.
+#
+# Paging — netmiko's `aruba_aoscx` driver disables paging itself at session
+# setup (AOS-CX uses `no page`).  cisco_more_paging (SPACE-injection) is
+# IOS/IOS-XE-only and ignored by the netmiko collector, so it stays false.
+
+vendor: Aruba
+os: AOS-CX
+version_match: "^10\\."       # advisory/future; AOS-CX 10.x trains (FL/GL/etc platform builds)
+type_key: ArubaCX
+priority: 10
+
+file_extension: cfg
+
+connection:
+  needs_enable: false         # AOS-CX SSH lands in manager '#'; no enable-mode escalation
+  cisco_more_paging: false    # netmiko aruba_aoscx disables paging natively (`no page`)
+  opnsense_shell_menu: false
+
+commands:
+  pre: []
+  config: "show running-config"
+  post: []
+
+prompts:
+  trailing:
+    - '^\S+[#>]\s*$'          # switch#  /  switch>
+
+collector:
+  strategy: netmiko
+  netmiko_device_type: aruba_aoscx
+
+probe:
+  # Pre-backup `show version` probe.  AOS-CX reports the firmware build on a
+  # `Version      : FL.10.10.1000` line (a two-letter platform prefix then
+  # the AOS-CX version).  Capture the 10.x major.minor so a future overlay
+  # (`os_version: "10.10"`) resolves.  Model is not in `show version` on
+  # AOS-CX (it lives in `show system`), so it is intentionally not probed
+  # here — version is the high-value fact for overlay selection.  Failure is
+  # non-fatal.
+  command: "show version"
+  patterns:
+    detected_os_version: 'Version\s*:\s*[A-Z]{2}\.(\d+\.\d+)'
+
+notes: >
+  Aruba AOS-CX 10.x (CX 6000/8000/10000) — the modern Linux-based switch OS,
+  distinct from AOS-S (ex-ProCurve, the "Aruba" type_key).  Pairs with the
+  aruba_aoscx migration codec for round-tripping `show running-config`.
+  netmiko's `aruba_aoscx` driver handles paging natively; no enable mode.

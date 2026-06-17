@@ -26,7 +26,21 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-## [0.2.0] - 2026-06-16
+### Added
+- **Backup device definitions for NX-OS, IOS-XR, AOS-CX, and VyOS** —
+  closes the backup-vs-migrate coverage gap.  These four vendors had a
+  migration codec but no `definitions/` entry, so configs could be
+  *migrated* but not *backed up* from a live device.  New family bases:
+  `definitions/cisco/nx-os/10.x.yaml` (`type_key: CiscoNXOS`,
+  netmiko `cisco_nxos`), `definitions/cisco/ios-xr/7.x.yaml`
+  (`CiscoIOSXR`, `cisco_xr`), `definitions/aruba/aos-cx/10.x.yaml`
+  (`ArubaCX`, `aruba_aoscx`), and `definitions/vyos/vyos/1.x.yaml`
+  (`VyOS`, `vyos`, fetching `show configuration commands` set-form which
+  the vyos codec accepts).  Distinct `type_key`s avoid colliding with the
+  existing `Cisco` (IOS-XE) and `Aruba` (AOS-S) family bases.  Every
+  migration codec family now has a backup definition.  Each ships a
+  tested `show version` probe; per-definition unit tests under
+  `tests/unit/definitions/` lock in the collector wiring + probe regexes.
 
 Internal maintenance + refactor release.  **No change to migration
 output** — the codec work below is behaviour-preserving: the cross-mesh
