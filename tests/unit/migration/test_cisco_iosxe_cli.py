@@ -855,6 +855,103 @@ class TestPipelineWithCLICodec:
 
 
 # ---------------------------------------------------------------------------
+# access-vlan implies access mode
+# ---------------------------------------------------------------------------
+
+
+class TestAccessVlanImpliesAccessMode:
+    """Real IOS treats an interface carrying ``switchport access vlan N``
+    as an access port even when the explicit ``switchport mode access``
+    line is absent (very common in real configs).  The parser must infer
+    ``switchport_mode="access"`` so VLAN-centric / L2 targets (e.g. Junos
+    ``ethernet-switching``) do not silently drop the membership.
+    """
+
+    def test_bare_access_vlan_infers_access_mode(self):
+        raw = (
+            "hostname r1\n!\n"
+            "vlan 10\n name DATA\n!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " switchport access vlan 10\n"
+            "!\n"
+        )
+        intent = CiscoIOSXECLICodec().parse(raw)
+        iface = next(
+            i for i in intent.interfaces if i.name.endswith("1/0/1")
+        )
+        assert iface.switchport_mode == "access"
+        assert iface.access_vlan == 10
+
+    def test_inference_round_trips_membership_to_junos(self):
+        from netcanon.migration.codecs.registry import get_codec
+        from netcanon.services.migration_pipeline import (
+            run_plan_with_rename,
+        )
+        raw = (
+            "hostname r1\n!\n"
+            "vlan 10\n name DATA\n!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " switchport access vlan 10\n"
+            "!\n"
+        )
+        job = run_plan_with_rename(
+            CiscoIOSXECLICodec(), get_codec("juniper_junos"), raw,
+            port_rename_map={},
+        )
+        assert "ethernet-switching vlan members DATA" in (
+            job.rendered or ""
+        )
+
+    def test_explicit_trunk_mode_is_not_overridden(self):
+        raw = (
+            "hostname r1\n!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " switchport mode trunk\n"
+            " switchport access vlan 10\n"
+            "!\n"
+        )
+        iface = CiscoIOSXECLICodec().parse(raw).interfaces[0]
+        assert iface.switchport_mode == "trunk"
+
+    def test_access_vlan_with_trunk_config_not_inferred(self):
+        # Ambiguous: both access vlan and a trunk-allowed list, no
+        # explicit mode.  The conservative inference leaves the mode
+        # unset rather than guessing a classification.
+        raw = (
+            "hostname r1\n!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " switchport access vlan 10\n"
+            " switchport trunk allowed vlan 20\n"
+            "!\n"
+        )
+        iface = CiscoIOSXECLICodec().parse(raw).interfaces[0]
+        assert iface.switchport_mode is None
+
+    def test_subinterface_access_vlan_not_inferred(self):
+        # Real IOS rejects `switchport` on a sub-interface; an access_vlan
+        # on a dotted name came from a cross-vendor logical unit, not an L2
+        # access port, so the mode stays unset (keeps cross-mesh round-trip
+        # membership symmetric with the source codec).
+        raw = (
+            "hostname r1\n!\n"
+            "interface GigabitEthernet0/0.100\n"
+            " switchport access vlan 100\n"
+            "!\n"
+        )
+        iface = CiscoIOSXECLICodec().parse(raw).interfaces[0]
+        assert iface.switchport_mode is None
+
+    def test_l3_only_interface_stays_unset(self):
+        raw = (
+            "hostname r1\n!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        iface = CiscoIOSXECLICodec().parse(raw).interfaces[0]
+        assert iface.switchport_mode is None
+
+# ---------------------------------------------------------------------------
 # Bug 4 — ip default-gateway
 # ---------------------------------------------------------------------------
 

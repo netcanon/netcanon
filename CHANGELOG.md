@@ -48,6 +48,19 @@ timestamp if your timezone matters for an audit.
   annotation fix in `icons.py`, etc.) and the CI `ruff check` scope is
   widened to all four trees so they stay clean. No runtime behaviour change.
 
+### Fixed
+
+* **Cisco access-VLAN membership no longer dropped when `switchport mode
+  access` is implicit.**  IOS treats an interface carrying `switchport
+  access vlan N` as an access port even without the explicit `switchport
+  mode access` line; the `cisco_iosxe_cli` parser now infers
+  `switchport_mode="access"` in that case, so VLAN membership survives
+  translation to VLAN-centric targets (e.g. Junos `ethernet-switching vlan
+  members`).  Conservative: an explicit mode is never overridden, ports
+  that also carry trunk config are left untouched, and sub-interfaces
+  (names with a `.`) are excluded since real IOS rejects `switchport`
+  there.  CODEC_BUG count unchanged (5).
+
 ## [0.3.1] - 2026-06-17
 
 ### Added
