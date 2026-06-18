@@ -763,10 +763,16 @@ interface GigabitEthernet1/0/1
         # user overrides applied, but source_vlans still populates.
         assert "source_vlans" in body
 
-    def test_plan_without_any_override_still_works(self, client):
-        """Legacy behaviour: no override maps, no target profile →
-        plain run_plan path.  Source-shape fields stay empty because
-        the capture only fires in the overrides engine."""
+    def test_plan_without_any_override_still_translates_port_names(
+        self, client,
+    ):
+        """No override maps and no target profile STILL translates
+        port names: the endpoint engages the auto port-name heuristic
+        so a plain cross-vendor translation renders native target
+        interface names (GigabitEthernet1/0/1 -> aruba 1/1) instead of
+        leaving them verbatim.  VLAN / local-user categories stay
+        disengaged (their maps were None), and the source-shape
+        capture fires."""
         resp = client.post(
             "/api/v1/migration/plan",
             json={
@@ -777,10 +783,13 @@ interface GigabitEthernet1/0/1
         )
         assert resp.status_code == 200
         body = resp.json()
-        # No overrides → empty renames.
-        assert body["port_renames"] == {}
+        # Auto port-name translation engaged even with no overrides.
+        assert body["port_renames"].get("GigabitEthernet1/0/1") == "1/1"
+        # Categories the caller didn't engage stay empty.
         assert body["vlan_renames"] == {}
         assert body["local_user_renames"] == {}
+        # Capture now fires (source-shape fields populate for the modal).
+        assert body["source_vlans"] == [10]
 
 
 class TestSourceShapeCapture:

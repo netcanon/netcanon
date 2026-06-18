@@ -32,11 +32,14 @@ class TestDemoModule:
             assert f"--pair {key}" in out
 
     def test_default_pair_translates_to_junos(self, capsys):
-        # No args → default cisco__junos scenario; Cisco hostname becomes
-        # Junos set-form.  Proves the pipeline actually ran end-to-end.
+        # No args → default cisco__junos scenario.  Proves the
+        # rename-aware pipeline ran end-to-end: the Cisco hostname becomes
+        # Junos set-form AND the Cisco port name is translated to native
+        # Junos form (ge-1/0/1), not left verbatim.
         assert demo_main([]) == 0
         out = capsys.readouterr().out
-        assert "set system host-name leaf-01" in out
+        assert "set system host-name access-sw-01" in out
+        assert "set interfaces ge-1/0/1" in out
 
     @pytest.mark.parametrize("pair", sorted(SCENARIOS))
     def test_every_scenario_runs_clean(self, pair, capsys):

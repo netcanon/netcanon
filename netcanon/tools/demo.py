@@ -22,9 +22,12 @@ Each scenario uses a small embedded synthetic config (~10-25 lines) so the
 demo is fully self-contained: no devices, no fixtures on disk, no FastAPI
 server.
 
-Internally this calls the same migration pipeline (`run_plan`) the API uses,
-through the same codec registry — so if the demo translates correctly, the
-production path does too.
+Internally this runs the rename-aware migration pipeline
+(``run_plan_with_rename``) — the same path the HTTP API's
+``POST /api/v1/migration/plan`` takes when a target profile is selected.
+So the cross-vendor interface-name translation you see here
+(``GigabitEthernet1/0/1`` -> ``ge-1/0/1``) is exactly what the API and
+browser UI produce, through the same codec registry.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ import sys
 from dataclasses import dataclass
 
 from ..migration.codecs.registry import get_codec
-from ..services.migration_pipeline import run_plan
+from ..services.migration_pipeline import run_plan_with_rename
 
 # ---------------------------------------------------------------------------
 # Scenarios
@@ -51,7 +54,7 @@ class Scenario:
 
 
 _CISCO_IOSXE = """\
-hostname leaf-01
+hostname access-sw-01
 !
 vlan 10
  name DATA
@@ -59,21 +62,24 @@ vlan 10
 vlan 20
  name VOICE
 !
-interface GigabitEthernet0/0/0
- description Uplink to spine
- switchport access vlan 10
- no shutdown
-!
-interface GigabitEthernet0/0/1
+interface GigabitEthernet1/0/1
  description Server-A
+ switchport mode access
  switchport access vlan 10
  no shutdown
 !
-interface GigabitEthernet0/0/2
- description Phone
+interface GigabitEthernet1/0/2
+ description Desk-Phone
+ switchport mode access
  switchport access vlan 20
  no shutdown
 !
+interface GigabitEthernet1/0/24
+ description Uplink-to-core
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+!
+snmp-server community public RO
 ip name-server 192.168.1.10
 ip name-server 192.168.1.11
 ntp server 192.168.1.20
@@ -174,10 +180,11 @@ SCENARIOS: dict[str, Scenario] = {
         source_codec="cisco_iosxe_cli",
         target_codec="juniper_junos",
         description=(
-            "Translate VLAN definitions, switchport-mode interfaces with "
-            "VLAN membership, DNS / NTP servers, and a default static route "
-            "from Cisco's per-interface model into Junos' VLAN-centric "
-            "set-form syntax."
+            "Translate a Catalyst access switch into Junos set-form: "
+            "hostname, VLAN definitions, switchport access + trunk ports "
+            "with their VLAN membership, an SNMP community, DNS / NTP "
+            "servers, and a default static route - including cross-vendor "
+            "interface-name translation (GigabitEthernet1/0/1 -> ge-1/0/1)."
         ),
         source_text=_CISCO_IOSXE,
     ),
@@ -262,7 +269,7 @@ def _run_scenario(scenario: Scenario) -> int:
 
     source = get_codec(scenario.source_codec)
     target = get_codec(scenario.target_codec)
-    job = run_plan(source, target, scenario.source_text)
+    job = run_plan_with_rename(source, target, scenario.source_text, port_rename_map={})
 
     if str(job.status).endswith("failed"):
         _print_section("FAILED")
@@ -274,6 +281,25 @@ def _run_scenario(scenario: Scenario) -> int:
         (job.rendered or "").rstrip(),
     )
     print()
+
+    # Show the cross-vendor interface-name translation explicitly — it
+    # is the load-bearing step that turns source-vendor port names into
+    # valid target-vendor syntax (GigabitEthernet1/0/1 -> ge-1/0/1).
+    renames = dict(job.port_renames or {})
+    if renames:
+        _print_section("Interface-name translations applied")
+        for src_name, tgt_name in renames.items():
+            print(f"  {src_name} -> {tgt_name}")
+        print()
+
+    # Advisories: port names the target codec has no clean equivalent
+    # for (left verbatim), plus any other per-pane warnings — honest
+    # about what the auto-heuristic could not resolve.
+    if job.warnings:
+        _print_section("Advisories")
+        for entry in job.warnings:
+            print(f"  - {entry}")
+        print()
 
     # Honest reporting of what didn't translate
     dropped = list(job.dropped_tier3_sections or [])

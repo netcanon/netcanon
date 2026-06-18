@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Changed
 
+* **Cross-vendor interface-name translation now runs by default.**  A
+  plain `POST /api/v1/migration/plan` translation (and the browser UI's
+  standard translate flow) engages the auto port-name heuristic even
+  when no target profile or rename map is supplied, so physical
+  switchports, LAGs, SVIs, and loopbacks render with native
+  target-vendor names (Cisco `GigabitEthernet1/0/1` -> Junos `ge-1/0/1`,
+  Aruba `1/1`, ...) instead of being left verbatim.  Explicit rename
+  maps and target profiles still win; the low-level `run_plan` primitive
+  is unchanged (still verbatim for callers that compose their own
+  transforms).  The bundled `netcanon demo` now exercises this path and
+  prints the interface-name translations it applied.
+
 * **Lint gate now covers `tools/` and `netcanon_desktop/`**
   (`.github/workflows/ci.yml`).  The v0.2.0 ruff baseline linted only
   `netcanon/` + `tests/`; the dev tools and the desktop shell are now

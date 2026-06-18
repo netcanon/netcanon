@@ -31,14 +31,17 @@ docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pa
 Paste this:
 
 ```
-hostname leaf-01
+hostname access-sw-01
 !
 vlan 10
  name DATA
 !
-interface GigabitEthernet0/0/0
- description Uplink to spine
+interface GigabitEthernet1/0/1
+ description Server-A
+ switchport mode access
  switchport access vlan 10
+!
+snmp-server community public RO
 !
 ip route 0.0.0.0 0.0.0.0 192.168.1.1
 ```
@@ -46,11 +49,19 @@ ip route 0.0.0.0 0.0.0.0 192.168.1.1
 Get this:
 
 ```
-set system host-name leaf-01
-set interfaces GigabitEthernet0/0/0 description "Uplink to spine"
+set system host-name access-sw-01
+set interfaces ge-1/0/1 description "Server-A"
+set interfaces ge-1/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-1/0/1 unit 0 family ethernet-switching vlan members DATA
 set vlans DATA vlan-id 10
 set routing-options static route 0.0.0.0/0 next-hop 192.168.1.1
+set snmp community public authorization read-only
 ```
+
+Notice ``GigabitEthernet1/0/1`` became ``ge-1/0/1`` and the access-VLAN
+membership rendered into Junos `ethernet-switching` form — Netcanon
+translates interface names and L2 membership across vendor conventions,
+not just the surrounding scalar config.
 
 Same canonical pipeline drives the HTTP API and the browser UI.  Run
 `netcanon demo --list` (or `python tools/demo.py --list` from a source

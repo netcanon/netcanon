@@ -22,7 +22,11 @@ isn't sustainable.
 - `ip name-server` → `set system name-server`
 - `ntp server` → `set system ntp server`
 - `ip route` → `set routing-options static route ... next-hop`
+- `snmp-server community ... RO/RW` → `set snmp community ... authorization`
 - LAGs (`Port-channel<N>`) → `ae<N>` aggregated-ethernet
+- **Interface names**, translated across vendor conventions
+  (`GigabitEthernet1/0/1` → `ge-1/0/1`) when a target profile is
+  selected or the rename pane is engaged (see the checklist below)
 
 **Deferred (Tier-3, see [`../CAPABILITIES.md`](../CAPABILITIES.md)):**
 
@@ -39,35 +43,76 @@ isn't sustainable.
 python tools/demo.py --pair cisco__junos
 ```
 
-Sample output (run the demo for the full version; the snippets below
-are excerpted):
+Actual demo output:
 
 ```
 INPUT (cisco_iosxe_cli)
 ========================================================================
-hostname leaf-01
+hostname access-sw-01
 !
 vlan 10
  name DATA
 !
-interface GigabitEthernet0/0/0
- description Uplink to spine
+vlan 20
+ name VOICE
+!
+interface GigabitEthernet1/0/1
+ description Server-A
+ switchport mode access
  switchport access vlan 10
+ no shutdown
+!
+interface GigabitEthernet1/0/2
+ description Desk-Phone
+ switchport mode access
+ switchport access vlan 20
+ no shutdown
+!
+interface GigabitEthernet1/0/24
+ description Uplink-to-core
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+!
+snmp-server community public RO
+ip name-server 192.168.1.10
+ip name-server 192.168.1.11
+ntp server 192.168.1.20
 !
 ip route 0.0.0.0 0.0.0.0 192.168.1.1
 
 OUTPUT (juniper_junos)
 ========================================================================
-set system host-name leaf-01
+set system host-name access-sw-01
 set system name-server 192.168.1.10
+set system name-server 192.168.1.11
 set system ntp server 192.168.1.20
-set interfaces GigabitEthernet0/0/0 description "Uplink to spine"
-set interfaces GigabitEthernet0/0/1 description "Server-A"
-set interfaces GigabitEthernet0/0/2 description "Phone"
+set interfaces ge-1/0/1 description "Server-A"
+set interfaces ge-1/0/1 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-1/0/1 unit 0 family ethernet-switching vlan members DATA
+set interfaces ge-1/0/2 description "Desk-Phone"
+set interfaces ge-1/0/2 unit 0 family ethernet-switching interface-mode access
+set interfaces ge-1/0/2 unit 0 family ethernet-switching vlan members VOICE
+set interfaces ge-1/0/24 description "Uplink-to-core"
+set interfaces ge-1/0/24 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ge-1/0/24 unit 0 family ethernet-switching vlan members DATA
+set interfaces ge-1/0/24 unit 0 family ethernet-switching vlan members VOICE
 set vlans DATA vlan-id 10
 set vlans VOICE vlan-id 20
 set routing-options static route 0.0.0.0/0 next-hop 192.168.1.1
+set snmp community public authorization read-only
+
+========================================================================
+Interface-name translations applied
+========================================================================
+  GigabitEthernet1/0/1 -> ge-1/0/1
+  GigabitEthernet1/0/2 -> ge-1/0/2
+  GigabitEthernet1/0/24 -> ge-1/0/24
 ```
+
+The demo runs the rename-aware pipeline (the same path the browser UI
+takes once you select a target profile), so Cisco interface names are
+translated to native Junos form (`GigabitEthernet1/0/1` → `ge-1/0/1`)
+rather than left verbatim.
 
 ## Tier-3 boundary
 
@@ -89,13 +134,17 @@ adjacent tools (Capirca / Aerleon for firewall ACL translation).
 Before applying the rendered Junos config to a real QFX/EX device,
 verify:
 
-- [ ] **Interface naming**: Cisco `GigabitEthernet0/0/0` becomes the
-      same string in Junos because Netcanon preserves names by
-      default.  If you want `ge-0/0/0` mapping, use the migrate-page
-      rename modal (web UI) or pass `rename_overrides` in the
-      `POST /api/v1/migration/run` payload — the rename mesh handles
-      Cisco↔Junos↔Arista name translation across all renamable
-      categories.
+- [ ] **Interface naming**: netcanon auto-translates names across
+      vendor conventions (Cisco `GigabitEthernet1/0/1` → Junos
+      `ge-1/0/1`).  Every `POST /api/v1/migration/plan` translation and
+      the browser UI's standard translate flow do this **by default** —
+      no target profile or rename map required.  (The low-level
+      `run_plan` primitive still preserves names verbatim for callers
+      that compose their own transforms.)  Verify the auto-mapping
+      matches your slot/module layout before applying — the heuristic
+      preserves the structural coordinates (`1/0/1`) but can't know
+      your physical hardware; use the rename modal / a `port_rename_map`
+      to override any port that needs a different target name.
 - [ ] **VLAN-Vlan SVI mapping**: IOS-XE's `interface Vlan<id>` SVIs
       translate to Junos's `interface irb.<id>` form.  Verify the
       irb numbering matches your VLAN IDs.
