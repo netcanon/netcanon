@@ -26,6 +26,16 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Changed
+
+* **Lint gate now covers `tools/` and `netcanon_desktop/`**
+  (`.github/workflows/ci.yml`).  The v0.2.0 ruff baseline linted only
+  `netcanon/` + `tests/`; the dev tools and the desktop shell are now
+  ruff-clean too (57 fixups -- unused imports/noqa, import ordering,
+  pyupgrade syntax, a `zip(..., strict=False)`, an undefined-name
+  annotation fix in `icons.py`, etc.) and the CI `ruff check` scope is
+  widened to all four trees so they stay clean. No runtime behaviour change.
+
 ## [0.3.1] - 2026-06-17
 
 ### Added

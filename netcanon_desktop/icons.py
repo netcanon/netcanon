@@ -17,9 +17,12 @@ Usage::
 """
 from __future__ import annotations
 
-import io
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import PIL.Image
 
 # Colour constants matching the web UI (base.html)
 _BG_DARK_NAVY = (26, 26, 46, 255)
@@ -27,7 +30,7 @@ _ACCENT_BLUE = (126, 184, 247, 255)
 _TEXT_WHITE = (238, 238, 238, 255)
 
 
-def _draw_icon(size: int) -> "PIL.Image.Image":  # type: ignore[name-defined]
+def _draw_icon(size: int) -> PIL.Image.Image:
     """Draw a single-size Netcanon icon.
 
     Renders a dark-navy rounded rectangle with a bold "NC" monogram in
@@ -40,7 +43,7 @@ def _draw_icon(size: int) -> "PIL.Image.Image":  # type: ignore[name-defined]
     Returns:
         An RGBA ``PIL.Image.Image`` of the requested size.
     """
-    from PIL import Image, ImageDraw, ImageFont
+    from PIL import Image, ImageDraw
 
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -61,7 +64,7 @@ def _draw_icon(size: int) -> "PIL.Image.Image":  # type: ignore[name-defined]
 
             font = _IF.truetype(face, font_size)
             break
-        except (OSError, IOError):
+        except OSError:
             continue
     if font is None:
         from PIL import ImageFont as _IF
@@ -78,7 +81,7 @@ def _draw_icon(size: int) -> "PIL.Image.Image":  # type: ignore[name-defined]
     return img
 
 
-def generate_tray_image(size: int = 64) -> "PIL.Image.Image":  # type: ignore[name-defined]
+def generate_tray_image(size: int = 64) -> PIL.Image.Image:
     """Return a ``PIL.Image`` suitable for ``pystray.Icon``.
 
     Args:

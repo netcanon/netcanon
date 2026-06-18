@@ -32,7 +32,7 @@ def main() -> None:
 
         app = DesktopApp()
         app.run()
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.critical("Fatal startup error", exc_info=True)
         _fatal(str(exc))
 
@@ -70,7 +70,7 @@ def _fatal(message: str) -> None:
             "Netcanon — Fatal Error",
             0x10,  # MB_ICONERROR
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         print(f"FATAL: {message}", file=sys.stderr)
     sys.exit(1)
 
@@ -91,7 +91,7 @@ def _already_running() -> None:
             "Netcanon",
             0x40,  # MB_ICONINFORMATION
         )
-    except Exception:  # noqa: BLE001
+    except Exception:
         # Non-Windows or no display — log-only behaviour is fine.
         pass
 

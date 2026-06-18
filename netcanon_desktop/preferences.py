@@ -72,7 +72,7 @@ class DesktopPreferences(BaseModel):
     open_browser_on_start: bool = False
 
     @classmethod
-    def load(cls, path: Path) -> "DesktopPreferences":
+    def load(cls, path: Path) -> DesktopPreferences:
         """Load preferences from a JSON file.
 
         Returns factory defaults when the file does not exist OR fails

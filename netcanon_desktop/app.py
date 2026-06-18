@@ -34,12 +34,12 @@ import logging
 import os
 
 from netcanon.main import create_app
-
-logger = logging.getLogger(__name__)
 from netcanon_desktop.server import ServerThread
 from netcanon_desktop.settings import _preferences_path, desktop_settings
 from netcanon_desktop.tray import TrayIcon
 from netcanon_desktop.window import WebViewWindow
+
+logger = logging.getLogger(__name__)
 
 
 class DesktopApp:
@@ -153,7 +153,7 @@ class DesktopApp:
         """Open the configs directory in the OS file explorer."""
         try:
             os.startfile(str(self._settings.configs_dir))  # type: ignore[attr-defined]
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.debug(
                 "os.startfile failed for configs_dir=%s",
                 self._settings.configs_dir,

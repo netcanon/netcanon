@@ -107,14 +107,13 @@ import json
 import re
 import sys
 from collections import Counter
-from datetime import datetime, timezone
-from functools import lru_cache
-from pathlib import Path
 from collections.abc import Callable
+from datetime import UTC, datetime
+from functools import cache
+from pathlib import Path
 from typing import Any
 
 import yaml
-
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -346,7 +345,7 @@ _ANYCAST_ADDR_ATTRS: tuple[str, ...] = (
 )
 
 
-@lru_cache(maxsize=None)
+@cache
 def _target_anycast_declaration(target_codec: str, family: str) -> str | None:
     """Return ``"unsupported"`` / ``"lossy"`` if *target_codec*'s capability
     matrix declares the per-family anycast-gateway virtual-address path
@@ -377,7 +376,7 @@ def _target_anycast_declaration(target_codec: str, family: str) -> str | None:
         getattr(u, "path", None) for u in getattr(caps, "unsupported", [])
     }:
         return "unsupported"
-    if path in {getattr(l, "path", None) for l in getattr(caps, "lossy", [])}:
+    if path in {getattr(lo, "path", None) for lo in getattr(caps, "lossy", [])}:
         return "lossy"
     return None
 
@@ -797,7 +796,7 @@ def reconcile_cell(
     if expectation is None:
         out["expectation_missing"] = True
         out["field_variances"] = {}
-        out["summary"] = {v: 0 for v in ALL_VARIANCES} | {
+        out["summary"] = dict.fromkeys(ALL_VARIANCES, 0) | {
             "fields_total": 0,
         }
         return out
@@ -811,7 +810,7 @@ def reconcile_cell(
         # field_variances so downstream consumers can filter.
         out["non_ok_status"] = True
         out["field_variances"] = {}
-        out["summary"] = {v: 0 for v in ALL_VARIANCES} | {
+        out["summary"] = dict.fromkeys(ALL_VARIANCES, 0) | {
             "fields_total": 0,
         }
         return out
@@ -983,7 +982,7 @@ def run_reconciliation(mesh_json_path: Path) -> dict[str, Any]:
     mesh = json.loads(mesh_json_path.read_text(encoding="utf-8"))
     expectations = load_expectation_yamls()
 
-    started = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    started = datetime.now(UTC).isoformat(timespec="seconds")
     cells_out: list[dict[str, Any]] = []
     intra_vendor_cells: list[dict[str, str]] = []
     cells_without_yaml: list[dict[str, str]] = []
@@ -1190,7 +1189,7 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
     if not sources or not targets:
         lines.append("(no CODEC_BUG findings across any cell)\n")
     else:
-        header = ["src ↓ / tgt →"] + targets
+        header = ["src ↓ / tgt →", *targets]
         lines.append("| " + " | ".join(header) + " |")
         lines.append("|" + "|".join(["---"] * len(header)) + "|")
         for src in sources:
@@ -1339,7 +1338,7 @@ def write_json(result: dict[str, Any]) -> Path:
     ``latest.json`` is the slim committed mirror.
     """
     PHASE4_RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     out_path = PHASE4_RUNS_DIR / f"{timestamp}.json"
     out_path.write_text(
         json.dumps(result, indent=2, default=str), encoding="utf-8",
