@@ -103,9 +103,12 @@ For the full audit narrative + the variance-class taxonomy, see
 ### Docker (recommended)
 
 ```bash
-# Generate a Fernet key once and keep it somewhere safe — this is the
-# encryption key for device credentials at rest.  Loss = re-entering
-# every saved device password; leak = decryptable backup state.
+# Optional but recommended for production: setting the key explicitly keeps
+# it in your secret store, separate from the data volume.  Skip this line
+# AND the `-e` flag below and Netcanon auto-generates + persists a key in
+# data/.fernet_key on first run (zero-config).  This key encrypts device
+# credentials at rest: loss = re-entering every saved device password;
+# leak = decryptable stored credentials.
 NETCANON_FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
 docker run --rm -p 8000:8000 \
