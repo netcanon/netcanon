@@ -1013,6 +1013,30 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
             description=g.get("description", ""),
         ))
 
+    # IOS treats an interface carrying `switchport access vlan N` as an
+    # access port even when the explicit `switchport mode access` line is
+    # absent (extremely common in real configs -- operators set the access
+    # VLAN and rely on the default).  Without inferring the mode here the
+    # canonical interface carries access_vlan but switchport_mode=None, and
+    # target renderers that gate L2 membership on switchport_mode=="access"
+    # (e.g. juniper_junos) silently drop the VLAN membership.  Only fill the
+    # gap: never override an explicit mode; leave ports that also carry
+    # trunk config untouched (their mode is genuinely ambiguous without the
+    # explicit line); and skip sub-interfaces (names with a "."), since real
+    # IOS rejects `switchport` on a sub-interface -- an access_vlan there
+    # came from a cross-vendor source's logical unit (e.g. Junos
+    # `ge-0/0/1.100`), not an L2 access port, and inferring access mode
+    # would desync round-trip membership against that source.
+    switchport_mode = raw.get("switchport_mode")
+    if (
+        switchport_mode is None
+        and raw.get("access_vlan") is not None
+        and not raw.get("trunk_allowed")
+        and raw.get("trunk_native") is None
+        and "." not in raw.get("name", "")
+    ):
+        switchport_mode = "access"
+
     return CanonicalInterface(
         name=raw["name"],
         description=raw.get("description", ""),
@@ -1027,7 +1051,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
             )
             for a in raw.get("ipv6", [])
         ],
-        switchport_mode=raw.get("switchport_mode"),
+        switchport_mode=switchport_mode,
         access_vlan=raw.get("access_vlan"),
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
