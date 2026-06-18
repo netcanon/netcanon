@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-06-18
+
 ### Changed
 
 * **Cross-vendor interface-name translation now runs by default.**  A
