@@ -16,7 +16,7 @@ using Pillow — no binary assets are required.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import pystray
 
@@ -58,8 +58,8 @@ class TrayIcon:
         self,
         on_show: Callable[[], None],
         on_quit: Callable[[], None],
-        on_preferences: Optional[Callable[[], None]] = None,
-        on_open_configs: Optional[Callable[[], None]] = None,
+        on_preferences: Callable[[], None] | None = None,
+        on_open_configs: Callable[[], None] | None = None,
         tooltip: str = "Netcanon",
     ) -> None:
         self._on_show = on_show
@@ -108,7 +108,7 @@ class TrayIcon:
         """Remove the tray icon and stop the pystray event loop."""
         try:
             self._icon.stop()
-        except Exception:  # noqa: BLE001
+        except Exception:
             # pystray may raise if the icon was never started or already
             # stopped — log at DEBUG so shutdown is always clean.
             logger.debug("pystray stop() raised during shutdown", exc_info=True)
@@ -117,20 +117,20 @@ class TrayIcon:
     # Internal menu callbacks
     # ------------------------------------------------------------------
 
-    def _handle_show(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+    def _handle_show(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         logger.debug("User selected Show from tray menu")
         self._on_show()
 
-    def _handle_quit(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+    def _handle_quit(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         logger.info("User selected Quit from tray menu")
         self._on_quit()
 
-    def _handle_preferences(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+    def _handle_preferences(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         logger.debug("User selected Preferences from tray menu")
         if self._on_preferences is not None:
             self._on_preferences()
 
-    def _handle_open_configs(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:  # noqa: ARG002
+    def _handle_open_configs(self, icon: pystray.Icon, item: pystray.MenuItem) -> None:
         logger.debug("User selected Open configs folder from tray menu")
         if self._on_open_configs is not None:
             self._on_open_configs()

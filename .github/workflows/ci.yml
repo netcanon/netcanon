@@ -53,12 +53,12 @@ jobs:
           pip install "ruff>=0.15,<0.16"
 
       - name: Run ruff
-        # Scope: the shipping package + its tests, driven lint-clean in
-        # the v0.2.0 Stage-1 tooling baseline.  tools/ and
-        # netcanon_desktop/ are not yet clean; broadening the scope is a
-        # follow-up.  Config (rule set, ignores, line-length) lives in
-        # pyproject.toml [tool.ruff].
-        run: ruff check netcanon tests
+        # Scope: the shipping package, the desktop shell, the dev tools, and
+        # the tests -- all driven lint-clean (netcanon/ + tests/ in the v0.2.0
+        # Stage-1 baseline; tools/ + netcanon_desktop/ added afterward).
+        # Config (rule set, ignores, line-length) lives in pyproject.toml
+        # [tool.ruff].
+        run: ruff check netcanon netcanon_desktop tools tests
 
   test:
     name: Tests (Python ${{ matrix.python-version }})

@@ -61,7 +61,7 @@ class ServerThread(threading.Thread):
 
     def __init__(
         self,
-        app: "Starlette",
+        app: Starlette,
         host: str = "127.0.0.1",
         port: int = 8765,
         log_level: str = "warning",
@@ -120,7 +120,7 @@ class ServerThread(threading.Thread):
             try:
                 import urllib.request
 
-                urllib.request.urlopen(self.url, timeout=1)  # noqa: S310
+                urllib.request.urlopen(self.url, timeout=1)
                 return
             except Exception:
                 time.sleep(0.05)

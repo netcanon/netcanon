@@ -24,7 +24,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 from netcanon_desktop.preferences import DesktopPreferences
 
@@ -57,7 +56,7 @@ class PreferencesDialog:
         prefs: DesktopPreferences,
         prefs_path: Path,
         configs_dir_default: Path,
-        parent: Optional[object] = None,
+        parent: object | None = None,
     ) -> None:
         self._prefs = prefs
         self._prefs_path = prefs_path
@@ -88,13 +87,10 @@ class PreferencesDialog:
             QDialog,
             QDialogButtonBox,
             QFormLayout,
-            QHBoxLayout,
             QLabel,
-            QLineEdit,
             QPushButton,
             QSpinBox,
             QVBoxLayout,
-            QWidget,
         )
 
         dlg = QDialog(self._parent)
@@ -251,7 +247,7 @@ class PreferencesDialog:
         )
         try:
             os.startfile(str(target))  # type: ignore[attr-defined]  # Windows-only
-        except Exception:  # noqa: BLE001
+        except Exception:
             # Non-Windows platforms or missing directory — log and skip.
             logger.debug(
                 "os.startfile failed for %s", target, exc_info=True
@@ -282,7 +278,7 @@ class PreferencesDialog:
                     else False
                 ),
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             QMessageBox.warning(
                 self._dialog,
                 "Invalid preferences",

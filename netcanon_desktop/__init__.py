@@ -18,5 +18,6 @@ Build MSI installer::
 
 See ``netcanon_desktop/README.md`` for architecture details.
 """
+from __future__ import annotations
 
 __version__ = "0.1.0"

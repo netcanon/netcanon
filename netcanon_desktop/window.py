@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Callable
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +96,7 @@ class WebViewWindow:
         handle_close = self._handle_close
 
         class _Win(QMainWindow):
-            def closeEvent(self, event):  # noqa: N805
+            def closeEvent(self, event):
                 handle_close(event)
 
         win = _Win()
@@ -129,7 +129,7 @@ class WebViewWindow:
         if self._on_closed is not None:
             try:
                 self._on_closed()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.debug("on_closed callback raised during shutdown", exc_info=True)
 
     # ------------------------------------------------------------------

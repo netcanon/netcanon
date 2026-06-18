@@ -22,7 +22,6 @@ from pathlib import Path
 
 import yaml
 
-
 VALID_DISPOSITIONS = {"good", "lossy", "unsupported", "not_applicable"}
 VALID_CERTAINTY = {"high", "medium", "low"}
 
@@ -68,7 +67,7 @@ def validate_one(path: Path) -> tuple[str, dict]:
     if not isinstance(fields, dict):
         raise ValueError(f"{path.name}: missing 'per_field_expectation' block")
 
-    breakdown = {k: 0 for k in VALID_DISPOSITIONS}
+    breakdown = dict.fromkeys(VALID_DISPOSITIONS, 0)
     for field_name, entry in fields.items():
         if not isinstance(entry, dict):
             raise ValueError(
