@@ -85,12 +85,13 @@ end
 
 
 class TestPlanWithRenameMap:
-    def test_plan_without_rename_map_is_legacy_shape(
+    def test_plan_without_rename_map_still_translates_port_names(
         self, client: TestClient,
     ):
-        """Legacy callers that don't send port_rename_map or
-        target_profile get the original run_plan behaviour — no
-        port_renames in response."""
+        """A plain translation (no port_rename_map, no target_profile)
+        now engages the auto port-name heuristic, so physical ports,
+        LAGs, and loopbacks are rewritten to native target names
+        instead of left verbatim."""
         resp = client.post(
             "/api/v1/migration/plan",
             json={
@@ -101,10 +102,9 @@ class TestPlanWithRenameMap:
         )
         assert resp.status_code == 200
         body = resp.json()
-        # port_renames and warnings exist in the model but are empty
-        # for legacy callers.
-        assert body["port_renames"] == {}
-        assert body["warnings"] == []
+        renames = body["port_renames"]
+        assert renames["GigabitEthernet1/0/1"] == "1/1"
+        assert renames["Port-channel1"] == "Trk1"
 
     def test_plan_with_target_profile_runs_auto_rename(
         self, client: TestClient,

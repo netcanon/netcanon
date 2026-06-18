@@ -107,7 +107,6 @@ from ...models.migration import (
 )
 from ...services.migration_detect import DetectCandidate, detect_codec
 from ...services.migration_pipeline import (
-    run_plan,
     run_plan_with_overrides,
 )
 from ...storage.base import BaseConfigStore
@@ -190,10 +189,13 @@ def plan_migration(
     Stages executed: class-guard → parse → (transforms) → validate →
     render.  Per-pane override transforms (port / VLAN / local_user /
     SNMP community / SNMPv3 user) are dispatched via
-    :func:`run_plan_with_overrides` whenever the request body carries
-    ANY override map or a ``target_profile`` selection; legacy callers
-    that supply none of those continue through :func:`run_plan`
-    unchanged.  Free-form caller-supplied transform lists are not
+    :func:`run_plan_with_overrides`.  When the body carries any
+    override map or a ``target_profile``, every supplied category is
+    threaded; when it carries none the endpoint STILL engages the auto
+    port-name heuristic (``port_rename_map={}``) so a plain translation
+    renders native target-vendor interface names
+    (``GigabitEthernet1/0/1`` -> ``ge-1/0/1``) instead of leaving
+    source names verbatim.  Free-form caller-supplied transform lists are not
     accepted on this endpoint — per-pane categories cover the shipped
     rewrite surface.
 
@@ -212,11 +214,11 @@ def plan_migration(
     source = resolve_adapter_or_422(body.source, side="source")
     target = resolve_adapter_or_422(body.target, side="target")
     raw_text = resolve_input_text(body, storage)
-    # Route to the rename-aware pipeline when the caller supplied
-    # ANY per-category override map OR a target profile selection
-    # (target-profile alone means "run auto-heuristic + return
-    # diagnostics the UI can render").  Legacy callers that supply
-    # none of these get ``run_plan`` unchanged.
+    # Route to the FULL multi-category pipeline when the caller
+    # supplied ANY per-category override map OR a target profile
+    # selection (target-profile alone means "run auto-heuristic +
+    # return diagnostics the UI can render").  Callers that supply
+    # none of these STILL get auto port-name translation (else branch).
     if request_has_overrides_or_profile(body):
         # Dispatch directly to run_plan_with_overrides so EVERY
         # category map threads through — run_plan_with_rename is
@@ -237,7 +239,16 @@ def plan_migration(
             force=body.force,
         )
     else:
-        job = run_plan(source, target, raw_text, force=body.force)
+        # No override map and no target profile, but STILL engage the
+        # auto port-name heuristic so a plain translation renders
+        # native target-vendor interface names (GigabitEthernet1/0/1
+        # -> ge-1/0/1) rather than leaving source-vendor names
+        # verbatim.  port_rename_map={} = auto-only; the other per-pane
+        # categories stay disengaged (None) so a bare request only
+        # rewrites port names.
+        job = run_plan_with_overrides(
+            source, target, raw_text, port_rename_map={}, force=body.force,
+        )
     logger.info(
         "Migration plan %s: %s -> %s = %s",
         job.id[:8],
