@@ -18,6 +18,12 @@ pair × every field gets classified into one of eight variance classes
 errors — the kind that produce output that *looks* valid but quietly
 drops or transforms a field — before they ship.
 
+<p align="center">
+  <img src="docs/assets/migrate.png" width="860" alt="Netcanon migrate page: a Cisco IOS-XE config translated to Junos, showing auto-detection, a green “Validation OK” banner, an amber “Tier-3 sections detected” banner listing the ACL and NAT lines that don’t translate, and the rendered Junos `set` output.">
+</p>
+
+<p align="center"><sub>The browser UI translating Cisco IOS-XE → Junos — interface names and L2 membership mapped across vendors, every field declared supported/lossy/unsupported, and Tier-3 sections (ACLs, NAT, …) surfaced rather than silently dropped.</sub></p>
+
 ---
 
 ## See it in 10 seconds
