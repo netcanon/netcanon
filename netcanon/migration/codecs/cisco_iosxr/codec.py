@@ -209,6 +209,31 @@ class CiscoIOSXRCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01) — this codec has no
+            #    Cisco-style access/trunk port model, so the per-port VLAN
+            #    membership the walker yields is dropped on render.  Declared
+            #    unsupported so a switch→{firewall,router} migration surfaces
+            #    the L2 loss instead of reporting `severity: ok`. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="IOS-XR is SP-routing with no L2 switchport model (L2VPN is Tier-3); the mode is dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="IOS-XR has no per-port access-VLAN; VLANs are dot1q sub-interfaces — dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="IOS-XR has no switchport trunk allowed-list; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="IOS-XR has no switchport native VLAN; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="IOS-XR has no voice-VLAN; dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

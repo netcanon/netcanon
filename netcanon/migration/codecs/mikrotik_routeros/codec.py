@@ -200,6 +200,31 @@ class MikroTikRouterOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01) — this codec has no
+            #    Cisco-style access/trunk port model, so the per-port VLAN
+            #    membership the walker yields is dropped on render.  Declared
+            #    unsupported so a switch→{firewall,router} migration surfaces
+            #    the L2 loss instead of reporting `severity: ok`. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="RouterOS models L2 via bridge VLAN filtering, not switchport modes; the mode is dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="RouterOS has no per-port access-VLAN (bridge VLAN table instead); dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="RouterOS tags VLANs in the bridge VLAN table; the allowed-list is dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="RouterOS PVID lives on the bridge port, not modelled here; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="RouterOS has no voice-VLAN; dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

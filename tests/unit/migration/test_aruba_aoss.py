@@ -564,11 +564,33 @@ class TestProbe:
 
 class TestCrossAdapter:
     def test_aruba_to_opnsense(self):
-        """Aruba AOS-S parsed and rendered as OPNsense config.xml."""
+        """Aruba AOS-S (a switch) rendered as OPNsense config.xml.
+
+        OPNsense is an L3 firewall with no Cisco-style switchport model,
+        so the Aruba source's per-port VLAN membership is dropped on
+        render.  Since ENG-01 the OPNsense matrix declares that
+        switchport surface ``unsupported``, so this run honestly
+        terminates as ``partial`` with a block-severity validation
+        report rather than silently ``completed``.  The L3 surfaces
+        (hostname, addresses) still render — that's the partial output.
+        """
         from netcanon.migration.codecs.opnsense import OPNsenseCodec
         raw = FIXTURES.joinpath("show_run_simple.txt").read_text()
         job = run_plan(ArubaAOSSCodec(), OPNsenseCodec(), raw)
-        assert job.status is MigrationJobStatus.completed
+        assert job.status is MigrationJobStatus.partial
+        assert job.validation is not None
+        assert job.validation.severity == "block"
+        # The dropped L2 switchport membership is surfaced (ENG-01),
+        # not silently classified supported.
+        assert any(
+            p.path
+            in {
+                "/interfaces/interface/switchport-mode",
+                "/interfaces/interface/access-vlan",
+                "/interfaces/interface/trunk-allowed-vlans",
+            }
+            for p in job.validation.unsupported_paths
+        )
         assert job.rendered is not None
         assert "<hostname>sw-edge-01</hostname>" in job.rendered
 
