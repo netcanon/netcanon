@@ -71,3 +71,43 @@ def test_default_resolves_to_info_root_level(monkeypatch):
         assert root.level == logging.INFO
 
     _run_with_clean_root(check)
+
+
+# --- v0.4.0 self-audit: an invalid level must coerce, never crash ---
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("verbose", "info"),   # unknown name
+        ("warn", "info"),      # not in our 5 (uvicorn alias, we don't accept)
+        ("DEBUG", "debug"),    # case
+        (" info ", "info"),    # stray whitespace from a .env line
+        ("", "info"),          # empty
+    ],
+)
+def test_invalid_or_messy_log_level_coerces_not_crashes(
+    monkeypatch, raw, expected
+):
+    """A mistyped ``NETCANON_LOG_LEVEL`` must normalise / fall back to
+    ``info`` (with a warning for unknown values) instead of raising an
+    unhandled ``ValueError`` at ``Settings()`` / ``configure_logging`` /
+    ``uvicorn.run`` — the import-time crash the self-audit found."""
+    monkeypatch.setenv("NETCANON_LOG_LEVEL", raw)
+    assert Settings().log_level == expected   # never raises
+
+
+def test_unknown_level_emits_warning(monkeypatch):
+    monkeypatch.setenv("NETCANON_LOG_LEVEL", "verbose")
+    with pytest.warns(UserWarning, match="Unknown NETCANON_LOG_LEVEL"):
+        assert Settings().log_level == "info"
+
+
+def test_coerced_level_still_reaches_root_logger(monkeypatch):
+    monkeypatch.setenv("NETCANON_LOG_LEVEL", "DEBUG ")  # messy but valid
+
+    def check(root):
+        configure_logging(level=Settings().log_level)
+        assert root.level == logging.DEBUG
+
+    _run_with_clean_root(check)

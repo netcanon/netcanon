@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import pytest
 
+from netcanon.migration.codecs.cisco_iosxe.codec import CiscoIOSXECodec
 from netcanon.migration.codecs.cisco_iosxe_cli.codec import CiscoIOSXECLICodec
 from netcanon.migration.codecs.cisco_iosxr.codec import CiscoIOSXRCodec
 from netcanon.migration.codecs.fortigate_cli.codec import FortiGateCLICodec
@@ -92,5 +93,27 @@ def test_switchport_loss_surfaces_as_unsupported(target_cls):
         f"L2 paths classified as supported instead of unsupported: {sorted(missing)}"
     )
     # Any unsupported path forces a block-severity, incompatible report.
+    assert report.severity == "block"
+    assert report.compatible is False
+
+
+def test_switchport_loss_surfaces_on_cisco_iosxe_netconf_stub():
+    """v0.4.0 self-audit: the ``cisco_iosxe`` OpenConfig/NETCONF stub was
+    the L3-style target ENG-01 missed.  It renders only name/enabled/type
+    and drops every switchport attribute, but left the 5 xpaths undeclared
+    — so ``classify`` defaulted them to ``supported`` and a switch→iosxe
+    migration reported ``severity: ok`` while VLAN membership was silently
+    discarded.  The stub now declares them unsupported like its 5 siblings.
+    """
+    source = CiscoIOSXECLICodec()
+    tree = source.parse(_SWITCH_CONFIG)
+    report = validate_against(tree, CiscoIOSXECodec(), source=source)
+    unsupported = {u.path for u in report.unsupported_paths}
+
+    missing = _DROPPED_SWITCHPORT_XPATHS - unsupported
+    assert not missing, (
+        "cisco_iosxe stub: switchport loss NOT surfaced — dropped L2 paths "
+        f"still classified supported: {sorted(missing)}"
+    )
     assert report.severity == "block"
     assert report.compatible is False

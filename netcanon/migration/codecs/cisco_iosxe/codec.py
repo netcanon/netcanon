@@ -243,6 +243,35 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01 completion, v0.4.0 self-audit).
+            #    This OpenConfig/NETCONF stub renders only name/enabled/type
+            #    per interface and drops every per-port VLAN-membership
+            #    attribute the walker yields.  The 5 sibling L3-style targets
+            #    (cisco_iosxr, vyos, fortigate_cli, opnsense, mikrotik_routeros)
+            #    declare these unsupported; this stub was the miss — undeclared
+            #    they defaulted to `supported`, so a switch→iosxe migration
+            #    reported `severity: ok` while the membership was silently
+            #    dropped on render. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="Phase 0.5 OpenConfig stub renders no switchport model; the mode is dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="Phase 0.5 OpenConfig stub renders no per-port access-VLAN; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="Phase 0.5 OpenConfig stub renders no switchport trunk allowed-list; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="Phase 0.5 OpenConfig stub renders no switchport native VLAN; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="Phase 0.5 OpenConfig stub renders no voice-VLAN; dropped on render.",
+            ),
             # ── Granular Tier-1/2 drops the walker now yields (2026-06
             #    adversarial review #9): the stub already carries the
             #    underscore field-markers below for run_full_mesh, but the
