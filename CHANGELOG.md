@@ -28,6 +28,14 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The sanitiser now strips Tier-3 `raw_sections` (audit finding
+  DATA-02).**  `sanitize_intent` cleared `dropped_tier3_sections` but
+  left `raw_sections` (verbatim carry-through vendor text) untouched.
+  No production parser populates it today, but the IOS-XE renderer
+  emits any entries verbatim, so a future parser filling it could
+  round-trip unredacted secrets.  It is now stripped fail-closed
+  alongside `dropped_tier3_sections`, with a coverage-guard test.
+
 * **`NETCANON_LOG_LEVEL` now takes effect on the server/Docker path
   (audit finding OBS-01).**  `main.py` called `configure_logging(
   level="INFO")` with a hardcoded level at import time, so the stdlib
