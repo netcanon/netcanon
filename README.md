@@ -111,10 +111,16 @@ For the full audit narrative + the variance-class taxonomy, see
 # leak = decryptable stored credentials.
 NETCANON_FERNET_KEY=$(python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
 
+# Required for a network-exposed (0.0.0.0) deployment: an API key gates
+# /api/v1.  Without it (or NETCANON_ALLOW_INSECURE_BIND=1) the container
+# refuses to start on a non-loopback bind (SEC-01 fail-closed).
+NETCANON_API_KEY=$(python -c "import secrets; print(secrets.token_urlsafe(32))")
+
 docker run --rm -p 8000:8000 \
     -v $(pwd)/configs:/app/configs \
     -v $(pwd)/data:/app/data \
     -e NETCANON_FERNET_KEY="$NETCANON_FERNET_KEY" \
+    -e NETCANON_API_KEY="$NETCANON_API_KEY" \
     ghcr.io/netcanon/netcanon:latest
 # -> http://127.0.0.1:8000        (UI)
 # -> http://127.0.0.1:8000/docs   (Swagger)
@@ -134,6 +140,15 @@ generates a key on first run inside `data/.fernet_key` so the
 container works zero-config; for the production deployment path see
 [`SECURITY.md`](SECURITY.md) "Credential Storage".
 
+`NETCANON_API_KEY` turns on a built-in bearer-token gate: when set,
+every `/api/v1` request must carry `Authorization: Bearer
+$NETCANON_API_KEY`.  `/health` and the HTML UI shell stay open, but the
+UI's data calls hit `/api/v1`, so an exposed UI should sit behind your
+reverse proxy's auth.  Because the image binds `0.0.0.0`, `netcanon
+serve` refuses to start without a key (or `NETCANON_ALLOW_INSECURE_BIND=1`),
+so an unauthenticated public bind is a deliberate choice — see
+[`SECURITY.md`](SECURITY.md) "Threat Model".
+
 The published image is signed via Sigstore (`cosign verify
 ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.
 
@@ -141,7 +156,7 @@ ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.
 Hub if your tooling defaults to `docker.io`:
 
 ```bash
-docker run --rm -p 8000:8000 netcanon/netcanon:latest
+docker run --rm -p 8000:8000 -e NETCANON_ALLOW_INSECURE_BIND=1 netcanon/netcanon:latest
 ```
 
 The Docker Hub mirror has the same image bytes but no cosign

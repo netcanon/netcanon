@@ -108,6 +108,15 @@ class Settings(BaseSettings):
     max_memory_jobs: int = Field(default=1000, ge=0)
     block_private_egress: bool = False
     ssh_host_key_checking: Literal["auto_add", "tofu", "reject"] = "auto_add"
+    # ── SEC-01 — opt-in API auth + bind safety ──
+    # When set, every /api/v1 route requires `Authorization: Bearer
+    # <api_key>`.  Empty (default) disables auth — the zero-config
+    # loopback / desktop posture is unchanged.
+    api_key: str = ""
+    # `netcanon serve` refuses to bind a non-loopback host with no
+    # api_key unless this opt-out is set (acknowledging that a reverse
+    # proxy terminates auth).  See netcanon/api/auth.py.
+    allow_insecure_bind: bool = False
 
     model_config = SettingsConfigDict(
         env_prefix="NETCANON_",

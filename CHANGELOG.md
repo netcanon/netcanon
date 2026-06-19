@@ -26,6 +26,20 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+* **Opt-in API authentication + fail-closed bind (audit finding
+  SEC-01).**  Set `NETCANON_API_KEY=<token>` to require an
+  `Authorization: Bearer <token>` header on every `/api/v1` route;
+  unset (the default) keeps the zero-config loopback / desktop
+  experience unauthenticated.  A new `netcanon serve` command (now the
+  Docker `ENTRYPOINT`) refuses to start on a non-loopback bind (e.g.
+  `0.0.0.0`) unless a key is set or `NETCANON_ALLOW_INSECURE_BIND=1` is
+  passed, so accidental unauthenticated public exposure is a conscious
+  choice rather than the default.  **Breaking:** an existing
+  `docker run` (binds `0.0.0.0`) now needs one of those env vars — see
+  the README quickstart and SECURITY.md.
+
 ### Fixed
 
 * **The sanitiser now strips Tier-3 `raw_sections` (audit finding

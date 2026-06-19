@@ -28,10 +28,11 @@ from contextlib import asynccontextmanager
 from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as _pkg_version
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 
 # Side-effect import — registers all built-in migration adapters.
 from . import migration as _migration_pkg  # noqa: F401
+from .api.auth import require_api_key
 from .api.routes import backups as backups_router
 from .api.routes import configs as configs_router
 from .api.routes import definitions as defs_router
@@ -297,13 +298,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # Routers
     # ------------------------------------------------------------------
     app.include_router(health_router.router)  # /health (no prefix; conventional probe path)
-    app.include_router(defs_router.router, prefix="/api/v1")
-    app.include_router(configs_router.router, prefix="/api/v1")
-    app.include_router(backups_router.router, prefix="/api/v1")
-    app.include_router(schedules_router.router, prefix="/api/v1")
-    app.include_router(device_profiles_router.router, prefix="/api/v1")
-    app.include_router(migration_router.router, prefix="/api/v1")
-    app.include_router(sanitize_router.router, prefix="/api/v1")
+    # SEC-01: opt-in bearer-token gate on the whole /api/v1 surface.
+    # No-op when NETCANON_API_KEY is unset (zero-config local UX).
+    _api_v1_auth = [Depends(require_api_key)]
+    app.include_router(defs_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(configs_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(backups_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(schedules_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(device_profiles_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(migration_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
+    app.include_router(sanitize_router.router, prefix="/api/v1", dependencies=_api_v1_auth)
     app.include_router(docs_router.router)  # custom Swagger UI at /docs (no prefix)
     app.include_router(ui_router.router)  # UI routes at root (/, /jobs, …)
 

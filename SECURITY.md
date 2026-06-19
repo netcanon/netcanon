@@ -53,6 +53,13 @@ Netcanon ships in two deployment shapes:
    controls (nginx + auth_request, Caddy + basic-auth, Cloudflare
    Access, etc.) and restrict ingress at the network layer.
 
+   As an in-app backstop, set `NETCANON_API_KEY=<token>` to require an
+   `Authorization: Bearer <token>` header on every `/api/v1` route.
+   `netcanon serve` (the Docker entry point) refuses to start on a
+   non-loopback bind unless a key is set or
+   `NETCANON_ALLOW_INSECURE_BIND=1` is passed, so accidental
+   unauthenticated exposure is a conscious opt-out, not the default.
+
    For this shape you can also set `NETCANON_BLOCK_PRIVATE_EGRESS=true`
    (default `false`): the backup entry points then refuse any target
    that resolves to a loopback or link-local address — including the
@@ -527,7 +534,7 @@ regulated environments.
 
 | Item | Risk | Accepted? | Rationale |
 |------|------|-----------|-----------|
-| No API authentication | Any local process can call the API | Yes (desktop) / Operator responsibility (web/Docker) | Desktop assumes single-user local machine; web operators must add auth via reverse proxy |
+| No API authentication by default | Any reachable peer can call the API when exposed | Opt-in: set `NETCANON_API_KEY` to gate `/api/v1`; `netcanon serve` refuses a non-loopback bind without a key or `NETCANON_ALLOW_INSECURE_BIND=1` | Desktop binds loopback; web operators should set a key and/or front with a reverse proxy |
 | Credentials over localhost HTTP | Plaintext in transit on loopback | Yes | Loopback is not a network interface; TLS on localhost adds no practical security |
 | OS keyring unavailable (container / headless Linux) | Resolved via env-var tier (recommended) or file-fallback tier (auto-bootstrap) | No (resolved) | Three-tier key resolution — `NETCANON_FERNET_KEY` for production; `$NETCANON_DATA_DIR/.fernet_key` auto-bootstrap for zero-config containers.  See "Credential Storage" above |
 | Key loss (keyring entry deleted / env var unset on restart / `.fernet_key` deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume.  Operators using tier 1 / tier 3 should back the key up alongside their other infrastructure secrets |

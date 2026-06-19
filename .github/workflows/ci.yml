@@ -155,7 +155,9 @@ jobs:
 
       - name: Boot image and check /health + dashboard renders
         run: |
-          docker run -d --name smoke -p 8000:8000 netcanon-smoke:pr
+          # SEC-01: the smoke container binds 0.0.0.0 with no API key;
+          # opt out of the fail-closed bind guard for this throwaway run.
+          docker run -d --name smoke -e NETCANON_ALLOW_INSECURE_BIND=1 -p 8000:8000 netcanon-smoke:pr
           # Poll /health for up to 60 seconds.  HEALTHCHECK in the
           # Dockerfile has start-period 10s, so ~12s is the typical
           # ready time; budget extra for slow CI runners.

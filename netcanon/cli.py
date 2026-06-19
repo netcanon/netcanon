@@ -99,6 +99,17 @@ def main(argv: list[str] | None = None) -> int:
         help="List all available demo scenarios and exit",
     )
 
+    subparsers.add_parser(
+        "serve",
+        help="Run the Netcanon web server (host/port/auth from NETCANON_* env)",
+        description=(
+            "Start the FastAPI app via uvicorn, binding Settings.host:port "
+            "(NETCANON_HOST / NETCANON_PORT, default 0.0.0.0:8000).  Refuses "
+            "to start on a non-loopback bind unless NETCANON_API_KEY is set "
+            "or NETCANON_ALLOW_INSECURE_BIND=1 (SEC-01 fail-closed)."
+        ),
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "sanitize":
@@ -110,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
 
         demo_argv = ["--list"] if args.list else ["--pair", args.pair]
         return _demo_main(demo_argv)
+    if args.command == "serve":
+        return _cmd_serve(args)
     return 1
 
 
@@ -167,6 +180,37 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    return 0
+
+
+def _cmd_serve(args: argparse.Namespace) -> int:
+    """``netcanon serve`` — boot the web server with a fail-closed bind guard.
+
+    Refuses to start on a non-loopback bind with no API key and no
+    explicit opt-out (SEC-01), so accidental public exposure is a
+    conscious choice rather than the zero-config default.
+    """
+    from .api.auth import bind_refusal_reason
+    from .config import Settings
+
+    settings = Settings()
+    reason = bind_refusal_reason(
+        settings.host, settings.api_key, settings.allow_insecure_bind
+    )
+    if reason:
+        print(f"error: {reason}", file=sys.stderr)
+        return 2
+
+    # Lazy import — keeps `netcanon --help` / sanitize fast and avoids
+    # building the app on the refusal path.
+    import uvicorn
+
+    uvicorn.run(
+        "netcanon.main:app",
+        host=settings.host,
+        port=settings.port,
+        log_level=settings.log_level,
+    )
     return 0
 
 
