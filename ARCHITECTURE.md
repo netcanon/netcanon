@@ -41,9 +41,10 @@ The rest of this document is about the migration layer.  The backup
 layer is architecturally simpler — see
 [`netcanon/collectors/README.md`](netcanon/collectors/README.md).
 Backup definitions ship for Cisco IOS-XE, Fortigate FortiOS, MikroTik
-RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS — see
-[`definitions/README.md`](definitions/README.md) for the per-vendor
-authoring notes.
+RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS, plus
+provisional definitions for Cisco NX-OS, Cisco IOS-XR, Aruba AOS-CX,
+and VyOS — see [`definitions/README.md`](definitions/README.md) for the
+per-vendor authoring notes and validation status.
 
 ---
 
@@ -376,9 +377,10 @@ where rename overrides apply to the canonical tree but vanish
 from rendered output.
 
 **Current state:** every shipped bidirectional codec has the
-attribute empty EXCEPT `OpnSenseCodec` and `CiscoIOSXECodec` (the
-NETCONF Phase-0.5 stub), which both declare `frozenset({"snmpv3"})`
-because their parse + render paths don't yet round-trip SNMPv3 USM
+attribute empty EXCEPT `OpnSenseCodec` (which declares
+`frozenset({"snmpv3"})`) and `CiscoIOSXECodec` (the NETCONF Phase-0.5
+stub, which declares `frozenset({"snmpv3", "ports"})`) because their
+parse + render paths don't yet round-trip those categories
 (operators renaming SNMPv3 users on either of those codecs as the
 target see the surfaced banner immediately).  Earlier `OPNsenseCodec`
 and `FortiGateCLICodec` also declared `{"local_users"}` under an

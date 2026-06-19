@@ -28,6 +28,12 @@ timestamp if your timezone matters for an audit.
 
 ### Added
 
+* **Contribution hygiene (audit finding LIC-01).**  Added a Developer
+  Certificate of Origin (DCO 1.1) sign-off requirement (CONTRIBUTING.md
+  + PR template), a `TRADEMARKS.md` nominative-use notice, and an
+  explicit "device-generated output isn't creative authorship"
+  rationale atop the real-capture fixture `NOTICE.md`.
+
 * **Opt-in API authentication + fail-closed bind (audit finding
   SEC-01).**  Set `NETCANON_API_KEY=<token>` to require an
   `Authorization: Bearer <token>` header on every `/api/v1` route;
@@ -41,6 +47,17 @@ timestamp if your timezone matters for an audit.
   the README quickstart and SECURITY.md.
 
 ### Fixed
+
+* **Documentation honesty fixes (audit findings DOC-01, CI-02, CI-04).**
+  Corrected the README claims that CI "runs the full matrix" (it runs
+  unit + integration; e2e + desktop are local) and is "the source of
+  truth for pass counts" (the `-x` invocation stops at first failure),
+  and that bare `pytest` runs the desktop tier (needs the `[desktop]`
+  extra); repointed the LAG-helper, NETCONF-frozenset, backup-NOS list,
+  variance-class table, and routes-table doc drifts to match the code;
+  softened the "every interactive element has a data-testid"
+  overclaim; and guarded the top-level `import pystray` so the desktop
+  module imports without the optional extra.
 
 * **The sanitiser now strips Tier-3 `raw_sections` (audit finding
   DATA-02).**  `sanitize_intent` cleared `dropped_tier3_sections` but

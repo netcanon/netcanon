@@ -11,6 +11,14 @@ the fixtures are committed so CI can detect regressions against the exact
 bytes we validated against, and so future contributors don't have to
 re-discover them.
 
+**Why this is includable:** the captured text is *device-generated
+configuration output* — factual, functional dumps produced by network
+OSes, not creative authorship — so the individual snippets carry
+little to no independent copyright.  Where a source nonetheless
+asserts a license, the per-fixture attribution below records it and
+the file is included under that license.  Any source author who
+objects can have their fixture removed (see the per-fixture notes).
+
 ---
 
 ## cisco_iosxe/

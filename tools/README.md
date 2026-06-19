@@ -80,11 +80,12 @@ fields were preserved or unsupported-by-design out of the audited total.
 ### What this is + isn't
 
 This is a **mechanical drift audit**.  It tells you which fields
-survived a parse-render-parse trip; it does NOT yet interpret which
-drift is expected.  Phase 3 of the audit adds a vendor-doc-grounded
-expectations file (`tests/fixtures/cross_vendor_expectations.yaml`,
-planned) that classifies each drift as expected-vs-defect.  Until
-then, treat every WARN cell as "unverified" rather than "broken".
+survived a parse-render-parse trip.  Phase 3 interprets that drift:
+the per-pair expectation files under
+`tests/fixtures/cross_vendor_expectations/` (one YAML per
+source__target pair, vendor-doc-grounded) classify each drift as
+expected-vs-defect, and `run_phase4_reconciliation.py` buckets every
+cell into the variance classes below.
 
 ### Real vs synthetic fixtures
 
@@ -167,6 +168,7 @@ unsupported / not_applicable, from Phase 3) and bucketed into one of:
 | `TRIVIAL_EMPTY`           | drift only because one side held `[]` / `{}` / `""` and the other held `None`; no semantic divergence | ok |
 | `METHODOLOGY_ISSUE_under` | preserved against {lossy/unsupported/N-A} expectation         | low/medium |
 | `METHODOLOGY_ISSUE_over`  | drifted against `not_applicable` expectation                  | low      |
+| `STRUCTURAL_ONLY`         | drifted only because a parent list's row count changed; the per-field drift is carried on one sibling key and the rest dedupe here | low |
 | `CODEC_BUG`               | drifted + expected good (the docs/code disagreement to fix)   | **high** |
 
 ### Usage
