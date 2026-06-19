@@ -46,13 +46,15 @@ from .config import Settings
 from .definitions.loader import DefinitionLoader
 
 # Configure application-level logging once, at module import time.  The
-# ``configure_logging`` helper (netcanon/logging_config.py) is idempotent
-# and a no-op under uvicorn's own log config / under pytest's harness, so
-# calling it here gives ``logger.info(...)`` output everywhere except
-# environments that have already installed a root-logger config.  This
-# replaces the prior state where our app-level INFO logs (most visibly
-# the migration pipeline's "Migration plan X: src -> tgt = status" line)
-# were silently dropped by the default WARNING threshold.
+# level comes from ``Settings().log_level`` (env ``NETCANON_LOG_LEVEL``,
+# default ``info``) so the operator's verbosity reaches the stdlib root
+# logger on every entry point — including the bare ``uvicorn
+# netcanon.main:app`` Docker path, where uvicorn configures only its own
+# ``uvicorn.*`` loggers and leaves the root logger to us (so this call is
+# NOT a no-op there).  ``configure_logging`` is idempotent and skips only
+# when real (non-pytest) root handlers already exist.  Previously the
+# level was hardcoded ``INFO`` and NETCANON_LOG_LEVEL was silently ignored
+# for application logs (audit finding OBS-01).
 from .logging_config import configure_logging
 from .storage.device_profile_store import FileDeviceProfileStore
 from .storage.file_store import FileConfigStore
@@ -60,7 +62,7 @@ from .storage.job_registry import BackupJobRegistry
 from .storage.job_store import FileJobStore
 from .storage.schedule_store import FileScheduleStore
 
-configure_logging(level="INFO")
+configure_logging(level=Settings().log_level)
 
 
 logger = logging.getLogger(__name__)
