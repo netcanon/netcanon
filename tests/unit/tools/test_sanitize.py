@@ -34,6 +34,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIPv4Address,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
+    CanonicalRoutingInstance,
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalStaticRoute,
@@ -997,3 +998,98 @@ def test_raw_sections_stripped_by_sanitiser():
     assert any(s.field == "raw_sections" for s in subs)
     # The verbatim secret must not survive anywhere in the output.
     assert "SENTINEL-raw" not in sanitized.model_dump_json()
+
+
+# ---------------------------------------------------------------------------
+# v0.4.0 self-audit — verbatim apply-group carry-through + free-text PII
+# ---------------------------------------------------------------------------
+
+
+class TestJunosApplyGroupsStripped:
+    """v0.4.0 self-audit (HIGH): secrets inside a Junos ``apply-group``
+    are carried verbatim in ``group_content`` and re-emitted by the
+    renderer, bypassing every field-typed redaction.  They must be
+    stripped fail-closed (like ``raw_sections``)."""
+
+    def test_group_content_and_apply_groups_emptied(self):
+        intent = CanonicalIntent(
+            hostname="r1",
+            group_content={
+                "GLOBAL": [
+                    ["system", "login", "user", "backdoor",
+                     "authentication", "encrypted-password",
+                     "$6$RealSalt$RealHashSENTINEL"],
+                    ["snmp", "community", "SuperSecretSENTINEL",
+                     "authorization", "read-only"],
+                ]
+            },
+            apply_groups=["GLOBAL"],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.group_content == {}
+        assert sanitized.apply_groups == []
+        assert {s.field for s in subs} >= {"group_content", "apply_groups"}
+        assert "SENTINEL" not in sanitized.model_dump_json()
+
+    def test_end_to_end_junos_apply_group_secret_not_rendered(self):
+        raw = (
+            "set system host-name real-edge-rtr\n"
+            "set groups GLOBAL system login user backdoor authentication "
+            'encrypted-password "$6$RealSaltHere$RealHashSecretXYZ"\n'
+            "set groups GLOBAL snmp community SuperSecretCommunity "
+            "authorization read-only\n"
+            "set apply-groups GLOBAL\n"
+        )
+        out = sanitize_text(raw, "juniper_junos").sanitized_text
+        assert "$6$RealSaltHere$RealHashSecretXYZ" not in out
+        assert "SuperSecretCommunity" not in out
+        assert "backdoor" not in out
+
+
+class TestFreeTextPiiRedaction:
+    """v0.4.0 self-audit: free-text fields besides interface.description
+    (VLAN name/description, static-route / routing-instance / VRRP
+    description, DHCP domain-name) are operator/org PII and must not
+    survive sanitisation."""
+
+    def test_modelled_free_text_fields_redacted(self):
+        intent = CanonicalIntent(
+            vlans=[CanonicalVlan(
+                id=10, name="CEO-OFFICE", description="Jane Doe x4012")],
+            static_routes=[CanonicalStaticRoute(
+                destination="0.0.0.0/0", gateway="10.0.0.1",
+                description="to-DC-NYC-rack42")],
+            routing_instances=[CanonicalRoutingInstance(
+                name="MGMT", description="customer ACME tenant")],
+            dhcp_servers=[CanonicalDHCPPool(
+                network="10.0.0.0/24",
+                domain_name="internal.acmecorp.example")],
+            interfaces=[CanonicalInterface(
+                name="ge-0/0/0", default_name="ge-0/0/0",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=1, description="HQ gateway - John")])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        blob = sanitized.model_dump_json()
+        for leaked in (
+            "CEO-OFFICE", "Jane Doe x4012", "to-DC-NYC-rack42",
+            "customer ACME tenant", "internal.acmecorp.example",
+            "HQ gateway - John",
+        ):
+            assert leaked not in blob, f"PII survived: {leaked!r}"
+
+    def test_vlan_name_redaction_is_cross_reference_stable(self):
+        """Same VLAN name → same placeholder, so ``vlan members <name>``
+        cross-references stay consistent in the rendered output."""
+        intent = CanonicalIntent(
+            vlans=[
+                CanonicalVlan(id=10, name="SECRET-VLAN"),
+                CanonicalVlan(id=20, name="SECRET-VLAN"),
+                CanonicalVlan(id=30, name="OTHER"),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        names = [v.name for v in sanitized.vlans]
+        assert "SECRET-VLAN" not in names and "OTHER" not in names
+        assert names[0] == names[1]      # same source name → same redaction
+        assert names[0] != names[2]      # distinct names stay distinct
