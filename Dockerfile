@@ -93,7 +93,10 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 # Operator-overridable bind-mount targets.
 VOLUME ["/app/configs", "/app/data"]
 
-ENTRYPOINT ["uvicorn", "netcanon.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# SEC-01: `netcanon serve` reads host/port/auth from NETCANON_* env
+# (default 0.0.0.0:8000) and refuses an unauthenticated non-loopback
+# bind unless NETCANON_API_KEY or NETCANON_ALLOW_INSECURE_BIND is set.
+ENTRYPOINT ["netcanon", "serve"]
 
 # OCI labels for image discovery + supply-chain provenance.  Repository
 # label is what GHCR keys against for "View source" links on the package
