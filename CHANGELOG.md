@@ -43,6 +43,45 @@ timestamp if your timezone matters for an audit.
   consistent.  Found by the post-release adversarial self-audit; the
   earlier DATA-02 fix had covered only `raw_sections`.
 
+### Fixed
+
+* **`cisco_iosxe` (NETCONF stub) now declares the switchport surface
+  unsupported (v0.4.0 self-audit, ENG-01 completion).**  The
+  OpenConfig/NETCONF stub renders only name/enabled/type per interface
+  and drops every per-port VLAN-membership attribute, but left the 5
+  switchport xpaths undeclared -- so `classify` defaulted them to
+  `supported` and a switch->iosxe migration reported `severity: ok`
+  while the membership was silently discarded.  It now declares them
+  unsupported like its 5 sibling L3-style targets.  Cross-mesh
+  `CODEC_BUG` unchanged at 5.
+
+* **Sub-minute DHCP lease no longer renders the invalid, unstable
+  `lease 0 0 0` (v0.4.0 self-audit).**  A lease of 0 < t < 60 s floored
+  all of days/hours/minutes to 0 in `cisco_iosxe_cli` (and `arista_eos`)
+  render, emitting a wire-invalid `lease 0 0 0` that reparsed to 0 and
+  then drifted to the 86400 default on the next render -- contradicting
+  the ENG-03 lossless claim.  Sub-minute leases now floor to 1 minute
+  (IOS-XE/EOS finest granularity), so the output is valid and stable
+  across re-renders.
+
+* **An invalid `NETCANON_LOG_LEVEL` no longer crashes startup
+  (v0.4.0 self-audit).**  `configure_logging` runs at import time,
+  outside the graceful-startup handler, so a mistyped level
+  (`verbose`, a stray-whitespace `"DEBUG "`, an empty value) raised an
+  unhandled `ValueError` and took down every entry path (bare uvicorn,
+  `netcanon serve`, desktop) with a raw traceback.  `Settings.log_level`
+  is now a validated `Literal` with a normalising validator that lowers
+  case/strips whitespace and degrades an unknown value to `info` with a
+  warning -- so a clean value always reaches both `logging.setLevel` and
+  `uvicorn.run`.
+
+* **Doc accuracy: the API-key gate covers `/api/v1` data/operation
+  routes, not the OpenAPI schema (v0.4.0 self-audit).**  Softened the
+  "every /api/v1 route" wording in `auth.py` + `SECURITY.md`:
+  `/api/v1/openapi.json` stays open so the intentionally-unauthenticated
+  `/docs` page can render it (it carries only route metadata -- no
+  config contents or credentials).  No behavioural change.
+
 ## [0.4.0] - 2026-06-19
 
 ### Added

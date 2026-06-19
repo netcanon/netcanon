@@ -270,3 +270,22 @@ class TestAristaDHCPCapability:
         assert not any(
             "dhcp" in u.path for u in caps.unsupported
         ), "DHCP path should no longer appear in `unsupported`."
+
+
+class TestAristaSubMinuteLease:
+    def test_sub_minute_lease_floors_to_one_minute_and_is_stable(self):
+        """v0.4.0 self-audit: a sub-minute lease floored to the invalid,
+        unstable ``lease 0 0 0`` (same root cause as cisco_iosxe_cli).  It
+        now floors to 1 minute and re-renders stably."""
+        codec = AristaEOSCodec()
+        rendered = codec.render(
+            CanonicalIntent(
+                dhcp_servers=[CanonicalDHCPPool(network="10.0.0.0/24",
+                                                lease_time=30)]
+            )
+        )
+        assert "lease 0 0 1" in rendered
+        assert "lease 0 0 0" not in rendered
+        reparsed = codec.parse(rendered)
+        assert reparsed.dhcp_servers[0].lease_time == 60
+        assert codec.render(reparsed) == rendered

@@ -589,6 +589,14 @@ def render_intent(tree: Any) -> str:
                 hours = rem // 3600
                 rem -= hours * 3600
                 minutes = rem // 60
+                # A sub-minute (but non-zero) lease floors all three units
+                # to 0 → the wire-invalid `lease 0 0 0`, which also reparses
+                # to lease_time=0 and then drifts to the 86400 default on the
+                # next render (v0.4.0 self-audit).  IOS-XE's finest lease
+                # granularity is one minute, so floor a sub-minute lease up
+                # to 1 minute rather than emit an invalid, unstable triple.
+                if days == 0 and hours == 0 and minutes == 0:
+                    minutes = 1
                 out.append(f" lease {days} {hours} {minutes}")
         out.append("!")
 

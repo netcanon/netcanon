@@ -68,3 +68,31 @@ def test_whole_hour_multi_day_lease_roundtrips():
     assert intent.dhcp_servers[0].lease_time == 604800
     assert " lease 7 0 0" in rendered
     assert reparsed.dhcp_servers[0].lease_time == 604800
+
+
+def test_sub_minute_lease_floors_to_one_minute_and_is_stable():
+    """v0.4.0 self-audit: a sub-minute (0<t<60s) lease floored all three
+    units to 0 → the wire-invalid ``lease 0 0 0``, which reparsed to
+    ``lease_time=0`` and then drifted to the 86400 default on the next
+    render.  It now floors to 1 minute (IOS-XE's finest granularity), so
+    the output is valid and STABLE across re-renders.
+    """
+    from netcanon.migration.canonical.intent import (
+        CanonicalDHCPPool,
+        CanonicalIntent,
+    )
+
+    codec = CiscoIOSXECLICodec()
+    # 30s comes in via e.g. a FortiGate `set lease-time 30` migration.
+    rendered = codec.render(
+        CanonicalIntent(
+            dhcp_servers=[CanonicalDHCPPool(network="10.0.0.0/24",
+                                            lease_time=30)]
+        )
+    )
+    assert " lease 0 0 1" in rendered
+    assert "lease 0 0 0" not in rendered     # the invalid/unstable form is gone
+    # Re-render must be a no-op (60s -> `lease 0 0 1` -> 60s), not drift.
+    reparsed = codec.parse(rendered)
+    assert reparsed.dhcp_servers[0].lease_time == 60
+    assert codec.render(reparsed) == rendered

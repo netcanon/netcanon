@@ -7,12 +7,15 @@ the insecure ``0.0.0.0`` default makes accidental public exposure one
 ``docker run -p`` away.  This module adds two opt-in, fail-closed controls:
 
 1. :func:`require_api_key` — when ``Settings.api_key`` (env
-   ``NETCANON_API_KEY``) is set, every ``/api/v1`` route requires a
-   matching ``Authorization: Bearer <key>`` header.  Empty key (the
-   default) makes the dependency a no-op, so the zero-config loopback /
-   desktop experience is unchanged.  Credentials stay write-only over the
-   API (``DeviceProfilePublic``); this is an orthogonal front door, not a
-   replacement for the reverse proxy.
+   ``NETCANON_API_KEY``) is set, every ``/api/v1`` data/operation route
+   requires a matching ``Authorization: Bearer <key>`` header.  (The
+   ``/api/v1/openapi.json`` schema is FastAPI-internal and stays open so
+   the intentionally-unauthenticated ``/docs`` page can render it; it
+   carries only route metadata — no config contents or credentials.)
+   Empty key (the default) makes the dependency a no-op, so the
+   zero-config loopback / desktop experience is unchanged.  Credentials
+   stay write-only over the API (``DeviceProfilePublic``); this is an
+   orthogonal front door, not a replacement for the reverse proxy.
 
 2. :func:`bind_refusal_reason` — used by ``netcanon serve`` to refuse to
    start when binding a non-loopback interface with no API key and no

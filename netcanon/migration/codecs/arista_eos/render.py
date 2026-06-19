@@ -389,6 +389,12 @@ def render_intent(tree: Any) -> str:
                     # (sample doc: ``lease 0 12 0`` for 12-hour
                     # leases).  Always emit the full triple so a
                     # 12-hour lease doesn't render as bare ``lease 0``.
+                    # But a sub-minute (non-zero) lease floors to
+                    # ``lease 0 0 0`` — invalid + reparses to 0 then
+                    # drifts to the 86400 default; floor it to 1 minute
+                    # (v0.4.0 self-audit, same fix as cisco_iosxe_cli).
+                    if days == 0 and hours == 0 and minutes == 0:
+                        minutes = 1
                     out.append(
                         f"   lease {days} {hours} {minutes}"
                     )

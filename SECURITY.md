@@ -54,7 +54,10 @@ Netcanon ships in two deployment shapes:
    Access, etc.) and restrict ingress at the network layer.
 
    As an in-app backstop, set `NETCANON_API_KEY=<token>` to require an
-   `Authorization: Bearer <token>` header on every `/api/v1` route.
+   `Authorization: Bearer <token>` header on every `/api/v1`
+   data/operation route.  (The `/api/v1/openapi.json` schema stays open
+   so the intentionally-unauthenticated `/docs` page can render it; it
+   exposes only route metadata — no config contents or credentials.)
    `netcanon serve` (the Docker entry point) refuses to start on a
    non-loopback bind unless a key is set or
    `NETCANON_ALLOW_INSECURE_BIND=1` is passed, so accidental

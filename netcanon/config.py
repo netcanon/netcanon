@@ -11,10 +11,11 @@ Pydantic-settings automatically reads ``.env`` files if present.
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 #: Hard ceiling on per-job parallel device workers.  Chosen conservatively
@@ -101,7 +102,9 @@ class Settings(BaseSettings):
     data_dir: Path | None = None
     host: str = "0.0.0.0"
     port: int = 8000
-    log_level: str = "info"
+    log_level: Literal[
+        "debug", "info", "warning", "error", "critical"
+    ] = "info"
     open_in_editor: bool = False
     backup_concurrency: int = Field(default=MAX_BACKUP_CONCURRENCY,
                                     ge=1, le=MAX_BACKUP_CONCURRENCY)
@@ -123,6 +126,35 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
     )
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, v: object) -> object:
+        """Coerce ``NETCANON_LOG_LEVEL`` case/whitespace; fall back to
+        ``info`` for an unknown value.
+
+        ``configure_logging`` runs at import time (``main.py``), outside the
+        graceful-startup handler, and passes this value to
+        ``logging.setLevel`` (and ``netcanon serve`` to ``uvicorn.run``).  A
+        mistyped value (``verbose``, ``warn``, a stray-whitespace
+        ``"DEBUG "``, an empty string) would otherwise raise an unhandled
+        ``ValueError`` and crash every entry path with a raw traceback
+        (v0.4.0 self-audit).  Normalising here guarantees a valid level
+        reaches both sinks; an unknown value warns and degrades to ``info``
+        rather than failing closed on a non-security setting.
+        """
+        if not isinstance(v, str):
+            return v
+        norm = v.strip().lower()
+        valid = {"debug", "info", "warning", "error", "critical"}
+        if norm in valid:
+            return norm
+        warnings.warn(
+            f"Unknown NETCANON_LOG_LEVEL {v!r}; falling back to 'info' "
+            "(valid: debug, info, warning, error, critical).",
+            stacklevel=2,
+        )
+        return "info"
 
     @property
     def effective_data_dir(self) -> Path:
