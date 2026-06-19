@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **`NETCANON_LOG_LEVEL` now takes effect on the server/Docker path
+  (audit finding OBS-01).**  `main.py` called `configure_logging(
+  level="INFO")` with a hardcoded level at import time, so the stdlib
+  root logger ignored `Settings.log_level` — `NETCANON_LOG_LEVEL=debug`
+  silently dropped all `logger.debug(...)` output under the bare
+  `uvicorn netcanon.main:app` entry point (uvicorn configures only its
+  own `uvicorn.*` loggers, never the root).  The level now resolves from
+  `Settings().log_level`.  Also corrected the `logging_config` /
+  `config.py` docstrings that wrongly described the call as a uvicorn-CLI
+  no-op.
+
 * **Cisco IOS-XE DHCP pool lease-time now round-trips losslessly
   (audit finding ENG-03).**  `cisco_iosxe_cli` render emitted
   `lease 0 <total_hours>`, truncating days into hours and dropping

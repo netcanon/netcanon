@@ -18,9 +18,12 @@ Usage (desktop)::
     from pathlib import Path
     configure_logging(level="INFO", log_file=Path("/path/to/netcanon.log"))
 
-When running under the ``uvicorn`` CLI the CLI configures logging itself via
-``dictConfig``; in that case the root logger will already have handlers and
-this function is a no-op — the uvicorn log format is used as-is.
+Under the ``uvicorn`` CLI, uvicorn configures only its own ``uvicorn.*``
+loggers (its default ``LOGGING_CONFIG`` has no ``root`` entry), so the root
+logger is left to this function — it is NOT a no-op there and does set the
+application's root level.  It short-circuits only when *real* (non-pytest)
+root handlers already exist (a prior call, or a host that installed its own
+root config).
 
 Log format::
 

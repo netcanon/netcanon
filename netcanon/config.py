@@ -39,9 +39,11 @@ class Settings(BaseSettings):
             the per-user data root independently of ``configs_dir``.
         host: Bind address for the Uvicorn server.
         port: TCP port for the Uvicorn server.
-        log_level: Logging verbosity passed to Uvicorn and the standard-library
-            ``logging`` module.  One of ``debug``, ``info``, ``warning``,
-            ``error``, ``critical``.
+        log_level: Logging verbosity.  Sets the stdlib root logger level via
+            ``configure_logging`` (so application logs honour it on every
+            entry point, incl. the bare-uvicorn Docker path) and is passed
+            to Uvicorn on the desktop server path.  One of ``debug``,
+            ``info``, ``warning``, ``error``, ``critical``.
         open_in_editor: Enable the ``POST /api/v1/configs/{filename}/open``
             endpoint that opens a config file in the OS default text editor
             via ``os.startfile()``.  Disabled by default because it only
