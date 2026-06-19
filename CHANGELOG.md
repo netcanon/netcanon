@@ -46,6 +46,14 @@ timestamp if your timezone matters for an audit.
   `docker run` (binds `0.0.0.0`) now needs one of those env vars — see
   the README quickstart and SECURITY.md.
 
+* **README now leads with the browser UI (audit finding MKT-01).**
+  Added a migrate-page screenshot (`docs/assets/migrate.png`) above
+  the fold: a Cisco IOS-XE -> Junos translation showing
+  auto-detection, the “Validation OK” / “Tier-3 sections
+  detected” honesty banners (with the dropped ACL/NAT lines listed),
+  and the rendered Junos `set` output -- so the README shows what the
+  tool looks like, not only what it claims.
+
 ### Fixed
 
 * **Documentation honesty fixes (audit findings DOC-01, CI-02, CI-04).**
@@ -101,6 +109,16 @@ timestamp if your timezone matters for an audit.
   the switchport surface `unsupported`, so the loss is reported as a
   block-severity migration finding.  Cross-mesh `CODEC_BUG` unchanged
   at 5 (the drift demotes to `EXPECTED_UNSUPPORTED`).
+
+### Security
+
+* **Docker base image is digest-pinned (audit finding SUP-01).**
+  Both build stages now pin `python:3.14.5-slim-bookworm` by its
+  multi-arch manifest digest
+  (`@sha256:a9bee15510a3...cf679ccb`) rather than the floating tag,
+  so a silently re-tagged or compromised upstream
+  `:3.14.5-slim-bookworm` cannot change what we build.  Dependabot's
+  existing `docker` ecosystem bumps the tag and digest together.
 
 ## [0.3.2] - 2026-06-18
 
