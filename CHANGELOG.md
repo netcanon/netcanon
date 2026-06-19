@@ -28,6 +28,15 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Cisco IOS-XE DHCP pool lease-time now round-trips losslessly
+  (audit finding ENG-03).**  `cisco_iosxe_cli` render emitted
+  `lease 0 <total_hours>`, truncating days into hours and dropping
+  minutes (e.g. `lease 2 6 30` rendered as `lease 0 54`, silently
+  losing 30 minutes), and never emitted `lease infinite`.  Render now
+  emits the full `lease <days> <hours> <minutes>` triple (and the
+  `infinite` marker), matching the parser grammar and the arista_eos
+  render.  Cross-mesh `CODEC_BUG` unchanged at 5.
+
 * **Switch -> firewall/router migrations now surface dropped L2
   switchport membership instead of a green banner (audit finding
   ENG-01).**  The L3-only target codecs (`fortigate_cli`, `opnsense`,

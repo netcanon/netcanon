@@ -574,8 +574,22 @@ def render_intent(tree: Any) -> str:
         if pool.domain_name:
             out.append(f" domain-name {pool.domain_name}")
         if pool.lease_time and pool.lease_time != 86400:
-            hours = pool.lease_time // 3600
-            out.append(f" lease 0 {hours}")
+            if pool.lease_time == 0xFFFFFFFF:
+                # DHCP infinite-lease marker (max uint32 seconds).
+                out.append(" lease infinite")
+            else:
+                # Emit the full day/hour/minute triple so multi-day
+                # and sub-hour leases round-trip losslessly (matches
+                # the parser's `lease <days> <hours> <minutes>` grammar
+                # and arista_eos render).  The old `lease 0 <hours>`
+                # form truncated days into hours and dropped minutes
+                # (audit finding ENG-03).
+                days = pool.lease_time // 86400
+                rem = pool.lease_time - days * 86400
+                hours = rem // 3600
+                rem -= hours * 3600
+                minutes = rem // 60
+                out.append(f" lease {days} {hours} {minutes}")
         out.append("!")
 
     # --- RADIUS servers ---
