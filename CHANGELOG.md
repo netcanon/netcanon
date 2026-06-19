@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-06-19
+
 ### Added
 
 * **Contribution hygiene (audit finding LIC-01).**  Added a Developer
