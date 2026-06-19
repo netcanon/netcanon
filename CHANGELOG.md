@@ -26,6 +26,23 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+* **Sanitiser strips Junos apply-group bodies + redacts more free-text
+  PII (v0.4.0 self-audit).**  A `$6$` hash, SNMP community, or username
+  placed INSIDE a Junos `apply-group` was carried verbatim in
+  `group_content` and re-emitted by the renderer, bypassing every
+  field-typed redaction in the bug-report sanitiser (the flattened
+  top-level copies were redacted, but the group-sourced `set groups
+  <G> ...` lines were not).  `group_content` + `apply_groups` are now
+  stripped fail-closed alongside `raw_sections`/`dropped_tier3_sections`.
+  Also redacted the modelled free-text fields the walk previously
+  skipped -- VLAN name/description, static-route / routing-instance /
+  VRRP description, and DHCP domain-name (operator/org PII); VLAN-name
+  redaction is cross-reference-stable so `vlan members <name>` stays
+  consistent.  Found by the post-release adversarial self-audit; the
+  earlier DATA-02 fix had covered only `raw_sections`.
+
 ## [0.4.0] - 2026-06-19
 
 ### Added

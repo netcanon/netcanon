@@ -269,6 +269,14 @@ def sanitize_intent(
                     redacted=new_auth,
                 ))
                 group.authentication = new_auth
+            if group.description:
+                subs.append(Substitution(
+                    category="vrrp-description",
+                    field=f"interfaces[{i}].vrrp_groups[{k}].description",
+                    original=group.description,
+                    redacted="description redacted",
+                ))
+                group.description = "description redacted"
 
     # ---- VLAN SVI IPv4 addresses ----
     # R-16 / CF-04: SVI L3 addressing lives on ``CanonicalVlan.
@@ -282,6 +290,29 @@ def sanitize_intent(
     # so a copy that mirrors an interface address resolves to the SAME
     # docs-range substitute (cross-reference stable).
     for i, vlan in enumerate(sanitized.vlans):
+        # R-16 / CF-04 follow-up (v0.4.0 self-audit): VLAN name +
+        # description are operator free text (``CEO-OFFICE``,
+        # ``Jane-Desk x4012``).  Name is redacted via a stable table so
+        # every ``vlan members <name>`` cross-reference stays consistent;
+        # description → opaque placeholder.
+        if vlan.name:
+            new_name = table.redact_vlan_name(vlan.name)
+            subs.append(Substitution(
+                category="vlan-name",
+                field=f"vlans[{i}].name",
+                original=vlan.name,
+                redacted=new_name,
+            ))
+            vlan.name = new_name
+        if vlan.description:
+            subs.append(Substitution(
+                category="vlan-description",
+                field=f"vlans[{i}].description",
+                original=vlan.description,
+                redacted="description redacted",
+            ))
+            vlan.description = "description redacted"
+
         for j, addr in enumerate(vlan.ipv4_addresses):
             new_ip = table.redact_ipv4(addr.ip)
             if new_ip != addr.ip:
@@ -462,7 +493,21 @@ def sanitize_intent(
                 ))
                 pool.gateway = new_gw
 
-    # ---- static-route gateways ----
+        # v0.4.0 self-audit: the DHCP domain-name is an internal DNS
+        # suffix (``corp.acme.example``) — operator/org-identifying PII.
+        # Reuse the domain table so it matches the top-level domain
+        # redaction style (and stays stable if the same suffix recurs).
+        if pool.domain_name:
+            new_domain = table.redact_domain(pool.domain_name)
+            subs.append(Substitution(
+                category="domain",
+                field=f"dhcp_servers[{i}].domain_name",
+                original=pool.domain_name,
+                redacted=new_domain,
+            ))
+            pool.domain_name = new_domain
+
+    # ---- static-route gateways + descriptions ----
     for i, route in enumerate(sanitized.static_routes):
         if route.gateway:
             new_gw = table.redact_ip_string(route.gateway)
@@ -474,6 +519,14 @@ def sanitize_intent(
                     redacted=new_gw,
                 ))
                 route.gateway = new_gw
+        if route.description:
+            subs.append(Substitution(
+                category="static-route-description",
+                field=f"static_routes[{i}].description",
+                original=route.description,
+                redacted="description redacted",
+            ))
+            route.description = "description redacted"
 
     # ---- Tier-3 carry-through — strip entirely ----
     if sanitized.dropped_tier3_sections:
@@ -500,6 +553,44 @@ def sanitize_intent(
             redacted="(stripped)",
         ))
         sanitized.raw_sections = {}
+
+    # ---- routing-instance descriptions ----
+    for i, ri in enumerate(sanitized.routing_instances):
+        if ri.description:
+            subs.append(Substitution(
+                category="routing-instance-description",
+                field=f"routing_instances[{i}].description",
+                original=ri.description,
+                redacted="description redacted",
+            ))
+            ri.description = "description redacted"
+
+    # ---- Junos apply-groups verbatim carry-through — strip entirely ----
+    # v0.4.0 self-audit (HIGH): ``group_content`` holds the verbatim
+    # token tails of every applied ``set groups <G> ...`` line, and the
+    # Junos renderer re-emits them byte-for-byte — so a password hash,
+    # SNMP community, or username placed INSIDE an apply-group bypasses
+    # every field-typed redaction above and round-trips unredacted.  The
+    # flattened canonical surfaces (local_users, snmp.community, ...) are
+    # already redacted, so dropping the verbatim group bodies loses no
+    # *modelled* intent; strip fail-closed like raw_sections rather than
+    # re-parsing arbitrary group bodies (same defense-in-depth posture).
+    if sanitized.group_content:
+        subs.append(Substitution(
+            category="apply-groups-stripped",
+            field="group_content",
+            original=f"{len(sanitized.group_content)} group(s)",
+            redacted="(stripped)",
+        ))
+        sanitized.group_content = {}
+    if sanitized.apply_groups:
+        subs.append(Substitution(
+            category="apply-groups-stripped",
+            field="apply_groups",
+            original=f"{len(sanitized.apply_groups)} reference(s)",
+            redacted="(stripped)",
+        ))
+        sanitized.apply_groups = []
 
     return sanitized, subs
 
@@ -536,6 +627,7 @@ class _SubstitutionTable:
         # user definition AND the AAA reference.
         self._local_user_names: dict[str, str] = {}
         self._snmpv3_user_names: dict[str, str] = {}
+        self._vlan_names: dict[str, str] = {}
 
     def redact_hostname(self, name: str) -> str:
         if name not in self._hostnames:
@@ -620,6 +712,20 @@ class _SubstitutionTable:
         scheme, sep, _secret = value.partition(":")
         placeholder = self.redact_secret("VRRP-AUTH")
         return f"{scheme}{sep}{placeholder}" if sep else placeholder
+
+    def redact_vlan_name(self, name: str) -> str:
+        """Cross-reference-stable VLAN-name redaction.
+
+        VLAN membership is modelled by numeric ID (``access_vlan`` /
+        ``trunk_allowed_vlans`` are ints), so the human VLAN *name* is a
+        display label the renderer resolves from this VLAN object —
+        redacting it here flows consistently to every ``set vlans
+        <name> ...`` / ``vlan members <name>`` reference.  A VLAN name
+        like ``CEO-OFFICE`` or ``Jane-Desk`` is operator PII.
+        """
+        if name not in self._vlan_names:
+            self._vlan_names[name] = f"vlan-{len(self._vlan_names) + 1}"
+        return self._vlan_names[name]
 
     def redact_local_user_name(self, name: str) -> str:
         """Cross-reference-stable local-user-name redaction.
