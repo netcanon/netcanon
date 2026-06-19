@@ -160,3 +160,19 @@ flow.
   discipline as a portable methodology
 - [`tests/README.md`](tests/README.md) — test-suite layout and mocking
   strategy
+
+## Developer Certificate of Origin (DCO)
+
+Contributions are accepted under the
+[Developer Certificate of Origin 1.1](https://developercertificate.org/).
+Certify that you wrote the patch (or have the right to submit it under
+the project's MIT license) by adding a `Signed-off-by` trailer to each
+commit:
+
+```
+Signed-off-by: Your Name <you@example.com>
+```
+
+`git commit -s` adds it automatically.  Trademarks of the network
+vendors whose syntax this project translates belong to their owners —
+see [`TRADEMARKS.md`](TRADEMARKS.md).

@@ -307,7 +307,7 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 
 ```bash
 pip install -e ".[dev]"
-pytest                       # unit + integration + desktop (fast)
+pytest                       # all tiers; desktop tier needs the [desktop] extra
 pytest -m e2e                # Playwright browser tests (slower)
 ```
 
@@ -315,9 +315,11 @@ Tests run across four layers: unit (pure functions, no I/O — the
 real-capture validation harness lives here as a unit subset),
 integration (TestClient + mocked SSH at the `get_collector`
 factory), e2e (Playwright against a live Uvicorn), and desktop
-(PySide6 + pystray mocked).  CI runs the full matrix on Python
-3.11 / 3.12 / 3.13 / 3.14 against Ubuntu.  CI output is the source of
-truth for pass counts.
+(PySide6 + pystray mocked).  CI runs the **unit + integration** tiers
+on Python 3.11 / 3.12 / 3.13 / 3.14 against Ubuntu; the e2e + desktop
+tiers run locally, not in CI.  The CI pytest invocation uses `-x`
+(stop at first failure), so a green run reports the authoritative
+pass count while a red run stops early.
 
 ### Layout
 
@@ -332,8 +334,8 @@ netcanon/              FastAPI application (shared by both platforms)
  ├── services/            Plain-function orchestrators (pipeline, detect, …)
  ├── storage/             FileConfigStore
  ├── tools/               sanitize, etc.
- └── templates/           Jinja2 templates (every interactive element
-                          carries a data-testid — see AGENTS.md)
+ └── templates/           Jinja2 templates (most interactive elements
+                          carry a data-testid — see AGENTS.md)
 
 netcanon_desktop/      Windows tray/webview shell around the same server
 definitions/            Device definition YAMLs
@@ -362,6 +364,7 @@ tests/fixtures/real/    Real-capture validation corpus (see RESULTS.md)
 * [`SECURITY.md`](SECURITY.md) — security model, sanitiser, supply-chain
   integrity controls
 * [`CHANGELOG.md`](CHANGELOG.md) — release log
+* [`TRADEMARKS.md`](TRADEMARKS.md) — third-party trademark / nominative-use notice
 
 ---
 

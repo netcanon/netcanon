@@ -342,17 +342,16 @@ the policy locally:
   `vlan.untagged_ports`.  Wave 7c (commit `87b2248`) added this as
   the systemic fix for cross-vendor lexical-order drift.
 
-* **LAG-name canonicalisation helpers** — `_canonical_lag_name`
-  (Wave 10γ-3) and `_normalise_lag_name_to_arista` (Wave 7c) live
-  in `netcanon/migration/canonical/transforms.py` (or the
-  per-codec port-name modules that re-export them) and normalise
-  vendor LAG forms (`Port-Channel1`, `Bundle-Ether10`, `ae0`,
-  `lag1`, `Trk1`) onto a single canonical handle so cross-codec
-  renders find each other through the rename mesh.  When adding a
-  new codec that emits a LAG container, route through these helpers
-  rather than coining a private normaliser — the cross-mesh tests
-  in `tests/unit/migration/test_cross_codec_matrix.py` rely on the
-  shared canonical form.
+* **LAG-name helpers (location note)** — two LAG-name helpers exist
+  but are NOT shared cross-codec utilities and do NOT live in
+  `netcanon/migration/canonical/transforms.py`: `_canonical_lag_name`
+  (`tools/run_phase4_reconciliation.py`) collapses LAG aliases
+  (`Port-Channel1`, `Bundle-Ether10`, `ae0`, `lag1`, `Trk1`) for the
+  offline cross-mesh reconciliation only, and
+  `_normalise_lag_name_to_arista` (`arista_eos/render.py`) is internal
+  to the Arista renderer.  Per-codec LAG naming is handled in each
+  codec's own `port_names.py` / render path — don't import these two
+  as if they were canonical transforms.
 
 When you find yourself wanting per-codec versions of "is this hash
 re-emittable?", "is this name CLI-safe?", or "what does VLAN N's

@@ -34,6 +34,10 @@ target doc updated in this same commit.
 - [ ] Capability matrix declarations are honest (supported / lossy / unsupported with cited reasons)
 - [ ] No hard-coded counts in prose docs (or a CI guard added)
 
+## Developer Certificate of Origin
+
+- [ ] I certify the [DCO 1.1](https://developercertificate.org/) for this contribution and my commits are signed off (`git commit -s`).
+
 ## Linked issues
 
 Closes #

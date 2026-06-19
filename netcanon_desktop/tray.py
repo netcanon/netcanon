@@ -18,7 +18,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-import pystray
+try:
+    import pystray
+except ModuleNotFoundError:  # pragma: no cover - optional [desktop] extra
+    # CI-02: keep ``import netcanon_desktop.tray`` importable when the
+    # optional [desktop] extra (pystray + PySide6) isn't installed, so
+    # test collection doesn't crash.  Tray construction still needs it.
+    pystray = None  # type: ignore[assignment]
 
 from netcanon_desktop.icons import generate_tray_image
 
