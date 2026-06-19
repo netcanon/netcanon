@@ -26,7 +26,7 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-## [0.3.3] - 2026-06-19
+## [0.4.0] - 2026-06-19
 
 ### Added
 

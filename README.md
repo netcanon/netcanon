@@ -108,6 +108,18 @@ For the full audit narrative + the variance-class taxonomy, see
 
 ### Docker (recommended)
 
+> [!IMPORTANT]
+> **As of 0.4.0 the container fails closed on a public bind.** The
+> default entrypoint (`netcanon serve`) binds `0.0.0.0`, so it now
+> **refuses to start** unless you either set an API key
+> (`-e NETCANON_API_KEY=...`, which gates `/api/v1`) **or** explicitly
+> opt out with `-e NETCANON_ALLOW_INSECURE_BIND=1`. This is deliberate
+> — it stops an accidental `docker run -p` from exposing an
+> unauthenticated API to your network. Just kicking the tyres? Add
+> `-e NETCANON_ALLOW_INSECURE_BIND=1`; for anything reachable by other
+> hosts, set `NETCANON_API_KEY` (the full command below does). A pure
+> loopback bind (`-e NETCANON_HOST=127.0.0.1`) needs neither.
+
 ```bash
 # Optional but recommended for production: setting the key explicitly keeps
 # it in your secret store, separate from the data volume.  Skip this line
