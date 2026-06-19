@@ -316,11 +316,10 @@ class TestCanonicalCoverage:
 
     def test_dhcp_pool_lease_one_day(self, parsed_intent) -> None:
         # Second pool uses ``lease 1 0 0`` (one day) — exercises the
-        # multi-token Cisco lease form.  ``lease infinite`` is a real
-        # IOS-XE form but its render path collapses to ``lease 0
-        # <hours>`` which is lossy on round-trip; that bug is out of
-        # scope here, so we keep the kitchen-sink to forms the
-        # codec round-trips cleanly.
+        # multi-token Cisco lease form.  The full day/hour/minute
+        # triple and ``lease infinite`` now round-trip losslessly
+        # (ENG-03 render fix); their dedicated round-trip coverage
+        # lives in test_eng03_cisco_dhcp_lease.py.
         voice = parsed_intent.dhcp_servers[1]
         assert voice.lease_time == 86400
 
