@@ -486,6 +486,21 @@ def sanitize_intent(
         ))
         sanitized.dropped_tier3_sections = []
 
+    # ---- Tier-3 raw_sections carry-through — strip entirely ----
+    # Defense-in-depth (audit finding DATA-02): no production parser
+    # populates raw_sections today, but the IOS-XE renderer emits any
+    # entries verbatim, so a future parser that fills it must not be
+    # able to round-trip unredacted vendor text through the sanitiser.
+    if sanitized.raw_sections:
+        n = len(sanitized.raw_sections)
+        subs.append(Substitution(
+            category="tier3-stripped",
+            field="raw_sections",
+            original=f"{n} entries",
+            redacted="(stripped)",
+        ))
+        sanitized.raw_sections = {}
+
     return sanitized, subs
 
 

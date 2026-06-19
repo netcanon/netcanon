@@ -976,3 +976,24 @@ class TestPiiTailRenderedOutputClean:
         rendered = get_codec("aruba_aoss").render(sanitized)
         assert "9.9.9.9" not in rendered            # SVI leak closed
         assert "admin@corp.example" not in rendered   # contact leak closed
+
+
+def test_raw_sections_stripped_by_sanitiser():
+    """DATA-02: Tier-3 ``raw_sections`` (verbatim vendor text) is cleared.
+
+    No production parser populates ``raw_sections`` today, but the IOS-XE
+    renderer emits any entries verbatim, so the sanitiser must fail closed
+    and strip it (mirrors the ``dropped_tier3_sections`` strip) — otherwise
+    a future parser that fills it could round-trip unredacted secrets.
+    """
+    intent = CanonicalIntent(
+        hostname="r1",
+        raw_sections={
+            "router bgp 65000": "neighbor 203.0.113.7 password SENTINEL-raw",
+        },
+    )
+    sanitized, subs = sanitize_intent(intent)
+    assert sanitized.raw_sections == {}
+    assert any(s.field == "raw_sections" for s in subs)
+    # The verbatim secret must not survive anywhere in the output.
+    assert "SENTINEL-raw" not in sanitized.model_dump_json()
