@@ -271,6 +271,31 @@ class VyOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01) — this codec has no
+            #    Cisco-style access/trunk port model, so the per-port VLAN
+            #    membership the walker yields is dropped on render.  Declared
+            #    unsupported so a switch→{firewall,router} migration surfaces
+            #    the L2 loss instead of reporting `severity: ok`. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="VyOS has no switchport access/trunk mode (L2 via bridge/vif); the mode is dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="VyOS models VLANs as vif <vid> sub-interfaces, not a per-port access-VLAN; dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="VyOS has no switchport trunk allowed-list (tagged VLANs are vif sub-ifaces); dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="VyOS has no switchport native VLAN; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="VyOS has no voice-VLAN; dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

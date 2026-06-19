@@ -26,6 +26,23 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+* **Switch -> firewall/router migrations now surface dropped L2
+  switchport membership instead of a green banner (audit finding
+  ENG-01).**  The L3-only target codecs (`fortigate_cli`, `opnsense`,
+  `cisco_iosxr`, `mikrotik_routeros`, `vyos`) have no Cisco-style
+  access/trunk port model, so a source switch's per-port VLAN
+  membership (`switchport-mode`, `access-vlan`, `trunk-allowed-vlans`,
+  `trunk-native-vlan`, `voice-vlan`) is dropped on render.  Those
+  paths were previously undeclared, so `CapabilityMatrix.classify()`
+  defaulted them to `supported` and the validation report said
+  `severity: ok` while the membership was silently lost (reproduced
+  live in the 2026-06 blind audit).  Each L3-only target now declares
+  the switchport surface `unsupported`, so the loss is reported as a
+  block-severity migration finding.  Cross-mesh `CODEC_BUG` unchanged
+  at 5 (the drift demotes to `EXPECTED_UNSUPPORTED`).
+
 ## [0.3.2] - 2026-06-18
 
 ### Changed

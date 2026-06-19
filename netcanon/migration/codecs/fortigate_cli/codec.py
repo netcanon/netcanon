@@ -236,6 +236,31 @@ class FortiGateCLICodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01) — this codec has no
+            #    Cisco-style access/trunk port model, so the per-port VLAN
+            #    membership the walker yields is dropped on render.  Declared
+            #    unsupported so a switch→{firewall,router} migration surfaces
+            #    the L2 loss instead of reporting `severity: ok`. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="FortiOS has no switchport access/trunk mode — every port is L3; the mode is dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="FortiOS has no per-port access-VLAN; the port→VLAN binding is dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="FortiOS trunks via stacked VLAN child-interfaces, not an allowed-list; dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="FortiOS has no native-VLAN on a routed port; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="FortiOS has no per-port voice-VLAN; dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

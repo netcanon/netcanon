@@ -205,6 +205,31 @@ class OPNsenseCodec(CodecBase):
             ),
         ],
         unsupported=[
+            # ── L2 switchport surface (ENG-01) — this codec has no
+            #    Cisco-style access/trunk port model, so the per-port VLAN
+            #    membership the walker yields is dropped on render.  Declared
+            #    unsupported so a switch→{firewall,router} migration surfaces
+            #    the L2 loss instead of reporting `severity: ok`. ──
+            UnsupportedPath(
+                path="/interfaces/interface/switchport-mode",
+                reason="OPNsense (BSD) has no Cisco-style access/trunk port mode; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/access-vlan",
+                reason="OPNsense models VLANs as <vlans> child-interfaces, not a per-port access-VLAN; dropped.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-allowed-vlans",
+                reason="OPNsense uses the allowed-list only as a parent-binding hint; not preserved on the port.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/trunk-native-vlan",
+                reason="OPNsense has no native-VLAN concept; dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason="OPNsense has no voice-VLAN; dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9).  NB: domain +
