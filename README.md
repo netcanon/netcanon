@@ -1,5 +1,11 @@
 # Netcanon
 
+[![CI](https://github.com/netcanon/netcanon/actions/workflows/ci.yml/badge.svg)](https://github.com/netcanon/netcanon/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/netcanon)](https://pypi.org/project/netcanon/)
+[![Python versions](https://img.shields.io/pypi/pyversions/netcanon)](https://pypi.org/project/netcanon/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Container: GHCR](https://img.shields.io/badge/ghcr.io-netcanon%2Fnetcanon-2496ED?logo=docker&logoColor=white)](https://github.com/netcanon/netcanon/pkgs/container/netcanon)
+
 **Multi-vendor network config translator with a verifiable cross-vendor audit.**
 
 Translates running-config across twelve codecs spanning Cisco (IOS-XE,
@@ -106,6 +112,30 @@ hashes, hostnames, or usernames into a public issue.
 
 For the full audit narrative + the variance-class taxonomy, see
 [`docs/HOW_WE_TEST.md`](docs/HOW_WE_TEST.md).
+
+---
+
+## How it compares
+
+Arriving from "I need a Batfish / NAPALM / Capirca alternative"?  Most
+adjacent tools occupy a different slot — Netcanon's niche is
+**bidirectional translation between vendors' native running-config
+formats**, with a per-field capability matrix and a cross-mesh audit.
+
+| Tool | What it does | Translates native config? |
+|---|---|---|
+| **Netcanon** | Multi-vendor config translation (parse + render) | ✅ bidirectional, 12 codecs |
+| [Batfish](https://github.com/batfish/batfish) | Config analysis + routing simulation | ❌ parse-only — *complements* Netcanon |
+| [Capirca](https://github.com/google/capirca) / [Aerleon](https://github.com/aerleon/aerleon) | Firewall ACL DSL → vendor syntax | ❌ render-only from a DSL — *competes* (firewall scope) |
+| [NAPALM](https://github.com/napalm-automation/napalm) / [Netmiko](https://github.com/ktbyers/netmiko) | Device get/set + SSH transport | ❌ no translation — *complements* (deploy side) |
+| [Oxidized](https://github.com/ytti/oxidized) / [RANCID](https://shrubbery.net/rancid/) | Multi-vendor config **backup** + diff | ❌ backup-only — overlaps Netcanon's backup half |
+
+Netcanon **competes** with Capirca / Aerleon (but defers firewall / NAT
+/ VPN / QoS to Tier-3) and **complements** Batfish (analyse what you
+translated), NAPALM / Netmiko (deploy it), and NetBox / Nautobot
+(desired-state vs existing-state).  Full breakdown — including the
+backup + sanitiser landscape — in
+[`docs/COMPARISON.md`](docs/COMPARISON.md).
 
 ---
 

@@ -42,6 +42,29 @@ per-field capability declarations.
 
 ---
 
+## The backup + sanitiser half
+
+Netcanon is two co-hosted tools.  Everything above is the
+**translation** engine; the other half is **backup** — pull
+running-configs from devices over SSH / NETCONF / REST, on a schedule —
+plus a built-in **config sanitiser**.  Those overlap a different set of
+tools than the translation half:
+
+| Tool | Slot | vs Netcanon |
+|---|---|---|
+| [**Oxidized**](https://github.com/ytti/oxidized) | Multi-vendor config backup + diff (the modern RANCID) | Backup-only — no translation, no per-field audit.  Far broader device-driver coverage; Netcanon's backup half is narrower and exists to *feed* the canonical translation + audit pipeline |
+| [**RANCID**](https://shrubbery.net/rancid/) | The original config-backup-and-diff daemon | Mature + battle-tested for backup/diff via a VCS; no web UI, no translation |
+| [**netconan**](https://github.com/intentionet/netconan) | Network-config anonymiser (Intentionet, the Batfish authors) | Netcanon ships its own sanitiser (`netcanon sanitize` CLI, the `/sanitize` page, and `POST /api/v1/sanitize` — all one library) wired to the same canonical model, so it scrubs structurally (interface IPs, password hashes, SNMP / RADIUS secrets, hostnames) rather than purely by regex |
+
+If config **backup + diff** is your only need, Oxidized / RANCID are
+purpose-built and more mature on device-driver breadth — Netcanon's
+backup half exists to feed translation, not to replace a dedicated
+backup daemon.  If config **anonymisation** is your only need, netconan
+is a focused standalone tool; Netcanon's sanitiser is integrated, so the
+same engine that parses a config also scrubs it.
+
+---
+
 ## Where Netcanon competes
 
 - **Capirca / Aerleon** for cross-vendor configuration translation.
