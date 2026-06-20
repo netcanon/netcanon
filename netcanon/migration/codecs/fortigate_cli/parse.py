@@ -65,6 +65,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
 )
 from .._helpers import _mask_to_prefix
+from .._helpers import _prefix_to_mask as _shared_prefix_to_mask
 from .._input_shape import detect_input_shape
 from ..base import ParseError
 from .vlan_heuristics import infer_iface_type as _infer_iface_type
@@ -78,19 +79,16 @@ logger = logging.getLogger(__name__)
 
 
 def _prefix_to_mask(prefix: int) -> str:
-    """Convert CIDR prefix length to dotted-decimal mask."""
-    # Import kept local to the function that actually raises — the
-    # module-level import is enough for the isinstance check the
-    # render path does, and keeping this here avoids a circular
-    # dependency with base.py.
-    from ..base import RenderError
-    if prefix < 0 or prefix > 32:
-        raise RenderError(
-            f"fortigate_cli: invalid CIDR prefix {prefix}",
-            yang_path="/interfaces/interface/ipv4/address/prefix-length",
-        )
-    mask_int = (0xFFFFFFFF << (32 - prefix)) & 0xFFFFFFFF
-    return str(ipaddress.IPv4Address(mask_int))
+    """Convert CIDR prefix length to dotted-decimal mask.
+
+    Thin fortigate-vendor binding over
+    :func:`netcanon.migration.codecs._helpers._prefix_to_mask` so the
+    dotted-mask range-check + math have a single home (run3
+    ``duplicated-prefix-to-mask-fortigate``).  Kept as a no-arg shim so
+    the render-side call sites + ``_split_cidr`` API stay stable; raises
+    the same :class:`RenderError` on an out-of-range prefix.
+    """
+    return _shared_prefix_to_mask(prefix, vendor="fortigate_cli")
 
 
 def _split_cidr(destination: str) -> tuple[str, int]:

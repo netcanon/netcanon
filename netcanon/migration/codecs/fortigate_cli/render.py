@@ -82,6 +82,19 @@ _RFC1918_NETWORKS = (
 )
 
 
+def _svi_ip_mask(addr: Any) -> tuple[str, str]:
+    """Return ``(ip, dotted-mask)`` for an SVI IPv4 address.
+
+    Consolidates the three near-identical addr -> ip -> mask SVI sites
+    and — unlike the prior inline ``try/except Exception: mask = ""``
+    idiom — lets a :class:`RenderError` from an out-of-range prefix
+    PROPAGATE rather than silently emitting an empty netmask (run3
+    ``fortigate-render-swallowed-rendererror``).  Valid prefixes (every
+    real config) are unaffected.
+    """
+    return addr.ip, _prefix_to_mask(addr.prefix_length)
+
+
 def _has_private_ipv4(iface: CanonicalInterface) -> bool:
     """Return True when *iface* has at least one RFC1918 IPv4
     address.  Used as a LAN-side signal in the VLAN-parent scorer."""
@@ -271,12 +284,7 @@ def _build_vlan_children(
         ip = ""
         mask = ""
         if vlan.ipv4_addresses:
-            addr = vlan.ipv4_addresses[0]
-            ip = addr.ip
-            try:
-                mask = _prefix_to_mask(addr.prefix_length)
-            except Exception:
-                mask = ""
+            ip, mask = _svi_ip_mask(vlan.ipv4_addresses[0])
         else:
             # Step 2a: Cisco/FortiGate-native exact-name lookup
             # (kept as fast-path for clarity even though the vlan-id
@@ -284,24 +292,14 @@ def _build_vlan_children(
             for cand_name in (f"Vlan{vlan.id}", f"vlan{vlan.id}"):
                 cand = iface_by_name.get(cand_name)
                 if cand and cand.ipv4_addresses:
-                    addr = cand.ipv4_addresses[0]
-                    ip = addr.ip
-                    try:
-                        mask = _prefix_to_mask(addr.prefix_length)
-                    except Exception:
-                        mask = ""
+                    ip, mask = _svi_ip_mask(cand.ipv4_addresses[0])
                     break
             # Step 2b: walk by resolved vlan_id for foreign SVI
             # iface shapes (OPNsense ``vlan0.<id>`` etc.).
             if not ip:
                 cand = iface_by_vlan_id.get(vlan.id)
                 if cand and cand.ipv4_addresses:
-                    addr = cand.ipv4_addresses[0]
-                    ip = addr.ip
-                    try:
-                        mask = _prefix_to_mask(addr.prefix_length)
-                    except Exception:
-                        mask = ""
+                    ip, mask = _svi_ip_mask(cand.ipv4_addresses[0])
 
         children.append({
             "name": f"vlan{vlan.id}",
