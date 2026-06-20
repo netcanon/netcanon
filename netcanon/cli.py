@@ -133,7 +133,11 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
     from .migration.codecs.base import ParseError
     from .tools.sanitize import sanitize_text
 
-    raw = Path(args.input).read_text(encoding="utf-8", errors="replace")
+    try:
+        raw = Path(args.input).read_text(encoding="utf-8", errors="replace")
+    except OSError as e:
+        print(f"error: cannot read {args.input!r}: {e}", file=sys.stderr)
+        return 2
 
     try:
         result = sanitize_text(

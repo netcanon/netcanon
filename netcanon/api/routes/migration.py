@@ -94,7 +94,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ...migration.codecs.registry import get_codec
@@ -182,6 +182,7 @@ def get_codec_capabilities(name: str) -> CapabilityMatrix:
 )
 def plan_migration(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """Run the translator pipeline for *body* and return the job.
@@ -256,6 +257,11 @@ def plan_migration(
         body.target,
         job.status.value,
     )
+    # Automation contract: surface the job disposition in a response
+    # header so a naive CI gate that only checks the HTTP status can
+    # still distinguish completed / partial / failed (the endpoint
+    # always returns 200 with the job body — see the docstring).
+    response.headers["X-Netcanon-Job-Status"] = job.status.value
     return job
 
 
@@ -577,6 +583,7 @@ def plan_migration_snmpv3(
 )
 def render_migration(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """Currently an alias for :func:`plan_migration`.
@@ -585,9 +592,11 @@ def render_migration(
     side-effects) from render (snapshots target pre-deploy, emits a
     diff URL) without another API rev.  For now both do the same
     thing — ``MigrationJob.rendered`` is populated in both cases
-    because the pipeline runs all stages unless it fails.
+    because the pipeline runs all stages unless it fails.  The
+    ``response`` is threaded through so the X-Netcanon-Job-Status
+    header is set here too.
     """
-    return plan_migration(body, storage)
+    return plan_migration(body, response, storage)
 
 
 @router.post(

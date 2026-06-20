@@ -203,6 +203,11 @@ def create_backup(
             try:
                 assert_egress_allowed(device.host)
             except EgressBlocked as exc:
+                logger.warning(
+                    "Backup request rejected by egress allow-list (host %r): %s",
+                    device.host,
+                    exc,
+                )
                 raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     job = BackupJob(

@@ -112,7 +112,7 @@ class ServerThread(threading.Thread):
         if not self._ready.wait(timeout):
             raise RuntimeError(
                 f"Embedded server did not start within {timeout}s. "
-                "Check that port {self._port} is not already in use."
+                f"Check that port {self._port} is not already in use."
             )
         # Brief poll to confirm the socket is reachable at the HTTP layer.
         deadline = time.monotonic() + 5.0

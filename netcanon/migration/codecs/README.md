@@ -153,7 +153,7 @@ class MyVendorCodec(CodecBase):
     _CAPS: ClassVar[CapabilityMatrix] = CapabilityMatrix(
         vendor_id="myvendor",
         device_classes=[DeviceClass.switch, DeviceClass.router],
-        supported_paths=[
+        supported=[
             "/system/hostname",
             "/interfaces/interface/name",
             # ... one xpath per CanonicalIntent field your codec wires.
@@ -162,7 +162,7 @@ class MyVendorCodec(CodecBase):
             # yields is a dead declaration (the registry honesty test
             # `test_declared_supported_is_walkable` fails on it).
         ],
-        # Plus lossy_paths / unsupported_paths as needed.
+        # Plus lossy / unsupported as needed.
     )
 
     @property
@@ -398,7 +398,7 @@ obviously fake (e.g. `$9$fake$hash`, `ENC fakeEncodedHash==`).  Real
 captures from upstream-published repos are OK since they're already
 public.
 
-### `iter_xpaths` must match `capabilities.supported_paths`
+### `iter_xpaths` must match `capabilities.supported`
 
 The cross-codec matrix validates that every xpath a codec yields via
 `iter_xpaths(tree)` is declared in its `capabilities`.  A mismatch is
