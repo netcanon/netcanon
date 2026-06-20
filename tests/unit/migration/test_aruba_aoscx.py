@@ -31,6 +31,8 @@ from netcanon.migration.codecs.aruba_aoscx import port_names
 from netcanon.migration.codecs.aruba_aoscx.codec import ArubaAOSCXCodec
 from netcanon.migration.codecs.registry import get_codec
 
+pytestmark = pytest.mark.unit
+
 _FIXTURE = (
     Path(__file__).resolve().parents[2]
     / "fixtures" / "synthetic" / "aruba_aoscx" / "kitchen_sink.cfg"

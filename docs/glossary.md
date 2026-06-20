@@ -50,9 +50,9 @@ by concern and listed alphabetically within each section.
 - **Bidirectional codec** — codec that implements both `parse()` and
   `render()`, allowing it to act as either source or target.
 - **Capability matrix** — per-codec `CapabilityMatrix` ClassVar listing
-  three triads: `supported_paths` (xpaths that round-trip cleanly),
-  `lossy_paths` (with per-entry `LossyPath(reason, severity)`),
-  `unsupported_paths` (with per-entry `UnsupportedPath(reason)`).
+  three triads: `supported` (xpaths that round-trip cleanly),
+  `lossy` (with per-entry `LossyPath(reason, severity)`),
+  `unsupported` (with per-entry `UnsupportedPath(reason)`).
   No silent unsupported — every gap is declared with rationale.
   Drives the migrate-page Validation panel + Phase 4 reconciliation.
   Reference `netcanon/migration/canonical/intent.py` for the

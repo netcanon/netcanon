@@ -103,14 +103,18 @@ class TestCLIErrorHandling:
         # Returns 2 on unknown vendor (or parse error)
         assert rc != 0
 
-    def test_missing_input_raises(self, capsys, tmp_path):
+    def test_missing_input_reports_error(self, capsys, tmp_path):
+        # A missing input file is reported with a clear `error: cannot
+        # read ...` message + a non-zero exit code, NOT a raw traceback
+        # (run3 sanitize-cli-read-outside-try).
         nonexistent = tmp_path / "does-not-exist.cfg"
-        with pytest.raises((FileNotFoundError, OSError)):
-            main([
-                "sanitize",
-                "-i", str(nonexistent),
-                "-s", "aruba_aoss",
-            ])
+        rc = main([
+            "sanitize",
+            "-i", str(nonexistent),
+            "-s", "aruba_aoss",
+        ])
+        assert rc == 2
+        assert "cannot read" in capsys.readouterr().err
 
 
 class TestCLIArgvFromList:
