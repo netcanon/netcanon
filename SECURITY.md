@@ -359,14 +359,16 @@ on the canonical model:
 | Hostname | `device-N` |
 | Domain | `example-N.test` |
 | Public IPv4 | RFC 5737 docs ranges |
+| Public / global IPv6 | RFC 3849 docs range (`2001:db8::`) — ULA / link-local / loopback / multicast / docs preserved |
 | Hashed passwords | Format-preserving fakes (Junos `$9$`, FortiGate `ENC`, crypt `$5$`/`$6$`, bcrypt `$2y$`, Cisco type-7 hex, Aruba SHA-1) |
 | SNMP communities | `public_redacted_N` |
 | SNMP contact / location (operator PII) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
-| RADIUS server / SNMP trap-target / DHCP-gateway hosts (public IPv4) | RFC 5737 docs ranges |
+| RADIUS server / SNMP trap-target / DHCP gateway+range+subnet hosts (public IPv4 / IPv6) | RFC 5737 / RFC 3849 docs ranges |
 | VLAN-SVI IPv4 addresses (public) | RFC 5737 docs ranges |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
+| VRRP / CARP virtual IPs (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
 
@@ -376,10 +378,10 @@ gets the same redacted value all 5 times).  `--dry-run` prints the
 substitution table for operator review before writing output.
 
 Known limitations are listed in
-[`BUG_REPORTING.md`](BUG_REPORTING.md) — notably IPv6-public redaction
-is IPv4-only at v0.1.0; host fields given as DNS names (a RADIUS / trap
-target like `nms.corp.example`) pass through; banner / comment text is
-parse-and-ignored rather than redacted.
+[`BUG_REPORTING.md`](BUG_REPORTING.md) — IP-typed redaction now covers
+both IPv4 and IPv6, but host fields given as DNS names (a RADIUS / trap
+target like `nms.corp.example`) still pass through, and banner / comment
+text is parse-and-ignored rather than redacted.
 
 ---
 
@@ -543,7 +545,7 @@ regulated environments.
 | Key loss (keyring entry deleted / env var unset on restart / `.fernet_key` deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume.  Operators using tier 1 / tier 3 should back the key up alongside their other infrastructure secrets |
 | SSH host-key not verified by default | A MITM on the management path could harvest the SSH password + enable secret on first connect | Yes (default) / opt-in hardening available | Default `ssh_host_key_checking=auto_add` trusts any key (legacy; assumes a trusted management VLAN).  Set `NETCANON_SSH_HOST_KEY_CHECKING=tofu` (record first key under `{data_dir}/known_hosts`, reject later changes) or `reject` (only known hosts) to harden.  Netmiko collectors map the strict modes onto the OS `~/.ssh/known_hosts` (no custom-store API). |
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
-| IPv6-public redaction not implemented | Operator-submitted public IPv6 addresses pass through verbatim | Documented | v0.1.0 limitation; sanitiser is IPv4-only.  Hand-redact public IPv6 before submission. |
+| DNS-name host fields not redacted | A RADIUS / SNMP-trap / NTP target given as a DNS name (`nms.corp.example`) passes through verbatim | Documented | IP-typed redaction covers IPv4 + IPv6 literals (v0.4.1); name-form hosts are free text the model does not classify.  Hand-redact named targets before submission. |
 | Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
 
 ---

@@ -32,6 +32,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalLocalUser,
     CanonicalRADIUSServer,
     CanonicalRoutingInstance,
@@ -1093,3 +1094,164 @@ class TestFreeTextPiiRedaction:
         assert "SECRET-VLAN" not in names and "OTHER" not in names
         assert names[0] == names[1]      # same source name → same redaction
         assert names[0] != names[2]      # distinct names stay distinct
+
+
+# ---------------------------------------------------------------------------
+# v0.4.1 run3 audit — IP-typed redaction gaps (extends the IPv4-only tail)
+#
+# Three "same class, new surface" leaks the IPv4-only redaction missed:
+#   * interface / DNS / NTP / syslog IPv6 (ipv6-sanitizer-leak)
+#   * VRRP / CARP virtual IPs, v4 and v6 (vrrp-vip-leak)
+#   * DHCP pool range bounds + served subnet (dhcp-range-leak)
+# These are network-location PII, not secrets, so they live here as a
+# forward "must not survive" block rather than in the secret-coverage
+# guard.
+# ---------------------------------------------------------------------------
+
+
+class TestIPv6Redaction:
+    """Global/public IPv6 is redacted to the RFC 3849 docs range; ULA,
+    link-local, loopback, unspecified, multicast, and the docs range
+    itself are preserved (mirrors the IPv4 policy)."""
+
+    def test_public_interface_ipv6_redacted(self):
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="Vlan10",
+                ipv6_addresses=[
+                    CanonicalIPv6Address(ip="2606:4700:4700::1111",
+                                         prefix_length=64),
+                ],
+            )],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        new_ip = sanitized.interfaces[0].ipv6_addresses[0].ip
+        assert new_ip != "2606:4700:4700::1111"
+        assert new_ip.startswith("2001:db8::")
+        assert any(
+            s.category == "ipv6-public"
+            and s.original == "2606:4700:4700::1111"
+            for s in subs
+        )
+
+    @pytest.mark.parametrize(
+        "preserved",
+        ["fe80::1", "fd00::dead:beef", "::1", "ff02::1", "2001:db8::5"],
+    )
+    def test_non_global_ipv6_preserved(self, preserved):
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="Vlan10",
+                ipv6_addresses=[
+                    CanonicalIPv6Address(ip=preserved, prefix_length=64),
+                ],
+            )],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.interfaces[0].ipv6_addresses[0].ip == preserved
+
+    def test_ipv6_in_dns_ntp_syslog_lists_redacted(self):
+        intent = CanonicalIntent(
+            dns_servers=["2001:4860:4860::8888"],
+            ntp_servers=["2606:4700:4700::64"],
+            syslog_servers=["2620:fe::fe"],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        blob = sanitized.model_dump_json()
+        for leaked in (
+            "2001:4860:4860::8888", "2606:4700:4700::64", "2620:fe::fe",
+        ):
+            assert leaked not in blob, f"public IPv6 survived: {leaked!r}"
+
+    def test_ipv6_redaction_is_cross_reference_stable(self):
+        """Same source IPv6 → same docs substitute everywhere."""
+        table = _SubstitutionTable()
+        a = table.redact_ipv6("2606:4700:4700::1111")
+        b = table.redact_ipv6("2606:4700:4700::1111")
+        c = table.redact_ipv6("2001:4860:4860::8888")
+        assert a == b           # stable
+        assert a != c           # distinct sources stay distinct
+
+
+class TestVRRPVirtualIPRedaction:
+    """v0.4.1: the VRRP / CARP virtual IP — frequently the public HA
+    gateway — was passed through verbatim while its sibling auth secret
+    was redacted.  Both v4 and v6 VIPs are now redacted."""
+
+    def test_public_virtual_ips_redacted_private_preserved(self):
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="Vlan10",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10,
+                    virtual_ips=["8.8.4.4", "10.0.0.254"],
+                    virtual_ipv6s=["2606:4700:4700::64", "fd00::64"],
+                )],
+            )],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        g = sanitized.interfaces[0].vrrp_groups[0]
+        assert "8.8.4.4" not in g.virtual_ips          # public v4 gone
+        assert "10.0.0.254" in g.virtual_ips           # private preserved
+        assert "2606:4700:4700::64" not in g.virtual_ipv6s  # public v6 gone
+        assert "fd00::64" in g.virtual_ipv6s           # ULA preserved
+        assert any("virtual_ips" in s.field for s in subs)
+        assert any("virtual_ipv6s" in s.field for s in subs)
+
+    def test_rendered_output_omits_public_vip(self):
+        """End-to-end via a codec that renders VRRP: a genuinely public
+        VIP must not appear in the sanitised render output."""
+        from netcanon.migration.codecs.registry import get_codec
+
+        intent = CanonicalIntent(
+            hostname="r1",
+            interfaces=[CanonicalInterface(
+                name="Vlan10",
+                ipv4_addresses=[
+                    CanonicalIPv4Address(ip="10.0.0.2", prefix_length=24)],
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10, virtual_ips=["8.8.4.4"])],
+            )],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        rendered = get_codec("cisco_iosxe_cli").render(sanitized)
+        assert "8.8.4.4" not in rendered
+
+
+class TestDHCPRangeRedaction:
+    """v0.4.1: DHCP pool range bounds (start_ip/end_ip) and the served
+    subnet (network) leaked while the same record's gateway / dns_servers
+    were redacted — the trust-asymmetry trap.  Public → docs range,
+    network prefix length preserved, private LAN ranges untouched."""
+
+    def test_public_range_and_network_redacted(self):
+        intent = CanonicalIntent(
+            dhcp_servers=[CanonicalDHCPPool(
+                network="9.9.9.0/24",
+                start_ip="9.9.9.10",
+                end_ip="9.9.9.20",
+                gateway="9.9.9.1",
+            )],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        p = sanitized.dhcp_servers[0]
+        assert "9.9.9.10" not in p.start_ip
+        assert "9.9.9.20" not in p.end_ip
+        assert "9.9.9.0" not in p.network
+        assert p.network.endswith("/24")   # prefix length preserved
+        for fld in ("start_ip", "end_ip", "network"):
+            assert any(s.field.endswith(fld) for s in subs)
+
+    def test_private_lan_range_preserved(self):
+        intent = CanonicalIntent(
+            dhcp_servers=[CanonicalDHCPPool(
+                network="192.168.10.0/24",
+                start_ip="192.168.10.100",
+                end_ip="192.168.10.200",
+            )],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        p = sanitized.dhcp_servers[0]
+        assert p.network == "192.168.10.0/24"
+        assert p.start_ip == "192.168.10.100"
+        assert p.end_ip == "192.168.10.200"
