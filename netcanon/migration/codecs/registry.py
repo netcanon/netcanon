@@ -68,5 +68,25 @@ def get_codec(name: str) -> CodecBase:
 
 
 def list_codecs() -> list[str]:
-    """Return registered adapter names, sorted alphabetically."""
+    """Return registered adapter names, sorted alphabetically.
+
+    Includes internal/hidden adapters (the ``mock`` reference codec) —
+    for test harnesses + cross-codec invariants that must see every
+    registered adapter.  User-facing surfaces want
+    :func:`list_public_codecs` instead.
+    """
     return sorted(_REGISTRY)
+
+
+def list_public_codecs() -> list[str]:
+    """Return user-facing adapter names, sorted alphabetically.
+
+    Excludes adapters whose class sets ``hidden = True`` (the internal
+    ``mock`` reference codec).  Use this for the target-vendor dropdown,
+    the sanitize source-vendor list, and source auto-detection so the
+    internal test adapter is never offered as a production translation
+    target (run3 ``mock-codec-exposed-prod``).
+    """
+    return sorted(
+        name for name, cls in _REGISTRY.items() if not getattr(cls, "hidden", False)
+    )

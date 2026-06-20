@@ -27,7 +27,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, Literal
 
 from ...models.migration import CapabilityMatrix
 
@@ -140,18 +140,31 @@ class CodecBase(ABC):
     #: codec can both parse AND render.  ``"parse_only"`` means render()
     #: raises NotImplementedError — the UI should only offer the codec as
     #: a SOURCE, never as a TARGET.  ``"render_only"`` is the reverse.
-    direction: ClassVar[str] = "bidirectional"
+    direction: ClassVar[Literal["bidirectional", "parse_only", "render_only"]] = (
+        "bidirectional"
+    )
 
     #: Certainty tier (see translator-plans.txt "Certainty Model").
     #:   ``"certified"``     — round-trip tested against ≥3 real captures.
     #:   ``"best_effort"``   — tested against synthetic samples only.
     #:   ``"experimental"``  — parse-only or incomplete; human review needed.
-    certainty: ClassVar[str] = "experimental"
+    certainty: ClassVar[Literal["experimental", "best_effort", "certified"]] = (
+        "experimental"
+    )
 
     #: Which canonical intent model this codec's tree shape targets.
     #: Default ``"openconfig-lite"`` covers the L2/L3 subset we support;
-    #: firewall codecs will declare ``"netcanon-firewall-ext"`` etc.
-    canonical_model: ClassVar[str] = "openconfig-lite"
+    #: a firewall canonical model (``"netcanon-firewall-ext"`` etc.) would
+    #: extend this Literal when those codecs land.
+    canonical_model: ClassVar[Literal["openconfig-lite"]] = "openconfig-lite"
+
+    #: Whether this codec is INTERNAL (test/reference) and must not be
+    #: offered on user-facing surfaces — the target dropdown, the sanitize
+    #: source list, or source auto-detection.  The ``mock`` reference
+    #: adapter sets this ``True``; every shipped vendor codec leaves it
+    #: ``False``.  Filtered by
+    #: :func:`netcanon.migration.codecs.registry.list_public_codecs`.
+    hidden: ClassVar[bool] = False
 
     #: Human-readable description of what :meth:`parse` expects.  Shown
     #: in the /migrate UI's format-hint banner.  One short paragraph,
