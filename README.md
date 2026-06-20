@@ -34,7 +34,9 @@ docker run --rm --entrypoint netcanon ghcr.io/netcanon/netcanon:latest demo --pa
 
 (Installed via pip instead? Just `netcanon demo --pair cisco__junos`.)
 
-Paste this:
+The `demo` command above translates a built-in sample. To translate your
+own, start the server (see [Install](#install)) and paste a config like
+this into the browser migrate page:
 
 ```
 hostname access-sw-01
@@ -78,15 +80,18 @@ FortiGate→MikroTik, Aruba→Arista, OPNsense→Junos).
 
 ## The trust signal — and the invitation
 
-Across every supported vendor pair × every field declared as
-`supported`, the cross-mesh audit tracks `CODEC_BUG` drift cell by cell.
-The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md` —
-the authoritative count) currently reports a small number of residual
-high-severity cells (5 at last run), each triaged as a benign comparator
-artifact on a synthetic fixture rather than a translation error, and every
-one is enumerated in that file.  That's not "we think it works"; that's
-every cell that should translate, checked by automated test against
-vendor-doc-grounded expectations, with nothing swept under the rug.
+Across every vendor pair we ship a fixture **and** a cross-vendor
+expectation for — 8 of the 12 codecs today; `aruba_aoscx`, `cisco_iosxr`,
+`cisco_nxos`, and `vyos` have fixtures but not yet cross-vendor
+expectations — the cross-mesh audit tracks `CODEC_BUG` drift cell by
+cell.  The live reconciliation (`tests/fixtures/real/PHASE4_RECONCILIATION.md`
+for the roll-up, `tests/fixtures/real/phase4_findings_residuals.md` for
+the per-cell triage) currently reports a small number of residual
+high-severity cells (5 at last run) — each triaged as a benign
+modelling/structural artifact (4 on real fixtures, 1 synthetic) rather
+than a translation error, and every one is enumerated.  That's not "we
+think it works"; that's every covered cell, checked by automated test
+against vendor-doc-grounded expectations, with nothing swept under the rug.
 
 The honest follow-up: **the audit only covers cells we have fixtures
 for.**  Real-world configs exercise paths the synthetic fixtures
@@ -289,7 +294,7 @@ That's the contribution this project values most.  Workflow:
 1. Sanitise your config — open the `/sanitize` browser page (easiest
    if the server's running), or run the `netcanon sanitize` CLI
    (no server required).  Both strip hostnames, usernames, IPs,
-   hashes, certs, SNMP communities, etc., with a counter-per-session
+   hashes, SNMP communities, etc., with a counter-per-session
    stable substitution table you can audit before submission.
 2. Open a [bug report](https://github.com/netcanon/netcanon/issues/new?template=bug_report.yml)
    or [fixture submission](https://github.com/netcanon/netcanon/issues/new?template=fixture_submission.yml).
