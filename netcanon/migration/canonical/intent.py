@@ -52,11 +52,12 @@ Schema extensions (ship-before-wire):
     added to support EVPN-VXLAN fabric migrations (Arista ↔ NX-OS ↔
     Junos).  ``routing_instances`` + :attr:`CanonicalInterface.vrf`
     are the cross-vendor VRF primitive (Junos ``routing-instances``,
-    Cisco ``vrf definition``, Arista ``vrf instance``).  No codec
-    populates any of these in v1 — each codec's
-    :class:`CapabilityMatrix` lists them under ``unsupported`` until
-    wired up.  This lets the UI's Unsupported-path banner surface the
-    gap even before any codec knows how to parse the bytes.
+    Cisco ``vrf definition``, Arista ``vrf instance``).  Shipped
+    schema-first; the codecs that have wired these up now populate them
+    (e.g. cisco_nxos, cisco_iosxr, arista_eos, juniper_junos), while
+    codecs without the wire-up still list them under ``unsupported`` in
+    their :class:`CapabilityMatrix` — so the UI's Unsupported-path
+    banner surfaces the gap on those targets.
 
 Schema extensions (wire-through in same commit as schema):
     :class:`CanonicalSNMPv3User` + :attr:`CanonicalSNMP.v3_users`
@@ -816,9 +817,10 @@ class CanonicalIntent(BaseModel):
         local_users: Tier 2 — local user accounts.
         radius_servers: Tier 2 — RADIUS server definitions.
         vxlan_vnis: Tier 2 (ship-before-wire) — VLAN-to-VNI mappings
-            for EVPN-VXLAN overlay.  No codec populates these in v1;
-            each codec's CapabilityMatrix lists them under
-            ``unsupported`` until wired up per-vendor.
+            for EVPN-VXLAN overlay.  Populated by the codecs that have
+            wired VXLAN (e.g. cisco_nxos, vyos); codecs without the
+            wire-up list them under ``unsupported`` in their
+            CapabilityMatrix.
         evpn_type5_routes: Tier 2 (ship-before-wire) — EVPN Type-5
             IP-prefix advertisements.  Same wire-up status as
             ``vxlan_vnis``.
