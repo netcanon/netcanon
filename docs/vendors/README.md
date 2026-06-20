@@ -17,12 +17,16 @@ rather than duplicate.
 | Vendor family | Page | Codecs | Certification |
 |---|---|---|---|
 | Cisco IOS-XE | [`cisco_iosxe.md`](cisco_iosxe.md) | `cisco_iosxe_cli`, `cisco_iosxe` | certified (CLI), best_effort (NETCONF) |
+| Cisco NX-OS | [`cisco_nxos.md`](cisco_nxos.md) | `cisco_nxos` | certified |
+| Cisco IOS-XR | [`cisco_iosxr.md`](cisco_iosxr.md) | `cisco_iosxr` | certified |
 | Juniper Junos | [`juniper_junos.md`](juniper_junos.md) | `juniper_junos` | certified |
 | Aruba AOS-S | [`aruba_aoss.md`](aruba_aoss.md) | `aruba_aoss` | certified |
+| Aruba AOS-CX | [`aruba_aoscx.md`](aruba_aoscx.md) | `aruba_aoscx` | certified |
 | Arista EOS | [`arista_eos.md`](arista_eos.md) | `arista_eos` | certified |
 | Fortinet FortiGate | [`fortigate.md`](fortigate.md) | `fortigate_cli` | certified |
 | MikroTik RouterOS | [`mikrotik_routeros.md`](mikrotik_routeros.md) | `mikrotik_routeros` | certified |
 | OPNsense | [`opnsense.md`](opnsense.md) | `opnsense` | certified |
+| VyOS | [`vyos.md`](vyos.md) | `vyos` | certified |
 
 ## Page format
 

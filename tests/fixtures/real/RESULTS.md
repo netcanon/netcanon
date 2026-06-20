@@ -112,12 +112,12 @@ All 5 real captures start with authoritative
 `Building configuration...` / `Current configuration : NNNN bytes` /
 `! Last configuration change at ...` / `version X.X` banners that
 prove they're device outputs rather than hand-crafted grammar tests.
-`parse_only` direction means round-trip is N/A — the cert bar for
-`parse_only` codecs is ≥3 real captures from ≥2 OS versions that
-parse cleanly and produce populated canonical trees.  Across 4 real
-OS-version anchors (16.9 + 17.3 + 17.9 + 17.12) and two distinct
-device domains (virtual routers + physical switch + virtual switch),
-the bar is met on both grammar fronts.
+The cert bar — ≥3 real captures from ≥2 OS versions that parse
+cleanly, produce populated canonical trees, and round-trip stably
+(`cisco_iosxe_cli` is bidirectional) — is cleared on both grammar
+fronts: across 4 real OS-version anchors (16.9 + 17.3 + 17.9 +
+17.12) and two distinct device domains (virtual routers + physical
+switch + virtual switch).
 
 ---
 
@@ -820,7 +820,11 @@ synthetic-validated (tracked in `WANTED.md`).
 | **aruba_aoss** | **6** (5 real + 1 rendered) | **5** (WC.16.07 + WB.16.08 + WC.16.10 + WC.16.11 + **KB.15.15**) | 2 (port-range slot drop; LAG-member link ordering) | **certified** ✅ | — |
 | **arista_eos** | **5** real | **4** (EOS 4.21.1F + 4.22.4M + 4.23.0.1F + 4.26.0.1F) | 3 (username regex line-bleed; render hash-delimiter drift; LAG render dropped channel-group lines) | **certified** ✅ | — (nice-to-have: even-newer EOS LTS 4.28+/4.30+ fixture) |
 | **juniper_junos** | **7** real | **4** (Junos 15.1R6 + 17.3R1 + 18.4R1 + 25.4R1) | 1 (render dropped bare interfaces) | **certified** ✅ | — (post-cert: GAP 6/8/9 codec enrichment) |
-| **TOTAL** | **45** | — | **17** | — | — |
+| **cisco_nxos** | **6** real | **1** (NX-OS 9.2(3)) | 0 | **certified** ✅ | — (nice-to-have: newer NX-OS 10.x major + a 2nd source) |
+| **cisco_iosxr** | **10** real | **2 sources** (batfish/lab-validation + ios-xr/xrd-tools) | 0 | **certified** ✅ | — (nice-to-have: flex-algo / L2VPN bridge-groups / QoS) |
+| **aruba_aoscx** | **4** real | **2** (AOS-CX 10.04 + 10.13) | 0 | **certified** ✅ | — (nice-to-have: non-Aruba-published source; L3VNI / VSX / VRRP) |
+| **vyos** | **10** real | **3** (VyOS 1.3 + 1.4 + 1.5) | 0 | **certified** ✅ | — (VRF round-trip remains synthetic-validated; real `vrf name` capture wanted) |
+| **TOTAL** | **75** | — | **17** | — | — |
 
 > **Note (2026-05-21 docs-audit):** the per-codec **Coverage matrix
 > tables above** in this file are pending a row-level refresh for 5
@@ -836,8 +840,10 @@ synthetic-validated (tracked in `WANTED.md`).
 > vlans, users etc.) need a parse pass to fill accurately rather
 > than estimation.  Tracked under docs-audit cluster F finding F3.
 
-17 total bugs surfaced by the real-capture harness across all seven
-codecs.  Every one would have survived arbitrarily long against our
+17 total bugs surfaced by the real-capture harness across seven of
+the twelve codecs (the four batfish/xrd-corpus codecs — cisco_nxos,
+cisco_iosxr, aruba_aoscx, vyos — surfaced none on first contact).
+Every one would have survived arbitrarily long against our
 synthetic fixtures — exactly the regression class the harness was
 built to catch.  All fixes include regression tests so reverting
 them breaks CI.

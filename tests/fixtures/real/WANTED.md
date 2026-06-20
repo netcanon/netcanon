@@ -25,6 +25,10 @@ grammar.
 | **junos** | 9 | 15.1 / **17.2** / 17.3 / 18.4 / **23.2** / 25.4 | SRX security platform; vJunos / cMX from CML *(19–22.x bridge now partly covered by `tsg8139_evpn_leaf_dhcpv6` 23.2, added 2026-06-15)* |
 | **mikrotik** | 4 | RouterOS 6.48.1 / 6.48.6 / 7.18.2 | RouterOS 7.0-7.10 (early v7); CHR (cloud-hosted router); CCR variants |
 | **opnsense** | 7 | OPNsense 25.x + config-schema 11.2 CARP HA pair | 22.x / 23.x / 24.x branches (HA-pair gap closed in commit 4686198 via `opnsense/docs` CARP examples; production-deployed HA pairs still welcome) |
+| **cisco_nxos** | 6 | NX-OS 9.2(3) | newer **10.x** major; a 2nd source (corpus is all `batfish/lab-validation`); `nxos_ebgp_loop_prevention` |
+| **cisco_iosxr** | 10 | IOS-XR (2 sources: `batfish/lab-validation` + `ios-xr/xrd-tools`) | flex-algo; L2VPN bridge-groups; ACL extended; QoS class-maps (remaining `xrd-tools` topos `simple-bgp` / `ospf-bgp-rr` / 8-node `segment-routing` are easy pulls) |
+| **aruba_aoscx** | 4 | AOS-CX 10.04 / 10.13 | symmetric-IRB **L3VNI** (`vni N / vrf`); **VSX** stanza; **VRRP**; an operator capture from a non-Aruba-published source |
+| **vyos** | 10 | VyOS 1.3 / 1.4 / 1.5 | a **permissive + curly-brace** real capture exercising **`vrf name`** (VRF stays synthetic-validated — see below); a permissive real **set-form** capture |
 
 ---
 
@@ -116,13 +120,18 @@ parser regression fixture once the codec ships.
 
 | Platform | Why it's missing | Highest-value capture source |
 |---|---|---|
-| Cisco NX-OS | Data center switches with completely distinct grammar from IOS-XE | **Codec shipped + `certified`** (`cisco_nxos`, bidirectional) — a 6-config `batfish/lab-validation` corpus (Apache-2.0) is committed under `tests/fixtures/real/cisco_nxos/`: `nxos_hsrp` ×2 (HSRP + LAG), `nxos_evpn_l3vni` ×2 (VRF + nve1 VTEP + L3VNI), `nxos_evpn_l2vni` (L2VNI), `nxos_bgp_redist_connected` (BGP).  Additional grammar coverage welcomed for a **newer NX-OS major** (the corpus is all 9.2(3)), `nxos_ebgp_loop_prevention`, and the T2 anycast-gateway already landed.  Operator captures from 10.x boxes are the highest-value contribution. |
 | Cisco IOS classic | Pre-IOS-XE; still in production at SMB | NTC-templates `tests/cisco_ios/`, NAPALM IOS fixtures |
 | Juniper SRX | Security platform; distinct from EX/QFX/MX grammar | Juniper Day One Books PDFs (© Juniper, free download — discovery-only, not direct-import), Junos Genius |
-| Aruba AOS-CX | Modern Aruba replacing AOS-S; includes the 8400 chassis class (AOS-CX-only — never shipped AOS-S) | **Codec shipped + `certified`** (`aruba_aoscx`, bidirectional) — a 4-config corpus from the Apache-2.0 `aruba/aoscx-ansible-dcn-workflows` reference fabric is committed under `tests/fixtures/real/aruba_aoscx/`: 2 EVPN-VXLAN leaves (`arch3` iBGP + eBGP — `interface vxlan` L2VNI) + 2 L3-agg cores (`arch4` — real `active-gateway` SVIs + multi-chassis LAGs), spanning AOS-CX 10.04 / 10.13.  Additional grammar coverage welcomed for symmetric-IRB **L3VNI** (`vni N / vrf`), **VSX** (`vsx` stanza), **VRRP**, and an operator capture from a non-Aruba-published source. |
-| Cisco IOS-XR | Service provider routing | **Codec shipped + `certified`** (`cisco_iosxr`, bidirectional) — 10-config corpus from two Apache-2.0 sources committed under `tests/fixtures/real/cisco_iosxr/`: the `batfish/lab-validation` trio (`cisco_xr_ios_vpnv4`, `iosxr_ebgp_basic`, `iosxr_ibgp_rr_over_ospf`) + 3 `ios-xr/xrd-tools` `xr_compose_topos` configs (SRv6-L3VPN, SR-MPLS, IS-IS IP-FRR).  Additional grammar coverage still welcomed for flex-algo, L2VPN bridge-groups, ACL extended, and QoS class-maps — remaining `ios-xr/xrd-tools` topologies (`simple-bgp`, `ospf-bgp-rr`, `segment-routing` 8-node) are easy pulls. |
-| VyOS | OSS Vyatta successor | **Codec shipped + `certified`** (`vyos`, bidirectional) — netcanon's 12th codec, a curly-brace `config.boot` parser (distinct from the set-form `juniper_junos`).  Real corpus under `tests/fixtures/real/vyos/` (10 files, 4 sources, VyOS 1.3 + 1.4 + 1.5): 6 MIT `cisagov/prescup-challenges` (IPv4/OSPF + IPv6/BGP) + 2 Apache-2.0 `zhouleyan/wcni-kind` (`interfaces vxlan` tunnel pair) + `scottlaird/vyos-parser` (Apache-2.0, 1.5) + `rapid7/metasploit-framework` (BSD-3, 1.3) — the last two real-validate `service snmp`.  Covered surfaces: interfaces / static / users / NTP (bare + block form) / `service snmp` / VRF / `interfaces vxlan`.  Still welcomed: a **permissive + curly-brace** real capture exercising **`vrf name`** — a 2026-06 hunt found such configs only under GPL (`vyos-1x` smoketests) or unlicensed, so **VRF alone remains synthetic-validated**.  `set`-form input (`show configuration commands`) now **ships** (the probe disambiguates VyOS set-form from the Junos set-form the `juniper_junos` codec owns; converted to curly-brace up front so the brace-stack walker is reused) — a permissive real set-form capture is welcomed to retire its synthetic-only validation. |
 | pfSense | Apache-2.0 (per `pfsense/pfsense` repo); structurally similar to OPNsense `config.xml`, could share codec layer | `sheridans/pfopn-convert` fixtures (BSD-2), `pfsense/pfsense` factory default, pfSense forum captures |
+
+> **Already shipped (no longer Tier-D).**  `cisco_nxos`, `cisco_iosxr`,
+> `aruba_aoscx`, and `vyos` graduated from this list — they are
+> certified codecs with real-capture corpora, now tracked in the
+> [Current corpus snapshot](#current-corpus-snapshot) above.  Their
+> remaining per-codec grammar gaps live in that table's "Notable gaps"
+> column; the VyOS **`vrf name`** gap (VRF stays synthetic-validated
+> until a permissive curly-brace real capture lands) is the
+> highest-leverage outstanding ask.
 
 If you're a maintainer at any of these vendors and would like to
 collaborate on bringing your platform into Netcanon's matrix, open
