@@ -71,8 +71,8 @@ by concern and listed alphabetically within each section.
   renders but doesn't round-trip the entity end-to-end. Drives the
   amber compatibility banner on the rename rail when the codec is
   selected as target. Every bidirectional codec declares it as empty
-  EXCEPT OPNsense + Cisco IOS-XE NETCONF, which declare `{"snmpv3"}`
-  (post-Option-A v0.1.1).
+  EXCEPT OPNsense (`{"snmpv3"}`) and Cisco IOS-XE NETCONF
+  (`{"snmpv3", "ports"}` — the stub has no port-name translation).
 - **Wire format** — the operator-paste form of a config: CLI
   `show run`, NETCONF XML, OPNsense `config.xml`, MikroTik `/export`,
   and similar.
@@ -81,7 +81,8 @@ by concern and listed alphabetically within each section.
 
 - **Cross-mesh / full-mesh** — every-source by every-target test
   matrix. `tests/unit/migration/test_cross_mesh_overrides.py`
-  exercises 8x8 bidirectional pairs.
+  exercises every certified bidirectional pair (a 12-codec
+  source × target mesh).
 - **Drift guard** — meta-test that catches silent coverage shrinkage
   (e.g. `_DIR_TO_CODEC_NAME` missing a fixture directory, or
   `_SOURCE_CAPABLE` missing a bidirectional codec).

@@ -57,6 +57,9 @@ arista
 mikrotik
 opnsense
 vyos
+nxos
+iosxr
+aoscx
 vendor-translation
 config-migration
 python
