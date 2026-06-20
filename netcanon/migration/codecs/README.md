@@ -102,9 +102,9 @@ aruba_aoss/codec.py's `__all__` for the shape.
 the rename-modal flow.  The cross-vendor orchestrator at
 `netcanon/migration/canonical/port_names.py` imports each codec's
 pair of pure functions directly — a codec that inlines them inside
-`codec.py` blocks on circular imports.  The four CLI codecs
-(`cisco_iosxe_cli`, `aruba_aoss`, `mikrotik_routeros`,
-`fortigate_cli`) all follow the split; copy the closest one.
+`codec.py` blocks on circular imports.  Every codec that joins the
+rename-mode mesh ships this split (11 today — the bidirectional codecs
+plus the IOS-XE CLI parser); copy the closest one.
 
 **`_svi_absorption.py`-style doc modules** are encouraged when a
 codec has a cross-cutting invariant spanning 3+ code paths.  The

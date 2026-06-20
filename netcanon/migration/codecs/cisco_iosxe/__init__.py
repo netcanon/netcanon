@@ -18,9 +18,11 @@ Supported / lossy / unsupported xpaths: see ``_CAPS`` on
 declared unsupported in the matrix.  IPv4 and IPv6 addresses on
 sub-interfaces are both shipped.
 
-Declares ``unsupported_rename_categories = {'snmpv3'}`` — Tier-2
-SNMPv3 round-trip is parser-side only; render emits no SNMPv3
-container, so the rename rail flips amber for this category.
+Declares ``unsupported_rename_categories = {'snmpv3', 'ports'}`` —
+SNMPv3 round-trip is parser-side only (render emits no SNMPv3
+container), and the NETCONF/OpenConfig stub has no port-name
+translation (classify/format are inherited no-ops), so the rename
+rail flips amber for both categories.
 
 Module layout:
     * codec.py — ``CiscoIOSXECodec`` class (metadata, delegation,
