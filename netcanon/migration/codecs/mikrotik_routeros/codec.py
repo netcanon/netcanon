@@ -141,6 +141,7 @@ class MikroTikRouterOSCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/description",  # run3 — `comment=...`
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -159,6 +160,15 @@ class MikroTikRouterOSCodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + gateway + comment only; the "
+                    "static-route administrative distance (metric) is "
+                    "dropped (run3)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(

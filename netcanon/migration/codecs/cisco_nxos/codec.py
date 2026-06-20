@@ -181,6 +181,14 @@ class CiscoNXOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop + metric only; the "
+                    "static-route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "NX-OS interface-type is inferred from the name "

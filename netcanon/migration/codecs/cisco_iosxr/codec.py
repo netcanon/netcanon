@@ -158,6 +158,22 @@ class CiscoIOSXRCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route administrative distance (metric) is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "CLI parser infers interface type from the name "

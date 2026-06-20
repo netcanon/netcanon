@@ -234,7 +234,8 @@ _VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(?:vrf\s+(\S+)\s+)?"
-    r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)",
+    r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)"
+    r"(.*)$",  # group 5: trailing tokens (admin distance / name / tag / ...)
     re.IGNORECASE,
 )
 # ``ip default-gateway X`` is the L2-switch form of a default route.
@@ -1273,11 +1274,38 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
                 gateway = gw_or_iface
             except ipaddress.AddressValueError:
                 iface = gw_or_iface
+            # Trailing tokens (run3 audit): IOS-XE permits an optional
+            # administrative distance (a bare 1-254 integer) and a
+            # ``name <NAME>`` route label after the next-hop, plus
+            # ``tag``/``track``/``permanent``.  Previously parse-and-
+            # ignored, so a cisco→cisco round-trip silently reset the
+            # admin distance and dropped the route name.  Harvest the
+            # distance onto ``metric`` (render emits it) and the name onto
+            # ``description`` (render drops it on this codec, so the loss
+            # is declared lossy — but cross-vendor targets can carry it).
+            metric = 0
+            description = ""
+            tail = (m.group(5) or "").split()
+            t = 0
+            while t < len(tail):
+                tok = tail[t].lower()
+                if tok == "name" and t + 1 < len(tail):
+                    description = tail[t + 1]
+                    t += 2
+                elif tok in ("tag", "track") and t + 1 < len(tail):
+                    t += 2  # keyword + its value — not modelled
+                elif tail[t].isdigit() and metric == 0:
+                    metric = int(tail[t])
+                    t += 1
+                else:
+                    t += 1
             routes.append(CanonicalStaticRoute(
                 destination=dest,
                 gateway=gateway,
                 interface=iface,
                 vrf=vrf,
+                metric=metric,
+                description=description,
             ))
             continue
         m = _DEFAULT_GATEWAY_RE.match(line)
