@@ -153,6 +153,22 @@ jobs:
       - name: Build image
         run: docker build -t netcanon-smoke:pr .
 
+      # Gating CVE scan (run3): the docker-publish.yml Trivy step is
+      # informational (exit-code 0) AND runs AFTER push, so a CRITICAL CVE
+      # would already be shipped + signed.  This scan runs pre-merge on the
+      # locally-built image and FAILS the PR (exit-code 1) on a fixable
+      # CRITICAL, so a vulnerable image can never reach a release tag.
+      # ignore-unfixed drops CVEs with no upstream patch (un-actionable
+      # noise).  Pinned to the same SHA as docker-publish.yml.
+      - name: Scan image for CRITICAL CVEs (gating)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: netcanon-smoke:pr
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
       - name: Boot image and check /health + dashboard renders
         run: |
           # SEC-01: the smoke container binds 0.0.0.0 with no API key;

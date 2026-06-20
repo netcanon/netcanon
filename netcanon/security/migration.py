@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 
-from .credentials import decrypt_field
+from .credentials import CredentialDecryptError, decrypt_field
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +22,36 @@ def migrate_credential_fields(
     """Decrypt credential *fields* in *data* in-place.
 
     Returns ``True`` if any field was plaintext (needs re-save with
-    encryption), ``False`` if all were already encrypted.
+    encryption), ``False`` if all were already encrypted **or** any field
+    could not be decrypted under the active key.
+
+    A token-shaped field that fails to decrypt (wrong / rotated / lost
+    key) is left untouched, logged loudly, and forces the return to
+    ``False`` so the store does NOT re-save the profile — re-saving would
+    double-encrypt the surviving ciphertext and corrupt it.
     """
     needs_resave = False
+    decrypt_failed = False
     for field in fields:
         value = data.get(field)
-        if value:
+        if not value:
+            continue
+        try:
             plaintext, was_encrypted = decrypt_field(value)
-            data[field] = plaintext
-            if not was_encrypted:
-                needs_resave = True
-    return needs_resave
+        except CredentialDecryptError as exc:
+            logger.warning(
+                "CREDENTIAL DECRYPT FAILED for field %r: %s.  Leaving the "
+                "stored value untouched and skipping re-save (avoids double-"
+                "encryption).  Restore the original encryption key or "
+                "re-enter the credential.",
+                field,
+                exc,
+            )
+            decrypt_failed = True
+            continue
+        data[field] = plaintext
+        if not was_encrypted:
+            needs_resave = True
+    # Never re-save a profile we could not fully decrypt — a re-save would
+    # re-encrypt the still-ciphertext field and corrupt it.
+    return needs_resave and not decrypt_failed

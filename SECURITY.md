@@ -431,7 +431,7 @@ provenance can verify each:
   through GitHub Actions OIDC.  Verifiable with:
   ```
   cosign verify ghcr.io/netcanon/netcanon:<tag> \
-      --certificate-identity-regexp 'github.com/netcanon/netcanon' \
+      --certificate-identity-regexp '^https://github\.com/netcanon/netcanon/\.github/workflows/docker-publish\.yml@refs/tags/v' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```
 - **SBOM via syft + cosign attestation (GHCR only).**  An SPDX-format

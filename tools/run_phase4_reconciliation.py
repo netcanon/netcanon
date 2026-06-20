@@ -92,10 +92,11 @@ Constraints honoured
 --------------------
 * Standalone executable — no pytest dependency at runtime.
 * Self-contained — no internet, no external API calls.
-* Honest about misses — cells whose pair YAML doesn't exist (shouldn't
-  happen since Phase 3 ships 56/56 pairs validated) are reported in
-  the JSON's ``cells_without_expectation_yaml`` field rather than
-  silently dropped.
+* Honest about misses — cells whose pair YAML doesn't exist (the 56
+  expectation YAMLs cover only an 8-codec subset; aruba_aoscx /
+  cisco_iosxr / cisco_nxos / vyos have none, so ~59% of mesh cells are
+  uncovered) are reported in the JSON's
+  ``cells_without_expectation_yaml`` field rather than silently dropped.
 * Idempotent — re-running produces a new timestamped JSON; the
   skeleton .md gets overwritten on every invocation.
 """
@@ -1136,12 +1137,18 @@ def render_skeleton_md(result: dict[str, Any]) -> str:
         )
     if result.get("cells_without_expectation_yaml"):
         n = len(result["cells_without_expectation_yaml"])
+        m = result.get("expectation_yamls_loaded", 0)
+        total = result.get("cells_total", 0)
         lines.append(
-            f"**Warning:** {n} cross-vendor cell(s) had no matching "
-            f"pair YAML.  Phase 3 ships 56/56 cross-vendor pairs "
-            f"validated; if this number is non-zero, check "
-            f"``tests/fixtures/cross_vendor_expectations/`` for "
-            f"missing files.  Detail in the per-run JSON.\n"
+            f"**Coverage note:** {n} cross-vendor cell(s) have no matching "
+            f"pair YAML.  The {m} expectation YAMLs cover only an 8-codec "
+            f"subset (8 of the 12 codecs); **aruba_aoscx / cisco_iosxr / "
+            f"cisco_nxos / vyos have ZERO expectation coverage** as both "
+            f"source and target, so any drift into or out of those codecs "
+            f"is structurally invisible to this residual.  That makes "
+            f"these {n} of {total} cells expected, NOT a missing-files "
+            f"error — the headline residual is computed over the covered "
+            f"subset, not the full mesh.  Detail in the per-run JSON.\n"
         )
 
     lines.append("## Aggregate variance counts\n")

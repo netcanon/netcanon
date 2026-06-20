@@ -205,6 +205,12 @@ jobs:
         env:
           IMAGE_DIGEST: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
         run: |
+          # The identity regexp is passed to Go's regexp (substring match,
+          # NO implicit anchors), so it MUST be anchored + dot-escaped +
+          # fully qualified to this workflow file — otherwise a SAN like
+          # https://github.com/netcanon/netcanon-attacker/... would also
+          # match (run3).  The keyless signer identity for a tag-triggered
+          # run is .../.github/workflows/docker-publish.yml@refs/tags/vX.Y.Z.
           cosign verify "${IMAGE_DIGEST}" \
-            --certificate-identity-regexp "https://github.com/${{ github.repository }}" \
+            --certificate-identity-regexp "^https://github\.com/${{ github.repository }}/\.github/workflows/docker-publish\.yml@refs/tags/v" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
