@@ -149,6 +149,17 @@ class CiscoIOSXECLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Parse/render round-trip a single-token ``ip route ... "
+                    "name <X>`` route label, but an IOS-XE route name is a "
+                    "single whitespace-free token — a multi-word description "
+                    "(e.g. a Junos free-text route description) cannot be "
+                    "represented and is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "CLI parser infers interface type from the name prefix "
@@ -626,6 +637,13 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         for addr in iface.ipv4_addresses:
             yield "/interfaces/interface/ipv4/address/ip"
             yield "/interfaces/interface/ipv4/address/prefix-length"
+            # Secondary addresses: single-address platforms (FortiGate /
+            # OPNsense) render only the primary and silently drop every
+            # is_secondary address — a whole-subnet reachability loss.
+            # Walk a secondary-specific xpath so those codecs can declare
+            # it unsupported and the loss surfaces instead of reporting ok.
+            if addr.is_secondary:
+                yield "/interfaces/interface/ipv4/address/secondary-ip"
             if addr.virtual_gateway_address:
                 yield (
                     "/interfaces/interface/ipv4/address/"
@@ -639,6 +657,8 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         for addr6 in iface.ipv6_addresses:            # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
+            if addr6.is_secondary:
+                yield "/interfaces/interface/ipv6/address/secondary-ip"
             if addr6.virtual_gateway_address:
                 yield (
                     "/interfaces/interface/ipv6/address/"
@@ -704,6 +724,19 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         yield "/routing/static-route"
         if route.vrf:
             yield "/routing/static-route/vrf"
+        # Sub-field losses (run3 audit): several codecs render only the
+        # destination + next-hop and silently drop the admin distance
+        # (metric), the operator route name (description), and/or
+        # interface-nexthop (connected) routes.  Walk them only when
+        # populated so the per-codec lossy/unsupported declaration fires
+        # in the live report instead of classify() defaulting to
+        # 'supported' (a silent loss reported severity: ok).
+        if route.metric:
+            yield "/routing/static-route/metric"
+        if route.description:
+            yield "/routing/static-route/description"
+        if route.interface:
+            yield "/routing/static-route/interface"
     if intent.anycast_gateway_mac:
         yield "/anycast-gateway-mac"
     # ── Tier 2 — emit only what's populated ──

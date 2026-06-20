@@ -550,11 +550,20 @@ def render_intent(tree: Any) -> str:
         target = route.gateway or route.interface
         if not target:
             continue
+        # ``name <NAME>`` route label (run3): IOS-XE route names are a
+        # single whitespace-free token, so emit it only when the
+        # description has no spaces — a multi-word description (e.g. a
+        # Junos free-text route description) cannot be represented and is
+        # dropped (the matrix declares /routing/static-route/description
+        # lossy for that case).  Single-token names round-trip losslessly.
+        name_tail = ""
+        if route.description and " " not in route.description:
+            name_tail = f" name {route.description}"
         # Per-VRF routes carry the ``vrf <NAME>`` qualifier between the
         # ``ip route`` keyword and the destination (v0.2.0 — graduated
         # /routing/static-route/vrf from unsupported to supported).
         vrf_prefix = f"vrf {route.vrf} " if route.vrf else ""
-        out.append(f"ip route {vrf_prefix}{dest} {mask} {target}{tail}")
+        out.append(f"ip route {vrf_prefix}{dest} {mask} {target}{tail}{name_tail}")
     if tree.static_routes:
         out.append("!")
 

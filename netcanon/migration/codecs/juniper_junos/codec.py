@@ -159,6 +159,22 @@ class JunosCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route administrative distance (metric) is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/subinterfaces/subinterface",
                 reason=(
                     "Unit 0 collapses into the parent (common case "
@@ -210,6 +226,14 @@ class JunosCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing/static-route/interface",
+                reason=(
+                    "Render emits ``next-hop <gateway>`` only; a gateway-less "
+                    "/ interface-only (connected) static route is dropped "
+                    "(run3)."
+                ),
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

@@ -86,6 +86,7 @@ from netcanon.migration.codecs import (  # noqa: F401
 )
 from netcanon.migration.codecs.cisco_iosxe_cli.codec import _walk_canonical
 from netcanon.migration.codecs.registry import get_codec, list_codecs
+from netcanon.services.migration_validate import validate_against
 
 pytestmark = pytest.mark.unit
 
@@ -127,10 +128,19 @@ def _maximal_intent() -> CanonicalIntent:
         virtual_gateway_address="2001:db8::254",
         virtual_gateway_mac="00:00:5e:00:02:01",
     )
+    # Secondary addresses exercise the per-address is_secondary walk so the
+    # single-address-platform codecs (FortiGate / OPNsense) that drop them
+    # have their /…/secondary-ip unsupported declaration reachable (run3).
+    addr4_sec = CanonicalIPv4Address(
+        ip="10.0.99.1", prefix_length=24, is_secondary=True,
+    )
+    addr6_sec = CanonicalIPv6Address(
+        ip="2001:db8:99::1", prefix_length=64, is_secondary=True,
+    )
     iface = CanonicalInterface(
         name="Ethernet1", default_name="Ethernet1", description="d",
         enabled=True, interface_type="ianaift:ethernetCsmacd", mtu=9000,
-        ipv4_addresses=[addr4], ipv6_addresses=[addr6],
+        ipv4_addresses=[addr4, addr4_sec], ipv6_addresses=[addr6, addr6_sec],
         switchport_mode="trunk", access_vlan=10, trunk_allowed_vlans=[10, 20],
         trunk_native_vlan=99, voice_vlan=200, lag_member_of="Port-Channel1",
         dhcp_client=True, dhcp_client_v6="dhcp6", tunnel_type="gre",
@@ -159,7 +169,11 @@ def _maximal_intent() -> CanonicalIntent:
             tagged_ports=["Ethernet1"], untagged_ports=["Ethernet2"],
             ipv4_addresses=[addr4])],
         static_routes=[CanonicalStaticRoute(
-            destination="0.0.0.0/0", gateway="10.0.0.2", vrf="TENANT")],
+            destination="0.0.0.0/0", gateway="10.0.0.2", vrf="TENANT",
+            # metric / description / interface exercise the static-route
+            # sub-field walk so the per-codec lossy/unsupported declarations
+            # for the codecs that drop them are reachable (run3).
+            metric=200, description="primary uplink", interface="Ethernet2")],
         anycast_gateway_mac="00:1c:73:00:dc:01",
         dhcp_servers=[CanonicalDHCPPool(
             network="10.0.0.0/24", start_ip="10.0.0.10", end_ip="10.0.0.99")],
@@ -435,3 +449,122 @@ def test_maximal_intent_exercises_every_top_level_field():
     # populated (an empty CanonicalSNMP() dumps truthy but would gut the
     # /snmp/* walker coverage).
     assert intent.snmp and intent.snmp.community, "_maximal_intent snmp.community empty"
+
+
+# ---------------------------------------------------------------------------
+# run3 audit — value-fidelity (not just presence) for static-route sub-fields
+# + secondary interface addresses.
+#
+# The presence-only honesty guards above prove the walker SEES each top-level
+# surface, but not that a partial VALUE loss (a route's metric/description/
+# interface, or a second IP on an interface) is declared.  These were the
+# silent ``severity: ok`` drops the run3 audit re-found.  This block renders a
+# kitchen-sink carrying those values through each codec, re-parses, and asserts
+# every codec that DROPS a sub-value declares it lossy/unsupported.
+# ---------------------------------------------------------------------------
+
+
+def _subfield_intent() -> CanonicalIntent:
+    """Cisco-shaped kitchen sink exercising the run3 static-route sub-fields
+    (metric / description / interface-nexthop) + a secondary IPv4 and IPv6
+    address, so a render→re-parse reveals which codecs drop each one."""
+    return CanonicalIntent(
+        hostname="r1",
+        interfaces=[CanonicalInterface(
+            name="GigabitEthernet0/1", default_name="GigabitEthernet0/1",
+            ipv4_addresses=[
+                CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24),
+                CanonicalIPv4Address(ip="10.0.9.1", prefix_length=24,
+                                     is_secondary=True),
+            ],
+            ipv6_addresses=[
+                CanonicalIPv6Address(ip="2001:db8::1", prefix_length=64),
+                CanonicalIPv6Address(ip="2001:db8:9::1", prefix_length=64,
+                                     is_secondary=True),
+            ],
+        )],
+        static_routes=[
+            CanonicalStaticRoute(destination="10.7.0.0/24",
+                                 gateway="172.16.0.1", metric=250,
+                                 description="BORDER-LINK"),
+            CanonicalStaticRoute(destination="10.8.0.0/24",
+                                 interface="GigabitEthernet0/1"),
+        ],
+    )
+
+
+@pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_static_route_subfield_and_secondary_drops_are_declared(name: str):
+    """Render→re-parse the sub-field kitchen-sink; every sub-VALUE the codec
+    drops must be declared lossy/unsupported, else live validation reports
+    ``severity: ok`` while the data is discarded (run3 value-fidelity gap)."""
+    codec = get_codec(name)
+    caps = codec.capabilities
+    declared = {u.path for u in caps.unsupported} | {lp.path for lp in caps.lossy}
+    reparsed = codec.parse(codec.render(_subfield_intent()))
+    routes = reparsed.static_routes
+
+    # Survival is reachability-based (the SECOND address / the route value),
+    # not flag-based — a codec that re-emits both IPs but loses the
+    # ``is_secondary`` marker has no reachability loss to declare.
+    max_v4 = max((len(i.ipv4_addresses) for i in reparsed.interfaces), default=0)
+    max_v6 = max((len(i.ipv6_addresses) for i in reparsed.interfaces), default=0)
+
+    gaps = []
+    # Clean value losses (no naming / representation ambiguity).  The route
+    # metric + description are scalars and the secondary address is a count,
+    # so a drop is unambiguous.  ``interface`` is deliberately NOT auto-
+    # checked here: codecs differ on whether a gateway-less route VANISHES
+    # (a true reachability loss — declared unsupported) or merely relocates
+    # the interface into the gateway/next-hop field (no loss); that nuance
+    # is covered by ``test_connected_route_loss_blocks_on_vanishing_codecs``.
+    if "/routing/static-route" not in {u.path for u in caps.unsupported}:
+        if not any(r.metric == 250 for r in routes) \
+                and "/routing/static-route/metric" not in declared:
+            gaps.append("static-route/metric")
+        if not any(r.description == "BORDER-LINK" for r in routes) \
+                and "/routing/static-route/description" not in declared:
+            gaps.append("static-route/description")
+    if max_v4 < 2 \
+            and "/interfaces/interface/ipv4/address/secondary-ip" not in declared:
+        gaps.append("ipv4/secondary-ip")
+    if max_v6 < 2 \
+            and "/interfaces/interface/ipv6/address/secondary-ip" not in declared:
+        gaps.append("ipv6/secondary-ip")
+
+    assert not gaps, (
+        f"{name}: render→re-parse DROPS these static-route sub-value(s) / "
+        f"secondary address(es) yet the matrix declares none of them "
+        f"lossy/unsupported, so live validation reports 'ok' while the data "
+        f"is discarded: {gaps}.  Add a LossyPath/UnsupportedPath (exact "
+        f"walker spelling)."
+    )
+
+
+@pytest.mark.parametrize("name", ["arista_eos", "juniper_junos", "opnsense"])
+def test_connected_route_loss_blocks_on_vanishing_codecs(name: str):
+    """A gateway-less (interface-only / connected) static route is dropped
+    ENTIRELY by these codecs — its destination vanishes from the render, a
+    real reachability loss.  The live validation report must surface that as
+    a block via the ``/routing/static-route/interface`` unsupported
+    declaration, not a silent ``severity: ok`` (run3)."""
+    src = get_codec("cisco_iosxe_cli")
+    tree = CanonicalIntent(
+        hostname="r1",
+        interfaces=[CanonicalInterface(
+            name="GigabitEthernet0/1", default_name="GigabitEthernet0/1")],
+        static_routes=[CanonicalStaticRoute(
+            destination="10.8.0.0/24", interface="GigabitEthernet0/1")],
+    )
+    # The route genuinely vanishes from this codec's render (precondition).
+    target = get_codec(name)
+    reparsed = target.parse(target.render(tree))
+    assert not reparsed.static_routes, (
+        f"{name} unexpectedly preserved the gateway-less route — revisit "
+        f"the interface-unsupported declaration"
+    )
+    report = validate_against(tree, target, source=src)
+    assert "/routing/static-route/interface" in {
+        u.path for u in report.unsupported_paths
+    }
+    assert report.severity == "block" and report.compatible is False

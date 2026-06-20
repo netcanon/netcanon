@@ -168,6 +168,14 @@ class VyOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop + distance only; "
+                    "the static-route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
                     "VyOS declares no IANA ifType; the codec infers it "

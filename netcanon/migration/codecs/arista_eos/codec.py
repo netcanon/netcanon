@@ -140,6 +140,22 @@ class AristaEOSCodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route administrative distance (metric) is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
             # -- v0.2.0 Wave C (VARP) -- per-IP MAC overrides --
             # EOS only supports a system-wide virtual-router MAC
             # (``ip virtual-router mac-address`` — see the
@@ -207,6 +223,13 @@ class AristaEOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing/static-route/interface",
+                reason=(
+                    "No interface-nexthop (connected) static-route form; a "
+                    "gateway-less / interface-only route is dropped (run3)."
+                ),
+            ),
             # ── Tier-1 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

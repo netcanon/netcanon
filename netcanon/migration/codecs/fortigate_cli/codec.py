@@ -138,6 +138,7 @@ class FortiGateCLICodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/interface",   # run3 — `set device <iface>`
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -164,6 +165,15 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + next-hop + device only; the "
+                    "static-route administrative distance (metric) is "
+                    "dropped (run3)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/description",
                 reason=(
@@ -236,6 +246,21 @@ class FortiGateCLICodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/ipv4/address/secondary-ip",
+                reason=(
+                    "Render emits one IPv4 address per interface; "
+                    "is_secondary addresses are dropped — a whole-subnet "
+                    "reachability loss (run3)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv6/address/secondary-ip",
+                reason=(
+                    "Render emits one IPv6 address per interface; "
+                    "is_secondary addresses are dropped (run3)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared

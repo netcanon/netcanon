@@ -167,6 +167,22 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/metric",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route administrative distance (metric) is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/routing/static-route/description",
+                reason=(
+                    "Render emits destination + next-hop only; the static-"
+                    "route name / description is dropped (run3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/description",
                 reason=(
                     "OPNsense imposes no length limit on description text; "
@@ -205,6 +221,29 @@ class OPNsenseCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing/static-route/interface",
+                reason=(
+                    "Render emits gateway-based routes only; a gateway-less "
+                    "/ interface-only (connected) static route is dropped "
+                    "(run3)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv4/address/secondary-ip",
+                reason=(
+                    "Render emits one IPv4 address per interface; "
+                    "is_secondary addresses are dropped — a whole-subnet "
+                    "reachability loss (run3)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv6/address/secondary-ip",
+                reason=(
+                    "Render emits one IPv6 address per interface; "
+                    "is_secondary addresses are dropped (run3)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared
