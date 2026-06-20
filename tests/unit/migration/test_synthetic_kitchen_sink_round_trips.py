@@ -346,3 +346,29 @@ def test_every_synthetic_dir_maps_to_a_registered_codec() -> None:
         f"codec: {missing}.  Either rename the dir to match a codec "
         f"name or remove it.  Registered codecs: {sorted(registered)}"
     )
+
+
+def test_corpus_covers_every_round_trippable_codec() -> None:
+    """Vacuous-skip guard (run3 ``data-driven-harness-vacuous-skip``).
+
+    The parametrized round-trip suites above ``@skipif`` away to GREEN
+    if discovery returns ``[]`` — a relocated fixture root or a broken
+    glob would silently erase coverage without failing the build.  This
+    is the forward direction of
+    ``test_every_synthetic_dir_maps_to_a_registered_codec``: assert
+    every registered codec is REPRESENTED in the discovered corpus.  The
+    internal ``mock`` test codec is the sole exemption (it ships no
+    synthetic fixture).
+    """
+    if not SYNTHETIC_FIXTURES_ROOT.is_dir():
+        pytest.skip(f"{SYNTHETIC_FIXTURES_ROOT} does not exist")
+    expected = {n for n in list_codecs() if n != "mock"}
+    covered = {codec_name for codec_name, _ in _FIXTURE_PARAMS}
+    missing = expected - covered
+    assert not missing, (
+        f"Synthetic kitchen-sink corpus is missing fixtures for "
+        f"{sorted(missing)} (discovery found {len(_FIXTURE_PARAMS)} "
+        f"fixtures across {len(covered)} codecs).  A round-trippable "
+        f"codec with no synthetic fixture means its parametrized "
+        f"round-trip coverage silently vanished."
+    )
