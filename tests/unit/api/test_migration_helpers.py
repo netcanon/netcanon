@@ -188,12 +188,16 @@ class TestGetTargetProfiles:
 
 
 class TestBuildCodecInfoList:
-    def test_returns_one_entry_per_registered_codec(self):
+    def test_returns_one_entry_per_public_codec(self):
         result = build_codec_info_list(vendors={})
         names = [info.name for info in result]
-        assert "mock" in names
         # Real codecs registered by the import side-effects:
         assert any(n.startswith("cisco") for n in names)
+        # The internal ``mock`` reference codec is hidden from the
+        # user-facing codec list (run3 mock-codec-exposed-prod) — it is
+        # still registered (``list_codecs`` sees it) but build_codec_info_list
+        # consumes ``list_public_codecs``, which filters ``hidden`` adapters.
+        assert "mock" not in names
 
     def test_vendor_display_name_resolved_when_vendor_present(self):
         """When the vendors map contains the codec's vendor_id, its

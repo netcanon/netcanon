@@ -23,11 +23,14 @@ class TestListMigrationAdapters:
         body = resp.json()
         assert isinstance(body, list)
 
-    def test_includes_mock_adapter(self, client):
-        """Phase 0 ships the mock adapter; it must appear in the list."""
+    def test_excludes_hidden_mock_adapter(self, client):
+        """The internal ``mock`` reference codec is hidden from the
+        user-facing adapters list (run3 mock-codec-exposed-prod) — it is
+        still registered + reachable by exact name on the capabilities
+        detail endpoint, but never offered as a translation target."""
         resp = client.get("/api/v1/migration/adapters")
         names = [a["name"] for a in resp.json()]
-        assert "mock" in names
+        assert "mock" not in names
 
     def test_each_entry_has_required_fields(self, client):
         resp = client.get("/api/v1/migration/adapters")
@@ -38,11 +41,13 @@ class TestListMigrationAdapters:
             ):
                 assert field in entry, f"missing {field} in {entry}"
 
-    def test_mock_adapter_device_classes_surface(self, client):
-        """MockCodec declares [switch, router] — both must come back via the
-        API so frontend code can filter the target-picker to compatible adapters."""
+    def test_device_classes_surface(self, client):
+        """A codec's device_classes come back via the API so frontend code
+        can filter the target-picker to compatible adapters.  cisco_nxos
+        declares [switch, router] (formerly asserted via the now-hidden
+        mock codec)."""
         resp = client.get("/api/v1/migration/adapters")
-        info = next(a for a in resp.json() if a["name"] == "mock")
+        info = next(a for a in resp.json() if a["name"] == "cisco_nxos")
         assert "switch" in info["device_classes"]
         assert "router" in info["device_classes"]
 
@@ -205,14 +210,16 @@ class TestListMigrationAdapters:
         supp_paths = caps["supported"]
         assert "/interfaces/interface/ipv6/address/ip" in supp_paths
 
-    def test_mock_adapter_counts_match_capability_matrix(self, client):
-        """The summary counts in the list view must match the detail view."""
+    def test_summary_counts_match_capability_detail(self, client):
+        """The summary counts in the list view must match the detail view
+        (formerly asserted via the now-hidden mock codec; cisco_nxos is a
+        public codec with all three triads populated)."""
         info = next(
             a for a in client.get("/api/v1/migration/adapters").json()
-            if a["name"] == "mock"
+            if a["name"] == "cisco_nxos"
         )
         caps = client.get(
-            "/api/v1/migration/adapters/mock/capabilities"
+            "/api/v1/migration/adapters/cisco_nxos/capabilities"
         ).json()
         assert info["supported_count"] == len(caps["supported"])
         assert info["lossy_count"] == len(caps["lossy"])

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ..migration.codecs.registry import get_codec, list_codecs
+from ..migration.codecs.registry import get_codec, list_public_codecs
 
 #: Bytes of input passed to each codec's probe.  Longer gives better
 #: signal for ambiguous formats but most real signatures fit in the
@@ -73,7 +73,7 @@ def detect_codec(
     """
     prefix = raw[:probe_bytes] if len(raw) > probe_bytes else raw
     candidates: list[DetectCandidate] = []
-    for name in list_codecs():
+    for name in list_public_codecs():
         try:
             codec_cls = type(get_codec(name))
             result = codec_cls.probe(prefix)

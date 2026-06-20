@@ -43,6 +43,9 @@ class MockCodec(CodecBase):
     direction: ClassVar[str] = "bidirectional"
     certainty: ClassVar[str] = "experimental"
     canonical_model: ClassVar[str] = "openconfig-lite"
+    # Internal reference/test adapter — never offered on user-facing
+    # surfaces (target dropdown, sanitize source list, auto-detection).
+    hidden: ClassVar[bool] = True
     description: ClassVar[str] = (
         "Paste a JSON object mapping xpath strings to values — the "
         "reference mock adapter's format.  Not meaningful for any "

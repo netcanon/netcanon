@@ -22,7 +22,7 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
 from ...migration.codecs.base import ParseError
-from ...migration.codecs.registry import list_codecs
+from ...migration.codecs.registry import list_public_codecs
 from ...tools.sanitize import sanitize_text
 
 router = APIRouter()
@@ -45,7 +45,7 @@ async def post_sanitize(
     config: UploadFile = File(...),
     dry_run: bool = Form(False),
 ):
-    available = sorted(list_codecs())
+    available = list_public_codecs()
     if source_vendor not in available:
         raise HTTPException(
             status_code=400,

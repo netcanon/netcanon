@@ -41,7 +41,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request
 
-from ...migration.codecs.registry import get_codec, list_codecs
+from ...migration.codecs.registry import get_codec, list_public_codecs
 from ...migration.target_profiles import TargetProfile
 from ...models.migration import CodecInfo, MigrationPlanRequest
 from ...storage.base import BaseConfigStore
@@ -132,7 +132,7 @@ def build_codec_info_list(vendors: dict) -> list[CodecInfo]:
         registry-iteration order.
     """
     result: list[CodecInfo] = []
-    for name in list_codecs():
+    for name in list_public_codecs():
         codec = get_codec(name)
         caps = codec.capabilities
         vendor = vendors.get(caps.vendor_id)
