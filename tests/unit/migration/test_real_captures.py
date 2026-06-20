@@ -649,3 +649,30 @@ def test_real_capture_detects_to_unique_codec(
             f"silently/alphabetically.  Ranking: "
             f"{[(c.codec, c.confidence) for c in ranked[:4]]}"
         )
+
+
+def test_every_mapped_fixture_dir_yields_at_least_one_capture() -> None:
+    """Vacuous-skip guard (run3 ``data-driven-harness-vacuous-skip``).
+
+    The parametrized real-capture suites above ``@skipif`` away to GREEN
+    if ``_discover_fixtures`` returns ``[]`` — a relocated fixture root
+    or a broken extension filter would silently erase coverage without
+    failing the build.  Assert every mapped vendor directory that exists
+    on disk contributes at least one discovered fixture.
+    """
+    if not REAL_FIXTURES_ROOT.is_dir():
+        pytest.skip(f"{REAL_FIXTURES_ROOT} does not exist")
+    covered = {codec_key for codec_key, _ in _FIXTURE_PARAMS}
+    expected = {
+        vendor_dir
+        for vendor_dir in _DIR_TO_CODEC_NAME
+        if (REAL_FIXTURES_ROOT / vendor_dir).is_dir()
+    }
+    missing = expected - covered
+    assert not missing, (
+        f"Real-capture corpus: mapped vendor dirs with no discovered "
+        f"fixture: {sorted(missing)} (discovery found "
+        f"{len(_FIXTURE_PARAMS)} fixtures across {len(covered)} dirs).  "
+        f"A populated dir contributing zero fixtures means the "
+        f"parametrized parse/round-trip coverage silently vanished."
+    )
