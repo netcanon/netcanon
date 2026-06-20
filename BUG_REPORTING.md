@@ -145,9 +145,11 @@ the same redacted value all 5 times).
 | SNMPv3 user names (USM securityName) | `snmpv3userN` (independent counter from local-user-name) |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
-| RADIUS server / SNMP trap-target / DHCP-gateway hosts | Public IPv4 → docs ranges; private / hostname preserved |
+| RADIUS server / SNMP trap-target / DHCP gateway+range+subnet hosts | Public IPv4 / IPv6 → docs ranges; private / hostname preserved |
+| Interface IPv6 addresses | Public / global IPv6 → `2001:db8::`; ULA / link-local / loopback / multicast preserved |
 | VLAN-SVI IPv4 addresses (the VLAN interface's L3 config) | Public IPv4 → docs ranges; private preserved |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
+| VRRP / CARP virtual IPs (v4 + v6) | Public → docs ranges; private / ULA preserved |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall, NAT, VPN) | Stripped entirely |
 
@@ -164,13 +166,12 @@ Full rules and limitations in the sanitiser's module docstring at
 - **Banner / comment text not redacted.**  These aren't in the
   canonical model.  Most are parse-and-ignored.  If your config has
   sensitive banner text, hand-edit it after sanitising.
-- **IPv6-public redaction is IPv4-only at v0.1.0.**  IPv6 addresses
-  pass through verbatim.  If your config has public IPv6 addresses,
-  hand-redact those before submitting.
 - **Host fields given as DNS names pass through.**  IP-typed
-  redaction (RADIUS server, SNMP trap target, DHCP gateway) acts on
-  bare IPv4 only; a target written as a hostname (`nms.corp.example`)
-  is preserved.  Hand-edit name-form hosts if they are identifying.
+  redaction (interface / SVI / VRRP-VIP / RADIUS server / SNMP trap
+  target / DHCP gateway+range) covers bare IPv4 *and* IPv6 literals
+  (v0.4.1); a target written as a hostname (`nms.corp.example`) is
+  free text the model does not classify, so it is preserved.
+  Hand-edit name-form hosts if they are identifying.
 
 ---
 

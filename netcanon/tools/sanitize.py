@@ -20,6 +20,10 @@ Field-typed rules (counter-per-session):
 * Public IPv4 anywhere → RFC 5737 docs ranges (192.0.2.x /
   198.51.100.x / 203.0.113.x); private IPs (RFC 1918, ULA, link-local,
   loopback, multicast, CGNAT 100.64/10) preserved
+* Public/global IPv6 anywhere → RFC 3849 docs range (``2001:db8::``);
+  ULA (fc00::/7), link-local (fe80::/10), loopback (``::1``),
+  unspecified (``::``), multicast (ff00::/8), and the docs range
+  itself preserved
 * ``CanonicalLocalUser.name`` → ``localuserN`` (Phase-3 R6.1 addition —
   the username is operator-identifying when chosen by the operator,
   e.g. ``alice``, ``john.smith``, or ``user12``)
@@ -44,9 +48,15 @@ Field-typed rules (counter-per-session):
   metadata and is preserved so the renderer still emits valid syntax;
   only the secret value (cleartext for ``plain:`` / ``carp-key:``, a
   key-string for ``md5:``) is replaced
+* ``CanonicalVRRPGroup.virtual_ips`` / ``virtual_ipv6s`` (public
+  entries) → docs range — a VRRP / CARP VIP is frequently the
+  public-facing HA gateway, so it is redacted like any other IP
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalDHCPPool.gateway`` (public) → docs range
+* ``CanonicalDHCPPool.start_ip`` / ``end_ip`` (public) → docs range
+* ``CanonicalDHCPPool.network`` (public host portion) → docs range,
+  prefix length preserved
 * ``CanonicalVlan.ipv4_addresses`` (public SVI L3 addresses) → docs
   range — SEPARATE field from ``interfaces[].ipv4_addresses``; the
   Aruba / Junos SVI-on-VLAN model renders these directly
@@ -61,10 +71,11 @@ Limitations:
   Tier-3 stanzas in the source bytes are not field-typed redacted —
   Tier-3 content is dropped on parse, banners are typically
   parse-and-ignore.
-* IP-typed redaction (interface / SVI / DHCP / RADIUS / trap-target
-  addresses) acts on IPv4 only.  IPv6 addresses and host fields given
-  as DNS NAMES (e.g. a RADIUS / trap target of ``nms.corp.example``)
-  pass through verbatim — hand-edit those before sharing.
+* IP-typed redaction covers both IPv4 and IPv6 (interface / SVI /
+  DHCP / RADIUS / trap-target / VRRP-VIP addresses).  Host fields
+  given as DNS NAMES (e.g. a RADIUS / trap target of
+  ``nms.corp.example``) still pass through verbatim — hand-edit those
+  before sharing.
 * Round-trip is sub-lossless: parse drops Tier-3 content, and render
   emits only what the codec models.  Operators sharing a sanitized
   config get the supported subset, not a byte-identical-shape
@@ -252,6 +263,17 @@ def sanitize_intent(
                 ))
                 addr.ip = new_ip
 
+        for j, addr in enumerate(iface.ipv6_addresses):
+            new_ip = table.redact_ipv6(addr.ip)
+            if new_ip != addr.ip:
+                subs.append(Substitution(
+                    category="ipv6-public",
+                    field=f"interfaces[{i}].ipv6_addresses[{j}].ip",
+                    original=addr.ip,
+                    redacted=new_ip,
+                ))
+                addr.ip = new_ip
+
         # ---- VRRP / CARP / HSRP authentication ----
         # Cleartext-bearing: the ``plain:`` / ``carp-key:`` schemes
         # hold the literal secret and ``md5:`` holds a key-string, all
@@ -277,6 +299,41 @@ def sanitize_intent(
                     redacted="description redacted",
                 ))
                 group.description = "description redacted"
+
+            # The virtual IP is frequently the public-facing HA gateway
+            # address — redact it like every other IP field (the sibling
+            # ``authentication`` secret above was redacted, but the VIP
+            # bypassed sanitisation entirely before this).  ``redact_ip_
+            # string`` handles both the IPv4 and IPv6 VIP lists; private
+            # VIPs (the LAN-gateway common case) are preserved.
+            if group.virtual_ips:
+                new_vips: list[str] = []
+                for m, vip in enumerate(group.virtual_ips):
+                    new_vip = table.redact_ip_string(vip)
+                    if new_vip != vip:
+                        subs.append(Substitution(
+                            category="ipv4-public",
+                            field=(f"interfaces[{i}].vrrp_groups[{k}]"
+                                   f".virtual_ips[{m}]"),
+                            original=vip,
+                            redacted=new_vip,
+                        ))
+                    new_vips.append(new_vip)
+                group.virtual_ips = new_vips
+            if group.virtual_ipv6s:
+                new_vip6s: list[str] = []
+                for m, vip in enumerate(group.virtual_ipv6s):
+                    new_vip = table.redact_ip_string(vip)
+                    if new_vip != vip:
+                        subs.append(Substitution(
+                            category="ipv6-public",
+                            field=(f"interfaces[{i}].vrrp_groups[{k}]"
+                                   f".virtual_ipv6s[{m}]"),
+                            original=vip,
+                            redacted=new_vip,
+                        ))
+                    new_vip6s.append(new_vip)
+                group.virtual_ipv6s = new_vip6s
 
     # ---- VLAN SVI IPv4 addresses ----
     # R-16 / CF-04: SVI L3 addressing lives on ``CanonicalVlan.
@@ -493,6 +550,43 @@ def sanitize_intent(
                 ))
                 pool.gateway = new_gw
 
+        # Pool range bounds + served subnet are network-location PII
+        # (sibling of the already-redacted gateway / dns_servers on the
+        # same record — the trust asymmetry the audit flagged).  Public
+        # IPv4/IPv6 → docs range; private (the common LAN case) preserved.
+        # ``network`` is a CIDR, so redact only its host portion and keep
+        # the prefix length.
+        if pool.start_ip:
+            new_start = table.redact_ip_string(pool.start_ip)
+            if new_start != pool.start_ip:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"dhcp_servers[{i}].start_ip",
+                    original=pool.start_ip,
+                    redacted=new_start,
+                ))
+                pool.start_ip = new_start
+        if pool.end_ip:
+            new_end = table.redact_ip_string(pool.end_ip)
+            if new_end != pool.end_ip:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"dhcp_servers[{i}].end_ip",
+                    original=pool.end_ip,
+                    redacted=new_end,
+                ))
+                pool.end_ip = new_end
+        if pool.network:
+            new_net = table.redact_cidr(pool.network)
+            if new_net != pool.network:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"dhcp_servers[{i}].network",
+                    original=pool.network,
+                    redacted=new_net,
+                ))
+                pool.network = new_net
+
         # v0.4.0 self-audit: the DHCP domain-name is an internal DNS
         # suffix (``corp.acme.example``) — operator/org-identifying PII.
         # Reuse the domain table so it matches the top-level domain
@@ -612,6 +706,8 @@ class _SubstitutionTable:
         self._hostnames: dict[str, str] = {}
         self._domains: dict[str, str] = {}
         self._ipv4: dict[str, str] = {}
+        self._ipv6: dict[str, str] = {}
+        self._ipv6_counter: int = 0
         self._communities: dict[str, str] = {}
         self._secret_counters: dict[str, int] = {}
         self._hash_counter: int = 0
@@ -673,13 +769,65 @@ class _SubstitutionTable:
         self._ipv4[ip] = new_ip
         return new_ip
 
+    def redact_ipv6(self, ip: str) -> str:
+        """Redact a public/global IPv6 address; preserve ULA / link-local /
+        loopback / unspecified / multicast / documentation.
+
+        Mirrors :meth:`redact_ipv4`.  Global unicast maps to a
+        deterministic RFC 3849 documentation address (``2001:db8::N``),
+        cache-keyed by the source string so the same address redacts
+        identically everywhere (cross-reference stable).  Preserved
+        as-is: ULA ``fc00::/7``, link-local ``fe80::/10``, loopback
+        ``::1``, unspecified ``::``, multicast ``ff00::/8``, reserved,
+        and the documentation range ``2001:db8::/32`` itself.
+        """
+        if ip in self._ipv6:
+            return self._ipv6[ip]
+        try:
+            addr = ipaddress.IPv6Address(ip)
+        except ValueError:
+            return ip
+        # ``is_private`` already covers ULA, link-local, loopback,
+        # unspecified, and the 2001:db8::/32 docs range; the rest are
+        # listed explicitly for self-documentation / defensive belt.
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_multicast
+            or addr.is_reserved
+            or addr.is_unspecified
+        ):
+            return ip
+        if addr in ipaddress.ip_network("2001:db8::/32"):
+            return ip
+        # Public global unicast — substitute a deterministic docs address.
+        self._ipv6_counter += 1
+        new_ip = f"2001:db8::{self._ipv6_counter:x}"
+        self._ipv6[ip] = new_ip
+        return new_ip
+
     def redact_ip_string(self, value: str) -> str:
-        """Redact public IPv4 in a free-form string field; preserve other content."""
+        """Redact a public IPv4 *or* IPv6 address in a free-form string
+        field; preserve private addresses and non-IP content."""
         try:
             ipaddress.IPv4Address(value)
             return self.redact_ipv4(value)
         except ValueError:
+            pass
+        try:
+            ipaddress.IPv6Address(value)
+            return self.redact_ipv6(value)
+        except ValueError:
             return value
+
+    def redact_cidr(self, value: str) -> str:
+        """Redact the address portion of a ``host/prefix`` CIDR string,
+        preserving the prefix length.  Bare addresses (no ``/``) are
+        redacted whole; non-IP content is returned verbatim."""
+        addr, sep, prefix = value.partition("/")
+        new_addr = self.redact_ip_string(addr)
+        return f"{new_addr}{sep}{prefix}" if sep else new_addr
 
     def redact_community(self, community: str) -> str:
         if community not in self._communities:
