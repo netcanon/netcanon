@@ -13,8 +13,9 @@ contributor / methodology level.
 
 ## TL;DR
 
-Netcanon ships with **four independent test layers** that gate every
-release:
+Netcanon ships with **four test layers**.  CI gates every release on the
+**unit + integration** tiers; the **E2E** (Playwright) and **desktop**
+(PySide6) tiers run locally and on demand, not on every PR:
 
 | Layer | What it tests | Speed |
 |---|---|---|
@@ -38,7 +39,9 @@ spot until the device behaves wrong in production.
 
 ## The matrix
 
-The cross-mesh audit runs on every PR and on every fixture import.
+The cross-mesh audit runs locally / on demand — it is a maintainer tool
+re-generated on every codec change (per the doc-sync checklist), NOT a CI
+gate on every PR (only the unit + integration tiers gate).
 Its results live in
 [`tests/fixtures/real/PHASE4_RECONCILIATION.md`](../tests/fixtures/real/PHASE4_RECONCILIATION.md)
 (machine-generated; not hand-edited).
@@ -65,9 +68,11 @@ classified honestly rather than smoothed over.
 
 ## The trust claim, quantified
 
-> Across every supported vendor pair × every field declared as
-> `supported`, the cross-mesh audit holds **zero CODEC_BUG cells**
-> as of the current commit.
+> Across every vendor pair we ship a fixture + cross-vendor expectation
+> for, the cross-mesh audit holds **5 CODEC_BUG cells** at last run —
+> each triaged as a benign modelling/structural artifact in
+> [`phase4_findings_residuals.md`](../tests/fixtures/real/phase4_findings_residuals.md),
+> none a genuine translation error.
 
 That's not "we think it works"; that's "every cell that should
 translate, does, by automated test against vendor-doc-grounded
@@ -133,8 +138,9 @@ permutation).
 variance taxonomy and generates
 `tests/fixtures/real/PHASE4_RECONCILIATION.md` (the matrix).
 
-Both run in CI on every PR; the matrix gets regenerated on every
-codec change per the
+Both run locally / on demand — the cross-mesh audit is a maintainer tool,
+NOT a CI gate (only the unit + integration tiers gate every PR).  The
+matrix gets regenerated on every codec change per the
 [doc-sync checklist](../AGENTS.md#documentation-sync-checklist).
 
 ---

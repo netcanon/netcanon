@@ -27,7 +27,7 @@ equal trees).
 ## cisco_iosxe_cli
 
 **Codec:** `netcanon.migration.codecs.cisco_iosxe_cli.CiscoIOSXECLICodec`
-**Direction:** `parse_only` *(round-trip N/A)*
+**Direction:** `bidirectional`
 **Certainty:** `certified` ✅
 
 ### Coverage matrix
