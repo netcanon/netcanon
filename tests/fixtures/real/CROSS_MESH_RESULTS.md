@@ -9823,7 +9823,7 @@ netcanon.migration.codecs.base.RenderError: cisco_iosxe_cli: prefix length 48 ou
 
 ### vyos/kitchen_sink.conf → fortigate_cli  (RENDER)
 
-**Error:** render failed: RenderError('fortigate_cli: invalid CIDR prefix 48')
+**Error:** render failed: RenderError('fortigate_cli: prefix length 48 out of range')
 
 ```
 Traceback (most recent call last):
@@ -9831,13 +9831,11 @@ Traceback (most recent call last):
     rendered = target_codec.render(canonical_source)
   File "netcanon\migration\codecs\fortigate_cli\codec.py", line 396, in render
     return render_intent(tree)
-  File "netcanon\migration\codecs\fortigate_cli\render.py", line 950, in render_intent
+  File "netcanon\migration\codecs\fortigate_cli\render.py", line 948, in render_intent
     dst_mask = _prefix_to_mask(dst_prefix)
-  File "netcanon\migration\codecs\fortigate_cli\parse.py", line 88, in _prefix_to_mask
-    raise RenderError(
-    ...<2 lines>...
-    )
-netcanon.migration.codecs.base.RenderError: fortigate_cli: invalid CIDR prefix 48
+  File "netcanon\migration\codecs\fortigate_cli\parse.py", line 91, in _prefix_to_mask
+    return _shared_prefix_to_mask(prefix, vendor="fortigate_cli")
+netcanon.migration.codecs.base.RenderError: fortigate_cli: prefix length 48 out of range
 ```
 
 ### vyos/kitchen_sink.conf → juniper_junos  (WARN 15/21)
