@@ -6,7 +6,7 @@ Total cells reconciled: **1224**.  Each cell carries one ``field_variances`` ent
 
 Intra-vendor self-pairs skipped (no Phase 3 YAML — by design, Phase 3 is cross-vendor only): **102** cell(s).  Their fields show up in the per-run JSON with empty ``field_variances``.
 
-**Warning:** 723 cross-vendor cell(s) had no matching pair YAML.  Phase 3 ships 56/56 cross-vendor pairs validated; if this number is non-zero, check ``tests/fixtures/cross_vendor_expectations/`` for missing files.  Detail in the per-run JSON.
+**Coverage note:** 723 cross-vendor cell(s) have no matching pair YAML.  The 56 expectation YAMLs cover only an 8-codec subset (8 of the 12 codecs); **aruba_aoscx / cisco_iosxr / cisco_nxos / vyos have ZERO expectation coverage** as both source and target, so any drift into or out of those codecs is structurally invisible to this residual.  That makes these 723 of 1224 cells expected, NOT a missing-files error — the headline residual is computed over the covered subset, not the full mesh.  Detail in the per-run JSON.
 
 ## Aggregate variance counts
 

@@ -56,6 +56,31 @@ def register_schedule_job(scheduler, schedule: BackupSchedule, app) -> None:
     )
 
 
+def _filter_egress_allowed(devices: list, schedule_name: str) -> list:
+    """Return only the *devices* whose host passes the egress allow-list.
+
+    Synchronous on purpose: ``assert_egress_allowed`` does a blocking
+    ``socket.getaddrinfo``, so the scheduled coroutine offloads this whole
+    loop to a worker thread via ``asyncio.to_thread`` (run3) instead of
+    stalling the event loop once per device.
+    """
+    from ...services.egress import EgressBlocked, assert_egress_allowed
+
+    kept = []
+    for d in devices:
+        try:
+            assert_egress_allowed(d.host)
+            kept.append(d)
+        except EgressBlocked as exc:
+            logger.warning(
+                "Schedule '%s': skipping target %s — %s",
+                schedule_name,
+                d.host,
+                exc,
+            )
+    return kept
+
+
 async def _run_scheduled_backup(schedule_id: str, app) -> None:
     """Coroutine executed by APScheduler for each scheduled run.
 
@@ -179,23 +204,15 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
     # Egress allow-list (opt-in via Settings.block_private_egress): drop any
     # scheduled target that resolves to loopback / link-local rather than
-    # failing the whole run (review finding #3).
+    # failing the whole run (review finding #3).  ``assert_egress_allowed``
+    # does a blocking, timeout-less ``socket.getaddrinfo`` per host; this
+    # coroutine runs ON the APScheduler/asyncio event loop, so the whole
+    # filter is offloaded to a worker thread (run3) — otherwise a slow DNS
+    # answer stalls the loop, scaling with the device count.
     if app.state.settings.block_private_egress:
-        from ...services.egress import EgressBlocked, assert_egress_allowed
-
-        kept = []
-        for d in devices:
-            try:
-                assert_egress_allowed(d.host)
-                kept.append(d)
-            except EgressBlocked as exc:
-                logger.warning(
-                    "Schedule '%s': skipping target %s — %s",
-                    schedule.name,
-                    d.host,
-                    exc,
-                )
-        devices = kept
+        devices = await asyncio.to_thread(
+            _filter_egress_allowed, devices, schedule.name
+        )
         if not devices:
             logger.warning(
                 "Schedule '%s': all targets blocked by egress policy — "

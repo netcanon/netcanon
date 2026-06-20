@@ -46,19 +46,43 @@ storage-layer concern only.
 
 Migration
 ---------
-On first load after upgrading from an unencrypted version, any field
-that fails to decrypt (``InvalidToken``) is assumed to be a legacy
-plaintext value.  ``decrypt_field()`` returns the plaintext and signals
-that the file should be re-saved with encryption applied.
+On first load after upgrading from an unencrypted version, a field that
+fails to decrypt is treated as legacy plaintext **only when it does not
+have the structural shape of a Fernet token**.  A value that *is* token-
+shaped but fails to decrypt means the wrong / rotated / lost key — fail
+closed: ``decrypt_field()`` raises :class:`CredentialDecryptError` so the
+caller logs loudly and skips the profile rather than loading the
+ciphertext verbatim as the password and double-encrypting it on re-save.
 """
 
 from __future__ import annotations
 
+import base64
+import binascii
 import logging
 import os
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+class CredentialDecryptError(Exception):
+    """A token-shaped credential failed to decrypt — wrong/rotated/lost key.
+
+    Distinct from the legacy-plaintext case (a non-token value written
+    before encryption existed).  Raising this — rather than returning the
+    undecryptable ciphertext as if it were plaintext — keeps the storage
+    layer from (a) handing the ciphertext to the collector as the SSH
+    password and (b) re-encrypting it on save (double-encryption /
+    corruption).
+    """
+
+
+#: First byte of a Fernet token after base64url-decoding — the version
+#: marker (0x80).  A token is ``version(1) || ts(8) || iv(16) ||
+#: ciphertext || hmac(32)`` so the minimum decoded length is 57 bytes.
+_FERNET_VERSION = 0x80
+_FERNET_MIN_LEN = 57
 
 _SERVICE = "Netcanon"
 _ACCOUNT = "master_key"
@@ -243,6 +267,21 @@ def decrypt(token: str) -> str:
     return _get_fernet().decrypt(token.encode()).decode()
 
 
+def _looks_like_fernet_token(value: str) -> bool:
+    """True if *value* has the structural shape of a Fernet token.
+
+    Positive detection (base64url that decodes to >= 57 bytes whose first
+    byte is the 0x80 version marker) so a token we simply can't decrypt
+    (wrong key) is distinguishable from genuine legacy plaintext — the
+    fail-open bug was treating every undecryptable value as plaintext.
+    """
+    try:
+        raw = base64.urlsafe_b64decode(value.encode("ascii"))
+    except (binascii.Error, ValueError, UnicodeEncodeError):
+        return False
+    return len(raw) >= _FERNET_MIN_LEN and raw[0] == _FERNET_VERSION
+
+
 def decrypt_field(value: str) -> tuple[str, bool]:
     """Decrypt *value* if it is a Fernet token; return as-is if plaintext.
 
@@ -253,13 +292,27 @@ def decrypt_field(value: str) -> tuple[str, bool]:
     Returns:
         ``(plaintext, was_encrypted)`` — ``was_encrypted`` is ``False`` when
         the stored value is a legacy plaintext credential that needs migrating.
+
+    Raises:
+        CredentialDecryptError: *value* is token-shaped but does not
+            decrypt under the active key (wrong / rotated / lost key).
+            Fail closed rather than returning the ciphertext as plaintext.
     """
     from cryptography.fernet import InvalidToken
 
     try:
         return _get_fernet().decrypt(value.encode()).decode(), True
     except InvalidToken:
-        # Value is not a valid Fernet token — treat as legacy plaintext.
+        if _looks_like_fernet_token(value):
+            # Token-shaped but undecryptable: wrong/rotated/lost key, NOT
+            # legacy plaintext.  Fail closed (the fail-open bug returned
+            # the ciphertext here as `(value, False)`).
+            raise CredentialDecryptError(
+                "credential is Fernet-token-shaped but failed to decrypt "
+                "under the active key (wrong / rotated / lost key?)"
+            ) from None
+        # Not token-shaped — genuine legacy plaintext from a pre-encryption
+        # version; signal the caller to re-save with encryption applied.
         return value, False
 
 

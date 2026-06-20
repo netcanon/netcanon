@@ -61,3 +61,21 @@ def test_unresolvable_host_is_not_blocked() -> None:
     # here would turn DNS hiccups into spurious backup failures.  The
     # `.invalid` TLD is guaranteed non-resolvable (RFC 6761).
     assert assert_egress_allowed("netcanon-egress-test.invalid") is None
+
+
+def test_scheduled_filter_egress_allowed_drops_blocked_hosts() -> None:
+    """run3: the scheduled-backup egress filter (now a sync helper offloaded
+    to a worker thread so its blocking getaddrinfo doesn't stall the event
+    loop) keeps allowed targets and drops loopback/link-local ones."""
+    from types import SimpleNamespace
+
+    from netcanon.api.routes.schedules import _filter_egress_allowed
+
+    devices = [
+        SimpleNamespace(host="8.8.8.8"),          # public — allowed
+        SimpleNamespace(host="10.0.0.5"),         # RFC-1918 — allowed
+        SimpleNamespace(host="127.0.0.1"),        # loopback — blocked
+        SimpleNamespace(host="169.254.169.254"),  # metadata — blocked
+    ]
+    kept = _filter_egress_allowed(devices, "test-schedule")
+    assert [d.host for d in kept] == ["8.8.8.8", "10.0.0.5"]

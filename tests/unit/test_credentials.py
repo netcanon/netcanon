@@ -187,6 +187,87 @@ class TestDecryptField:
         assert val == ""
         assert was_enc is False
 
+    def test_token_shaped_wrong_key_fails_closed(self):
+        """run3: a value that IS a Fernet token but fails to decrypt under
+        the active key (wrong / rotated / lost key) must RAISE rather than
+        be returned as legacy plaintext.  The fail-open bug returned the
+        ciphertext verbatim with ``was_encrypted=False``, so the store
+        loaded it as the SSH password and double-encrypted it on re-save."""
+        from cryptography.fernet import Fernet
+
+        from netcanon.security.credentials import (
+            CredentialDecryptError,
+            decrypt_field,
+        )
+
+        # Encrypt under a DIFFERENT key than the fixture's active key.
+        foreign = Fernet(Fernet.generate_key())
+        token = foreign.encrypt(b"SuperSecret").decode()
+        with pytest.raises(CredentialDecryptError):
+            decrypt_field(token)
+
+    def test_looks_like_fernet_token_discriminates(self):
+        from netcanon.security.credentials import (
+            _looks_like_fernet_token,
+            encrypt,
+        )
+
+        assert _looks_like_fernet_token(encrypt("x")) is True
+        # Genuine legacy plaintext passwords are not token-shaped.
+        for plain in ("hunter2", "admin", "P@ssw0rd!", "", "not base64 €€"):
+            assert _looks_like_fernet_token(plain) is False
+
+
+class TestMigrateCredentialFields:
+    """run3: the storage-layer migration helper must fail closed on a
+    wrong-key field and never re-save (which would double-encrypt)."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_keyring(self):
+        key = _make_fernet_key()
+        with (
+            patch("keyring.get_password", return_value=key),
+            patch("keyring.set_password"),
+        ):
+            yield
+
+    def test_plaintext_field_flags_resave(self):
+        from netcanon.security.migration import migrate_credential_fields
+
+        data = {"password": "legacyplain"}
+        needs = migrate_credential_fields(data, ["password"])
+        assert needs is True
+        assert data["password"] == "legacyplain"
+
+    def test_encrypted_field_no_resave(self):
+        from netcanon.security.credentials import encrypt
+        from netcanon.security.migration import migrate_credential_fields
+
+        data = {"password": encrypt("secret")}
+        needs = migrate_credential_fields(data, ["password"])
+        assert needs is False
+        assert data["password"] == "secret"
+
+    def test_wrong_key_field_left_untouched_and_no_resave(self, caplog):
+        import logging
+
+        from cryptography.fernet import Fernet
+
+        from netcanon.security.migration import migrate_credential_fields
+
+        foreign = Fernet(Fernet.generate_key())
+        ciphertext = foreign.encrypt(b"secret").decode()
+        data = {"password": ciphertext, "enable": "legacyplain"}
+        with caplog.at_level(logging.WARNING):
+            needs = migrate_credential_fields(data, ["password", "enable"])
+        # Must NOT re-save (would double-encrypt the surviving ciphertext).
+        assert needs is False
+        # The undecryptable field is left exactly as-is.
+        assert data["password"] == ciphertext
+        # The sibling plaintext field is still decrypted normally.
+        assert data["enable"] == "legacyplain"
+        assert any("DECRYPT FAILED" in r.message for r in caplog.records)
+
 
 # ---------------------------------------------------------------------------
 # Tier 1: NETCANON_FERNET_KEY env var (operator-explicit override)

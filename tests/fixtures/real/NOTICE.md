@@ -248,7 +248,13 @@ round-trip cleanly (the codec keeps the canonical single `community`).
 
 ## Adding new captures
 
-1. Fetch from an unambiguously-licensed public source (Apache, MIT, BSD).
+1. Fetch from an unambiguously-licensed public source (Apache, MIT, BSD)
+   **or** an operator forum-share thread (factual device-output precedent —
+   see the entries above).  **Do NOT add new captures from a repository
+   with no LICENSE file.**  The no-LICENSE entries above are grandfathered
+   under the factual-device-output (non-creative) precedent and each carries
+   an explicit "drop if author objects" note; new all-rights-reserved
+   upstreams are not accepted — replace with a synthetic capture instead.
 2. Drop into `<vendor>/` with a filename that encodes origin + feature.
 3. Update this NOTICE with an entry covering origin URL, license, and
    what the file stresses.

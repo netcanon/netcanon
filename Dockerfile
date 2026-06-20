@@ -52,7 +52,13 @@ RUN pip install --no-cache-dir --upgrade pip wheel \
 FROM python:3.14.5-slim-bookworm@sha256:a9bee15510a364124aa24692899d269835683b883de42f7ebec8c293cf679ccb AS runtime
 
 # curl is the only runtime addition — used by HEALTHCHECK.  No build tools.
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# ``apt-get upgrade`` applies Debian security point-releases on top of the
+# digest-pinned base (run3): the base tag is rebuilt less often than the
+# point-releases land, so it can ship a stale package (e.g. libgnutls30
+# behind a fixed CRITICAL CVE).  The gating Trivy scan in ci.yml fails the
+# PR on exactly that, so patch it here at build time — the digest still
+# pins the base layer; this is an explicit, auditable hardening layer.
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r app --gid=1000 \
