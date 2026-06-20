@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-06-19
+
 ### Security
 
 * **Sanitiser strips Junos apply-group bodies + redacts more free-text
@@ -42,6 +44,16 @@ timestamp if your timezone matters for an audit.
   redaction is cross-reference-stable so `vlan members <name>` stays
   consistent.  Found by the post-release adversarial self-audit; the
   earlier DATA-02 fix had covered only `raw_sections`.
+
+* **Sanitiser now redacts IPv6, VRRP virtual IPs, and DHCP pool ranges (run3 audit).**  The IPv4-only IP redaction missed three "same class, new surface" leaks: interface IPv6 + any IPv6 in the DNS / NTP / syslog / trap-target / RADIUS / DHCP lists (now mapped to the RFC 3849 docs range, with ULA / link-local / loopback / multicast preserved); the VRRP / CARP virtual IP -- often the public HA gateway, previously bypassed while its sibling auth secret was redacted; and the DHCP pool's range bounds + served subnet.  IPv6 redaction is cross-reference-stable like the IPv4 path.
+
+* **Credential decryption now fails closed on a wrong / rotated / lost key (run3 audit).**  `decrypt_field` treated *any* decryption failure as legacy plaintext, so a real Fernet token under the wrong key was returned verbatim as the SSH password (`was_encrypted=False`) and the storage layer then re-saved it, double-encrypting / corrupting the field.  Token shape is now positively detected (base64url -> `0x80` version byte, >= 57 bytes); a token-shaped value that won't decrypt raises `CredentialDecryptError`, the migration helper logs loudly, leaves the field untouched, and skips re-save.  Genuine legacy plaintext still migrates.
+
+* **Supply-chain hardening (run3 audit).**  The `cosign verify` identity regexp is now anchored + dot-escaped + fully qualified to the workflow path `@refs/tags/v` (Go regexp is a substring match -- the old `https://github.com/<repo>` pattern also matched `<repo>-attacker/...`).  A **gating** Trivy scan (CRITICAL, fixable-only) was added to the PR CI so a vulnerable image fails the PR before it can reach a release tag; it immediately caught two fixed CRITICAL GnuTLS CVEs in the digest-pinned base image, now patched via an `apt-get upgrade` hardening layer in the Dockerfile runtime stage.
+
+### Changed
+
+* **Silently-dropped static-route sub-fields + secondary IPs now surface as warn/block (run3 audit; behaviour change).**  A migration that dropped a static route's admin distance (metric), name (description), or interface-nexthop (connected) route -- or a second IP on an interface -- reported `severity: ok` while discarding the data.  The shared validation walker now yields those sub-paths, and every codec that drops one declares it `lossy` (warn; the migration proceeds) or `unsupported` (block; overridable with `force=True`), grounded in an empirical render->re-parse drop-map.  A connected route migrating to Arista / Junos / OPNsense now blocks (the route vanishes); the FortiGate / OPNsense secondary-IP drop blocks (a whole-subnet reachability loss).  Cross-mesh `CODEC_BUG` unchanged at 5.
 
 ### Fixed
 
@@ -81,6 +93,12 @@ timestamp if your timezone matters for an audit.
   `/api/v1/openapi.json` stays open so the intentionally-unauthenticated
   `/docs` page can render it (it carries only route metadata -- no
   config contents or credentials).  No behavioural change.
+
+* **`cisco_iosxe_cli` now parses the static-route admin distance + name (run3 audit).**  `ip route ... <distance> name <X>` previously parse-and-ignored the trailing tokens, so a cisco round-trip silently reset the admin distance and dropped the route name.  The distance now maps to `metric` (round-trips) and the name to `description` (single-token names round-trip via `name <X>`; multi-word names stay declared lossy).
+
+* **Scheduled-backup egress check no longer blocks the event loop (run3 audit).**  The per-device egress allow-list ran a blocking `socket.getaddrinfo` directly on the scheduler's asyncio event loop; it is now offloaded to a worker thread, so a slow DNS answer can't stall the loop.
+
+* **Doc honesty (run3 audit).**  The Phase-4 reconciliation report no longer claims "56/56 pairs validated" -- it states the 56 expectation YAMLs cover only 8 of 12 codecs (aoscx / iosxr / nxos / vyos have none, so 723/1224 cells are expected-uncovered, not a missing-files error).  `NOTICE.md` "Adding new captures" now forbids new no-LICENSE upstreams.
 
 ## [0.4.0] - 2026-06-19
 
