@@ -13,6 +13,15 @@ permissions:
   id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
   security-events: write   # Trivy SARIF upload to Code Scanning
 
+# Serialise release runs for a given ref so a re-pushed tag (or a
+# workflow_dispatch racing the tag push) can't double-build / double-push
+# and race the `:latest` move.  Never cancel an in-flight publish — a
+# half-signed / half-attested image is worse than a queued second run
+# (run3 no-concurrency-guard-publish).
+concurrency:
+  group: docker-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   # GHCR is the primary, signed, SBOM-attested registry.
   REGISTRY: ghcr.io
@@ -67,7 +76,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Docker Hub is an OPTIONAL convenience mirror.  Gate the login on the
+      # token being configured so a fork (or a repo that never set up the
+      # Docker Hub secret) doesn't hard-fail the whole publish on a missing
+      # credential.  The canonical repo has the secret, so this is a no-op
+      # there — login runs exactly as before (run3 dockerhub-login-unguarded).
       - name: Log in to Docker Hub
+        if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -80,9 +95,13 @@ jobs:
           # Two images = same tag patterns applied to both registries.
           # The build-push-action below pushes a single image manifest
           # to both registries in one step (no double-build cost).
+          # The Docker Hub line is emitted only when the mirror is enabled
+          # (token configured); otherwise it resolves to an empty line,
+          # which metadata-action ignores — so build-push targets GHCR
+          # only and never attempts an unauthenticated docker.io push.
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ env.DOCKERHUB_IMAGE }}
+            ${{ secrets.DOCKERHUB_TOKEN != '' && env.DOCKERHUB_IMAGE || '' }}
           tags: |
             # Semver-derived (no `v` prefix), e.g. `0.1.0-rc4` or `0.1.0`.
             # Matches the convention of official Docker Hub images

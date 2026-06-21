@@ -10,6 +10,14 @@ on:
 permissions:
   contents: read
 
+# Serialise release runs for a given ref so a re-pushed tag (or a
+# workflow_dispatch racing the tag push) can't double-publish.  Never
+# cancel an in-flight publish mid-upload — queue the second run instead
+# (run3 no-concurrency-guard-publish).
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   # Opt-in to Node.js 24 for JavaScript actions ahead of the June 2026
   # forced cutover (https://github.blog/changelog/2025-09-19-deprecation-
