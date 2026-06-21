@@ -94,10 +94,14 @@ class TestAdapterDropdownsPopulate:
         values = mig.source_select.evaluate(
             "sel => Array.from(sel.options).map(o => o.value)"
         )
-        # At minimum the three registered adapters.
+        # Public, user-selectable codecs appear in the source dropdown...
         assert "cisco_iosxe" in values
+        assert "cisco_iosxe_cli" in values
         assert "opnsense" in values
-        assert "mock" in values
+        # ...but the internal reference 'mock' codec is hidden from the
+        # user-facing dropdown (run3 mock-codec-exposed-prod, #148 —
+        # build_codec_info_list consumes list_public_codecs).
+        assert "mock" not in values
 
     def test_codec_info_updates_on_change(self, page: Page, base_url: str):
         page.goto("/migrate")
@@ -224,10 +228,14 @@ class TestMigrateSubmitFlow:
                 '[data-testid="migrate-source-select"]'
             ).options.length > 0"""
         )
-        # mock → mock with an unsupported path path in the input.
-        mig.pick_source("mock")
-        mig.pick_target("mock")
-        mig.fill_raw('{"/unsafe/kernel_module": "rootkit"}')
+        # cisco_iosxe_cli → cisco_iosxe (the NETCONF stub) carrying surfaces
+        # the stub declares unsupported (hostname + SNMP community) → a
+        # partial job whose validation severity is block.  (Previously this
+        # used mock → mock via /unsafe/kernel_module; mock is now hidden from
+        # the dropdown — #148 — so a real codec pair drives the same outcome.)
+        mig.pick_source("cisco_iosxe_cli")
+        mig.pick_target("cisco_iosxe")
+        mig.fill_raw("hostname R1\nsnmp-server community public RO\n!\n")
         mig.submit_and_wait()
         expect(mig.result).to_be_visible()
         assert mig.banner_severity_class() == "block"
@@ -273,9 +281,11 @@ class TestBannerSeverityMatchesJobOutcome:
         """partial ⇒ block banner — rendered output exists but unsafe
         to deploy as-is, so the banner must scream 'read me'."""
         mig = self._setup(page)
-        mig.pick_source("mock")
-        mig.pick_target("mock")
-        mig.fill_raw('{"/unsafe/kernel_module": "x"}')
+        # cisco_iosxe_cli → cisco_iosxe stub drops hostname + SNMP → partial.
+        # (Was mock → mock; mock is now hidden from the dropdown, #148.)
+        mig.pick_source("cisco_iosxe_cli")
+        mig.pick_target("cisco_iosxe")
+        mig.fill_raw("hostname R1\nsnmp-server community public RO\n!\n")
         mig.submit_and_wait()
         assert mig.banner_severity_attr() == "block"
 
@@ -394,28 +404,27 @@ class TestStoredConfigCompatWarn:
         mig = self._setup(page)
         expect(mig.filename_compat_warn).to_be_hidden()
 
-    def test_mock_adapter_shows_no_store_warning(
+    def test_incompatible_source_extension_shows_store_warning(
         self, page: Page, base_url: str
     ):
-        """Picking ANY stored config while mock is the source codec
-        must surface a compatibility warning.  The warning text
-        varies by whether mock's output_extension is declared:
+        """Picking a stored config whose extension doesn't match the
+        selected source codec's expected format must surface the
+        filename-mode compatibility warning.
 
-        * No output_extension → "does not read files from the
-          backup store" (the hard-block warning — mock can never
-          read from the store).
-        * ``.json`` output_extension (current state) → "has
-          extension .cfg but mock expects json" (the extension-
-          mismatch warning — mock COULD read .json but the stored
-          config isn't one).
+        The e2e session's stored configs are Cisco ``.cfg`` (CLI dumps);
+        ``cisco_iosxe`` is the OpenConfig-NETCONF stub whose
+        ``output_extension`` is ``xml`` — so ``.cfg`` ≠ ``.xml`` trips the
+        "Translate will almost certainly fail" extension-mismatch warning.
 
-        Either is a legitimate "don't do this" signal; the test
-        accepts both to stay stable across codec-metadata tweaks.
+        (Previously this used the ``mock`` codec, which declares no
+        ``output_extension`` and tripped the "does not read files from the
+        backup store" branch — but mock is now hidden from the dropdown,
+        #148, so a real incompatible codec drives the still-live warning.)
         """
         mig = self._setup(page)
         # Switch to filename mode; only works if there's at least one config.
         page.locator('[data-testid="migrate-input-mode-filename"]').click()
-        mig.pick_source("mock")
+        mig.pick_source("cisco_iosxe")
         sel = page.locator('[data-testid="migrate-filename-select"]')
         options = sel.evaluate(
             "s => Array.from(s.options).map(o => o.value)"
@@ -428,11 +437,8 @@ class TestStoredConfigCompatWarn:
         # Accept either warning-text variant — both signal
         # "this combination won't work".
         warn_text = mig.filename_compat_warn.text_content() or ""
-        assert (
-            "does not read files from the backup store" in warn_text
-            or "Translate will almost certainly fail" in warn_text
-        ), (
-            f"expected a mock-vs-stored-config warning, got: {warn_text!r}"
+        assert "Translate will almost certainly fail" in warn_text, (
+            f"expected an extension-mismatch store warning, got: {warn_text!r}"
         )
 
 
