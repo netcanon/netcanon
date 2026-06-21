@@ -33,6 +33,25 @@ no false positives across a single universal kitchen-sink:
 
 3. **No supported/unsupported overlap** (``test_no_supported_unsupported_overlap``).
 
+4. **Non-walkable lossy/unsupported are documented-synthetic**
+   (``test_lossy_unsupported_nonwalkable_is_documented_synthetic``).  The
+   reverse-parity guard (#1) is enforced for ``supported`` only — a
+   ``supported`` path the walker never yields is unambiguous dead weight.
+   For ``lossy``/``unsupported``, non-walkable is the NORM *by design*: a
+   codec documents its handling of Tier-3 surfaces (firewall / nat / qos /
+   routing-protocols / access-list / mpls / policy), verbatim
+   ``raw-sections`` blobs, whole-field markers, and a handful of per-vendor
+   structural sub-fields the canonical model deliberately does not walk.
+   This guard permits exactly those documented kinds and FAILS on any OTHER
+   non-walkable lossy/unsupported declaration — catching a typo'd path
+   (e.g. ``/snmp/comunity``) that ``validate_against`` could never reach, so
+   the surface would silently report ``severity: ok`` while the codec drops
+   it.  (run3 ``unreachable-matrix-declarations``: the empirical sweep found
+   ZERO dead declarations across the fleet, confirming the literal "every
+   lossy/unsupported is walkable" invariant would only false-fail on the
+   ~30 intentional markers — so the guard is a documented-allowlist gate,
+   not a blanket assertion.)
+
 The third honesty direction — *dropped*-field ⇒ ``unsupported`` — is
 NOT enforced here.  Detecting a "drop" from a single universal
 kitchen-sink produces vendor-naming false positives (e.g. a LAG whose
@@ -274,6 +293,60 @@ def _declares_unsupported(unsupported: set[str], markers: tuple[str, ...]) -> bo
 
 
 # ---------------------------------------------------------------------------
+# Reverse-parity (lossy/unsupported) — documented-synthetic allowlist.
+# ---------------------------------------------------------------------------
+
+#: The top-level path segments the shared walker actually emits.  A declared
+#: lossy/unsupported path whose top segment is NOT one of these is a Tier-3 /
+#: non-canonical surface (firewall, nat, qos, access-list, routing-protocols,
+#: mpls, policy, filter) — modelled only as opaque ``dropped_tier3_sections``,
+#: never walked, so a non-walkable declaration on it is honest documentation,
+#: not a dead rule.
+_WALKABLE_TOP_SEGMENTS = frozenset(
+    p.split("/")[1] for p in _WALKABLE if p.startswith("/")
+)
+
+#: Every whole-field unsupported marker (the field-name spellings like
+#: ``/snmp`` / ``/vlans`` / ``/dns_servers``) the marker dict already blesses.
+#: The cisco_iosxe NETCONF stub declares whole top-level fields unsupported
+#: with these, and they are intentionally coarser than any walker xpath.
+_WHOLE_FIELD_MARKERS = frozenset(
+    m for markers in _FIELD_TO_UNSUPPORTED_MARKERS.values() for m in markers
+)
+
+#: Per-vendor STRUCTURAL synthetic sub-field markers: paths under a modelled
+#: namespace (interfaces / routing-instances / vxlan-vnis) that the walker
+#: deliberately does not descend into, used by a codec to document a vendor
+#: quirk it cannot represent canonically.  Each is a conscious "this is a
+#: marker, not a typo" declaration — adding a new one here is the honesty gate
+#: the reverse-parity guard enforces.
+_SYNTHETIC_NONWALKABLE = frozenset({
+    "/interfaces/interface/4th-port-segment",                  # IOS-XR 4-segment port id
+    "/interfaces/interface/vrrp-groups/group/address-family",  # IOS-XE-CLI modern-AF VRRP
+    "/interfaces/interface/subinterfaces/subinterface",        # Junos dot1q sub-iface unit
+    "/interfaces/interface/subinterfaces/subinterface/ipv6",   # IOS-XE-CLI sub-iface IPv6
+    "/routing-instances/instance/table",                       # VyOS per-VRF route table
+    "/vxlan-vnis/l2vni-route-target",                          # AOS-CX / VyOS L2VNI RT
+})
+
+
+def _is_legitimate_nonwalkable(path: str) -> bool:
+    """True iff a non-walkable lossy/unsupported declaration is a documented
+    synthetic / Tier-3 surface rather than a dead (e.g. typo'd) declaration.
+
+    See :func:`test_lossy_unsupported_nonwalkable_is_documented_synthetic`."""
+    if "/raw-sections/" in path:                          # verbatim-preserved blob
+        return True
+    if path.split("/")[1] not in _WALKABLE_TOP_SEGMENTS:  # Tier-3 / non-canonical top
+        return True
+    if path.startswith("/routing/") and not path.startswith("/routing/static-route"):
+        return True                                       # Tier-3 routing protocol (bgp/ospf/isis…)
+    if path in _WHOLE_FIELD_MARKERS:                      # documented whole-field marker
+        return True
+    return path in _SYNTHETIC_NONWALKABLE                 # blessed per-vendor structural marker
+
+
+# ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
@@ -300,6 +373,38 @@ def test_declared_supported_is_walkable(name: str):
         f"emits, so validate_against can never reach them: {unreachable}.  "
         f"Either normalise the declaration to the walker's vocabulary or "
         f"add the yield to _walk_canonical."
+    )
+
+
+@pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_lossy_unsupported_nonwalkable_is_documented_synthetic(name: str):
+    """Reverse-parity for lossy/unsupported (sibling of the supported-only
+    #8c guard above; run3 ``unreachable-matrix-declarations``).
+
+    Unlike ``supported`` — where a non-walkable declaration is unambiguous
+    dead weight — a ``lossy``/``unsupported`` path the walker never yields is
+    the NORM by design: codecs document their handling of Tier-3 surfaces,
+    verbatim ``raw-sections``, whole-field markers, and a few per-vendor
+    structural sub-fields the canonical model deliberately does not walk.
+    This guard permits exactly those documented kinds (see
+    :func:`_is_legitimate_nonwalkable`) and fails on any OTHER non-walkable
+    lossy/unsupported declaration — catching a typo of a walkable path
+    (e.g. ``/snmp/comunity``) that ``validate_against`` could never reach, so
+    the surface would silently report ``severity: ok`` while the codec drops
+    it."""
+    codec = get_codec(name)
+    caps = codec.capabilities
+    declared = {lp.path for lp in caps.lossy} | {u.path for u in caps.unsupported}
+    suspicious = sorted(
+        p for p in (declared - _WALKABLE) if not _is_legitimate_nonwalkable(p)
+    )
+    assert not suspicious, (
+        f"{name}: declares lossy/unsupported xpath(s) the canonical walker "
+        f"never emits and that match no documented synthetic/Tier-3 pattern, "
+        f"so validate_against can never reach them — likely a typo of a "
+        f"walkable path or a dead declaration: {suspicious}.  Fix the spelling "
+        f"to the walker's vocabulary, or (if it is a genuine non-walkable "
+        f"marker) add it to _SYNTHETIC_NONWALKABLE with a one-line rationale."
     )
 
 
