@@ -21,7 +21,6 @@ import logging
 
 from netmiko import ConnectHandler
 
-from ..config import Settings
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 from .base import BaseCollector
@@ -95,7 +94,7 @@ class NetmikoCollector(BaseCollector):
         # Host-key policy (netcanon.collectors.hostkey): for tofu / reject
         # this adds system_host_keys + ssh_strict (OS ~/.ssh/known_hosts);
         # default auto_add adds nothing (Netmiko's own auto-add behaviour).
-        params.update(netmiko_host_key_params(Settings()))
+        params.update(netmiko_host_key_params(self._effective_settings()))
 
         logger.info("Connecting to %s:%d (%s)", device.host, device.port, device_type)
         logger.debug(
@@ -180,7 +179,7 @@ class NetmikoCollector(BaseCollector):
             params["secret"] = (
                 device.credentials.enable_password.get_secret_value()
             )
-        params.update(netmiko_host_key_params(Settings()))
+        params.update(netmiko_host_key_params(self._effective_settings()))
 
         logger.info(
             "Probing %s:%d (%s) with command %r",

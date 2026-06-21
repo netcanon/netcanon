@@ -41,7 +41,6 @@ import time
 
 import paramiko
 
-from ..config import Settings
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 from .base import BaseCollector
@@ -167,7 +166,7 @@ class ParamikoShellCollector(BaseCollector):
         # Host-key verification policy (see module "Security model" +
         # netcanon.collectors.hostkey): auto_add (default, legacy) / tofu /
         # reject, driven by Settings.ssh_host_key_checking.
-        settings = Settings()
+        settings = self._effective_settings()
         apply_paramiko_policy(client, settings)
 
         logger.info("Connecting (Paramiko shell) to %s:%d", device.host, device.port)
@@ -263,7 +262,7 @@ class ParamikoShellCollector(BaseCollector):
         client = paramiko.SSHClient()
         # Same host-key policy as collect() — see module "Security model"
         # and netcanon.collectors.hostkey.
-        settings = Settings()
+        settings = self._effective_settings()
         apply_paramiko_policy(client, settings)
 
         logger.info(
