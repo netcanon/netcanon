@@ -150,6 +150,17 @@ class TestThemeToggle:
             "() => getComputedStyle(document.body).backgroundColor"
         )
         page.get_by_test_id("nav-theme-toggle").click()
+        # ``body`` animates ``background-color`` over a ~.15s CSS transition,
+        # so reading the computed value *immediately* after the click returns
+        # the pre-/mid-transition (still-light) colour — a flaky read.  Poll
+        # until the rendered background has actually moved off the light token
+        # before asserting; if it genuinely never changes this times out and
+        # the failure points at a real var(--page-bg) regression, not timing.
+        page.wait_for_function(
+            "light => getComputedStyle(document.body).backgroundColor !== light",
+            arg=light_bg,
+            timeout=3000,
+        )
         dark_bg = page.evaluate(
             "() => getComputedStyle(document.body).backgroundColor"
         )
