@@ -56,7 +56,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 
-from ..config import MAX_BACKUP_CONCURRENCY
+from ..config import MAX_BACKUP_CONCURRENCY, Settings
 from ..definitions.loader import DefinitionLoader
 from ..definitions.schema import DeviceDefinition
 from ..models.backup import BackupJob, BackupResult, JobStatus
@@ -81,6 +81,7 @@ def _process_one_device(
     definition_loader: DefinitionLoader | None = None,
     device_profiles: dict[str, DeviceProfile] | None = None,
     device_profile_store: FileDeviceProfileStore | None = None,
+    settings: Settings | None = None,
 ) -> None:
     """Run the backup for a single device and mutate ``job.results[idx]``.
 
@@ -132,6 +133,11 @@ def _process_one_device(
             ``detected_facts`` for UI display.
         device_profile_store: Optional persistence backend for the
             profile registry.
+        settings: Job-level :class:`Settings` snapshot resolved once by
+            :func:`run_backup_job` and injected onto the probe + collect
+            collectors so each device doesn't re-read env / .env per SSH
+            session.  ``None`` (direct callers / tests) leaves the
+            collectors to resolve on demand.
 
     All exceptions are caught and recorded on the ``BackupResult``; this
     function therefore never raises under normal operation.  Any exception
@@ -155,6 +161,10 @@ def _process_one_device(
     # Use the family-base collector for probe — connection-layer
     # settings (netmiko_device_type, auth) are stable across overlays.
     base_collector = _backups_route.get_collector(family_base)
+    # Share the job-level Settings snapshot so probe + collect don't each
+    # re-resolve env / .env on every SSH session (real collectors read
+    # ``self.settings``; mock collectors ignore the attribute).
+    base_collector.settings = settings
 
     detected_facts: dict[str, str] = {}
     if family_base.probe.command and definition_loader is not None:
@@ -226,6 +236,7 @@ def _process_one_device(
     # resolved overlay may have different commands or prompts than
     # the family base even though connection params are stable.
     collector = _backups_route.get_collector(definition)
+    collector.settings = settings  # share the job-level snapshot (see above)
     result = job.results[idx]
     result.status = "running"
     start = time.monotonic()
@@ -285,6 +296,7 @@ def run_backup_job(
     definition_loader: DefinitionLoader | None = None,
     device_profiles: dict[str, DeviceProfile] | None = None,
     device_profile_store: FileDeviceProfileStore | None = None,
+    settings: Settings | None = None,
 ) -> None:
     """Execute all device backups for *job* and update its state.
 
@@ -322,6 +334,10 @@ def run_backup_job(
             through for ``detected_facts`` persistence.
         device_profile_store: Optional persistence backend paired with
             ``device_profiles``.
+        settings: Optional pre-resolved :class:`Settings`.  Resolved once
+            here (``settings or Settings()``) and injected onto every
+            device's collectors so the whole job shares one snapshot
+            instead of re-reading env / .env per SSH session.
 
     Thread safety:
         * ``job.results`` is pre-populated before dispatch and is never
@@ -330,6 +346,12 @@ def run_backup_job(
           ``(device_type, host)`` pairs produce distinct paths so there
           is no contention in the common case.
     """
+    # Resolve Settings once for the whole job and inject it onto each
+    # device's collectors (via _process_one_device) so probe + collect don't
+    # each re-read env / .env per SSH session — and the whole job sees one
+    # consistent snapshot even if the environment changes mid-run.
+    job_settings = settings or Settings()
+
     # Pre-populate every device as "queued" so polling clients see the full
     # device list immediately — they can render placeholder rows before any
     # collection has started.  Each result is mutated in place (never
@@ -363,6 +385,7 @@ def run_backup_job(
             _process_one_device(
                 job, idx, device, definitions, storage,
                 definition_loader, device_profiles, device_profile_store,
+                job_settings,
             )
     else:
         # Parallel path: up to `workers` devices in flight at once; the
@@ -375,6 +398,7 @@ def run_backup_job(
                 pool.submit(
                     _process_one_device, job, idx, device, definitions, storage,
                     definition_loader, device_profiles, device_profile_store,
+                    job_settings,
                 )
                 for idx, device in enumerate(request.devices)
             ]

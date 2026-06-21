@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 
+from ..config import Settings
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 
@@ -33,6 +34,18 @@ class BaseCollector(ABC):
     unchanged, and the pipeline gracefully falls back to the
     family-base definition.
     """
+
+    #: Job-level :class:`~netcanon.config.Settings` snapshot, injected by the
+    #: backup runner (:func:`netcanon.services.backup_runner.run_backup_job`)
+    #: so a single resolution is shared across this job's probe + collect
+    #: calls instead of re-reading env / .env on every SSH session.  ``None``
+    #: → resolve on demand (the default for standalone use and tests).
+    settings: Settings | None = None
+
+    def _effective_settings(self) -> Settings:
+        """Return the injected job-level :class:`Settings`, or a freshly
+        resolved instance when the runner did not inject one."""
+        return self.settings or Settings()
 
     @abstractmethod
     def collect(self, device: DeviceTarget, definition: DeviceDefinition) -> str:
