@@ -1,3 +1,6 @@
+! Source: https://github.com/networktocode/ntc-templates (tests/cisco_ios/show_running-config_interface/cisco_ios_show_running-config_interface.raw)
+! License: Apache-2.0
+! Snapshot: Carrier-grade IOS interfaces -- VRFs, dot1Q Q-in-Q subinterfaces, QoS service-policies, uRPF, ACL groups.
 Building configuration...
 
 Current configuration : 440 bytes

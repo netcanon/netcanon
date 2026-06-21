@@ -1,3 +1,6 @@
+! Source: User-contributed real `show running-config` from a physical Cisco Catalyst 9300-24UX on IOS-XE 17.12 (captured via Netcanon's backup layer; sanitised -- see NOTICE.md)
+! License: CC0-1.0 (user contribution)
+! Snapshot: Physical Cat9300 -- 47 interfaces, 3 LACP EtherChannels, 6 VLANs, rapid-pvst, Cat9k CPP policer grammar, privilege-exec delegation; two type-9 user secrets -> synthetic markers.
 Building configuration...
 
 Current configuration : 14725 bytes

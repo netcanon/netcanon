@@ -1,3 +1,6 @@
+# Source: https://github.com/ksator/lab_management (backup/QFX10K2-174_config.2017-12-19@15:28:23 @ 37e42eb)
+# License: MIT -- Copyright Juniper Networks 2018
+# Snapshot: Junos 17.3R1-S2.1 set-form QFX10002-72Q spine (391 lines) -- channelized break-out ports (`xe-0/0/6:2.10`), 2 ae LAGs w/ ESI + LACP system-id, 7 irb SVIs w/ VRRP, 6 vlan vxlan vni mappings, 3 vrf routing-instances, policy-options (Tier-3).
 set version 17.3R1-S2.1
 set groups POC_Lab system host-name QFX10K2-182
 set groups POC_Lab system backup-router 172.25.90.1

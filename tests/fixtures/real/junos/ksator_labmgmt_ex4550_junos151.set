@@ -1,3 +1,6 @@
+# Source: https://github.com/ksator/lab_management (backup/EX4550-190_config.2017-12-19@15:28:15 @ 37e42eb)
+# License: MIT -- Copyright Juniper Networks 2018
+# Snapshot: Junos 15.1R6.7 set-form EX4550 (52 lines, pure set-form) -- xe-0/0/0-2 trunk ports w/ ethernet-switching vlan members, 6 VLANs, chassis aggregated-devices, apply-groups POC_Lab.
 set version 15.1R6.7
 set groups POC_Lab system host-name EX4550-190
 set groups POC_Lab system backup-router 172.25.90.1

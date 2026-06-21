@@ -1,3 +1,6 @@
+! Source: https://github.com/CiscoDevNet/cml-community (lab-topologies/ccna/Domain_2/2.5-interpret_stp/saumur_PVRSTP_solution.yaml -- saumur node)
+! License: BSD-3-Clause
+! Snapshot: IOS-XE 17.12 CML ioll2-xe -- PVRST+ / spanning-tree-cost grammar, VTP, self-signed PKI trustpoint.
 Building configuration...
 
 Current configuration : 3752 bytes

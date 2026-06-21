@@ -1,3 +1,6 @@
+# Source: https://github.com/ksator/lab_management (backup/QFX5100-183_config.2017-12-19@15:28:16 @ 37e42eb)
+# License: MIT -- Copyright Juniper Networks 2018
+# Snapshot: Junos 17.3R1.10 set-form QFX5100 leaf (106 lines, pure set-form) -- ae0/ae1 LAGs, 2 et-0/0/48-49 40G uplinks, 16 vlans, apply-groups POC_Lab inheritance, root-authentication, RADIUS + SSH.
 set version 17.3R1.10
 set groups POC_Lab system host-name QFX5100-183
 set groups POC_Lab system backup-router 172.25.90.1

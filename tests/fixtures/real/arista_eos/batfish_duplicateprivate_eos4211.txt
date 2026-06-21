@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/lab-validation (snapshots/eos_private_asn/configs/DuplicatePrivate/show_running-config.txt @ d40faf6)
+! License: Apache-2.0
+! Snapshot: vEOS EOS-4.21.1.1F -- light BGP-focused config: hostname, sha512 user, 1 routed interface, stub interfaces, `router bgp 65001` duplicate-private-ASN scenario.
 ! Command: show running-config
 ! device: DuplicatePrivate (vEOS, EOS-4.21.1.1F)
 !

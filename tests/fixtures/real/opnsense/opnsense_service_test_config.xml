@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: https://github.com/opnsense/core (src/opnsense/service/tests/config/config.xml)
+  License: BSD-2-Clause
+  Snapshot: Service-layer test config - real interface zones (wan/lan), DHCP client settings, DHCPv6 prefix delegation, gateway tracking.
+-->
 <opnsense>
   <version>1</version>
   <interfaces>

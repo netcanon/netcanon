@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/lab-validation (snapshots/eos_evpn_l3_design_guide_vlan_based/configs/H-LEAF2A/show_running-config.txt @ d40faf6)
+! License: Apache-2.0
+! Snapshot: vEOS EOS-4.23.0.1F VLAN-based EVPN leaf (L2VNI-only, centralised L3 gw) -- vlan-aware-bundle, Vxlan1 `vxlan vlan X vni Y`, MLAG, router bgp 65102.
 ! Command: show running-config
 ! device: H-LEAF2A (vEOS, EOS-4.23.0.1F)
 !

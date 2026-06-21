@@ -1,3 +1,6 @@
+! Source: https://github.com/StayFresh-NetworkBytes/CiscoLive-BRKOPS-1104-Lab (device_configs/cml-demo-lf1.txt)
+! License: unlicensed public device-output (no LICENSE file; CML lab capture -- factual-output precedent, drop if author objects)
+! Snapshot: IOS-XE 17.15 CML EVPN leaf -- vlan, vrf definition RD/RT, switchport, l2vpn-evpn/VXLAN nve (Tier-3). Sanitised: type-9 secret + pim rp public IP -> synthetic/RFC5737.
 Building configuration...
 
 Current configuration : 6018 bytes

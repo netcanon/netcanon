@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/lab-validation (snapshots/eos_evpn_l3_design_guide/configs/DC1-LEAF2A/show_running-config.txt @ d40faf61c940da7e225c63bb66da9e2487a1ccb8)
+! License: Apache-2.0
+! Snapshot: vEOS EOS-4.23.0.1F symmetric-IRB EVPN leaf -- MLAG across 5 Port-Channels, VXLAN1 overlay, 15 tenant VLANs, router bgp 65102, VRFs, Vlan3009 VARP virtual-router MAC, 40 interfaces.
 ! Command: show running-config
 ! device: DC1-LEAF2A (vEOS, EOS-4.23.0.1F)
 !

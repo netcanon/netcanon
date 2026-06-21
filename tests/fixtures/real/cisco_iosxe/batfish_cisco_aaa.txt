@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/batfish (tests/parsing-tests/networks/unit-tests/configs/cisco_aaa)
+! License: Apache-2.0
+! Snapshot: Cisco IOS AAA accounting/authentication/authorization stanzas -- parse-tolerance fixture (not canonically modelled).
 !
 hostname cisco_aaa
 !

@@ -1,3 +1,6 @@
+# Source: https://github.com/buraglio/Juniper-SR-PCE (netlab-ns-junos-set)
+# License: no declared license -- short `display set` device-output, factual-output precedent (ES.net netlab-ns demo); drop if author objects
+# Snapshot: Junos 18.4R1-S1.1 set-form (28 lines) -- set version, host-name FQDN, root-authentication (parse-and-ignore), em0/lo0 inet/inet6/iso/mpls families, routing-options autonomous-system, protocols bgp/isis/mpls (parse-and-ignore).
 set version 18.4R1-S1.1
 set groups global system services ssh
 set system root-authentication encrypted-password "$6$oJIg7Fw3$ZPzZRNcM0xQEP2LIoAtvbbOGpOybn0Lc6hJb1a656762nfypRkUgLUuABFAcH/ICqY3io/bRpQ9ocp.UkXiSJ/"

@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: https://github.com/opnsense/core (src/etc/config.xml.sample)
+  License: BSD-2-Clause
+  Snapshot: Upstream default `config.xml` template - system, users, groups, webgui, timeservers, bogons, firewall bits.
+-->
 <opnsense>
   <trigger_initial_wizard/>
   <theme>opnsense</theme>
