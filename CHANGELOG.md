@@ -26,6 +26,65 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-06-21
+
+A low-severity polish release.  A third blind-audit pass (run3)
+surfaced ~50 documentation-honesty / CI / dependency-hygiene /
+test-coverage items; each was verified against current `main` before
+fixing (several proved non-findings and were documented rather than
+"fixed").  No runtime behaviour change beyond the backup-settings
+refactor below; the cross-mesh `CODEC_BUG` baseline stays at 5.
+
+### Added
+
+* **Reverse-parity capability-honesty guard.**  A registry-wide test
+  asserts every `lossy` / `unsupported` xpath a codec declares is
+  either walkable by the shared canonical walker or a documented
+  synthetic / Tier-3 marker -- catching a typo'd declaration that
+  `validate_against` could never reach (the sibling of the existing
+  supported-path guard; the empirical sweep found zero dead
+  declarations, so it is a documented-allowlist gate, not a blanket
+  assertion).
+* **Attribution headers on every real-capture fixture.**  The 48
+  previously-headerless third-party captures (7 vendors) now carry a
+  3-line `Source` / `License` / `Snapshot` header in their own comment
+  syntax; `NOTICE.md` remains the authoritative provenance ledger.
+* **THIRD-PARTY-NOTICES completeness.**  Added the copyleft `scp`
+  (LGPL-2.1-or-later, bundled transitively via netmiko) plus 16
+  additional direct/transitive permissive components the MSI
+  redistributes (licenses read from each component's package metadata).
+
+### Changed
+
+* **Backup jobs resolve `Settings` once and share it across the probe +
+  collect collectors** instead of re-reading env / `.env` on every SSH
+  session.
+* **Runtime dependency upper-caps** -- `pydantic<3`, `pydantic-settings<3`,
+  `apscheduler<4` -- so a breaking major can no longer be pulled by `>=`.
+* **Docker Hub mirror is now optional** -- the publish workflow skips the
+  Docker Hub login + image when `DOCKERHUB_TOKEN` is absent (forks publish
+  to GHCR alone); the canonical release path is byte-identical.
+* **Publish-workflow concurrency guards** (`docker-publish` + `pypi-publish`,
+  `cancel-in-progress: false`) so a re-pushed tag can't double-publish.
+* **Documentation honesty pass** -- README trust-signals + badges, the
+  testing-methodology docs, the certified-codec counts (synced to 12),
+  four vendor capability pages, and a `COMPARISON.md` landscape; image
+  verification docs now show the immutable-digest `cosign verify` form.
+
+### Fixed
+
+* **e2e migrate tests** that drove the now-hidden internal `mock` codec
+  through the UI dropdown -- a v0.4.0 fallout invisible to CI (which runs
+  only unit + integration) -- re-pointed at real codec pairs.
+* **FortiGate** `_prefix_to_mask` duplication removed and a swallowed
+  `RenderError` on a malformed SVI mask now surfaces.
+* `THIRD-PARTY-NOTICES.txt` referenced a non-existent `bundled
+  LICENSE.txt` (the bundled file is `LICENSE`).
+* Assorted code + test hygiene: sanitize-CLI read guard, a failed-job
+  status header, dead-module removal, vacuous-skip + XXE-rejection test
+  guards, literal-typed codec metadata, and the internal `mock` codec
+  hidden from the user-facing codec list / sanitiser / detection.
+
 ## [0.4.1] - 2026-06-20
 
 ### Security
