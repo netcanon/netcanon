@@ -428,9 +428,15 @@ provenance can verify each:
   install.
 - **Cosign signatures via Sigstore (GHCR only).**  Published GHCR
   images (`ghcr.io/netcanon/netcanon`) are signed with keyless cosign
-  through GitHub Actions OIDC.  Verifiable with:
+  through GitHub Actions OIDC.  Verify against the **immutable digest**,
+  not a mutable tag — a tag can be repointed after you read it, and
+  because the build sets `provenance: true` the published reference is a
+  multi-arch manifest-list whose digest is what cosign signs.  Resolve
+  the digest first (the GHCR package page, `docker buildx imagetools
+  inspect ghcr.io/netcanon/netcanon:<tag>`, or `crane digest`), then
+  verify the digest:
   ```
-  cosign verify ghcr.io/netcanon/netcanon:<tag> \
+  cosign verify ghcr.io/netcanon/netcanon@sha256:<digest> \
       --certificate-identity-regexp '^https://github\.com/netcanon/netcanon/\.github/workflows/docker-publish\.yml@refs/tags/v' \
       --certificate-oidc-issuer https://token.actions.githubusercontent.com
   ```

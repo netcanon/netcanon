@@ -55,15 +55,23 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
-    "pydantic>=2.0.0",
-    "pydantic-settings>=2.0.0",
+    # Upper-cap the volatile validation core at the current major: a
+    # pydantic 3.x with breaking model/validator semantics would otherwise
+    # be pulled by `>=` and silently break parse/render at runtime
+    # (run3 runtime-deps-no-upper-bounds).
+    "pydantic>=2.0.0,<3",
+    "pydantic-settings>=2.0.0,<3",
     "pyyaml>=6.0",
     "netmiko>=4.4.0",
     "paramiko>=3.4.0",
     "jinja2>=3.1.0",
     "python-multipart>=0.0.9",
     "aiofiles>=23.0.0",
-    "apscheduler>=3.10.4",
+    # Cap below the 4.x rewrite: APScheduler 4 is a ground-up API change
+    # (new scheduler/datastore model) that would break `scheduler.add_job`
+    # usage and app boot if pulled by an unbounded floor (run3
+    # apscheduler-unbounded-floor).
+    "apscheduler>=3.10.4,<4",
     # Hard runtime dep of apscheduler (imported at scheduler startup).
     # Declared explicitly — and pinned away from the yanked 5.4.2 — so a
     # bad upstream tzlocal release can't silently break app boot through

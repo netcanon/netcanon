@@ -202,8 +202,10 @@ serve` refuses to start without a key (or `NETCANON_ALLOW_INSECURE_BIND=1`),
 so an unauthenticated public bind is a deliberate choice — see
 [`SECURITY.md`](SECURITY.md) "Threat Model".
 
-The published image is signed via Sigstore (`cosign verify
-ghcr.io/netcanon/netcanon ...`) with an SBOM attestation.
+The published image is signed via Sigstore with an SBOM attestation.
+Verify against the immutable digest (`ghcr.io/netcanon/netcanon@sha256:<digest>`),
+not a mutable tag — see [`SECURITY.md`](SECURITY.md) "Supply-Chain
+Integrity" for the exact `cosign verify` invocation.
 
 **Docker Hub mirror** — same image, convenience-mirrored to Docker
 Hub if your tooling defaults to `docker.io`:

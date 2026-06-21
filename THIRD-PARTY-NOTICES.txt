@@ -2,7 +2,7 @@ THIRD-PARTY SOFTWARE NOTICES
 ============================
 
 Netcanon itself is distributed under the MIT License (see the bundled
-LICENSE.txt).  The Windows desktop installer (MSI), built with cx_Freeze,
+LICENSE file).  The Windows desktop installer (MSI), built with cx_Freeze,
 *redistributes* the third-party components listed below as compiled
 binaries / bundled Python packages.  This file satisfies their attribution
 requirement and, for the copyleft (LGPL) components, records the written
@@ -40,6 +40,11 @@ that component with this application as permitted by its license.
   Copyright: Jeff Forcier and contributors
   Homepage: https://www.paramiko.org  ·  https://github.com/paramiko/paramiko
 
+* scp (SCP transfer helper, pulled in transitively by netmiko)
+  License: LGPL-2.1-or-later
+  Copyright: James Bardin, Remi Rampin and contributors
+  Homepage: https://github.com/jbardin/scp.py
+
 * pystray (system-tray integration for the desktop shell)
   License: LGPL-3.0-or-later
   Copyright: Moses Palmér
@@ -60,6 +65,26 @@ Permissive components (attribution)
 * keyring           — MIT            — Jason R. Coombs    — https://github.com/jaraco/keyring
 * defusedxml        — PSF-2.0        — Christian Heimes   — https://github.com/tiran/defusedxml
 * CPython runtime   — PSF-2.0        — Python Software Foundation — https://www.python.org
+
+Additional permissive components (direct + transitive deps redistributed in the MSI)
+------------------------------------------------------------------------------------
+Licenses below were read from the components' own installed package metadata.
+* bcrypt            — Apache-2.0     — The Python Cryptographic Authority — https://github.com/pyca/bcrypt
+* PyNaCl            — Apache-2.0     — The PyNaCl developers (PyCA) — https://github.com/pyca/pynacl
+* cffi              — MIT            — Armin Rigo, Maciej Fijałkowski — https://github.com/python-cffi/cffi
+* pycparser         — BSD-3-Clause   — Eli Bendersky — https://github.com/eliben/pycparser
+* click             — BSD-3-Clause   — Pallets — https://palletsprojects.com/p/click/
+* h11               — MIT            — Nathaniel J. Smith — https://github.com/python-hyper/h11
+* MarkupSafe        — BSD-3-Clause   — Pallets — https://palletsprojects.com/p/markupsafe/
+* annotated-types   — MIT            — Adrian Garcia Badaracco and contributors — https://github.com/annotated-types/annotated-types
+* typing_extensions — PSF-2.0        — Python Software Foundation — https://github.com/python/typing_extensions
+* idna              — BSD-3-Clause   — Kim Davies and contributors — https://github.com/kjd/idna
+* textfsm           — Apache-2.0     — Google LLC — https://github.com/google/textfsm
+* ntc-templates     — Apache-2.0     — Network to Code, LLC — https://github.com/networktocode/ntc-templates
+* pyserial          — BSD-3-Clause   — Chris Liechti — https://github.com/pyserial/pyserial
+* python-multipart  — Apache-2.0     — Andrew Dunham and contributors — https://github.com/Kludex/python-multipart
+* python-dotenv     — BSD-3-Clause   — Saurabh Kumar and contributors — https://github.com/theskumar/python-dotenv
+* six               — MIT            — Benjamin Peterson — https://github.com/benjaminp/six
 
 Notes
 -----
