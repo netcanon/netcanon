@@ -1,3 +1,6 @@
+# Source: https://github.com/ksator/lab_management (backup/QFX5110-169_config.2017-12-19@15:28:19 @ 37e42eb)
+# License: MIT -- Copyright Juniper Networks 2018
+# Snapshot: Junos 17.3R1-S2.1 set-form QFX5110 48x10G+6x40G leaf (52 lines) -- basic apply-groups + lo0; platform-class coverage (newer ASIC than QFX5100).
 set version 17.3R1-S2.1
 set groups POC_Lab system host-name QFX5110-169
 set groups POC_Lab system backup-router 172.25.90.1

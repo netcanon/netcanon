@@ -1,3 +1,6 @@
+! Source: https://github.com/CiscoDevNet/cml-community (lab-topologies/basic-forwarding-behavior.yaml -- R1 IOSv node)
+! License: BSD-3-Clause
+! Snapshot: Cisco IOSv 15.x -- OSPF single-area multi-feature + dot1Q subinterfaces + banner block; lab RFC1918.
 !
 hostname R1
 !

@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/lab-validation (snapshots/ios_basic_vrrp/configs/BR1/show_running-config.txt @ d40faf6)
+! License: Apache-2.0 (derived)
+! Snapshot: Cisco IOS BR1 -- VRRP grammar (`vrrp 12 ip`/`priority`) + 4 routed interfaces + static default; cleartext lab credential retained (RFC5737-class).
 Building configuration...
 
   

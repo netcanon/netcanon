@@ -1,3 +1,6 @@
+# Source: https://github.com/networktocode/ntc-templates (tests/mikrotik_routeros/ip_address_export_verbose/mikrotik_routeros_ip_address_export_verbose.raw)
+# License: Apache-2.0
+# Snapshot: RouterOS 6.48.6 `/export verbose` snippet -- `# ... by RouterOS` banner + `/ip address` section with quoted comments.
 # jul/21/2023 09:42:42 by RouterOS 6.48.6
 # software id = 1234-ABCD
 #

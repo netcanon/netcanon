@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/batfish (tests/parsing-tests/networks/unit-tests/configs/cisco_interface)
+! License: Apache-2.0
+! Snapshot: Interface grammar kitchen-sink -- every interface sub-command Batfish's parser supports on one Ethernet.
 !
 hostname cisco_interface
 !

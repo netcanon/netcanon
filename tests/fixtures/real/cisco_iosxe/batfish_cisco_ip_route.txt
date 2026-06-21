@@ -1,3 +1,6 @@
+! Source: https://github.com/batfish/batfish (tests/parsing-tests/networks/unit-tests/configs/cisco_ip_route)
+! License: Apache-2.0
+! Snapshot: Static-route variants -- `ip route ... name`, track, administrative distance, tag, permanent.
 !
 hostname cisco_ip_route
 !

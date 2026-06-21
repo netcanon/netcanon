@@ -1,3 +1,6 @@
+# Source: https://github.com/AmirArsalanTaqavi/Mikrotik-Config-Examples (initial-provisioning.rsc)
+# License: MIT
+# Snapshot: RouterOS provisioning script (L009UiGS-2HaxD, not a /export) -- /interface bridge + bridge port, /interface ethernet w/ comments, /ip service, /user add, DHCP, WireGuard, firewall. Password is the source's own `ChangeMe123!` placeholder.
 # MikroTik RouterOS - Initial Provisioning Script
 # Based on Model: L009UiGS-2HaxD (ARM)
 # Description: Basic setup including Bridge, DHCP, WireGuard, and Firewall hardening.

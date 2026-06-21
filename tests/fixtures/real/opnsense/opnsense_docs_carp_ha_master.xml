@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: https://github.com/opnsense/docs (source/manual/how-tos/resources/Carp_example_master.xml @ a508f63b08c9688c9aabc94f08c312a4950c1381)
+  License: BSD-2-Clause
+  Snapshot: Official OPNsense docs CARP HA master-node example (704 lines, schema 11.2) - full <virtualip> (2 carp <vip>) + master-side <hasync> pfsync settings. Docs-sample `opnsense` CARP key + empty-salt $6$ user hash.
+-->
 <opnsense>
   <version>11.2</version>
   <lastchange/>

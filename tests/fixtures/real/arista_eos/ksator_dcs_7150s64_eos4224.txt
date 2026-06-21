@@ -1,3 +1,6 @@
+! Source: https://github.com/ksator/arista_eos_audit (output/10.83.28.122/eos_commands/text/show running-config.txt)
+! License: unlicensed public device-output (no LICENSE file; public Arista-community audit-tool demo repo -- factual-output precedent, drop if author objects)
+! Snapshot: DCS-7150S-64-CL `show running-config` on EOS 4.22.4M -- hostname/DNS/NTP/SNMP, 5 local users, mstp, aaa, 52 Ethernet + 16 QSFP-breakout subports, Loopback0/Management1, static route, parse-and-ignore router bgp.
 ! Command: show running-config
 ! device: switch1 (DCS-7150S-64-CL, EOS-4.22.4M-2GB)
 !

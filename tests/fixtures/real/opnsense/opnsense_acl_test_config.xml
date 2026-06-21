@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: https://github.com/opnsense/core (src/opnsense/mvc/tests/app/models/OPNsense/ACL/AclConfig/config.xml)
+  License: BSD-2-Clause
+  Snapshot: ACL model test config - 4 groups (admins + 3 test groups w/ distinct priv lists) + 5 users (root + per-group testers + restricted admin). Richest local_users surface in the corpus.
+-->
 <opnsense>
   <trigger_initial_wizard/>
   <theme>opnsense</theme>

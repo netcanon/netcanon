@@ -1,3 +1,6 @@
+! Source: https://github.com/karneliuk-com/batfish-mvp (snapshots/nat/configs/EOS1.cfg @ 62e8ce7)
+! License: BSD-3-Clause -- Copyright 2021 karneliuk.com
+! Snapshot: vEOS EOS-4.26.0.1F EVPN/VXLAN kitchen-sink -- multi-agent routing model, mstp, sha512 AAA, VLAN100, Vxlan1 vni 100, prefix-list, route-maps, router bgp 65033 evpn + ipv4 AFs.
 ! Command: show running-config
 ! Time: Sat Jun 26 15:23:13 2021
 ! device: A-EOS1 (vEOS, EOS-4.26.0.1F)

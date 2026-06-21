@@ -1,3 +1,6 @@
+# Source: https://github.com/batfish/lab-validation (snapshots/junos_evpn_type5/configs/router1/show_configuration_|_display_set.txt @ d40faf6)
+# License: Apache-2.0
+# Snapshot: Junos 25.4R1.12 set-form EVPN Type-5 -- `set vlans <name> vxlan vni`, 4 IRB sub-interfaces + VRRP, routing-instances vrf RD/vrf-target, protocols evpn vxlan, bgp family evpn signaling. Type-5 routes parse-and-ignore.
 set version 25.4R1.12
 set system host-name router1
 set system root-authentication encrypted-password "$6$sr/SJsLZ$n1stApaAKubyIZNKxJxnfIfdW4/ohw9GsO7QbQSxS09jHzhNoXRy4qzfIOZZN2iza3lKfeN9wN90.cNEkIY1y/"

@@ -1,3 +1,6 @@
+# Source: https://github.com/saidvandeklundert/rust (projects/jsc/config_17_set.txt)
+# License: MIT (Copyright 2023 saidvandeklundert)
+# Snapshot: Junos 17.2R3.4 set-form -- SNMPv3 USM (`set snmp v3 usm local-engine user` + auth-sha + privacy-aes128 + vacm) + snmp location, ae1-ae6/ae101-202 802.3ad LAGs, trunk VLANs, static routes. IPs -> RFC5737; secrets upstream `/* SECRET-DATA */`.
 set version 17.2R3.4
 set system login class READ permissions clear
 set system login class READ permissions maintenance

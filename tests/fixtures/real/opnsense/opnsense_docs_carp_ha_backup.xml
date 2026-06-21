@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: https://github.com/opnsense/docs (source/manual/how-tos/resources/Carp_example_backup.xml @ a508f63b08c9688c9aabc94f08c312a4950c1381)
+  License: BSD-2-Clause
+  Snapshot: Official OPNsense docs CARP HA backup-node example (701 lines, schema 11.2) - <virtualip> WAN VHID 1 + LAN VHID 3 in carp mode, reduced backup-side <hasync> block. Cross-validates both sides of a CARP relationship.
+-->
 <opnsense>
   <version>11.2</version>
   <lastchange/>

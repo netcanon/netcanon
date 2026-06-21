@@ -1,3 +1,6 @@
+# Source: https://github.com/TsG8139/evpn-vxlan-implementation (srx/leaf02.txt)
+# License: MIT (Copyright 2026 TsG8139)
+# Snapshot: Junos 23.2R1.14 set-form EVPN-VXLAN leaf -- DHCPv6-client (`fxp0 ... family inet6 dhcpv6-client`), vrf routing-instances (RD + vrf-target), IPv6 addressing, dot1q sub-interfaces. $6$ root hash -> synthetic; router-id 2.2.2.2 -> RFC5737.
 set version 23.2R1.14
 set system root-authentication encrypted-password "$6$fakeSalt$fakeHashExampleValueForFixtureOnlyNotARealCredential0000000000000000000000000000"
 set system services ssh root-login allow

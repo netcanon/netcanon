@@ -1,3 +1,6 @@
+# Source: User-contributed real `/export verbose` from a CRS310-8G+2S+ on RouterOS 7.18.2 (sanitised by scripts/ -- see NOTICE.md)
+# License: CC0-1.0 (user contribution)
+# Snapshot: Home-lab CRS310 (630 lines) -- renamed ethernet port fleet, 5 VLANs, bridge + bridge port, BGP template stub, IPv6 ND, l2tp/sstp server, MPLS settings, system clock/leds/watchdog. Serial/software-id/MACs -> placeholders; RFC1918 retained.
 # 2026-04-21 20:35:02 by RouterOS 7.18.2
 # software id = XXXX-XXXX
 #

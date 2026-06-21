@@ -1,3 +1,6 @@
+# Source: https://github.com/adamcharnock/routeros-diff (tests/test_files/verbose_export.rsc)
+# License: MIT
+# Snapshot: RouterOS 6.48.1 `/export verbose` (484 lines, RB952Ui-5ac2nD) -- /interface bridge + vlan (named gn-mgmt), /ip address, /ip dhcp-server network + /ip pool, /snmp, /interface wireless, /queue tree.
 # feb/22/2021 01:08:08 by RouterOS 6.48.1
 # software id = RI0B-IPQ6
 #

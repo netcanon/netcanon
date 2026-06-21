@@ -1,3 +1,6 @@
+# Source: https://github.com/JNPRAutomate/mnha-ipsec-and-multiple-routing-instances (full-configurations/mnha-vsrx-a.set)
+# License: MIT (Juniper Networks automation org)
+# Snapshot: Junos vSRX MNHA set-form (637 lines) -- multiple routing-instances w/ descriptions + virtual-router/vrf mix, 3-address lo0.10, st0 secure-tunnel units, security ike/ipsec, apply-groups MNHA (Tier-3). secondary-dns 8.8.8.8 -> RFC5737; PSKs are upstream $9$Fake placeholders.
 set groups global
 set groups MNHA-SYNC security ike proposal IKE-PROP-1 description MNHA-IKE-PROPOSAL_for_ICL
 set groups MNHA-SYNC security ike proposal IKE-PROP-1 authentication-method pre-shared-keys

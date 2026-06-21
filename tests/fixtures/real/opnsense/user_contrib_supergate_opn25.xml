@@ -1,4 +1,9 @@
 <?xml version="1.0"?>
+<!--
+  Source: User-contributed real `/conf/config.xml` from a deployed OPNsense instance (captured via Netcanon's backup layer; heavily sanitised - see NOTICE.md)
+  License: CC0-1.0 (user contribution)
+  Snapshot: Deployed OPNsense (2,302-line config.xml) - 8 interfaces, 5 <vlans>, 2 bcrypt users, per-zone DHCP w/ static reservations, Unbound DNS, NTP/SNMP/IPsec/WireGuard, self-signed CA + cert chain. 2 bcrypt hashes + apikeys + private keys -> synthetic; domain -> example.test; 13 MACs OUI-preserving-sanitised.
+-->
 
 <opnsense>
 
