@@ -129,12 +129,36 @@ class DesktopApp:
         self._server.stop()
 
     def _show_preferences(self) -> None:
-        """Open the Preferences dialog (modal, blocks until closed).
+        """Open the Preferences dialog, marshalling onto the Qt GUI thread.
 
-        Imports PySide6 and the dialog lazily so this method is safe to
-        call from the pystray background thread on Windows even though
-        the dialog itself must be constructed on the main Qt thread —
-        Qt's invokeMethod machinery handles the marshalling.
+        This is wired as the tray ``on_preferences`` callback, so it fires
+        on **pystray's background thread**.  The dialog is a ``QWidget`` and
+        Qt forbids constructing or ``exec``-ing widgets off the GUI thread
+        (cross-thread UB / hard crash).  When we detect we're not on the GUI
+        thread we post the work to the GUI thread's event loop via
+        ``QMetaObject.invokeMethod`` (the same marshalling ``window.py`` uses
+        for ``show`` / ``hide`` / ``quit``); the call returns immediately and
+        the modal dialog runs on the GUI thread, keeping the tray responsive.
+        On the GUI thread already (or with no ``QApplication`` yet, e.g. unit
+        tests) we run inline.
+        """
+        from PySide6.QtCore import QMetaObject, Qt, QThread
+        from PySide6.QtWidgets import QApplication
+
+        app = QApplication.instance()
+        if app is not None and app.thread() is not QThread.currentThread():
+            QMetaObject.invokeMethod(
+                app,
+                self._open_preferences_dialog,
+                Qt.ConnectionType.QueuedConnection,
+            )
+        else:
+            self._open_preferences_dialog()
+
+    def _open_preferences_dialog(self) -> None:
+        """Construct + exec the Preferences dialog (modal, blocks until
+        closed).  MUST run on the Qt GUI thread — ``_show_preferences``
+        marshals here when invoked from the pystray background thread.
         """
         from netcanon_desktop.preferences import DesktopPreferences
         from netcanon_desktop.preferences_dialog import PreferencesDialog
