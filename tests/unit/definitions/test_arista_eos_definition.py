@@ -10,12 +10,11 @@ device.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from netcanon.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.loader import DefinitionLoader
 from netcanon.definitions.schema import DeviceDefinition
 
@@ -27,8 +26,7 @@ pytestmark = pytest.mark.unit
 # ---------------------------------------------------------------------------
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_ARISTA_DEFINITION_PATH = _REPO_ROOT / "definitions" / "arista" / "eos" / "4.32.yaml"
+_ARISTA_DEFINITION_PATH = LIBRARY_DIR / "arista" / "eos" / "4.32.yaml"
 
 
 def _load_definition() -> DeviceDefinition:
@@ -128,7 +126,7 @@ class TestSchemaCompliance:
     def test_loaded_via_definition_loader(self):
         """End-to-end: the production loader picks the file up and
         registers it under the ``Arista`` type_key."""
-        loader = DefinitionLoader(_REPO_ROOT / "definitions")
+        loader = DefinitionLoader(LIBRARY_DIR)
         defs = loader.load_all()
         assert "Arista" in defs, (
             f"Arista type_key missing from shipped definitions: "

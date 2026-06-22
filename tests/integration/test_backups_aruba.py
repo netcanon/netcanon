@@ -18,21 +18,20 @@ caller.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
 from tests.conftest import FakeCollector
 
 pytestmark = pytest.mark.integration
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ARUBA_DEF_SRC = REPO_ROOT / "definitions" / "aruba" / "aos-s" / "16.x.yaml"
+ARUBA_DEF_SRC = LIBRARY_DIR / "aruba" / "aos-s" / "16.x.yaml"
 
 
 # Synthetic AOS-S running-config — small but recognisable shape:

@@ -181,10 +181,10 @@ docker run --rm -p 8000:8000 \
 ```
 
 `configs/` is where backed-up running-configs land; `data/` holds
-device profiles, schedules, and job state.  Don't bind-mount
-`definitions/` — those YAMLs are baked into the image as tracked
-content; mounting an empty host directory over them will crash
-startup.
+device profiles, schedules, and job state.  The device-definition
+library ships *inside the package* (there is no `definitions/` mount
+target) — set `NETCANON_DEFINITIONS_DIR` to a bind-mounted directory
+only if you maintain a custom definition set.
 
 `NETCANON_FERNET_KEY` injects the credential-encryption key directly
 (recommended for production / orchestrated deployments — the key
@@ -349,7 +349,7 @@ Full workflow is in [`BUG_REPORTING.md`](BUG_REPORTING.md).
 | Read the canonical model overview | [`netcanon/migration/canonical/README.md`](netcanon/migration/canonical/README.md) |
 | Add or change an HTTP route | [`netcanon/api/routes/README.md`](netcanon/api/routes/README.md) — frozen pipeline-stage signatures, endpoint inventory |
 | Add a new codec | [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md) |
-| Add a new device definition / target profile | [`definitions/README.md`](definitions/README.md) |
+| Add a new device definition / target profile | [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) |
 | Add a new canonical field | [`docs/adding-a-canonical-field.md`](docs/adding-a-canonical-field.md) |
 | Ship a feature across web + desktop | [`docs/feature-parity-walkthrough.md`](docs/feature-parity-walkthrough.md) |
 | See what's shipped recently | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -383,6 +383,8 @@ netcanon/              FastAPI application (shared by both platforms)
  ├── api/routes/          HTTP endpoints
  ├── collectors/          SSH/NETCONF/REST fetchers — one factory,
  │                        one mock-point (`get_collector`)
+ ├── definitions/         Device-definition loader + shipped YAML
+ │                        library (`library/`, baked into the wheel)
  ├── migration/           Cross-vendor translation pipeline
  │   ├── canonical/         CanonicalIntent model + shared transforms
  │   └── codecs/            Per-vendor parse/render implementations
@@ -393,7 +395,6 @@ netcanon/              FastAPI application (shared by both platforms)
                           carry a data-testid — see AGENTS.md)
 
 netcanon_desktop/      Windows tray/webview shell around the same server
-definitions/            Device definition YAMLs
 tools/demo.py           One-command cross-vendor translation demo
 docs/walkthroughs/      Narrative migration walkthroughs (paired with demo)
 docs/vendors/           Per-vendor "what works for me?" pages

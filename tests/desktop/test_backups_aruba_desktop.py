@@ -19,12 +19,12 @@ from __future__ import annotations
 import shutil
 import socket
 import urllib.request
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
 from netcanon_desktop.server import ServerThread
 from tests.conftest import FakeCollector
@@ -32,8 +32,7 @@ from tests.conftest import FakeCollector
 pytestmark = pytest.mark.desktop
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ARUBA_DEF_SRC = REPO_ROOT / "definitions" / "aruba" / "aos-s" / "16.x.yaml"
+ARUBA_DEF_SRC = LIBRARY_DIR / "aruba" / "aos-s" / "16.x.yaml"
 
 
 def _free_port() -> int:
@@ -53,7 +52,7 @@ def _build_settings_with_aruba(tmp_path) -> Settings:
     shutil.copy(ARUBA_DEF_SRC, aruba_dst / "16.x.yaml")
     # We also copy in target_profiles so create_app's migration wiring
     # finds the directory at startup (parity with the production tree).
-    src_profiles = REPO_ROOT / "definitions" / "target_profiles"
+    src_profiles = LIBRARY_DIR / "target_profiles"
     if src_profiles.is_dir():
         shutil.copytree(src_profiles, defs / "target_profiles")
 

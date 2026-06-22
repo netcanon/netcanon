@@ -13,19 +13,17 @@ this definition is what the backup pipeline uses to *fetch* the
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from netcanon.collectors.probe import parse_probe_output
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ARUBA_DEF_PATH = REPO_ROOT / "definitions" / "aruba" / "aos-s" / "16.x.yaml"
+ARUBA_DEF_PATH = LIBRARY_DIR / "aruba" / "aos-s" / "16.x.yaml"
 
 
 # Canonical AOS-S "show system" output.  The colon-aligned key/value

@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
+from netcanon.definitions import LIBRARY_DIR
 from netcanon_desktop.settings import DESKTOP_PORT, desktop_settings
 
 pytestmark = pytest.mark.desktop
@@ -28,13 +29,13 @@ class TestDesktopPort:
 class TestDesktopSettingsDev:
     """When ``sys.frozen`` is absent the settings use the repo-relative paths."""
 
-    def test_definitions_dir_is_repo_relative(self, tmp_path):
+    def test_definitions_dir_is_packaged_library(self, tmp_path):
         # Ensure sys.frozen is not set
         with patch.object(sys, "frozen", False, create=True):
             settings = desktop_settings()
-        # definitions_dir should be <repo_root>/definitions
-        repo_root = Path(__file__).parent.parent.parent
-        assert settings.definitions_dir == repo_root / "definitions"
+        # In dev mode definitions resolve to the library bundled inside the
+        # netcanon package (LIBRARY_DIR), not a repo-root `definitions/`.
+        assert settings.definitions_dir == LIBRARY_DIR
 
     def test_configs_dir_is_repo_relative(self, tmp_path):
         with patch.object(sys, "frozen", False, create=True):

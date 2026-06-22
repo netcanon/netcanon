@@ -72,11 +72,12 @@ COPY --from=builder /wheels /wheels
 RUN pip install --no-cache-dir --no-index --find-links=/wheels netcanon \
     && rm -rf /wheels
 
-# Per-vendor backup-side device definitions — read by the app's lifespan
-# at startup (DefinitionLoader walks /app/definitions).  These ship in the
-# image rather than being bind-mounted because they're tracked-content,
-# not operator state.
-COPY definitions/ /app/definitions/
+# Per-vendor backup-side device definitions are read by the app's lifespan
+# at startup.  They now ship *inside the wheel* as package data
+# (netcanon/definitions/library/, installed above), and the default
+# `definitions_dir` resolves to that packaged copy — so there is no separate
+# COPY here and no working-directory assumption.  Operators who maintain a
+# custom definition tree mount it and point NETCANON_DEFINITIONS_DIR at it.
 
 # Operator state directories — bind-mount for persistence across container
 # restarts.  Default to /app/configs (backup output) + /app/data (jobs /

@@ -52,7 +52,11 @@ MSI_VERSION = os.environ.get("NETCANON_MSI_VERSION", MSI_VERSION_DEFAULT)
 # ---------------------------------------------------------------------------
 
 HERE = Path(__file__).parent
-DEFINITIONS_DIR = HERE / "definitions"
+# The device-definition library lives inside the package
+# (netcanon/definitions/library/) so it ships in the wheel; the frozen MSI
+# bundles that same tree next to the EXE under "definitions/" (see
+# include_files below) where desktop_settings() finds it when sys.frozen.
+DEFINITIONS_DIR = HERE / "netcanon" / "definitions" / "library"
 
 # ---------------------------------------------------------------------------
 # MSI upgrade code — MUST remain constant across releases so the installer

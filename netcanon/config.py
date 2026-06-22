@@ -24,13 +24,37 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 MAX_BACKUP_CONCURRENCY: int = 10
 
 
+def _default_definitions_dir() -> Path:
+    """Resolve the default device-definition library root.
+
+    Returns the library bundled *inside the installed package*
+    (:data:`netcanon.definitions.LIBRARY_DIR`, i.e.
+    ``netcanon/definitions/library/``) rather than a working-directory-relative
+    ``definitions/``.  This is what makes a plain ``pip install netcanon`` +
+    ``uvicorn netcanon.main:app`` boot from *any* directory — previously the
+    server crashed on startup with ``FileNotFoundError`` because the wheel
+    shipped no definition tree and the default pointed at ``./definitions``.
+
+    Operators relocate the library with ``NETCANON_DEFINITIONS_DIR`` (env
+    sources still take precedence over this default).  Imported lazily so
+    ``netcanon.config`` stays import-light and free of an import cycle with
+    the definitions package.
+    """
+    from .definitions import LIBRARY_DIR
+
+    return LIBRARY_DIR
+
+
 class Settings(BaseSettings):
     """Runtime configuration for the Netcanon application.
 
     Attributes:
         definitions_dir: Directory tree containing ``*.yaml`` device definition
-            files.  Defaults to ``definitions/`` relative to the working
-            directory so the shared definition library is used out of the box.
+            files.  Defaults to the library bundled inside the installed
+            package (``netcanon/definitions/library/``, see
+            :func:`_default_definitions_dir`) so a plain ``pip install`` works
+            from any working directory.  Override with
+            ``NETCANON_DEFINITIONS_DIR`` to point at a custom tree.
         configs_dir: Directory where captured configuration files are stored.
         data_dir: Optional explicit override for the *data root* — the parent
             directory under which ``jobs/``, ``schedules/``, and ``devices/``
@@ -97,7 +121,7 @@ class Settings(BaseSettings):
             netcanon data-dir store described above.  See SECURITY.md.
     """
 
-    definitions_dir: Path = Path("definitions")
+    definitions_dir: Path = Field(default_factory=_default_definitions_dir)
     configs_dir: Path = Path("configs")
     data_dir: Path | None = None
     host: str = "0.0.0.0"

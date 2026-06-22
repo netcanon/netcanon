@@ -10,20 +10,18 @@ Exercises the version probe against a realistic VyOS ``show version``.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from netcanon.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.loader import DefinitionLoader
 from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFINITION_PATH = _REPO_ROOT / "definitions" / "vyos" / "vyos" / "1.x.yaml"
+_DEFINITION_PATH = LIBRARY_DIR / "vyos" / "vyos" / "1.x.yaml"
 
 
 def _load_definition() -> DeviceDefinition:
@@ -71,7 +69,7 @@ class TestSchemaCompliance:
         assert "LIVE-VALIDATED" in notes
 
     def test_loaded_via_definition_loader(self):
-        defs = DefinitionLoader(_REPO_ROOT / "definitions").load_all()
+        defs = DefinitionLoader(LIBRARY_DIR).load_all()
         assert "VyOS" in defs, sorted(defs.keys())
         assert defs["VyOS"].vendor == "VyOS"
 

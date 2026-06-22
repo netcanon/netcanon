@@ -18,21 +18,20 @@ caller.
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
 from tests.conftest import FakeCollector
 
 pytestmark = pytest.mark.integration
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-ARISTA_DEF_SRC = REPO_ROOT / "definitions" / "arista" / "eos" / "4.32.yaml"
+ARISTA_DEF_SRC = LIBRARY_DIR / "arista" / "eos" / "4.32.yaml"
 
 
 # Synthetic Arista EOS running-config — small but recognisable shape:

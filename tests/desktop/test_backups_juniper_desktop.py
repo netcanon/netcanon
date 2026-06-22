@@ -28,7 +28,6 @@ this test pins.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -36,13 +35,13 @@ from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.main import create_app
 
 pytestmark = pytest.mark.desktop
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-JUNOS_DEF_PATH = REPO_ROOT / "definitions" / "juniper" / "junos" / "22.x.yaml"
+JUNOS_DEF_PATH = LIBRARY_DIR / "juniper" / "junos" / "22.x.yaml"
 
 
 class _NoopCollector(BaseCollector):

@@ -9,20 +9,18 @@ the ASR 9000 and NCS platform families.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from netcanon.collectors.probe import PROBE_TIMESTAMP_KEY, parse_probe_output
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.loader import DefinitionLoader
 from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
 
-_REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFINITION_PATH = _REPO_ROOT / "definitions" / "cisco" / "ios-xr" / "7.x.yaml"
+_DEFINITION_PATH = LIBRARY_DIR / "cisco" / "ios-xr" / "7.x.yaml"
 
 
 def _load_definition() -> DeviceDefinition:
@@ -70,7 +68,7 @@ class TestSchemaCompliance:
         assert "NOT YET VALIDATED" in _load_definition().notes
 
     def test_loaded_via_definition_loader(self):
-        defs = DefinitionLoader(_REPO_ROOT / "definitions").load_all()
+        defs = DefinitionLoader(LIBRARY_DIR).load_all()
         assert "CiscoIOSXR" in defs, sorted(defs.keys())
         assert "Cisco" in defs  # coexists with IOS-XE family base
         assert defs["CiscoIOSXR"].os == "IOS-XR"

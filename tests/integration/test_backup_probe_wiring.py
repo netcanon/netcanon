@@ -29,6 +29,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from netcanon.collectors.base import BaseCollector
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.schema import DeviceDefinition
 from netcanon.main import create_app
 from netcanon.models.device import DeviceTarget
@@ -356,10 +357,8 @@ class TestShippedCiscoIOSXEProbeBlock:
     def test_cisco_iosxe_family_base_declares_probe(self):
         from netcanon.definitions.loader import DefinitionLoader
 
-        # Project-root definitions/ directory — the shipped set.
-        repo_root = Path(__file__).resolve().parents[2]
-        defs_dir = repo_root / "definitions"
-        loader = DefinitionLoader(defs_dir)
+        # The shipped definition library bundled in the package.
+        loader = DefinitionLoader(LIBRARY_DIR)
         definitions = loader.load_all()
 
         assert "Cisco" in definitions, (
@@ -385,9 +384,7 @@ class TestShippedCiscoIOSXEProbeBlock:
         Probe runs on the family-base collector before resolve()."""
         from netcanon.definitions.loader import DefinitionLoader
 
-        repo_root = Path(__file__).resolve().parents[2]
-        defs_dir = repo_root / "definitions"
-        loader = DefinitionLoader(defs_dir)
+        loader = DefinitionLoader(LIBRARY_DIR)
         # resolve() needs load_all() to populate the variant registry.
         loader.load_all()
 

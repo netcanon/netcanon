@@ -21,11 +21,11 @@ from __future__ import annotations
 
 import socket
 import urllib.request
-from pathlib import Path
 
 import pytest
 
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.loader import DefinitionLoader
 from netcanon.main import create_app
 from netcanon_desktop.server import ServerThread
@@ -33,8 +33,7 @@ from netcanon_desktop.server import ServerThread
 pytestmark = pytest.mark.desktop
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-SHIPPED_DEFINITIONS_DIR = REPO_ROOT / "definitions"
+SHIPPED_DEFINITIONS_DIR = LIBRARY_DIR
 
 
 def _free_port() -> int:
