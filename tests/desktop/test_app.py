@@ -211,3 +211,37 @@ class TestDesktopAppShowPreferences:
         MockDialog.assert_called_once()
         instance.create.assert_called_once()
         instance.exec.assert_called_once()
+
+    def test_show_preferences_marshals_to_gui_thread_off_thread(self, app):
+        """Regression: the tray fires ``_show_preferences`` on pystray's
+        background thread, but a QWidget dialog must be constructed + exec'd
+        on the Qt GUI thread (cross-thread construction is UB / a crash).
+        When off the GUI thread we post the work via
+        ``QMetaObject.invokeMethod`` (QueuedConnection) instead of building
+        the dialog inline — the same marshalling ``window.py`` uses for
+        ``show`` / ``hide`` / ``quit``.
+        """
+        from PySide6.QtCore import Qt
+
+        gui_thread = object()
+        bg_thread = object()
+        with (
+            patch("PySide6.QtWidgets.QApplication") as MockQApp,
+            patch("PySide6.QtCore.QThread") as MockQThread,
+            patch("PySide6.QtCore.QMetaObject") as MockQMeta,
+            patch(
+                "netcanon_desktop.preferences_dialog.PreferencesDialog"
+            ) as MockDialog,
+        ):
+            fake_app = MockQApp.instance.return_value
+            fake_app.thread.return_value = gui_thread
+            MockQThread.currentThread.return_value = bg_thread
+            app._show_preferences()
+
+        # Posted onto the GUI thread; the dialog was NOT constructed inline.
+        MockQMeta.invokeMethod.assert_called_once()
+        ctx, functor, conn = MockQMeta.invokeMethod.call_args.args
+        assert ctx is fake_app
+        assert functor == app._open_preferences_dialog
+        assert conn == Qt.ConnectionType.QueuedConnection
+        MockDialog.assert_not_called()
