@@ -26,6 +26,59 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-06-21
+
+A fourth independent blind-audit pass (against the published v0.4.2
+tree) scored 8.0/10 and surfaced a small set of real, verified
+defects.  This release ships the ship-blocker subset: a broken
+documented install, a desktop threading bug, and an insecure-by-default
+bind.  Each finding was reproduced against current `main` before fixing.
+No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
+
+### Security
+
+* **The default bind address is now `127.0.0.1` (loopback), not
+  `0.0.0.0`** (audit T0-2).  The zero-config `host` default previously
+  advertised an all-interfaces bind; binding a network interface is now
+  an explicit opt-in (`NETCANON_HOST=0.0.0.0` or `uvicorn ... --host
+  0.0.0.0`).  Docker is unchanged -- the image sets `NETCANON_HOST=
+  0.0.0.0` explicitly and the `netcanon serve` entrypoint still fails
+  closed without an API key or `NETCANON_ALLOW_INSECURE_BIND`; the
+  desktop already pinned loopback.  `netcanon serve` with no
+  `NETCANON_HOST` now serves on loopback instead of refusing.  (`#160`,
+  commit cad9c81)
+
+### Fixed
+
+* **`pip install netcanon` + `uvicorn netcanon.main:app` no longer
+  crashes on startup** (audit T0-3, NEW HIGH).  The device-definition
+  YAML library lived at the repo root and was never shipped as wheel
+  package-data, so a wheel-installed server raised `FileNotFoundError`
+  loading definitions from a working-directory-relative `./definitions`
+  (`netcanon serve` from any other directory hit the same crash; Docker
+  and the source tree masked it).  The library now lives inside the
+  package (`netcanon/definitions/library/`, exposed as
+  `netcanon.definitions.LIBRARY_DIR`) and ships in the wheel; the default
+  `definitions_dir` resolves to that packaged copy.
+  `NETCANON_DEFINITIONS_DIR` still overrides for a custom tree.  (`#158`,
+  commit 6c80ca4)
+* **Desktop: the Preferences dialog is now built on the Qt GUI thread.**
+  The tray's `on_preferences` callback fires on pystray's background
+  thread and constructed/`exec`'d a `QWidget` directly there (cross-thread
+  Qt undefined behaviour / a crash on some builds).  It now marshals the
+  dialog onto the GUI thread via
+  `QMetaObject.invokeMethod(QueuedConnection)`, matching the pattern
+  `window.py` already uses for show/hide/quit.  (`#159`, commit 2331b9c)
+
+### Added
+
+* **Clean-room wheel-install CI guard.**  The `Build sdist + wheel` job
+  now installs the built wheel into a fresh venv and boots `uvicorn
+  netcanon.main:app` from an *empty* directory against `/health` --
+  catching the packaging-regression class (definitions or templates
+  missing from the wheel) that the source-tree `test` job structurally
+  cannot see.  (`#158`)
+
 ## [0.4.2] - 2026-06-21
 
 A low-severity polish release.  A third blind-audit pass (run3)
