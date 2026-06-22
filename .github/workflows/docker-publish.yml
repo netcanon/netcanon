@@ -69,6 +69,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4
 
+      # Resolve whether the optional Docker Hub mirror is configured.  The
+      # `secrets` context is NOT available in a step-level `if:`, so we map
+      # the token to a step env var (allowed) and emit a plain boolean output
+      # the downstream `if:` / `with:` can consume via the `steps` context.
+      - name: Resolve Docker Hub mirror availability
+        id: mirror
+        env:
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
         with:
@@ -82,7 +97,7 @@ jobs:
       # credential.  The canonical repo has the secret, so this is a no-op
       # there — login runs exactly as before (run3 dockerhub-login-unguarded).
       - name: Log in to Docker Hub
-        if: ${{ secrets.DOCKERHUB_TOKEN != '' }}
+        if: steps.mirror.outputs.enabled == 'true'
         uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -101,7 +116,7 @@ jobs:
           # only and never attempts an unauthenticated docker.io push.
           images: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-            ${{ secrets.DOCKERHUB_TOKEN != '' && env.DOCKERHUB_IMAGE || '' }}
+            ${{ steps.mirror.outputs.enabled == 'true' && env.DOCKERHUB_IMAGE || '' }}
           tags: |
             # Semver-derived (no `v` prefix), e.g. `0.1.0-rc4` or `0.1.0`.
             # Matches the convention of official Docker Hub images
