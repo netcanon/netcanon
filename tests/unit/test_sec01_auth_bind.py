@@ -126,3 +126,20 @@ def test_serve_refuses_insecure_bind(monkeypatch, capsys):
     rc = cli_main(["serve"])
     assert rc == 2
     assert "Refusing to start" in capsys.readouterr().err
+
+
+def test_default_bind_is_loopback(monkeypatch):
+    """Zero-config posture is loopback-safe by default: with no
+    ``NETCANON_HOST`` the bind address is ``127.0.0.1``, so a bare
+    ``uvicorn netcanon.main:app`` or ``netcanon serve`` never exposes the
+    API on a network interface by accident — binding ``0.0.0.0`` is an
+    explicit opt-in.  Guards against a regression back to the historical
+    ``0.0.0.0`` default (audit T0-2: insecure-by-default bind)."""
+    for var in ("NETCANON_HOST", "NETCANON_API_KEY", "NETCANON_ALLOW_INSECURE_BIND"):
+        monkeypatch.delenv(var, raising=False)
+    s = Settings()
+    assert s.host == "127.0.0.1"
+    assert is_loopback_host(s.host)
+    # The bind guard passes for the zero-config default — `netcanon serve`
+    # serves on loopback rather than refusing.
+    assert bind_refusal_reason(s.host, s.api_key, s.allow_insecure_bind) is None

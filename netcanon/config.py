@@ -38,7 +38,13 @@ class Settings(BaseSettings):
             falls back to ``configs_dir.parent`` for backward compatibility.
             Setting this explicitly lets the desktop preferences UI relocate
             the per-user data root independently of ``configs_dir``.
-        host: Bind address for the Uvicorn server.
+        host: Bind address for the Uvicorn server.  Defaults to
+            ``127.0.0.1`` (loopback) so the zero-config posture is never
+            network-exposed by accident; binding all interfaces is an
+            explicit opt-in via ``NETCANON_HOST=0.0.0.0`` (which the Docker
+            image sets) or ``uvicorn … --host 0.0.0.0``.  ``netcanon serve``
+            then gates a non-loopback bind behind ``NETCANON_API_KEY`` or
+            ``NETCANON_ALLOW_INSECURE_BIND`` (see netcanon/api/auth.py).
         port: TCP port for the Uvicorn server.
         log_level: Logging verbosity.  Sets the stdlib root logger level via
             ``configure_logging`` (so application logs honour it on every
@@ -100,7 +106,7 @@ class Settings(BaseSettings):
     definitions_dir: Path = Path("definitions")
     configs_dir: Path = Path("configs")
     data_dir: Path | None = None
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = 8000
     log_level: Literal[
         "debug", "info", "warning", "error", "critical"

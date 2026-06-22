@@ -1,10 +1,13 @@
 """Optional API authentication + bind-safety guard (audit finding SEC-01).
 
-Netcanon ships with **no** authentication by default: the desktop shell
-binds ``127.0.0.1`` and web/Docker operators are told to front the app
-with a reverse proxy.  That posture is documented in ``SECURITY.md``, but
-the insecure ``0.0.0.0`` default makes accidental public exposure one
-``docker run -p`` away.  This module adds two opt-in, fail-closed controls:
+Netcanon ships with **no** authentication by default, but binds
+``127.0.0.1`` by default (both the desktop shell and the zero-config
+server posture), and web/Docker operators are told to front the app with a
+reverse proxy.  That posture is documented in ``SECURITY.md``.  A
+deployment that binds a non-loopback interface (the published Docker image
+sets ``NETCANON_HOST=0.0.0.0``; an operator may pass ``--host 0.0.0.0``)
+is one ``docker run -p`` away from exposing an unauthenticated API.  This
+module adds two opt-in, fail-closed controls:
 
 1. :func:`require_api_key` — when ``Settings.api_key`` (env
    ``NETCANON_API_KEY``) is set, every ``/api/v1`` data/operation route
