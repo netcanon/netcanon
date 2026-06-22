@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from netcanon.collectors.hostkey import known_hosts_path, netmiko_host_key_params
+from netcanon.collectors.hostkey import (
+    host_key_warning_reason,
+    known_hosts_path,
+    netmiko_host_key_params,
+)
 from netcanon.config import Settings
 
 pytestmark = pytest.mark.unit
@@ -35,3 +39,19 @@ def test_known_hosts_path_under_data_dir(tmp_path) -> None:
 def test_default_is_auto_add() -> None:
     # No env override → legacy behaviour, so existing deployments are unchanged.
     assert Settings().ssh_host_key_checking == "auto_add"
+
+
+def test_warning_reason_fires_for_auto_add_default(tmp_path) -> None:
+    """The insecure-default (auto_add) is surfaced once at startup — a
+    server logs this so the posture is a conscious choice (audit T0-4)."""
+    s = Settings(ssh_host_key_checking="auto_add", data_dir=tmp_path)
+    reason = host_key_warning_reason(s)
+    assert reason is not None
+    assert "auto_add" in reason
+    assert "NETCANON_SSH_HOST_KEY_CHECKING" in reason
+
+
+@pytest.mark.parametrize("mode", ["tofu", "reject"])
+def test_no_warning_reason_for_strict_modes(tmp_path, mode) -> None:
+    s = Settings(ssh_host_key_checking=mode, data_dir=tmp_path)
+    assert host_key_warning_reason(s) is None
