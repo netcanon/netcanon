@@ -45,8 +45,11 @@ Netcanon ships in two deployment shapes:
    netcanon_desktop` shell binds the embedded server exclusively to
    `127.0.0.1`.  Security controls assume a single-user local
    machine.
-2. **Web / Docker deployment.**  Operators who pass `--host 0.0.0.0`
-   (or run the published GHCR image) are deploying outside the
+2. **Web / Docker deployment.**  The configured default bind is
+   `127.0.0.1` (loopback), so exposing the API on a network interface
+   is always an explicit choice.  Operators who set
+   `NETCANON_HOST=0.0.0.0` / pass `--host 0.0.0.0` (the published GHCR
+   image sets the former) are deploying outside the
    single-user-local-machine threat model.  Netcanon does NOT ship
    API authentication, TLS, or rate-limiting — operators in this
    shape must front the app with a reverse proxy that provides those

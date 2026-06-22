@@ -104,9 +104,9 @@ def main(argv: list[str] | None = None) -> int:
         help="Run the Netcanon web server (host/port/auth from NETCANON_* env)",
         description=(
             "Start the FastAPI app via uvicorn, binding Settings.host:port "
-            "(NETCANON_HOST / NETCANON_PORT, default 0.0.0.0:8000).  Refuses "
-            "to start on a non-loopback bind unless NETCANON_API_KEY is set "
-            "or NETCANON_ALLOW_INSECURE_BIND=1 (SEC-01 fail-closed)."
+            "(NETCANON_HOST / NETCANON_PORT, default 127.0.0.1:8000).  "
+            "Refuses to start on a non-loopback bind unless NETCANON_API_KEY "
+            "is set or NETCANON_ALLOW_INSECURE_BIND=1 (SEC-01 fail-closed)."
         ),
     )
 
