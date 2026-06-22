@@ -32,7 +32,7 @@ A fourth independent blind-audit pass (against the published v0.4.2
 tree) scored 8.0/10 and surfaced a small set of real, verified
 defects.  This release ships the ship-blocker subset: a broken
 documented install, a desktop threading bug, and an insecure-by-default
-bind.  Each finding was reproduced against current `main` before fixing.
+bind, plus two follow-on hardening fixes.  Each finding was reproduced against current `main` before fixing.
 No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
 
 ### Security
@@ -47,6 +47,25 @@ No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
   desktop already pinned loopback.  `netcanon serve` with no
   `NETCANON_HOST` now serves on loopback instead of refusing.  (`#160`,
   commit cad9c81)
+
+* **A startup WARNING now fires when SSH host-key checking is
+  `auto_add`** (audit T0-4).  The backup collectors' default trusts any
+  device host key on first connect with no persistence (MITM-able on the
+  management path).  A blanket flip to `tofu` is unsafe as a default — on
+  the Netmiko path `tofu` maps to strict OS `~/.ssh/known_hosts` checking
+  with no persist API, so a first-run backup of an unknown device would
+  fail — so instead the insecure posture is surfaced once at startup
+  (mirrors the bind guard), naming
+  `NETCANON_SSH_HOST_KEY_CHECKING='tofu'` and the Netmiko caveat.
+  (`#163`, commit 56cd02f)
+* **The config sanitiser now redacts EVPN/VXLAN/VRF overlay
+  identifiers** (audit #12).  VRF route-distinguisher + route-targets,
+  the VXLAN BUM multicast group + VTEP flood-list, EVPN Type-5
+  route-targets + advertised prefix, and the SNMPv3 engineID previously
+  bypassed every field-typed redaction (a verifier leaked `65501:100` /
+  `239.7.7.7` / `9.9.9.9` through them).  RD/RTs map cross-reference-
+  stable to the RFC 5398 documentation ASN; the BUM group to the RFC
+  5771 MCAST-TEST-NET range.  (`#162`, commit 8ff9c56)
 
 ### Fixed
 
