@@ -163,6 +163,17 @@ include = ["netcanon*", "netcanon_desktop*"]
 netcanon = [
     "templates/*.html",
     "templates/_partials/*.js",
+    # Device-definition library (per-vendor `*.yaml` + Tier-3
+    # `target_profiles/`).  These MUST ship in the wheel: the app loads
+    # them at startup via DefinitionLoader, and the default
+    # `definitions_dir` resolves to this packaged copy
+    # (`netcanon/definitions/library/`, see netcanon.config).  A wheel
+    # without them crashes a `pip install netcanon` + `uvicorn
+    # netcanon.main:app` boot with FileNotFoundError — the
+    # `clean-room-wheel-smoke` CI job in ci.yml boots an installed wheel
+    # against /health to catch exactly that regression.  `**` recursive
+    # globs need setuptools >= 62.3 (we require >= 68).
+    "definitions/library/**/*.yaml",
 ]
 
 [tool.pytest.ini_options]

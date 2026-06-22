@@ -4,8 +4,9 @@ Desktop-specific settings factory.
 Resolves the correct ``definitions_dir`` and ``configs_dir`` paths depending
 on whether the application is:
 
-* Running from source (development) — definitions are in the repo root, configs
-  go to a ``configs/`` sibling directory that is created on first run.
+* Running from source (development) — definitions are the library bundled in
+  the ``netcanon`` package (``netcanon.definitions.LIBRARY_DIR``), configs go
+  to a ``configs/`` sibling directory that is created on first run.
 * Running as a frozen cx_Freeze executable — definitions ship next to the EXE
   (included by ``setup_desktop.py``), configs go to
   ``%APPDATA%\\Netcanon\\configs\\`` so they survive upgrades.
@@ -24,6 +25,7 @@ import sys
 from pathlib import Path
 
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon_desktop.preferences import DesktopPreferences
 
 #: Internal loopback port used by the embedded Uvicorn server.
@@ -53,8 +55,9 @@ def desktop_settings() -> Settings:
         prefs = DesktopPreferences.load(_preferences_path())
     else:
         # Running from source — project root is two levels up from this file.
+        # Definitions live inside the package (LIBRARY_DIR), not the repo root.
         repo_root = Path(__file__).parent.parent
-        definitions_dir = repo_root / "definitions"
+        definitions_dir = LIBRARY_DIR
         configs_dir = repo_root / "configs"
         # Dev mode deliberately uses factory defaults (no preferences
         # file load) so tests / local development have predictable

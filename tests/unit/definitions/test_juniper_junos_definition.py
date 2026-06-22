@@ -14,19 +14,17 @@ performs.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 from netcanon.collectors.probe import parse_probe_output
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.schema import DeviceDefinition
 
 pytestmark = pytest.mark.unit
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
-JUNOS_DEF_PATH = REPO_ROOT / "definitions" / "juniper" / "junos" / "22.x.yaml"
+JUNOS_DEF_PATH = LIBRARY_DIR / "juniper" / "junos" / "22.x.yaml"
 
 
 # ---------------------------------------------------------------------------

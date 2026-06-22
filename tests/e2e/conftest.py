@@ -36,6 +36,7 @@ from unittest.mock import patch
 
 import pytest
 
+from netcanon.definitions import LIBRARY_DIR
 from tests.conftest import CISCO_FAKE_OUTPUT, FakeCollector
 
 # ---------------------------------------------------------------------------
@@ -101,8 +102,7 @@ def _e2e_definitions_dir(tmp_path_factory) -> Path:
     )
     # Copy real target profiles in so e2e tests can exercise the
     # Tier 3 port-rename UI flows that depend on loaded profiles.
-    repo_root = Path(__file__).resolve().parents[2]
-    repo_profiles = repo_root / "definitions" / "target_profiles"
+    repo_profiles = LIBRARY_DIR / "target_profiles"
     if repo_profiles.is_dir():
         import shutil
         shutil.copytree(repo_profiles, defs_dir / "target_profiles")

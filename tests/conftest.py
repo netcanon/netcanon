@@ -18,6 +18,7 @@ import pytest
 
 from netcanon.collectors.base import BaseCollector
 from netcanon.config import Settings
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.definitions.schema import DeviceDefinition
 from netcanon.models.device import DeviceTarget
 
@@ -142,8 +143,7 @@ def sample_definitions_dir(tmp_path: Path) -> Path:
     # YAML — no test-specific variant is needed; shipping them under
     # definitions/target_profiles/ is the exact same data the app
     # loads in production.
-    repo_root = Path(__file__).resolve().parents[1]
-    repo_profiles = repo_root / "definitions" / "target_profiles"
+    repo_profiles = LIBRARY_DIR / "target_profiles"
     if repo_profiles.is_dir():
         import shutil
         shutil.copytree(repo_profiles, defs_dir / "target_profiles")

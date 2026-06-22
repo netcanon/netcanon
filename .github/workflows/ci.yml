@@ -130,6 +130,49 @@ jobs:
       - name: Validate distribution metadata
         run: python -m twine check dist/*
 
+      - name: Clean-room wheel install boots from an empty dir (T0-3 guard)
+        # Reproduces a plain `pip install netcanon` user: install the freshly
+        # built wheel into a clean venv and boot the documented
+        # `uvicorn netcanon.main:app` path from an EMPTY working directory (no
+        # repo `definitions/` on disk).  The app loads the device-definition
+        # library at startup; if that tree isn't shipped as package-data the
+        # server crashes on boot with FileNotFoundError (the T0-3 broken-
+        # install finding).  The `test` job cannot catch this — it runs from
+        # the source tree where the library always exists regardless of
+        # packaging.  Bind loopback so the lifespan/CLI bind guard is
+        # satisfied without an opt-out.
+        run: |
+          set -euo pipefail
+          wheel="$(ls "${GITHUB_WORKSPACE}"/dist/*.whl)"
+          echo "Installing wheel into a clean venv: ${wheel}"
+          python -m venv "${RUNNER_TEMP}/clean-venv"
+          "${RUNNER_TEMP}/clean-venv/bin/pip" install --quiet --upgrade pip
+          "${RUNNER_TEMP}/clean-venv/bin/pip" install --quiet "${wheel}"
+          mkdir -p "${RUNNER_TEMP}/empty-cwd"
+          cd "${RUNNER_TEMP}/empty-cwd"
+          # 1) The packaged library must be importable + populated — this is
+          #    exactly what the app's lifespan does at startup.
+          "${RUNNER_TEMP}/clean-venv/bin/python" -c "from netcanon.definitions import LIBRARY_DIR, DefinitionLoader; assert LIBRARY_DIR.is_dir(), LIBRARY_DIR; d = DefinitionLoader(LIBRARY_DIR).load_all(); assert len(d) >= 10, sorted(d); print('packaged library OK:', len(d), 'family-base definitions')"
+          # 2) End-to-end: the documented bare-uvicorn path must boot + serve
+          #    /health from the empty dir.
+          "${RUNNER_TEMP}/clean-venv/bin/python" -m uvicorn netcanon.main:app --host 127.0.0.1 --port 8137 > "${RUNNER_TEMP}/uvicorn.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "${server_pid}" 2>/dev/null || true' EXIT
+          ready=0
+          for _ in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8137/health >/dev/null 2>&1; then ready=1; break; fi
+            sleep 1
+          done
+          if [ "${ready}" -ne 1 ]; then
+            echo "FAIL: wheel-installed server never served /health from an empty dir."
+            echo "Likely cause: the definition library is not shipped as package-data"
+            echo "— check pyproject.toml [tool.setuptools.package-data]."
+            echo "--- uvicorn log ---"
+            cat "${RUNNER_TEMP}/uvicorn.log" || true
+            exit 1
+          fi
+          echo "Clean-room wheel install boots and serves /health."
+
   docker-build-smoke:
     name: Docker build smoke test
     runs-on: ubuntu-latest

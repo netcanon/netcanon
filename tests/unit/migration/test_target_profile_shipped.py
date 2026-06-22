@@ -23,10 +23,9 @@ loader behaviour tests live in ``test_target_profile_loader.py``.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
+from netcanon.definitions import LIBRARY_DIR
 from netcanon.migration.target_profiles import (
     load_profiles_dir,
 )
@@ -40,10 +39,7 @@ class TestRealProfilesShipped:
     cleanly and expose the documented port inventories.  Any breakage
     here means a published profile file was malformed."""
 
-    REPO_PROFILES_DIR = (
-        Path(__file__).resolve().parents[3]
-        / "definitions" / "target_profiles"
-    )
+    REPO_PROFILES_DIR = LIBRARY_DIR / "target_profiles"
 
     def test_all_profiles_load(self):
         profiles = load_profiles_dir(self.REPO_PROFILES_DIR)
