@@ -228,6 +228,14 @@ jobs:
           format: spdx-json
           output-file: sbom.spdx.json
           upload-artifact: true
+          # Do NOT attach the SBOM to the GitHub Release.  sbom-action
+          # auto-attaches when a Release for the tag already exists, which
+          # needs `contents: write` (we only grant `contents: read`) and so
+          # fails the step + skips the cosign attestation below — this bit
+          # the v0.4.2 re-tag, where the Release already existed from the
+          # first push's MSI run.  We publish the SBOM as a cosign
+          # attestation on the image (next step), not as a release asset.
+          upload-release-assets: false
 
       - name: Attach SBOM as a cosign attestation
         env:
