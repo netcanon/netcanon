@@ -495,6 +495,15 @@ def sanitize_intent(
                     redacted=new_value,
                 ))
                 v3user.priv_passphrase = new_value
+            if v3user.engine_id:
+                new_value = table.redact_secret("SNMPV3-ENGINE-ID")
+                subs.append(Substitution(
+                    category="snmpv3-engine-id",
+                    field=f"snmp.v3_users[{j}].engine_id",
+                    original=v3user.engine_id,
+                    redacted=new_value,
+                ))
+                v3user.engine_id = new_value
 
     # ---- RADIUS server host + shared secret (field name: ``key``) ----
     for i, server in enumerate(sanitized.radius_servers):
@@ -648,7 +657,7 @@ def sanitize_intent(
         ))
         sanitized.raw_sections = {}
 
-    # ---- routing-instance descriptions ----
+    # ---- routing-instance descriptions + RD / route-targets ----
     for i, ri in enumerate(sanitized.routing_instances):
         if ri.description:
             subs.append(Substitution(
@@ -658,6 +667,56 @@ def sanitize_intent(
                 redacted="description redacted",
             ))
             ri.description = "description redacted"
+        if ri.route_distinguisher:
+            new_rd = table.redact_route_target(ri.route_distinguisher)
+            subs.append(Substitution(
+                category="route-distinguisher",
+                field=f"routing_instances[{i}].route_distinguisher",
+                original=ri.route_distinguisher,
+                redacted=new_rd,
+            ))
+            ri.route_distinguisher = new_rd
+        ri.rt_imports = _redact_route_target_list(
+            ri.rt_imports, f"routing_instances[{i}].rt_imports", table, subs
+        )
+        ri.rt_exports = _redact_route_target_list(
+            ri.rt_exports, f"routing_instances[{i}].rt_exports", table, subs
+        )
+
+    # ---- VXLAN / EVPN overlay (BUM mcast group, VTEP flood-list, Type-5
+    #      route-targets + advertised prefix) — network-identifying fabric
+    #      values that bypassed every field-typed redaction above ----
+    for i, vni in enumerate(sanitized.vxlan_vnis):
+        if vni.mcast_group:
+            new_g = table.redact_mcast_group(vni.mcast_group)
+            if new_g != vni.mcast_group:
+                subs.append(Substitution(
+                    category="mcast-group",
+                    field=f"vxlan_vnis[{i}].mcast_group",
+                    original=vni.mcast_group,
+                    redacted=new_g,
+                ))
+                vni.mcast_group = new_g
+        vni.flood_list = _redact_ip_list(
+            vni.flood_list, f"vxlan_vnis[{i}].flood_list", "vtep-flood", table, subs
+        )
+    for i, r5 in enumerate(sanitized.evpn_type5_routes):
+        r5.rt_imports = _redact_route_target_list(
+            r5.rt_imports, f"evpn_type5_routes[{i}].rt_imports", table, subs
+        )
+        r5.rt_exports = _redact_route_target_list(
+            r5.rt_exports, f"evpn_type5_routes[{i}].rt_exports", table, subs
+        )
+        if r5.prefix:
+            new_p = table.redact_cidr(r5.prefix)
+            if new_p != r5.prefix:
+                subs.append(Substitution(
+                    category="evpn-type5-prefix",
+                    field=f"evpn_type5_routes[{i}].prefix",
+                    original=r5.prefix,
+                    redacted=new_p,
+                ))
+                r5.prefix = new_p
 
     # ---- Junos apply-groups verbatim carry-through — strip entirely ----
     # v0.4.0 self-audit (HIGH): ``group_content`` holds the verbatim
@@ -724,6 +783,13 @@ class _SubstitutionTable:
         self._local_user_names: dict[str, str] = {}
         self._snmpv3_user_names: dict[str, str] = {}
         self._vlan_names: dict[str, str] = {}
+        # Overlay (EVPN/VXLAN/VRF) identifiers — network-identifying AND
+        # cross-referenced (a VRF's RD recurs as a route-target across
+        # sibling VRFs + EVPN Type-5 routes; a VXLAN BUM group recurs
+        # across VNIs), so they redact cross-reference-stable like the
+        # name maps above.
+        self._route_targets: dict[str, str] = {}
+        self._mcast_groups: dict[str, str] = {}
 
     def redact_hostname(self, name: str) -> str:
         if name not in self._hostnames:
@@ -828,6 +894,45 @@ class _SubstitutionTable:
         addr, sep, prefix = value.partition("/")
         new_addr = self.redact_ip_string(addr)
         return f"{new_addr}{sep}{prefix}" if sep else new_addr
+
+    def redact_route_target(self, value: str) -> str:
+        """Cross-reference-stable RD / route-target redaction.
+
+        A route-distinguisher and the route-targets that import/export it
+        are network-identifying — they encode the operator's ASN (or a
+        loopback IP) plus an internal index — and they are *correlated*:
+        a VRF's RD often equals its RT, and the same RT recurs on the
+        EVPN Type-5 routes and sibling VRFs that share the VPN.  Map each
+        distinct ``<left>:<right>`` token to a stable placeholder built on
+        the RFC 5398 documentation ASN ``64496`` so the correlation
+        structure survives while the real ASN/IP and index are hidden.
+        Same input → same output across the whole config.
+        """
+        if value not in self._route_targets:
+            self._route_targets[value] = f"64496:{len(self._route_targets) + 1}"
+        return self._route_targets[value]
+
+    def redact_mcast_group(self, addr: str) -> str:
+        """Redact a VXLAN underlay multicast (BUM) group address.
+
+        :meth:`redact_ipv4` deliberately *preserves* multicast (well-known
+        groups are non-identifying), but an administratively-scoped VXLAN
+        BUM group (``239.0.0.0/8``) is an operator-chosen fabric value
+        that correlates configs, so it must be redacted here.  Map each
+        distinct group to a stable address in the RFC 5771 MCAST-TEST-NET
+        documentation range (``233.252.0.0/24``).  Non-multicast / non-IP
+        values fall through to the normal IP redaction.
+        """
+        try:
+            a = ipaddress.IPv4Address(addr)
+        except ValueError:
+            return self.redact_ip_string(addr)
+        if not a.is_multicast:
+            return self.redact_ip_string(addr)
+        if addr not in self._mcast_groups:
+            host = (len(self._mcast_groups) % 254) + 1
+            self._mcast_groups[addr] = f"233.252.0.{host}"
+        return self._mcast_groups[addr]
 
     def redact_community(self, community: str) -> str:
         if community not in self._communities:
@@ -979,4 +1084,25 @@ def _redact_ip_list(
                 redacted=new_ip,
             ))
         out.append(new_ip)
+    return out
+
+
+def _redact_route_target_list(
+    values: list[str],
+    field_name: str,
+    table: _SubstitutionTable,
+    subs: list[Substitution],
+) -> list[str]:
+    """Redact a list of RD / route-target entries cross-reference-stable."""
+    out: list[str] = []
+    for j, rt in enumerate(values):
+        new_rt = table.redact_route_target(rt)
+        if new_rt != rt:
+            subs.append(Substitution(
+                category="route-target",
+                field=f"{field_name}[{j}]",
+                original=rt,
+                redacted=new_rt,
+            ))
+        out.append(new_rt)
     return out

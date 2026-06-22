@@ -29,6 +29,7 @@ from pydantic import BaseModel
 
 from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
+    CanonicalEvpnType5Route,
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
@@ -41,6 +42,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
+    CanonicalVxlan,
 )
 from netcanon.tools.sanitize import (
     SanitizationResult,
@@ -1255,3 +1257,164 @@ class TestDHCPRangeRedaction:
         assert p.network == "192.168.10.0/24"
         assert p.start_ip == "192.168.10.100"
         assert p.end_ip == "192.168.10.200"
+
+
+# ---------------------------------------------------------------------------
+# Overlay (EVPN / VXLAN / VRF) identifiers — non-secret but network-
+# identifying fields the sanitiser previously left untouched: VRF
+# route-distinguisher + route-targets, VXLAN BUM multicast group + VTEP
+# flood-list, EVPN Type-5 RTs + advertised prefix, and the SNMPv3
+# engineID.  A verifier leaked the trio `65501:100` / `239.7.7.7` /
+# `9.9.9.9` through these.  Like the PII-tail block above, these are NOT
+# secret-NAMED so they intentionally don't register in
+# _REGISTERED_SECRET_FIELDS; this is their forward "must not survive"
+# guard.
+# ---------------------------------------------------------------------------
+
+
+class TestOverlayFieldRedaction:
+    def test_route_distinguisher_redacted(self):
+        intent = CanonicalIntent(
+            routing_instances=[
+                CanonicalRoutingInstance(name="TENANT-A", route_distinguisher="65501:100"),
+            ],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        rd = sanitized.routing_instances[0].route_distinguisher
+        assert rd != "65501:100"
+        assert rd.startswith("64496:")  # RFC 5398 documentation ASN
+        assert any(s.category == "route-distinguisher" for s in subs)
+
+    def test_route_targets_redacted(self):
+        intent = CanonicalIntent(
+            routing_instances=[
+                CanonicalRoutingInstance(
+                    name="TENANT-A",
+                    rt_imports=["65501:100", "65001:200"],
+                    rt_exports=["65501:100"],
+                ),
+            ],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        ri = sanitized.routing_instances[0]
+        assert "65501:100" not in ri.rt_imports and "65001:200" not in ri.rt_imports
+        assert "65501:100" not in ri.rt_exports
+        assert all(rt.startswith("64496:") for rt in ri.rt_imports + ri.rt_exports)
+        assert any(s.category == "route-target" for s in subs)
+
+    def test_rd_rt_cross_reference_stable(self):
+        """An RD that recurs as a route-target (and across sibling VRFs)
+        maps to the SAME placeholder, so the VPN-correlation structure
+        survives sanitisation while the real ASN/index is hidden."""
+        intent = CanonicalIntent(
+            routing_instances=[
+                CanonicalRoutingInstance(
+                    name="A", route_distinguisher="65501:100",
+                    rt_imports=["65501:100"], rt_exports=["65501:100"],
+                ),
+                CanonicalRoutingInstance(
+                    name="B", route_distinguisher="65501:200",
+                    rt_imports=["65501:100"],  # imports A's RT
+                ),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        a, b = sanitized.routing_instances
+        # 65501:100 everywhere → one placeholder; 65501:200 → a distinct one.
+        assert a.route_distinguisher == a.rt_imports[0] == a.rt_exports[0]
+        assert b.rt_imports[0] == a.route_distinguisher
+        assert b.route_distinguisher != a.route_distinguisher
+
+    def test_vxlan_mcast_group_redacted_to_doc_range(self):
+        intent = CanonicalIntent(
+            vxlan_vnis=[
+                CanonicalVxlan(vlan_id=100, vni=10100, mcast_group="239.7.7.7"),
+                CanonicalVxlan(vlan_id=200, vni=10200, mcast_group="239.7.7.7"),
+            ],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        g0 = sanitized.vxlan_vnis[0].mcast_group
+        g1 = sanitized.vxlan_vnis[1].mcast_group
+        assert g0 != "239.7.7.7"
+        assert g0.startswith("233.252.0.")   # RFC 5771 MCAST-TEST-NET
+        assert g0 == g1                       # same group → stable placeholder
+        assert any(s.category == "mcast-group" for s in subs)
+
+    def test_vxlan_flood_list_public_redacted_private_preserved(self):
+        intent = CanonicalIntent(
+            vxlan_vnis=[
+                CanonicalVxlan(
+                    vlan_id=100, vni=10100,
+                    flood_list=["9.9.9.9", "10.0.0.1"],
+                ),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        flood = sanitized.vxlan_vnis[0].flood_list
+        assert flood[0] != "9.9.9.9"
+        assert flood[0].startswith(("192.0.2.", "198.51.100.", "203.0.113."))
+        assert flood[1] == "10.0.0.1"  # private VTEP preserved
+
+    def test_evpn_type5_rt_and_public_prefix_redacted(self):
+        intent = CanonicalIntent(
+            evpn_type5_routes=[
+                CanonicalEvpnType5Route(
+                    vrf="TENANT-A",
+                    prefix="8.8.0.0/16",   # public — address redacted
+                    rt_imports=["65001:100"],
+                    rt_exports=["65001:100"],
+                ),
+                CanonicalEvpnType5Route(
+                    vrf="TENANT-B",
+                    prefix="10.1.0.0/16",   # private — preserved
+                    rt_imports=["65001:200"],
+                ),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        r0, r1 = sanitized.evpn_type5_routes
+        assert all(rt.startswith("64496:") for rt in r0.rt_imports + r0.rt_exports)
+        # Public prefix address redacted, /16 preserved; private kept whole.
+        assert r0.prefix.endswith("/16")
+        assert r0.prefix.split("/")[0].startswith(
+            ("192.0.2.", "198.51.100.", "203.0.113.")
+        )
+        assert r1.prefix == "10.1.0.0/16"
+
+    def test_snmpv3_engine_id_redacted(self):
+        intent = CanonicalIntent(
+            snmp=CanonicalSNMP(
+                community="",
+                v3_users=[
+                    CanonicalSNMPv3User(name="ops", engine_id="80001f8880e5817264"),
+                ],
+            ),
+        )
+        sanitized, subs = sanitize_intent(intent)
+        eid = sanitized.snmp.v3_users[0].engine_id
+        assert eid != "80001f8880e5817264"
+        assert "REDACTED" in eid
+        assert any(s.category == "snmpv3-engine-id" for s in subs)
+
+    def test_leaked_overlay_trio_does_not_survive(self):
+        """End-to-end: the exact values an audit verifier leaked through
+        the overlay surfaces (`65501:100`, `239.7.7.7`, `9.9.9.9`) must
+        not appear anywhere in the sanitised canonical output."""
+        intent = CanonicalIntent(
+            routing_instances=[
+                CanonicalRoutingInstance(
+                    name="A", route_distinguisher="65501:100",
+                    rt_imports=["65501:100"],
+                ),
+            ],
+            vxlan_vnis=[
+                CanonicalVxlan(
+                    vlan_id=100, vni=10100,
+                    mcast_group="239.7.7.7", flood_list=["9.9.9.9"],
+                ),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        blob = sanitized.model_dump_json()
+        leaked = [t for t in ("65501:100", "239.7.7.7", "9.9.9.9") if t in blob]
+        assert not leaked, f"overlay identifiers survived sanitisation: {leaked}"
