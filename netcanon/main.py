@@ -211,6 +211,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             len([s for s in _app.state.schedules.values() if s.enabled]),
         )
 
+        # Surface an insecure SSH host-key posture once at startup so
+        # 'auto_add' (the back-compat default) is a conscious choice, not
+        # a silent one (audit T0-4 — the "most repeatable miss").
+        from .collectors.hostkey import host_key_warning_reason
+        if hk_warning := host_key_warning_reason(settings):
+            logger.warning(hk_warning)
+
         yield
 
         scheduler.shutdown(wait=False)

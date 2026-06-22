@@ -101,3 +101,32 @@ def netmiko_host_key_params(settings: Settings) -> dict:
     if settings.ssh_host_key_checking == "auto_add":
         return {}
     return {"system_host_keys": True, "ssh_strict": True}
+
+
+def host_key_warning_reason(settings: Settings) -> str | None:
+    """Return a startup-warning message when the host-key policy is the
+    insecure ``auto_add`` default, else ``None``.
+
+    ``auto_add`` trusts any SSH host key on every connect with no
+    persistence, so a man-in-the-middle on the management path could
+    harvest the SSH password + enable secret.  The default stays
+    ``auto_add`` for backward-compatibility — and because the strict
+    ``tofu`` / ``reject`` modes require the *Netmiko* collector's targets
+    to be pre-seeded in the operator's OS ``~/.ssh/known_hosts`` (Netmiko
+    exposes no TOFU-persist API), so flipping the default would break
+    first-run backups of unknown devices.  But a running server should at
+    least surface the posture once at startup, so it is a conscious choice
+    rather than a silent default (mirrors :func:`bind_refusal_reason`).
+    See SECURITY.md.
+    """
+    if settings.ssh_host_key_checking != "auto_add":
+        return None
+    return (
+        "SSH host-key checking is 'auto_add' (the default): the backup "
+        "collectors trust any device host key on first connect with no "
+        "persistence, so a man-in-the-middle on the management path could "
+        "capture SSH/enable credentials. Set NETCANON_SSH_HOST_KEY_CHECKING="
+        "'tofu' to pin keys on first use (the Paramiko shell collector "
+        "persists them; the Netmiko collector then requires targets to "
+        "already be in the operator's ~/.ssh/known_hosts). See SECURITY.md."
+    )
