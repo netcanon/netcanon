@@ -22,6 +22,7 @@ from netcanon.collectors.hostkey import (
     apply_paramiko_policy,
     known_hosts_path,
     persist_paramiko_host_keys,
+    verify_host_key,
 )
 from netcanon.config import Settings
 
@@ -161,3 +162,59 @@ def test_reject_mode_refuses_unknown_host(tmp_path, server) -> None:
     # No prior known_hosts entry → RejectPolicy refuses the connection.
     with pytest.raises(paramiko.SSHException):
         _connect("127.0.0.1", server.port, settings)
+
+
+# ---------------------------------------------------------------------------
+# Netmiko host-key pre-flight (``verify_host_key``).  Netmiko itself can't
+# persist a learned key, so the collector runs this auth-less paramiko
+# pre-flight first; it must show the same TOFU learn/persist, reconnect-
+# stable, changed-key-rejected, and reject-unknown behaviour, and write a
+# store the Paramiko collector can read (one pinned key per device, either
+# collector).
+# ---------------------------------------------------------------------------
+
+
+def test_verify_auto_add_is_noop(tmp_path, server) -> None:
+    settings = _settings(tmp_path, "auto_add")
+    verify_host_key("127.0.0.1", server.port, settings)
+    assert not known_hosts_path(settings).exists()
+
+
+def test_verify_tofu_learns_and_persists(tmp_path, server) -> None:
+    settings = _settings(tmp_path, "tofu")
+    kh = known_hosts_path(settings)
+    assert not kh.exists()
+    verify_host_key("127.0.0.1", server.port, settings)
+    assert kh.exists()
+    loaded = paramiko.HostKeys(str(kh))
+    assert loaded.lookup(f"[127.0.0.1]:{server.port}") is not None
+
+
+def test_verify_tofu_same_key_reconnect_succeeds(tmp_path, server) -> None:
+    settings = _settings(tmp_path, "tofu")
+    verify_host_key("127.0.0.1", server.port, settings)  # learn
+    verify_host_key("127.0.0.1", server.port, settings)  # same key — no raise
+
+
+def test_verify_tofu_changed_key_is_rejected(tmp_path, server) -> None:
+    settings = _settings(tmp_path, "tofu")
+    verify_host_key("127.0.0.1", server.port, settings)  # learn key A
+    server.set_host_key(paramiko.RSAKey.generate(2048))  # device re-keys / MITM
+    with pytest.raises(paramiko.BadHostKeyException):
+        verify_host_key("127.0.0.1", server.port, settings)
+
+
+def test_verify_reject_refuses_unknown_host(tmp_path, server) -> None:
+    settings = _settings(tmp_path, "reject")
+    with pytest.raises(paramiko.SSHException):
+        verify_host_key("127.0.0.1", server.port, settings)
+
+
+def test_verify_store_is_interoperable_with_paramiko_collector(tmp_path, server) -> None:
+    """A key pinned via the Netmiko pre-flight is trusted by the Paramiko
+    collector against the SAME store — proving the file format interop that
+    lets one device share a single pinned key across both collectors."""
+    verify_host_key("127.0.0.1", server.port, _settings(tmp_path, "tofu"))  # learn
+    # Paramiko collector in REJECT mode (same data_dir) now connects, because
+    # the host is already known from the Netmiko-side pre-flight.
+    _connect("127.0.0.1", server.port, _settings(tmp_path, "reject"))
