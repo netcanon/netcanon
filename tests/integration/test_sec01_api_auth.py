@@ -42,3 +42,29 @@ def test_api_v1_gated_when_api_key_set(client):
 
     # /health is a conventional probe path and stays open even with a key.
     assert client.get("/health").status_code == 200
+
+
+def test_ui_routes_are_not_key_gated_by_design(client):
+    """DOCUMENTED DECISION (blind-audit 3ec11f3 T0-1), not an oversight: the
+    API key gates ``/api/v1`` ONLY — the server-rendered HTML UI stays open
+    even when a key is set.  Several UI pages read data server-side, *not*
+    through the gated API: the diff view (``/configs/{a}/vs/{b}``) emits full
+    config text and ``/configs`` / ``/devices`` list inventory, so the key
+    does NOT protect them.  For any non-loopback exposure a reverse proxy that
+    authenticates the whole surface is REQUIRED (a native in-app UI
+    session/login is intentionally not implemented — it would duplicate the
+    proxy).  See SECURITY.md "Known Limitations" (HTML UI not covered by the
+    API key) + the README API-key note.
+
+    This pins the behavior so docs and code agree: the audit's finding was
+    that the README falsely claimed "the UI's data calls hit /api/v1" — the
+    leak was real, but it is an accepted, proxy-mitigated posture, now named
+    here and documented rather than silently shipped.
+    """
+    client.app.state.settings.api_key = "s3cret"
+    # No bearer token supplied; UI routes must NOT 401 (they are not gated).
+    for path in ("/", "/configs", "/devices"):
+        assert client.get(path).status_code != 401, (
+            f"{path} is now auth-gated — if intentional, update SECURITY.md "
+            f"(HTML UI row) + README, which document the UI as NOT key-gated."
+        )
