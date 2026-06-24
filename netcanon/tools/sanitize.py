@@ -51,6 +51,12 @@ Field-typed rules (counter-per-session):
 * ``CanonicalVRRPGroup.virtual_ips`` / ``virtual_ipv6s`` (public
   entries) → docs range — a VRRP / CARP VIP is frequently the
   public-facing HA gateway, so it is redacted like any other IP
+* ``CanonicalIPv4Address.virtual_gateway_address`` /
+  ``CanonicalIPv6Address.virtual_gateway_address`` (public) → docs range
+  — the anycast / VARP virtual-gateway IP is the structural twin of a
+  VRRP/CARP VIP (a public one reveals real routable infrastructure), and
+  is rendered verbatim by Arista/Aruba/Junos/NX-OS/IOS-XE, so it is
+  redacted at every address site (interface + VLAN SVI, v4 + v6)
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalDHCPPool.gateway`` (public) → docs range
@@ -262,6 +268,22 @@ def sanitize_intent(
                     redacted=new_ip,
                 ))
                 addr.ip = new_ip
+            # The anycast / VARP virtual-gateway address is a SIBLING of
+            # ``.ip`` and is rendered verbatim by 5 codecs (Arista
+            # ``ip address virtual``, Aruba ``active-gateway ip``, Junos,
+            # NX-OS DAG, IOS-XE SD-Access).  A public one reveals real
+            # routable infrastructure exactly like a VRRP/CARP VIP, so
+            # redact it the same way (cache-keyed, so it tracks ``.ip``).
+            if addr.virtual_gateway_address:
+                new_vga = table.redact_ipv4(addr.virtual_gateway_address)
+                if new_vga != addr.virtual_gateway_address:
+                    subs.append(Substitution(
+                        category="ipv4-public",
+                        field=f"interfaces[{i}].ipv4_addresses[{j}].virtual_gateway_address",
+                        original=addr.virtual_gateway_address,
+                        redacted=new_vga,
+                    ))
+                    addr.virtual_gateway_address = new_vga
 
         for j, addr in enumerate(iface.ipv6_addresses):
             new_ip = table.redact_ipv6(addr.ip)
@@ -273,6 +295,16 @@ def sanitize_intent(
                     redacted=new_ip,
                 ))
                 addr.ip = new_ip
+            if addr.virtual_gateway_address:
+                new_vga = table.redact_ipv6(addr.virtual_gateway_address)
+                if new_vga != addr.virtual_gateway_address:
+                    subs.append(Substitution(
+                        category="ipv6-public",
+                        field=f"interfaces[{i}].ipv6_addresses[{j}].virtual_gateway_address",
+                        original=addr.virtual_gateway_address,
+                        redacted=new_vga,
+                    ))
+                    addr.virtual_gateway_address = new_vga
 
         # ---- VRRP / CARP / HSRP authentication ----
         # Cleartext-bearing: the ``plain:`` / ``carp-key:`` schemes
@@ -380,6 +412,19 @@ def sanitize_intent(
                     redacted=new_ip,
                 ))
                 addr.ip = new_ip
+            # Anycast/VARP virtual-gateway companion on the SVI address —
+            # same leak class as the interface site above (the SVI's
+            # ``active-gateway`` / ``ip address virtual`` line).
+            if addr.virtual_gateway_address:
+                new_vga = table.redact_ipv4(addr.virtual_gateway_address)
+                if new_vga != addr.virtual_gateway_address:
+                    subs.append(Substitution(
+                        category="ipv4-public",
+                        field=f"vlans[{i}].ipv4_addresses[{j}].virtual_gateway_address",
+                        original=addr.virtual_gateway_address,
+                        redacted=new_vga,
+                    ))
+                    addr.virtual_gateway_address = new_vga
 
     # ---- local users (usernames + hashed passwords) ----
     # Phase-3 R6.1: redact the username too.  Operator-chosen

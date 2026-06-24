@@ -26,6 +26,20 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Security
+
+* **Anycast / VARP virtual-gateway address no longer leaks through the
+  sanitizer.** `CanonicalIPv4Address` / `CanonicalIPv6Address.virtual_gateway_address`
+  -- the anycast gateway IP rendered verbatim by Arista (`ip address
+  virtual`), Aruba (`active-gateway ip`), Junos, NX-OS DAG and IOS-XE
+  SD-Access -- was passed through `netcanon sanitize` while its primary-IP
+  sibling was redacted, so a public virtual-gateway IP could leak into a
+  shared sanitised config or bug report. It is now redacted at every
+  address site (interface + VLAN SVI, v4 + v6), mirroring the VRRP/CARP
+  VIP redaction; private gateways (the LAN-gateway common case) are
+  preserved. Found by an independent blind audit (`3ec11f3`, finding #6)
+  and runtime-reproduced.
+
 ### Fixed
 
 * **Silent capability-loss on VLAN port membership for the router /
