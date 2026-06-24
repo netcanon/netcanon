@@ -97,6 +97,47 @@ jobs:
       - name: Run integration tests
         run: pytest tests/integration -q --no-header
 
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          # Full history + tags so setuptools_scm derives a real version on
+          # `pip install -e .` (matches the test job; a `0.0.0` fallback can
+          # skew version-dependent UI strings).
+          fetch-depth: 0
+          # No git push from any ci.yml job; clear the token-in-.git/config
+          # default to limit the blast radius of a compromised step.
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install Playwright Chromium + OS deps
+        # `--with-deps` pulls the apt libraries headless Chromium needs on the
+        # runner.  Only Chromium is installed (the suite is single-browser) to
+        # keep the download small.
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        # The suite starts its own session-scoped Uvicorn server in a daemon
+        # thread (tests/e2e/conftest.py) with the SSH collector mocked, so it
+        # needs no external server, display, or network — headless Chromium
+        # against 127.0.0.1.  Gating these in CI closes the gap where a
+        # UI/template regression could merge to main (and, transitively, reach
+        # a release tag) undetected; the previous policy ran e2e locally only.
+        run: pytest tests/e2e -m e2e -q --no-header
+
   build-distribution:
     name: Build sdist + wheel
     runs-on: ubuntu-latest
