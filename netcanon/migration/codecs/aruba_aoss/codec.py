@@ -124,6 +124,11 @@ class ArubaAOSSCodec(CodecBase):
             "/vlans/vlan/name",
             "/vlans/vlan/tagged-ports",
             "/vlans/vlan/untagged-ports",
+            # SVI / management L3 on the VLAN record itself — AOS-S models the
+            # SVI as a property of the VLAN (no sibling interface) and renders
+            # it straight off this surface, so it round-trips (unlike the
+            # router/firewall codecs that drop it; blind-audit 3ec11f3 T0-2).
+            "/vlans/vlan/ipv4/address/ip",
             # Per-interface switchport view — AOS-S models L2 membership
             # VLAN-centrically (``vlan N / tagged|untagged <ports>``), but
             # parse populates the transposed per-interface switchport_mode /
