@@ -50,6 +50,8 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalSNMP,
+    CanonicalSNMPv3User,
     CanonicalVlan,
     CanonicalVxlan,
 )
@@ -143,6 +145,56 @@ def _flood_survived(reparsed: CanonicalIntent) -> bool:
     )
 
 
+def _vlan_desc_intent() -> CanonicalIntent:
+    """A VLAN carrying a description distinct from its name, plus an access
+    port so codecs that only render referenced VLANs still emit it."""
+    return CanonicalIntent(
+        hostname="sw",
+        interfaces=[
+            CanonicalInterface(
+                name="Ethernet1", default_name="Ethernet1",
+                switchport_mode="access", access_vlan=10,
+            )
+        ],
+        vlans=[CanonicalVlan(id=10, name="ENG", description="Engineering-VLAN")],
+    )
+
+
+def _vlan_kept(reparsed: CanonicalIntent) -> bool:
+    return any(v.id == 10 for v in reparsed.vlans)
+
+
+def _vlan_desc_survived(reparsed: CanonicalIntent) -> bool:
+    return any(v.description == "Engineering-VLAN" for v in reparsed.vlans)
+
+
+def _v3_engineid_intent() -> CanonicalIntent:
+    """A single SNMPv3 USM user carrying an explicit engineID."""
+    return CanonicalIntent(
+        hostname="r",
+        interfaces=[CanonicalInterface(name="Ethernet1", default_name="Ethernet1")],
+        snmp=CanonicalSNMP(
+            v3_users=[
+                CanonicalSNMPv3User(
+                    name="u1", group="g1",
+                    auth_protocol="sha", auth_passphrase="authpass12345",
+                    priv_protocol="aes", priv_passphrase="privpass12345",
+                    engine_id="80000009ff",
+                )
+            ]
+        ),
+    )
+
+
+def _v3_user_kept(reparsed: CanonicalIntent) -> bool:
+    return bool(reparsed.snmp and reparsed.snmp.v3_users)
+
+
+def _v3_engineid_survived(reparsed: CanonicalIntent) -> bool:
+    users = reparsed.snmp.v3_users if reparsed.snmp else []
+    return any(u.engine_id == "80000009ff" for u in users)
+
+
 class _Case:
     """One (leaf, identity, targeted-intent) silent-loss probe."""
 
@@ -180,6 +232,23 @@ _CASES = [
         intent=_flood_intent,
         identity_kept=_vni_kept,
         subdetail_survived=_flood_survived,
+    ),
+    # -- Stage 2: clean naming-independent value sub-details --
+    _Case(
+        case_id="vlan-description",
+        leaf="/vlans/vlan/description",
+        identity="/vlans/vlan/id",
+        intent=_vlan_desc_intent,
+        identity_kept=_vlan_kept,
+        subdetail_survived=_vlan_desc_survived,
+    ),
+    _Case(
+        case_id="snmp-v3-engine-id",
+        leaf="/snmp/v3-user/engine-id",
+        identity="/snmp/v3-user",
+        intent=_v3_engineid_intent,
+        identity_kept=_v3_user_kept,
+        subdetail_survived=_v3_engineid_survived,
     ),
 ]
 
