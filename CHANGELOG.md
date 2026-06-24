@@ -66,6 +66,17 @@ No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
   `239.7.7.7` / `9.9.9.9` through them).  RD/RTs map cross-reference-
   stable to the RFC 5398 documentation ASN; the BUM group to the RFC
   5771 MCAST-TEST-NET range.  (`#162`, commit 8ff9c56)
+* **SSH host-key `tofu` / `reject` now work on the Netmiko collector.**
+  The strict modes previously pointed Netmiko at the operator's OS
+  `~/.ssh/known_hosts`, so a netcanon server with an empty OS store
+  rejected every device on first connect -- the documented `tofu` mode
+  was unusable on that path. The Netmiko collector now runs an auth-less
+  paramiko pre-flight (`verify_host_key`) that learns + persists (or
+  rejects) the host key in the netcanon-managed `{data_dir}/known_hosts`
+  store -- the same store the Paramiko collector uses, so one device
+  shares one pinned key across both -- then connects `ssh_strict` against
+  it. Default stays `auto_add` (non-breaking); this removes the blocker
+  that kept the default from becoming `tofu`. (`#169`)
 
 ### Fixed
 
