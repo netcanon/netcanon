@@ -43,6 +43,18 @@ released -- folded into this cut.)
 
 ### Security
 
+* **BREAKING: SSH host-key checking now defaults to `tofu`, not
+  `auto_add`.** New backups pin each device's host key on first connect
+  (under `{data_dir}/known_hosts`) and reject a later changed key
+  (`BadHostKeyException`) -- catching MITM / re-key on the management
+  path, on both the Paramiko and Netmiko collectors (the latter via the
+  pre-flight added below).  **Operational impact:** after a *legitimate*
+  device re-key (re-image, hardware swap, IP reuse) the next backup fails
+  with a clear `BadHostKeyException` until you remove that host's line
+  from `{data_dir}/known_hosts`.  Set `NETCANON_SSH_HOST_KEY_CHECKING=
+  auto_add` to restore the pre-v0.4.5 trust-anything behaviour (a startup
+  warning then flags that verification is disabled).  (`#170`)
+
 * **The default bind address is now `127.0.0.1` (loopback), not
   `0.0.0.0`** (audit T0-2).  The zero-config `host` default previously
   advertised an all-interfaces bind; binding a network interface is now
