@@ -88,6 +88,19 @@ No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
   dialog onto the GUI thread via
   `QMetaObject.invokeMethod(QueuedConnection)`, matching the pattern
   `window.py` already uses for show/hide/quit.  (`#159`, commit 2331b9c)
+* **VXLAN BUM-replication detail no longer ships a green banner when
+  dropped** (silent-loss class, Bucket-C stage 1).  `arista_eos`,
+  `aruba_aoscx`, and `juniper_junos` render the VLAN<->VNI binding
+  (`/vxlan-vnis/vni`, declared supported) but not the BUM-replication
+  underlay, so a VNI's multicast group (`/vxlan-vnis/mcast-group`) and
+  ingress-replication flood list (`/vxlan-vnis/flood-list`) dropped on
+  render while `validate_against` -- exact-string `classify` defaulting
+  the undeclared sub-leaves to "supported" -- reported `severity: ok`
+  (verified live: cisco_nxos -> arista_eos).  Both sub-leaves are now
+  declared `lossy` on those three codecs, so the migrate banner warns;
+  a new registry guard (`test_silent_loss_list_subfields`) enforces the
+  base-identity-coverage rule with single-mode targeted intents.  Matrix
+  declarations only -- no render change, `CODEC_BUG` stays 5.  (`#165`)
 
 ### Added
 

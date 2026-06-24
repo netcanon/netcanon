@@ -256,6 +256,34 @@ class ArubaAOSCXCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- VXLAN BUM-replication underlay (silent-loss guard) --
+            # Render emits the ``interface vxlan 1`` VTEP (source ip +
+            # per-VNI ``vni``/``vlan`` bindings) but not the flood/multicast
+            # underlay, so those sub-details drop while the VNI binding
+            # (declared supported above) survives — declared here so the
+            # validation report warns instead of reporting ``severity: ok``.
+            LossyPath(
+                path="/vxlan-vnis/mcast-group",
+                reason=(
+                    "Render emits the VTEP `source ip` + per-VNI "
+                    "`vni <N>` / nested `vlan <V>` bindings, but not the "
+                    "BUM-replication underlay: a per-VNI multicast group "
+                    "drops on render while the VLAN↔VNI binding survives.  "
+                    "The operator re-applies the multicast/flood underlay "
+                    "on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/flood-list",
+                reason=(
+                    "Companion to /vxlan-vnis/mcast-group: head-end / "
+                    "ingress-replication VTEP flood-lists are not emitted, "
+                    "so a source carrying static flood VTEPs loses them on "
+                    "render while the VLAN↔VNI binding survives."
+                ),
+                severity="warn",
+            ),
         ],
         unsupported=[
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
