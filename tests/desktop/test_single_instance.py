@@ -82,7 +82,10 @@ class TestWindowsAcquisition:
         windll, kernel32 = self._patch_kernel32(last_error=0)
         with (
             patch.object(sys, "platform", "win32"),
-            patch("ctypes.windll", windll),
+            # create=True: ctypes.windll only exists on Windows, so on a
+            # Linux/macOS CI runner there is no original attribute to
+            # replace/restore — create it for the duration of the patch.
+            patch("ctypes.windll", windll, create=True),
         ):
             assert single_instance.acquire_singleton() is True
         kernel32.CreateMutexW.assert_called_once()
@@ -95,7 +98,10 @@ class TestWindowsAcquisition:
         )
         with (
             patch.object(sys, "platform", "win32"),
-            patch("ctypes.windll", windll),
+            # create=True: ctypes.windll only exists on Windows, so on a
+            # Linux/macOS CI runner there is no original attribute to
+            # replace/restore — create it for the duration of the patch.
+            patch("ctypes.windll", windll, create=True),
         ):
             assert single_instance.acquire_singleton() is False
 
@@ -108,7 +114,10 @@ class TestWindowsAcquisition:
         windll, kernel32 = self._patch_kernel32(last_error=0)
         with (
             patch.object(sys, "platform", "win32"),
-            patch("ctypes.windll", windll),
+            # create=True: ctypes.windll only exists on Windows, so on a
+            # Linux/macOS CI runner there is no original attribute to
+            # replace/restore — create it for the duration of the patch.
+            patch("ctypes.windll", windll, create=True),
         ):
             single_instance.acquire_singleton()
 
@@ -134,7 +143,10 @@ class TestWindowsAcquisition:
         windll, kernel32 = self._patch_kernel32(last_error=0)
         with (
             patch.object(sys, "platform", "win32"),
-            patch("ctypes.windll", windll),
+            # create=True: ctypes.windll only exists on Windows, so on a
+            # Linux/macOS CI runner there is no original attribute to
+            # replace/restore — create it for the duration of the patch.
+            patch("ctypes.windll", windll, create=True),
         ):
             single_instance.acquire_singleton()
         # Third positional arg is the LPCWSTR mutex name
