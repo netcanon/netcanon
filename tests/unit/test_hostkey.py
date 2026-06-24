@@ -25,10 +25,19 @@ def test_auto_add_adds_no_netmiko_params(tmp_path) -> None:
 
 
 @pytest.mark.parametrize("mode", ["tofu", "reject"])
-def test_strict_modes_enable_netmiko_host_key_checking(tmp_path, mode) -> None:
+def test_strict_modes_point_netmiko_at_netcanon_store(tmp_path, mode) -> None:
+    """tofu/reject point Netmiko at the netcanon-managed known_hosts store
+    (populated by the verify_host_key pre-flight), NOT the operator's OS
+    ~/.ssh/known_hosts."""
     s = Settings(ssh_host_key_checking=mode, data_dir=tmp_path)
     params = netmiko_host_key_params(s)
-    assert params == {"system_host_keys": True, "ssh_strict": True}
+    assert params == {
+        "alt_host_keys": True,
+        "alt_key_file": str(known_hosts_path(s)),
+        "ssh_strict": True,
+    }
+    # The old OS-known_hosts mechanism must be gone.
+    assert "system_host_keys" not in params
 
 
 def test_known_hosts_path_under_data_dir(tmp_path) -> None:

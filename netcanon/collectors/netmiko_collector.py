@@ -24,7 +24,7 @@ from netmiko import ConnectHandler
 from ..definitions.schema import DeviceDefinition
 from ..models.device import DeviceTarget
 from .base import BaseCollector
-from .hostkey import netmiko_host_key_params
+from .hostkey import netmiko_host_key_params, verify_host_key
 from .probe import parse_probe_output
 
 logger = logging.getLogger(__name__)
@@ -91,10 +91,14 @@ class NetmikoCollector(BaseCollector):
             params["secret"] = (
                 device.credentials.enable_password.get_secret_value()
             )
-        # Host-key policy (netcanon.collectors.hostkey): for tofu / reject
-        # this adds system_host_keys + ssh_strict (OS ~/.ssh/known_hosts);
-        # default auto_add adds nothing (Netmiko's own auto-add behaviour).
-        params.update(netmiko_host_key_params(self._effective_settings()))
+        # Host-key policy (netcanon.collectors.hostkey): for tofu / reject a
+        # paramiko pre-flight learns+persists (or rejects) the host key in
+        # the netcanon known_hosts store, then Netmiko connects ssh_strict
+        # against that store; default auto_add does nothing (Netmiko's own
+        # auto-add behaviour).
+        settings = self._effective_settings()
+        params.update(netmiko_host_key_params(settings))
+        verify_host_key(device.host, device.port, settings)
 
         logger.info("Connecting to %s:%d (%s)", device.host, device.port, device_type)
         logger.debug(
@@ -179,7 +183,9 @@ class NetmikoCollector(BaseCollector):
             params["secret"] = (
                 device.credentials.enable_password.get_secret_value()
             )
-        params.update(netmiko_host_key_params(self._effective_settings()))
+        settings = self._effective_settings()
+        params.update(netmiko_host_key_params(settings))
+        verify_host_key(device.host, device.port, settings)
 
         logger.info(
             "Probing %s:%d (%s) with command %r",
