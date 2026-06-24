@@ -108,23 +108,24 @@ class Settings(BaseSettings):
         ssh_host_key_checking: SSH host-key verification policy for the
             backup collectors.  One of:
 
-            * ``"auto_add"`` (default): trust-on-first-use *without*
-              persistence — any host key is accepted, every time.  This is
-              the historical behaviour; no change for existing deployments.
-            * ``"tofu"``: trust-on-first-use *with* persistence — the first
-              key seen for a host is recorded under
+            * ``"tofu"`` (default since v0.4.5): trust-on-first-use *with*
+              persistence — the first key seen for a host is recorded under
               ``{effective_data_dir}/known_hosts`` and a later **changed**
               key is rejected (paramiko ``BadHostKeyException``), catching
               MITM / re-key.  Re-trust a legitimately re-keyed device by
               removing its line from that file.
+            * ``"auto_add"``: trust-on-first-use *without* persistence — any
+              host key is accepted, every time (the pre-v0.4.5 behaviour;
+              MITM-able).  An explicit opt-OUT of host-key verification; a
+              startup warning fires while it is selected.
             * ``"reject"``: only connect to hosts already present in the
               ``known_hosts`` store; unknown hosts are refused.
 
-            Override via ``NETCANON_SSH_HOST_KEY_CHECKING``.  The Netmiko
-            collector honours ``tofu`` / ``reject`` as strict checking
-            against the *OS* ``~/.ssh/known_hosts`` (it has no custom-store
-            / TOFU-persist API); the Paramiko shell collector uses the
-            netcanon data-dir store described above.  See SECURITY.md.
+            Override via ``NETCANON_SSH_HOST_KEY_CHECKING``.  Both collectors
+            use the netcanon data-dir ``known_hosts`` store: the Paramiko
+            shell collector inline, the Netmiko collector via an auth-less
+            paramiko pre-flight (Netmiko has no native TOFU-persist API).
+            See SECURITY.md.
     """
 
     definitions_dir: Path = Field(default_factory=_default_definitions_dir)
@@ -140,7 +141,7 @@ class Settings(BaseSettings):
                                     ge=1, le=MAX_BACKUP_CONCURRENCY)
     max_memory_jobs: int = Field(default=1000, ge=0)
     block_private_egress: bool = False
-    ssh_host_key_checking: Literal["auto_add", "tofu", "reject"] = "auto_add"
+    ssh_host_key_checking: Literal["auto_add", "tofu", "reject"] = "tofu"
     # ── SEC-01 — opt-in API auth + bind safety ──
     # When set, every /api/v1 route requires `Authorization: Bearer
     # <api_key>`.  Empty (default) disables auth — the zero-config

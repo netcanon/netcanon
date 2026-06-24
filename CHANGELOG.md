@@ -26,14 +26,20 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
-## [0.4.3] - 2026-06-21
+## [0.4.5] - 2026-06-24
 
-A fourth independent blind-audit pass (against the published v0.4.2
-tree) scored 8.0/10 and surfaced a small set of real, verified
-defects.  This release ships the ship-blocker subset: a broken
-documented install, a desktop threading bug, and an insecure-by-default
-bind, plus two follow-on hardening fixes.  Each finding was reproduced against current `main` before fixing.
-No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
+A security-and-honesty release.  It began as the ship-blocker subset of
+a fourth blind-audit pass (8.0/10 against the published v0.4.2 tree) and
+grew to carry that audit's full Bucket A/B/C remediation, a three-stage
+"silent-loss" capability-matrix honesty sweep, the Playwright e2e suite
+gated in CI, and a hardened SSH host-key posture.  **Two security
+defaults changed (both reversible):** the server now binds loopback
+(`127.0.0.1`) instead of `0.0.0.0`, and SSH host-key checking now
+defaults to `tofu` (trust-on-first-use with key pinning) instead of
+`auto_add` (trust-anything).  Each audit finding was reproduced against
+`main` before fixing.  No cross-mesh fidelity change; the `CODEC_BUG`
+baseline stays at 5.  (Versions 0.4.3-0.4.4 were staged but never
+released -- folded into this cut.)
 
 ### Security
 

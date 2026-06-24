@@ -45,14 +45,15 @@ def test_known_hosts_path_under_data_dir(tmp_path) -> None:
     assert known_hosts_path(s) == tmp_path / "known_hosts"
 
 
-def test_default_is_auto_add() -> None:
-    # No env override → legacy behaviour, so existing deployments are unchanged.
-    assert Settings().ssh_host_key_checking == "auto_add"
+def test_default_is_tofu() -> None:
+    # v0.4.5 flipped the secure default: host-key verification is ON unless
+    # explicitly disabled with auto_add.
+    assert Settings().ssh_host_key_checking == "tofu"
 
 
-def test_warning_reason_fires_for_auto_add_default(tmp_path) -> None:
-    """The insecure-default (auto_add) is surfaced once at startup — a
-    server logs this so the posture is a conscious choice (audit T0-4)."""
+def test_warning_reason_fires_when_auto_add_selected(tmp_path) -> None:
+    """auto_add is now an explicit opt-OUT of host-key verification; a
+    server surfaces that insecure choice once at startup (audit T0-4)."""
     s = Settings(ssh_host_key_checking="auto_add", data_dir=tmp_path)
     reason = host_key_warning_reason(s)
     assert reason is not None
