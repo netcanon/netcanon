@@ -39,6 +39,17 @@ timestamp if your timezone matters for an audit.
   VIP redaction; private gateways (the LAN-gateway common case) are
   preserved. Found by an independent blind audit (`3ec11f3`, finding #6)
   and runtime-reproduced.
+* **Corrected a misleading API-key claim in the README + SECURITY.md.**
+  The README stated the HTML UI's "data calls hit `/api/v1`", implying
+  `NETCANON_API_KEY` protected the config data shown in the UI. It does
+  not: the server-rendered diff view (`/configs/{a}/vs/{b}`) emits full
+  config text and `/configs` / `/devices` list inventory server-side,
+  outside the key-gated `/api/v1`. The docs now state plainly that the key
+  gates `/api/v1` only and a reverse proxy is required to authenticate the
+  UI for any non-loopback exposure; a regression test names the behavior.
+  No behavior change -- the UI was, and remains, intentionally
+  proxy-fronted (a native in-app UI login was deliberately not added).
+  Found by an independent blind audit (`3ec11f3`, T0-1).
 
 ### Fixed
 

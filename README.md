@@ -195,12 +195,17 @@ container works zero-config; for the production deployment path see
 
 `NETCANON_API_KEY` turns on a built-in bearer-token gate: when set,
 every `/api/v1` request must carry `Authorization: Bearer
-$NETCANON_API_KEY`.  `/health` and the HTML UI shell stay open, but the
-UI's data calls hit `/api/v1`, so an exposed UI should sit behind your
-reverse proxy's auth.  Because the image binds `0.0.0.0`, `netcanon
-serve` refuses to start without a key (or `NETCANON_ALLOW_INSECURE_BIND=1`),
-so an unauthenticated public bind is a deliberate choice — see
-[`SECURITY.md`](SECURITY.md) "Threat Model".
+$NETCANON_API_KEY`.  **The key gates the `/api/v1` surface only — it does
+NOT cover the HTML UI.**  Several UI pages are server-rendered and read
+data server-side, *not* through `/api/v1`: the diff view
+(`/configs/{a}/vs/{b}`) emits full config text (secrets included), and
+`/configs` / `/devices` list the config + device inventory.  The API key
+does **not** protect those pages, so for any non-loopback exposure you
+**must** front the app with a reverse proxy that authenticates the whole
+surface — do not rely on the key alone to secure the UI.  Because the
+image binds `0.0.0.0`, `netcanon serve` refuses to start without a key
+(or `NETCANON_ALLOW_INSECURE_BIND=1`), so an unauthenticated public bind
+is a deliberate choice — see [`SECURITY.md`](SECURITY.md) "Threat Model".
 
 The published image is signed via Sigstore with an SBOM attestation.
 Verify against the immutable digest (`ghcr.io/netcanon/netcanon@sha256:<digest>`),
