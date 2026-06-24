@@ -165,6 +165,18 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/vlans/vlan/tagged-ports"
         for _ in vlan.untagged_ports:
             yield "/vlans/vlan/untagged-ports"
+        # VLAN SVI / management L3 address (the VLAN-record IP, distinct from
+        # interfaces[].ipv4_addresses).  The Junos ``irb`` + Aruba SVI-on-VLAN
+        # shapes fold the SVI's L3 here via project_svi_to_vlan, and only the
+        # SVI-model renderers (arista_eos, cisco_iosxe_cli) reconstruct it via
+        # synthesize_svis_from_vlan_l3.  Codecs that render L3 only from a
+        # sibling interface drop it on render — so this MUST be walked, else
+        # validate_against classifies the unwalked path as "supported" and
+        # reports severity:ok while the SVI/management IP silently vanishes
+        # (the same fail-surfaced principle as the {tagged,untagged}-ports
+        # twin above; blind-audit 3ec11f3 T0-2).  Droppers declare it lossy.
+        for _ in vlan.ipv4_addresses:
+            yield "/vlans/vlan/ipv4/address/ip"
     for route in intent.static_routes:
         yield "/routing/static-route"
         if route.vrf:

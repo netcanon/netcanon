@@ -42,6 +42,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Silent loss of VLAN SVI / management L3 addresses to router / firewall
+  codecs.** A VLAN's SVI L3 carried on the VLAN record itself (the Junos
+  `irb` / Aruba SVI-on-VLAN shape, folded onto
+  `CanonicalVlan.ipv4_addresses`) was never walked by `_walk_canonical`, so
+  `validate_against` classified it `supported` and reported `severity: ok`
+  while `cisco_nxos`, `cisco_iosxr`, `aruba_aoscx`, `opnsense` and
+  `mikrotik_routeros` silently dropped it on render. The walker now yields
+  `/vlans/vlan/ipv4/address/ip` and those five codecs declare it lossy
+  (warn), so the loss is surfaced; the SVI-model codecs (Arista, IOS-XE
+  CLI, AOS-S) preserve it and FortiGate renders it on a routed
+  sub-interface. Found by an independent blind audit (`3ec11f3`, T0-2); the
+  audit named nxos+iosxr, the fix's own per-codec census also caught
+  aoscx/opnsense/mikrotik.
 * **Silent capability-loss on VLAN port membership for the router /
   firewall codecs.** `opnsense`, `mikrotik_routeros`, and `fortigate_cli`
   model a VLAN as a single-parent sub-interface and structurally cannot

@@ -177,6 +177,19 @@ class ArubaAOSCXCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/ipv4/address/ip",
+                reason=(
+                    "Renders VLAN SVI / management L3 only from a sibling "
+                    "interface stanza; an L3 address carried on the VLAN record "
+                    "itself (the Junos irb / Aruba SVI-on-VLAN shape, folded onto "
+                    "CanonicalVlan.ipv4_addresses) is dropped on render because "
+                    "this codec does not synthesize an SVI from the VLAN record. "
+                    "Declared lossy so validate_against surfaces the loss instead "
+                    "of reporting severity:ok (blind-audit 3ec11f3 T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-mac",
                 reason=(
                     "Render emits the per-address active-gateway VIP "

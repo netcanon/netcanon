@@ -270,6 +270,35 @@ def _tunnel_type_survived(reparsed: CanonicalIntent) -> bool:
     return any(i.tunnel_type == "gre" for i in reparsed.interfaces)
 
 
+def _svi_intent() -> CanonicalIntent:
+    """A VLAN carrying its SVI / management L3 on the VLAN record itself (the
+    Junos ``irb`` / Aruba SVI-on-VLAN shape, with NO sibling Vlan<N> interface)
+    — folded onto ``CanonicalVlan.ipv4_addresses`` by project_svi_to_vlan."""
+    return CanonicalIntent(
+        hostname="r",
+        vlans=[CanonicalVlan(
+            id=11, name="BLUE",
+            ipv4_addresses=[CanonicalIPv4Address(ip="10.11.0.1", prefix_length=24)])],
+    )
+
+
+def _svi_vlan_kept(reparsed: CanonicalIntent) -> bool:
+    return any(v.id == 11 for v in reparsed.vlans)
+
+
+def _svi_ip_survived(reparsed: CanonicalIntent) -> bool:
+    # The SVI address may round-trip on EITHER canonical representation: the
+    # VLAN record (SVI-model targets re-fold via project_svi_to_vlan) OR an
+    # interface (FortiGate renders it on a routed VLAN sub-interface).  Either
+    # means the L3 reached the target — no reachability loss.  A genuine
+    # dropper (nxos/iosxr/aoscx/opnsense/mikrotik) leaves it on neither.
+    on_vlan = any(a.ip == "10.11.0.1" for v in reparsed.vlans for a in v.ipv4_addresses)
+    on_iface = any(
+        a.ip == "10.11.0.1" for i in reparsed.interfaces for a in i.ipv4_addresses
+    )
+    return on_vlan or on_iface
+
+
 class _Case:
     """One (leaf, identity, targeted-intent) silent-loss probe."""
 
@@ -366,6 +395,18 @@ _CASES = [
         intent=_tunnel_intent,
         identity_kept=_tunnel_iface_kept,
         subdetail_survived=_tunnel_type_survived,
+    ),
+    # -- VLAN SVI / management L3 (blind-audit 3ec11f3 T0-2): the VLAN-record
+    # IP was unwalked, so a codec that drops it on render reported severity:ok.
+    # Now walked (/vlans/vlan/ipv4/address/ip) + declared lossy on the droppers
+    # (nxos/iosxr/aoscx/opnsense/mikrotik); SVI-model targets preserve it. --
+    _Case(
+        case_id="vlan-svi-ipv4",
+        leaf="/vlans/vlan/ipv4/address/ip",
+        identity="/vlans/vlan/id",
+        intent=_svi_intent,
+        identity_kept=_svi_vlan_kept,
+        subdetail_survived=_svi_ip_survived,
     ),
 ]
 

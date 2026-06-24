@@ -82,7 +82,13 @@ def _kitchen_sink() -> CanonicalIntent:
                 tunnel_type="gre",
             ),
         ],
-        vlans=[CanonicalVlan(id=10, name="USERS")],
+        vlans=[CanonicalVlan(
+            id=10, name="USERS",
+            # SVI / management L3 on the VLAN record — the surface that was
+            # unwalked (so silently lost on render to nxos/iosxr/...) until
+            # blind-audit 3ec11f3 T0-2; exercised here so the honesty floor
+            # covers it (see test_vlan_svi_l3_is_walked).
+            ipv4_addresses=[CanonicalIPv4Address(ip="10.10.0.1", prefix_length=24)])],
         static_routes=[
             CanonicalStaticRoute(
                 destination="0.0.0.0/0", gateway="198.51.100.2", vrf="TENANT-A"
@@ -219,6 +225,20 @@ def test_per_interface_subfields_are_walked():
         "/interfaces/interface/trunk-native-vlan",
     ):
         assert xpath in emitted, f"_walk_canonical drops {xpath!r}"
+
+
+def test_vlan_svi_l3_is_walked():
+    """The VLAN-record SVI / management L3 address must be walked, else a
+    codec that drops it on render (nxos/iosxr/aoscx/opnsense/mikrotik) is
+    classified ``supported`` and the live report says severity:ok while the
+    address vanishes — the silent loss closed in blind-audit 3ec11f3 T0-2.
+    This is the surface the honesty floor was previously blind to (the
+    kitchen-sink VLAN carried no ipv4_addresses)."""
+    emitted = set(_walk_canonical(_kitchen_sink()))
+    assert "/vlans/vlan/ipv4/address/ip" in emitted, (
+        "_walk_canonical drops the VLAN SVI L3 address — the live validator "
+        "is structurally blind to it again"
+    )
 
 
 def test_snmp_v3_subfields_are_walked():
