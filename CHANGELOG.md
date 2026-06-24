@@ -26,6 +26,23 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+* **Silent capability-loss on VLAN port membership for the router /
+  firewall codecs.** `opnsense`, `mikrotik_routeros`, and `fortigate_cli`
+  model a VLAN as a single-parent sub-interface and structurally cannot
+  represent multi-port `tagged` / `untagged` membership, yet left
+  `/vlans/vlan/tagged-ports` + `/vlans/vlan/untagged-ports` undeclared --
+  so `validate_against` reported them *supported* while a
+  switch -> {firewall,router} migration silently dropped the port -> VLAN
+  bindings. Now declared unsupported, consistent with the per-interface
+  switchport surface those codecs already declared unsupported. A new
+  naming-sensitive silent-loss guard
+  (`tests/unit/migration/test_silent_loss_naming_sensitive.py`) pins this,
+  plus LAG-member + switchport round-trip honesty across the fleet, using
+  per-codec native-named intents (the value-detail + registry-honesty
+  guards deliberately excluded these naming-sensitive surfaces).
+
 ## [0.4.5] - 2026-06-24
 
 A security-and-honesty release.  It began as the ship-blocker subset of

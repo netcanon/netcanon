@@ -306,6 +306,27 @@ class FortiGateCLICodec(CodecBase):
                 path="/interfaces/interface/voice-vlan",
                 reason="FortiOS has no per-port voice-VLAN; dropped on render.",
             ),
+            # ── VLAN-centric L2 membership — the twin of the per-port
+            #    switchport surface above.  FortiOS models a VLAN as a single-
+            #    parent child interface (``set interface <phys>`` +
+            #    ``set vlanid N``), so a VLAN that spans several switch ports
+            #    collapses to one sub-interface and the tagged/untagged port
+            #    LISTS are dropped on render.  Declared unsupported so a
+            #    switch→firewall migration surfaces the membership loss
+            #    instead of reporting ``severity: ok`` while the walker yields
+            #    these paths (silent-loss naming-sensitive guard). ──
+            UnsupportedPath(
+                path="/vlans/vlan/tagged-ports",
+                reason="FortiOS binds a VLAN to a single parent child-interface; "
+                "multi-port tagged membership (switchport's VLAN-centric twin) "
+                "is dropped on render.",
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/untagged-ports",
+                reason="FortiOS binds a VLAN to a single parent child-interface; "
+                "multi-port untagged membership (switchport's VLAN-centric twin) "
+                "is dropped on render.",
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
