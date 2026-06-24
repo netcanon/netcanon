@@ -982,6 +982,96 @@ class TestPiiTailRenderedOutputClean:
         assert "admin@corp.example" not in rendered   # contact leak closed
 
 
+class TestVirtualGatewayAddressRedaction:
+    """Regression guard for the anycast / VARP virtual-gateway-address leak
+    (blind audit ``3ec11f3`` #6).  ``virtual_gateway_address`` is a sibling
+    of ``.ip`` on both address models, rendered verbatim by 5 codecs
+    (Arista ``ip address virtual``, Aruba ``active-gateway ip``, Junos,
+    NX-OS DAG, IOS-XE SD-Access).  A public one bypassed sanitisation while
+    its primary-IP sibling was redacted — the identical leak class the
+    VRRP/CARP VIP fix (#134) closed for ``CanonicalVRRPGroup.virtual_ips``."""
+
+    def test_public_vga_redacted_on_interface_ipv4(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="8.8.8.2", prefix_length=24,
+                    virtual_gateway_address="9.9.9.1")])],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        addr = sanitized.interfaces[0].ipv4_addresses[0]
+        assert addr.ip != "8.8.8.2"                       # primary redacted (baseline)
+        assert addr.virtual_gateway_address != "9.9.9.1"  # VGA redacted (the fix)
+        assert any(
+            s.field.endswith("ipv4_addresses[0].virtual_gateway_address")
+            for s in subs
+        )
+
+    def test_public_vga_redacted_on_interface_ipv6(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                ipv6_addresses=[CanonicalIPv6Address(
+                    ip="2001:4860::2", prefix_length=64,
+                    virtual_gateway_address="2001:4860::1")])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        addr = sanitized.interfaces[0].ipv6_addresses[0]
+        assert addr.ip != "2001:4860::2"
+        assert addr.virtual_gateway_address != "2001:4860::1"
+
+    def test_public_vga_redacted_on_vlan_svi(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            vlans=[CanonicalVlan(
+                id=10, name="V10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="8.8.8.2", prefix_length=24,
+                    virtual_gateway_address="9.9.9.1")])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        addr = sanitized.vlans[0].ipv4_addresses[0]
+        assert addr.virtual_gateway_address != "9.9.9.1"
+
+    def test_private_vga_preserved(self):
+        """A private VGA (the LAN-gateway common case) is preserved, like any
+        private IP — redaction targets public/routable addresses only."""
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.0.2", prefix_length=24,
+                    virtual_gateway_address="10.0.0.1")])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.interfaces[0].ipv4_addresses[0].virtual_gateway_address == "10.0.0.1"
+
+    def test_public_vga_absent_from_render(self):
+        """End-to-end: the Aruba AOS-CX ``active-gateway ip`` line must not
+        emit the public VGA after sanitisation.  Precondition-asserts the
+        codec DOES emit it first, so the test can't pass vacuously."""
+        from netcanon.migration.codecs.registry import get_codec
+
+        intent = CanonicalIntent(
+            hostname="sw",
+            vlans=[CanonicalVlan(id=10, name="V10")],
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                interface_type="ianaift:l3ipvlan",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="8.8.8.2", prefix_length=24,
+                    virtual_gateway_address="9.9.9.1")])],
+        )
+        codec = get_codec("aruba_aoscx")
+        assert "9.9.9.1" in codec.render(intent)            # precondition: codec emits VGA
+        sanitized, _ = sanitize_intent(intent)
+        assert "9.9.9.1" not in codec.render(sanitized)     # leak closed end-to-end
+
+
 def test_raw_sections_stripped_by_sanitiser():
     """DATA-02: Tier-3 ``raw_sections`` (verbatim vendor text) is cleared.
 
