@@ -1136,9 +1136,12 @@ interface nve1
         assert caps.classify("/evpn-type5-routes/route") == "lossy"
         # IPv4 DAG anycast graduated; only the IPv6 companion is deferred.
         assert caps.classify("/anycast-gateway-mac") == "supported"
+        # Demoted supported -> lossy (Bucket-C stage 3): DAG round-trips only
+        # vga == primary-IP; a separate cross-vendor VARP VIP has no NX-OS
+        # equivalent and drops on render.
         assert caps.classify(
             "/interfaces/interface/ipv4/address/virtual-gateway-address"
-        ) == "supported"
+        ) == "lossy"
         assert caps.classify(
             "/interfaces/interface/ipv6/address/virtual-gateway-address"
         ) == "unsupported"

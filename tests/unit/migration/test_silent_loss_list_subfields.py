@@ -50,6 +50,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalIPv6Address,
     CanonicalSNMP,
     CanonicalSNMPv3User,
     CanonicalVlan,
@@ -195,6 +196,80 @@ def _v3_engineid_survived(reparsed: CanonicalIntent) -> bool:
     return any(u.engine_id == "80000009ff" for u in users)
 
 
+def _varp_intent() -> CanonicalIntent:
+    """An SVI carrying a SEPARATE anycast/VARP virtual IP + MAC (the
+    Arista/Junos shape where the virtual gateway address differs from the
+    interface's own address), on both IPv4 and IPv6."""
+    return CanonicalIntent(
+        hostname="sw",
+        vlans=[CanonicalVlan(id=10, name="V10")],
+        interfaces=[
+            CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                interface_type="ianaift:l3ipvlan",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.0.2", prefix_length=24,
+                    virtual_gateway_address="10.0.0.1",
+                    virtual_gateway_mac="00:00:5e:00:01:01")],
+                ipv6_addresses=[CanonicalIPv6Address(
+                    ip="2001:db8::2", prefix_length=64,
+                    virtual_gateway_address="2001:db8::1",
+                    virtual_gateway_mac="00:00:5e:00:02:01")],
+            )
+        ],
+    )
+
+
+def _v4_addrs(reparsed: CanonicalIntent):
+    return [a for i in reparsed.interfaces for a in i.ipv4_addresses]
+
+
+def _v6_addrs(reparsed: CanonicalIntent):
+    return [a for i in reparsed.interfaces for a in i.ipv6_addresses]
+
+
+def _v4_ip_kept(reparsed: CanonicalIntent) -> bool:
+    return any(a.ip == "10.0.0.2" for a in _v4_addrs(reparsed))
+
+
+def _v6_ip_kept(reparsed: CanonicalIntent) -> bool:
+    return any(a.ip == "2001:db8::2" for a in _v6_addrs(reparsed))
+
+
+def _v4_vga_survived(reparsed: CanonicalIntent) -> bool:
+    return any(a.virtual_gateway_address for a in _v4_addrs(reparsed))
+
+
+def _v6_vga_survived(reparsed: CanonicalIntent) -> bool:
+    return any(a.virtual_gateway_address for a in _v6_addrs(reparsed))
+
+
+def _v4_vgm_survived(reparsed: CanonicalIntent) -> bool:
+    return any(a.virtual_gateway_mac for a in _v4_addrs(reparsed))
+
+
+def _v6_vgm_survived(reparsed: CanonicalIntent) -> bool:
+    return any(a.virtual_gateway_mac for a in _v6_addrs(reparsed))
+
+
+def _tunnel_intent() -> CanonicalIntent:
+    """A GRE tunnel interface carrying a tunnel_type discriminator."""
+    return CanonicalIntent(
+        hostname="r",
+        interfaces=[CanonicalInterface(
+            name="Tunnel0", default_name="Tunnel0",
+            interface_type="ianaift:tunnel", tunnel_type="gre")],
+    )
+
+
+def _tunnel_iface_kept(reparsed: CanonicalIntent) -> bool:
+    return any(i.name == "Tunnel0" for i in reparsed.interfaces)
+
+
+def _tunnel_type_survived(reparsed: CanonicalIntent) -> bool:
+    return any(i.tunnel_type == "gre" for i in reparsed.interfaces)
+
+
 class _Case:
     """One (leaf, identity, targeted-intent) silent-loss probe."""
 
@@ -249,6 +324,48 @@ _CASES = [
         intent=_v3_engineid_intent,
         identity_kept=_v3_user_kept,
         subdetail_survived=_v3_engineid_survived,
+    ),
+    # -- Stage 3: anycast/VARP + tunnel value sub-details (per-codec
+    # representation nuance verified by an adversarial workflow) --
+    _Case(
+        case_id="varp-vga-v4",
+        leaf="/interfaces/interface/ipv4/address/virtual-gateway-address",
+        identity="/interfaces/interface/ipv4/address/ip",
+        intent=_varp_intent,
+        identity_kept=_v4_ip_kept,
+        subdetail_survived=_v4_vga_survived,
+    ),
+    _Case(
+        case_id="varp-vga-v6",
+        leaf="/interfaces/interface/ipv6/address/virtual-gateway-address",
+        identity="/interfaces/interface/ipv6/address/ip",
+        intent=_varp_intent,
+        identity_kept=_v6_ip_kept,
+        subdetail_survived=_v6_vga_survived,
+    ),
+    _Case(
+        case_id="varp-vgm-v4",
+        leaf="/interfaces/interface/ipv4/address/virtual-gateway-mac",
+        identity="/interfaces/interface/ipv4/address/virtual-gateway-address",
+        intent=_varp_intent,
+        identity_kept=_v4_vga_survived,
+        subdetail_survived=_v4_vgm_survived,
+    ),
+    _Case(
+        case_id="varp-vgm-v6",
+        leaf="/interfaces/interface/ipv6/address/virtual-gateway-mac",
+        identity="/interfaces/interface/ipv6/address/virtual-gateway-address",
+        intent=_varp_intent,
+        identity_kept=_v6_vga_survived,
+        subdetail_survived=_v6_vgm_survived,
+    ),
+    _Case(
+        case_id="tunnel-type",
+        leaf="/interfaces/interface/tunnel-type",
+        identity="/interfaces/interface/name",
+        intent=_tunnel_intent,
+        identity_kept=_tunnel_iface_kept,
+        subdetail_survived=_tunnel_type_survived,
     ),
 ]
 

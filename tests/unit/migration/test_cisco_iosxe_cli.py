@@ -1488,18 +1488,28 @@ class TestAnycastGateway:
         ) == 1
 
     def test_anycast_capability_matrix_lists_supported_paths(self):
-        """Capability matrix declares the three new SD-Access paths
-        supported (Wave C) — keeping the IPv6 form unsupported as
-        documented."""
+        """Capability matrix declares the SD-Access anycast paths (Wave C):
+        the chassis MAC supported, the IPv4 virtual-gateway-address LOSSY
+        (Bucket-C stage 3 demotion — only the primary-IP-as-gateway shape
+        round-trips; a separate cross-vendor VARP VIP drops), and the IPv6
+        form unsupported."""
         codec = CiscoIOSXECLICodec()
         caps = codec.capabilities
         supported = set(caps.supported)
+        lossy = {lp.path for lp in caps.lossy}
         unsupported = {u.path for u in caps.unsupported}
         # Wave B + C wire-up.
         assert "/interfaces/interface/vrrp-groups/group" in supported
+        # Demoted supported -> lossy (Bucket-C stage 3): SD-Access anycast
+        # round-trips only vga == primary-IP; a separate cross-vendor VARP
+        # VIP has no IOS-XE equivalent and drops on render.
         assert (
             "/interfaces/interface/ipv4/address/virtual-gateway-address"
-            in supported
+            in lossy
+        )
+        assert (
+            "/interfaces/interface/ipv4/address/virtual-gateway-address"
+            not in supported
         )
         assert "/anycast-gateway-mac" in supported
         # IPv6 anycast intentionally unsupported.

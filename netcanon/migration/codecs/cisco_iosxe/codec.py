@@ -233,6 +233,18 @@ class CiscoIOSXECodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "The OpenConfig/NETCONF render emits only "
+                    "name/enabled/type/description + IP addresses and models "
+                    "no tunnel-encapsulation augment, so a canonical "
+                    "tunnel_type drops on render while the interface "
+                    "identity survives (silent-loss guard, Bucket-C "
+                    "stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/config/mtu",
                 reason=(
                     "IOS-XE OC model tracks MTU but some platform-specific "
