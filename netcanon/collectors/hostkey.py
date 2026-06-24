@@ -21,8 +21,10 @@ and then lets Netmiko connect ``ssh_strict`` against the now-populated
 store (:func:`netmiko_host_key_params`) — NOT the operator's OS
 ``~/.ssh/known_hosts``.  See SECURITY.md.
 
-Default-off (``auto_add``) means existing deployments see no behaviour
-change; the helpers below early-return for that mode.
+The default is ``tofu`` (real trust-on-first-use with persistence) as of
+v0.4.5; ``auto_add`` is now an explicit opt-OUT of host-key verification.
+The helpers below early-return for ``auto_add`` (no store, legacy
+trust-anything).
 """
 
 from __future__ import annotations
@@ -210,23 +212,20 @@ def host_key_warning_reason(settings: Settings) -> str | None:
 
     ``auto_add`` trusts any SSH host key on every connect with no
     persistence, so a man-in-the-middle on the management path could
-    harvest the SSH password + enable secret.  The default stays
-    ``auto_add`` for backward-compatibility (flipping it is a deliberate,
-    separately-gated change); ``tofu`` now does real trust-on-first-use
-    persistence on BOTH collectors — the Paramiko collector inline and the
-    Netmiko collector via the :func:`verify_host_key` pre-flight — so the
-    historical "Netmiko can't persist" blocker is gone.  A running server
-    should surface the insecure default once at startup so it is a
-    conscious choice (mirrors :func:`bind_refusal_reason`).  See SECURITY.md.
+    harvest the SSH password + enable secret.  Since v0.4.5 the default is
+    ``tofu`` (real trust-on-first-use with persistence on BOTH collectors —
+    the Paramiko collector inline and the Netmiko collector via the
+    :func:`verify_host_key` pre-flight), so ``auto_add`` is now an explicit
+    opt-OUT.  A running server surfaces that insecure choice once at startup
+    so it is conscious (mirrors :func:`bind_refusal_reason`).  See SECURITY.md.
     """
     if settings.ssh_host_key_checking != "auto_add":
         return None
     return (
-        "SSH host-key checking is 'auto_add' (the default): the backup "
-        "collectors trust any device host key on first connect with no "
-        "persistence, so a man-in-the-middle on the management path could "
-        "capture SSH/enable credentials. Set NETCANON_SSH_HOST_KEY_CHECKING="
-        "'tofu' to pin each device's key on first use — both the Paramiko "
-        "and Netmiko collectors persist learned keys to the netcanon "
-        "known_hosts store and reject a later changed key. See SECURITY.md."
+        "SSH host-key checking is set to 'auto_add': the backup collectors "
+        "trust any device host key on first connect with no persistence, so "
+        "a man-in-the-middle on the management path could capture SSH/enable "
+        "credentials. The default is 'tofu' (pin each device's key on first "
+        "use, reject a later change); unset NETCANON_SSH_HOST_KEY_CHECKING "
+        "or set it to 'tofu' to restore host-key verification. See SECURITY.md."
     )
