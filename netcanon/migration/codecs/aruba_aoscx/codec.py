@@ -177,6 +177,30 @@ class ArubaAOSCXCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "Render emits the per-address active-gateway VIP "
+                    "(`active-gateway ip <vip>`) and hoists the anycast MAC "
+                    "to the switch-wide `active-gateway ip mac <mac>` "
+                    "(canonical anycast_gateway_mac), but the per-address "
+                    "virtual_gateway_mac is not emitted, so per-address MAC "
+                    "granularity drops while the VIP + switch-wide MAC "
+                    "survive (silent-loss guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "AOS-CX Phase 1 does not model generic GRE/IPsec tunnel "
+                    "interfaces; a `Tunnel<N>` interface renders as a "
+                    "generic interface with no tunnel encapsulation, so the "
+                    "canonical tunnel_type drops while the interface name "
+                    "survives (silent-loss guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "

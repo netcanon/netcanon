@@ -158,6 +158,18 @@ class CiscoIOSXRCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "Render emits no `tunnel mode <kind>` for tunnel "
+                    "interfaces (the parser infers ianaift:tunnel from the "
+                    "`tunnel-ip`/`tunnel-te` name prefix, but tunnel_type is "
+                    "never emitted), so a canonical tunnel_type drops on "
+                    "render while the interface name survives (silent-loss "
+                    "guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + next-hop only; the static-"
@@ -225,6 +237,25 @@ class CiscoIOSXRCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "IOS-XR has no VARP / anycast-gateway grammar; render "
+                    "emits only the standard `ipv4 address` line, so a "
+                    "canonical anycast virtual-gateway address is dropped "
+                    "entirely on render while the interface + primary "
+                    "address survive (silent-loss guard, Bucket-C stage 3)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
+                reason=(
+                    "Mirror of the IPv4 case — no IOS-XR IPv6 anycast-"
+                    "gateway grammar; the canonical anycast virtual-gateway "
+                    "address drops on render (silent-loss guard, Bucket-C "
+                    "stage 3)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared

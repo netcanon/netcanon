@@ -168,6 +168,18 @@ class VyOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "VyOS models tunnels (GRE/IPIP/IPsec) as separate "
+                    "`interfaces tunnel` / `vti` Tier-3 sections, not as an "
+                    "encapsulation property of the interface; render emits "
+                    "no tunnel-type discriminator, so a canonical "
+                    "tunnel_type drops while the interface name survives "
+                    "(silent-loss guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/description",
                 reason=(
                     "Render emits destination + next-hop + distance only; "
@@ -279,6 +291,24 @@ class VyOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VyOS has no anycast-gateway / VARP grammar; render "
+                    "emits only the `address <ip>/<plen>` line, so a "
+                    "canonical anycast virtual-gateway address drops "
+                    "entirely while the interface + primary address survive "
+                    "(silent-loss guard, Bucket-C stage 3)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/ipv6/address/virtual-gateway-address",
+                reason=(
+                    "Mirror of the IPv4 case — no VyOS IPv6 anycast-gateway "
+                    "grammar; the canonical anycast virtual-gateway address "
+                    "drops on render (silent-loss guard, Bucket-C stage 3)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared

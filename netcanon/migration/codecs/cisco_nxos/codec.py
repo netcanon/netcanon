@@ -172,14 +172,41 @@ class CiscoNXOSCodec(CodecBase):
             "/vxlan-vnis/mcast-group",
             "/vxlan-vnis/flood-list",
             "/routing-instances/instance/l3-vni",
-            # Distributed Anycast Gateway (T2) — per-SVI `fabric forwarding
-            # mode anycast-gateway` mirrors the primary IP into
-            # virtual_gateway_address; `fabric forwarding anycast-gateway-mac`
-            # is the chassis-wide MAC (dotted-triplet ↔ canonical colon-hex).
-            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            # Distributed Anycast Gateway (T2) — `fabric forwarding
+            # anycast-gateway-mac` is the chassis-wide MAC (dotted-triplet ↔
+            # canonical colon-hex).  The per-SVI `fabric forwarding mode
+            # anycast-gateway` (virtual_gateway_address == primary IP) is
+            # declared LOSSY below — a separate cross-vendor VARP VIP drops.
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "Distributed Anycast Gateway (virtual_gateway_address "
+                    "== the interface's primary IP) round-trips via `fabric "
+                    "forwarding mode anycast-gateway`, but a SEPARATE "
+                    "cross-vendor VARP virtual IP (virtual_gateway_address "
+                    "!= the interface IP, the Arista/Junos shape) has no "
+                    "NX-OS equivalent and drops on render.  Demoted from "
+                    "supported to lossy so the separate-VIP loss is "
+                    "surfaced instead of reported severity:ok (silent-loss "
+                    "guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/tunnel-type",
+                reason=(
+                    "Render emits `interface Tunnel<N>` with no `tunnel "
+                    "mode <kind>` sub-command, so the canonical tunnel_type "
+                    "(gre/ipip/ipsec) drops on render while the interface "
+                    "name survives.  NX-OS supports the `tunnel mode` "
+                    "grammar; this is a render-coverage gap (silent-loss "
+                    "guard, Bucket-C stage 3)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/vlans/vlan/description",
                 reason=(

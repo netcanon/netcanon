@@ -112,6 +112,18 @@ No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
   user) but silently dropped the sub-detail.  Both are now declared
   `lossy`.  Matrix declarations only -- no render change, `CODEC_BUG`
   stays 5.  (`#166`)
+* **Anycast VARP + tunnel-type sub-detail drops now surface** (silent-
+  loss class, Bucket-C stage 3).  The nuanced final stage, verified per-
+  codec by an adversarial agent workflow.  Adds 5 guard cases + 12
+  declarations: the anycast `virtual-gateway-address` (separate VARP VIP)
+  is `unsupported` on `cisco_iosxr` / `vyos` (no anycast grammar) and
+  **demoted supported -> lossy** on `cisco_iosxe_cli` / `cisco_nxos`
+  (their DAG / SD-Access render round-trips only the primary-IP-as-
+  gateway shape; a separate cross-vendor VIP drops); `virtual-gateway-
+  mac` is `lossy` on `aruba_aoscx`; and `tunnel-type` is `lossy` on
+  `cisco_iosxe` / `cisco_iosxr` / `cisco_nxos` / `vyos` / `aruba_aoscx`
+  (interface survives, encapsulation discriminator dropped).  Matrix
+  declarations only -- no render change, `CODEC_BUG` stays 5.  (`#167`)
 
 ### Added
 

@@ -135,13 +135,10 @@ class CiscoIOSXECLICodec(CodecBase):
             # stanzas; renders the classic single-line per-attribute
             # form (broadest IOS-XE compatibility, 15.x onward).
             "/interfaces/interface/vrrp-groups/group",
-            # Wave C (v0.2.0) — SD-Access anycast-gateway.  Per-SVI
-            # ``fabric forwarding mode anycast-gateway`` mirrors the
-            # primary IP into ``virtual_gateway_address`` and round-
-            # trips back out on render.  IPv6 form intentionally
-            # unsupported (no fixture coverage today; see UnsupportedPath
-            # below).
-            "/interfaces/interface/ipv4/address/virtual-gateway-address",
+            # NB: ``/interfaces/interface/ipv4/address/virtual-gateway-address``
+            # is declared LOSSY below — SD-Access anycast only round-trips the
+            # primary-IP-as-gateway shape (vga == ip); a separate cross-vendor
+            # VARP VIP (vga != ip) drops on render.
             # Wave C (v0.2.0) — top-level ``fabric forwarding
             # anycast-gateway-mac <MAC>`` declares the chassis-wide
             # anycast MAC.  Round-trips between Cisco dotted-triplet
@@ -149,6 +146,22 @@ class CiscoIOSXECLICodec(CodecBase):
             "/anycast-gateway-mac",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "SD-Access anycast (virtual_gateway_address == the "
+                    "interface's primary IP) round-trips via `fabric "
+                    "forwarding mode anycast-gateway`, but a SEPARATE "
+                    "cross-vendor VARP virtual IP (virtual_gateway_address "
+                    "!= the interface IP, the Arista/Junos shape) has no "
+                    "IOS-XE equivalent and drops on render (emitted as a "
+                    "review comment only).  Demoted from supported to lossy "
+                    "so the separate-VIP loss is surfaced instead of "
+                    "reported severity:ok (silent-loss guard, Bucket-C "
+                    "stage 3)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
