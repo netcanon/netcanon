@@ -50,9 +50,13 @@ On first load after upgrading from an unencrypted version, a field that
 fails to decrypt is treated as legacy plaintext **only when it does not
 have the structural shape of a Fernet token**.  A value that *is* token-
 shaped but fails to decrypt means the wrong / rotated / lost key — fail
-closed: ``decrypt_field()`` raises :class:`CredentialDecryptError` so the
-caller logs loudly and skips the profile rather than loading the
-ciphertext verbatim as the password and double-encrypting it on re-save.
+closed: ``decrypt_field()`` raises :class:`CredentialDecryptError`, so the
+caller logs loudly and leaves the field untouched, skipping the re-save
+so the still-ciphertext value is never double-encrypted.  The profile
+still loads (the undecryptable value is left as-is); that credential then
+fails SSH auth at backup time — surfaced loudly, never a silent success —
+and is stripped from API responses by ``DeviceProfilePublic``.  It is
+never treated as a valid plaintext password.
 """
 
 from __future__ import annotations
@@ -71,10 +75,13 @@ class CredentialDecryptError(Exception):
 
     Distinct from the legacy-plaintext case (a non-token value written
     before encryption existed).  Raising this — rather than returning the
-    undecryptable ciphertext as if it were plaintext — keeps the storage
-    layer from (a) handing the ciphertext to the collector as the SSH
-    password and (b) re-encrypting it on save (double-encryption /
-    corruption).
+    undecryptable ciphertext as if it were valid plaintext — keeps the
+    storage layer from re-encrypting it on save (double-encryption /
+    corruption) and from accepting a wrong-key field as a successfully
+    migrated password.  The profile still loads with the value left
+    untouched; the bad credential surfaces as an SSH auth failure at
+    backup time (logged loudly) and is stripped from API output by
+    ``DeviceProfilePublic`` — it is never silently accepted.
     """
 
 

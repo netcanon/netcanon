@@ -50,6 +50,17 @@ timestamp if your timezone matters for an audit.
   No behavior change -- the UI was, and remains, intentionally
   proxy-fronted (a native in-app UI login was deliberately not added).
   Found by an independent blind audit (`3ec11f3`, T0-1).
+* **Credential fail-closed behavior documented accurately.** The
+  `credentials.py` docstrings said the loader "skips the profile" on a
+  wrong / rotated / lost Fernet key, and `SECURITY.md` still described only
+  the pre-fix legacy-plaintext migration path. Corrected to the actual
+  (already-shipped, safe) behavior: a token-shaped value that won't decrypt
+  raises `CredentialDecryptError`; the field is left untouched and the
+  re-save skipped (no double-encryption); the profile still loads but that
+  credential fails SSH auth at backup time (logged) and is stripped from
+  API output. No behavior change -- the security hole (ciphertext returned
+  as plaintext + double-encryption) was fixed in #136; this is the
+  contract/doc-accuracy residual (`3ec11f3`, T0-3).
 
 ### Fixed
 

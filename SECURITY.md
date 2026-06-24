@@ -167,11 +167,23 @@ setting them as `NETCANON_FERNET_KEY`, and deleting the file.
 
 ### Migration
 
-On first startup after upgrading from a pre-encryption version, any
-credential field that fails Fernet decryption is assumed to be a legacy
-plaintext value.  `decrypt_field()` returns the plaintext and signals the
-caller to re-save the file with encryption applied.  Migration is
-transparent and logged at `INFO`.
+On first startup after upgrading from a pre-encryption version, a
+credential field that fails Fernet decryption **and does not have the
+structural shape of a Fernet token** is treated as a legacy plaintext
+value: `decrypt_field()` returns it and signals the caller to re-save the
+file with encryption applied.  That migration is transparent and logged
+at `INFO`.
+
+A value that *is* token-shaped but fails to decrypt means the wrong /
+rotated / lost key, so `decrypt_field()` **fails closed** — it raises
+`CredentialDecryptError` instead of returning the ciphertext as if it
+were plaintext.  The migration helper logs loudly, leaves the field
+untouched, and skips the re-save, so the still-ciphertext value is never
+double-encrypted.  The profile still loads, but the undecryptable
+credential fails SSH auth at backup time and is stripped from API output
+(`DeviceProfilePublic`) — it is never silently accepted as a password.
+Restore the original key (or re-enter the credential) to recover; see the
+"Key loss" row under Known Limitations.
 
 ### In-memory model
 
