@@ -1109,17 +1109,22 @@ def test_real_ip_drift_to_unsupported_target_stays_codec_bug() -> None:
     assert fv["severity"] == "high"
 
 
-def test_anycast_only_drift_to_supporting_target_stays_codec_bug() -> None:
-    """When the target SUPPORTS anycast (cisco_iosxe_cli renders SD-Access),
-    an anycast drift is a genuine bug, not expected — stays CODEC_BUG."""
+def test_anycast_companion_drift_to_lossy_target_is_expected_lossy() -> None:
+    """cisco_iosxe_cli renders SD-Access anycast only for the primary-IP-as-
+    gateway shape (virtual_gateway_address == ip); a SEPARATE cross-vendor
+    VARP VIP (vga != ip, as here) has no IOS-XE equivalent and drops on
+    render, so the matrix declares the IPv4 virtual-gateway-address LOSSY
+    (Bucket-C stage 3 — demoted from supported).  An anycast-companion-only
+    drift to it is therefore an EXPECTED_LOSSY drop, not a CODEC_BUG."""
     cell = _anycast_cell(
         "cisco_iosxe_cli",
         source_addrs=[_addr(ip="10.0.0.1", vga="10.1.10.1")],
-        target_addrs=[_addr(ip="10.0.0.1")],  # dropped the (supported) anycast
+        target_addrs=[_addr(ip="10.0.0.1")],  # dropped the separate VARP VIP
     )
     result = reconcile_cell(cell, _EXPECT_IPV4)
     fv = result["field_variances"]["interfaces[].ipv4_addresses"]
-    assert fv["variance"] == recon.VAR_CODEC_BUG
+    assert fv["variance"] == recon.VAR_EXPECTED_LOSSY
+    assert fv["severity"] == "ok"
 
 
 def test_drift_is_anycast_companion_only_predicate() -> None:
