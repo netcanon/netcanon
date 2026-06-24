@@ -174,6 +174,36 @@ class JunosCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- VXLAN BUM-replication underlay (silent-loss guard) --
+            # Render emits ``set vlans <V> vxlan vni <N>`` + switch-options
+            # vtep-source-interface / vxlan-port, but not the flood/multicast
+            # underlay, so those sub-details drop while the VNI binding
+            # (declared supported above) survives — declared here so the
+            # validation report warns instead of reporting ``severity: ok``.
+            LossyPath(
+                path="/vxlan-vnis/mcast-group",
+                reason=(
+                    "Render emits the VLAN<->VNI bindings "
+                    "(``set vlans <V> vxlan vni <N>``) + switch-options "
+                    "vtep-source-interface / vxlan-port, but not the "
+                    "multicast underlay: the per-VNI multicast group drops "
+                    "on render while the VLAN<->VNI binding survives.  A "
+                    "cross-vendor source carrying a multicast underlay "
+                    "surfaces a review banner so the operator can re-apply "
+                    "EVPN multicast-mode on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/flood-list",
+                reason=(
+                    "Companion to /vxlan-vnis/mcast-group: ingress-"
+                    "replication / head-end flood VTEP lists are not "
+                    "emitted, so a source carrying static flood VTEPs loses "
+                    "them on render while the VLAN<->VNI binding survives."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/subinterfaces/subinterface",
                 reason=(

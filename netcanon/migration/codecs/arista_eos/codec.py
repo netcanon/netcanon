@@ -187,6 +187,37 @@ class AristaEOSCodec(CodecBase):
                 ),
                 severity="warn",
             ),
+            # -- VXLAN BUM-replication underlay (silent-loss guard) --
+            # Render emits the ``interface Vxlan1`` VLAN<->VNI bindings
+            # (+ source-interface + udp-port) but not the flood/multicast
+            # underlay, so those sub-details drop while the VNI binding
+            # (declared supported above) survives — declared here so the
+            # validation report warns instead of reporting ``severity: ok``.
+            LossyPath(
+                path="/vxlan-vnis/mcast-group",
+                reason=(
+                    "Render emits the per-VNI VLAN<->VNI bindings "
+                    "(``vxlan vlan <V> vni <N>``) + source-interface + "
+                    "udp-port, but not the multicast underlay "
+                    "(``vxlan vlan <V> multicast-group <ip>``): the BUM "
+                    "multicast group drops on render while the VLAN<->VNI "
+                    "binding survives.  Cross-vendor sources carrying a "
+                    "multicast underlay surface a review banner so the "
+                    "operator can re-apply flood/multicast on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vxlan-vnis/flood-list",
+                reason=(
+                    "Companion to /vxlan-vnis/mcast-group: the ingress-"
+                    "replication (head-end) flood list "
+                    "(``vxlan flood vtep <ip> …``) is not emitted, so a "
+                    "source using static VTEP flood-lists loses them on "
+                    "render while the VLAN<->VNI binding survives."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/config/type",
                 reason=(
