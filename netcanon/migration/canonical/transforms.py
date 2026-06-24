@@ -32,9 +32,9 @@ Public surface:
   lists on each :class:`CanonicalVlan`.  Called by Cisco-style codecs
   whose native config is per-port.
 * :func:`project_vlan_to_switchport` — the inverse: read VLAN-centric
-  ``tagged_ports`` / ``untagged_ports`` / ``forbidden_ports`` lists
-  and synthesise ``switchport_mode`` + ``access_vlan`` +
-  ``trunk_allowed_vlans`` on each :class:`CanonicalInterface`.
+  ``tagged_ports`` / ``untagged_ports`` lists and synthesise
+  ``switchport_mode`` + ``access_vlan`` + ``trunk_allowed_vlans`` on each
+  :class:`CanonicalInterface`.
   Called by VLAN-centric codecs (Aruba AOS-S, OPNsense, MikroTik)
   before handing the tree to a per-port-shape target renderer.
 * :func:`project_svi_to_vlan` — synthesise a :class:`CanonicalVlan`
