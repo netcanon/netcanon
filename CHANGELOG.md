@@ -101,6 +101,17 @@ No cross-mesh behaviour change; the `CODEC_BUG` baseline stays at 5.
   a new registry guard (`test_silent_loss_list_subfields`) enforces the
   base-identity-coverage rule with single-mode targeted intents.  Matrix
   declarations only -- no render change, `CODEC_BUG` stays 5.  (`#165`)
+* **More silent-loss sub-detail drops now warn** (silent-loss class,
+  Bucket-C stage 2).  Extends #165's guard with two more clean
+  naming-independent value sub-details: a VLAN's `description` (distinct
+  from its name) on `arista_eos` / `aruba_aoss` / `cisco_iosxe_cli` /
+  `cisco_nxos` / `fortigate_cli` / `juniper_junos` / `opnsense`, and an
+  SNMPv3 USM user's `engine-id` on `arista_eos` / `aruba_aoscx` /
+  `aruba_aoss` / `cisco_iosxe_cli` / `fortigate_cli` / `juniper_junos` /
+  `mikrotik_routeros` -- each rendered the identity leaf (VLAN id / v3
+  user) but silently dropped the sub-detail.  Both are now declared
+  `lossy`.  Matrix declarations only -- no render change, `CODEC_BUG`
+  stays 5.  (`#166`)
 
 ### Added
 

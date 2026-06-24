@@ -177,6 +177,16 @@ class ArubaAOSCXCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/snmp/v3-user/engine-id",
+                reason=(
+                    "The SNMPv3 USM user round-trips but a per-user "
+                    "engineID is not emitted on render (engineIDs are "
+                    "device-assigned / global), so the canonical engine_id "
+                    "drops (silent-loss guard, Bucket-C stage 2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/description",
                 reason=(
                     "Render emits destination + next-hop only; the static-"

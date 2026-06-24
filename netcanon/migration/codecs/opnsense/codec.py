@@ -167,6 +167,16 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/description",
+                reason=(
+                    "Render emits the VLAN name but not a separate "
+                    "description line, so the canonical VLAN description "
+                    "(distinct from the name) drops on render (silent-loss "
+                    "guard, Bucket-C stage 2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + next-hop only; the static-"
