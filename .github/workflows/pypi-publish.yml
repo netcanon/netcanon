@@ -26,8 +26,46 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  # ── Publish-time test gate (blind-audit 3ec11f3 T0-4) ──
+  # The release pipeline is gate-at-merge: `main` is ruleset-protected with a
+  # required-check set (unit/integration/e2e/desktop/build/docker-smoke/PII),
+  # release tags are only cut from `main`, and the ancestry check in `build`
+  # refuses any off-main tag — so every published artefact normally derives
+  # from a commit that already passed the full CI matrix.  But that guarantee
+  # lives in branch protection (off-tree, admin-bypassable) and
+  # `workflow_dispatch` can publish a ref that never went through a PR.  This
+  # job re-runs the unit + integration suite *inside the publish run* so the
+  # gate is in the artefact an auditor can read and holds even if the merge
+  # gate was bypassed.  It is a fast subset (single Python, no e2e/desktop
+  # matrix) — the full matrix already ran at merge; this is defense-in-depth,
+  # not a re-run of CI.  No pip cache (single-shot publish job — same
+  # cache-poisoning-surface reasoning as the build job below).
+  test:
+    name: Test gate (unit + integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          # setuptools_scm needs full history/tags or `pip install -e .`
+          # falls back to a 0.0.0 version (matches the build job).
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
   build:
     name: Build sdist + wheel
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:

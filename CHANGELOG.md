@@ -74,6 +74,18 @@ timestamp if your timezone matters for an audit.
   single job's behavior is unchanged; raise it via
   `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`. Found by an independent blind
   audit (`3ec11f3`, r7).
+* **Release artefacts now gated on tests inside the publish run, not only
+  at merge.** The publish workflows (PyPI, Docker, desktop MSI) trigger on
+  a `v*.*.*` tag push (and `workflow_dispatch`) and previously ran no tests
+  in the publish run -- the test gate lived entirely in branch protection on
+  `main` (off-tree, admin-bypassable) plus an on-main ancestry check. Each
+  publish workflow now begins with a `Test gate (unit + integration)` job
+  the build/publish jobs `needs:`, re-running the suite on the exact ref
+  being shipped, so a manual dispatch or a bypassed merge still can't ship
+  red code. Layer 1 (the full 4-Python + e2e + desktop matrix at merge)
+  still covers the surfaces this fast subset omits. SECURITY.md documents
+  both layers + the residual `workflow_dispatch` / admin-bypass risks. Found
+  by an independent blind audit (`3ec11f3`, T0-4).
 
 ### Fixed
 
