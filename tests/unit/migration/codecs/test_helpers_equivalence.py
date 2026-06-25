@@ -33,9 +33,6 @@ from netcanon.migration.codecs.aruba_aoscx.parse import (
 from netcanon.migration.codecs.aruba_aoscx.render import (
     _coalesce_vlan_ids as _aoscx_coalesce,
 )
-from netcanon.migration.codecs.cisco_iosxe_cli.parse import (
-    _parse_vlan_list as _iosxe_parse,
-)
 from netcanon.migration.codecs.cisco_nxos.parse import (
     _parse_vlan_list as _nxos_parse,
 )
@@ -44,7 +41,10 @@ from netcanon.migration.codecs.cisco_nxos.render import (
 )
 
 # Inline copies that the shared _parse_vlan_list must reproduce exactly.
-_PARSE_INLINE_COPIES = (_nxos_parse, _iosxe_parse, _aoscx_parse)
+# (cisco_iosxe_cli no longer imports _parse_vlan_list directly -- its only
+# caller, the trunk allowed-vlan line, now routes through the shared
+# ``merge_trunk_allowed`` helper -- so it is no longer a surviving copy.)
+_PARSE_INLINE_COPIES = (_nxos_parse, _aoscx_parse)
 # Inline copies that the shared _coalesce_vlan_ids must reproduce exactly.
 _COALESCE_INLINE_COPIES = (_nxos_coalesce, _aoscx_coalesce)
 

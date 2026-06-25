@@ -56,7 +56,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import _mask_to_prefix
+from .._helpers import _mask_to_prefix, merge_trunk_allowed
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -1115,7 +1115,9 @@ def _apply_iface_subcommand(
         # so a lingering access_vlan would silently drop on round-trip.
         iface.access_vlan = None
         tail = line.split(None, 4)[-1]
-        iface.trunk_allowed_vlans = _expand_vlan_list(tail)
+        iface.trunk_allowed_vlans = merge_trunk_allowed(
+            iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list
+        )
         return
     if line.startswith("switchport trunk native vlan "):
         # Phase 4b Wave 7c-C: ``switchport trunk native vlan <N>``.
@@ -1379,7 +1381,16 @@ def _infer_iface_type(name: str) -> str:
 
 
 def _expand_vlan_list(spec: str) -> list[int]:
-    """Expand a VLAN-list spec like ``10,20,30-35`` into [10,20,30..35]."""
+    """Expand a VLAN-list spec like ``10,20,30-35`` into [10,20,30..35].
+
+    Arista's near-twin of the shared ``_helpers._parse_vlan_list``: it is
+    deliberately NOT converged because it accepts ``int(chunk)`` forms
+    (``"+10"``) that the canonical ``str.isdigit()`` gate rejects (see
+    ``tests/.../test_helpers_equivalence.py``).  It is injected into
+    :func:`.._helpers.merge_trunk_allowed` as that function's ``parse_ids``
+    so the trunk add/remove keyword logic is shared without changing
+    arista's id-list behaviour.
+    """
     out: list[int] = []
     for chunk in spec.split(","):
         chunk = chunk.strip()
