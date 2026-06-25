@@ -49,6 +49,23 @@ class TestReachableModels:
     def test_descends_through_optional_and_list(self):
         assert reachable_models(_Root) == {_Root, _Child}
 
+    def test_resolves_forward_ref_to_a_later_defined_model(self):
+        """A field annotating a model defined LATER in its module is a
+        ``ForwardRef`` (``get_args() == ()``) until the owner is rebuilt — it
+        must NOT be invisible to the walk. The real model hits this:
+        ``CanonicalInterface.vrrp_groups: list[CanonicalVRRPGroup]`` (VRRPGroup
+        is defined further down ``intent.py``). ``reachable_models`` must reach
+        it WITHOUT relying on an instance having been constructed first."""
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalVRRPGroup,
+        )
+
+        assert CanonicalVRRPGroup in reachable_models(CanonicalIntent), (
+            "reachable_models missed a forward-referenced nested model — the "
+            "completeness guards would silently skip every leaf under it"
+        )
+
 
 class TestScalarLeaves:
     def test_exact_leaf_set(self):

@@ -58,12 +58,28 @@ def flatten_annotation(ann) -> typing.Iterator:
 def reachable_models(root_cls: type[BaseModel], acc: set | None = None) -> set:
     """Return every ``BaseModel`` subclass reachable from *root_cls* via its
     (possibly nested / list-wrapped / optional) field annotations, including
-    *root_cls* itself."""
+    *root_cls* itself.
+
+    Forces forward-reference resolution first. With ``from __future__ import
+    annotations``, a field annotating a class defined LATER in the same module
+    (e.g. ``CanonicalInterface.vrrp_groups: list[CanonicalVRRPGroup]`` —
+    ``CanonicalVRRPGroup`` is defined further down) stays an unresolved
+    ``ForwardRef`` whose ``get_args()`` is empty until the owning model is
+    rebuilt — so the nested class would be INVISIBLE to this walk (and the
+    completeness guards would silently miss every leaf under it). ``model_rebuild
+    (force=True)`` resolves the annotations in place, deterministically, whether
+    or not an instance has been constructed first (relying on instance
+    construction to resolve refs is an import-order accident, not a guarantee).
+    """
     if acc is None:
         acc = set()
     if root_cls in acc:
         return acc
     acc.add(root_cls)
+    try:
+        root_cls.model_rebuild(force=True)
+    except Exception:  # pragma: no cover - rebuild is best-effort; a model with
+        pass           # a genuinely unresolvable ref will simply not recurse.
     for fld in root_cls.model_fields.values():
         for t in flatten_annotation(fld.annotation):
             if isinstance(t, type) and issubclass(t, BaseModel):
