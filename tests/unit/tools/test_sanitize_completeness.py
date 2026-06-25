@@ -73,6 +73,7 @@ _SENSITIVE_REDACTED = frozenset({
     ("CanonicalSNMPv3User", "auth_passphrase"),
     ("CanonicalSNMPv3User", "engine_id"),
     ("CanonicalSNMPv3User", "priv_passphrase"),
+    ("CanonicalStaticRoute", "destination"),
     ("CanonicalStaticRoute", "gateway"),
     ("CanonicalVxlan", "flood_list"),
     ("CanonicalVxlan", "mcast_group"),
@@ -84,7 +85,7 @@ _SENSITIVE_REDACTED = frozenset({
 
 #: Sensitive str leaves the sanitiser does NOT cover yet — surfaced + tracked +
 #: deferred. REDACTION_NOT_WIRED: a clean follow-up wires it (a redact_mac
-#: primitive; static-route-destination redact_cidr). TIER3_OPAQUE: verbatim
+#: primitive for the anycast / VRRP virtual-MAC fields). TIER3_OPAQUE: verbatim
 #: vendor text the STRUCTURED sanitiser can't reach (sanitize_text re-parses +
 #: sanitises the text path, but the intent-level walk treats these as a blob).
 _SENSITIVE_GAP: dict[tuple[str, str], tuple[str, str]] = {
@@ -92,7 +93,6 @@ _SENSITIVE_GAP: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalIPv6Address", "virtual_gateway_mac"): ("REDACTION_NOT_WIRED", "anycast vMAC; redact_mac follow-up"),
     ("CanonicalVRRPGroup", "virtual_mac"): ("REDACTION_NOT_WIRED", "VRRP vMAC; redact_mac follow-up"),
     ("CanonicalIntent", "anycast_gateway_mac"): ("REDACTION_NOT_WIRED", "anycast-gateway MAC; redact_mac follow-up"),
-    ("CanonicalStaticRoute", "destination"): ("REDACTION_NOT_WIRED", "public dest CIDR unredacted; redact_cidr later"),
     ("CanonicalIntent", "raw_sections"): ("TIER3_OPAQUE", "Tier-3 verbatim text; structural walk can't reach it"),
     ("CanonicalIntent", "group_content"): ("TIER3_OPAQUE", "Junos group bodies (verbatim); not structurally sanitised"),
     ("CanonicalIntent", "dropped_tier3_sections"): ("TIER3_OPAQUE", "dropped-section text; not structurally sanitised"),

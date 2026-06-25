@@ -525,6 +525,31 @@ class TestStaticRouteRedaction:
         # Private gateway preserved
         assert sanitized.static_routes[1].gateway == "192.168.1.1"
 
+    def test_public_destination_redacted_prefix_preserved(self):
+        """A public destination CIDR (a route to a provider / peer block) is
+        redacted to a docs range with its prefix length preserved; the
+        default route and private aggregates are preserved (audit 65f9c01 #20)."""
+        intent = CanonicalIntent(
+            static_routes=[
+                # 44.21.0.0/16 is clearly public (44/8 is allocated + routable,
+                # and NOT one of the RFC 5737 docs ranges the redactor skips).
+                CanonicalStaticRoute(destination="44.21.0.0/16", gateway="44.21.0.1"),
+                # default route — 0.0.0.0 is unspecified, left as-is.
+                CanonicalStaticRoute(destination="0.0.0.0/0", gateway="192.0.2.1"),
+                # private aggregate preserved (the common LAN case).
+                CanonicalStaticRoute(destination="10.20.0.0/16", gateway="10.0.0.1"),
+            ]
+        )
+        sanitized, subs = sanitize_intent(intent)
+        public_dest = sanitized.static_routes[0].destination
+        assert public_dest != "44.21.0.0/16"      # public dest redacted
+        assert public_dest.endswith("/16")         # prefix length preserved
+        assert sanitized.static_routes[1].destination == "0.0.0.0/0"
+        assert sanitized.static_routes[2].destination == "10.20.0.0/16"
+        assert any(
+            s.field == "static_routes[0].destination" for s in subs
+        ), "destination redaction must be recorded in the substitution log"
+
 
 class TestTier3Stripped:
     def test_dropped_tier3_sections_emptied(self):

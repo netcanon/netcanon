@@ -385,6 +385,7 @@ on the canonical model:
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
 | Anycast / VARP virtual-gateway addresses (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
+| Static-route destination prefix + next-hop (public) | RFC 5737 / RFC 3849 docs ranges (prefix length preserved) |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall / NAT / VPN) | Stripped entirely |
 
