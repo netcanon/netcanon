@@ -120,6 +120,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **FortiGate hardware-switch members no longer remap silently across
+  vendors.** On small appliances (40F/60F/80F) `internal1`-`internalN`
+  and `lanN` are switched ports of the `internal` / `lan` L2 fabric, but
+  they classified as plain physical ports and were remapped to a
+  positional target name (`internal3` -> MikroTik `ether3`) with no
+  advisory at all -- the bare `internal` / `lan` aggregate warned, the
+  numbered member did not, silently dropping the L2-fabric-membership
+  semantic the project's own `fortigate_60f.yaml` profile records. The
+  source classifier now flags the member
+  (`PortIdentity.hw_switch_member`) and the vendor-agnostic port-name
+  orchestrator surfaces a soft "verify cabling / L2 role" advisory on
+  cross-vendor runs (same-vendor round-trips losslessly, so none fires;
+  the generic `portN` form is left clean to avoid over-firing). The
+  rename still happens -- the advisory rides alongside it. Found by an
+  independent blind audit (`65f9c01`, #7).
 * **Trunk `switchport trunk allowed vlan add` / `remove` no longer
   collapses VLAN membership.** `show running-config` renders a long
   trunk allowed-list across multiple lines using the relative keyword

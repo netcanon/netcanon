@@ -851,6 +851,93 @@ class TestAutoDropUnmappable:
         assert not any("Vlan11" in w for w in result.warnings)
 
 
+class TestHwSwitchMemberAdvisory:
+    """FortiGate numbered hw-switch members (``internalN`` / ``lanN``)
+    must carry a soft positional-mapping advisory on CROSS-vendor
+    translation — blind-audit ``65f9c01`` finding #7.
+
+    The bare ``internal`` / ``lan`` aggregate already warns (kind=
+    hw_aggregate).  The numbered member classified as plain physical
+    and was remapped to a positional target name with NO advisory at
+    all, silently dropping the L2-fabric-membership semantic the
+    project's own ``fortigate_60f.yaml`` profile records.  The fix flags
+    the member on :class:`PortIdentity` and the orchestrator surfaces a
+    "verify cabling" advisory — but only cross-vendor (same-vendor
+    round-trips losslessly) and only for the fabric-member names (the
+    generic ``portN`` form is left clean to avoid over-firing).
+    """
+
+    def test_classifier_flags_numbered_members_not_generic_ports(self):
+        f = FortiGateCLICodec()
+        for member in ("internal3", "internal1", "lan2", "lan5"):
+            ident = f.classify_port_name(member)
+            assert ident.kind == "physical", member
+            assert ident.hw_switch_member is True, (
+                f"{member!r} is a hw-switch member — must set the flag"
+            )
+        # Generic / role-coded ports are NOT fabric members.
+        for routed in ("port5", "port1", "wan1", "dmz1", "mgmt", "a"):
+            ident = f.classify_port_name(routed)
+            assert ident.hw_switch_member is False, (
+                f"{routed!r} is not a hw-switch member — flag must stay False"
+            )
+        # The bare aggregate stays hw_aggregate (its own warning path).
+        for bare in ("internal", "lan"):
+            ident = f.classify_port_name(bare)
+            assert ident.kind == "hw_aggregate", bare
+            assert ident.hw_switch_member is False, bare
+
+    def test_member_advisory_fires_cross_vendor(self):
+        """FortiGate ``internalN`` → MikroTik: rename SUCCEEDS (positional
+        ``etherN``) AND a hardware-switch advisory rides alongside it."""
+        intent = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(name="internal3"),
+                CanonicalInterface(name="lan2"),
+            ],
+        )
+        result = translate_port_names(
+            intent, FortiGateCLICodec(), MikroTikRouterOSCodec(),
+        )
+        # Rename still happened — the port IS real, just positionally
+        # mapped; it is NOT dropped.
+        assert "internal3" in result.applied
+        assert "internal3" not in result.dropped
+        assert "lan2" in result.applied
+        # The advisory names the source port + the hardware-switch loss.
+        assert any(
+            "internal3" in w and "hardware-switch" in w
+            for w in result.warnings
+        ), result.warnings
+        assert any(
+            "lan2" in w and "hardware-switch" in w for w in result.warnings
+        ), result.warnings
+
+    def test_no_advisory_same_vendor_round_trip(self):
+        """FortiGate → FortiGate reproduces ``internal3`` losslessly, so
+        no advisory (would be spurious noise)."""
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="internal3")],
+        )
+        result = translate_port_names(
+            intent, FortiGateCLICodec(), FortiGateCLICodec(),
+        )
+        assert intent.interfaces[0].name == "internal3"
+        assert not any("hardware-switch" in w for w in result.warnings)
+
+    def test_generic_port_no_hw_switch_advisory_cross_vendor(self):
+        """``portN`` is the generic FG-100F+ form (standalone routed),
+        NOT a fabric member — it must not draw the advisory even
+        cross-vendor (the over-fire the design deliberately avoids)."""
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="port5")],
+        )
+        result = translate_port_names(
+            intent, FortiGateCLICodec(), MikroTikRouterOSCodec(),
+        )
+        assert not any("hardware-switch" in w for w in result.warnings)
+
+
 # ---------------------------------------------------------------------------
 # Integration: run_plan_with_rename against the real Cat 9300-24UX fixture
 # ---------------------------------------------------------------------------

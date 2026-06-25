@@ -158,6 +158,12 @@ def classify_port_name(name: str) -> PortIdentity:
             kind="physical",
             port=int(m.group(1)),
             meta={"fortigate_role": "lan"},
+            # Numbered ``lanN`` is a switched member of the ``lan``
+            # hardware-switch fabric on small FortiGates — flag it so
+            # cross-vendor translation surfaces a positional-mapping
+            # advisory (the bare ``lan`` form already warns via
+            # hw_aggregate; the member historically warned for nothing).
+            hw_switch_member=True,
             original=name,
         )
 
@@ -176,6 +182,11 @@ def classify_port_name(name: str) -> PortIdentity:
             kind="physical",
             port=int(m.group(1)),
             meta={"fortigate_role": "internal"},
+            # Numbered ``internalN`` is a switched member of the
+            # ``internal`` hardware-switch fabric (see fortigate_60f.yaml
+            # device profile: ``internal1-5`` = hw-switch default) —
+            # flag it for the cross-vendor positional-mapping advisory.
+            hw_switch_member=True,
             original=name,
         )
 
