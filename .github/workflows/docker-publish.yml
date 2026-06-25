@@ -12,6 +12,7 @@ permissions:
   packages: write
   id-token: write          # cosign keyless signing via Sigstore + GitHub OIDC
   security-events: write   # Trivy SARIF upload to Code Scanning
+  actions: read            # read the CI run conclusion for the "require CI success" gate
 
 # Serialise release runs for a given ref so a re-pushed tag (or a
 # workflow_dispatch racing the tag push) can't double-build / double-push
@@ -95,6 +96,35 @@ jobs:
             exit 1
           fi
           echo "OK: build commit $head_sha is on origin/main."
+
+      # Prove the full CI matrix concluded 'success' for this commit, not just
+      # that it is on main (audit T0-4: ancestry != CI success). See
+      # pypi-publish.yml for the full rationale. Needs `actions: read`.
+      - name: Require CI success for this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          head_sha="$(git rev-parse HEAD)"
+          for attempt in $(seq 1 30); do
+            out="$(gh api \
+              "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$head_sha&event=push&per_page=1" \
+              --jq '(.workflow_runs[0].status // "none") + " " + (.workflow_runs[0].conclusion // "none")' \
+              2>/dev/null || true)"
+            status="${out%% *}"; conclusion="${out##* }"
+            if [ "$conclusion" = "success" ]; then
+              echo "CI concluded success for $head_sha."; exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              echo "::error::CI for $head_sha concluded '$conclusion' (not success) — refusing to publish."
+              exit 1
+            fi
+            echo "CI for $head_sha is '${status:-unknown}' (attempt $attempt/30); waiting 20s..."
+            sleep 20
+          done
+          echo "::error::Timed out waiting for CI to complete for $head_sha — refusing to publish."
+          exit 1
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4

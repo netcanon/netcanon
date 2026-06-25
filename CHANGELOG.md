@@ -86,6 +86,16 @@ timestamp if your timezone matters for an audit.
   still covers the surfaces this fast subset omits. SECURITY.md documents
   both layers + the residual `workflow_dispatch` / admin-bypass risks. Found
   by an independent blind audit (`3ec11f3`, T0-4).
+* **Release publish now also requires the full CI run to have passed for
+  the tagged commit.** On top of the in-run unit+integration test gate, each
+  publish workflow (PyPI / Docker / MSI) adds a `Require CI success for this
+  commit` step that queries the Actions API and refuses to publish unless the
+  CI workflow concluded `success` for that exact commit -- so the *full*
+  matrix (4-Python + e2e + desktop + build + docker-smoke + PII-guard), not
+  just the in-run subset, is proven green. Closes the residual that the
+  on-main ancestry check proves ancestry, not CI success (admin-bypass /
+  force-merge / a never-PR'd `workflow_dispatch`); fails closed on a missing
+  or non-success CI run. Found by an independent blind audit (`3ec11f3`, T0-4).
 
 ### Fixed
 
