@@ -43,7 +43,7 @@ layer is architecturally simpler — see
 Backup definitions ship for Cisco IOS-XE, Fortigate FortiOS, MikroTik
 RouterOS, OPNsense, Aruba AOS-S, Juniper Junos, and Arista EOS, plus
 provisional definitions for Cisco NX-OS, Cisco IOS-XR, Aruba AOS-CX,
-and VyOS — see [`definitions/README.md`](definitions/README.md) for the
+and VyOS — see [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) for the
 per-vendor authoring notes and validation status.
 
 ---
@@ -102,7 +102,7 @@ conflated in vendor-specific tooling:
 
 ### Layer 1 — Vendor Definition
 
-**Where:** `definitions/*.yaml`
+**Where:** `netcanon/definitions/library/*.yaml`
 **What:** A small declarative struct per vendor/device family:
 `{name, device_classes, cli_prompt_hints, default_timeout}`.  No code.
 
@@ -131,7 +131,7 @@ commit) writes back to `DeviceProfile.detected_facts`, which operators
 see read-only in the device edit panel so they can reconcile their
 pins against what the device actually reports.
 
-See [`definitions/README.md`](definitions/README.md) for the full
+See [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) for the full
 authoring guide; [`netcanon/definitions/README.md`](netcanon/definitions/README.md)
 for the loader implementation and Pydantic schema reference.
 
@@ -485,7 +485,7 @@ the wrong call — see `netcanon/migration/codecs/README.md`
 
 ## Target profiles (hardware-aware rename-modal metadata)
 
-**Where:** `definitions/target_profiles/*.yaml` +
+**Where:** `netcanon/definitions/library/target_profiles/*.yaml` +
 `netcanon/migration/target_profiles.py`
 **What:** Declarative descriptions of a target device's port
 inventory — vendor, model, device class, stacking mode,
@@ -595,7 +595,7 @@ the target**.  No automatic cross-link today; a future `PlatformKey`
 shared type may unify on `(vendor, os_family)` — see
 [`translator-plans.txt`](translator-plans.txt).
 
-See [`definitions/README.md`](definitions/README.md) for full
+See [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) for full
 schema + authoring guide;
 [`netcanon/migration/target_profiles.py`](netcanon/migration/target_profiles.py)
 for the loader + accessor implementation.
@@ -929,7 +929,7 @@ What's queued:
 
 ## See also
 
-- [`definitions/README.md`](definitions/README.md) — device-definition + target-profile YAML schema
+- [`netcanon/definitions/library/README.md`](netcanon/definitions/library/README.md) — device-definition + target-profile YAML schema
 - [`netcanon/migration/codecs/README.md`](netcanon/migration/codecs/README.md) — codec authorship guide
 - [`netcanon/migration/canonical/README.md`](netcanon/migration/canonical/README.md) — canonical intent model and Tier 1 / 2 / 3 promotion rules
 - [`netcanon/api/routes/README.md`](netcanon/api/routes/README.md) — HTTP route inventory and frozen pipeline-stage signatures

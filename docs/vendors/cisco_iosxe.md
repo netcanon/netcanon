@@ -206,7 +206,7 @@ Provenance + per-fixture detail in
   Type-9 hashes round-trip cleanly within Cisco; type-5/6 hashes
   translate via the cross-vendor crypt-form mapping.
 - **Backup-side**: `cisco_more_paging: true` in the device-definition
-  YAML — see [`../../definitions/cisco/`](../../definitions/cisco/)
+  YAML — see [`../../netcanon/definitions/library/cisco/`](../../netcanon/definitions/library/cisco/)
   for the canonical examples.
 
 ## See also

@@ -142,16 +142,16 @@ A single bad file never prevents other files from loading.
 
 To add a new device:
 
-1. Create a YAML file under `definitions/<vendor>/<os>/<version>.yaml`.
+1. Create a YAML file under `netcanon/definitions/library/<vendor>/<os>/<version>.yaml`.
 2. The server picks it up on the next restart.
 3. Add a test definition in `tests/unit/test_loader.py` to cover any new
    schema fields.
 
-See `definitions/README.md` for the full YAML schema reference.
+See `netcanon/definitions/library/README.md` for the full YAML schema reference.
 
 ---
 
 ## See also
 
-- [`../../definitions/README.md`](../../definitions/README.md) — YAML-author-facing schema reference (this directory is the loader / Pydantic model side)
+- [`library/README.md`](library/README.md) — YAML-author-facing schema reference (this directory is the loader / Pydantic model side)
 - [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — four-layer design and where definitions feed into the backup + migration concerns

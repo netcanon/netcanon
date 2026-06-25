@@ -116,7 +116,7 @@ appropriate for the current execution context:
 
 | Context | `definitions_dir` | `configs_dir` | Data root (`jobs/`, `schedules/`, `devices/`, logs) |
 |---------|------------------|---------------|-----|
-| Dev (unfrozen) | `<repo_root>/definitions/` | `<repo_root>/configs/` | `<repo_root>/` |
+| Dev (unfrozen) | `netcanon/definitions/library/` | `<repo_root>/configs/` | `<repo_root>/` |
 | Frozen (cx_Freeze) | `<install_dir>/definitions/` | `%APPDATA%\Netcanon\configs\` | `%APPDATA%\Netcanon\` |
 
 The data root holds the operational JSON state stores derived under it as
