@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Security
 
+* **Static-route destination prefixes are now redacted by the
+  sanitiser.** `netcanon sanitize` redacted a static route's next-hop
+  (`gateway`) but passed its `destination` CIDR through verbatim, so a
+  route to a public provider / peer / branch block leaked the real prefix
+  into a shared sanitised config or bug report. The destination is now
+  redacted to an RFC 5737 / RFC 3849 documentation range with the prefix
+  length preserved (via the existing `redact_cidr`); the default route
+  (`0.0.0.0/0`) and private aggregates are preserved. Found by an
+  independent blind audit (`65f9c01`, #20). (The companion DNS-name host
+  re-leak the same finding notes remains a documented sanitiser
+  limitation -- host fields written as FQDNs still pass through.)
 * **Anycast / VARP virtual-gateway address no longer leaks through the
   sanitizer.** `CanonicalIPv4Address` / `CanonicalIPv6Address.virtual_gateway_address`
   -- the anycast gateway IP rendered verbatim by Arista (`ip address

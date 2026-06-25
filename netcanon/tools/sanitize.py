@@ -67,6 +67,8 @@ Field-typed rules (counter-per-session):
   range — SEPARATE field from ``interfaces[].ipv4_addresses``; the
   Aruba / Junos SVI-on-VLAN model renders these directly
 * ``CanonicalStaticRoute.gateway`` (public) → docs range
+* ``CanonicalStaticRoute.destination`` (public destination CIDR) → docs
+  range, prefix length preserved
 * ``CanonicalIntent.dropped_tier3_sections`` → stripped entirely
   (Tier-3 carry-through may contain anything; never share)
 
@@ -655,8 +657,24 @@ def sanitize_intent(
             ))
             pool.domain_name = new_domain
 
-    # ---- static-route gateways + descriptions ----
+    # ---- static-route destinations + gateways + descriptions ----
     for i, route in enumerate(sanitized.static_routes):
+        # The destination prefix is a sibling of the already-redacted
+        # gateway on the same record — a public destination CIDR (a route
+        # to a provider / peer / branch block) is as network-identifying as
+        # the next hop, yet bypassed sanitisation entirely before this.
+        # ``redact_cidr`` preserves the prefix length; private destinations
+        # (the common LAN / aggregate case) are preserved (audit 65f9c01 #20).
+        if route.destination:
+            new_dest = table.redact_cidr(route.destination)
+            if new_dest != route.destination:
+                subs.append(Substitution(
+                    category="ipv4-public",
+                    field=f"static_routes[{i}].destination",
+                    original=route.destination,
+                    redacted=new_dest,
+                ))
+                route.destination = new_dest
         if route.gateway:
             new_gw = table.redact_ip_string(route.gateway)
             if new_gw != route.gateway:

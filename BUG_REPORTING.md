@@ -150,6 +150,7 @@ the same redacted value all 5 times).
 | VLAN-SVI IPv4 addresses (the VLAN interface's L3 config) | Public IPv4 → docs ranges; private preserved |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (v4 + v6) | Public → docs ranges; private / ULA preserved |
+| Static-route destination prefix + next-hop | Public IPv4 / IPv6 → docs ranges (prefix length preserved); default route + private aggregates preserved |
 | Interface descriptions | `description redacted` |
 | Tier-3 sections (firewall, NAT, VPN) | Stripped entirely |
 
