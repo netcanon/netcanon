@@ -534,6 +534,46 @@ hardening.
   secret scanning runs on history + blocks credential pushes at
   commit time.
 
+### Release gate — how every published artefact is tied to green tests
+
+The release pipeline gates on tests in **two independent layers**, so a
+published artefact (PyPI wheel, GHCR / Docker Hub image, Windows MSI) is
+tied to passing tests even if one layer is bypassed.
+
+1. **Gate-at-merge (branch protection).**  `main` is protected by an active
+   GitHub *ruleset* requiring a fixed set of status checks to pass on every
+   PR before merge, plus PR-required, no force-push, and no branch deletion.
+   The required checks are: `Lint (ruff)`, `Tests (Python 3.11/3.12/3.13/
+   3.14)`, `E2E (Playwright)`, `Desktop (PySide6)`, `Build sdist + wheel`,
+   `Docker build smoke test`, and `No leaked personal identifiers`.  Release
+   tags are only ever cut from `main` (a CHANGELOG PR merged to `main`, then
+   the tag pushed on `main`), and each publish workflow's **on-main ancestry
+   check** (`git merge-base --is-ancestor`) refuses any tag whose commit is
+   not an ancestor of `origin/main`.  So a release tag normally derives from
+   a commit that passed the full CI matrix.
+
+2. **Gate-at-publish (in-workflow test job).**  Each publish workflow
+   (`pypi-publish.yml`, `docker-publish.yml`, `desktop-msi-publish.yml`)
+   begins with a `Test gate (unit + integration)` job that the build /
+   publish jobs `needs:`.  It re-runs the unit + integration suite *inside
+   the publish run* on the exact ref being shipped, so the gate is
+   verifiable from the repository itself and holds even if layer 1 was
+   bypassed.  It is a fast single-Python subset (the full 4-version matrix +
+   e2e + desktop already ran at merge) — defense-in-depth, not a re-run of
+   CI.
+
+**Residual risks (explicitly accepted).**  Layer 1 lives in GitHub
+branch-protection settings, which are not committed to the tree, and the
+repo-admin role can bypass the ruleset (`bypass_mode: always`) — a
+single-maintainer reality, not a defended boundary.  All three publish
+workflows also expose `workflow_dispatch`, which can publish a ref that
+never went through a PR (e.g. the MSI backfill path that builds an
+operator-supplied `inputs.tag`).  Layer 2 mitigates both: a manual dispatch
+or a bypassed merge still runs the publish-time test job before anything is
+shipped.  What layer 2 does **not** cover is the e2e / desktop / multi-Python
+surface (only layer 1 does) and a defect that no test catches.  See
+blind-audit `3ec11f3` (T0-4).
+
 ### Distribution channels and what each provides
 
 | Channel | Image bytes | Cosign signature | SBOM attestation |

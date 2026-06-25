@@ -55,8 +55,43 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  # ── Publish-time test gate (blind-audit 3ec11f3 T0-4) ──
+  # See pypi-publish.yml for the full rationale.  The MSI just packages
+  # already-tested Python code, but the same off-tree/admin-bypass and
+  # workflow_dispatch holes apply, so we re-run the unit + integration suite
+  # inside the publish run before building.  It checks out the SAME ref the
+  # build does (`inputs.tag || github.ref`) so a workflow_dispatch backfill
+  # tests exactly what it ships.  Runs on ubuntu (the suite is OS-agnostic
+  # and green on Linux in CI) — faster + cheaper than a Windows runner; only
+  # the MSI build itself needs windows-latest.  NOTE: backfilling a *very
+  # old* tag re-runs today's suite against that tag's code, which can fail on
+  # environment drift — expected, the gate is doing its job.  Fast subset (no
+  # e2e/desktop matrix); no pip cache (single-shot).
+  test:
+    name: Test gate (unit + integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
   build-msi:
     name: Build Windows MSI
+    needs: [test]
     runs-on: windows-latest
 
     steps:

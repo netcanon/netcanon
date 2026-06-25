@@ -37,8 +37,38 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
 jobs:
+  # ── Publish-time test gate (blind-audit 3ec11f3 T0-4) ──
+  # See pypi-publish.yml for the full rationale.  In short: the release gate
+  # is gate-at-merge (ruleset-protected `main` + on-main ancestry check), but
+  # that lives off-tree (admin-bypassable) and `workflow_dispatch` can publish
+  # a never-PR'd ref.  Re-running the unit + integration suite inside the
+  # publish run puts the gate in the artefact and holds even if the merge gate
+  # was bypassed.  Fast subset (single Python, no e2e/desktop) — defense in
+  # depth, not a re-run of the full CI matrix.  No pip cache (single-shot).
+  test:
+    name: Test gate (unit + integration)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+      - name: Run unit tests
+        run: pytest tests/unit -q --no-header
+      - name: Run integration tests
+        run: pytest tests/integration -q --no-header
+
   build-and-publish:
     name: Build, push, sign, attest
+    needs: [test]
     runs-on: ubuntu-latest
 
     steps:
