@@ -171,6 +171,24 @@ class PortIdentity(BaseModel):
     #: membership info without re-parsing.
     aggregate_members: list[str] = Field(default_factory=list)
 
+    #: Source-side advisory flag: this PHYSICAL port is a member of a
+    #: hardware-switch L2 fabric on the source device.  FortiGate
+    #: ``internalN`` / ``lanN`` on small appliances (40F/60F/80F) are
+    #: switched ports of the ``internal`` / ``lan`` fabric, NOT
+    #: standalone routed ports — the bare ``internal`` / ``lan`` form
+    #: classifies as ``hw_aggregate`` (and warns), but the numbered
+    #: member historically classified as plain ``physical`` and was
+    #: remapped to a positional target name with no advisory at all.
+    #: The cross-vendor name mapping is purely positional (name-shape)
+    #: and cannot carry the L2-switch membership, so the orchestrator
+    #: surfaces a soft "verify cabling / L2 role" advisory when source
+    #: and target vendors differ.  ``kind`` STAYS ``physical`` (the
+    #: port IS a real port) — this flag only drives the advisory, never
+    #: the rename or drop.  Vendor-agnostic: any codec whose classifier
+    #: can detect hw-switch membership may set it; today only FortiGate
+    #: does.  Same-vendor round-trip preserves the name, so no advisory.
+    hw_switch_member: bool = False
+
     #: Verbatim source name — used as fallback when the target codec
     #: can't format this identity (``format_port_identity`` returns
     #: ``None``).  Always populated by the source classifier.
@@ -449,6 +467,25 @@ def translate_port_names(
                 dropped_set.add(name)
             memo[name] = name
             return name
+        # A structurally-clean rename can STILL drop a source-side
+        # semantic the target can't carry.  A hardware-switch member
+        # (FortiGate ``internalN`` / ``lanN``) maps to a positional
+        # target name by name-shape only — the L2-fabric membership is
+        # lost even though the rename "succeeded".  This is the
+        # success-branch analogue of the ``hw_aggregate`` warning above
+        # (which fires for the bare ``internal`` / ``lan`` aggregate).
+        # Same-vendor round-trip reproduces the name losslessly, so
+        # gate on a cross-vendor pair to avoid spurious noise.  The
+        # rename is still applied + recorded; the advisory rides
+        # alongside it (the operator needs both).
+        if ident.hw_switch_member and source_codec.name != target_codec.name:
+            warnings.append(
+                f"{target_codec.name}: {source_codec.name} port {name!r} is "
+                f"a hardware-switch (L2 fabric) member; the mapping to {out!r} "
+                f"is positional (name-shape only) and does NOT carry the "
+                f"L2-switch membership — verify the target port's physical "
+                f"cabling and L2 role."
+            )
         memo[name] = out
         if out != name:
             applied[name] = out

@@ -35,6 +35,16 @@ firewall translation is your primary need, see
   flag before `set mtu` takes effect on physical ports).  `mtu` is declared
   `supported` in the codec capability matrix.  Per-interface VRF is
   routing-instance-scoped, not a Tier-1 binding.
+  **hardware-switch members:** on small appliances (40F/60F/80F)
+  `internal1`-`internalN` / `lanN` are *switched ports* of the
+  `internal` / `lan` L2 fabric, not standalone routed ports.  They
+  translate to a positional target name (`internal3` → MikroTik
+  `ether3`, etc.), so a **cross-vendor** run surfaces a soft advisory in
+  the port-rename panel: the name maps by shape only and does **not**
+  carry the L2-switch membership — verify the target port's physical
+  cabling and L2 role.  Same-vendor round-trip preserves the name, so no
+  advisory fires.  The bare aggregate (`internal` / `lan` with no
+  number) has no cross-vendor equivalent at all and warns separately.
 - VLANs — VLAN sub-interface form (`config system interface` →
   `set type vlan` + `set vlanid <N>`)
 - Static routes (`config router static`)
