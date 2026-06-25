@@ -145,7 +145,7 @@ the same redacted value all 5 times).
 | SNMPv3 user names (USM securityName) | `snmpv3userN` (independent counter from local-user-name) |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
-| RADIUS server / SNMP trap-target / DHCP gateway+range+subnet hosts | Public IPv4 / IPv6 → docs ranges; private / hostname preserved |
+| RADIUS / SNMP-trap / NTP / syslog / DHCP gateway+range+subnet hosts | Public IPv4 / IPv6 → docs ranges; an FQDN NTP / syslog / trap / RADIUS target → `host-N.example.test`; private IP + bare single label preserved |
 | Interface IPv6 addresses | Public / global IPv6 → `2001:db8::`; ULA / link-local / loopback / multicast preserved |
 | VLAN-SVI IPv4 addresses (the VLAN interface's L3 config) | Public IPv4 → docs ranges; private preserved |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
@@ -167,12 +167,13 @@ Full rules and limitations in the sanitiser's module docstring at
 - **Banner / comment text not redacted.**  These aren't in the
   canonical model.  Most are parse-and-ignored.  If your config has
   sensitive banner text, hand-edit it after sanitising.
-- **Host fields given as DNS names pass through.**  IP-typed
-  redaction (interface / SVI / VRRP-VIP / RADIUS server / SNMP trap
-  target / DHCP gateway+range) covers bare IPv4 *and* IPv6 literals
-  (v0.4.1); a target written as a hostname (`nms.corp.example`) is
-  free text the model does not classify, so it is preserved.
-  Hand-edit name-form hosts if they are identifying.
+- **FQDN host targets redacted; unmodelled host references not.**  The
+  modelled host fields (NTP / syslog / SNMP-trap / RADIUS targets) now
+  redact an FQDN to a stable `host-N.example.test` placeholder so the org
+  domain does not re-leak; bare IPv4 / IPv6 literals → docs ranges and a
+  bare single label (`localhost`) is preserved.  A host written into a
+  region the canonical model does not type as a host (Tier-3 / banner
+  text) still passes through — hand-edit those before sharing.
 
 ---
 

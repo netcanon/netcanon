@@ -47,6 +47,7 @@ _NON_SENSITIVE_CODES = frozenset(
 #: test_sanitize.py; this set documents coverage and anchors the partition.
 _SENSITIVE_REDACTED = frozenset({
     ("CanonicalDHCPPool", "dns_servers"),
+    ("CanonicalDHCPPool", "domain_name"),
     ("CanonicalDHCPPool", "end_ip"),
     ("CanonicalDHCPPool", "gateway"),
     ("CanonicalDHCPPool", "network"),
@@ -59,6 +60,7 @@ _SENSITIVE_REDACTED = frozenset({
     ("CanonicalIPv6Address", "ip"),
     ("CanonicalIPv6Address", "virtual_gateway_address"),
     ("CanonicalIntent", "dns_servers"),
+    ("CanonicalIntent", "domain"),
     ("CanonicalIntent", "ntp_servers"),
     ("CanonicalIntent", "syslog_servers"),
     ("CanonicalRADIUSServer", "host"),
@@ -102,12 +104,10 @@ _SENSITIVE_GAP: dict[tuple[str, str], tuple[str, str]] = {
 #: interface references, operator free text, tool provenance. Each reason is one
 #: a reviewer can challenge (a real IP/secret leaf has no honest code here).
 _NON_SENSITIVE: dict[tuple[str, str], tuple[str, str]] = {
-    ("CanonicalDHCPPool", "domain_name"): ("IDENTIFIER", "DHCP-offered DNS domain; passed through"),
     ("CanonicalDHCPPool", "interface"): ("IFACE_REF", "bind interface name"),
     ("CanonicalEvpnType5Route", "vrf"): ("IDENTIFIER", "VRF name"),
     ("CanonicalIPv6Address", "scope"): ("ENUM", "global | link-local"),
     ("CanonicalIntent", "apply_groups"): ("METADATA", "Junos apply-group names"),
-    ("CanonicalIntent", "domain"): ("IDENTIFIER", "device DNS domain; passed through"),
     ("CanonicalIntent", "hostname"): ("IDENTIFIER", "device hostname; passed through by design"),
     ("CanonicalIntent", "source_format"): ("METADATA", "source input_format hint"),
     ("CanonicalIntent", "source_vendor"): ("METADATA", "producing codec"),

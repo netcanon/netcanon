@@ -551,6 +551,66 @@ class TestStaticRouteRedaction:
         ), "destination redaction must be recorded in the substitution log"
 
 
+class TestDnsNameHostFieldRedaction:
+    """DNS-name host fields (NTP / syslog / SNMP-trap / RADIUS targets) must
+    not re-leak the org domain (audit 65f9c01 #20)."""
+
+    def test_fqdn_maps_to_stable_opaque_placeholder(self):
+        table = _SubstitutionTable()
+        out = table.redact_host("syslog.corp.example.com")
+        assert out == "host-1.example.test"
+        assert "corp.example.com" not in out and "example.com" not in out
+        # stable: same FQDN -> same placeholder (cross-reference survives)
+        assert table.redact_host("syslog.corp.example.com") == "host-1.example.test"
+        # distinct FQDN -> distinct placeholder
+        assert table.redact_host("ntp.corp.example.com") == "host-2.example.test"
+
+    def test_two_label_org_domain_not_leaked_in_first_label(self):
+        """The org name lives in the FIRST label of a bare registered domain
+        (``acmecorp.com``); preserving the first label would leak it, so the
+        whole name is replaced."""
+        out = _SubstitutionTable().redact_host("acmecorp.com")
+        assert "acmecorp" not in out
+        assert out == "host-1.example.test"
+
+    def test_ip_behaviour_unchanged(self):
+        table = _SubstitutionTable()
+        # public IP -> docs range (as before)
+        assert table.redact_host("8.8.8.8").startswith(
+            ("192.0.2.", "198.51.100.", "203.0.113.")
+        )
+        # private IP preserved
+        assert table.redact_host("10.0.0.5") == "10.0.0.5"
+
+    def test_bare_single_label_preserved(self):
+        table = _SubstitutionTable()
+        assert table.redact_host("localhost") == "localhost"
+        assert table.redact_host("nms") == "nms"
+
+    def test_fqdn_servers_redacted_through_sanitize_intent(self):
+        intent = CanonicalIntent(
+            ntp_servers=["ntp.corp.example.com", "10.0.0.1"],
+            syslog_servers=["logs.corp.example.com"],
+            snmp=CanonicalSNMP(trap_hosts=["nms.corp.example.com"]),
+            radius_servers=[
+                CanonicalRADIUSServer(
+                    host="radius.corp.example.com", key="s3cret"
+                )
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        # The org domain must not survive in ANY host field.
+        assert all("corp.example.com" not in h for h in sanitized.ntp_servers)
+        assert all("corp.example.com" not in h for h in sanitized.syslog_servers)
+        assert all(
+            "corp.example.com" not in h for h in sanitized.snmp.trap_hosts
+        )
+        assert "corp.example.com" not in sanitized.radius_servers[0].host
+        # FQDN entry became a host placeholder; the private IP is preserved.
+        assert sanitized.ntp_servers[0].endswith(".example.test")
+        assert sanitized.ntp_servers[1] == "10.0.0.1"
+
+
 class TestTier3Stripped:
     def test_dropped_tier3_sections_emptied(self):
         intent = CanonicalIntent(
@@ -820,7 +880,7 @@ class TestSNMPContactLocationRedaction:
 
 class TestSNMPTrapHostRedaction:
     """SNMP trap-target hosts: public IPv4 → docs range, private
-    preserved, hostname preserved."""
+    preserved, FQDN → host placeholder (audit 65f9c01 #20)."""
 
     def test_public_trap_host_redacted_private_preserved(self):
         intent = CanonicalIntent(
@@ -837,13 +897,17 @@ class TestSNMPTrapHostRedaction:
         assert sanitized.snmp.trap_hosts[1] == "192.168.50.5"  # private kept
         assert len([s for s in subs if s.category == "ipv4-public"]) == 1
 
-    def test_hostname_trap_target_preserved(self):
+    def test_fqdn_trap_target_redacted(self):
         intent = CanonicalIntent(
             snmp=CanonicalSNMP(community="", trap_hosts=["nms.corp.example"])
         )
         sanitized, _ = sanitize_intent(intent)
-        # Documented residual: name-form hosts pass through.
-        assert sanitized.snmp.trap_hosts[0] == "nms.corp.example"
+        # An FQDN trap target re-leaks the org domain — now redacted to a
+        # stable host placeholder (audit 65f9c01 #20, was a documented
+        # residual passthrough before).
+        assert sanitized.snmp.trap_hosts[0] != "nms.corp.example"
+        assert "corp.example" not in sanitized.snmp.trap_hosts[0]
+        assert sanitized.snmp.trap_hosts[0].endswith(".example.test")
 
 
 class TestRADIUSHostRedaction:
