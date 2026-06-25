@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.6] - 2026-06-25
+
 ### Security
 
 * **Static-route destination prefixes are now redacted by the
