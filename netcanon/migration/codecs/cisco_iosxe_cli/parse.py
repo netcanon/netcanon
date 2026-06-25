@@ -250,6 +250,13 @@ _DEFAULT_GATEWAY_RE = re.compile(
 _SWITCHPORT_ACCESS_RE = re.compile(
     r"^\s+switchport\s+access\s+vlan\s+(\d+)", re.IGNORECASE
 )
+#: ``switchport voice vlan <N>`` — per-port voice VLAN for IP-phone
+#: traffic.  The renderer already emits this line; parsing it closes the
+#: round-trip asymmetry (blind-audit ``65f9c01`` #11: a real config's
+#: voice binding parsed to ``None`` and the loss reported ``severity: ok``).
+_SWITCHPORT_VOICE_RE = re.compile(
+    r"^\s+switchport\s+voice\s+vlan\s+(\d+)", re.IGNORECASE
+)
 _SWITCHPORT_TRUNK_ALLOWED_RE = re.compile(
     r"^\s+switchport\s+trunk\s+allowed\s+vlan\s+(.+)", re.IGNORECASE
 )
@@ -637,6 +644,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             "ipv4": [],
             "switchport_mode": None,
             "access_vlan": None,
+            "voice_vlan": None,
             "trunk_allowed": [],
             "trunk_native": None,
             "lag_member_of": None,
@@ -786,6 +794,11 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         am = _SWITCHPORT_ACCESS_RE.match(line)
         if am:
             current["access_vlan"] = int(am.group(1))
+            return
+
+        vm = _SWITCHPORT_VOICE_RE.match(line)
+        if vm:
+            current["voice_vlan"] = int(vm.group(1))
             return
 
         tm = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
@@ -1056,6 +1069,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         ],
         switchport_mode=switchport_mode,
         access_vlan=raw.get("access_vlan"),
+        voice_vlan=raw.get("voice_vlan"),
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),

@@ -275,6 +275,14 @@ class AristaEOSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason=(
+                    "This codec does not model EOS per-port voice VLAN "
+                    "(``switchport phone``); dropped on render (blind-audit "
+                    "65f9c01 #11)."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing/static-route/interface",
                 reason=(
                     "No interface-nexthop (connected) static-route form; a "

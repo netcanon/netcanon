@@ -383,6 +383,13 @@ class CiscoNXOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason=(
+                    "This codec does not model NX-OS per-port voice VLAN; "
+                    "dropped on render (blind-audit 65f9c01 #11)."
+                ),
+            ),
             # ── Tier-1/2 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──

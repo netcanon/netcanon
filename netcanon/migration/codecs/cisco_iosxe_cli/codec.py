@@ -119,6 +119,13 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
+            # ``switchport voice vlan <N>`` — parsed (_SWITCHPORT_VOICE_RE)
+            # and rendered, so it fully round-trips same-vendor (blind-audit
+            # 65f9c01 #11; targets that can't carry it declare it unsupported).
+            # The sibling L2 surfaces (switchport-mode / access-vlan / trunk-*)
+            # also round-trip but ride the classify() default; declared here
+            # because the audit named voice-vlan specifically.
+            "/interfaces/interface/voice-vlan",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
