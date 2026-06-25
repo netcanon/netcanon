@@ -27,9 +27,9 @@ codec module's ``parse()`` method is now a one-line delegator to
 :func:`parse_intent`.
 
 Internal helpers (``_parse_stanzas``, ``_parse_router_bgp``,
-``_apply_iface_subcommand``, ``_infer_iface_type``,
-``_expand_vlan_list``) and the module-level regex constants
-(``_HOSTNAME_RE`` etc.) live here because they are parse-only.
+``_apply_iface_subcommand``, ``_infer_iface_type``) and the
+module-level regex constants (``_HOSTNAME_RE`` etc.) live here
+because they are parse-only.
 """
 
 from __future__ import annotations
@@ -56,7 +56,7 @@ from ...canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
-from .._helpers import _mask_to_prefix
+from .._helpers import _mask_to_prefix, merge_trunk_allowed
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
 from ..base import ParseError
@@ -1115,7 +1115,9 @@ def _apply_iface_subcommand(
         # so a lingering access_vlan would silently drop on round-trip.
         iface.access_vlan = None
         tail = line.split(None, 4)[-1]
-        iface.trunk_allowed_vlans = _expand_vlan_list(tail)
+        iface.trunk_allowed_vlans = merge_trunk_allowed(
+            iface.trunk_allowed_vlans, tail
+        )
         return
     if line.startswith("switchport trunk native vlan "):
         # Phase 4b Wave 7c-C: ``switchport trunk native vlan <N>``.
@@ -1376,29 +1378,3 @@ def _infer_iface_type(name: str) -> str:
     if lower.startswith("tunnel"):
         return "ianaift:tunnel"
     return ""
-
-
-def _expand_vlan_list(spec: str) -> list[int]:
-    """Expand a VLAN-list spec like ``10,20,30-35`` into [10,20,30..35]."""
-    out: list[int] = []
-    for chunk in spec.split(","):
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        if "-" in chunk:
-            a, b = chunk.split("-", 1)
-            try:
-                a_i, b_i = int(a), int(b)
-            except ValueError:
-                continue
-            # Clamp to the valid VLAN space before materializing so a huge
-            # span cannot OOM the process (valid sub-range preserved).
-            a_i, b_i = max(1, a_i), min(4094, b_i)
-            if a_i <= b_i:
-                out.extend(range(a_i, b_i + 1))
-        else:
-            try:
-                out.append(int(chunk))
-            except ValueError:
-                continue
-    return out

@@ -99,6 +99,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Trunk `switchport trunk allowed vlan add` / `remove` no longer
+  collapses VLAN membership.** `show running-config` renders a long
+  trunk allowed-list across multiple lines using the relative keyword
+  forms (`... add 30,40`, `... remove 20`), but `cisco_iosxe_cli`,
+  `cisco_nxos` and `arista_eos` overwrote the allowed-list per line
+  (keeping only the last) and glued the leading keyword onto the first
+  id token (`"add 30"` -> non-numeric -> silently skipped), so `allowed
+  vlan 10,20` followed by `allowed vlan add 30,40` collapsed to `[40]`
+  with no warning and `severity: ok` -- silently changing L2
+  segmentation. All three now route through a shared
+  `merge_trunk_allowed` helper that strips the keyword and applies it
+  (set / add / remove / none / all / except) relative to the running
+  list; the bare single-line form is byte-identical, so existing
+  round-trips are unchanged. Found by an independent blind audit
+  (`65f9c01`, T0-1).
 * **Silent loss of VLAN SVI / management L3 addresses to router / firewall
   codecs.** A VLAN's SVI L3 carried on the VLAN record itself (the Junos
   `irb` / Aruba SVI-on-VLAN shape, folded onto

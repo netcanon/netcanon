@@ -70,6 +70,7 @@ from .._helpers import (
     _is_link_local_v6,
     _normalise_mac_to_colon_hex,
     _parse_vlan_list,
+    merge_trunk_allowed,
 )
 from .._input_shape import detect_input_shape
 from .._scanner import scan_stanzas
@@ -754,7 +755,9 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         tam = _SWITCHPORT_TRUNK_ALLOWED_RE.match(line)
         if tam:
             current["switchport_mode"] = current["switchport_mode"] or "trunk"
-            current["trunk_allowed"] = _parse_vlan_list(tam.group(1).strip())
+            current["trunk_allowed"] = merge_trunk_allowed(
+                current["trunk_allowed"], tam.group(1).strip()
+            )
             return
         tnm = _SWITCHPORT_TRUNK_NATIVE_RE.match(line)
         if tnm:

@@ -135,6 +135,63 @@ def _parse_vlan_list(text: str) -> list[int]:
     return result
 
 
+#: Leading keywords in the Cisco / Arista / NX-OS ``switchport trunk
+#: allowed vlan`` grammar that make the line RELATIVE to the running list
+#: rather than a fresh assignment.  ``show running-config`` emits a long
+#: allowed-list as an initial set line followed by ``... add`` continuation
+#: lines, so a parser that overwrites per line (instead of applying the
+#: keyword) silently keeps only the last line.
+_TRUNK_ALLOWED_KEYWORDS = frozenset(
+    {"add", "remove", "except", "none", "all"}
+)
+
+
+def merge_trunk_allowed(existing: list[int], remainder: str) -> list[int]:
+    """Apply one ``switchport trunk allowed vlan`` *remainder* to *existing*.
+
+    The Cisco / Arista / NX-OS grammar renders a long allowed-list across
+    multiple lines using relative keywords::
+
+        switchport trunk allowed vlan 10,20      # set      -> [10, 20]
+        switchport trunk allowed vlan add 30,40  # union    -> [10, 20, 30, 40]
+        switchport trunk allowed vlan remove 20  # subtract -> [10, 30, 40]
+
+    A bare list (no keyword) SETS the membership; ``none`` clears it;
+    ``all`` is the full 1-4094 space; ``except L`` is everything but *L*.
+    The keyword must be stripped before the id list is parsed — otherwise
+    it glues onto the first token (``"add 30"``), which is non-numeric and
+    is silently dropped, so ``allowed vlan add 30,40`` collapsed to
+    ``[40]`` and (because each line overwrote the previous) any earlier set
+    line vanished entirely (blind-audit ``65f9c01`` T0-1).
+
+    The bare-list path is byte-identical to :func:`_parse_vlan_list` (same
+    input order, no de-dup) so the common single-line form round-trips
+    exactly as before; only the keyword forms — which no prior code handled
+    — change behaviour.  ``add``/``remove`` preserve *existing* order and
+    append/drop in place.
+    """
+    tokens = remainder.split(None, 1)
+    keyword = tokens[0].lower() if tokens else ""
+    if keyword not in _TRUNK_ALLOWED_KEYWORDS:
+        # Bare ``<id-list>`` — preserve the exact prior parse behaviour.
+        return _parse_vlan_list(remainder)
+    if keyword == "none":
+        return []
+    if keyword == "all":
+        return list(range(1, 4095))
+    rest = tokens[1] if len(tokens) > 1 else ""
+    ids = _parse_vlan_list(rest)
+    if keyword == "except":
+        blocked = set(ids)
+        return [vid for vid in range(1, 4095) if vid not in blocked]
+    base = list(existing)
+    if keyword == "add":
+        return base + [vid for vid in ids if vid not in base]
+    # keyword == "remove"
+    drop = set(ids)
+    return [vid for vid in base if vid not in drop]
+
+
 def _run_token(lo: int, hi: int) -> str:
     """Format a single consecutive run for :func:`_coalesce_vlan_ids`.
 
