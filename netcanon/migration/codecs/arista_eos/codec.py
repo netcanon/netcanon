@@ -12,7 +12,7 @@ Module layout (post-split):
 * ``parse.py`` — line-scan + per-stanza dispatch over EOS
   ``show running-config`` text.  Hosts the regex constants, the
   router-bgp + interface walkers, and helpers like
-  ``_infer_iface_type``.
+  ``_infer_iface_type`` / ``_expand_vlan_list``.
 * ``render.py`` — canonical tree → EOS CLI text.
 
 Structural strategy: EOS CLI is line-oriented with ``!`` delimiters,

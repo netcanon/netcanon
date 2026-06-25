@@ -27,9 +27,9 @@ codec module's ``parse()`` method is now a one-line delegator to
 :func:`parse_intent`.
 
 Internal helpers (``_parse_stanzas``, ``_parse_router_bgp``,
-``_apply_iface_subcommand``, ``_infer_iface_type``) and the
-module-level regex constants (``_HOSTNAME_RE`` etc.) live here
-because they are parse-only.
+``_apply_iface_subcommand``, ``_infer_iface_type``,
+``_expand_vlan_list``) and the module-level regex constants
+(``_HOSTNAME_RE`` etc.) live here because they are parse-only.
 """
 
 from __future__ import annotations
@@ -1116,7 +1116,7 @@ def _apply_iface_subcommand(
         iface.access_vlan = None
         tail = line.split(None, 4)[-1]
         iface.trunk_allowed_vlans = merge_trunk_allowed(
-            iface.trunk_allowed_vlans, tail
+            iface.trunk_allowed_vlans, tail, parse_ids=_expand_vlan_list
         )
         return
     if line.startswith("switchport trunk native vlan "):
@@ -1378,3 +1378,38 @@ def _infer_iface_type(name: str) -> str:
     if lower.startswith("tunnel"):
         return "ianaift:tunnel"
     return ""
+
+
+def _expand_vlan_list(spec: str) -> list[int]:
+    """Expand a VLAN-list spec like ``10,20,30-35`` into [10,20,30..35].
+
+    Arista's near-twin of the shared ``_helpers._parse_vlan_list``: it is
+    deliberately NOT converged because it accepts ``int(chunk)`` forms
+    (``"+10"``) that the canonical ``str.isdigit()`` gate rejects (see
+    ``tests/.../test_helpers_equivalence.py``).  It is injected into
+    :func:`.._helpers.merge_trunk_allowed` as that function's ``parse_ids``
+    so the trunk add/remove keyword logic is shared without changing
+    arista's id-list behaviour.
+    """
+    out: list[int] = []
+    for chunk in spec.split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        if "-" in chunk:
+            a, b = chunk.split("-", 1)
+            try:
+                a_i, b_i = int(a), int(b)
+            except ValueError:
+                continue
+            # Clamp to the valid VLAN space before materializing so a huge
+            # span cannot OOM the process (valid sub-range preserved).
+            a_i, b_i = max(1, a_i), min(4094, b_i)
+            if a_i <= b_i:
+                out.extend(range(a_i, b_i + 1))
+        else:
+            try:
+                out.append(int(chunk))
+            except ValueError:
+                continue
+    return out

@@ -12,12 +12,20 @@ from __future__ import annotations
 
 import pytest
 
+from netcanon.migration.codecs._helpers import merge_trunk_allowed
 from netcanon.migration.codecs.arista_eos.parse import _expand_vlan_list as eos
 from netcanon.migration.codecs.aruba_aoscx.parse import _parse_vlan_list as aoscx
-from netcanon.migration.codecs.cisco_iosxe_cli.parse import _parse_vlan_list as iosxe
 from netcanon.migration.codecs.cisco_nxos.parse import _parse_vlan_list as nxos
 
 pytestmark = pytest.mark.unit
+
+
+def iosxe(spec: str) -> list[int]:
+    # cisco_iosxe_cli expands a trunk allowed-list via the shared
+    # ``merge_trunk_allowed`` bare path (default ``parse_ids`` is
+    # ``_parse_vlan_list``), which carries the OOM clamp.
+    return merge_trunk_allowed([], spec)
+
 
 # Each codec's comma/range VLAN-list expander (cisco family + arista).
 _EXPANDERS = [

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Callable
 
 from .base import ParseError, RenderError
 
@@ -146,7 +147,12 @@ _TRUNK_ALLOWED_KEYWORDS = frozenset(
 )
 
 
-def merge_trunk_allowed(existing: list[int], remainder: str) -> list[int]:
+def merge_trunk_allowed(
+    existing: list[int],
+    remainder: str,
+    *,
+    parse_ids: Callable[[str], list[int]] = _parse_vlan_list,
+) -> list[int]:
     """Apply one ``switchport trunk allowed vlan`` *remainder* to *existing*.
 
     The Cisco / Arista / NX-OS grammar renders a long allowed-list across
@@ -164,23 +170,27 @@ def merge_trunk_allowed(existing: list[int], remainder: str) -> list[int]:
     ``[40]`` and (because each line overwrote the previous) any earlier set
     line vanished entirely (blind-audit ``65f9c01`` T0-1).
 
-    The bare-list path is byte-identical to :func:`_parse_vlan_list` (same
-    input order, no de-dup) so the common single-line form round-trips
-    exactly as before; only the keyword forms — which no prior code handled
-    — change behaviour.  ``add``/``remove`` preserve *existing* order and
-    append/drop in place.
+    *parse_ids* parses a comma/hyphen id-list into ``list[int]``; it
+    defaults to the shared :func:`_parse_vlan_list` but a codec injects its
+    own near-twin (``arista_eos._expand_vlan_list``) so this keyword logic
+    can be shared without converging the codec's deliberately-divergent
+    id-list parser.  Because the bare-list path delegates straight to
+    *parse_ids*, the common single-line form round-trips exactly as before;
+    only the keyword forms — which no prior code handled — change
+    behaviour.  ``add``/``remove`` preserve *existing* order and append /
+    drop in place.
     """
     tokens = remainder.split(None, 1)
     keyword = tokens[0].lower() if tokens else ""
     if keyword not in _TRUNK_ALLOWED_KEYWORDS:
         # Bare ``<id-list>`` — preserve the exact prior parse behaviour.
-        return _parse_vlan_list(remainder)
+        return parse_ids(remainder)
     if keyword == "none":
         return []
     if keyword == "all":
         return list(range(1, 4095))
     rest = tokens[1] if len(tokens) > 1 else ""
-    ids = _parse_vlan_list(rest)
+    ids = parse_ids(rest)
     if keyword == "except":
         blocked = set(ids)
         return [vid for vid in range(1, 4095) if vid not in blocked]
