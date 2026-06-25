@@ -21,11 +21,9 @@ Covers:
 from __future__ import annotations
 
 import re
-import typing
 from pathlib import Path
 
 import pytest
-from pydantic import BaseModel
 
 from netcanon.migration.canonical.intent import (
     CanonicalDHCPPool,
@@ -50,6 +48,12 @@ from netcanon.tools.sanitize import (
     _SubstitutionTable,
     sanitize_intent,
     sanitize_text,
+)
+from tests.support.canonical_reflection import (
+    flatten_annotation as _flatten_annotation,
+)
+from tests.support.canonical_reflection import (
+    reachable_models as _reachable_canonical_models,
 )
 
 pytestmark = pytest.mark.unit
@@ -657,32 +661,6 @@ _SECRET_NAME_RE = re.compile(
     r"passphrase|password|secret|community|^authentication$|(^|_)key$",
     re.IGNORECASE,
 )
-
-
-def _flatten_annotation(ann):
-    """Yield ``ann`` and every nested type argument (unwraps
-    ``list[...]`` / ``Optional[...]`` / ``dict[...]`` / unions)."""
-    args = typing.get_args(ann)
-    if not args:
-        yield ann
-        return
-    for a in args:
-        yield from _flatten_annotation(a)
-
-
-def _reachable_canonical_models(root_cls, acc=None):
-    """All ``BaseModel`` subclasses reachable from ``root_cls`` via its
-    (possibly nested) field annotations."""
-    if acc is None:
-        acc = set()
-    if root_cls in acc:
-        return acc
-    acc.add(root_cls)
-    for fld in root_cls.model_fields.values():
-        for t in _flatten_annotation(fld.annotation):
-            if isinstance(t, type) and issubclass(t, BaseModel):
-                _reachable_canonical_models(t, acc)
-    return acc
 
 
 class TestSecretRedactionCoverage:
