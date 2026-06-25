@@ -124,6 +124,65 @@ logger = logging.getLogger(__name__)
 TransformCallable = Callable[[Any], Any]
 
 
+def _input_not_recognized(raw_text: str, tree: Any, job: MigrationJob) -> bool:
+    """True when *non-trivial* input parsed to an empty canonical tree.
+
+    This is the **whole-input-rejection** silent-success surface (blind
+    audit ``65f9c01`` T0-2, the output-side half of the silent-loss
+    meta-finding): a permissive ``parse()`` returns an empty intent for
+    input it doesn't understand (wrong source vendor, garbage, a config
+    in a format this codec can't read), the validator then walks nothing,
+    severity stays ``ok``, and the job would otherwise reach ``completed``
+    with a banner-only render and zero warnings.  The web UI already flags
+    this (``migrate.html`` ``isEmptyCompleted`` → parse-failure banner),
+    but the backend ``MigrationJob.status`` — and therefore the HTTP /
+    automation contract (``X-Netcanon-Job-Status``) — stayed ``completed``,
+    so a CI gate that only checks status saw a green light for a translation
+    that produced nothing.  This lifts the UI's signal to the pipeline.
+
+    Gated tightly so a legitimate translation is never mislabelled:
+
+      * the input must be **non-trivial** (non-whitespace) — an empty
+        submission is vacuously empty, not a rejection (and most codecs
+        raise ``ParseError`` on empty input anyway, never reaching here);
+      * the validator must have recognized **zero** paths — any supported
+        / lossy / unsupported path means the parse understood something,
+        so a tiny-but-valid config (e.g. just ``hostname R1``) is safe;
+      * **no Tier-3 sections were detected** — an all-Tier-3 config (e.g.
+        a firewall-only ruleset) already carries its own honest "detected
+        in source but not translated" signal via
+        ``dropped_tier3_sections``, so it is a *recognized* (if
+        untranslatable) input, not a rejection.
+
+    Mirrors the UI's ``isEmptyCompleted`` zero-path test, plus the Tier-3
+    exemption so the backend signal is at least as precise as the banner.
+
+    Only applies to a real :class:`CanonicalIntent` tree: the internal
+    ``mock`` reference codec and ad-hoc test stubs return a plain ``dict``
+    by design (a deliberate no-op parse, not a parse that "recognized
+    nothing"), so they are never flagged — same non-canonical guard the
+    port-name orchestrator uses.
+    """
+    # Lazy import — mirrors translate_port_names' non-canonical guard and
+    # avoids any import-time coupling from this codec-agnostic orchestrator.
+    from ..migration.canonical.intent import CanonicalIntent
+
+    if not isinstance(tree, CanonicalIntent):
+        return False
+    if not (raw_text or "").strip():
+        return False
+    if job.dropped_tier3_sections:
+        return False
+    report = job.validation
+    if report is None:
+        return False
+    return not (
+        report.supported_paths
+        or report.lossy_paths
+        or report.unsupported_paths
+    )
+
+
 def run_plan(
     source: CodecBase,
     target: CodecBase,
@@ -277,6 +336,21 @@ def run_plan(
                 "Render completed but target adapter reported unsupported "
                 "or error-level lossy paths — output may not be safe to "
                 "deploy as-is."
+            )
+        elif _input_not_recognized(raw_text, tree, job):
+            # Whole-input rejection (audit 65f9c01 T0-2): non-trivial
+            # input parsed to an empty tree — the source vendor almost
+            # certainly doesn't match the input.  Surfacing this as
+            # `partial` (not `completed`) makes the API / automation
+            # contract honest, matching the UI's empty-result banner.
+            job.status = MigrationJobStatus.partial
+            job.error = (
+                "No source constructs were recognized: the input is "
+                "non-empty but parsed to an empty configuration (0 "
+                "supported / lossy / unsupported paths) and rendered only "
+                "a bare scaffold. The selected source vendor most likely "
+                "does not match the input format — treat this as a failed "
+                "translation, not a clean result."
             )
         else:
             job.status = MigrationJobStatus.completed

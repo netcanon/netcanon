@@ -205,8 +205,13 @@ def plan_migration(
 
     * ``completed`` — every stage ran, validation severity is ``ok``
       or ``warn``, rendered output is in ``job.rendered``.
-    * ``partial``  — rendered output exists but validation severity
-      is ``block``; review before deploying.
+    * ``partial``  — rendered output exists but it is not a clean
+      success: EITHER validation severity is ``block`` (target can't
+      faithfully consume the tree), OR the input was non-empty yet
+      parsed to an empty configuration (0 recognized paths, banner-only
+      render — the source vendor most likely doesn't match the input).
+      ``job.error`` explains which.  Review before deploying; an
+      automation gate should treat ``partial`` as a non-success.
     * ``failed``   — a stage raised; ``job.error`` has the summary.
 
     Use ``force=true`` in the request body to override the stage-0

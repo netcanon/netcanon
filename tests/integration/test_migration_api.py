@@ -286,6 +286,31 @@ class TestPlanEndpoint:
         assert job["rendered"] is not None
         assert job["validation"]["severity"] == "ok"
 
+    def test_unrecognized_input_is_partial_not_silent_completed(self, client):
+        """Audit 65f9c01 T0-2: non-trivial input the source codec can't
+        recognize must NOT report ``completed`` via the automation contract.
+
+        Previously a permissive parser returned an empty tree, severity
+        stayed ``ok`` and the job (and ``X-Netcanon-Job-Status`` header) said
+        ``completed`` with a banner-only render — a naive CI gate saw green
+        for a translation that produced nothing. It now reports ``partial``.
+        """
+        resp = client.post(
+            "/api/v1/migration/plan",
+            json={
+                "source": "cisco_iosxe_cli",
+                "target": "arista_eos",
+                "raw_text": "@@@ this is not a real config @@@\nlorem ipsum\n",
+            },
+        )
+        # Still HTTP 200 (the job body is always returned) ...
+        assert resp.status_code == 200
+        job = resp.json()
+        # ... but the disposition is honest on BOTH the body and the header.
+        assert job["status"] == "partial"
+        assert resp.headers["X-Netcanon-Job-Status"] == "partial"
+        assert job["error"] and "recognized" in job["error"].lower()
+
     def test_422_for_unknown_source_codec(self, client):
         resp = client.post(
             "/api/v1/migration/plan",

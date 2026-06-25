@@ -120,6 +120,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Unrecognized input no longer reports `completed` via the API /
+  automation contract.** A non-empty config the source codec couldn't
+  parse (wrong source vendor, garbage) produced an empty canonical tree,
+  rendered a banner-only stub, and the job -- plus the
+  `X-Netcanon-Job-Status` header -- reported `completed` with zero
+  warnings, so a CI gate checking only status saw green for a translation
+  that produced nothing. The web UI already flagged this (the empty-result
+  banner); the backend now does too -- `run_plan` downgrades a whole-input
+  rejection to `partial` with an explanatory `error`. Tightly gated
+  (non-trivial input + zero recognized paths + no Tier-3 detected + a real
+  `CanonicalIntent` tree) so a minimal-but-valid config, an all-Tier-3
+  config, and the internal mock codec are never mislabelled. This is the
+  OUTPUT-side half of the silent-loss meta-finding (#180 closed the
+  input-walk half). Found by an independent blind audit (`65f9c01`, T0-2).
 * **Per-port voice VLAN (`switchport voice vlan N`) is no longer
   silently dropped at parse.** `cisco_iosxe_cli` *rendered* the line but
   never *parsed* it, so a real Cisco config's voice binding parsed to
