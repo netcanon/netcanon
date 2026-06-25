@@ -552,15 +552,21 @@ tied to passing tests even if one layer is bypassed.
    not an ancestor of `origin/main`.  So a release tag normally derives from
    a commit that passed the full CI matrix.
 
-2. **Gate-at-publish (in-workflow test job).**  Each publish workflow
+2. **Gate-at-publish (in the publish run itself).**  Each publish workflow
    (`pypi-publish.yml`, `docker-publish.yml`, `desktop-msi-publish.yml`)
-   begins with a `Test gate (unit + integration)` job that the build /
-   publish jobs `needs:`.  It re-runs the unit + integration suite *inside
-   the publish run* on the exact ref being shipped, so the gate is
-   verifiable from the repository itself and holds even if layer 1 was
-   bypassed.  It is a fast single-Python subset (the full 4-version matrix +
-   e2e + desktop already ran at merge) — defense-in-depth, not a re-run of
-   CI.
+   gates the build on tests in two ways, so the guarantee is verifiable from
+   the repository itself and holds even if layer 1 was bypassed:
+   * a `Test gate (unit + integration)` job that the build / publish jobs
+     `needs:` — it re-runs the unit + integration suite *inside the publish
+     run* on the exact ref being shipped (a fast single-Python subset; the
+     full matrix already ran at merge); and
+   * a **`Require CI success for this commit`** step that queries the Actions
+     API for the CI run of the tagged commit and refuses to publish unless it
+     concluded `success` — so the *full* CI matrix (4-Python + e2e + desktop +
+     build + docker-smoke + PII-guard), not just the in-run subset, is proven
+     green for the exact commit. It polls briefly in case the tag was pushed
+     before the on-main CI run finished, and fails closed (a missing /
+     non-`success` / never-completing CI run blocks the publish).
 
 **Residual risks (explicitly accepted).**  Layer 1 lives in GitHub
 branch-protection settings, which are not committed to the tree, and the
@@ -568,11 +574,13 @@ repo-admin role can bypass the ruleset (`bypass_mode: always`) — a
 single-maintainer reality, not a defended boundary.  All three publish
 workflows also expose `workflow_dispatch`, which can publish a ref that
 never went through a PR (e.g. the MSI backfill path that builds an
-operator-supplied `inputs.tag`).  Layer 2 mitigates both: a manual dispatch
-or a bypassed merge still runs the publish-time test job before anything is
-shipped.  What layer 2 does **not** cover is the e2e / desktop / multi-Python
-surface (only layer 1 does) and a defect that no test catches.  See
-blind-audit `3ec11f3` (T0-4).
+operator-supplied `inputs.tag`).  Layer 2 closes most of this: a manual
+dispatch or a bypassed merge still runs the publish-time test job AND must
+clear the `Require CI success` check (a commit an admin force-merged without
+a green CI run has no `success` conclusion, so the publish is refused).  What
+remains is narrow: a defect no test catches, or a commit whose CI run record
+has aged out of GitHub's retention (an old-tag `workflow_dispatch` backfill —
+re-run CI on that ref first).  See blind-audit `3ec11f3` (T0-4).
 
 ### Distribution channels and what each provides
 
