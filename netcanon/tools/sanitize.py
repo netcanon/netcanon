@@ -36,13 +36,18 @@ Field-typed rules (counter-per-session):
   email / name)
 * ``CanonicalSNMP.location`` → ``<location redacted>`` (operator PII —
   site / address)
-* ``CanonicalSNMP.trap_hosts`` (public entries) → docs range
+* ``CanonicalSNMP.trap_hosts`` (public IP → docs range; FQDN →
+  ``host-N.example.test``)
 * ``CanonicalSNMPv3User.name`` → ``snmpv3userN`` (Phase-3 R6.1 — same
   rationale as local-user-name above)
 * ``CanonicalSNMPv3User.auth_passphrase`` → ``REDACTED-AUTH-N``
 * ``CanonicalSNMPv3User.priv_passphrase`` → ``REDACTED-PRIV-N``
 * ``CanonicalRADIUSServer.key`` → ``REDACTED-RADIUS-N``
-* ``CanonicalRADIUSServer.host`` (public) → docs range
+* ``CanonicalRADIUSServer.host`` (public IP → docs range; FQDN →
+  ``host-N.example.test``)
+* ``CanonicalIntent.ntp_servers`` / ``syslog_servers`` (public IP → docs
+  range; FQDN → ``host-N.example.test`` — a DNS name re-leaks the org
+  domain).  ``dns_servers`` are IP-only by protocol (resolver addresses)
 * ``CanonicalVRRPGroup.authentication`` → ``<scheme>:REDACTED-VRRP-AUTH-N``
   — the ``<scheme>:`` prefix (``plain:`` / ``md5:`` / ``carp-key:``) is
   metadata and is preserved so the renderer still emits valid syntax;
@@ -80,10 +85,14 @@ Limitations:
   Tier-3 content is dropped on parse, banners are typically
   parse-and-ignore.
 * IP-typed redaction covers both IPv4 and IPv6 (interface / SVI /
-  DHCP / RADIUS / trap-target / VRRP-VIP addresses).  Host fields
-  given as DNS NAMES (e.g. a RADIUS / trap target of
-  ``nms.corp.example``) still pass through verbatim — hand-edit those
-  before sharing.
+  DHCP / VRRP-VIP addresses).  Host fields that legitimately hold DNS
+  NAMES (NTP / syslog / SNMP-trap / RADIUS targets) are also redacted:
+  a multi-label FQDN (``nms.corp.example``) → a stable
+  ``host-N.example.test`` placeholder so the org domain does not
+  re-leak; a bare single label (``localhost``) has no domain and is
+  preserved.  A host written into a field the model does NOT type as a
+  host (e.g. inside an unmodelled Tier-3 stanza) still passes through —
+  hand-edit those before sharing.
 * Round-trip is sub-lossless: parse drops Tier-3 content, and render
   emits only what the codec models.  Operators sharing a sanitized
   config get the supported subset, not a byte-identical-shape
@@ -107,10 +116,23 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.registry import get_codec
+
+#: A DNS hostname: dot-separated labels (alnum + internal hyphen), at least
+#: two labels (the leading ``(?:...)`` + the ``(?:\.…)+`` group), <= 253
+#: chars.  Used by :meth:`_SubstitutionTable.redact_host` to tell an FQDN
+#: host field (whose domain suffix re-leaks the org) from a bare single
+#: label (``localhost`` / ``nms`` — no domain to leak) or free text.  IP
+#: literals are matched + handled BEFORE this regex, so the fact that a
+#: dotted-quad also matches the shape is moot.
+_HOSTNAME_RE = re.compile(
+    r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+)
 
 # ---------------------------------------------------------------------------
 # Public API — dataclasses
@@ -240,13 +262,18 @@ def sanitize_intent(
         ))
         sanitized.domain = new_value
 
-    # ---- IP-list scalars (DNS / NTP / syslog) ----
+    # ---- host-list scalars (DNS / NTP / syslog) ----
+    # DNS resolvers are IPs by protocol (RFC 2132 option 6); NTP + syslog
+    # targets are commonly FQDNs, so those two also redact a DNS-name entry
+    # (org-domain re-leak) via ``redact_host``.
     sanitized.dns_servers = _redact_ip_list(
         sanitized.dns_servers, "dns_servers", "ipv4-public", table, subs)
     sanitized.ntp_servers = _redact_ip_list(
-        sanitized.ntp_servers, "ntp_servers", "ipv4-public", table, subs)
+        sanitized.ntp_servers, "ntp_servers", "ipv4-public", table, subs,
+        redactor=table.redact_host)
     sanitized.syslog_servers = _redact_ip_list(
-        sanitized.syslog_servers, "syslog_servers", "ipv4-public", table, subs)
+        sanitized.syslog_servers, "syslog_servers", "ipv4-public", table, subs,
+        redactor=table.redact_host)
 
     # ---- interfaces ----
     for i, iface in enumerate(sanitized.interfaces):
@@ -495,12 +522,13 @@ def sanitize_intent(
             ))
             sanitized.snmp.location = redacted_location
 
-        # R-16 / CF-04: SNMP trap-target hosts.  Public IPv4 → docs
-        # range; private / loopback / hostname forms preserved (same
-        # policy as every other IP field).
+        # R-16 / CF-04: SNMP trap-target hosts.  Public IPv4/IPv6 → docs
+        # range; private / loopback preserved.  A trap target written as an
+        # FQDN re-leaks the org domain, so route through ``redact_host``
+        # (65f9c01 #20) — bare single labels still pass through.
         new_traps: list[str] = []
         for j, host in enumerate(sanitized.snmp.trap_hosts):
-            new_host = table.redact_ip_string(host)
+            new_host = table.redact_host(host)
             if new_host != host:
                 subs.append(Substitution(
                     category="ipv4-public",
@@ -555,10 +583,11 @@ def sanitize_intent(
     # ---- RADIUS server host + shared secret (field name: ``key``) ----
     for i, server in enumerate(sanitized.radius_servers):
         # R-16 / CF-04: the RADIUS server address is network-
-        # identifying.  Public IPv4 → docs range; private / hostname
-        # preserved (same IP policy as everywhere else).
+        # identifying.  Public IPv4/IPv6 → docs range; private preserved.
+        # An FQDN target re-leaks the org domain, so route through
+        # ``redact_host`` (65f9c01 #20) — bare single labels pass through.
         if server.host:
-            new_host = table.redact_ip_string(server.host)
+            new_host = table.redact_host(server.host)
             if new_host != server.host:
                 subs.append(Substitution(
                     category="ipv4-public",
@@ -853,6 +882,10 @@ class _SubstitutionTable:
         # name maps above.
         self._route_targets: dict[str, str] = {}
         self._mcast_groups: dict[str, str] = {}
+        # DNS-name host fields (NTP / syslog / SNMP-trap / RADIUS targets
+        # written as FQDNs) re-leak the org domain.  Map each distinct
+        # name to a stable opaque placeholder so cross-references survive.
+        self._host_names: dict[str, str] = {}
 
     def redact_hostname(self, name: str) -> str:
         if name not in self._hostnames:
@@ -957,6 +990,44 @@ class _SubstitutionTable:
         addr, sep, prefix = value.partition("/")
         new_addr = self.redact_ip_string(addr)
         return f"{new_addr}{sep}{prefix}" if sep else new_addr
+
+    def redact_host(self, value: str) -> str:
+        """Redact a host field that may be an IP *OR* a DNS name.
+
+        IP literals go through :meth:`redact_ip_string` (public → docs
+        range; private / loopback preserved) — unchanged behaviour.
+
+        A multi-label DNS name re-leaks the operator's domain: not just
+        ``syslog.corp.example.com`` (where the suffix is the org domain)
+        but also a bare registered domain like ``acme.com`` (where the
+        *first* label is the org).  Because the registered-domain boundary
+        can't be found reliably without a public-suffix list, the whole
+        name is mapped to a stable opaque placeholder
+        (``host-N.example.test``) — same name → same placeholder across the
+        config, so cross-references survive.  This deliberately also
+        redacts public service names (``pool.ntp.org``): a sanitised config
+        is for sharing, and over-redacting a public pool is harmless.
+
+        A bare single label (``localhost`` / ``nms`` — no dot, no domain to
+        leak) and any non-host free text are returned unchanged.
+        """
+        try:
+            ipaddress.IPv4Address(value)
+            return self.redact_ipv4(value)
+        except ValueError:
+            pass
+        try:
+            ipaddress.IPv6Address(value)
+            return self.redact_ipv6(value)
+        except ValueError:
+            pass
+        if "." in value and _HOSTNAME_RE.match(value):
+            if value not in self._host_names:
+                self._host_names[value] = (
+                    f"host-{len(self._host_names) + 1}.example.test"
+                )
+            return self._host_names[value]
+        return value
 
     def redact_route_target(self, value: str) -> str:
         """Cross-reference-stable RD / route-target redaction.
@@ -1134,11 +1205,20 @@ def _redact_ip_list(
     category: str,
     table: _SubstitutionTable,
     subs: list[Substitution],
+    *,
+    redactor: Callable[[str], str] | None = None,
 ) -> list[str]:
-    """Redact a list of IP-string entries; record substitutions inline."""
+    """Redact a list of host-string entries; record substitutions inline.
+
+    *redactor* defaults to :meth:`_SubstitutionTable.redact_ip_string`
+    (IP-only — VTEP flood-list, DNS resolvers).  Pass
+    :meth:`_SubstitutionTable.redact_host` for fields that legitimately
+    hold FQDNs (NTP / syslog targets) so a DNS-name entry is redacted too.
+    """
+    fn = redactor or table.redact_ip_string
     out: list[str] = []
     for j, ip in enumerate(values):
-        new_ip = table.redact_ip_string(ip)
+        new_ip = fn(ip)
         if new_ip != ip:
             subs.append(Substitution(
                 category=category,

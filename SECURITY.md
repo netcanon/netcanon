@@ -380,7 +380,7 @@ on the canonical model:
 | SNMP contact / location (operator PII) | `<contact redacted>` / `<location redacted>` |
 | SNMPv3 auth/priv passphrases | `REDACTED-AUTH-N` / `REDACTED-PRIV-N` |
 | RADIUS shared secrets | `REDACTED-RADIUS-N` |
-| RADIUS server / SNMP trap-target / DHCP gateway+range+subnet hosts (public IPv4 / IPv6) | RFC 5737 / RFC 3849 docs ranges |
+| RADIUS / SNMP-trap / NTP / syslog / DHCP gateway+range+subnet hosts (public IPv4 / IPv6) | RFC 5737 / RFC 3849 docs ranges; an FQDN NTP / syslog / trap / RADIUS target → `host-N.example.test` (bare single label preserved) |
 | VLAN-SVI IPv4 addresses (public) | RFC 5737 docs ranges |
 | VRRP / CARP / HSRP authentication keys | `<scheme>:REDACTED-VRRP-AUTH-N` (scheme prefix preserved, secret value redacted) |
 | VRRP / CARP virtual IPs (public, v4 + v6) | RFC 5737 / RFC 3849 docs ranges |
@@ -395,9 +395,9 @@ gets the same redacted value all 5 times).  `--dry-run` prints the
 substitution table for operator review before writing output.
 
 Known limitations are listed in
-[`BUG_REPORTING.md`](BUG_REPORTING.md) — IP-typed redaction now covers
-both IPv4 and IPv6, but host fields given as DNS names (a RADIUS / trap
-target like `nms.corp.example`) still pass through, and banner / comment
+[`BUG_REPORTING.md`](BUG_REPORTING.md) — IP-typed redaction covers both
+IPv4 and IPv6, FQDN-form NTP / syslog / SNMP-trap / RADIUS host targets
+are redacted to a `host-N.example.test` placeholder, and banner / comment
 text is parse-and-ignored rather than redacted.
 
 ---
@@ -617,7 +617,7 @@ regulated environments.
 | Key loss (keyring entry deleted / env var unset on restart / `.fernet_key` deleted) | Encrypted profiles become unreadable | Accepted | User must re-enter credentials; profiles are low-volume.  Operators using tier 1 / tier 3 should back the key up alongside their other infrastructure secrets |
 | SSH host-key trust-on-first-use | A MITM present on the **first** connect to a given device is trusted + pinned (the classic TOFU window) | Yes (TOFU is the default, v0.4.5+) | Default `ssh_host_key_checking=tofu`: the first key seen per device is pinned under `{data_dir}/known_hosts` and a later **changed** key is rejected (`BadHostKeyException`) — on both collectors (Paramiko inline; Netmiko via an auth-less `verify_host_key` pre-flight that reads + pins/rejects before Netmiko connects `ssh_strict`).  Eliminate the first-connect window with `reject` + a pre-seeded store.  `auto_add` (legacy trust-anything, no pinning) remains an opt-out and warns at startup.  A legitimately re-keyed device needs its line cleared from the store before the next backup. |
 | Banner / comment text not sanitised | Operator-submitted bug reports may leak banner content | Documented | Sanitiser is canonical-model-driven; banner text is parse-and-ignored.  See `BUG_REPORTING.md`; hand-redact banners before submission. |
-| DNS-name host fields not redacted | A RADIUS / SNMP-trap / NTP target given as a DNS name (`nms.corp.example`) passes through verbatim | Documented | IP-typed redaction covers IPv4 + IPv6 literals (v0.4.1); name-form hosts are free text the model does not classify.  Hand-redact named targets before submission. |
+| DNS-name in an UNMODELLED host region | An FQDN inside a Tier-3 / banner / comment region the canonical model doesn't type as a host passes through verbatim | Documented (narrowed) | The modelled host fields (NTP / syslog / SNMP-trap / RADIUS) now redact an FQDN target to `host-N.example.test`; only hosts the model can't see (Tier-3 / banner text, itself parse-and-ignored) remain.  Hand-redact those before submission. |
 | Backup artifacts (`configs/`) stored plaintext | Fetched device configs contain device secrets (`$9$`/type-7/`$6$`, SNMP/RADIUS/IKE) written verbatim | Yes (deliberate) | A backup must be the real, complete, diffable config; recommended at-rest control is an OS-encrypted volume (covers `configs/` + the key in one layer; offline-threat only).  See "Credential Storage → Backup artifacts" |
 | Backup-engine resource exhaustion (many concurrent jobs) | The per-job worker pool caps a *single* job at `MAX_BACKUP_CONCURRENCY` (10), but several schedules firing together — or a schedule firing during a manual run — each spin up their own pool, so the total SSH/NETCONF session count was unbounded (N jobs x per-job cap), able to exhaust threads / file descriptors on the backup host | No (mitigated) | A process-wide `BoundedSemaphore` (`netcanon/services/backup_runner.py`) caps the *sum* of in-flight device collections across all concurrent jobs at `MAX_GLOBAL_BACKUP_CONCURRENCY` (defaults to the per-job cap, so single-job behaviour is unchanged); an over-limit worker blocks (back-pressure) until a slot frees, never failing.  Raise via `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`.  The 500-device per-request cap + opt-in egress allow-list bound the surface further.  (blind audit `3ec11f3`, r7) |
 

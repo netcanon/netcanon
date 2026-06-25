@@ -36,9 +36,19 @@ timestamp if your timezone matters for an audit.
   redacted to an RFC 5737 / RFC 3849 documentation range with the prefix
   length preserved (via the existing `redact_cidr`); the default route
   (`0.0.0.0/0`) and private aggregates are preserved. Found by an
-  independent blind audit (`65f9c01`, #20). (The companion DNS-name host
-  re-leak the same finding notes remains a documented sanitiser
-  limitation -- host fields written as FQDNs still pass through.)
+  independent blind audit (`65f9c01`, #20).
+* **DNS-name host fields no longer re-leak the org domain.** NTP /
+  syslog / SNMP-trap / RADIUS targets written as FQDNs
+  (`syslog.corp.example.com`, or a bare registered domain `acme.com`)
+  passed through `netcanon sanitize` verbatim -- the IP-typed redaction
+  only caught literal addresses -- so the operator's domain re-leaked
+  into a shared config. Such fields now redact to a stable
+  `host-N.example.test` placeholder (the WHOLE name, since the
+  registered-domain boundary can't be found reliably without a
+  public-suffix list); IP entries are unchanged and a bare single label
+  (`localhost`) is preserved. This deliberately also redacts public
+  service names (`pool.ntp.org`) -- harmless for a config meant for
+  sharing. Completes the second half of audit `65f9c01` #20.
 * **Anycast / VARP virtual-gateway address no longer leaks through the
   sanitizer.** `CanonicalIPv4Address` / `CanonicalIPv6Address.virtual_gateway_address`
   -- the anycast gateway IP rendered verbatim by Arista (`ip address
