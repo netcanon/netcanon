@@ -120,6 +120,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Per-port voice VLAN (`switchport voice vlan N`) is no longer
+  silently dropped at parse.** `cisco_iosxe_cli` *rendered* the line but
+  never *parsed* it, so a real Cisco config's voice binding parsed to
+  `None` and round-tripped away while self-validation reported
+  `severity: ok` -- voice-vlan was undeclared in the capability matrix and
+  rode the `classify()` 'supported' default (the silent-loss class). The
+  parser now captures it (`_SWITCHPORT_VOICE_RE`) so voice-vlan fully
+  round-trips same-vendor, and the surface is declared explicitly across
+  the mesh: `supported` on `cisco_iosxe_cli`, `unsupported` on every codec
+  that drops it on render (`cisco_nxos`, `arista_eos`, `juniper_junos`,
+  `aruba_aoss`, `aruba_aoscx` -- the other six already declared it) so a
+  now-parseable binding can't relocate the silent loss to a target. A new
+  registry-wide guard fails CI if any codec leaves voice-vlan at the
+  silent default. Cross-mesh + phase4 snapshots regenerated (CODEC_BUG
+  flat at 5). Found by an independent blind audit (`65f9c01`, #11).
 * **FortiGate hardware-switch members no longer remap silently across
   vendors.** On small appliances (40F/60F/80F) `internal1`-`internalN`
   and `lanN` are switched ports of the `internal` / `lan` L2 fabric, but

@@ -277,6 +277,14 @@ class JunosCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/voice-vlan",
+                reason=(
+                    "This codec does not model Junos voice VLAN (VoIP / "
+                    "ELS VLAN membership); dropped on render (blind-audit "
+                    "65f9c01 #11)."
+                ),
+            ),
+            UnsupportedPath(
                 path="/routing/static-route/interface",
                 reason=(
                     "Render emits ``next-hop <gateway>`` only; a gateway-less "

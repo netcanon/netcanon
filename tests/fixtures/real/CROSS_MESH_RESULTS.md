@@ -8785,7 +8785,7 @@ One section per non-OK synthetic cell (133 total).  Sections are ordered by sour
 |---|---|---|---|---|
 | dns_servers | DRIFT | ["198.51.100.53", "198.51.100.54", "2001:db8:53::1"] | [] | all 3 dns_servers dropped |
 | ntp_servers | DRIFT | ["198.51.100.123", "198.51.100.124"] | [] | all 2 ntp_servers dropped |
-| interfaces | DRIFT | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"i... | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"i... | {"interfaces[2] {'name': 'GigabitEthernet0/0/1'}": {"access_vlan": {"source": 10, "target": null}, "switchport_mode": {"source": "access", "target": null}}, "interfaces[4] {'name': 'Port-channel1'}... |
+| interfaces | DRIFT | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"i... | [{"name": "GigabitEthernet0", "default_name": "", "description": "Out-of-band management interface", "enabled": true, "interface_type": "ianaift:ethernetCsmacd", "mtu": null, "ipv4_addresses": [{"i... | {"interfaces[2] {'name': 'GigabitEthernet0/0/1'}": {"access_vlan": {"source": 10, "target": null}, "switchport_mode": {"source": "access", "target": null}, "voice_vlan": {"source": 30, "target": nu... |
 | vlans | DRIFT | [{"id": 10, "name": "USERS", "description": "", "tagged_ports": [], "untagged_ports": ["GigabitEthernet0/0/1", "Port-channel1", "TenGigabitEthernet1/0/1", "TenGigabitEthernet1/0/2"], "ipv4_addresse... | [] | all 4 vlans dropped |
 | dhcp_servers | DRIFT | [{"interface": "", "network": "192.168.10.0/24", "start_ip": "", "end_ip": "", "gateway": "192.168.10.1", "dns_servers": ["198.51.100.53", "198.51.100.54"], "lease_time": 604800, "domain_name": "co... | [] | all 2 dhcp_servers dropped |
 | snmp | DRIFT | {"community": "publicRO", "location": "Lab-A Rack 12 Unit 4", "contact": "noc@kitchensink.example.com", "trap_hosts": ["198.51.100.250", "198.51.100.251"], "v3_users": [{"name": "monitor1", "group"... |  | snmp: {'community': 'publicRO', 'location': 'Lab-A Rack 12 Unit 4', 'contact': 'noc@kitchensink.example.com', 'trap_hosts': ['198.51.100.250', '198.51.100.251'], 'v3_users': [{'name': 'monitor1', '... |
@@ -9786,7 +9786,7 @@ One section per non-OK synthetic cell (133 total).  Sections are ordered by sour
 Traceback (most recent call last):
   File "tools\run_full_mesh.py", line 665, in process_cell
     rendered = target_codec.render(canonical_source)
-  File "netcanon\migration\codecs\cisco_iosxe_cli\codec.py", line 360, in render
+  File "netcanon\migration\codecs\cisco_iosxe_cli\codec.py", line 401, in render
     return render_intent(tree)
   File "netcanon\migration\codecs\cisco_iosxe_cli\render.py", line 546, in render_intent
     dest, mask = _cidr_to_dest_mask(route.destination)
@@ -9829,7 +9829,7 @@ netcanon.migration.codecs.base.RenderError: cisco_iosxe_cli: prefix length 48 ou
 Traceback (most recent call last):
   File "tools\run_full_mesh.py", line 665, in process_cell
     rendered = target_codec.render(canonical_source)
-  File "netcanon\migration\codecs\fortigate_cli\codec.py", line 396, in render
+  File "netcanon\migration\codecs\fortigate_cli\codec.py", line 437, in render
     return render_intent(tree)
   File "netcanon\migration\codecs\fortigate_cli\render.py", line 948, in render_intent
     dst_mask = _prefix_to_mask(dst_prefix)
