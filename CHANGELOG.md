@@ -61,6 +61,19 @@ timestamp if your timezone matters for an audit.
   API output. No behavior change -- the security hole (ciphertext returned
   as plaintext + double-encryption) was fixed in #136; this is the
   contract/doc-accuracy residual (`3ec11f3`, T0-3).
+* **Global ceiling on concurrent backup collections.** The per-job worker
+  pool capped a single job at `MAX_BACKUP_CONCURRENCY` (10), but nothing
+  bounded the *number of jobs* in flight -- several schedules firing
+  together, or a schedule firing during a manual run, could open N pools'
+  worth of SSH/NETCONF sessions at once (N x 10) and exhaust threads / file
+  descriptors on the backup host. A process-wide `BoundedSemaphore`
+  (`netcanon.services.backup_runner`) now caps the *sum* of in-flight
+  collections across every concurrent job; an over-limit worker blocks
+  (back-pressure) until a slot frees, never failing -- the device just
+  stays `queued` until its turn. Defaults to `MAX_BACKUP_CONCURRENCY` so a
+  single job's behavior is unchanged; raise it via
+  `NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY`. Found by an independent blind
+  audit (`3ec11f3`, r7).
 
 ### Fixed
 

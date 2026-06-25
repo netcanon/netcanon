@@ -11,6 +11,7 @@ Pydantic-settings automatically reads ``.env`` files if present.
 
 from __future__ import annotations
 
+import os
 import warnings
 from pathlib import Path
 from typing import Literal
@@ -22,6 +23,47 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 #: to protect the SSH target devices (most vendors cap concurrent sessions
 #: between 5 and 16) and to bound thread count on the backup server.
 MAX_BACKUP_CONCURRENCY: int = 10
+
+
+def _resolve_global_backup_ceiling() -> int:
+    """Read the process-wide backup-collection ceiling from the environment.
+
+    Module-level (not a :class:`Settings` field) because the limiter it
+    sizes is a single *process-wide* object created once, independent of any
+    per-job ``Settings`` snapshot.  Reads ``NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY``,
+    falling back to :data:`MAX_BACKUP_CONCURRENCY` when unset or unparseable;
+    floored at 1.
+    """
+    raw = os.environ.get("NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY")
+    if raw is None:
+        return MAX_BACKUP_CONCURRENCY
+    try:
+        return max(1, int(raw))
+    except ValueError:
+        warnings.warn(
+            f"NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY={raw!r} is not an "
+            f"integer; falling back to {MAX_BACKUP_CONCURRENCY}",
+            stacklevel=2,
+        )
+        return MAX_BACKUP_CONCURRENCY
+
+
+#: Process-wide ceiling on the number of device collections in flight at
+#: once, summed across *all* concurrently-running backup jobs.  The per-job
+#: :data:`MAX_BACKUP_CONCURRENCY` cap only bounds a single job; nothing
+#: bounded the sum, so N simultaneous jobs (several schedules firing
+#: together, or a schedule firing during a manual run) could open N×cap
+#: SSH/NETCONF sessions and exhaust threads / file descriptors on the backup
+#: host (blind-audit 3ec11f3 r7).  A module-level ``BoundedSemaphore`` in
+#: :mod:`netcanon.services.backup_runner` enforces this ceiling: a worker
+#: that can't get a permit blocks (back-pressure) until one frees — never a
+#: failure, the device just stays ``queued`` until its turn.
+#:
+#: Defaults to :data:`MAX_BACKUP_CONCURRENCY` so a *single* job's behaviour
+#: is unchanged (it can still fill every worker slot) while the multi-job
+#: blow-up is capped.  Raise it for large deployments with capacity to spare
+#: via ``NETCANON_MAX_GLOBAL_BACKUP_CONCURRENCY``.
+MAX_GLOBAL_BACKUP_CONCURRENCY: int = _resolve_global_backup_ceiling()
 
 
 def _default_definitions_dir() -> Path:

@@ -52,11 +52,16 @@ route-module home):
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 
-from ..config import MAX_BACKUP_CONCURRENCY, Settings
+from ..config import (
+    MAX_BACKUP_CONCURRENCY,
+    MAX_GLOBAL_BACKUP_CONCURRENCY,
+    Settings,
+)
 from ..definitions.loader import DefinitionLoader
 from ..definitions.schema import DeviceDefinition
 from ..models.backup import BackupJob, BackupResult, JobStatus
@@ -70,6 +75,70 @@ from ..storage.device_profile_store import (
 from ..storage.job_store import FileJobStore
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Process-wide collection ceiling (blind-audit 3ec11f3 r7)
+# ---------------------------------------------------------------------------
+# The per-job ``ThreadPoolExecutor`` below bounds ONE job to ``max_workers``
+# (<= MAX_BACKUP_CONCURRENCY).  It does NOT bound the *number of jobs* in
+# flight: several schedules firing together — or a schedule firing during a
+# manual run — each spin up their own pool, so the total SSH/NETCONF session
+# count was unbounded (N jobs × cap → thread / file-descriptor exhaustion on
+# the backup host).  This module-level ``BoundedSemaphore`` caps the SUM of
+# in-flight device collections across every concurrent job; a worker that
+# can't get a permit blocks until one frees (back-pressure — the device just
+# stays ``queued`` until its turn, never a failure).
+_GLOBAL_LIMITER: threading.BoundedSemaphore | None = None
+_GLOBAL_LIMITER_LOCK = threading.Lock()
+
+
+def _global_collection_limiter() -> threading.BoundedSemaphore:
+    """Return the process-wide collection semaphore, building it once.
+
+    Sized from :data:`MAX_GLOBAL_BACKUP_CONCURRENCY`.  Lazily created (with a
+    double-checked lock) so the size can be monkeypatched before first use in
+    tests; :func:`reset_global_limiter` drops the cached instance so a later
+    call rebuilds at the patched size.
+    """
+    global _GLOBAL_LIMITER
+    if _GLOBAL_LIMITER is None:
+        with _GLOBAL_LIMITER_LOCK:
+            if _GLOBAL_LIMITER is None:
+                _GLOBAL_LIMITER = threading.BoundedSemaphore(
+                    MAX_GLOBAL_BACKUP_CONCURRENCY
+                )
+    return _GLOBAL_LIMITER
+
+
+def reset_global_limiter() -> None:
+    """Drop the cached process-wide limiter (test helper only).
+
+    The next :func:`_global_collection_limiter` call rebuilds it from the
+    current :data:`MAX_GLOBAL_BACKUP_CONCURRENCY`, letting a test set a small
+    ceiling and observe the back-pressure deterministically.
+    """
+    global _GLOBAL_LIMITER
+    with _GLOBAL_LIMITER_LOCK:
+        _GLOBAL_LIMITER = None
+
+
+def _process_one_device_limited(*args, **kwargs) -> None:
+    """Run :func:`_process_one_device` while holding one global permit.
+
+    The acquire is the cross-job ceiling (r7); the per-job pool's FIFO queue
+    is the in-job ceiling.  The permit is taken *before* the wrapped call
+    flips the result to ``running``, so a device waiting on a permit stays
+    ``queued`` (accurate UI state).  The ``with`` block releases on every
+    path — including the "should never happen" escape documented on
+    :func:`_process_one_device` — so a permit can't leak.
+
+    ``_process_one_device`` is referenced as a module global so test patches
+    of that name (the documented collection seam) are still honoured through
+    this wrapper.
+    """
+    with _global_collection_limiter():
+        _process_one_device(*args, **kwargs)
 
 
 def _process_one_device(
@@ -311,6 +380,11 @@ def run_backup_job(
     Device work is dispatched to a bounded ``ThreadPoolExecutor`` so up
     to *max_workers* devices are processed in parallel; additional
     devices wait in the executor's FIFO queue and start as slots free up.
+    A *second*, process-wide ceiling
+    (:data:`~netcanon.config.MAX_GLOBAL_BACKUP_CONCURRENCY`, enforced by the
+    module-level limiter inside :func:`_process_one_device_limited`) caps the
+    SUM of in-flight collections across *all* concurrent jobs, so N
+    simultaneous jobs can't open N×*max_workers* sessions at once (r7).
 
     Each device is processed independently; a failure on one device does
     not prevent others from running.  Job ``status`` becomes
@@ -381,24 +455,28 @@ def run_backup_job(
 
     if workers == 1:
         # Serial fast-path: single device, or deployment pinned to 1.
+        # Still gated by the process-wide limiter so a single-device job
+        # respects the global ceiling when other jobs are saturating it.
         for idx, device in enumerate(request.devices):
-            _process_one_device(
+            _process_one_device_limited(
                 job, idx, device, definitions, storage,
                 definition_loader, device_profiles, device_profile_store,
                 job_settings,
             )
     else:
         # Parallel path: up to `workers` devices in flight at once; the
-        # executor itself queues the rest and drains FIFO.
+        # executor itself queues the rest and drains FIFO.  The global
+        # limiter (inside _process_one_device_limited) caps the SUM of
+        # in-flight collections across this and every other live job.
         with ThreadPoolExecutor(
             max_workers=workers,
             thread_name_prefix=f"backup-{job.id[:8]}",
         ) as pool:
             futures = [
                 pool.submit(
-                    _process_one_device, job, idx, device, definitions, storage,
-                    definition_loader, device_profiles, device_profile_store,
-                    job_settings,
+                    _process_one_device_limited, job, idx, device, definitions,
+                    storage, definition_loader, device_profiles,
+                    device_profile_store, job_settings,
                 )
                 for idx, device in enumerate(request.devices)
             ]
