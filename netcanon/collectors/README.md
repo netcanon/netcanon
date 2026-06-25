@@ -52,7 +52,7 @@ Supported `netmiko_device_type` values (non-exhaustive):
 | Juniper Junos | `juniper_junos` |
 | Arista EOS | `arista_eos` |
 
-See [`../../definitions/README.md`](../../definitions/README.md) "Vendor-Specific Notes" for the full set of shipped device-definitions and their per-vendor authoring conventions.
+See [`../definitions/library/README.md`](../definitions/library/README.md) "Vendor-Specific Notes" for the full set of shipped device-definitions and their per-vendor authoring conventions.
 
 > **Why no `terminal length 0`?**  This command is unreliable on some IOS-XE
 > versions and was deliberately removed.  The space-injection approach
@@ -145,4 +145,4 @@ touching any transport layer.
 
 - [`../api/routes/README.md`](../api/routes/README.md) — HTTP routes (the backup route is the single mock point for `get_collector`)
 - [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — four-layer design (collectors are Layer 1 of the backup concern)
-- [`../../definitions/README.md`](../../definitions/README.md) — device-definition schema (the `connection` block selects which collector strategy runs)
+- [`../definitions/library/README.md`](../definitions/library/README.md) — device-definition schema (the `connection` block selects which collector strategy runs)

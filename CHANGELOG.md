@@ -114,6 +114,15 @@ timestamp if your timezone matters for an audit.
   list; the bare single-line form is byte-identical, so existing
   round-trips are unchanged. Found by an independent blind audit
   (`65f9c01`, T0-1).
+* **Stale top-level `definitions/` paths corrected across the onboarding
+  docs.** The v0.4.5 packaging move relocated the device-definition +
+  target-profile YAML tree to `netcanon/definitions/library/` (shipped in
+  the wheel), but ARCHITECTURE / AGENTS / CAPABILITIES, the glossary, the
+  target-profile / collector / definitions READMEs, three vendor pages and
+  the desktop dev-path table still pointed at the old repo-root
+  `definitions/` location -- several as broken markdown links. All updated
+  to the real paths (README was already correct); docs-only, no behaviour
+  change. Found by an independent blind audit (`65f9c01`, #17).
 * **Silent loss of VLAN SVI / management L3 addresses to router / firewall
   codecs.** A VLAN's SVI L3 carried on the VLAN record itself (the Junos
   `irb` / Aruba SVI-on-VLAN shape, folded onto

@@ -21,7 +21,7 @@ lives in [`../tests/fixtures/real/RESULTS.md`](../tests/fixtures/real/RESULTS.md
 
 Twelve migration codecs ship today, plus a `_mock` adapter used in
 tests.  Backup-side device definitions are listed under
-[`../definitions/`](../definitions/) (one YAML per vendor/OS family).
+[`../netcanon/definitions/library/`](../netcanon/definitions/library/) (one YAML per vendor/OS family).
 
 | Codec | Vendor | Wire format | Direction | Certainty |
 |---|---|---|---|---|
@@ -48,7 +48,7 @@ provisional**: their backup wiring is verified in code and against sample
 the `/definitions` Notes column flags each with a "NOT YET VALIDATED"
 warning.  (`VyOS` was provisional too until it was live-validated against a
 real VyOS rolling instance — backup run end-to-end — and graduated.)  See
-[`../definitions/README.md`](../definitions/README.md) for the
+[`../netcanon/definitions/library/README.md`](../netcanon/definitions/library/README.md) for the
 authoring guide and the live `/definitions` page in the running app
 for the per-vendor inventory.  RESULTS.md is the source of truth for
 current certification — this table summarises but does not gate.

@@ -118,13 +118,13 @@ by concern and listed alphabetically within each section.
   FastAPI app. Backup pulls raw configs from devices over
   SSH / NETCONF / REST; migration translates a stored backup between
   vendors via the canonical IR.
-- **Definitions** — vendor YAML files at `definitions/` describing
+- **Definitions** — vendor YAML files at `netcanon/definitions/library/` describing
   how to log into a given device class.
 - **get_collector** — the single mock-point for backup tests. Hard
   Rule: never patch `ConnectHandler` or `paramiko.SSHClient` directly;
   patch this factory instead.
 - **Target profile** — hardware-shape definition under
-  `definitions/target_profiles/<vendor>/<model>.yaml`. Drives port
+  `netcanon/definitions/library/target_profiles/<vendor>/<model>.yaml`. Drives port
   rename and VLAN/user fit-checks in the UI.
 - **MODULE_VARIANT_PROFILES** — allowlist (`tests/fixtures/module_variants.py`)
   of `{vendor}/{model}` keys whose target profiles ship `modules:`

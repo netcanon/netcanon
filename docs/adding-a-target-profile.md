@@ -12,7 +12,7 @@ file you can create and a test you can run.
 ## Why this doc exists
 
 Adding a target profile is mechanically simple — write a YAML file
-under `definitions/target_profiles/`, add a unit test, and the loader
+under `netcanon/definitions/library/target_profiles/`, add a unit test, and the loader
 picks it up on next start.  But the schema has two distinct shapes
 (legacy flat-ports vs module-variant chassis), the test conventions
 guard against copy-paste drift between sibling SKUs, and the
@@ -33,9 +33,9 @@ fit-check banner ("source has 52 interfaces; target has 50; 2 won't
 map"), and the VLAN / local-user fit-check banners.
 
 Target profiles are NOT backup-side device definitions — those live
-under `definitions/<vendor>/` and are consumed by the SSH / NETCONF /
+under `netcanon/definitions/library/<vendor>/` and are consumed by the SSH / NETCONF /
 REST collectors.  Target profiles are migration-side only and are
-loaded from `definitions/target_profiles/` by
+loaded from `netcanon/definitions/library/target_profiles/` by
 `netcanon/migration/target_profiles.py::load_profiles_dir`.
 
 ---
@@ -49,7 +49,7 @@ hardware.
 
 For fixed-port switches, firewalls, and routers — every port the
 device will ever have is listed directly under `ports:`.  Reference:
-[`definitions/target_profiles/aruba_2930f_48g.yaml`](../definitions/target_profiles/aruba_2930f_48g.yaml).
+[`netcanon/definitions/library/target_profiles/aruba_2930f_48g.yaml`](../netcanon/definitions/library/target_profiles/aruba_2930f_48g.yaml).
 
 ```yaml
 # Aruba 2930F-48G (JL260A)
@@ -77,7 +77,7 @@ rule (prefix-consistent ranges, integer end-points, `start <= end`).
 For chassis-style switches with swappable uplink modules — the
 chassis-fixed access ports go under `ports:`, and each
 swappable-module SKU goes under `modules:` keyed by SKU.  Reference:
-[`definitions/target_profiles/cisco_c9300_24ux.yaml`](../definitions/target_profiles/cisco_c9300_24ux.yaml).
+[`netcanon/definitions/library/target_profiles/cisco_c9300_24ux.yaml`](../netcanon/definitions/library/target_profiles/cisco_c9300_24ux.yaml).
 
 ```yaml
 vendor: cisco_iosxe
@@ -135,8 +135,8 @@ module-variant shape instead.
 
 ### 2. Create the YAML
 
-Path: `definitions/target_profiles/aruba_6300m_24g.yaml`.  The
-loader recursively globs `*.yaml` under `definitions/target_profiles/`,
+Path: `netcanon/definitions/library/target_profiles/aruba_6300m_24g.yaml`.  The
+loader recursively globs `*.yaml` under `netcanon/definitions/library/target_profiles/`,
 so file naming is conventional only — `vendor + model` inside the
 file is what uniquely identifies the profile.
 
@@ -332,7 +332,7 @@ for everything in that second list.
   wire-through example)
 * [`feature-parity-walkthrough.md`](feature-parity-walkthrough.md) —
   sibling cookbook for cross-platform feature work (web + desktop)
-* [`../definitions/README.md`](../definitions/README.md) — schema
+* [`../netcanon/definitions/library/README.md`](../netcanon/definitions/library/README.md) — schema
   reference for backup-side device definitions; target profiles
   share the same YAML-loader pattern
 * [`../netcanon/migration/target_profiles.py`](../netcanon/migration/target_profiles.py)

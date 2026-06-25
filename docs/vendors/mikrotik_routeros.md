@@ -169,7 +169,7 @@ Spans RouterOS 6.48.1, 6.48.6, and 7.18.2 — three OS versions.
   via VLAN-centric projection so cross-vendor port-list
   semantics work.
 - **Backup-side**: definition YAML lives at
-  [`../../definitions/mikrotik/`](../../definitions/mikrotik/);
+  [`../../netcanon/definitions/library/mikrotik/`](../../netcanon/definitions/library/mikrotik/);
   uses `cisco_more_paging: false`.
 
 ## See also

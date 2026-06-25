@@ -178,7 +178,7 @@ pipeline — they just aren't pinned by a fixture yet").
   targets cleanly; review-comment surfaces in the rendered output
   when targeting incompatible vendors.
 - **Backup-side**: definition YAML lives at
-  [`../../definitions/aruba/aos-s/16.x.yaml`](../../definitions/aruba/aos-s/16.x.yaml).
+  [`../../netcanon/definitions/library/aruba/aos-s/16.x.yaml`](../../netcanon/definitions/library/aruba/aos-s/16.x.yaml).
 
 ## See also
 
