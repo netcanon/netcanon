@@ -28,6 +28,15 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Developer docs no longer mislabel the bidirectional `cisco_iosxe_cli`
+  codec as "parse-only".** Three stale references -- the canonical
+  add-a-field worked example (`docs/adding-a-canonical-field.md`), the
+  feature-parity walkthrough, and a `CanonicalSNMPv3User` docstring -- called
+  the codec parse-only even though it is certified `direction = bidirectional`
+  and is a render target in seven cross-vendor fixtures, so a contributor
+  following the worked example would have skipped wiring the Cisco render
+  path. The 2026-05-21 docs-audit had corrected only the user-facing vendor
+  page. Found by an independent blind audit (`81d9740`, #8).
 * **Backup jobs no longer report a false `completed` (or hang at
   `running`) when a device has an unknown `type_key`.** A typo'd or renamed
   device type (ordinary operator data -- device profiles and schedules do

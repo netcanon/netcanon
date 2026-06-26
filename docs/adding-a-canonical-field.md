@@ -140,7 +140,12 @@ and in `tests/fixtures/real/RESULTS.md`.
 Render side mirrors parse.  Render only when the field is non-default
 to avoid emitting noise:
 
-**Cisco** (parse-only — no render side for this codec).
+**Cisco** (`cisco_iosxe_cli` — bidirectional; renders via an indented
+`out` line):
+```python
+if iface.mtu is not None:
+    out.append(f" mtu {iface.mtu}")
+```
 
 **OPNsense**:
 ```python
