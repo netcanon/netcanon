@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The sanitiser now redacts virtual / anycast MAC addresses.** The
+  anycast virtual-gateway MAC, the per-address virtual-gateway MAC (v4 +
+  v6), the per-group VRRP virtual MAC, and the system-wide
+  anycast-gateway MAC were rendered verbatim by the codecs but bypassed
+  every field-typed redaction, so a burned-in or operator-assigned MAC
+  (the OUI reveals the hardware vendor; the full address is
+  device-unique) leaked into a shared bug report. A new `redact_mac`
+  primitive maps each to a stable RFC 7042 documentation MAC
+  (`00:00:5e:00:53:NN`, separator style preserved); protocol-standard
+  VRRP / HSRP / GLBP / CARP virtual MACs and multicast / broadcast
+  addresses are preserved (they identify nothing). The sanitizer-
+  completeness partition guard moves the four MAC leaves from
+  `REDACTION_NOT_WIRED` to redacted. Found by an independent blind audit
+  (`f92e97a`, T0-3).
 * **Per-pane migration endpoints now set the `X-Netcanon-Job-Status`
   response header.** `/plan` and `/render` surfaced the job disposition
   (`completed` / `partial` / `failed`) in this header so an HTTP-only
