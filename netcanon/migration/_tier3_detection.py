@@ -54,6 +54,15 @@ _IOSXE_TIER3_HEADERS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^ip access-list (?:extended|standard)\s+\S+", re.MULTILINE),
     re.compile(r"^ipv6 access-list\s+\S+", re.MULTILINE),
     re.compile(r"^access-list\s+\d+\s+(?:permit|deny)\b.*$", re.MULTILINE),
+    # Indented interface-level ACL binding (`ip access-group BLOCK in`). The
+    # ACL *definition* above is column-0, but the per-interface *binding* is
+    # indented under `interface`, so it slipped past the column-0 anchors —
+    # and a config that lost an inbound/outbound packet filter validated
+    # `severity=ok` with no banner (worse: when the ACL definition lives
+    # off-box, NOTHING fired). Require `ip`/`ipv6` immediately before
+    # `access-group` so `ip igmp access-group` (a multicast join-filter) is
+    # excluded, plus a trailing `in`/`out` direction (blind audit 81d9740 T0-4).
+    re.compile(r"^\s+ip(?:v6)?\s+access-group\s+\S+\s+(?:in|out)\b", re.MULTILINE),
     re.compile(r"^ip nat\s+(?:inside|outside|pool)\b.*$", re.MULTILINE),
     re.compile(r"^class-map\b.*$", re.MULTILINE),
     re.compile(r"^policy-map\b.*$", re.MULTILINE),

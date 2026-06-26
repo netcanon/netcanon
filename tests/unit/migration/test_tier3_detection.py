@@ -99,6 +99,36 @@ class TestIOSXECLI:
         result = detect_tier3_sections_iosxe_cli(raw)
         assert result == ["access-list 10 permit 10.0.0.0 0.0.0.255"]
 
+    def test_interface_acl_binding_detected(self) -> None:
+        # The indented per-interface ACL binding is a dropped security control;
+        # it must surface so the "not translated" banner fires, even though the
+        # column-0 anchors (test_extended_acl) only see the definition (audit
+        # 81d9740 T0-4).
+        raw = (
+            "interface GigabitEthernet0/2\n"
+            " ip address 203.0.113.1 255.255.255.0\n"
+            " ip access-group BLOCK in\n"
+            " ipv6 access-group V6OUT out\n"
+            "!\n"
+        )
+        result = detect_tier3_sections_iosxe_cli(raw)
+        assert "ip access-group BLOCK in" in result
+        assert "ipv6 access-group V6OUT out" in result
+
+    def test_interface_acl_binding_off_box_def_still_surfaces(self) -> None:
+        # Worst case: ONLY the binding is in this config (the ACL definition
+        # lives off-box), so the column-0 definition banner never fires — the
+        # binding alone must still surface.
+        raw = "interface Gi0/2\n ip access-group BLOCK in\n!\n"
+        assert detect_tier3_sections_iosxe_cli(raw) == ["ip access-group BLOCK in"]
+
+    def test_igmp_access_group_not_flagged(self) -> None:
+        # `ip igmp access-group` is a multicast join-filter, not an ACL packet
+        # filter — `ip` is not immediately followed by `access-group`, so the
+        # binding pattern must NOT flag it (false-positive guard).
+        raw = "interface Gi0/3\n ip igmp access-group MCAST-FILTER\n!\n"
+        assert detect_tier3_sections_iosxe_cli(raw) == []
+
 
 # ---------------------------------------------------------------------------
 # FortiOS detector
@@ -361,6 +391,26 @@ class TestCodecWiring:
             s.startswith("route-map RM")
             for s in intent.dropped_tier3_sections
         )
+
+    def test_cisco_iosxe_cli_interface_acl_binding_surfaces(self) -> None:
+        # The audit's worst case (81d9740 T0-4): the ONLY ACL signal is the
+        # indented per-interface binding (the ACL definition lives off-box).
+        # Before the detector fix this produced an empty dropped_tier3_sections
+        # and a silent severity=ok migration; the binding must now surface so
+        # the "not translated" banner fires.
+        from netcanon.migration.codecs.cisco_iosxe_cli.codec import (
+            CiscoIOSXECLICodec,
+        )
+
+        raw = (
+            "hostname r1\n"
+            "interface GigabitEthernet0/2\n"
+            " ip address 203.0.113.1 255.255.255.0\n"
+            " ip access-group BLOCK in\n"
+            "!\n"
+        )
+        intent = CiscoIOSXECLICodec().parse(raw)
+        assert "ip access-group BLOCK in" in intent.dropped_tier3_sections
 
     def test_cisco_iosxe_netconf_populates_field_as_empty(self) -> None:
         from netcanon.migration.codecs.cisco_iosxe.codec import (

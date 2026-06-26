@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **An interface-bound ACL (`ip access-group ... in/out`) is no longer
+  dropped silently with no banner.** The IOS-XE Tier-3 detector matched only
+  column-0 ACL *definitions* (`^ip access-list ...`); the per-interface
+  *binding* is indented under `interface`, so a config that lost an
+  inbound/outbound packet filter surfaced nothing in the "detected but not
+  translated" banner -- and when the ACL definition lived off-box, nothing
+  fired at all. The detector now also matches the indented `ip`/`ipv6
+  access-group <name> in|out` binding (excluding `ip igmp access-group`, a
+  multicast join-filter) so the dropped security control is surfaced. Shared
+  by the codecs that reuse the IOS-XE detector (Arista EOS, Aruba AOS-S).
+  Found by an independent blind audit (`81d9740`, T0-4).
 * **Developer docs no longer mislabel the bidirectional `cisco_iosxe_cli`
   codec as "parse-only".** Three stale references -- the canonical
   add-a-field worked example (`docs/adding-a-canonical-field.md`), the
