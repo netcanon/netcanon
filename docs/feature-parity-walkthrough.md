@@ -49,9 +49,10 @@ suspicion.
    `parse.py` + `render.py` siblings), `juniper_junos/codec.py`,
    `mikrotik_routeros/codec.py` each grew parse rules that extract
    USM users from the wire format and render rules that emit them
-   back.  The `parse_only` Cisco IOS-XE CLI codec gained parse-only
-   coverage (it can read v3 user lines from a backup but doesn't
-   render them — see the codec's `direction` ClassVar).
+   back.  The bidirectional Cisco IOS-XE CLI codec gained SNMPv3
+   *parse* coverage — it reads v3 user lines from a backup but does not
+   yet render them, so the v3-user surface is parse-only on this codec
+   even though the codec itself is `direction = bidirectional`.
 3. **Capability declarations — non-supporting codecs.**
    `netcanon/migration/codecs/opnsense/codec.py` and
    `netcanon/migration/codecs/cisco_iosxe/codec.py` (the NETCONF

@@ -64,7 +64,9 @@ Schema extensions (wire-through in same commit as schema):
     — the SNMPv3 User-based Security Model surface.  Wired on every
     bidirectional codec that has a documented v3 grammar (Arista
     EOS, Aruba AOS-S, FortiGate, MikroTik RouterOS, Juniper Junos)
-    as well as the Cisco IOS-XE CLI parse-only codec.  OPNsense's
+    as well as the Cisco IOS-XE CLI codec, whose v3-user surface is
+    parse-only (parsed, not yet rendered) though the codec itself is
+    bidirectional.  OPNsense's
     SNMPv3 story is Tier-3 (raw ``snmpd.conf`` snippet) and not in
     scope; its capability matrix lists ``/snmp/v3-user`` as
     unsupported.  Rename surface (fifth per-pane category) lives
