@@ -45,6 +45,20 @@ timestamp if your timezone matters for an audit.
   The comment now documents the loopback default and warns that `0.0.0.0`
   should only be used behind an authenticating reverse proxy. Found by an
   independent blind audit (`f92e97a`, T0-4 residual).
+* **OPNsense no longer silently drops static routes.** The OPNsense
+  codec's `config.xml` renderer emits no `<staticroutes>` block, so a
+  translated static route dropped entirely on render -- yet
+  `/routing/static-route` was the one routing-codec base path left
+  undeclared in the capability matrix, so `classify()` defaulted it to
+  `supported` and `validate_against` reported `severity: ok` while the
+  whole route vanished. It is now declared `lossy` (warn) -- matching this
+  codec's cross-vendor expectation dispositions and the #175 SVI-total-
+  drop precedent -- so the loss surfaces as a warning instead of a silent
+  all-clear; operators re-add routes on the OPNsense target. Three
+  misleading sub-field reasons (which claimed "render emits destination +
+  next-hop only") were corrected, and a new registry-wide guard pins that
+  any codec rendering a plain gateway route to nothing must declare the
+  base path. Found by an independent blind audit (`f92e97a`, T0-1).
 
 ## [0.4.6] - 2026-06-25
 
