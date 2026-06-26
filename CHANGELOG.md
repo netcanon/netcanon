@@ -26,6 +26,21 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+* **Backup jobs no longer report a false `completed` (or hang at
+  `running`) when a device has an unknown `type_key`.** A typo'd or renamed
+  device type (ordinary operator data -- device profiles and schedules do
+  not validate it against the loaded definition library) hit a bare
+  `definitions[type_key]` dict subscript *outside* the per-device error
+  handler. The serial path let the `KeyError` strand the whole job at
+  `running`; the parallel path left the device `queued` so the terminal
+  logic counted zero failures and marked the job `completed` though the
+  device never ran. The lookup now resolves an unknown type to an honest
+  per-device `failed` result, and a terminal-time safety net forces any
+  still-non-terminal device to `failed` so "the device never ran" can never
+  read as success. Found by an independent blind audit (`81d9740`, T0-2).
+
 ## [0.4.7] - 2026-06-25
 
 ### Fixed
