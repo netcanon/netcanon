@@ -174,6 +174,37 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
+                    "/vlans/vlan/ipv4/address/ip): this codec renders no SVI "
+                    "from the VLAN record, so a secondary IP carried there is "
+                    "dropped with it. Declared lossy so validate_against "
+                    "surfaces the loss (blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
+                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
+                    "IP carried on the VLAN record drops with the unrendered "
+                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount, subsumed by the whole-SVI-L3 drop (see "
+                    "/vlans/vlan/ipv4/address/ip): the anycast virtual-gateway "
+                    "MAC carried on the VLAN record drops with the unrendered "
+                    "SVI. Declared lossy (blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "The SNMPv3 USM user round-trips but a per-user "

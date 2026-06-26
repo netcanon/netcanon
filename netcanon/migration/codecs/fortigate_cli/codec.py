@@ -267,6 +267,35 @@ class FortiGateCLICodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount: FortiOS models one IP per interface (cf. "
+                    "the unsupported interface-mount twin), so a secondary IP "
+                    "on a VLAN SVI is dropped — a whole-subnet reachability "
+                    "loss. Declared unsupported (blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount: FortiGate is a firewall/edge platform with "
+                    "no anycast-gateway fabric primitive (cf. the unsupported "
+                    "interface-mount twin), so an anycast virtual-gateway IP on "
+                    "a VLAN SVI cannot be modelled. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount: FortiOS has no anycast/VARP virtual-MAC "
+                    "surface (see the unsupported system-wide "
+                    "/anycast-gateway-mac), so a per-address virtual-gateway "
+                    "MAC on a VLAN SVI is dropped. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/secondary-ip",
                 reason=(
                     "Render emits one IPv4 address per interface; "

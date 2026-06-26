@@ -157,6 +157,17 @@ class ArubaAOSSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount: AOS-S renders the SVI L3 from the VLAN "
+                    "record as co-equal `ip address X/N` lines (no secondary-IP "
+                    "grammar), so the is_secondary flag drops while the address "
+                    "value round-trips. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
@@ -239,6 +250,26 @@ class ArubaAOSSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount: AOS-S is a campus L2/L3 codec with no "
+                    "anycast-gateway / VARP grammar (cf. the interface-mount "
+                    "twin + system-wide /anycast-gateway-mac, both "
+                    "unsupported), so an anycast virtual-gateway IP on a VLAN "
+                    "SVI cannot be modelled at all. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount: AOS-S has no anycast-gateway MAC grammar "
+                    "(see the unsupported /anycast-gateway-mac), so a per-"
+                    "address virtual-gateway MAC on a VLAN SVI is dropped. "
+                    "Declared unsupported (blind-audit f92e97a T0-2)."
+                ),
+            ),
             UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(

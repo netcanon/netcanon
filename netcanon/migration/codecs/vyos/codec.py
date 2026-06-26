@@ -292,6 +292,35 @@ class VyOSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount: VyOS models 802.1Q only as `vif` sub-"
+                    "interfaces and render never emits VLAN-record L3, so a "
+                    "secondary IP on a VLAN SVI is dropped with the whole VLAN "
+                    "L3 surface. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount: VyOS has no anycast-gateway / VARP grammar "
+                    "(cf. the unsupported interface-mount twin) and renders no "
+                    "VLAN-record L3, so an anycast virtual-gateway IP on a VLAN "
+                    "SVI is dropped. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount: VyOS has no anycast/VARP virtual-MAC "
+                    "grammar and renders no VLAN-record L3, so a per-address "
+                    "virtual-gateway MAC on a VLAN SVI is dropped. Declared "
+                    "unsupported (blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(
                     "VyOS has no anycast-gateway / VARP grammar; render "

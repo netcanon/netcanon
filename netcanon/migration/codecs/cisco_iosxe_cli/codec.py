@@ -154,6 +154,31 @@ class CiscoIOSXECLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount render gap: the synthesized `interface "
+                    "Vlan<N>` (synthesize_svis_from_vlan_l3) carries only "
+                    "ip+prefix_length, so an anycast virtual-gateway IP on a "
+                    "VLAN-record address is stripped before the anycast-mode "
+                    "emit fires — even the vga==ip SD-Access partial that "
+                    "round-trips on the interface mount. The secondary-IP flag "
+                    "DOES survive (positional ` secondary` token) so it stays "
+                    "supported. Declared lossy (blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount render gap: the synthesized SVI carries "
+                    "only ip+prefix_length, and IOS-XE has no per-SVI virtual-"
+                    "MAC line (the chassis-wide anycast MAC rides "
+                    "/anycast-gateway-mac). Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(
                     "SD-Access anycast (virtual_gateway_address == the "

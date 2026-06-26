@@ -141,6 +141,40 @@ class AristaEOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount render gap: this codec renders a VLAN's L3 "
+                    "by synthesizing an `interface Vlan<N>` "
+                    "(synthesize_svis_from_vlan_l3), which copies only "
+                    "ip+prefix_length, so the is_secondary flag on a VLAN-"
+                    "record address is dropped. The SVI L3 itself round-trips, "
+                    "so declared lossy (blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount render gap: the synthesized `interface "
+                    "Vlan<N>` carries only ip+prefix_length, so an anycast/VARP "
+                    "virtual-gateway IP on a VLAN-record address never reaches "
+                    "the `ip address virtual` emit. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount render gap: the synthesized SVI carries "
+                    "only ip+prefix_length, and EOS has no per-IP virtual-MAC "
+                    "grammar anyway (only the system-wide `ip virtual-router "
+                    "mac-address` rides /anycast-gateway-mac). Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "
