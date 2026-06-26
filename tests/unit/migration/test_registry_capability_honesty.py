@@ -277,6 +277,14 @@ _NAMING_INDEPENDENT_DROP_FIELDS: dict[str, tuple[str, ...]] = {
     "dhcp_servers": ("/dhcp-servers/pool",),
     "radius_servers": ("/radius-servers/server/host", "/radius-servers/server/key"),
     "routing_instances": ("/routing-instances/instance", "/routing-instances/instance/name"),
+    # NB: `static_routes` is intentionally absent here even though its base
+    # path IS naming-independent: the shared `_maximal_intent` route carries a
+    # VRF binding, and codecs that declare `/routing/static-route/vrf`
+    # unsupported (aruba_aoscx et al.) drop that whole VRF-bound route while
+    # still rendering plain routes — a declared sub-field drop this base-path
+    # check would mis-attribute.  The whole-route silent-drop gap (audit
+    # f92e97a T0-1, opnsense) is instead pinned by
+    # `test_whole_static_route_drop_is_declared` with a PLAIN gateway route.
     # NB: `vlans` is intentionally absent.  Its drop is codec-specific, not a
     # clean universal pattern: SP-router codecs (cisco_iosxr) model VLANs as
     # dot1q sub-interface encapsulation rather than a standalone VLAN DB, so a
@@ -673,3 +681,41 @@ def test_connected_route_loss_blocks_on_vanishing_codecs(name: str):
         u.path for u in report.unsupported_paths
     }
     assert report.severity == "block" and report.compatible is False
+
+
+@pytest.mark.parametrize("name", _CODEC_NAMES)
+def test_whole_static_route_drop_is_declared(name: str):
+    """A codec that renders a PLAIN gateway static route to nothing — the whole
+    route vanishes — must declare ``/routing/static-route`` lossy/unsupported,
+    else validate_against reports ``severity: ok`` while the route is silently
+    discarded.
+
+    A plain destination+next-hop route (NO VRF, interface-nexthop, metric, or
+    description) is unambiguous: every codec with a static-route render path
+    round-trips it, so a total drop means the codec has no render path at all
+    — opnsense's ``config.xml`` emits no ``<staticroutes>`` block.  This was
+    the f92e97a audit's T0-1: opnsense left the BASE path undeclared, so
+    classify() defaulted it to ``supported`` and a whole gateway route vanished
+    silently.
+
+    Sub-fields are deliberately omitted so a declared sub-field drop (e.g. the
+    VRF binding, which aruba_aoscx drops by dropping the whole VRF-bound route
+    while still rendering plain routes) is never mis-attributed to the base
+    path — see the note on ``_NAMING_INDEPENDENT_DROP_FIELDS``."""
+    codec = get_codec(name)
+    caps = codec.capabilities
+    declared = {u.path for u in caps.unsupported} | {lp.path for lp in caps.lossy}
+    if "/routing/static-route" in declared:
+        return  # honestly declared (lossy or unsupported) — loss surfaces
+    tree = CanonicalIntent(
+        hostname="r1",
+        static_routes=[CanonicalStaticRoute(destination="10.9.0.0/24",
+                                            gateway="10.0.0.2")],
+    )
+    rp = codec.parse(codec.render(tree))
+    assert rp.static_routes, (
+        f"{name}: renders a plain gateway static route to nothing yet declares "
+        f"/routing/static-route neither lossy nor unsupported — "
+        f"validate_against reports 'supported' while the route silently "
+        f"vanishes (audit f92e97a T0-1). Add a LossyPath/UnsupportedPath."
+    )

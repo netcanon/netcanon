@@ -190,18 +190,44 @@ class OPNsenseCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                # Base static-route path.  Previously UNDECLARED — so
+                # classify() defaulted it to ``supported`` and a whole
+                # gateway route rendered to nothing while validate_against
+                # reported ``severity: ok`` (audit f92e97a T0-1).  OPNsense's
+                # config.xml renderer emits no <staticroutes>/<route> block at
+                # all (see render.py), so the ENTIRE route — destination +
+                # next-hop — drops on render.  Declared lossy (warn, matching
+                # the cross_vendor_expectations dispositions for this codec)
+                # so the loss surfaces instead of reporting ok; operators
+                # re-add routes on the OPNsense target.  (Interface-only
+                # connected routes are the harder loss and stay unsupported /
+                # block below.)
+                path="/routing/static-route",
+                reason=(
+                    "OPNsense's config.xml renderer emits no "
+                    "<staticroutes>/<route> block, so the entire static route "
+                    "(destination + next-hop) is dropped on render. Declared "
+                    "lossy so validate_against surfaces the loss instead of "
+                    "reporting severity:ok (audit f92e97a T0-1)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
-                    "Render emits destination + next-hop only; the static-"
-                    "route administrative distance (metric) is dropped (run3)."
+                    "Subsumed by the whole-route drop (see "
+                    "/routing/static-route): no <staticroutes> block is "
+                    "rendered, so the administrative distance (metric) is "
+                    "dropped with the route (audit f92e97a T0-1)."
                 ),
                 severity="warn",
             ),
             LossyPath(
                 path="/routing/static-route/description",
                 reason=(
-                    "Render emits destination + next-hop only; the static-"
-                    "route name / description is dropped (run3)."
+                    "Subsumed by the whole-route drop (see "
+                    "/routing/static-route): the route name / description is "
+                    "dropped with the unrendered route (audit f92e97a T0-1)."
                 ),
                 severity="warn",
             ),
@@ -247,9 +273,12 @@ class OPNsenseCodec(CodecBase):
             UnsupportedPath(
                 path="/routing/static-route/interface",
                 reason=(
-                    "Render emits gateway-based routes only; a gateway-less "
-                    "/ interface-only (connected) static route is dropped "
-                    "(run3)."
+                    "No <staticroutes> block is rendered (see "
+                    "/routing/static-route), so an interface-only (connected) "
+                    "static route — which has no gateway to fall back on — is "
+                    "dropped entirely. Declared unsupported (block) to surface "
+                    "the connected-route reachability loss as harder than a "
+                    "gateway route's lossy drop (audit f92e97a T0-1)."
                 ),
             ),
             UnsupportedPath(
