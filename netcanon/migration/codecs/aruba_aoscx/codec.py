@@ -308,13 +308,18 @@ class ArubaAOSCXCodec(CodecBase):
             LossyPath(
                 path="/snmp/v3-user/auth-passphrase",
                 reason=(
-                    "AOS-CX SNMPv3 auth/priv keys are `ciphertext` blobs "
-                    "encrypted with the device key (portable same-device "
-                    "only).  Cross-vendor / cross-device migration emits "
-                    "the blob verbatim under `ciphertext`, but the operator "
-                    "must re-key the SNMPv3 user on the target; the "
+                    "AOS-CX renders SNMPv3 with SHA-1 auth and AES-128 priv "
+                    "ONLY: a stronger source algorithm (SHA-224/256/384/512 "
+                    "auth, or AES-192/256 / 3DES priv) is silently DOWNGRADED "
+                    "to fit the target's grammar -- verify the resulting "
+                    "security level is acceptable, this is a cryptographic "
+                    "downgrade, not just a re-key.  The auth/priv keys are "
+                    "also `ciphertext` blobs encrypted with the device key "
+                    "(portable same-device only), so cross-vendor / cross-"
+                    "device migration emits the blob verbatim and the "
+                    "operator must RE-KEY the SNMPv3 user on the target (the "
                     "`plaintext` key form is normalised to `ciphertext` on "
-                    "render."
+                    "render)."
                 ),
                 severity="warn",
             ),

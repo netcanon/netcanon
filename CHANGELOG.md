@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The SNMPv3 lossy warning now names the cryptographic downgrade, not just
+  a "re-key".** AOS-CX renders SNMPv3 with SHA-1 auth and AES-128 priv only,
+  so a stronger source algorithm (e.g. SHA-256, AES-256) is silently
+  downgraded on render -- but the operator-facing lossy reason on the
+  `/snmp/v3-user/auth-passphrase` path only mentioned re-keying the
+  ciphertext, mislabelling a security downgrade as routine. The reason now
+  states the SHA-1 / AES-128 ceiling and that this is a cryptographic
+  downgrade. (Full per-codec surfacing of the unwalked `auth-protocol` /
+  `priv-protocol` / `priv-passphrase` leaves -- incl. the mikrotik 3DES->DES
+  and fortigate 3DES->AES priv substitutions -- remains the tracked
+  walk-expansion follow-up.) Found by an independent blind audit
+  (`81d9740`, T0-3).
 * **An interface-bound ACL (`ip access-group ... in/out`) is no longer
   dropped silently with no banner.** The IOS-XE Tier-3 detector matched only
   column-0 ACL *definitions* (`^ip access-list ...`); the per-interface

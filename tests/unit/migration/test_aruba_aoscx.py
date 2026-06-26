@@ -603,6 +603,24 @@ def test_matrix_lossy(codec: ArubaAOSCXCodec, path: str) -> None:
     assert codec.capabilities.classify(path) == "lossy"
 
 
+def test_snmpv3_auth_passphrase_reason_names_the_downgrade(
+    codec: ArubaAOSCXCodec,
+) -> None:
+    # Audit 81d9740 T0-3: AOS-CX collapses SNMPv3 auth -> SHA-1 and priv ->
+    # AES-128. The operator-facing lossy reason on the (walked) auth-passphrase
+    # path must NAME that cryptographic downgrade, not merely a re-key, so a
+    # security downgrade is never mislabelled as routine. (The mikrotik/
+    # fortigate priv-side substitutions live on the unwalked priv-protocol /
+    # priv-passphrase leaves — the tracked PR-2 walk-expansion.)
+    reason = next(
+        lp.reason for lp in codec.capabilities.lossy
+        if lp.path == "/snmp/v3-user/auth-passphrase"
+    ).lower()
+    assert "downgrad" in reason
+    assert "sha-1" in reason
+    assert "aes-128" in reason
+
+
 @pytest.mark.parametrize("path", [
     "/snmp/trap-host",
     "/vxlan-vnis/l2vni-route-target",
