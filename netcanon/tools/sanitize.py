@@ -82,6 +82,12 @@ Field-typed rules (counter-per-session):
 * ``CanonicalStaticRoute.gateway`` (public) → docs range
 * ``CanonicalStaticRoute.destination`` (public destination CIDR) → docs
   range, prefix length preserved
+* VRF / routing-instance names (``CanonicalRoutingInstance.name``,
+  ``CanonicalInterface.vrf``, ``CanonicalStaticRoute.vrf``,
+  ``CanonicalEvpnType5Route.vrf``) → ``vrf-N`` — a VRF name can encode
+  customer / tenant identity (``Tenant_A``); cross-reference-stable so the
+  routing-instance definition and every ``vrf <name>`` reference rename
+  together (same risk class as a VLAN name)
 * ``CanonicalIntent.dropped_tier3_sections`` → stripped entirely
   (Tier-3 carry-through may contain anything; never share)
 
@@ -306,6 +312,16 @@ def sanitize_intent(
                 redacted=redacted_desc,
             ))
             iface.description = redacted_desc
+
+        if iface.vrf:
+            new_vrf = table.redact_vrf_name(iface.vrf)
+            subs.append(Substitution(
+                category="vrf-name",
+                field=f"interfaces[{i}].vrf",
+                original=iface.vrf,
+                redacted=new_vrf,
+            ))
+            iface.vrf = new_vrf
 
         for j, addr in enumerate(iface.ipv4_addresses):
             new_ip = table.redact_ipv4(addr.ip)
@@ -789,6 +805,15 @@ def sanitize_intent(
                 redacted="description redacted",
             ))
             route.description = "description redacted"
+        if route.vrf:
+            new_vrf = table.redact_vrf_name(route.vrf)
+            subs.append(Substitution(
+                category="vrf-name",
+                field=f"static_routes[{i}].vrf",
+                original=route.vrf,
+                redacted=new_vrf,
+            ))
+            route.vrf = new_vrf
 
     # ---- Tier-3 carry-through — strip entirely ----
     if sanitized.dropped_tier3_sections:
@@ -818,6 +843,15 @@ def sanitize_intent(
 
     # ---- routing-instance descriptions + RD / route-targets ----
     for i, ri in enumerate(sanitized.routing_instances):
+        if ri.name:
+            new_name = table.redact_vrf_name(ri.name)
+            subs.append(Substitution(
+                category="vrf-name",
+                field=f"routing_instances[{i}].name",
+                original=ri.name,
+                redacted=new_name,
+            ))
+            ri.name = new_name
         if ri.description:
             subs.append(Substitution(
                 category="routing-instance-description",
@@ -860,6 +894,15 @@ def sanitize_intent(
             vni.flood_list, f"vxlan_vnis[{i}].flood_list", "vtep-flood", table, subs
         )
     for i, r5 in enumerate(sanitized.evpn_type5_routes):
+        if r5.vrf:
+            new_vrf = table.redact_vrf_name(r5.vrf)
+            subs.append(Substitution(
+                category="vrf-name",
+                field=f"evpn_type5_routes[{i}].vrf",
+                original=r5.vrf,
+                redacted=new_vrf,
+            ))
+            r5.vrf = new_vrf
         r5.rt_imports = _redact_route_target_list(
             r5.rt_imports, f"evpn_type5_routes[{i}].rt_imports", table, subs
         )
@@ -942,6 +985,13 @@ class _SubstitutionTable:
         self._local_user_names: dict[str, str] = {}
         self._snmpv3_user_names: dict[str, str] = {}
         self._vlan_names: dict[str, str] = {}
+        # VRF / routing-instance names — operator-chosen labels that can encode
+        # customer / tenant identity (``Tenant_A``, ``ACME-MGMT``), the same
+        # risk class as a VLAN name.  Keyed by name string across the
+        # routing-instance definition AND every interface / static-route /
+        # EVPN-Type5 record that references it, so the rename is
+        # cross-reference-stable (audit 81d9740 #5).
+        self._vrf_names: dict[str, str] = {}
         # Overlay (EVPN/VXLAN/VRF) identifiers — network-identifying AND
         # cross-referenced (a VRF's RD recurs as a route-target across
         # sibling VRFs + EVPN Type-5 routes; a VXLAN BUM group recurs
@@ -1216,6 +1266,22 @@ class _SubstitutionTable:
         if name not in self._vlan_names:
             self._vlan_names[name] = f"vlan-{len(self._vlan_names) + 1}"
         return self._vlan_names[name]
+
+    def redact_vrf_name(self, name: str) -> str:
+        """Cross-reference-stable VRF / routing-instance name redaction.
+
+        A VRF name is an operator-chosen label that can encode customer /
+        tenant identity (``Tenant_A``, ``ACME-MGMT``) — the same risk class
+        as a VLAN name (which is redacted).  VRF membership is keyed by the
+        name string across the routing-instance definition AND every
+        interface / static-route / EVPN-Type5 record that references it, so
+        the rename MUST be cross-reference-stable: same input -> same
+        ``vrf-N`` placeholder everywhere, or the round-trip breaks (a renamed
+        ``ip route vrf <name>`` would dangle off its definition).
+        """
+        if name not in self._vrf_names:
+            self._vrf_names[name] = f"vrf-{len(self._vrf_names) + 1}"
+        return self._vrf_names[name]
 
     def redact_local_user_name(self, name: str) -> str:
         """Cross-reference-stable local-user-name redaction.
