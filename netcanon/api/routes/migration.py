@@ -281,6 +281,7 @@ def plan_migration(
 )
 def plan_migration_ports(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """Port-rename-only entry into the migration pipeline.
@@ -324,6 +325,10 @@ def plan_migration_ports(
         body.target,
         job.status.value,
     )
+    # Automation contract: per-pane endpoints run the same pipeline as
+    # /plan and can yield partial/failed, so they must surface the job
+    # disposition in the response header too (audit f92e97a #7).
+    response.headers["X-Netcanon-Job-Status"] = job.status.value
     return job
 
 
@@ -338,6 +343,7 @@ def plan_migration_ports(
 )
 def plan_migration_vlans(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """VLAN-rename-only entry into the migration pipeline.
@@ -380,6 +386,7 @@ def plan_migration_vlans(
         body.target,
         job.status.value,
     )
+    response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
     return job
 
 
@@ -394,6 +401,7 @@ def plan_migration_vlans(
 )
 def plan_migration_local_users(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """Local-user-rename-only entry into the migration pipeline.
@@ -444,6 +452,7 @@ def plan_migration_local_users(
         body.target,
         job.status.value,
     )
+    response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
     return job
 
 
@@ -458,6 +467,7 @@ def plan_migration_local_users(
 )
 def plan_migration_snmp(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """SNMP-community-rename-only entry into the migration pipeline.
@@ -509,6 +519,7 @@ def plan_migration_snmp(
         body.target,
         job.status.value,
     )
+    response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
     return job
 
 
@@ -523,6 +534,7 @@ def plan_migration_snmp(
 )
 def plan_migration_snmpv3(
     body: MigrationPlanRequest,
+    response: Response,
     storage: BaseConfigStore = Depends(get_storage),
 ) -> MigrationJob:
     """SNMPv3-user-rename-only entry into the migration pipeline.
@@ -574,6 +586,7 @@ def plan_migration_snmpv3(
         body.target,
         job.status.value,
     )
+    response.headers["X-Netcanon-Job-Status"] = job.status.value  # audit f92e97a #7
     return job
 
 
