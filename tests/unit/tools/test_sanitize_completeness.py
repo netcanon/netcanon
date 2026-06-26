@@ -57,8 +57,10 @@ _SENSITIVE_REDACTED = frozenset({
     ("CanonicalEvpnType5Route", "rt_imports"),
     ("CanonicalIPv4Address", "ip"),
     ("CanonicalIPv4Address", "virtual_gateway_address"),
+    ("CanonicalIPv4Address", "virtual_gateway_mac"),
     ("CanonicalIPv6Address", "ip"),
     ("CanonicalIPv6Address", "virtual_gateway_address"),
+    ("CanonicalIPv6Address", "virtual_gateway_mac"),
     ("CanonicalIntent", "dns_servers"),
     ("CanonicalIntent", "domain"),
     ("CanonicalIntent", "ntp_servers"),
@@ -80,21 +82,20 @@ _SENSITIVE_REDACTED = frozenset({
     ("CanonicalVxlan", "flood_list"),
     ("CanonicalVxlan", "mcast_group"),
     ("CanonicalLocalUser", "hashed_password"),
+    ("CanonicalIntent", "anycast_gateway_mac"),
     ("CanonicalVRRPGroup", "authentication"),
     ("CanonicalVRRPGroup", "virtual_ips"),
     ("CanonicalVRRPGroup", "virtual_ipv6s"),
+    ("CanonicalVRRPGroup", "virtual_mac"),
 })
 
 #: Sensitive str leaves the sanitiser does NOT cover yet — surfaced + tracked +
-#: deferred. REDACTION_NOT_WIRED: a clean follow-up wires it (a redact_mac
-#: primitive for the anycast / VRRP virtual-MAC fields). TIER3_OPAQUE: verbatim
-#: vendor text the STRUCTURED sanitiser can't reach (sanitize_text re-parses +
-#: sanitises the text path, but the intent-level walk treats these as a blob).
+#: deferred. (The four virtual-MAC leaves graduated to _SENSITIVE_REDACTED once
+#: the redact_mac primitive was wired — blind-audit f92e97a T0-3.) TIER3_OPAQUE:
+#: verbatim vendor text the STRUCTURED sanitiser can't reach (sanitize_text
+#: re-parses + sanitises the text path, but the intent-level walk treats these
+#: as a blob).
 _SENSITIVE_GAP: dict[tuple[str, str], tuple[str, str]] = {
-    ("CanonicalIPv4Address", "virtual_gateway_mac"): ("REDACTION_NOT_WIRED", "anycast vMAC; redact_mac follow-up"),
-    ("CanonicalIPv6Address", "virtual_gateway_mac"): ("REDACTION_NOT_WIRED", "anycast vMAC; redact_mac follow-up"),
-    ("CanonicalVRRPGroup", "virtual_mac"): ("REDACTION_NOT_WIRED", "VRRP vMAC; redact_mac follow-up"),
-    ("CanonicalIntent", "anycast_gateway_mac"): ("REDACTION_NOT_WIRED", "anycast-gateway MAC; redact_mac follow-up"),
     ("CanonicalIntent", "raw_sections"): ("TIER3_OPAQUE", "Tier-3 verbatim text; structural walk can't reach it"),
     ("CanonicalIntent", "group_content"): ("TIER3_OPAQUE", "Junos group bodies (verbatim); not structurally sanitised"),
     ("CanonicalIntent", "dropped_tier3_sections"): ("TIER3_OPAQUE", "dropped-section text; not structurally sanitised"),

@@ -1139,6 +1139,129 @@ class TestVirtualGatewayAddressRedaction:
         assert "9.9.9.1" not in codec.render(sanitized)     # leak closed end-to-end
 
 
+class TestVirtualMacRedaction:
+    """Regression guard for the burned-in / operator MAC leak (blind audit
+    ``f92e97a`` T0-3).  The anycast virtual-gateway MAC and a VRRP virtual MAC
+    are rendered verbatim by the codecs; a burned-in MAC's OUI leaks the
+    hardware vendor and the full address is device-unique.  Redacted to the
+    RFC 7042 documentation range (``00:00:5e:00:53:NN``); protocol-standard
+    VRRP/HSRP vMACs (derived from the group ID) are preserved -- they identify
+    nothing about the operator."""
+
+    #: Arista OUI 00:1c:73 -> identifying (hardware vendor + device-unique).
+    _BURNED_IN = "00:1c:73:0a:0b:0c"
+
+    def test_interface_ipv4_vgmac_redacted(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.0.2", prefix_length=24,
+                    virtual_gateway_mac=self._BURNED_IN)])],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        vgm = sanitized.interfaces[0].ipv4_addresses[0].virtual_gateway_mac
+        assert vgm != self._BURNED_IN
+        assert vgm.startswith("00:00:5e:00:53:")            # RFC 7042 docs range
+        assert any(
+            s.field.endswith("ipv4_addresses[0].virtual_gateway_mac") for s in subs
+        )
+
+    def test_interface_ipv6_vgmac_redacted(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                ipv6_addresses=[CanonicalIPv6Address(
+                    ip="2001:db8::2", prefix_length=64,
+                    virtual_gateway_mac=self._BURNED_IN)])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert (
+            sanitized.interfaces[0].ipv6_addresses[0].virtual_gateway_mac
+            != self._BURNED_IN
+        )
+
+    def test_vlan_svi_vgmac_redacted(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            vlans=[CanonicalVlan(
+                id=10, name="V10",
+                ipv4_addresses=[CanonicalIPv4Address(
+                    ip="10.0.0.2", prefix_length=24,
+                    virtual_gateway_mac=self._BURNED_IN)])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert (
+            sanitized.vlans[0].ipv4_addresses[0].virtual_gateway_mac
+            != self._BURNED_IN
+        )
+
+    def test_vrrp_virtual_mac_redacted(self):
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10, virtual_ips=["10.0.0.254"],
+                    virtual_mac=self._BURNED_IN)])],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        assert (
+            sanitized.interfaces[0].vrrp_groups[0].virtual_mac != self._BURNED_IN
+        )
+        assert any(s.field.endswith("vrrp_groups[0].virtual_mac") for s in subs)
+
+    def test_anycast_gateway_mac_redacted(self):
+        intent = CanonicalIntent(hostname="sw", anycast_gateway_mac=self._BURNED_IN)
+        sanitized, subs = sanitize_intent(intent)
+        assert sanitized.anycast_gateway_mac != self._BURNED_IN
+        assert any(s.field == "anycast_gateway_mac" for s in subs)
+
+    def test_wellknown_vrrp_mac_preserved(self):
+        """The protocol-standard VRRP virtual MAC (00:00:5e:00:01:NN, derived
+        from the VRID) identifies nothing and is preserved."""
+        vrrp_mac = "00:00:5e:00:01:0a"
+        intent = CanonicalIntent(
+            hostname="sw",
+            interfaces=[CanonicalInterface(
+                name="Vlan10", default_name="Vlan10",
+                vrrp_groups=[CanonicalVRRPGroup(
+                    group_id=10, virtual_ips=["10.0.0.254"],
+                    virtual_mac=vrrp_mac)])],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        assert sanitized.interfaces[0].vrrp_groups[0].virtual_mac == vrrp_mac
+
+    def test_cisco_dotted_format_preserved(self):
+        """A Cisco dotted-form MAC (aaaa.bbbb.cccc) is redacted in the same
+        format so the renderer still emits valid syntax."""
+        intent = CanonicalIntent(hostname="sw", anycast_gateway_mac="001c.730a.0b0c")
+        sanitized, _ = sanitize_intent(intent)
+        out = sanitized.anycast_gateway_mac
+        assert out != "001c.730a.0b0c"
+        assert out.startswith("0000.5e00.53")              # dotted RFC 7042 form
+
+    def test_burned_in_mac_absent_from_render(self):
+        """End-to-end: the NX-OS ``fabric forwarding anycast-gateway-mac`` line
+        must not emit the burned-in OUI after sanitisation.  Precondition-asserts
+        the codec DOES emit it first, so the test can't pass vacuously."""
+        from netcanon.migration.codecs.registry import get_codec
+
+        intent = CanonicalIntent(
+            hostname="sw",
+            anycast_gateway_mac=self._BURNED_IN,
+            vlans=[CanonicalVlan(id=10, name="V10")],
+        )
+        codec = get_codec("cisco_nxos")
+        assert "001c.730a.0b0c" in codec.render(intent)     # precondition: codec emits the MAC
+        sanitized, _ = sanitize_intent(intent)
+        rendered = codec.render(sanitized)
+        assert "001c.73" not in rendered                    # burned-in OUI gone (dotted form)
+        assert "00:1c:73" not in rendered                   # ...and colon form
+
+
 def test_raw_sections_stripped_by_sanitiser():
     """DATA-02: Tier-3 ``raw_sections`` (verbatim vendor text) is cleared.
 

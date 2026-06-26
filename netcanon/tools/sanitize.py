@@ -62,6 +62,14 @@ Field-typed rules (counter-per-session):
   VRRP/CARP VIP (a public one reveals real routable infrastructure), and
   is rendered verbatim by Arista/Aruba/Junos/NX-OS/IOS-XE, so it is
   redacted at every address site (interface + VLAN SVI, v4 + v6)
+* ``CanonicalIPv4Address.virtual_gateway_mac`` /
+  ``CanonicalIPv6Address.virtual_gateway_mac`` /
+  ``CanonicalVRRPGroup.virtual_mac`` /
+  ``CanonicalIntent.anycast_gateway_mac`` (burned-in / operator-assigned
+  MAC) → RFC 7042 documentation MAC (``00:00:5e:00:53:N``), separator
+  style preserved.  Protocol-standard VRRP / HSRP / GLBP / CARP virtual
+  MACs (derived from the group ID) and multicast / broadcast / all-zero
+  addresses are preserved — they identify nothing about the operator
 * ``CanonicalInterface.description`` → ``description redacted``
 * ``CanonicalDHCPPool.dns_servers`` (public entries) → docs range
 * ``CanonicalDHCPPool.gateway`` (public) → docs range
@@ -262,6 +270,18 @@ def sanitize_intent(
         ))
         sanitized.domain = new_value
 
+    # ---- anycast-gateway MAC (system-wide DAG / SD-Access / VARP MAC) ----
+    if sanitized.anycast_gateway_mac:
+        new_mac = table.redact_mac(sanitized.anycast_gateway_mac)
+        if new_mac != sanitized.anycast_gateway_mac:
+            subs.append(Substitution(
+                category="mac",
+                field="anycast_gateway_mac",
+                original=sanitized.anycast_gateway_mac,
+                redacted=new_mac,
+            ))
+            sanitized.anycast_gateway_mac = new_mac
+
     # ---- host-list scalars (DNS / NTP / syslog) ----
     # DNS resolvers are IPs by protocol (RFC 2132 option 6); NTP + syslog
     # targets are commonly FQDNs, so those two also redact a DNS-name entry
@@ -313,6 +333,19 @@ def sanitize_intent(
                         redacted=new_vga,
                     ))
                     addr.virtual_gateway_address = new_vga
+            # The anycast / VRRP virtual-gateway MAC sibling — burned-in or
+            # operator-chosen, so the OUI leaks the hardware vendor; redact it
+            # (well-known protocol vMACs are preserved by redact_mac).
+            if addr.virtual_gateway_mac:
+                new_vgm = table.redact_mac(addr.virtual_gateway_mac)
+                if new_vgm != addr.virtual_gateway_mac:
+                    subs.append(Substitution(
+                        category="mac",
+                        field=f"interfaces[{i}].ipv4_addresses[{j}].virtual_gateway_mac",
+                        original=addr.virtual_gateway_mac,
+                        redacted=new_vgm,
+                    ))
+                    addr.virtual_gateway_mac = new_vgm
 
         for j, addr in enumerate(iface.ipv6_addresses):
             new_ip = table.redact_ipv6(addr.ip)
@@ -334,6 +367,16 @@ def sanitize_intent(
                         redacted=new_vga,
                     ))
                     addr.virtual_gateway_address = new_vga
+            if addr.virtual_gateway_mac:
+                new_vgm = table.redact_mac(addr.virtual_gateway_mac)
+                if new_vgm != addr.virtual_gateway_mac:
+                    subs.append(Substitution(
+                        category="mac",
+                        field=f"interfaces[{i}].ipv6_addresses[{j}].virtual_gateway_mac",
+                        original=addr.virtual_gateway_mac,
+                        redacted=new_vgm,
+                    ))
+                    addr.virtual_gateway_mac = new_vgm
 
         # ---- VRRP / CARP / HSRP authentication ----
         # Cleartext-bearing: the ``plain:`` / ``carp-key:`` schemes
@@ -360,6 +403,20 @@ def sanitize_intent(
                     redacted="description redacted",
                 ))
                 group.description = "description redacted"
+            # The per-group virtual MAC — a configured override (Arista VARP /
+            # operator-set) leaks the OUI; redact it.  The protocol-standard
+            # VRRP/HSRP/CARP vMACs derived from the group ID are preserved by
+            # redact_mac (well-known, non-identifying).
+            if group.virtual_mac:
+                new_vmac = table.redact_mac(group.virtual_mac)
+                if new_vmac != group.virtual_mac:
+                    subs.append(Substitution(
+                        category="mac",
+                        field=f"interfaces[{i}].vrrp_groups[{k}].virtual_mac",
+                        original=group.virtual_mac,
+                        redacted=new_vmac,
+                    ))
+                    group.virtual_mac = new_vmac
 
             # The virtual IP is frequently the public-facing HA gateway
             # address — redact it like every other IP field (the sibling
@@ -454,6 +511,16 @@ def sanitize_intent(
                         redacted=new_vga,
                     ))
                     addr.virtual_gateway_address = new_vga
+            if addr.virtual_gateway_mac:
+                new_vgm = table.redact_mac(addr.virtual_gateway_mac)
+                if new_vgm != addr.virtual_gateway_mac:
+                    subs.append(Substitution(
+                        category="mac",
+                        field=f"vlans[{i}].ipv4_addresses[{j}].virtual_gateway_mac",
+                        original=addr.virtual_gateway_mac,
+                        redacted=new_vgm,
+                    ))
+                    addr.virtual_gateway_mac = new_vgm
 
     # ---- local users (usernames + hashed passwords) ----
     # Phase-3 R6.1: redact the username too.  Operator-chosen
@@ -886,6 +953,12 @@ class _SubstitutionTable:
         # written as FQDNs) re-leak the org domain.  Map each distinct
         # name to a stable opaque placeholder so cross-references survive.
         self._host_names: dict[str, str] = {}
+        # Burned-in / operator-assigned MACs (anycast virtual-gateway MAC,
+        # VRRP virtual MAC) — the OUI reveals the hardware vendor and the
+        # full address is device-unique, so a public bug report leaks it.
+        # Map each to a stable RFC 7042 documentation MAC; well-known
+        # protocol vMACs are preserved (see :meth:`redact_mac`).
+        self._macs: dict[str, str] = {}
 
     def redact_hostname(self, name: str) -> str:
         if name not in self._hostnames:
@@ -1068,6 +1141,36 @@ class _SubstitutionTable:
             self._mcast_groups[addr] = f"233.252.0.{host}"
         return self._mcast_groups[addr]
 
+    def redact_mac(self, value: str) -> str:
+        """Redact a burned-in / operator-assigned MAC address.
+
+        The anycast virtual-gateway MAC (NX-OS DAG / IOS-XE SD-Access /
+        Arista VARP) and a VRRP/CARP virtual MAC are rendered verbatim by
+        the codecs, yet a burned-in or operator-chosen MAC leaks the
+        hardware vendor (via the OUI) and a device-unique value into a
+        shared bug report.  Map each distinct MAC to a stable address in
+        the RFC 7042 documentation range (``00:00:5e:00:53:XX``),
+        preserving the input's separator style (Cisco dotted / colon /
+        hyphen / bare) so the renderer still emits valid syntax.
+
+        PRESERVED (derived from a group ID or a standard — leak nothing
+        about the operator, the audit's "well-known VRRP/HSRP MACs"):
+        VRRP IPv4/IPv6 (``00:00:5e:00:01|02:XX``), HSRP v1/v2, GLBP, CARP
+        (shares the VRRP range), every multicast / group address, and the
+        all-zero / broadcast addresses.  Non-MAC-shaped values pass
+        through verbatim.
+
+        Cross-reference stable: same input MAC -> same documentation MAC
+        across the whole config.
+        """
+        digits = _mac_digits(value)
+        if digits is None or _mac_is_well_known(digits):
+            return value
+        if value not in self._macs:
+            n = len(self._macs) % 256
+            self._macs[value] = _format_mac_like(value, f"00005e0053{n:02x}")
+        return self._macs[value]
+
     def redact_community(self, community: str) -> str:
         if community not in self._communities:
             self._communities[community] = f"public_redacted_{len(self._communities) + 1}"
@@ -1197,6 +1300,48 @@ class _SubstitutionTable:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+#: 12 hex digits = a MAC with the separators (``.:-``) stripped.
+_MAC_RE = re.compile(r"^[0-9A-Fa-f]{12}$")
+
+
+def _mac_digits(value: str) -> str | None:
+    """Return the 12 lowercase hex digits of a MAC string (Cisco-dotted,
+    colon, hyphen, or bare), or ``None`` if *value* is not MAC-shaped."""
+    digits = re.sub(r"[.:-]", "", value.strip())
+    return digits.lower() if _MAC_RE.match(digits) else None
+
+
+def _mac_is_well_known(digits: str) -> bool:
+    """True for protocol-standard / group MACs (12 lowercase hex digits in)
+    that are derived from a group ID or a standard and leak nothing about
+    the operator: VRRP v4/v6 (RFC 5798) + CARP, HSRP v1/v2, GLBP, every
+    multicast / group address (I/G bit set), and the all-zero / broadcast
+    addresses.  The RFC 7042 documentation range is also treated as
+    well-known so an already-redacted value is idempotent."""
+    if digits in ("000000000000", "ffffffffffff"):
+        return True
+    if int(digits[:2], 16) & 0x01:  # I/G (multicast / group) bit set
+        return True
+    return digits.startswith((
+        "00005e0001",   # VRRP IPv4 virtual MAC (RFC 5798) / CARP
+        "00005e0002",   # VRRP IPv6 virtual MAC
+        "00000c07ac",   # HSRP v1 virtual MAC
+        "00000c9f",     # HSRP v2 virtual MAC
+        "0007b4",       # GLBP virtual MAC
+        "00005e0053",   # RFC 7042 documentation MAC range (already redacted)
+    ))
+
+
+def _format_mac_like(template: str, digits: str) -> str:
+    """Format 12 hex *digits* with the same separator style as *template*
+    (Cisco dotted ``aaaa.bbbb.cccc`` / colon / hyphen / bare)."""
+    if "." in template:
+        return f"{digits[0:4]}.{digits[4:8]}.{digits[8:12]}"
+    sep = "-" if "-" in template else ":" if ":" in template else ""
+    if not sep:
+        return digits
+    return sep.join(digits[i:i + 2] for i in range(0, 12, 2))
 
 
 def _redact_ip_list(
