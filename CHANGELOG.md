@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The published source distribution (sdist) no longer ships the test
+  suite.** `tests/fixtures/real/` holds third-party, device-generated
+  config captures committed for regression testing (provenance in
+  `tests/fixtures/real/NOTICE.md`); several carry no upstream LICENSE.
+  `setuptools_scm` bundles every git-tracked file into the sdist by
+  default, so the published PyPI source tarball was redistributing them. A
+  new `MANIFEST.in` (`prune tests`) excludes the whole `tests/` tree -- it
+  is not needed to install or run netcanon and the wheel never contained
+  it -- and a CI gate in the "Build sdist + wheel" job fails if any
+  `tests/` file reappears in the sdist. Found by an independent blind
+  audit (`f92e97a`, T0-5).
 * **The sanitiser now redacts virtual / anycast MAC addresses.** The
   anycast virtual-gateway MAC, the per-address virtual-gateway MAC (v4 +
   v6), the per-group VRRP virtual MAC, and the system-wide

@@ -19,6 +19,14 @@ asserts a license, the per-fixture attribution below records it and
 the file is included under that license.  Any source author who
 objects can have their fixture removed (see the per-fixture notes).
 
+**Not redistributed in the published package.** These fixtures exist in
+git for CI regression coverage only.  `MANIFEST.in` prunes the entire
+`tests/` tree from the published PyPI source distribution (sdist), and the
+wheel never contained it — so installing netcanon from PyPI redistributes
+none of these third-party captures.  A CI gate in the "Build sdist + wheel"
+job fails if any `tests/` file ever reappears in the sdist (blind audit
+`f92e97a`, T0-5).
+
 ---
 
 ## cisco_iosxe/

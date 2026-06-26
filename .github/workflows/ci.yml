@@ -231,6 +231,27 @@ jobs:
       - name: Validate distribution metadata
         run: python -m twine check dist/*
 
+      - name: sdist excludes the test suite (T0-5 licensing gate)
+        # tests/fixtures/real/ holds third-party device-config captures (several
+        # with no upstream LICENSE) committed purely for regression testing —
+        # fine to keep in git, but they must NOT be redistributed in the
+        # published source tarball (blind audit f92e97a, T0-5). MANIFEST.in
+        # prunes the whole tests/ tree; assert the built sdist honours it so a
+        # MANIFEST.in regression (or a setuptools_scm change that re-adds VCS
+        # files) turns this required check red instead of shipping the bytes.
+        run: |
+          set -euo pipefail
+          sdist="$(ls "${GITHUB_WORKSPACE}"/dist/*.tar.gz)"
+          echo "Inspecting sdist: ${sdist}"
+          leaked="$(tar tzf "${sdist}" | grep -E '/tests/' || true)"
+          if [ -n "${leaked}" ]; then
+            echo "FAIL: the source distribution ships test-suite files that must be excluded"
+            echo "(blind audit f92e97a, T0-5 — see MANIFEST.in 'prune tests'):"
+            echo "${leaked}" | head -20
+            exit 1
+          fi
+          echo "OK: sdist contains no tests/ entries."
+
       - name: Clean-room wheel install boots from an empty dir (T0-3 guard)
         # Reproduces a plain `pip install netcanon` user: install the freshly
         # built wheel into a clean venv and boot the documented

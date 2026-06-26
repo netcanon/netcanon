@@ -1,0 +1,11 @@
+# Source-distribution (sdist) file list.
+#
+# setuptools_scm includes every VCS-tracked file in the sdist by default. The
+# test suite is not needed to install or run netcanon — the wheel never
+# contained it — and tests/fixtures/real/ holds third-party, device-generated
+# config captures committed purely for regression testing (provenance in
+# tests/fixtures/real/NOTICE.md). Those are fine to keep in git, but several
+# carry no upstream LICENSE, so they must NOT be redistributed in the published
+# PyPI source tarball (blind audit f92e97a, T0-5). Prune the whole tree; a CI
+# gate in the "Build sdist + wheel" job asserts the sdist stays tests-free.
+prune tests
