@@ -255,6 +255,38 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            # VLAN-SVI L3 sub-fields (blind-audit f92e97a T0-2).  This
+            # OpenConfig/NETCONF stub renders no VLAN-record L3 at all (the
+            # whole /vlans subtree is unsupported), so any L3 sub-field carried
+            # on a VLAN record is dropped wholesale -> block (not the lossy
+            # render-gap of the SVI-synthesising codecs).
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount: the stub renders no VLAN L3, so a "
+                    "secondary IP on a VLAN record is dropped entirely. "
+                    "Declared unsupported (blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-address",
+                reason=(
+                    "VLAN-SVI mount: the stub renders no VLAN L3 and models no "
+                    "anycast-gateway augment (cf. the unsupported interface-"
+                    "mount twin), so an anycast virtual-gateway IP on a VLAN "
+                    "record is dropped. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/vlans/vlan/ipv4/address/virtual-gateway-mac",
+                reason=(
+                    "VLAN-SVI mount: the stub renders no VLAN L3 and no "
+                    "virtual-MAC augment, so a per-address virtual-gateway MAC "
+                    "on a VLAN record is dropped. Declared unsupported "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01 completion, v0.4.0 self-audit).
             #    This OpenConfig/NETCONF stub renders only name/enabled/type
             #    per interface and drops every per-port VLAN-membership

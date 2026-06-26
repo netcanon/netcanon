@@ -159,6 +159,18 @@ class JunosCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/vlans/vlan/ipv4/address/secondary-ip",
+                reason=(
+                    "VLAN-SVI mount: Junos models the SVI as an `irb` unit "
+                    "whose `family inet address` lines are co-equal (no "
+                    "primary/secondary distinction), so the is_secondary flag "
+                    "is dropped on render while the address value, VGA and VGM "
+                    "round-trip natively via the irb fold. Declared lossy "
+                    "(blind-audit f92e97a T0-2)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "

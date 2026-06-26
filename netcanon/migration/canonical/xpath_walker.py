@@ -175,8 +175,23 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         # reports severity:ok while the SVI/management IP silently vanishes
         # (the same fail-surfaced principle as the {tagged,untagged}-ports
         # twin above; blind-audit 3ec11f3 T0-2).  Droppers declare it lossy.
-        for _ in vlan.ipv4_addresses:
+        for addr in vlan.ipv4_addresses:
             yield "/vlans/vlan/ipv4/address/ip"
+            # VLAN-SVI L3 sub-fields — the twin of the interface-mount walk
+            # above.  Previously the VLAN-SVI mount yielded ONLY .../ip while
+            # the interface mount walked all five, so a dropped secondary IP /
+            # anycast virtual-gateway-address / virtual-gateway-mac carried on
+            # a VLAN record rode the classify() default to "supported" and
+            # validate_against reported severity:ok while the value vanished
+            # (blind-audit f92e97a T0-2).  Walk them (conditionally, mirroring
+            # the interface loop) so the loss surfaces; droppers declare them
+            # lossy/unsupported per the per-codec capability matrix.
+            if addr.is_secondary:
+                yield "/vlans/vlan/ipv4/address/secondary-ip"
+            if addr.virtual_gateway_address:
+                yield "/vlans/vlan/ipv4/address/virtual-gateway-address"
+            if addr.virtual_gateway_mac:
+                yield "/vlans/vlan/ipv4/address/virtual-gateway-mac"
     for route in intent.static_routes:
         yield "/routing/static-route"
         if route.vrf:

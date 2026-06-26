@@ -59,6 +59,25 @@ timestamp if your timezone matters for an audit.
   next-hop only") were corrected, and a new registry-wide guard pins that
   any codec rendering a plain gateway route to nothing must declare the
   base path. Found by an independent blind audit (`f92e97a`, T0-1).
+* **VLAN-SVI L3 sub-fields no longer drop silently.** The xpath walker
+  yielded only `/vlans/vlan/ipv4/address/ip` for a VLAN SVI while the
+  interface mount walked five sub-paths, so a secondary IP, anycast
+  virtual-gateway-address, or virtual-gateway-mac carried on a VLAN
+  record rode the `classify()` default to `supported` and
+  `validate_against` reported `severity: ok` while the value vanished on
+  render (e.g. a Junos `irb` anycast gateway migrated to a target that
+  drops it). The walker now walks all three VLAN-SVI sub-paths, and a
+  12-codec census (verified by an independent multi-agent pass) declared
+  each per target: lossy where the codec renders the SVI L3 but drops the
+  sub-field, unsupported where it has no anycast/secondary grammar at
+  all, supported where it round-trips. The completeness guard that should
+  have caught this had inherited the same blind spot -- it passed a
+  dual-mounted leaf if ANY mount was walked, so the interface-mount walk
+  masked the VLAN-SVI gap; it now requires the three independent-loss
+  sub-fields be walked on EVERY mount. Found by an independent blind
+  audit (`f92e97a`, T0-2). The SVI-fold fidelity enhancement (preserving
+  the sub-fields through `project_svi_to_vlan`) and the IPv6-on-VLAN
+  schema addition are deferred as separate work.
 
 ## [0.4.6] - 2026-06-25
 

@@ -89,6 +89,25 @@ _CLASS_CONTAINERS: dict[str, tuple[str, ...]] = {
     "CanonicalEvpnType5Route": (),
 }
 
+#: Leaves ``(Model, field)`` that must be walked on EVERY mount of their class,
+#: not just one.  Only ``CanonicalIPv4Address``'s INDEPENDENT-loss sub-fields
+#: qualify: each is mounted on BOTH ``/interfaces/interface/ipv4/address/`` and
+#: ``/vlans/vlan/ipv4/address/``, and the interface-mount walk previously MASKED
+#: the silent VLAN-SVI sub-field drop — a leaf walked on the interface mount
+#: counted as "covered" so the VLAN-SVI gap was structurally invisible to this
+#: guard (blind-audit f92e97a T0-2; the meta-finding that "the fix-the-class
+#: guard inherited the class's own blind spot").  ``ip`` is already walked on
+#: both mounts and ``prefix_length`` travels with it (no independent loss), so
+#: both stay on the default any()-over-mounts test — as does every class whose
+#: multiple _CLASS_CONTAINERS prefixes are segment ALTERNATIVES (CanonicalIntent
+#: /system/ vs /; CanonicalInterface /…/ vs /…/config/), where a field lives
+#: under exactly one prefix.
+_ALL_MOUNTS_REQUIRED: frozenset[tuple[str, str]] = frozenset({
+    ("CanonicalIPv4Address", "is_secondary"),
+    ("CanonicalIPv4Address", "virtual_gateway_address"),
+    ("CanonicalIPv4Address", "virtual_gateway_mac"),
+})
+
 #: Field-name -> xpath-segment overrides where the walker's spelling diverges
 #: from ``field.replace("_", "-")`` (singularised list fields; two renames).
 #: Guarded against staleness by ``test_segment_overrides_reference_real_leaves``.
@@ -184,12 +203,24 @@ def _expected_xpaths(cls: str, field: str) -> tuple[str, ...]:
 
 
 def _walked_leaves() -> set[tuple[str, str]]:
-    """Every scalar leaf whose expected xpath the walker actually emits."""
-    return {
-        leaf
-        for leaf in scalar_leaves(CanonicalIntent)
-        if any(xp in _WALKABLE for xp in _expected_xpaths(*leaf))
-    }
+    """Every scalar leaf whose expected xpath the walker actually emits.
+
+    A leaf in ``_ALL_MOUNTS_REQUIRED`` counts as walked only when EVERY mount
+    is walked (``all``): a leaf walked on one mount must not mask a silent drop
+    on another (blind-audit f92e97a T0-2).  For every other leaf the multiple
+    container prefixes are segment alternatives (or the leaf travels with a
+    base that is walked on every mount), so any one walked prefix suffices
+    (``any``).
+    """
+    out: set[tuple[str, str]] = set()
+    for leaf in scalar_leaves(CanonicalIntent):
+        expected = _expected_xpaths(*leaf)
+        if not expected:
+            continue
+        combine = all if leaf in _ALL_MOUNTS_REQUIRED else any
+        if combine(xp in _WALKABLE for xp in expected):
+            out.add(leaf)
+    return out
 
 
 # ---------------------------------------------------------------------------

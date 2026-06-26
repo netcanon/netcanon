@@ -186,7 +186,13 @@ def _maximal_intent() -> CanonicalIntent:
         vlans=[CanonicalVlan(
             id=10, name="V", description="desc",
             tagged_ports=["Ethernet1"], untagged_ports=["Ethernet2"],
-            ipv4_addresses=[addr4])],
+            # Both a primary (carrying VGA + VGM) AND a secondary address so
+            # every VLAN-SVI mount sub-path the walker now yields
+            # (/vlans/vlan/ipv4/address/{secondary-ip,virtual-gateway-address,
+            # virtual-gateway-mac}) is in _WALKABLE — the all()-over-mounts
+            # completeness guard requires the VLAN mount be walked independently
+            # of the interface mount (blind-audit f92e97a T0-2).
+            ipv4_addresses=[addr4, addr4_sec])],
         static_routes=[CanonicalStaticRoute(
             destination="0.0.0.0/0", gateway="10.0.0.2", vrf="TENANT",
             # metric / description / interface exercise the static-route
