@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.7] - 2026-06-25
+
 ### Fixed
 
 * **The published source distribution (sdist) no longer ships the test
