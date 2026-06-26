@@ -26,6 +26,26 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+* **Per-pane migration endpoints now set the `X-Netcanon-Job-Status`
+  response header.** `/plan` and `/render` surfaced the job disposition
+  (`completed` / `partial` / `failed`) in this header so an HTTP-only
+  automation gate -- which always sees a 200 with the job in the body --
+  can still tell a real translation from a partial/failed one. The five
+  per-pane override endpoints (`/plan/ports`, `/plan/vlans`,
+  `/plan/local_users`, `/plan/snmp`, `/plan/snmpv3`) run the same pipeline
+  but omitted the header, so a gate watching only the header saw no signal
+  on those routes. They now set it too, and the body-only parity test was
+  extended to compare the header. Found by an independent blind audit
+  (`f92e97a`, #7).
+* **`.env.example` no longer advertises a `0.0.0.0` bind default.** The
+  sample config still showed `# NETCANON_HOST=0.0.0.0`, contradicting the
+  loopback (`127.0.0.1`) bind default the server has shipped since v0.4.5.
+  The comment now documents the loopback default and warns that `0.0.0.0`
+  should only be used behind an authenticating reverse proxy. Found by an
+  independent blind audit (`f92e97a`, T0-4 residual).
+
 ## [0.4.6] - 2026-06-25
 
 ### Security

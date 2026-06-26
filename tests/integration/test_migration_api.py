@@ -506,13 +506,60 @@ class TestPlanPortsEndpoint:
             "raw_text": _IOSXE_SIMPLE,
             "port_rename_map": {},   # opt into rename-aware pipeline
         }
-        plan = client.post("/api/v1/migration/plan", json=body).json()
-        plan_ports = client.post("/api/v1/migration/plan/ports", json=body).json()
+        plan_resp = client.post("/api/v1/migration/plan", json=body)
+        plan_ports_resp = client.post("/api/v1/migration/plan/ports", json=body)
+        plan = plan_resp.json()
+        plan_ports = plan_ports_resp.json()
         # Same pipeline outcome (job IDs differ, but status + rendered
         # content match).
         assert plan["status"] == plan_ports["status"]
         assert plan["rendered"] == plan_ports["rendered"]
         assert plan["port_renames"] == plan_ports["port_renames"]
+        # Automation-contract parity: the per-pane endpoint must surface the
+        # same X-Netcanon-Job-Status header as /plan, not just the same JSON
+        # body.  The prior assertion compared only .json() and so missed the
+        # header divergence (audit f92e97a #7).
+        assert (
+            plan_ports_resp.headers["X-Netcanon-Job-Status"] == plan_ports["status"]
+        )
+        assert (
+            plan_resp.headers["X-Netcanon-Job-Status"]
+            == plan_ports_resp.headers["X-Netcanon-Job-Status"]
+        )
+
+
+class TestPerPaneEndpointsSetJobStatusHeader:
+    """Every per-pane override endpoint must set ``X-Netcanon-Job-Status``,
+    matching ``/plan`` and ``/render``.
+
+    The endpoint always returns HTTP 200 with the job in the body, so the
+    header is the only signal an HTTP-only automation gate can read to tell
+    completed from partial/failed.  ``/plan`` set it but the five per-pane
+    siblings did not, and the body-only parity test never noticed (audit
+    f92e97a #7).
+    """
+
+    _PER_PANE_PATHS = [
+        "/api/v1/migration/plan/ports",
+        "/api/v1/migration/plan/vlans",
+        "/api/v1/migration/plan/local_users",
+        "/api/v1/migration/plan/snmp",
+        "/api/v1/migration/plan/snmpv3",
+    ]
+
+    @pytest.mark.parametrize("path", _PER_PANE_PATHS)
+    def test_header_present_and_matches_body_status(self, client, path):
+        resp = client.post(
+            path,
+            json={
+                "source": "cisco_iosxe",
+                "target": "cisco_iosxe",
+                "raw_text": _IOSXE_SIMPLE,
+            },
+        )
+        assert resp.status_code == 200
+        assert "X-Netcanon-Job-Status" in resp.headers
+        assert resp.headers["X-Netcanon-Job-Status"] == resp.json()["status"]
 
 
 class TestPlanVlansEndpoint:
