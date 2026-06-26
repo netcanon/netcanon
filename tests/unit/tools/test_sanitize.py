@@ -1262,6 +1262,54 @@ class TestVirtualMacRedaction:
         assert "00:1c:73" not in rendered                   # ...and colon form
 
 
+class TestVRFNameRedaction:
+    """VRF / routing-instance names are redacted cross-reference-stable
+    (blind audit ``81d9740`` #5).  A VRF name can encode customer / tenant
+    identity (``Tenant_A``) — the same risk class as a VLAN name, which IS
+    redacted.  The rename must apply to the routing-instance definition AND
+    every interface / static-route / EVPN-Type5 record that references it, or
+    a ``ip route vrf <name>`` reference would dangle off its definition."""
+
+    def test_vrf_names_redacted_across_all_four_sites(self):
+        intent = CanonicalIntent(
+            hostname="r1",
+            routing_instances=[CanonicalRoutingInstance(name="Tenant_A")],
+            interfaces=[CanonicalInterface(
+                name="Gi0/1", default_name="Gi0/1", vrf="Tenant_A")],
+            static_routes=[CanonicalStaticRoute(
+                destination="10.0.0.0/24", gateway="10.0.0.1", vrf="Tenant_A")],
+            evpn_type5_routes=[CanonicalEvpnType5Route(
+                vrf="Tenant_A", prefix="10.1.0.0/24")],
+        )
+        sanitized, subs = sanitize_intent(intent)
+        # The operator-chosen name is gone from every site...
+        assert sanitized.routing_instances[0].name != "Tenant_A"
+        assert sanitized.interfaces[0].vrf != "Tenant_A"
+        assert sanitized.static_routes[0].vrf != "Tenant_A"
+        assert sanitized.evpn_type5_routes[0].vrf != "Tenant_A"
+        # ...replaced by a vrf-N placeholder...
+        placeholder = sanitized.routing_instances[0].name
+        assert placeholder.startswith("vrf-")
+        # ...the SAME placeholder everywhere (cross-reference stable).
+        assert sanitized.interfaces[0].vrf == placeholder
+        assert sanitized.static_routes[0].vrf == placeholder
+        assert sanitized.evpn_type5_routes[0].vrf == placeholder
+        assert any(s.category == "vrf-name" for s in subs)
+
+    def test_distinct_vrf_names_get_distinct_placeholders(self):
+        intent = CanonicalIntent(
+            hostname="r1",
+            routing_instances=[
+                CanonicalRoutingInstance(name="Tenant_A"),
+                CanonicalRoutingInstance(name="Tenant_B"),
+            ],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        names = {ri.name for ri in sanitized.routing_instances}
+        assert len(names) == 2                      # distinct in -> distinct out
+        assert "Tenant_A" not in names and "Tenant_B" not in names
+
+
 def test_raw_sections_stripped_by_sanitiser():
     """DATA-02: Tier-3 ``raw_sections`` (verbatim vendor text) is cleared.
 

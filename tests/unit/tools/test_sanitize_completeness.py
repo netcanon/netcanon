@@ -87,6 +87,12 @@ _SENSITIVE_REDACTED = frozenset({
     ("CanonicalVRRPGroup", "virtual_ips"),
     ("CanonicalVRRPGroup", "virtual_ipv6s"),
     ("CanonicalVRRPGroup", "virtual_mac"),
+    # VRF / routing-instance names — can encode customer/tenant identity,
+    # redacted cross-reference-stable to vrf-N (audit 81d9740 #5).
+    ("CanonicalRoutingInstance", "name"),
+    ("CanonicalInterface", "vrf"),
+    ("CanonicalStaticRoute", "vrf"),
+    ("CanonicalEvpnType5Route", "vrf"),
 })
 
 #: Sensitive str leaves the sanitiser does NOT cover yet — surfaced + tracked +
@@ -106,7 +112,6 @@ _SENSITIVE_GAP: dict[tuple[str, str], tuple[str, str]] = {
 #: a reviewer can challenge (a real IP/secret leaf has no honest code here).
 _NON_SENSITIVE: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalDHCPPool", "interface"): ("IFACE_REF", "bind interface name"),
-    ("CanonicalEvpnType5Route", "vrf"): ("IDENTIFIER", "VRF name"),
     ("CanonicalIPv6Address", "scope"): ("ENUM", "global | link-local"),
     ("CanonicalIntent", "apply_groups"): ("METADATA", "Junos apply-group names"),
     ("CanonicalIntent", "hostname"): ("IDENTIFIER", "device hostname; passed through by design"),
@@ -123,7 +128,6 @@ _NON_SENSITIVE: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalInterface", "name"): ("IDENTIFIER", "interface name"),
     ("CanonicalInterface", "switchport_mode"): ("ENUM", "access | trunk"),
     ("CanonicalInterface", "tunnel_type"): ("ENUM", "tunnel encapsulation token"),
-    ("CanonicalInterface", "vrf"): ("IDENTIFIER", "VRF name"),
     ("CanonicalLAG", "members"): ("IFACE_REF", "member interface names"),
     ("CanonicalLAG", "mode"): ("ENUM", "active | passive | on"),
     ("CanonicalLAG", "name"): ("IDENTIFIER", "LAG name"),
@@ -131,14 +135,12 @@ _NON_SENSITIVE: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalLocalUser", "role"): ("ENUM", "role / privilege keyword"),
     ("CanonicalRoutingInstance", "description"): ("FREE_TEXT", "VRF description"),
     ("CanonicalRoutingInstance", "instance_type"): ("ENUM", "vrf | mac-vrf"),
-    ("CanonicalRoutingInstance", "name"): ("IDENTIFIER", "VRF name"),
     ("CanonicalSNMPv3User", "auth_protocol"): ("ENUM", "md5 | sha | ..."),
     ("CanonicalSNMPv3User", "group"): ("IDENTIFIER", "VACM group name"),
     ("CanonicalSNMPv3User", "name"): ("IDENTIFIER", "SNMPv3 user name; passed through"),
     ("CanonicalSNMPv3User", "priv_protocol"): ("ENUM", "des | aes | ..."),
     ("CanonicalStaticRoute", "description"): ("FREE_TEXT", "route description"),
     ("CanonicalStaticRoute", "interface"): ("IFACE_REF", "egress interface name"),
-    ("CanonicalStaticRoute", "vrf"): ("IDENTIFIER", "VRF name"),
     ("CanonicalVlan", "description"): ("FREE_TEXT", "VLAN description"),
     ("CanonicalVlan", "name"): ("IDENTIFIER", "VLAN name"),
     ("CanonicalVlan", "tagged_ports"): ("IFACE_REF", "tagged member interface names"),

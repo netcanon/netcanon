@@ -28,6 +28,15 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **VRF / routing-instance names are now redacted by the sanitiser.** A VRF
+  name can encode customer / tenant identity (`Tenant_A`, `ACME-MGMT`) -- the
+  same risk class as a VLAN name, which was already redacted, yet VRF names
+  passed through verbatim (an inconsistency an earlier release deliberately
+  deferred). `CanonicalRoutingInstance.name`, `CanonicalInterface.vrf`,
+  `CanonicalStaticRoute.vrf`, and `CanonicalEvpnType5Route.vrf` now map to a
+  stable `vrf-N` placeholder, cross-reference-stable so the routing-instance
+  definition and every `vrf <name>` reference rename together (the round-trip
+  stays valid). Found by an independent blind audit (`81d9740`, #5).
 * **The SNMPv3 lossy warning now names the cryptographic downgrade, not just
   a "re-key".** AOS-CX renders SNMPv3 with SHA-1 auth and AES-128 priv only,
   so a stronger source algorithm (e.g. SHA-256, AES-256) is silently
