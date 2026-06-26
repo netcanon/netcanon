@@ -209,9 +209,11 @@ def _process_one_device(
             collectors to resolve on demand.
 
     All exceptions are caught and recorded on the ``BackupResult``; this
-    function therefore never raises under normal operation.  Any exception
-    that does escape indicates a programming bug in the backup runner
-    itself (e.g. an invalid definition lookup) and should surface.
+    function therefore never raises under normal operation.  Ordinary
+    operator-data problems (e.g. an unknown ``type_key`` absent from the
+    definition library) are converted to a per-device ``failed`` result, not
+    raised.  Any exception that does still escape indicates a programming bug
+    in the backup runner itself and should surface.
 
     Thread safety: ``job.results[idx]`` is mutated only by the single
     worker assigned to index *idx*.  Other workers touch other indices,
@@ -226,7 +228,28 @@ def _process_one_device(
     # module at load time).
     from ..api.routes import backups as _backups_route
 
-    family_base = definitions[device.type_key]
+    result = job.results[idx]
+    # Guard the definition lookup. A typo'd / renamed type_key is ordinary
+    # operator data — device profiles and schedules do NOT validate it against
+    # the loaded library — not a programming bug. A bare definitions[type_key]
+    # KeyError here escapes the per-device try/except below: serial path leaves
+    # the job stranded at "running" forever; parallel path leaves this device
+    # "queued" so the terminal logic counts no failure and marks the job a
+    # false "completed". Resolve an unknown type to an honest per-device
+    # failure instead (blind audit 81d9740 T0-2).
+    family_base = definitions.get(device.type_key)
+    if family_base is None:
+        result.status = "failed"
+        result.error = (
+            f"{device.host}: unknown device type {device.type_key!r} — not in "
+            f"the loaded definition library. Check the device profile's type."
+        )[:500]
+        logger.error(
+            "Job %s: device %s/%s has an unknown type_key %r (not in the "
+            "definition library) — marking the device failed.",
+            job.id, device.type_key, device.host, device.type_key,
+        )
+        return
     # Use the family-base collector for probe — connection-layer
     # settings (netmiko_device_type, auth) are stable across overlays.
     base_collector = _backups_route.get_collector(family_base)
@@ -306,7 +329,6 @@ def _process_one_device(
     # the family base even though connection params are stable.
     collector = _backups_route.get_collector(definition)
     collector.settings = settings  # share the job-level snapshot (see above)
-    result = job.results[idx]
     result.status = "running"
     start = time.monotonic()
     try:
@@ -493,6 +515,23 @@ def run_backup_job(
                         "Job %s: worker raised unexpected exception: %s",
                         job.id, exc, exc_info=exc,
                     )
+
+    # Safety net: any device still non-terminal (queued/running) here never
+    # reached a success/failed verdict — e.g. an unexpected worker escape
+    # before its per-device try/except. The parallel path above logs such an
+    # exception without re-raising, which would otherwise leave the device
+    # "queued" so the terminal logic below counts zero failures and marks a
+    # never-ran device a clean "completed". Force any non-terminal result to
+    # "failed" so "the device never ran" can never read as success (blind
+    # audit 81d9740 T0-2).
+    for r in job.results:
+        if r.status not in ("success", "failed"):
+            r.status = "failed"
+            if not r.error:
+                r.error = (
+                    f"{r.host}: backup did not run to completion "
+                    "(the worker did not reach a terminal state)."
+                )
 
     job.completed_at = datetime.now(UTC)
     success = sum(1 for r in job.results if r.status == "success")
