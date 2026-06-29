@@ -26,6 +26,17 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Paramiko shell collector fails closed on a never-settling stream**
+  (audit 276eaeb T0-3): when a device kept streaming up to the
+  `_MAX_SECONDS` cap without the read ever going idle, `_collect_output`
+  used to *return* the truncated buffer, which the backup runner then
+  saved with `status="success"` — a silently-corrupted backup. It now
+  raises `TimeoutError` on that path (restoring parity with the
+  read-timeout fail-closed `NetmikoCollector`), so a partial capture
+  surfaces as a failed backup instead of a good-looking truncated one.
+
 ## [0.4.8] - 2026-06-29
 
 ### Fixed

@@ -373,7 +373,12 @@ class ParamikoShellCollector(BaseCollector):
            polls (approximately 3 seconds of silence).
 
         An absolute ``_MAX_SECONDS`` cap prevents hanging forever if a
-        device produces a never-ending stream.
+        device produces a never-ending stream.  Hitting that cap while
+        output is still arriving raises ``TimeoutError`` (fail closed)
+        rather than returning the truncated buffer — a partial config
+        must never be persisted as a successful backup (audit 276eaeb
+        T0-3; the NetmikoCollector sibling fails closed the same way via
+        its read timeout).
 
         If *command* is supplied, the accumulated buffer is post-
         processed to strip the echoed command from the head — PTY
@@ -398,11 +403,16 @@ class ParamikoShellCollector(BaseCollector):
             line removed from the head.
 
         Raises:
-            TimeoutError: If no output at all arrives within ``_MAX_SECONDS``.
+            TimeoutError: If no output at all arrives within
+                ``_MAX_SECONDS``, or if output is still arriving when the
+                ``_MAX_SECONDS`` cap is hit (the idle window was never
+                reached, so the buffer would be truncated — fail closed
+                rather than save a partial config).
         """
         buf = ""
         idle_count = 0
         started = False
+        settled = False
         deadline = time.monotonic() + _MAX_SECONDS
 
         while time.monotonic() < deadline:
@@ -425,11 +435,25 @@ class ParamikoShellCollector(BaseCollector):
                         host,
                         len(buf.splitlines()),
                     )
+                    settled = True
                     break
 
         if not buf:
             raise TimeoutError(
                 f"No output received from {host} within {_MAX_SECONDS}s"
+            )
+
+        if not settled:
+            # Fell through the absolute _MAX_SECONDS cap while the device
+            # was still streaming — the idle window was never reached, so
+            # the buffer is almost certainly truncated mid-config.  Fail
+            # closed: a partial capture must surface as a failed backup,
+            # never be saved as "success" (audit 276eaeb T0-3 — restores
+            # parity with the read-timeout fail-closed NetmikoCollector).
+            raise TimeoutError(
+                f"Output from {host} never settled within {_MAX_SECONDS}s "
+                f"({len(buf.splitlines())} lines captured, stream still "
+                "active) — refusing to save a truncated backup"
             )
 
         if command:
