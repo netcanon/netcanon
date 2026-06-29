@@ -28,6 +28,16 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The `X-Netcanon-Job-Status` automation header is now declared in the
+  OpenAPI schema.** All seven job-running migration POST endpoints (`/plan`,
+  `/plan/ports`, `/plan/vlans`, `/plan/local_users`, `/plan/snmp`,
+  `/plan/snmpv3`, `/render`) set this header at runtime so an HTTP-only CI
+  gate can tell `completed` from `partial`/`failed`, but it was absent from
+  `responses=` (which advertised only 404 + 422), so generated clients and
+  contract tools could not discover it. Each 200 response now declares the
+  header with its `completed` / `partial` / `failed` enum (the MigrationJob
+  body schema is unchanged). Found by an independent blind audit
+  (`e5b77d7`, #8).
 * **The green "Validation OK" migration banner no longer overstates its
   coverage.** It claimed "every field that translates maps to a supported
   path on the target", but live validation walks only a subset of the

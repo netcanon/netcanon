@@ -136,6 +136,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/migration", tags=["migration"])
 
 
+# Automation contract (audit f92e97a #7, e5b77d7 #8): every job-running POST
+# endpoint sets the ``X-Netcanon-Job-Status`` response header to the job
+# disposition so a naive CI gate that only reads the HTTP status can still
+# distinguish a non-success -- these endpoints always return 200 with the job
+# body.  Declaring the header on the 200 response (not only setting it at
+# runtime) makes it visible in the OpenAPI schema and generated clients.
+# Shared so all seven job-running handlers stay in lock-step; FastAPI merges
+# this 200 entry with the response_model-derived body schema.
+_JOB_STATUS_RESPONSES: dict[int | str, dict] = {
+    200: {
+        "headers": {
+            "X-Netcanon-Job-Status": {
+                "description": (
+                    "Job disposition: completed / partial / failed. Mirrors "
+                    "``MigrationJob.status`` so an automation gate reading only "
+                    "the HTTP status can still detect a non-success."
+                ),
+                "schema": {
+                    "type": "string",
+                    "enum": ["completed", "partial", "failed"],
+                },
+            },
+        },
+    },
+    404: {"description": "source_filename does not exist"},
+    422: {"description": "Invalid adapter name or input specification"},
+}
+
+
 @router.get(
     "/adapters",
     response_model=list[CodecInfo],
@@ -175,10 +204,7 @@ def get_codec_capabilities(name: str) -> CapabilityMatrix:
     "/plan",
     response_model=MigrationJob,
     summary="Parse + validate a config against a target adapter",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration(
     body: MigrationPlanRequest,
@@ -274,10 +300,7 @@ def plan_migration(
     "/plan/ports",
     response_model=MigrationJob,
     summary="Per-pane override endpoint: port-name renames",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration_ports(
     body: MigrationPlanRequest,
@@ -336,10 +359,7 @@ def plan_migration_ports(
     "/plan/vlans",
     response_model=MigrationJob,
     summary="Per-pane override endpoint: VLAN ID renames",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration_vlans(
     body: MigrationPlanRequest,
@@ -394,10 +414,7 @@ def plan_migration_vlans(
     "/plan/local_users",
     response_model=MigrationJob,
     summary="Per-pane override endpoint: local-user renames",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration_local_users(
     body: MigrationPlanRequest,
@@ -460,10 +477,7 @@ def plan_migration_local_users(
     "/plan/snmp",
     response_model=MigrationJob,
     summary="Per-pane override endpoint: SNMP community rename",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration_snmp(
     body: MigrationPlanRequest,
@@ -527,10 +541,7 @@ def plan_migration_snmp(
     "/plan/snmpv3",
     response_model=MigrationJob,
     summary="Per-pane override endpoint: SNMPv3 USM user rename",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def plan_migration_snmpv3(
     body: MigrationPlanRequest,
@@ -594,10 +605,7 @@ def plan_migration_snmpv3(
     "/render",
     response_model=MigrationJob,
     summary="Alias of /plan — included for API symmetry and future split",
-    responses={
-        404: {"description": "source_filename does not exist"},
-        422: {"description": "Invalid adapter name or input specification"},
-    },
+    responses=_JOB_STATUS_RESPONSES,
 )
 def render_migration(
     body: MigrationPlanRequest,
