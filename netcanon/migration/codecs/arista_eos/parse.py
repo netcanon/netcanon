@@ -237,8 +237,13 @@ _DHCP_DEFAULT_ROUTER_RE = re.compile(
     r"^\s+default-router\s+(\d+\.\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
+# Anchor the value on a leading ``\S`` (not ``.+``) so the ``\s+`` separator
+# and the value group cannot both match the same run of spaces -- that overlap
+# is the polynomial-ReDoS CodeQL flagged (py/polynomial-redos #124).  The
+# consumer ``.split()``s the group, so requiring a non-space first char is
+# behaviour-identical for every real ``dns-server`` line.
 _DHCP_DNS_SERVER_RE = re.compile(
-    r"^\s+dns-server\s+(.+)$", re.IGNORECASE,
+    r"^\s+dns-server\s+(\S.*)$", re.IGNORECASE,
 )
 _DHCP_DOMAIN_NAME_RE = re.compile(
     r"^\s+domain-name\s+(\S+)", re.IGNORECASE,
