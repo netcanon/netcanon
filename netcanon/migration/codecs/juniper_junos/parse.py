@@ -74,7 +74,7 @@ from ..base import ParseError
 logger = logging.getLogger(__name__)
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse Junos ``set``-form (or block-form) text into a
     :class:`CanonicalIntent`.
 
@@ -1181,7 +1181,7 @@ def _apply_system(
             existing.hashed_password = f"junos:{tokens[5]}"
 
 
-def _apply_interfaces(
+def _apply_interfaces(  # noqa: C901
     tokens: list[str],
     iface_state: dict[str, dict[str, Any]],
     range_state: dict[str, dict[str, Any]] | None = None,

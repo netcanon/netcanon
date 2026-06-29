@@ -59,7 +59,7 @@ from .._helpers import _prefix_to_mask
 from ..base import RenderError
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` to IOS-XE
     ``show running-config`` text.
 

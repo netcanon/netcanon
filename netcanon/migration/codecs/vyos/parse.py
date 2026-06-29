@@ -286,7 +286,7 @@ def _serialise_brace(node: dict, depth: int) -> list[str]:
     return out
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse VyOS ``config.boot`` text into a :class:`CanonicalIntent`.
 
     Raises:

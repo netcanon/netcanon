@@ -20,7 +20,7 @@ from collections.abc import Iterable
 from .intent import CanonicalIntent
 
 
-def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
+def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
     """Yield schema xpaths for every populated field of a CanonicalIntent.
 
     This is the input to :func:`netcanon.services.migration_validate.

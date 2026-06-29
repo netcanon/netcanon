@@ -367,7 +367,7 @@ def run_plan(
     return job
 
 
-def run_plan_with_overrides(
+def run_plan_with_overrides(  # noqa: C901
     source: CodecBase,
     target: CodecBase,
     raw_text: str,

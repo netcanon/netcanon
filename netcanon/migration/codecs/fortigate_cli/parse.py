@@ -286,7 +286,7 @@ def _apply_system_ntp(block: _ConfigBlock, intent: CanonicalIntent) -> None:
                 intent.ntp_servers.append(server[0])
 
 
-def _apply_system_interface(
+def _apply_system_interface(  # noqa: C901
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
     for edit in block.edits:

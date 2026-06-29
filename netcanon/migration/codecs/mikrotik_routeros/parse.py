@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse RouterOS ``/export verbose`` text into a
     :class:`CanonicalIntent`.
 

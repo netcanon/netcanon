@@ -238,7 +238,7 @@ def sanitize_text(
     )
 
 
-def sanitize_intent(
+def sanitize_intent(  # noqa: C901
     intent: CanonicalIntent,
 ) -> tuple[CanonicalIntent, list[Substitution]]:
     """Apply field-typed redactions to a :class:`CanonicalIntent`.

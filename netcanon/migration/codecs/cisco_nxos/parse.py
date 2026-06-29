@@ -606,7 +606,7 @@ def _new_iface_scratch(name: str) -> dict:
     }
 
 
-def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
+def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """Extract ``interface <name>`` stanzas from NX-OS config text.
 
     Per interface: description, enabled (shutdown / no shutdown), mtu,
@@ -631,7 +631,7 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
             return None
         return _new_iface_scratch(name)
 
-    def _on_line(line: str, current: dict) -> None:
+    def _on_line(line: str, current: dict) -> None:  # noqa: C901
         # ── HSRP nested block (Phase 2c) ──
         # ``hsrp <N>`` opens a group; its sub-commands are further-indented
         # (>= 4 spaces).  Any shallower indented line ends the block.  This

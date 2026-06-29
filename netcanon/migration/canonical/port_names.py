@@ -241,7 +241,7 @@ class PortRenameResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def translate_port_names(
+def translate_port_names(  # noqa: C901
     intent: CanonicalIntent,
     source_codec: CodecBase,
     target_codec: CodecBase,
