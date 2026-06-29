@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Server-rendered UI pages no longer block the asyncio event loop.** The
+  nine GET page handlers (`/`, `/jobs`, `/schedules`, `/configs`, the diff
+  view, `/devices`, `/definitions`, `/migrate`, `/sanitize`) were declared
+  `async def` but ran fully synchronous bodies -- five of them doing a
+  blocking full-tree `list_configs()` filesystem walk (the diff view also two
+  `get_content()` reads) directly on the event loop, stalling every
+  concurrent request for the duration of the walk. They are now plain `def`
+  handlers, so Starlette runs them in its threadpool -- matching the sibling
+  API / migration routes and the storage layer's own non-blocking contract.
+  Page output is unchanged. Found by an independent blind audit
+  (`e5b77d7`, #3).
 * **The `X-Netcanon-Job-Status` automation header is now declared in the
   OpenAPI schema.** All seven job-running migration POST endpoints (`/plan`,
   `/plan/ports`, `/plan/vlans`, `/plan/local_users`, `/plan/snmp`,
