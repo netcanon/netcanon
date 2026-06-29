@@ -28,6 +28,14 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Doc-drift corrections** (audit 276eaeb): `SECURITY.md` listed the
+  hash-locked dependency manifest as "Pending" though `requirements.lock`
+  shipped in v0.4.8; the `aruba_to_arista.md` walkthrough cited a dead
+  `POST /api/v1/migration/run` endpoint and a non-existent `rename_overrides`
+  field (the real endpoint is `/api/v1/migration/plan`, the field is
+  `port_rename_map` plus four sibling `*_rename_map` fields); and the
+  `paramiko_collector` docstrings still described `auto_add` as the
+  host-key-checking default (the default has been `tofu` since v0.4.5).
 - **Multi-address interfaces no longer report a silent `ok` when extra
   addresses are dropped** (audit 276eaeb T0-1). The capability walker
   emitted `/interfaces/interface/ipv{4,6}/address/secondary-ip` only when

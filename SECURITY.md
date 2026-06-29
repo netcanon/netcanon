@@ -600,10 +600,18 @@ in regulated environments should pull from GHCR to get the attested
 provenance chain.  Operators in casual environments who just want
 the image working can use either.
 
-**Pending:** a pinned dependency manifest (`requirements.lock` /
-`uv.lock`).  Production builds currently resolve from `pyproject.toml`
-ranges; lock-file resolution is a follow-up wave for operators in
-regulated environments.
+**Shipped (v0.4.8):** a hash-pinned dependency manifest
+(`requirements.lock`).  The Docker image installs its dependencies with
+`pip --require-hashes -r requirements.lock` (see the `Dockerfile` builder
+stage), so the shipped container's dependency input set is constrained
+and integrity-verified rather than re-resolved from `pyproject.toml`
+ranges at build time.  The lock is resolved *inside* the digest-pinned
+base image (`tools/gen_requirements_lock.sh`) so its pins + hashes match
+the deploy platform, and `tests/unit/test_requirements_lock.py` fails CI
+if it drifts out of sync with `pyproject.toml`.  The PyPI sdist/wheel
+deliberately keeps `pyproject`'s version *ranges* — that artifact is a
+library and must let downstream resolvers co-install it; the lock
+constrains the *application* (the container).
 
 ---
 
