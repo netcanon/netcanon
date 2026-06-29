@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **SNMPv3 USM sub-field losses no longer report a green `severity: ok`.**
+  Live validation walked the `/snmp/v3-user` anchor but not its
+  auth-protocol / priv-protocol / priv-passphrase / VACM-group sub-fields, so
+  a migration that downgraded the SNMPv3 auth algorithm (e.g. SHA-256 ->
+  SHA-1 on AOS-CX / VyOS), substituted the privacy cipher (3DES -> AES on
+  FortiGate), re-keyed the opaque passphrase, or dropped the group showed a
+  green banner on a real cryptographic downgrade. The canonical walker now
+  yields these four sub-paths and the 12 codecs declare them per their actual
+  render behaviour: faithful round-trips stay supported; auth/priv downgrades
+  and key re-keys are `lossy` (reasons naming the downgrade); codecs that
+  render no SNMPv3 (the cisco_iosxe NETCONF stub, cisco_iosxr, opnsense)
+  declare them unsupported. First surface of the tracked `KNOWN_GAP`
+  walk-expansion ("PR-2"). Found by an independent blind audit (`e5b77d7`,
+  T0-2 / PR-2a).
 * **The sanitiser no longer leaks the org domain for trailing-dot or
   underscore FQDNs.** `redact_host` maps a multi-label FQDN host field (NTP /
   syslog / SNMP-trap / RADIUS target) to an opaque `host-N.example.test`

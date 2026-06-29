@@ -186,6 +186,25 @@ class FortiGateCLICodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "FortiOS has no 3DES privacy cipher; a `3des` source "
+                    "cipher is substituted with AES on render (a cipher "
+                    "change, not a re-key) -- verify the resulting security "
+                    "level.  AES-128/192/256 and DES round-trip faithfully."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/group",
+                reason=(
+                    "FortiOS `config system snmp user` carries no VACM group "
+                    "(users are grouped implicitly by security-level); the "
+                    "user renders but the canonical group is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + next-hop + device only; the "

@@ -215,6 +215,15 @@ class MikroTikRouterOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/group",
+                reason=(
+                    "RouterOS overloads `/snmp community` for v3 users and "
+                    "carries no VACM group binding there; the user renders "
+                    "but the canonical group is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/metric",
                 reason=(
                     "Render emits destination + gateway + comment only; the "

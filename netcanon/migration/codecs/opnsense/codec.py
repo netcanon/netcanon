@@ -421,6 +421,34 @@ class OPNsenseCodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "SNMPv3 users are not in OPNsense config.xml (see "
+                    "/snmp/v3-user); the auth algorithm is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "SNMPv3 users are not in OPNsense config.xml (see "
+                    "/snmp/v3-user); the privacy cipher is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "SNMPv3 users are not in OPNsense config.xml (see "
+                    "/snmp/v3-user); the privacy key is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/group",
+                reason=(
+                    "SNMPv3 users are not in OPNsense config.xml (see "
+                    "/snmp/v3-user); the VACM group is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
                 path="/vxlan-vnis/vni",
                 reason="VXLAN not modelled — OPNsense is a firewall codec.",
             ),

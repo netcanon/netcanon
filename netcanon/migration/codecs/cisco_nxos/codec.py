@@ -331,6 +331,16 @@ class CiscoNXOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: the NX-OS privacy key uses the "
+                    "`localizedkey` digest form, so operators migrating "
+                    "between OS versions or vendors must re-key the SNMPv3 "
+                    "user on the target device."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "NX-OS emits engineID in colon-decimal "

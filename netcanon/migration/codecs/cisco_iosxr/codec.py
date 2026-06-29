@@ -361,6 +361,34 @@ class CiscoIOSXRCodec(CodecBase):
                 path="/snmp/community",
                 reason="SNMP parse + render is out of the v1 XR scope.",
             ),
+            UnsupportedPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "SNMP is out of the v1 XR scope (see /snmp/community); "
+                    "the SNMPv3 auth algorithm is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "SNMP is out of the v1 XR scope (see /snmp/community); "
+                    "the SNMPv3 privacy cipher is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "SNMP is out of the v1 XR scope (see /snmp/community); "
+                    "the SNMPv3 privacy key is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/group",
+                reason=(
+                    "SNMP is out of the v1 XR scope (see /snmp/community); "
+                    "the SNMPv3 VACM group is dropped on migration."
+                ),
+            ),
             # ── Routing protocols — Tier 3 ──
             UnsupportedPath(
                 path="/routing/bgp",
