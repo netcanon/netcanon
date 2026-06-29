@@ -161,6 +161,24 @@ class MikroTikRouterOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "RouterOS renders only IETF VRRP; a cross-family source "
+                    "mode (HSRP / CARP) drops to a review comment on render -- "
+                    "the FHRP protocol silently changes, verify."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "RouterOS `/interface vrrp` carries no description / "
+                    "comment field on the group; the group renders but the "
+                    "operator description is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/ip",
                 reason=(
                     "Renders VLAN SVI / management L3 only from a sibling "

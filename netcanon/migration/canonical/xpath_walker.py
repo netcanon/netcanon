@@ -145,6 +145,22 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/interfaces/interface/voice-vlan"
         for grp in iface.vrrp_groups:
             yield "/interfaces/interface/vrrp-groups/group"
+            # FHRP family discriminator + election / timer params (audit
+            # e5b77d7, PR-2b walk-expansion).  mode/priority/preempt/advert
+            # are always populated (schema defaults), so a target codec that
+            # renders only its native FHRP family (or no FHRP at all) declares
+            # them lossy/unsupported -- a cross-family downgrade or a dropped
+            # election parameter is no longer silently 'ok'.
+            yield "/interfaces/interface/vrrp-groups/group/mode"
+            yield "/interfaces/interface/vrrp-groups/group/priority"
+            yield "/interfaces/interface/vrrp-groups/group/preempt"
+            yield "/interfaces/interface/vrrp-groups/group/advertisement-interval"
+            if grp.authentication:
+                yield "/interfaces/interface/vrrp-groups/group/authentication"
+            if grp.virtual_ipv6s:
+                yield "/interfaces/interface/vrrp-groups/group/virtual-ipv6s"
+            if grp.description:
+                yield "/interfaces/interface/vrrp-groups/group/description"
             # Sub-field losses several codecs declare lossy (FortiGate /
             # AOS-S keep one VIP + drop secondaries / virtual-mac / track
             # objects).  Walk them only when the loss condition holds, so

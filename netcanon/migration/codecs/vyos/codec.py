@@ -322,6 +322,62 @@ class VyOSCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group",
+                reason=(
+                    "VyOS VRRP / VRRPv3 is not modelled by the codec; the "
+                    "group is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "FHRP mode is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/priority",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "election priority is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/preempt",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "preempt flag is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "advertisement interval is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/authentication",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "FHRP authentication is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "IPv6 virtual addresses are dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "VyOS VRRP is not modelled (see the group anchor); the "
+                    "group description is dropped."
+                ),
+            ),
+            UnsupportedPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
                     "VLAN-SVI mount: VyOS models 802.1Q only as `vif` sub-"

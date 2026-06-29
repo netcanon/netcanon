@@ -166,6 +166,23 @@ class FortiGateCLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "FortiOS renders only IETF VRRP; a cross-family source "
+                    "mode (HSRP / CARP) drops to a review comment on render -- "
+                    "the FHRP protocol silently changes, verify."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "FortiOS `config vrrp` carries no per-group description; "
+                    "the group renders but the operator description is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/description",
                 reason=(
                     "Render emits the VLAN name but not a separate "

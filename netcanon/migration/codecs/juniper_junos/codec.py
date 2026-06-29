@@ -159,6 +159,15 @@ class JunosCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "Junos renders only IETF VRRP; a cross-family source mode "
+                    "(HSRP / CARP) is skipped on render -- the FHRP protocol "
+                    "silently changes, verify the redundancy intent survived."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
                     "VLAN-SVI mount: Junos models the SVI as an `irb` unit "

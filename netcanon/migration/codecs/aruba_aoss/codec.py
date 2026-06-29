@@ -157,6 +157,49 @@ class ArubaAOSSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "AOS-S renders only IETF VRRP; a cross-family source mode "
+                    "(HSRP / CARP) drops to a review comment on render -- the "
+                    "FHRP protocol silently changes, verify."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "AOS-S VRRP has no per-group advertisement-interval stanza; "
+                    "the group renders but the election timer is dropped (the "
+                    "target falls back to its 1s default)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/authentication",
+                reason=(
+                    "AOS-S VRRP renders only the plaintext-password auth "
+                    "scheme; an md5 / carp-key source scheme surfaces a review "
+                    "comment rather than the secret."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "AOS-S VRRP has only an IPv4 virtual-ip-address grammar; "
+                    "IPv6 virtual addresses (VRRPv3) are dropped on render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "AOS-S VRRP stanzas carry no description / name field; the "
+                    "group renders but the operator description is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
                     "VLAN-SVI mount: AOS-S renders the SVI L3 from the VLAN "

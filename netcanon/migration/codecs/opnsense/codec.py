@@ -167,6 +167,25 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "OPNsense renders only BSD CARP; a non-CARP source mode "
+                    "(VRRP / HSRP) is skipped on render and the whole group "
+                    "drops -- verify the redundancy was re-created on the "
+                    "target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/preempt",
+                reason=(
+                    "OPNsense's CARP `<vip>` grammar has no preempt element; "
+                    "the group renders but the preempt flag is dropped on "
+                    "render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/ip",
                 reason=(
                     "Renders VLAN SVI / management L3 only from a sibling "
