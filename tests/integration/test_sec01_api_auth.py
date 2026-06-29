@@ -44,6 +44,47 @@ def test_api_v1_gated_when_api_key_set(client):
     assert client.get("/health").status_code == 200
 
 
+def test_openapi_advertises_bearer_when_key_set(client):
+    """audit 276eaeb #9: with NETCANON_API_KEY configured, the OpenAPI
+    schema declares the ``BearerAuth`` security scheme and applies it to
+    every /api/v1 operation, so /docs renders an Authorize button and a
+    client can discover the requirement from the schema (require_api_key
+    is a plain dependency, invisible to OpenAPI on its own)."""
+    client.app.state.settings.api_key = "s3cret"
+    schema = client.get("/api/v1/openapi.json").json()
+
+    schemes = schema.get("components", {}).get("securitySchemes", {})
+    assert schemes.get("BearerAuth", {}).get("type") == "http"
+    assert schemes.get("BearerAuth", {}).get("scheme") == "bearer"
+
+    api_paths = {
+        p: item for p, item in schema["paths"].items() if p.startswith("/api/v1")
+    }
+    assert api_paths, "no /api/v1 paths in the schema"
+    for path, item in api_paths.items():
+        for op in item.values():
+            if isinstance(op, dict):
+                assert {"BearerAuth": []} in op.get("security", []), (
+                    f"{path} operation does not require BearerAuth in the schema"
+                )
+
+
+def test_openapi_open_when_no_key(client):
+    """No key → no security scheme: the schema is honest about the
+    zero-config open posture (don't claim auth that isn't enforced)."""
+    schema = client.get("/api/v1/openapi.json").json()
+    schemes = schema.get("components", {}).get("securitySchemes", {})
+    assert "BearerAuth" not in schemes
+    for path, item in schema["paths"].items():
+        if not path.startswith("/api/v1"):
+            continue
+        for op in item.values():
+            if isinstance(op, dict):
+                assert "security" not in op, (
+                    f"{path} declares security but no key is configured"
+                )
+
+
 def test_ui_routes_are_not_key_gated_by_design(client):
     """DOCUMENTED DECISION (blind-audit 3ec11f3 T0-1), not an oversight: the
     API key gates ``/api/v1`` ONLY — the server-rendered HTML UI stays open

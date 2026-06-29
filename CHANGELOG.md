@@ -28,6 +28,13 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **OpenAPI schema now advertises the `/api/v1` bearer-token requirement**
+  (audit 276eaeb #9). `require_api_key` enforced `Authorization: Bearer`
+  as a plain dependency, invisible to OpenAPI, so `/docs` had no Authorize
+  button and the gate wasn't discoverable from the schema. When
+  `NETCANON_API_KEY` is set, the schema now declares a `BearerAuth`
+  security scheme and applies it to every `/api/v1` operation; with no key
+  the schema stays open (honest about the zero-config posture).
 - **`POST /api/v1/configs/diff` walks the config store once, not twice**
   (audit 276eaeb T0-5). The route resolved the left and right records via
   two `_resolve_record` calls that each re-ran `storage.list_configs()`
