@@ -957,6 +957,71 @@ def sanitize_intent(  # noqa: C901
 # Substitution-table — counter-per-session for cross-reference stability
 # ---------------------------------------------------------------------------
 
+# NAT64 carries the IPv4 in its low 32 bits but — unlike 6to4 / IPv4-mapped /
+# Teredo — has no ``ipaddress`` accessor, so we recognise the prefixes and
+# slice the bits ourselves.  Both the well-known prefix (RFC 6052) and the
+# RFC 8215 local-use prefix are in play.
+_NAT64_NETWORKS = (
+    ipaddress.ip_network("64:ff9b::/96"),
+    ipaddress.ip_network("64:ff9b:1::/48"),
+)
+
+
+def _ipv4_is_public(addr: ipaddress.IPv4Address) -> bool:
+    """True iff *addr* is a globally-routable IPv4 the sanitizer must
+    redact — the exact inverse of :meth:`_SubstitutionTable.redact_ipv4`'s
+    preserve set (private / loopback / link-local / multicast / reserved /
+    unspecified, the three RFC 5737 docs ranges, and CGNAT)."""
+    if (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    ):
+        return False
+    if str(addr).startswith(("192.0.2.", "198.51.100.", "203.0.113.")):
+        return False
+    return addr not in ipaddress.ip_network("100.64.0.0/10")
+
+
+def _embedded_public_ipv4(
+    addr: ipaddress.IPv6Address,
+) -> ipaddress.IPv4Address | None:
+    """Return the embedded IPv4 of an IPv6 *transition* address (6to4,
+    IPv4-mapped, IPv4-compatible, NAT64, Teredo) **iff** that IPv4 is
+    public/global and would otherwise leak.
+
+    These formats carry a routable IPv4 in their low bits, but the
+    address frequently classifies as ``is_private`` / ``is_reserved`` at
+    the v6 layer (6to4 ``2002::/16`` is private, NAT64 ``64:ff9b::/96``
+    is reserved, Teredo ``2001:0::/32`` is private), so ``redact_ipv6``'s
+    preserve branch emitted them verbatim — leaking the embedded public
+    IPv4 (audit 276eaeb T0-4).  Returns ``None`` when no transition IPv4
+    is present, or the embedded IPv4 is itself private / docs / reserved
+    (nothing to leak — e.g. ``2002:c0a8:0101::`` embeds 192.168.1.1)."""
+    candidates: list[ipaddress.IPv4Address] = []
+    if addr.sixtofour is not None:
+        candidates.append(addr.sixtofour)
+    if addr.ipv4_mapped is not None:
+        candidates.append(addr.ipv4_mapped)
+    if addr.teredo is not None:
+        # (server, client): both are clear-text routable IPv4s.
+        candidates.extend(addr.teredo)
+    if any(addr in net for net in _NAT64_NETWORKS):
+        candidates.append(ipaddress.IPv4Address(int(addr) & 0xFFFFFFFF))
+    if not candidates:
+        # IPv4-compatible (deprecated): ``::a.b.c.d`` — all high bits zero
+        # with a non-trivial low word (exclude ``::`` and ``::1``).
+        low = int(addr) & 0xFFFFFFFF
+        if (int(addr) >> 32) == 0 and low > 1:
+            candidates.append(ipaddress.IPv4Address(low))
+    for v4 in candidates:
+        if _ipv4_is_public(v4):
+            return v4
+    return None
+
 
 class _SubstitutionTable:
     """Per-session redaction table.
@@ -1031,20 +1096,9 @@ class _SubstitutionTable:
             addr = ipaddress.IPv4Address(ip)
         except ValueError:
             return ip
-        if (
-            addr.is_private
-            or addr.is_loopback
-            or addr.is_link_local
-            or addr.is_multicast
-            or addr.is_reserved
-            or addr.is_unspecified
-        ):
-            return ip
-        # Already in docs ranges
-        if str(addr).startswith(("192.0.2.", "198.51.100.", "203.0.113.")):
-            return ip
-        # CGNAT
-        if addr in ipaddress.ip_network("100.64.0.0/10"):
+        if not _ipv4_is_public(addr):
+            # private / loopback / link-local / multicast / reserved /
+            # unspecified / docs-range / CGNAT — preserve verbatim.
             return ip
         # Public — substitute via cycle through the three docs ranges
         ranges = ["192.0.2", "198.51.100", "203.0.113"]
@@ -1068,6 +1122,12 @@ class _SubstitutionTable:
         as-is: ULA ``fc00::/7``, link-local ``fe80::/10``, loopback
         ``::1``, unspecified ``::``, multicast ``ff00::/8``, reserved,
         and the documentation range ``2001:db8::/32`` itself.
+
+        Exception (audit 276eaeb T0-4): IPv6 *transition* formats (6to4,
+        IPv4-mapped, IPv4-compatible, NAT64, Teredo) embed a routable
+        IPv4 yet often classify as private/reserved at the v6 layer, so
+        they are checked *before* the preserve branch and redacted when
+        the embedded IPv4 is public — see :func:`_embedded_public_ipv4`.
         """
         if ip in self._ipv6:
             return self._ipv6[ip]
@@ -1075,6 +1135,10 @@ class _SubstitutionTable:
             addr = ipaddress.IPv6Address(ip)
         except ValueError:
             return ip
+        # Transition address embedding a public IPv4 — redact before the
+        # preserve branch below would emit it verbatim and leak the v4.
+        if _embedded_public_ipv4(addr) is not None:
+            return self._substitute_ipv6(ip)
         # ``is_private`` already covers ULA, link-local, loopback,
         # unspecified, and the 2001:db8::/32 docs range; the rest are
         # listed explicitly for self-documentation / defensive belt.
@@ -1090,6 +1154,11 @@ class _SubstitutionTable:
         if addr in ipaddress.ip_network("2001:db8::/32"):
             return ip
         # Public global unicast — substitute a deterministic docs address.
+        return self._substitute_ipv6(ip)
+
+    def _substitute_ipv6(self, ip: str) -> str:
+        """Allocate the next deterministic RFC 3849 docs address
+        (``2001:db8::N``) for *ip* and cache it (cross-reference stable)."""
         self._ipv6_counter += 1
         new_ip = f"2001:db8::{self._ipv6_counter:x}"
         self._ipv6[ip] = new_ip
