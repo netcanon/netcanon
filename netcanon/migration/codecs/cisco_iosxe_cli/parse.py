@@ -235,7 +235,13 @@ _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(?:vrf\s+(\S+)\s+)?"
     r"(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)\s+(\S+)"
-    r"(.*)$",  # group 5: trailing tokens (admin distance / name / tag / ...)
+    # group 5: trailing tokens (admin distance / name / tag / ...).  ``(\s.*)?``
+    # not ``(.*)`` so the next-hop ``(\S+)`` and the trailing group can't both
+    # match the same non-space run -- that overlap was the polynomial ReDoS
+    # CodeQL flagged (py/polynomial-redos #128).  ``(.*)`` after a greedy
+    # ``(\S+)`` already began at the first space, so ``(\s.*)?`` captures the
+    # identical value (None when absent, normalised by ``or ""`` downstream).
+    r"(\s.*)?$",
     re.IGNORECASE,
 )
 # ``ip default-gateway X`` is the L2-switch form of a default route.
@@ -335,8 +341,12 @@ _TOP_NTP_SERVER_RE = re.compile(
 _VRF_DEFINITION_RE = re.compile(
     r"^vrf\s+definition\s+(\S+)\s*$", re.IGNORECASE,
 )
+# ``(\S.*)`` (not ``(.+)``) so the ``\s+`` separator and the value can't both
+# match the same spaces -- the polynomial-ReDoS overlap CodeQL flagged
+# (py/polynomial-redos #127).  The consumer ``.strip()``s the group, so a
+# non-space first char is behaviour-identical for any real description.
 _VRF_DESCRIPTION_RE = re.compile(
-    r"^\s+description\s+(.+)$", re.IGNORECASE,
+    r"^\s+description\s+(\S.*)$", re.IGNORECASE,
 )
 _VRF_RD_RE = re.compile(
     r"^\s+rd\s+(\S+)\s*$", re.IGNORECASE,

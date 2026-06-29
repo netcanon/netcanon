@@ -144,8 +144,14 @@ _VLAN_TRUNK_NATIVE_RE = re.compile(
 )
 #: ``vlan trunk allowed <list|all>`` — ``all`` maps to an empty
 #: allowed-list (the render re-emits ``all`` for an empty list).
+# Anchor the value on a leading ``\S`` and let the consumer ``.strip()`` the
+# trailing whitespace, instead of ``(.+?)\s*$`` -- the lazy ``.+?`` overlapped
+# both the leading ``\s+`` separator and the trailing ``\s*`` (polynomial
+# ReDoS, CodeQL py/polynomial-redos #125).  Every real trunk line has a VLAN
+# list or ``all``; a value-less ``vlan trunk allowed`` was degenerate config
+# (it set trunk_allowed=[] == "all") and is now skipped.
 _VLAN_TRUNK_ALLOWED_RE = re.compile(
-    r"^\s+vlan\s+trunk\s+allowed\s+(.+?)\s*$", re.IGNORECASE,
+    r"^\s+vlan\s+trunk\s+allowed\s+(\S.*)$", re.IGNORECASE,
 )
 #: ``lag <N>`` on a physical port declares it a member of ``lag <N>``.
 _LAG_MEMBER_RE = re.compile(r"^\s+lag\s+(\d+)\s*$", re.IGNORECASE)

@@ -230,7 +230,11 @@ _FABRIC_AG_MODE_RE = re.compile(
 
 #: ``vrf context <name>`` opens a top-level VRF stanza.
 _VRF_CONTEXT_RE = re.compile(r"^vrf\s+context\s+(\S+)\s*$", re.IGNORECASE)
-_VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(.+)$", re.IGNORECASE)
+# ``(\S.*)`` (not ``(.+)``) so the ``\s+`` separator and the value can't both
+# match the same spaces -- the polynomial-ReDoS overlap CodeQL flagged
+# (py/polynomial-redos #126).  The consumer ``.strip()``s the group, so a
+# non-space first char is behaviour-identical for any real description.
+_VRF_DESCRIPTION_RE = re.compile(r"^\s+description\s+(\S.*)$", re.IGNORECASE)
 # ── VRF RD / route-target + per-VRF static route (Phase 3) ──
 #: ``rd <asn>:<nn>`` / ``rd <ip>:<nn>`` / ``rd auto`` inside a ``vrf
 #: context`` block.  ``auto`` (NX-OS derives the RD from the BGP ASN +

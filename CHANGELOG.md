@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Hardened five config-parser regexes against polynomial ReDoS** (CodeQL
+  `py/polynomial-redos`, alerts #124-#128). The Arista DHCP `dns-server`, the
+  AOS-CX `vlan trunk allowed`, the NX-OS and IOS-XE VRF `description`, and the
+  IOS-XE `ip route` patterns each paired a `\s+` separator (or a greedy next-hop
+  `(\S+)`) with a value group whose character class overlapped it, so a long
+  attacker-controlled line pasted through the migrate / sanitize API could drive
+  super-linear backtracking. Anchored each value boundary on a disjoint class
+  (`\S` for the value patterns, `\s` for the static-route trailing group);
+  behaviour is identical for every real config because each consumer already
+  `.split()`s or `.strip()`s the captured group (confirmed by a render -> parse
+  equivalence check, pinned by `tests/unit/migration/test_redos_hardening.py`).
+
 * **Static-route next-hop, routing-instance type, and IPv6 address scope no
   longer report a green `severity: ok` when dropped on translation.** Live
   validation walked the `/routing/static-route`, `/routing-instances/instance`,
