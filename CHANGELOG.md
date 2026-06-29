@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The green "Validation OK" migration banner no longer overstates its
+  coverage.** It claimed "every field that translates maps to a supported
+  path on the target", but live validation walks only a subset of the
+  canonical tree -- ~13 enumerated, CI-tracked leaves (SNMPv3 auth/privacy
+  algorithms, VRRP priority/preempt/mode, static-route gateway, and others;
+  see `tests/unit/migration/test_walker_completeness.py`) are not yet
+  inspected, so a green banner could accompany a silently-downgraded SNMPv3
+  privacy cipher or a dropped VRRP failover parameter. The banner now reads
+  "Validation OK for the checked fields" and names representative
+  not-yet-checked sub-fields, so the operator-facing severity stops implying
+  full coverage while the walk-expansion (PR-2) is pending. Found by an
+  independent blind audit (`e5b77d7`, T0-2 interim).
 * **`ARCHITECTURE.md` no longer mislabels the bidirectional
   `cisco_iosxe_cli` codec as "parse-only" and no longer omits four shipped
   codecs.** The Phase-1 roadmap entry called the IOS-XE CLI codec parse-only

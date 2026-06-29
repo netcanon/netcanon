@@ -1519,9 +1519,12 @@
     var v = job.validation;
     if (!v) return '<em>No validation report.</em>';
     if (v.severity === 'ok') {
-      return '<div>&#10003; Validation OK — every field that translates maps '
-           + 'to a supported path on the target. Review before applying; '
-           + 'Netcanon has no deploy path.</div>';
+      return '<div>&#10003; Validation OK for the checked fields. Every '
+           + 'translatable field Netcanon inspects maps to a supported path '
+           + 'on the target, but some advanced sub-fields (e.g. SNMPv3 '
+           + 'auth/privacy algorithms, VRRP priority/preempt) are not yet '
+           + 'checked — review the output before applying; Netcanon has no '
+           + 'deploy path.</div>';
     }
     var lines = v.reasons.map(function(r) {
       return '<li>' + escapeHtml(r) + '</li>';
