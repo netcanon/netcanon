@@ -430,6 +430,22 @@ class CiscoIOSXECodec(CodecBase):
                 ),
             ),
             UnsupportedPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason="SNMPv3 USM not wired in the Phase-0.5 stub (see /snmp/v3-user); the auth algorithm is dropped.",
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason="SNMPv3 USM not wired in the Phase-0.5 stub (see /snmp/v3-user); the privacy cipher is dropped.",
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason="SNMPv3 USM not wired in the Phase-0.5 stub (see /snmp/v3-user); the privacy key is dropped.",
+            ),
+            UnsupportedPath(
+                path="/snmp/v3-user/group",
+                reason="SNMPv3 USM not wired in the Phase-0.5 stub (see /snmp/v3-user); the VACM group is dropped.",
+            ),
+            UnsupportedPath(
                 path="/vxlan-vnis/vni",
                 reason=(
                     "VXLAN not modelled in this NETCONF/OpenConfig "

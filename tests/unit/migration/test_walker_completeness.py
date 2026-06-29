@@ -177,10 +177,6 @@ _WALK_EXEMPT: dict[tuple[str, str], tuple[str, str]] = {
     # ── KNOWN_GAP: real currently-silent losses, deferred to walk-expansion ──
     ("CanonicalIPv6Address", "scope"): ("KNOWN_GAP", "link-local discriminator not walked; PR-2"),
     ("CanonicalRoutingInstance", "instance_type"): ("KNOWN_GAP", "mac-vrf vs vrf not walked; PR-2"),
-    ("CanonicalSNMPv3User", "auth_protocol"): ("KNOWN_GAP", "auth algorithm downgrade not walked; PR-2"),
-    ("CanonicalSNMPv3User", "priv_protocol"): ("KNOWN_GAP", "priv cipher downgrade not walked; PR-2"),
-    ("CanonicalSNMPv3User", "priv_passphrase"): ("KNOWN_GAP", "privacy key unwalked; sanitizer redacts it; PR-2"),
-    ("CanonicalSNMPv3User", "group"): ("KNOWN_GAP", "VACM group not walked; PR-2 (lower)"),
     ("CanonicalVRRPGroup", "mode"): ("KNOWN_GAP", "FHRP family (hsrp/carp/vrrp) not walked; PR-2"),
     ("CanonicalVRRPGroup", "priority"): ("KNOWN_GAP", "master-election priority not walked; PR-2"),
     ("CanonicalVRRPGroup", "preempt"): ("KNOWN_GAP", "failover preempt not walked; PR-2"),

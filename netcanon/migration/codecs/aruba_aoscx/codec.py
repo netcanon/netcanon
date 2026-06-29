@@ -324,6 +324,46 @@ class ArubaAOSCXCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "AOS-CX renders SNMPv3 auth with SHA-1 only: a stronger "
+                    "source auth algorithm (SHA-224/256/384/512) is silently "
+                    "DOWNGRADED to SHA-1 on render -- a cryptographic "
+                    "downgrade, not a re-key; verify the resulting security "
+                    "level is acceptable."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "AOS-CX renders SNMPv3 privacy with AES-128 / DES only: a "
+                    "stronger source cipher (AES-192/256) is DOWNGRADED to "
+                    "AES-128 and 3DES to DES on render -- a cryptographic "
+                    "downgrade, verify the resulting security level."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "The SNMPv3 privacy key is a `ciphertext` blob encrypted "
+                    "with the device key (portable same-device only); cross-"
+                    "vendor / cross-device migration emits it verbatim and the "
+                    "operator must RE-KEY the user on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/group",
+                reason=(
+                    "AOS-CX `snmpv3 user` syntax carries no VACM group "
+                    "binding; the user renders but the canonical group is "
+                    "dropped on render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vxlan-vnis/source-interface",
                 reason=(
                     "AOS-CX states the VTEP source as an IPv4 *address* "

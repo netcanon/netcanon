@@ -244,6 +244,36 @@ class VyOSCodec(CodecBase):
                 severity="warn",
             ),
             LossyPath(
+                path="/snmp/v3-user/auth-protocol",
+                reason=(
+                    "VyOS `snmp v3 user ... auth type` renders only md5 / sha; "
+                    "a stronger source auth algorithm (SHA-224/256/384/512) is "
+                    "collapsed to `sha` (SHA-1) on render -- a cryptographic "
+                    "downgrade requiring a re-key on the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-protocol",
+                reason=(
+                    "VyOS `snmp v3 user ... privacy type` renders only bare "
+                    "`des` / `aes`; AES key-length variants (AES-192/256) and "
+                    "3DES lose their exact strength on render -- a "
+                    "cryptographic downgrade requiring a re-key."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/snmp/v3-user/priv-passphrase",
+                reason=(
+                    "Same as the auth key: the VyOS privacy key is an opaque "
+                    "`encrypted-password` blob; it round-trips verbatim same-"
+                    "vendor but cross-vendor migration requires re-keying on "
+                    "the target."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/snmp/v3-user/engine-id",
                 reason=(
                     "VyOS declares a single config-wide `engineid` for the "

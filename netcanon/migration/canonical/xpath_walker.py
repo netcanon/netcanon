@@ -223,8 +223,22 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
             yield "/snmp/trap-host"
         for v3 in intent.snmp.v3_users:
             yield "/snmp/v3-user"
+            # Sub-field losses (audit e5b77d7, PR-2a walk-expansion): codecs
+            # that render the v3-user but DOWNGRADE the auth/priv algorithm,
+            # re-key the opaque passphrase, or drop the VACM group declare
+            # these lossy/unsupported.  Walk them only when populated so the
+            # declaration fires in the live report instead of classify()
+            # fail-opening to 'supported' (a silent crypto downgrade).
+            if v3.auth_protocol:
+                yield "/snmp/v3-user/auth-protocol"
             if v3.auth_passphrase:
                 yield "/snmp/v3-user/auth-passphrase"
+            if v3.priv_protocol:
+                yield "/snmp/v3-user/priv-protocol"
+            if v3.priv_passphrase:
+                yield "/snmp/v3-user/priv-passphrase"
+            if v3.group:
+                yield "/snmp/v3-user/group"
             if v3.engine_id:
                 yield "/snmp/v3-user/engine-id"
     for _ in intent.dhcp_servers:
