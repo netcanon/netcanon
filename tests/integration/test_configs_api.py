@@ -355,6 +355,44 @@ class TestDiffCompatibility:
         assert resp.status_code == 404
 
 
+class TestDiffEfficiency:
+    """blind-audit 276eaeb T0-5: a two-sided diff resolves both records from
+    a SINGLE storage walk, not one ``list_configs()`` per side (the route
+    used to call ``_resolve_record`` — which re-listed the store — once for
+    left and once for right)."""
+
+    def test_diff_lists_store_once(self, client):
+        a = _seed_config_of_type(client, "Cisco", "10.6.6.1")
+        b = _seed_config_of_type(client, "Cisco", "10.6.6.2")
+        storage = client.app.state.storage
+        with patch.object(
+            storage, "list_configs", wraps=storage.list_configs
+        ) as spy:
+            resp = client.post(
+                "/api/v1/configs/diff", json={"left": a, "right": b}
+            )
+        assert resp.status_code == 200
+        assert spy.call_count == 1, (
+            f"diff walked the store {spy.call_count}x; expected 1 "
+            "(build the {filename: record} index once)"
+        )
+
+    def test_diff_404_also_lists_store_once(self, client):
+        """The single-walk holds on the not-found path too (left resolves,
+        right 404s) — the index is built before either lookup."""
+        a = _seed_config_of_type(client, "Cisco", "10.6.6.3")
+        storage = client.app.state.storage
+        with patch.object(
+            storage, "list_configs", wraps=storage.list_configs
+        ) as spy:
+            resp = client.post(
+                "/api/v1/configs/diff",
+                json={"left": a, "right": "Cisco_0-0-0-0_20000101_000000.cfg"},
+            )
+        assert resp.status_code == 404
+        assert spy.call_count == 1
+
+
 class TestDiffOutput:
     """Structural checks on the diff body — stats, line kinds, numbers."""
 
