@@ -28,6 +28,13 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`POST /api/v1/sanitize` now caps the upload size** (audit 276eaeb
+  #19). The endpoint read the entire request body into memory and fed it
+  to the synchronous parse->redact->render pipeline with no limit, so an
+  oversized upload was an availability footgun. It now reads at most
+  `NETCANON_MAX_SANITIZE_UPLOAD_BYTES` (default 16 MiB) and returns `413`
+  beyond that. Real configs are far below the cap; raise the env var or
+  run the CLI `netcanon sanitize` for anything larger.
 - **Doc-drift corrections** (audit 276eaeb): `SECURITY.md` listed the
   hash-locked dependency manifest as "Pending" though `requirements.lock`
   shipped in v0.4.8; the `aruba_to_arista.md` walkthrough cited a dead

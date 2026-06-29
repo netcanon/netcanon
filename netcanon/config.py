@@ -66,6 +66,44 @@ def _resolve_global_backup_ceiling() -> int:
 MAX_GLOBAL_BACKUP_CONCURRENCY: int = _resolve_global_backup_ceiling()
 
 
+#: Default ceiling on a single ``POST /api/v1/sanitize`` upload (16 MiB).
+#: Network configs are well under a megabyte even for large chassis, so 16 MiB
+#: is generous headroom while still bounding the work an unauthenticated /
+#: anonymous caller can force: without a cap the endpoint read the entire body
+#: into memory and ran the synchronous parse→redact→render pipeline on it, so a
+#: multi-gigabyte upload was an availability footgun (blind-audit 276eaeb #19).
+_DEFAULT_MAX_SANITIZE_UPLOAD_BYTES: int = 16 * 1024 * 1024
+
+
+def _resolve_sanitize_upload_cap() -> int:
+    """Read the ``/sanitize`` upload ceiling from the environment.
+
+    Module-level (not a :class:`Settings` field) so the route can read it at
+    request time and a test can monkeypatch it cheaply.  Reads
+    ``NETCANON_MAX_SANITIZE_UPLOAD_BYTES``, falling back to
+    :data:`_DEFAULT_MAX_SANITIZE_UPLOAD_BYTES` when unset or unparseable;
+    floored at 1 KiB so an operator can't accidentally set a cap that rejects
+    every real config.
+    """
+    raw = os.environ.get("NETCANON_MAX_SANITIZE_UPLOAD_BYTES")
+    if raw is None:
+        return _DEFAULT_MAX_SANITIZE_UPLOAD_BYTES
+    try:
+        return max(1024, int(raw))
+    except ValueError:
+        warnings.warn(
+            f"NETCANON_MAX_SANITIZE_UPLOAD_BYTES={raw!r} is not an integer; "
+            f"falling back to {_DEFAULT_MAX_SANITIZE_UPLOAD_BYTES}",
+            stacklevel=2,
+        )
+        return _DEFAULT_MAX_SANITIZE_UPLOAD_BYTES
+
+
+#: Resolved at import; the route reads ``config.MAX_SANITIZE_UPLOAD_BYTES`` at
+#: request time (see :mod:`netcanon.api.routes.sanitize`).
+MAX_SANITIZE_UPLOAD_BYTES: int = _resolve_sanitize_upload_cap()
+
+
 def _default_definitions_dir() -> Path:
     """Resolve the default device-definition library root.
 

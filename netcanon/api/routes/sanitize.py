@@ -21,6 +21,7 @@ import logging
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse
 
+from ... import config as app_config
 from ...migration.codecs.base import ParseError
 from ...migration.codecs.registry import list_public_codecs
 from ...tools.sanitize import sanitize_text
@@ -52,7 +53,22 @@ async def post_sanitize(
             detail=f"Unknown source_vendor {source_vendor!r}; available: {available}",
         )
 
-    raw_bytes = await config.read()
+    # Bound the read: without a cap the whole body is pulled into memory and
+    # fed to the synchronous parse→redact→render pipeline, so an oversized
+    # upload is an availability footgun (blind-audit 276eaeb #19).  Read at
+    # most cap+1 bytes — if we get more than the cap, the body is too large.
+    # The cap is read at request time so it stays env-overridable + testable.
+    cap = app_config.MAX_SANITIZE_UPLOAD_BYTES
+    raw_bytes = await config.read(cap + 1)
+    if len(raw_bytes) > cap:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Config upload exceeds the {cap} byte limit. Raise "
+                "NETCANON_MAX_SANITIZE_UPLOAD_BYTES if you must sanitize a "
+                "larger file, or run the CLI 'netcanon sanitize' locally."
+            ),
+        )
     raw = raw_bytes.decode("utf-8", errors="replace")
 
     try:
