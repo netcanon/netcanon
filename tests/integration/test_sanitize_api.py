@@ -48,6 +48,34 @@ class TestSanitizeEndpoint:
         # Original hostname should not survive
         assert "SW-1OG-01" not in body
 
+    def test_oversized_upload_rejected_413(self, client, monkeypatch):
+        """blind-audit 276eaeb #19: an upload larger than the cap is
+        rejected with 413 instead of being read whole into memory and
+        pushed through the synchronous parse pipeline."""
+        import netcanon.config as cfg
+        monkeypatch.setattr(cfg, "MAX_SANITIZE_UPLOAD_BYTES", 64)
+        big = b"hostname x\n" * 50  # ~550 bytes, well over the 64-byte cap
+        response = client.post(
+            "/api/v1/sanitize",
+            data={"source_vendor": "aruba_aoss"},
+            files={"config": ("big.cfg", big, "text/plain")},
+        )
+        assert response.status_code == 413
+        assert "limit" in response.json()["detail"].lower()
+
+    def test_upload_at_cap_is_not_size_rejected(self, client, monkeypatch):
+        """A body within the cap is not size-rejected (it proceeds to the
+        normal parse path — the cap guards size only, nothing else)."""
+        import netcanon.config as cfg
+        monkeypatch.setattr(cfg, "MAX_SANITIZE_UPLOAD_BYTES", 10_000)
+        with open(ARUBA_FIXTURE, "rb") as f:
+            response = client.post(
+                "/api/v1/sanitize",
+                data={"source_vendor": "aruba_aoss"},
+                files={"config": ("test.cfg", f, "text/plain")},
+            )
+        assert response.status_code == 200
+
     def test_dry_run_returns_json_audit(self, client):
         with open(ARUBA_FIXTURE, "rb") as f:
             response = client.post(
