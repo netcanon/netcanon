@@ -562,6 +562,43 @@ class TestPerPaneEndpointsSetJobStatusHeader:
         assert resp.headers["X-Netcanon-Job-Status"] == resp.json()["status"]
 
 
+class TestJobStatusHeaderInOpenAPISchema:
+    """The ``X-Netcanon-Job-Status`` automation header must be *declared* in
+    the OpenAPI schema, not only set at runtime.
+
+    The wire-header tests above prove the header is emitted; this proves it is
+    documented, so generated clients / contract tools can discover it.  All
+    seven job-running endpoints emitted the header but none declared it in the
+    schema (``responses=`` advertised only 404 + 422) -- audit e5b77d7 #8.
+    """
+
+    _JOB_PATHS = [
+        "/api/v1/migration/plan",
+        "/api/v1/migration/plan/ports",
+        "/api/v1/migration/plan/vlans",
+        "/api/v1/migration/plan/local_users",
+        "/api/v1/migration/plan/snmp",
+        "/api/v1/migration/plan/snmpv3",
+        "/api/v1/migration/render",
+    ]
+
+    @pytest.mark.parametrize("path", _JOB_PATHS)
+    def test_header_declared_on_200_with_enum(self, client, path):
+        r200 = client.app.openapi()["paths"][path]["post"]["responses"]["200"]
+        hdr = r200.get("headers", {}).get("X-Netcanon-Job-Status")
+        assert hdr is not None, f"{path} 200 response is missing the header"
+        assert hdr["schema"]["enum"] == ["completed", "partial", "failed"]
+        # Declaring the header must NOT clobber the MigrationJob body schema.
+        assert "application/json" in r200.get("content", {})
+
+    def test_detect_endpoint_does_not_declare_the_header(self, client):
+        # /detect returns a candidate list, runs no pipeline, sets no header.
+        r200 = client.app.openapi()["paths"][
+            "/api/v1/migration/detect"
+        ]["post"]["responses"]["200"]
+        assert "X-Netcanon-Job-Status" not in r200.get("headers", {})
+
+
 class TestPlanVlansEndpoint:
     """``POST /api/v1/migration/plan/vlans`` — second per-pane
     override endpoint.  Exercises the ``vlan_rename_map`` surface
