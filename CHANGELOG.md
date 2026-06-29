@@ -28,6 +28,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **`ARCHITECTURE.md` no longer mislabels the bidirectional
+  `cisco_iosxe_cli` codec as "parse-only" and no longer omits four shipped
+  codecs.** The Phase-1 roadmap entry called the IOS-XE CLI codec parse-only
+  (it is certified `direction = bidirectional`) and listed only the original
+  eight codecs, omitting the four bidirectional, round-trip-certified codecs
+  that shipped in v0.1.5--v0.1.8 (Cisco NX-OS, Cisco IOS-XR, Aruba AOS-CX,
+  VyOS). The earlier parse-only doc sweep (`81d9740`, #8) fixed three
+  developer docs but not this cited location. Also corrected a stale
+  cross-mesh note that pointed at a never-shipped
+  `cross_vendor_expectations.yaml` "(planned)" file -- the expectations
+  shipped as the `tests/fixtures/cross_vendor_expectations/` directory,
+  reconciled by `PHASE4_RECONCILIATION.md`. Found by an independent blind
+  audit (`e5b77d7`, #6).
 * **VRF / routing-instance names are now redacted by the sanitiser.** A VRF
   name can encode customer / tenant identity (`Tenant_A`, `ACME-MGMT`) -- the
   same risk class as a VLAN name, which was already redacted, yet VRF names

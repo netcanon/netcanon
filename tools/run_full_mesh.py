@@ -906,12 +906,13 @@ def render_matrix_md(result: dict[str, Any]) -> str:
         "\n"
     )
     lines.append(
-        "**This is mechanical drift only — Phase 3 of the audit will add "
-        "vendor-doc-grounded expectations to interpret which drift is "
-        "expected vs which is a codec defect.**  See "
-        "`tests/fixtures/cross_vendor_expectations.yaml` (planned) for "
-        "the eventual ground truth.  Until then, treat every WARN cell "
-        "as 'unverified' rather than 'broken'.\n"
+        "**This is mechanical drift only — the vendor-doc-grounded "
+        "expectations that interpret which drift is expected vs which is "
+        "a codec defect now live in `tests/fixtures/cross_vendor_expectations/` "
+        "(per-pair YAML), reconciled against this matrix by "
+        "[`PHASE4_RECONCILIATION.md`](PHASE4_RECONCILIATION.md).**  Treat any "
+        "WARN cell not yet explained by a pair expectation as 'unverified' "
+        "rather than 'broken'.\n"
     )
     if result.get("unmapped_fixture_dirs"):
         lines.append(
