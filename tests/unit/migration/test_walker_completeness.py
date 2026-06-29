@@ -174,10 +174,12 @@ _WALK_EXEMPT: dict[tuple[str, str], tuple[str, str]] = {
     ("CanonicalEvpnType5Route", "rt_exports"): ("ENVELOPE_AUDIT_BACKSTOPPED", "EVPN-Type5 sub-leaf; audit-backstopped"),
     ("CanonicalRADIUSServer", "auth_port"): ("ENVELOPE_AUDIT_BACKSTOPPED", "defaulted 1812; non-default backstopped"),
     ("CanonicalRADIUSServer", "acct_port"): ("ENVELOPE_AUDIT_BACKSTOPPED", "defaulted 1813; non-default backstopped"),
-    # ── KNOWN_GAP: real currently-silent losses, deferred to walk-expansion ──
-    ("CanonicalIPv6Address", "scope"): ("KNOWN_GAP", "link-local discriminator not walked; PR-2"),
-    ("CanonicalRoutingInstance", "instance_type"): ("KNOWN_GAP", "mac-vrf vs vrf not walked; PR-2"),
-    ("CanonicalStaticRoute", "gateway"): ("KNOWN_GAP", "next-hop not walked; PR-2"),
+    # NOTE: the former KNOWN_GAP exemptions (IPv6 scope, routing-instance
+    # instance_type, static-route gateway) are now WALKED -- PR-2c (audit
+    # e5b77d7) closed the last three silent-loss leaves, completing the
+    # walk-expansion that began with PR-2a (SNMPv3) and PR-2b (VRRP/FHRP).
+    # The KNOWN_GAP reason code is retained in _REASON_CODES for any future
+    # deferral; this exemption set now carries none.
 }
 
 

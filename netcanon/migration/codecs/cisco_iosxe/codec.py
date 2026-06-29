@@ -233,6 +233,18 @@ class CiscoIOSXECodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/ipv6/address/scope",
+                reason=(
+                    "The Phase-0.5 stub renders the IPv6 address (openconfig "
+                    "ip/prefix-length) but emits no scope and does not re-infer "
+                    "link-local from the fe80::/10 prefix on parse, so the "
+                    "link-local vs global discriminator is lost. Declared lossy so "
+                    "the loss surfaces instead of reporting severity:ok "
+                    "(audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/tunnel-type",
                 reason=(
                     "The OpenConfig/NETCONF render emits only "
@@ -255,6 +267,22 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing/static-route/gateway",
+                reason=(
+                    "Phase 0.5 stub render does not walk intent.static_routes "
+                    "(see /routing/static-route), so the next-hop gateway is "
+                    "dropped with the route (audit e5b77d7, PR-2c)."
+                ),
+            ),
+            UnsupportedPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "Phase 0.5 stub render emits no <network-instances> (see "
+                    "/routing-instances/instance), so the mac-vrf vs vrf "
+                    "instance-type discriminator is dropped (audit e5b77d7, PR-2c)."
+                ),
+            ),
             UnsupportedPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(

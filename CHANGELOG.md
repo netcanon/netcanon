@@ -28,6 +28,22 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Static-route next-hop, routing-instance type, and IPv6 address scope no
+  longer report a green `severity: ok` when dropped on translation.** Live
+  validation walked the `/routing/static-route`, `/routing-instances/instance`,
+  and `/interfaces/interface/ipv6/address` anchors but not these three
+  discriminator sub-fields, so a migration that dropped a default-route next-hop,
+  flattened a `mac-vrf` to a plain `vrf`, or lost an address's `link-local`
+  scope showed a green banner on a real loss. The walker now yields
+  `/routing/static-route/gateway`, `/routing-instances/instance/instance-type`,
+  and `/interfaces/interface/ipv6/address/scope`, and every codec declares them
+  per its actual render -- verified by a render -> parse round-trip probe
+  (supported only where the value survives a round-trip; lossy where the anchor
+  renders but the field downgrades; unsupported where the codec renders no such
+  anchor). This closes the last three `KNOWN_GAP` walker exemptions, completing
+  the walk-expansion begun in the SNMPv3 (PR-2a) and VRRP/FHRP (PR-2b) entries
+  below (audit e5b77d7, PR-2c).
+
 * **VRRP / FHRP redundancy sub-field losses no longer report a green
   `severity: ok`.** Live validation walked the
   `/interfaces/interface/vrrp-groups/group` anchor but not its election /

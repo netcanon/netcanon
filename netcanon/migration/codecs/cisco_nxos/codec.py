@@ -181,6 +181,17 @@ class CiscoNXOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "Renders the VRF as `vrf context <name>` (see "
+                    "/routing-instances/instance/name), which has no mac-vrf form, "
+                    "so the mac-vrf vs vrf instance-type discriminator downgrades "
+                    "to vrf on render. Declared lossy so validate_against surfaces "
+                    "the loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "NX-OS renders only HSRP; a cross-family source mode "

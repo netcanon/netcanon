@@ -141,6 +141,7 @@ class MikroTikRouterOSCodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/description",  # run3 — `comment=...`
             # Tier 2 — SNMP
             "/snmp/community",
@@ -291,6 +292,14 @@ class MikroTikRouterOSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "RouterOS renders no VRF / routing-instance (see "
+                    "/routing-instances/instance), so the mac-vrf vs vrf "
+                    "instance-type discriminator is dropped (audit e5b77d7, PR-2c)."
+                ),
+            ),
             # ── L2 switchport surface (ENG-01) — this codec has no
             #    Cisco-style access/trunk port model, so the per-port VLAN
             #    membership the walker yields is dropped on render.  Declared

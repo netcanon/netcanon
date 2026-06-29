@@ -102,6 +102,15 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
         for addr6 in iface.ipv6_addresses:            # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
+            # link-local vs global scope discriminator (audit e5b77d7,
+            # PR-2c walk-expansion).  scope defaults "global" (always
+            # populated), so a codec that renders the address but hardcodes
+            # the scope (FortiGate / VyOS pin "global") or drops it on the
+            # NETCONF stub declares it lossy -- losing the link-local marker
+            # is no longer silently 'ok'.  Codecs that re-infer scope from
+            # the fe80::/10 prefix on parse round-trip it and stay supported.
+            if addr6.scope:
+                yield "/interfaces/interface/ipv6/address/scope"
             if addr6.is_secondary:
                 yield "/interfaces/interface/ipv6/address/secondary-ip"
             if addr6.virtual_gateway_address:
@@ -210,6 +219,13 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
                 yield "/vlans/vlan/ipv4/address/virtual-gateway-mac"
     for route in intent.static_routes:
         yield "/routing/static-route"
+        # Next-hop gateway (audit e5b77d7, PR-2c walk-expansion).  Walk it
+        # when populated so a codec that renders no <staticroutes> at all
+        # (OPNsense) or no static routes whatsoever (the NETCONF stub) has
+        # its lossy/unsupported declaration fire instead of classify()
+        # fail-opening the dropped next-hop to 'supported'.
+        if route.gateway:
+            yield "/routing/static-route/gateway"
         if route.vrf:
             yield "/routing/static-route/vrf"
         # Sub-field losses (run3 audit): several codecs render only the
@@ -288,6 +304,15 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:
     for inst in intent.routing_instances:
         yield "/routing-instances/instance"
         yield "/routing-instances/instance/name"
+        # Instance-type discriminator (audit e5b77d7, PR-2c walk-expansion):
+        # mac-vrf vs vrf.  Defaults "vrf" (always populated), so a codec that
+        # renders the routing-instance anchor but cannot represent the type
+        # (most CLI VRF renderers emit a plain `vrf NAME`) declares it lossy,
+        # and a codec that renders no routing-instance at all declares it
+        # unsupported -- only Arista (mac-vrf/vrf branch) and Junos (explicit
+        # `instance-type`) round-trip it and stay supported.
+        if inst.instance_type:
+            yield "/routing-instances/instance/instance-type"
         if inst.description:
             yield "/routing-instances/instance/description"
         if inst.route_distinguisher:

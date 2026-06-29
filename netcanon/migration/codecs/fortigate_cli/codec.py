@@ -138,6 +138,7 @@ class FortiGateCLICodec(CodecBase):
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
+            "/routing/static-route/gateway",     # audit e5b77d7 — next-hop round-trips
             "/routing/static-route/interface",   # run3 — `set device <iface>`
             # Tier 2 — SNMP
             "/snmp/community",
@@ -165,6 +166,17 @@ class FortiGateCLICodec(CodecBase):
             "/interfaces/interface/vrrp-groups/group",
         ],
         lossy=[
+            LossyPath(
+                path="/interfaces/interface/ipv6/address/scope",
+                reason=(
+                    "Renders the IPv6 address but parse hardcodes scope=global "
+                    "(never re-infers link-local from the fe80::/10 prefix), so the "
+                    "link-local vs global discriminator is lost. Declared lossy so "
+                    "validate_against surfaces the loss instead of reporting "
+                    "severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
@@ -302,6 +314,15 @@ class FortiGateCLICodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "FortiGate models tenancy as VDOMs, not VRFs, and renders no "
+                    "routing-instance (see /routing-instances/instance), so the "
+                    "mac-vrf vs vrf instance-type discriminator is dropped "
+                    "(audit e5b77d7, PR-2c)."
+                ),
+            ),
             UnsupportedPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
