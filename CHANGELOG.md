@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.8] - 2026-06-28
+
 ### Fixed
 
 * **Hardened five config-parser regexes against polynomial ReDoS** (CodeQL
