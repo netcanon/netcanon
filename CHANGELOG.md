@@ -28,6 +28,16 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **IPv6 transition addresses no longer leak their embedded public IPv4**
+  (audit 276eaeb T0-4): 6to4 (`2002::/16`), NAT64 (`64:ff9b::/96` +
+  the RFC 8215 `64:ff9b:1::/48`), IPv4-mapped, IPv4-compatible, and
+  Teredo addresses carry a routable IPv4 in their low bits but often
+  classify as private/reserved at the v6 layer, so the sanitizer's
+  preserve branch emitted them verbatim — leaking e.g.
+  `2002:0808:0808::1` (→ 8.8.8.8) and `64:ff9b::8.8.8.8`. They are now
+  redacted to a docs `2001:db8::N` address whenever the embedded IPv4
+  is public; transition addresses wrapping a *private* IPv4 (e.g.
+  `2002:c0a8:0101::`) are still preserved.
 - **Paramiko shell collector fails closed on a never-settling stream**
   (audit 276eaeb T0-3): when a device kept streaming up to the
   `_MAX_SECONDS` cap without the read ever going idle, `_collect_output`

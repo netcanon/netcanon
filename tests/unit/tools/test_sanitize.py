@@ -1524,6 +1524,72 @@ class TestIPv6Redaction:
         assert a != c           # distinct sources stay distinct
 
 
+class TestIPv6TransitionAddressRedaction:
+    """audit 276eaeb T0-4: IPv6 *transition* formats (6to4, IPv4-mapped,
+    IPv4-compatible, NAT64, Teredo) embed a routable IPv4 in their low
+    bits, yet classify as ``is_private`` / ``is_reserved`` at the v6
+    layer — so ``redact_ipv6`` used to emit them verbatim and leak the
+    embedded public IPv4.  They are now redacted iff the embedded IPv4
+    is public; transition addresses wrapping a *private* IPv4 are still
+    preserved (the wrapper carries no public information)."""
+
+    # Each embeds the public 8.8.8.8 (Teredo embeds public 65.54.227.120
+    # as its server) and must NOT survive verbatim, and must NOT leak the
+    # embedded v4 anywhere in the substitute.
+    @pytest.mark.parametrize(
+        "addr, leaked_v4",
+        [
+            ("2002:0808:0808::1", "8.8.8.8"),                 # 6to4
+            ("64:ff9b::8.8.8.8", "8.8.8.8"),                  # NAT64 well-known
+            ("64:ff9b:1::8.8.8.8", "8.8.8.8"),                # NAT64 RFC 8215
+            ("::ffff:8.8.8.8", "8.8.8.8"),                    # IPv4-mapped
+            ("::8.8.8.8", "8.8.8.8"),                         # IPv4-compatible
+            ("2001:0000:4136:e378:8000:63bf:3fff:fdd2",       # Teredo
+             "65.54.227.120"),
+        ],
+    )
+    def test_transition_with_public_v4_is_redacted(self, addr, leaked_v4):
+        table = _SubstitutionTable()
+        out = table.redact_ipv6(addr)
+        assert out != addr, f"transition address survived verbatim: {addr}"
+        assert out.startswith("2001:db8::")
+        assert leaked_v4 not in out, f"embedded public IPv4 leaked: {leaked_v4}"
+
+    @pytest.mark.parametrize(
+        "addr",
+        [
+            "2002:c0a8:0101::1",     # 6to4 wrapping 192.168.1.1 (private)
+            "::ffff:192.168.1.1",    # IPv4-mapped wrapping a private v4
+            "::ffff:10.0.0.1",       # IPv4-mapped wrapping RFC 1918
+            "2002:c633:6401::1",     # 6to4 wrapping 198.51.100.1 (docs)
+        ],
+    )
+    def test_transition_with_nonpublic_v4_is_preserved(self, addr):
+        """No public information to leak → preserve verbatim (don't
+        manufacture a false redaction that would corrupt a real config)."""
+        table = _SubstitutionTable()
+        assert table.redact_ipv6(addr) == addr
+
+    def test_end_to_end_transition_leak_closed_on_interface(self):
+        """Full pipeline: a 6to4 + a NAT64 address on an interface must
+        not appear anywhere in the sanitized dump."""
+        intent = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="Vlan10",
+                ipv6_addresses=[
+                    CanonicalIPv6Address(ip="2002:0808:0808::1",
+                                         prefix_length=64),
+                    CanonicalIPv6Address(ip="64:ff9b::8.8.8.8",
+                                         prefix_length=96),
+                ],
+            )],
+        )
+        sanitized, _ = sanitize_intent(intent)
+        blob = sanitized.model_dump_json()
+        for leaked in ("2002:0808:0808::1", "64:ff9b::8.8.8.8", "8.8.8.8"):
+            assert leaked not in blob, f"transition leak survived: {leaked!r}"
+
+
 class TestVRRPVirtualIPRedaction:
     """v0.4.1: the VRRP / CARP virtual IP — frequently the public HA
     gateway — was passed through verbatim while its sibling auth secret
