@@ -10,9 +10,15 @@ config.xml\\r\\r\\n`` preamble that breaks the migration parser.
 """
 from __future__ import annotations
 
+import types
+
 import pytest
 
-from netcanon.collectors.paramiko_collector import _strip_command_echo
+from netcanon.collectors import paramiko_collector
+from netcanon.collectors.paramiko_collector import (
+    ParamikoShellCollector,
+    _strip_command_echo,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -178,3 +184,98 @@ class TestStripShellPromptTail:
         out = _strip_command_echo(buf, "cat /conf/config.xml")
         assert out.startswith('<?xml')
         assert "root@host" not in out
+
+
+class _VirtualClock:
+    """A no-real-wait clock for driving ``_collect_output`` to its
+    ``_MAX_SECONDS`` deadline deterministically.  ``sleep`` advances a
+    virtual monotonic counter instead of blocking, so a 120 s timeout
+    elapses in microseconds of test wall-clock."""
+
+    def __init__(self) -> None:
+        self.t = 0.0
+
+    def monotonic(self) -> float:
+        return self.t
+
+    def sleep(self, secs: float) -> None:
+        self.t += secs
+
+
+class _NeverIdleChannel:
+    """A ``paramiko.Channel`` stand-in that always has data ready and
+    never goes idle — simulates a device emitting an unbounded stream
+    (or one so slow / chatty it never settles within the idle window).
+    ``_collect_output`` must hit the absolute cap on this channel."""
+
+    def recv_ready(self) -> bool:
+        return True
+
+    def recv(self, _n: int) -> bytes:
+        return b"flood flood flood\n"
+
+
+class _SettlingChannel:
+    """Emits a fixed list of chunks, then reports idle forever — the
+    normal, healthy completion shape: output starts, finishes, the
+    channel goes quiet, and the idle threshold fires a clean stop."""
+
+    def __init__(self, chunks: list[bytes]) -> None:
+        self._chunks = list(chunks)
+
+    def recv_ready(self) -> bool:
+        return bool(self._chunks)
+
+    def recv(self, _n: int) -> bytes:
+        return self._chunks.pop(0)
+
+
+def _collector() -> ParamikoShellCollector:
+    # __new__ bypasses BaseCollector.__init__ (no definition needed):
+    # _collect_output reads only its args + module constants, never self.
+    return ParamikoShellCollector.__new__(ParamikoShellCollector)
+
+
+class TestCollectOutputFailsClosedOnTruncation:
+    """Regression guard for audit 276eaeb T0-3: a device that never
+    stops streaming used to fall through the ``_MAX_SECONDS`` cap and
+    *return* the truncated buffer, which ``backup_runner`` then saved
+    as a ``success`` — a silently-corrupted backup.  The collector must
+    now fail closed (raise ``TimeoutError``) when the idle window is
+    never reached, mirroring the read-timeout-driven NetmikoCollector."""
+
+    @pytest.fixture(autouse=True)
+    def _virtual_time(self, monkeypatch):
+        clock = _VirtualClock()
+        monkeypatch.setattr(
+            paramiko_collector,
+            "time",
+            types.SimpleNamespace(monotonic=clock.monotonic, sleep=clock.sleep),
+        )
+        return clock
+
+    def test_never_ending_stream_raises_not_truncates(self):
+        """The bug shape: unbounded output → cap hit while data is
+        still arriving → must raise, NOT return a partial buffer."""
+        with pytest.raises(TimeoutError) as exc:
+            _collector()._collect_output(_NeverIdleChannel(), "stream.example")
+        msg = str(exc.value)
+        assert "never settled" in msg
+        assert "truncated" in msg
+
+    def test_settled_stream_returns_buffer(self):
+        """Happy path is preserved: output that starts, finishes, and
+        goes idle returns normally (the fix must not break the clean
+        idle-threshold exit)."""
+        shell = _SettlingChannel([b"line one\n", b"line two\n"])
+        out = _collector()._collect_output(shell, "quiet.example")
+        assert "line one" in out
+        assert "line two" in out
+
+    def test_silent_device_still_raises_empty_timeout(self):
+        """A device that emits nothing at all keeps the original
+        empty-buffer ``TimeoutError`` (distinct from the truncation
+        path — buffer is empty, not partial)."""
+        with pytest.raises(TimeoutError) as exc:
+            _collector()._collect_output(_SettlingChannel([]), "silent.example")
+        assert "No output received" in str(exc.value)
