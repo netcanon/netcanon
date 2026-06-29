@@ -411,7 +411,7 @@ def _is_fortigate_native_name(name: str) -> bool:
     return bool(_IS_FORTIGATE_PHYSICAL_PORT_RE.match(name))
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` tree to FortiOS CLI text.
 
     Raises:

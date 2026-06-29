@@ -30,6 +30,16 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Added a cyclomatic-complexity gate to CI** (audit e5b77d7 finding #4:
+  "19 F-rank functions and no complexity gate"). Ruff's mccabe check (`C90`,
+  `max-complexity = 25`) now fails the `Lint (ruff)` job on any new or
+  modified function above the audit's recommended threshold. The ~25
+  pre-existing hot spots (codec parse/render, the canonical walker, the
+  sanitiser) are grandfathered with an inline `C901` suppression -- a visible,
+  greppable backlog -- and a new ratchet guard
+  (`tests/unit/test_complexity_ratchet.py`) pins that count so the debt can
+  only shrink, never grow.
+
 * **Hardened five config-parser regexes against polynomial ReDoS** (CodeQL
   `py/polynomial-redos`, alerts #124-#128). The Arista DHCP `dns-server`, the
   AOS-CX `vlan trunk allowed`, the NX-OS and IOS-XE VRF `description`, and the

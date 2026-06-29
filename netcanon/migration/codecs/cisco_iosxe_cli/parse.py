@@ -642,7 +642,7 @@ def _parse_routing_instances(raw: str) -> list[CanonicalRoutingInstance]:
     )
 
 
-def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
+def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
     """Extract interface stanzas from IOS config text."""
     def _open(m: re.Match[str]) -> dict[str, Any]:
         iface_name = m.group(1)

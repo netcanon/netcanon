@@ -357,7 +357,7 @@ def _format_port_list(ports: list[str]) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` to AOS-S ``show running-
     config`` text.
 

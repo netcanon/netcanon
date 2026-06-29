@@ -222,6 +222,7 @@ select = [
     "PIE",  # flake8-pie — misc lints
     "SIM",  # flake8-simplify
     "RUF",  # ruff-specific
+    "C90",  # mccabe — cyclomatic-complexity ceiling (audit e5b77d7 #4)
 ]
 ignore = [
     # FastAPI's `Depends()`/`Query()`/... dependency-injection markers are
@@ -245,6 +246,17 @@ ignore = [
     # deliberate. Do NOT auto-migrate.
     "UP042",
 ]
+
+[tool.ruff.lint.mccabe]
+# Cyclomatic-complexity ceiling (audit e5b77d7 finding #4: "19 F-rank
+# functions and no complexity gate in CI").  New/modified functions must
+# stay at or below 25 (the audit's recommended threshold); the pre-existing
+# offenders are grandfathered with an explicit ``# noqa: C901`` at their def
+# site -- a visible, greppable backlog -- and capped by
+# tests/unit/test_complexity_ratchet.py so the debt can only shrink, never
+# grow.  Lower this number (and burn down noqas) as the codec parse/render
+# hot spots are refactored.
+max-complexity = 25
 
 [tool.ruff.lint.isort]
 # Lock in the v0.2.0 Stage-1(a) sweep: every module must carry the future

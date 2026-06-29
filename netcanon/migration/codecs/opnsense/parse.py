@@ -160,7 +160,7 @@ _trim_xml_prologue = _trim_xml_envelope
 # ---------------------------------------------------------------------------
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse an OPNsense ``config.xml`` document into a
     :class:`CanonicalIntent`.
 

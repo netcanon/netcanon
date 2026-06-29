@@ -76,7 +76,7 @@ def render_intent(tree: Any) -> str:
     )
 
 
-def render_canonical(intent: CanonicalIntent) -> str:
+def render_canonical(intent: CanonicalIntent) -> str:  # noqa: C901
     """Render from the canonical intent shape."""
     root = ET.Element("opnsense")
 

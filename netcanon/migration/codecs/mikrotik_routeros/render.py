@@ -96,7 +96,7 @@ def _routeros_group_for_privilege(level: int) -> str:
 # ---------------------------------------------------------------------------
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` to RouterOS ``/export`` text.
 
     Raises:

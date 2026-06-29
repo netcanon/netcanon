@@ -93,7 +93,7 @@ class VlanRenameResult(BaseModel):
     side effects of drops, out-of-range rejections."""
 
 
-def translate_vlan_ids(
+def translate_vlan_ids(  # noqa: C901
     intent: CanonicalIntent,
     rename_map: dict[int, int | None] | None = None,
 ) -> VlanRenameResult:

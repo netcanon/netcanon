@@ -144,7 +144,7 @@ def _normalise_lag_name_to_arista(name: str) -> str | None:
     return None
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` as Arista EOS CLI text.
 
     Raises:

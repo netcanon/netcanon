@@ -773,7 +773,7 @@ def _parse_interface_stanza(
 # ---------------------------------------------------------------------------
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse AOS-S ``show running-config`` text into a
     :class:`CanonicalIntent`.
 

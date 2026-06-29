@@ -335,7 +335,7 @@ def _parse_dhcp_pools(raw: str) -> list[CanonicalDHCPPool]:
 # ---------------------------------------------------------------------------
 
 
-def parse_intent(raw: str) -> CanonicalIntent:
+def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     """Parse Arista EOS ``show running-config`` text into a
     :class:`CanonicalIntent`.
 
@@ -753,7 +753,7 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
                 m_iface.lag_member_of = lag_name
 
 
-def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
+def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:  # noqa: C901
     """Parse ``router bgp <asn> / vrf <name> / rd <rd> /
     route-target import|export|both <rt>`` — VRF metadata — AND
     ``router bgp <asn> / vlan <N> / rd ... / route-target ...``
@@ -918,7 +918,7 @@ def _parse_router_bgp(raw: str, intent: CanonicalIntent) -> None:
         # CanonicalRoutingInstance.redistribute_*.
 
 
-def _apply_iface_subcommand(
+def _apply_iface_subcommand(  # noqa: C901
     iface: CanonicalInterface,
     line: str,
     lag_members: dict[int, list[str]],

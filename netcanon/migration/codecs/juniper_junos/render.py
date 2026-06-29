@@ -78,7 +78,7 @@ from ..base import RenderError
 logger = logging.getLogger(__name__)
 
 
-def render_intent(tree: Any) -> str:
+def render_intent(tree: Any) -> str:  # noqa: C901
     """Render a :class:`CanonicalIntent` to Junos ``set``-form text.
 
     Emits commands in a deterministic order so repeated renders of
