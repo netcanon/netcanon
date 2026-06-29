@@ -141,6 +141,16 @@ class AristaEOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "Arista EOS renders only IETF VRRP; a cross-family source "
+                    "mode (HSRP / CARP) drops to a review comment on render, so "
+                    "the FHRP protocol silently changes -- verify the "
+                    "redundancy intent survived."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/secondary-ip",
                 reason=(
                     "VLAN-SVI mount render gap: this codec renders a VLAN's L3 "

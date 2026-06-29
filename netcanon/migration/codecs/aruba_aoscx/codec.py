@@ -410,6 +410,55 @@ class ArubaAOSCXCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the FHRP mode is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/priority",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the master-election priority is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/preempt",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the preempt flag is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the advertisement interval is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/authentication",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the FHRP authentication secret is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the IPv6 virtual addresses are dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "AOS-CX VRRP is a deferred phase (the group anchor is "
+                    "unsupported); the group description is dropped."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(
                     "This codec does not model AOS-CX per-port voice VLAN; "

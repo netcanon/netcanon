@@ -154,6 +154,16 @@ class CiscoIOSXECLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "Cisco IOS-XE CLI renders only IETF VRRP (`vrrp`); a "
+                    "cross-family source mode (HSRP / CARP) drops to a review "
+                    "comment on render -- the FHRP protocol silently changes, "
+                    "verify."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-address",
                 reason=(
                     "VLAN-SVI mount render gap: the synthesized `interface "

@@ -181,6 +181,41 @@ class CiscoNXOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "NX-OS renders only HSRP; a cross-family source mode "
+                    "(VRRP / CARP) is reinterpreted as HSRP on render -- the "
+                    "FHRP protocol silently changes, verify the redundancy "
+                    "intent survived."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "The NX-OS HSRP codec does not model the advertisement / "
+                    "hello timer; the group renders but the interval is dropped "
+                    "(the target uses its default)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "The NX-OS HSRP codec models only IPv4 virtual IPs; IPv6 "
+                    "virtual addresses are dropped on render."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "The NX-OS HSRP group grammar carries no description; the "
+                    "group renders but the operator description is dropped."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/vlans/vlan/ipv4/address/ip",
                 reason=(
                     "Renders VLAN SVI / management L3 only from a sibling "

@@ -28,6 +28,21 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **VRRP / FHRP redundancy sub-field losses no longer report a green
+  `severity: ok`.** Live validation walked the
+  `/interfaces/interface/vrrp-groups/group` anchor but not its election /
+  timer / family sub-fields, so a migration that reinterpreted the FHRP
+  family (e.g. HSRP -> VRRP), dropped the master-election priority / preempt /
+  advertisement-interval, or lost the IPv6 virtual addresses / FHRP
+  authentication / group description showed a green banner on a real
+  redundancy loss. The walker now yields seven sub-paths (mode / priority /
+  preempt / advertisement-interval / authentication / virtual-ipv6s /
+  description) and all 12 codecs declare them per their actual render
+  behaviour. Notably `mode` (the VRRP / HSRP / CARP discriminator) is lossy
+  or unsupported on EVERY codec -- none renders all three families, so a
+  cross-family translation always warrants review. Second surface of the
+  tracked `KNOWN_GAP` walk-expansion ("PR-2"). Found by an independent blind
+  audit (`e5b77d7`, T0-2 / PR-2b).
 * **SNMPv3 USM sub-field losses no longer report a green `severity: ok`.**
   Live validation walked the `/snmp/v3-user` anchor but not its
   auth-protocol / priv-protocol / priv-passphrase / VACM-group sub-fields, so

@@ -166,12 +166,15 @@ def _maximal_intent() -> CanonicalIntent:
         vrf="TENANT",
         vrrp_groups=[CanonicalVRRPGroup(
             group_id=10,
-            # >1 VIP + virtual_mac + track exercise the VRRP sub-field
-            # losses several codecs declare lossy, so the walker yields
-            # those granular xpaths and reverse-parity confirms the lossy
-            # declarations are reachable.
+            # >1 VIP + virtual_mac + track + the PR-2b sub-fields (auth /
+            # v6-VIP / description) exercise the VRRP sub-field losses several
+            # codecs declare lossy, so the walker yields those granular xpaths
+            # and reverse-parity confirms the lossy declarations are reachable.
             virtual_ips=["10.0.0.254", "10.0.0.253"],
+            virtual_ipv6s=["fd00::1:0a"],
             virtual_mac="00:00:5e:00:01:0a",
+            authentication="md5:vrrpkey",
+            description="uplink-redundancy",
             track_interfaces=["Ethernet2"])],
     )
     iface2 = CanonicalInterface(

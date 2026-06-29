@@ -282,6 +282,62 @@ class CiscoIOSXRCodec(CodecBase):
         ],
         unsupported=[
             UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group",
+                reason=(
+                    "VRRP / FHRP redundancy groups are out of the v1 IOS-XR "
+                    "scope; the group is dropped on migration."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the FHRP mode is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/priority",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the election priority is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/preempt",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the preempt flag is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the advertisement interval is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/authentication",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the FHRP authentication is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the IPv6 virtual addresses are dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "VRRP / FHRP is out of the v1 IOS-XR scope (see the group "
+                    "anchor); the group description is dropped."
+                ),
+            ),
+            UnsupportedPath(
                 path="/interfaces/interface/ipv4/address/virtual-gateway-address",
                 reason=(
                     "IOS-XR has no VARP / anycast-gateway grammar; render "

@@ -255,6 +255,55 @@ class CiscoIOSXECodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/mode",
+                reason=(
+                    "VRRP / HSRP / CARP parse-and-ignore in the Phase-0.5 stub "
+                    "(the group anchor is unsupported); the FHRP mode is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/priority",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the election priority is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/preempt",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the preempt flag is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/advertisement-interval",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the advertisement interval is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/authentication",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the FHRP authentication is dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/virtual-ipv6s",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the IPv6 virtual addresses are dropped."
+                ),
+            ),
+            UnsupportedPath(
+                path="/interfaces/interface/vrrp-groups/group/description",
+                reason=(
+                    "VRRP parse-and-ignore in the Phase-0.5 stub (the group "
+                    "anchor is unsupported); the group description is dropped."
+                ),
+            ),
             # VLAN-SVI L3 sub-fields (blind-audit f92e97a T0-2).  This
             # OpenConfig/NETCONF stub renders no VLAN-record L3 at all (the
             # whole /vlans subtree is unsupported), so any L3 sub-field carried
