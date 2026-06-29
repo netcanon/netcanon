@@ -173,7 +173,7 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 
 @router.get("/", response_class=HTMLResponse)
-async def index(request: Request) -> HTMLResponse:
+def index(request: Request) -> HTMLResponse:
     """Dashboard: recent jobs summary and backup form."""
     jobs = heapq.nlargest(
         10,
@@ -200,7 +200,7 @@ async def index(request: Request) -> HTMLResponse:
 
 
 @router.get("/jobs", response_class=HTMLResponse)
-async def jobs_page(request: Request) -> HTMLResponse:
+def jobs_page(request: Request) -> HTMLResponse:
     """Full job history: all backup jobs with per-device config file links."""
     jobs = sorted(
         request.app.state.jobs.values(),
@@ -224,7 +224,7 @@ async def jobs_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/schedules", response_class=HTMLResponse)
-async def schedules_page(request: Request) -> HTMLResponse:
+def schedules_page(request: Request) -> HTMLResponse:
     """Schedule manager: create and manage recurring backup schedules."""
     schedules = sorted(
         request.app.state.schedules.values(),
@@ -251,7 +251,7 @@ async def schedules_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/configs", response_class=HTMLResponse)
-async def configs_page(request: Request) -> HTMLResponse:
+def configs_page(request: Request) -> HTMLResponse:
     """Config browser: list and delete stored configuration files."""
     configs = request.app.state.storage.list_configs()
     return _templates.TemplateResponse(
@@ -271,7 +271,7 @@ async def configs_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/configs/{left}/vs/{right}", response_class=HTMLResponse)
-async def diff_page(
+def diff_page(
     left: str, right: str, request: Request, force: bool = False
 ) -> HTMLResponse:
     """Render a line-level textual diff between two stored configs.
@@ -361,7 +361,7 @@ async def diff_page(
 
 
 @router.get("/devices", response_class=HTMLResponse)
-async def devices_page(request: Request) -> HTMLResponse:
+def devices_page(request: Request) -> HTMLResponse:
     """Device profile manager: create and manage persistent device profiles."""
     profiles = sorted(
         request.app.state.device_profiles.values(),
@@ -397,7 +397,7 @@ async def devices_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/definitions", response_class=HTMLResponse)
-async def definitions_page(request: Request) -> HTMLResponse:
+def definitions_page(request: Request) -> HTMLResponse:
     """Definition browser: surfaces every Netcanon data-source the
     user cares about.  Four sections:
 
@@ -496,7 +496,7 @@ async def definitions_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/migrate", response_class=HTMLResponse)
-async def migrate_page(request: Request) -> HTMLResponse:
+def migrate_page(request: Request) -> HTMLResponse:
     """Translator workbench: pick source + target adapters, paste or
     select a config, submit to ``POST /api/v1/migration/plan``, and
     review the validation report + rendered output in-page.
@@ -518,7 +518,7 @@ async def migrate_page(request: Request) -> HTMLResponse:
 
 
 @router.get("/sanitize", response_class=HTMLResponse)
-async def sanitize_page(request: Request) -> HTMLResponse:
+def sanitize_page(request: Request) -> HTMLResponse:
     """Sanitize workbench: pick source vendor, paste or select a
     config, submit to ``POST /api/v1/sanitize``, and review the
     redaction audit + sanitized output in-page.
