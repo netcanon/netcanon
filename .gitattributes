@@ -1,0 +1,7 @@
+# Force LF for files that break under CRLF regardless of the checkout OS.
+# requirements.lock: pip --require-hashes line-continuations (`\`) must not be
+# followed by a CR; shell scripts must not carry CRLF (bad interpreter on Linux).
+# Scoped narrowly on purpose -- the rest of the tree keeps its existing eol
+# handling (CHANGELOG.md is intentionally CRLF).
+requirements.lock text eol=lf
+/tools/gen_requirements_lock.sh text eol=lf

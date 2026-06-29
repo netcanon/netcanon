@@ -35,14 +35,22 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_NETCANON=$SETUPTOOLS_SCM_PRETEND_VERSION_
 
 # Copy project metadata + source.  README + LICENSE go in to satisfy
 # pyproject.toml (readme = "README.md", license-files = ["LICENSE"]).
-COPY pyproject.toml README.md LICENSE ./
+# requirements.lock is the hash-pinned dependency manifest (audit e5b77d7 #5).
+COPY pyproject.toml README.md LICENSE requirements.lock ./
 COPY netcanon/ ./netcanon/
 
-# Build the netcanon wheel + collect every dependency as a wheel into /wheels.
-# Runtime stage installs from /wheels with --no-index to guarantee no
-# network access during the runtime layer.
+# Build every dependency wheel from the hash-pinned lock FIRST, then the
+# netcanon wheel with --no-deps (audit e5b77d7 #5: "no pinned/hash-locked
+# dependency manifest for shipped artifacts").  ``--require-hashes`` constrains
+# the image's dependency input set to the exact versions in requirements.lock
+# and verifies each artifact's hash, instead of re-resolving pyproject's ranges
+# against whatever PyPI serves at build time.  requirements.lock is generated
+# in THIS digest-pinned base image (tools/gen_requirements_lock.sh), so its
+# wheels match the platform here; the runtime stage then installs from /wheels
+# with --no-index, so only this locked set can ever be installed.
 RUN pip install --no-cache-dir --upgrade pip wheel \
-    && pip wheel --no-cache-dir --wheel-dir /wheels .
+    && pip wheel --no-cache-dir --require-hashes -r requirements.lock --wheel-dir /wheels \
+    && pip wheel --no-cache-dir --no-deps --wheel-dir /wheels .
 
 
 # ===========================================================================
