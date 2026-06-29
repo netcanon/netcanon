@@ -30,6 +30,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **Pinned the shipped Docker image's dependencies with a hash-locked
+  manifest** (audit e5b77d7 finding #5: "no pinned/hash-locked dependency
+  manifest for shipped artifacts"). A new `requirements.lock` -- 51 packages
+  resolved with `--generate-hashes` inside the exact digest-pinned
+  `python:3.14` base image (`tools/gen_requirements_lock.sh`) -- is installed
+  by the Dockerfile builder with `pip --require-hashes`, so the container's
+  dependency input set is constrained to exact versions and integrity-verified
+  rather than re-resolved from pyproject's ranges at build time. The PyPI
+  wheel deliberately keeps pyproject's ranges (it is a library). A consistency
+  guard (`tests/unit/test_requirements_lock.py`) fails CI if the lock drifts
+  out of sync with the declared dependencies.
+
 * **Added a cyclomatic-complexity gate to CI** (audit e5b77d7 finding #4:
   "19 F-rank functions and no complexity gate"). Ruff's mccabe check (`C90`,
   `max-complexity = 25`) now fails the `Lint (ruff)` job on any new or
