@@ -28,6 +28,12 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`POST /api/v1/configs/diff` walks the config store once, not twice**
+  (audit 276eaeb T0-5). The route resolved the left and right records via
+  two `_resolve_record` calls that each re-ran `storage.list_configs()`
+  (a full storage directory walk), so every diff stat'd every stored file
+  twice. It now builds a `{filename: record}` index once and resolves both
+  sides from it, mirroring the HTML diff page. No behaviour change.
 - **`POST /api/v1/sanitize` now caps the upload size** (audit 276eaeb
   #19). The endpoint read the entire request body into memory and fed it
   to the synchronous parse->redact->render pipeline with no limit, so an

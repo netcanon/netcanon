@@ -219,9 +219,9 @@ def open_config(
 
 
 def _resolve_record(
-    storage: BaseConfigStore, filename: str, side: str
+    records_by_name: dict[str, ConfigRecord], filename: str, side: str
 ) -> ConfigRecord:
-    """Find the ``ConfigRecord`` for *filename* or raise a 404.
+    """Find the ``ConfigRecord`` for *filename* in a pre-built index or 404.
 
     The config list is authoritative — ``resolve_path`` only proves the
     bytes exist on disk, but the metadata (``device_type``,
@@ -229,27 +229,31 @@ def _resolve_record(
     missing entry here means the filename was never produced by the
     backup engine, so a 404 is honest.
 
+    Takes a ``{filename: record}`` index (built once per request) rather
+    than re-listing the store, so a two-sided diff does a single storage
+    walk instead of one per side (blind-audit 276eaeb T0-5).
+
     Args:
-        storage: Config storage backend whose ``list_configs()`` is
-            treated as the authoritative inventory.
+        records_by_name: ``{filename: ConfigRecord}`` built once from
+            ``storage.list_configs()`` — the authoritative inventory.
         filename: Bare filename as returned by the list endpoint.
         side: Either ``"left"`` or ``"right"``; surfaced verbatim in
             the 404 detail so the client can highlight the offending
             field in the diff form.
 
     Returns:
-        The matching ``ConfigRecord`` from ``storage.list_configs()``.
+        The matching ``ConfigRecord``.
 
     Raises:
         HTTPException 404: If no record's ``filename`` matches.
     """
-    for record in storage.list_configs():
-        if record.filename == filename:
-            return record
-    raise HTTPException(
-        status_code=404,
-        detail=f"{side.capitalize()} config not found: {filename!r}",
-    )
+    record = records_by_name.get(filename)
+    if record is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{side.capitalize()} config not found: {filename!r}",
+        )
+    return record
 
 
 @router.post(
@@ -289,8 +293,12 @@ def diff_configs(
         HTTPException 422: If the two configs are incompatible and
             ``force`` is not set.
     """
-    left_rec = _resolve_record(storage, body.left, side="left")
-    right_rec = _resolve_record(storage, body.right, side="right")
+    # Index the store once and resolve both sides from it — a two-sided
+    # diff used to call list_configs() per side (a full storage walk x2);
+    # mirrors ui.py's single-walk diff_page (blind-audit 276eaeb T0-5).
+    records_by_name = {r.filename: r for r in storage.list_configs()}
+    left_rec = _resolve_record(records_by_name, body.left, side="left")
+    right_rec = _resolve_record(records_by_name, body.right, side="right")
 
     # Short-circuit the expensive read if we're going to reject anyway.
     from ...services.diff import check_compatibility
