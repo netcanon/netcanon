@@ -154,6 +154,17 @@ class CiscoIOSXECLICodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "Renders the VRF as `vrf definition <name>` (see "
+                    "/routing-instances/instance), which has no mac-vrf form, so "
+                    "the mac-vrf vs vrf instance-type discriminator downgrades to "
+                    "vrf on render. Declared lossy so validate_against surfaces the "
+                    "loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Cisco IOS-XE CLI renders only IETF VRRP (`vrrp`); a "

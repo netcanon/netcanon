@@ -168,6 +168,28 @@ class VyOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "Renders the VRF as `set vrf name <name>` (see "
+                    "/routing-instances/instance/name), which has no mac-vrf form, "
+                    "so the mac-vrf vs vrf instance-type discriminator downgrades "
+                    "to vrf on render. Declared lossy so validate_against surfaces "
+                    "the loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
+                path="/interfaces/interface/ipv6/address/scope",
+                reason=(
+                    "Renders the IPv6 address but parse hardcodes scope=global "
+                    "(never re-infers link-local from the fe80::/10 prefix), so the "
+                    "link-local vs global discriminator is lost. Declared lossy so "
+                    "validate_against surfaces the loss instead of reporting "
+                    "severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/tunnel-type",
                 reason=(
                     "VyOS models tunnels (GRE/IPIP/IPsec) as separate "

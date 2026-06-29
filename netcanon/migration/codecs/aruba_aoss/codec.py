@@ -141,6 +141,7 @@ class ArubaAOSSCodec(CodecBase):
             "/interfaces/interface/trunk-allowed-vlans",
             "/interfaces/interface/trunk-native-vlan",
             "/routing/static-route",
+            "/routing/static-route/gateway",      # audit e5b77d7 — next-hop round-trips
             # Tier 2 — SNMP
             "/snmp/community",
             "/snmp/location",
@@ -293,6 +294,14 @@ class ArubaAOSSCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "AOS-S renders no VRF / routing-instance (see "
+                    "/routing-instances/instance), so the mac-vrf vs vrf "
+                    "instance-type discriminator is dropped (audit e5b77d7, PR-2c)."
+                ),
+            ),
             UnsupportedPath(
                 path="/vlans/vlan/ipv4/address/virtual-gateway-address",
                 reason=(

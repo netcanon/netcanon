@@ -167,6 +167,16 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/routing/static-route/gateway",
+                reason=(
+                    "Renders no <staticroutes> block (see /routing/static-route), "
+                    "so the next-hop gateway is dropped on render. Declared lossy "
+                    "for parity with the route anchor so validate_against surfaces "
+                    "the loss instead of reporting severity:ok (audit e5b77d7, PR-2c)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "OPNsense renders only BSD CARP; a non-CARP source mode "
@@ -320,6 +330,14 @@ class OPNsenseCodec(CodecBase):
             ),
         ],
         unsupported=[
+            UnsupportedPath(
+                path="/routing-instances/instance/instance-type",
+                reason=(
+                    "OPNsense renders no VRF / routing-instance (see "
+                    "/routing-instances/instance), so the mac-vrf vs vrf "
+                    "instance-type discriminator is dropped (audit e5b77d7, PR-2c)."
+                ),
+            ),
             UnsupportedPath(
                 path="/routing/static-route/interface",
                 reason=(
