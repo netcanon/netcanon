@@ -28,6 +28,18 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+* **The sanitiser no longer leaks the org domain for trailing-dot or
+  underscore FQDNs.** `redact_host` maps a multi-label FQDN host field (NTP /
+  syslog / SNMP-trap / RADIUS target) to an opaque `host-N.example.test`
+  placeholder, but its hostname regex required the name to end in an
+  alphanumeric label and allowed only hyphens -- so a rooted FQDN with a
+  trailing root dot (`nms.corp.example.`) and a host whose label contains an
+  underscore (`srv_01.corp.example`, common in AD / SRV / operator names)
+  failed to match and passed through verbatim, re-leaking the domain. The
+  regex now accepts an optional trailing dot and underscores in labels; bare
+  single labels (`localhost`, `srv_01`) with no dot still pass through (no
+  domain to leak, no over-match). Found by an independent blind audit
+  (`e5b77d7`, #12).
 * **Server-rendered UI pages no longer block the asyncio event loop.** The
   nine GET page handlers (`/`, `/jobs`, `/schedules`, `/configs`, the diff
   view, `/devices`, `/definitions`, `/migrate`, `/sanitize`) were declared

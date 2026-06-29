@@ -136,16 +136,19 @@ from dataclasses import dataclass, field
 from ..migration.canonical.intent import CanonicalIntent
 from ..migration.codecs.registry import get_codec
 
-#: A DNS hostname: dot-separated labels (alnum + internal hyphen), at least
-#: two labels (the leading ``(?:...)`` + the ``(?:\.…)+`` group), <= 253
-#: chars.  Used by :meth:`_SubstitutionTable.redact_host` to tell an FQDN
-#: host field (whose domain suffix re-leaks the org) from a bare single
-#: label (``localhost`` / ``nms`` — no domain to leak) or free text.  IP
-#: literals are matched + handled BEFORE this regex, so the fact that a
-#: dotted-quad also matches the shape is moot.
+#: A DNS hostname: dot-separated labels (alnum, internal hyphen, and
+#: underscore — some operator / AD / SRV host names use ``_``), at least two
+#: labels (the leading label + the ``(?:\.…)+`` group), with an optional
+#: trailing root dot (``nms.corp.example.``), <= 254 chars.  Used by
+#: :meth:`_SubstitutionTable.redact_host` to tell an FQDN host field (whose
+#: domain suffix re-leaks the org) from a bare single label (``localhost`` /
+#: ``nms`` — no domain to leak) or free text.  IP literals are matched +
+#: handled BEFORE this regex, so the fact that a dotted-quad also matches the
+#: shape is moot.  (Trailing-dot and underscore FQDNs previously slipped
+#: through unredacted, re-leaking the org domain — audit e5b77d7 #12.)
 _HOSTNAME_RE = re.compile(
-    r"^(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
-    r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$"
+    r"^(?=.{1,254}$)[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?"
+    r"(?:\.[A-Za-z0-9_](?:[A-Za-z0-9_-]{0,61}[A-Za-z0-9_])?)+\.?$"
 )
 
 # ---------------------------------------------------------------------------

@@ -587,6 +587,27 @@ class TestDnsNameHostFieldRedaction:
         assert table.redact_host("localhost") == "localhost"
         assert table.redact_host("nms") == "nms"
 
+    def test_trailing_dot_fqdn_redacted(self):
+        """A rooted FQDN with a trailing dot (``nms.corp.example.``) is still
+        an org-domain leak and must be redacted, not passed through verbatim
+        (audit e5b77d7 #12)."""
+        out = _SubstitutionTable().redact_host("nms.corp.example.")
+        assert out == "host-1.example.test"
+        assert "corp" not in out
+
+    def test_underscore_label_fqdn_redacted(self):
+        """A host label containing an underscore (``srv_01.corp.example`` —
+        common in AD / SRV / operator-named hosts) must be redacted, not
+        leaked (audit e5b77d7 #12)."""
+        out = _SubstitutionTable().redact_host("srv_01.corp.example")
+        assert out == "host-1.example.test"
+        assert "srv_01" not in out and "corp" not in out
+
+    def test_bare_underscore_label_preserved(self):
+        """A bare single label with an underscore but no dot has no domain to
+        leak — the widened FQDN regex must not over-match it."""
+        assert _SubstitutionTable().redact_host("srv_01") == "srv_01"
+
     def test_fqdn_servers_redacted_through_sanitize_intent(self):
         intent = CanonicalIntent(
             ntp_servers=["ntp.corp.example.com", "10.0.0.1"],
