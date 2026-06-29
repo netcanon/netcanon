@@ -881,10 +881,14 @@ that have shipped:
 - **Phase 0** — codec scaffold + mock adapter (`run_plan`, capability matrix)
 - **Phase 0.5** — canonical intent model + pluggable CIMs
 - **Phase 1** — real codecs across the major switching/firewall
-  vendors: parse-only Cisco IOS-XE CLI (Cisco-as-source); plus
-  bidirectional Cisco IOS-XE NETCONF stub, Aruba AOS-S, OPNsense,
-  MikroTik RouterOS, FortiGate CLI, Arista EOS, and Juniper Junos.
-  See `netcanon/migration/codecs/` for the live registry.
+  vendors, all bidirectional: Cisco IOS-XE CLI (originally
+  Cisco-as-source, since certified `direction = bidirectional`),
+  Cisco IOS-XE NETCONF stub, Aruba AOS-S, OPNsense, MikroTik
+  RouterOS, FortiGate CLI, Arista EOS, and Juniper Junos.  See
+  `netcanon/migration/codecs/` for the live registry.
+- **Phase 1.5 (v0.1.5–v0.1.8)** — four more bidirectional,
+  round-trip-certified codecs: Cisco NX-OS, Cisco IOS-XR, Aruba
+  AOS-CX, and VyOS — bringing the live registry to 12 codecs.
 - **R5** — auto-detection probe
 - **R6/7** — real-capture validation harness + fixture corpus
 - **Tier 2 wire-throughs** — SNMP + SNMPv3, LAGs, local_users, DHCP pools,
