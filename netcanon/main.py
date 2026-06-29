@@ -323,6 +323,57 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     # it wraps the fully-mounted router set.
     ui_router.register_exception_handlers(app)
 
+    # ------------------------------------------------------------------
+    # OpenAPI security scheme (audit 276eaeb #9)
+    # ------------------------------------------------------------------
+    # require_api_key enforces an `Authorization: Bearer <key>` on /api/v1
+    # when NETCANON_API_KEY is set, but it's a plain dependency (not a
+    # fastapi Security scheme), so the generated OpenAPI never advertised
+    # it: /docs had no "Authorize" button and a client couldn't discover
+    # the requirement from the schema.  Inject the BearerAuth scheme — but
+    # ONLY when a key is configured, so the schema stays honest (open with
+    # no key, bearer-gated with one) and the zero-config local schema is
+    # unchanged.  Applied to /api/v1 operations only; /health and the UI
+    # routes are not bearer-gated.
+    from fastapi.openapi.utils import get_openapi
+
+    def _custom_openapi() -> dict:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+        )
+        # Read the live settings the enforcement uses (state is set in
+        # lifespan; fall back to the resolved closure value otherwise).
+        active = getattr(app.state, "settings", None) or settings
+        if (getattr(active, "api_key", "") or "").strip():
+            schema.setdefault("components", {}).setdefault(
+                "securitySchemes", {}
+            )["BearerAuth"] = {
+                "type": "http",
+                "scheme": "bearer",
+                "description": (
+                    "Static token from NETCANON_API_KEY, sent as "
+                    "`Authorization: Bearer <token>`. Required on /api/v1 "
+                    "when the key is configured (SEC-01)."
+                ),
+            }
+            for path, item in schema.get("paths", {}).items():
+                if not path.startswith("/api/v1"):
+                    continue
+                for operation in item.values():
+                    if isinstance(operation, dict):
+                        operation.setdefault("security", []).append(
+                            {"BearerAuth": []}
+                        )
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = _custom_openapi
+
     return app
 
 
