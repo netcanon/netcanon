@@ -20,9 +20,10 @@ Netcanon is operator-trust-anchor by design: the operator who registers
 a backup target in the UI is asserting that the target's IP + port pair
 is the device they intend to reach.  Host-key verification is governed by
 ``Settings.ssh_host_key_checking`` (see :mod:`netcanon.collectors.hostkey`):
-``auto_add`` (default) keeps the historical trust-on-first-use-without-
-persistence behaviour for a trusted management VLAN; ``tofu`` persists the
-first key under ``{data_dir}/known_hosts`` and rejects a later changed key;
+``tofu`` (default since v0.4.5) persists the first key seen under
+``{data_dir}/known_hosts`` and rejects a later changed key; ``auto_add``
+(legacy opt-out) keeps the historical trust-on-first-use-*without*-
+persistence behaviour for a trusted management VLAN and warns at startup;
 ``reject`` only connects to already-known hosts.  Both
 :meth:`ParamikoShellCollector.collect` and ``.probe`` apply the configured
 policy + persist (TOFU) after a successful connect.
@@ -164,8 +165,9 @@ class ParamikoShellCollector(BaseCollector):
         """
         client = paramiko.SSHClient()
         # Host-key verification policy (see module "Security model" +
-        # netcanon.collectors.hostkey): auto_add (default, legacy) / tofu /
-        # reject, driven by Settings.ssh_host_key_checking.
+        # netcanon.collectors.hostkey): tofu (default since v0.4.5) /
+        # auto_add (legacy opt-out) / reject, driven by
+        # Settings.ssh_host_key_checking.
         settings = self._effective_settings()
         apply_paramiko_policy(client, settings)
 

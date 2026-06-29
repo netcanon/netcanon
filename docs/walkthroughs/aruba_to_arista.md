@@ -86,10 +86,13 @@ per-port `switchport access vlan` directives via the
 (`interface 1`, `interface 2`, ...) — Arista accepts both bare-
 numeric and `Ethernet<N>` forms.  If you want the Arista-canonical
 `Ethernet1` / `Ethernet2` form, use the migrate-page rename modal
-(web UI) or pass `rename_overrides` in the `POST /api/v1/migration/run`
-payload — the rename mesh handles the AOS-S-numeric → Arista-
-`Ethernet<N>` mapping across all bound categories (VLANs, LAGs,
-SNMP communities, etc., not just port names).
+(web UI) or pass `port_rename_map` in the `POST /api/v1/migration/plan`
+payload — the rename mesh propagates each AOS-S-numeric → Arista-
+`Ethernet<N>` port rewrite to every surface that *references* the port
+(VLAN tagged/untagged lists, LAG members, etc.), not just the interface
+itself.  Renaming other identity classes has its own sibling fields
+(`vlan_rename_map`, `local_user_rename_map`, `snmp_community_rename_map`,
+`snmpv3_user_rename_map`).
 
 ## Tier-3 boundary in this scenario
 
