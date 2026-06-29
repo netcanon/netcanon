@@ -79,15 +79,21 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
         yield "/interfaces/interface/config/enabled"
         if iface.interface_type:
             yield "/interfaces/interface/config/type"
-        for addr in iface.ipv4_addresses:
+        for idx, addr in enumerate(iface.ipv4_addresses):
             yield "/interfaces/interface/ipv4/address/ip"
             yield "/interfaces/interface/ipv4/address/prefix-length"
-            # Secondary addresses: single-address platforms (FortiGate /
+            # Additional addresses: single-address platforms (FortiGate /
             # OPNsense) render only the primary and silently drop every
-            # is_secondary address — a whole-subnet reachability loss.
-            # Walk a secondary-specific xpath so those codecs can declare
-            # it unsupported and the loss surfaces instead of reporting ok.
-            if addr.is_secondary:
+            # extra address — a whole-subnet reachability loss.  The
+            # discriminator is CARDINALITY, not the is_secondary flag:
+            # IPv4 sources that don't model a primary/secondary distinction
+            # (Junos / OPNsense parse) leave is_secondary False on every
+            # address, so a flag-gated walk emitted nothing for a genuinely
+            # multi-address interface and the loss reported 'ok' (audit
+            # 276eaeb T0-1).  Walk the secondary xpath for every address
+            # beyond the first so those codecs' unsupported declaration
+            # fires regardless of whether the flag was set.
+            if idx > 0 or addr.is_secondary:
                 yield "/interfaces/interface/ipv4/address/secondary-ip"
             if addr.virtual_gateway_address:
                 yield (
@@ -99,7 +105,7 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
                     "/interfaces/interface/ipv4/address/"
                     "virtual-gateway-mac"
                 )
-        for addr6 in iface.ipv6_addresses:            # GAP-EVPN-3
+        for idx6, addr6 in enumerate(iface.ipv6_addresses):   # GAP-EVPN-3
             yield "/interfaces/interface/ipv6/address/ip"
             yield "/interfaces/interface/ipv6/address/prefix-length"
             # link-local vs global scope discriminator (audit e5b77d7,
@@ -111,7 +117,11 @@ def _walk_canonical(intent: CanonicalIntent) -> Iterable[str]:  # noqa: C901
             # the fe80::/10 prefix on parse round-trip it and stay supported.
             if addr6.scope:
                 yield "/interfaces/interface/ipv6/address/scope"
-            if addr6.is_secondary:
+            # Cardinality discriminator (see the IPv4 note above): IPv6 has
+            # no `secondary` keyword at all, so is_secondary is structurally
+            # never set — only the address count reveals the drop (audit
+            # 276eaeb T0-1).
+            if idx6 > 0 or addr6.is_secondary:
                 yield "/interfaces/interface/ipv6/address/secondary-ip"
             if addr6.virtual_gateway_address:
                 yield (

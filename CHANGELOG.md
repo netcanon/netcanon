@@ -28,6 +28,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **Multi-address interfaces no longer report a silent `ok` when extra
+  addresses are dropped** (audit 276eaeb T0-1). The capability walker
+  emitted `/interfaces/interface/ipv{4,6}/address/secondary-ip` only when
+  an address carried `is_secondary=True`, but IPv6 has no `secondary`
+  keyword (the flag is never set) and flagless IPv4 sources (Junos /
+  OPNsense parse) leave it False on every address. So a genuinely
+  multi-address interface migrated to a single-address codec (FortiGate /
+  OPNsense, which render only the first address) reported `severity: ok`
+  while a whole subnet's reachability vanished. The walker now keys on
+  address *cardinality* (every address beyond the first), so the dropping
+  codecs' existing `secondary-ip` unsupported declaration fires regardless
+  of the flag. Capability matrices were already honest about which codecs
+  drop extra addresses, so no declaration changes were needed.
 - **IPv6 transition addresses no longer leak their embedded public IPv4**
   (audit 276eaeb T0-4): 6to4 (`2002::/16`), NAT64 (`64:ff9b::/96` +
   the RFC 8215 `64:ff9b:1::/48`), IPv4-mapped, IPv4-compatible, and
