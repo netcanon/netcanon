@@ -74,11 +74,20 @@ class DiffRequest(BaseModel):
             a ``block`` severity no longer produces a 422.  Exists to
             support deliberate cross-vendor comparisons; the rendered
             output carries a red warning banner.
+        context: Opt-in fold control.  ``None`` (default) returns every
+            line — the full-fidelity report, unchanged.  An integer ``>= 0``
+            collapses runs of equal lines that are more than ``context``
+            lines from any change: those cold lines are OMITTED from
+            ``lines`` and counted in ``stats["collapsed"]``, so a diff of
+            two large near-identical configs no longer serialises tens of
+            thousands of unchanged lines to the client (audit 276eaeb #18).
+            ``3`` matches the git unified-diff convention.
     """
 
     left: str
     right: str
     force: bool = False
+    context: int | None = Field(default=None, ge=0)
 
 
 class DiffReport(BaseModel):
@@ -88,10 +97,15 @@ class DiffReport(BaseModel):
         left: Metadata record of the left-hand file.
         right: Metadata record of the right-hand file.
         compatibility: Pre-flight compatibility report.
-        lines: Ordered sequence of ``DiffLine`` rows.
-        stats: Count of each kind — ``added``, ``removed``, ``equal``.
-            Computed once by the service layer so the UI doesn't have
-            to re-scan ``lines``.
+        lines: Ordered sequence of ``DiffLine`` rows.  When the request
+            sets ``context`` (opt-in fold), cold equal lines are omitted
+            here and counted in ``stats["collapsed"]``.
+        stats: Count of each kind — ``added``, ``removed``, ``equal``
+            (the ``equal`` count always reflects the FULL diff, even when
+            folded).  Carries an extra ``collapsed`` key — the number of
+            equal lines omitted from ``lines`` — only when ``context`` was
+            requested.  Computed by the service layer so the UI doesn't
+            have to re-scan ``lines``.
     """
 
     left: ConfigRecord

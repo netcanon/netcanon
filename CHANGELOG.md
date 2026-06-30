@@ -26,6 +26,17 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Added
+
+- **`POST /api/v1/configs/diff` accepts an opt-in `context` fold control**
+  (audit 276eaeb #18). The JSON diff serialised every line, including all
+  unchanged ones — tens of thousands of rows for two large near-identical
+  configs. Passing `context: <int>` now collapses runs of equal lines more
+  than that many lines from any change: those cold lines are omitted from
+  `lines` and counted in `stats.collapsed` (the `equal` stat still reflects
+  the full diff). Omitting `context` returns the full report exactly as
+  before — no contract change for existing callers.
+
 ### Fixed
 
 - **OpenAPI schema now advertises the `/api/v1` bearer-token requirement**

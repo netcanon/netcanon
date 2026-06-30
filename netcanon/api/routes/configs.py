@@ -285,8 +285,10 @@ def diff_configs(
     render a warning banner.
 
     Args:
-        body: Request payload with ``left``, ``right``, and optional
-            ``force`` flag.
+        body: Request payload with ``left``, ``right``, an optional
+            ``force`` flag, and an optional ``context`` fold control
+            (omit for the full line-by-line report; set to an int to
+            collapse cold equal runs — see :class:`DiffRequest`).
 
     Raises:
         HTTPException 404: If either filename is not known to the store.
@@ -319,6 +321,25 @@ def diff_configs(
     report = compute_diff(
         left_rec, left_text, right_rec, right_text, force=body.force
     )
+
+    # Opt-in fold (audit 276eaeb #18): when the caller passes `context`,
+    # drop equal lines that are more than `context` lines from any change
+    # so a diff of two large near-identical configs doesn't serialise tens
+    # of thousands of unchanged lines.  Default (context=None) is the full
+    # report, unchanged.  The `equal` stat still reflects the full diff; a
+    # `collapsed` stat records how many equal lines were omitted.
+    if body.context is not None:
+        from ...services.diff import fold_context
+
+        groups = fold_context(report.lines, context=body.context)
+        visible = [
+            line for g in groups if g.kind != "collapsed" for line in g.lines
+        ]
+        collapsed = sum(len(g.lines) for g in groups if g.kind == "collapsed")
+        report = report.model_copy(
+            update={"lines": visible, "stats": {**report.stats, "collapsed": collapsed}}
+        )
+
     logger.info(
         "Diff %s vs %s: +%d / -%d (compat=%s, force=%s)",
         body.left,
