@@ -259,11 +259,20 @@ def _render_snmp(snmp) -> list[str]:
             line += f" {user.group}"
         if user.auth_protocol:
             line += f" auth {user.auth_protocol} {user.auth_passphrase}"
-            if user.priv_protocol:
-                priv = _CANON_TO_NXOS_PRIV.get(
-                    user.priv_protocol, user.priv_protocol,
-                )
-                line += f" priv {priv} {user.priv_passphrase}"
+            # Emit ``priv`` whenever a privacy passphrase is set — gating on
+            # ``priv_protocol`` instead would DROP the key for the bare
+            # ``priv <key>`` (default-DES, no explicit cipher) form, whose
+            # canonical ``priv_protocol`` is empty.  The cipher token is
+            # emitted only when present (``priv aes-128 <key>``); absent it
+            # round-trips the default-DES form (``priv <key>``).
+            if user.priv_passphrase:
+                if user.priv_protocol:
+                    priv = _CANON_TO_NXOS_PRIV.get(
+                        user.priv_protocol, user.priv_protocol,
+                    )
+                    line += f" priv {priv} {user.priv_passphrase}"
+                else:
+                    line += f" priv {user.priv_passphrase}"
             line += " localizedkey"
         if user.engine_id:
             line += f" engineID {user.engine_id}"

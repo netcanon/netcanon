@@ -589,6 +589,63 @@ class TestPhase2bSNMPUsers:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2b regression — SNMPv3 ``priv <key>`` (default-DES, no explicit
+# cipher).  The dogfood mesh (napalm NX-OS captures) caught the sanitizer
+# leaking the priv key here: the parse regex assumed ``priv <cipher> <key>``
+# (two tokens), so the bare ``priv <key> localizedkey`` form swallowed the
+# real key as the "cipher" (un-sanitized ``priv_protocol``) and the
+# ``localizedkey`` keyword as the "key".
+# ---------------------------------------------------------------------------
+
+
+_SNMP_V3_PRIV_NOCIPHER_CONFIG = """\
+!Command: show running-config
+hostname AAA
+snmp-server user pyclass network-admin auth md5 0xd1e3bf70 priv 0xd1e3bf70 localizedkey
+snmp-server user admin auth md5 0x9e902c38 priv 0x9e902c38 localizedkey engineID 128:0:0:9:3:0:12:41
+"""
+
+
+class TestSNMPv3PrivNoCipherKeyLeak:
+    @pytest.fixture
+    def tree(self, codec):
+        return codec.parse(_SNMP_V3_PRIV_NOCIPHER_CONFIG)
+
+    def test_priv_key_lands_in_passphrase_not_protocol(self, tree):
+        """The bare ``priv <key>`` form has NO cipher, so the key must land
+        in ``priv_passphrase`` (sanitized) with an empty ``priv_protocol`` —
+        NOT the reverse, which leaked the key through the un-sanitized
+        protocol field."""
+        pyclass = next(u for u in tree.snmp.v3_users if u.name == "pyclass")
+        assert pyclass.priv_protocol == ""        # default DES, no cipher token
+        assert pyclass.priv_passphrase == "0xd1e3bf70"
+        assert pyclass.auth_passphrase == "0xd1e3bf70"
+
+    def test_default_des_priv_round_trips_faithfully(self, codec, tree):
+        rendered = codec.render(tree)
+        assert (
+            "snmp-server user pyclass network-admin auth md5 "
+            "0xd1e3bf70 priv 0xd1e3bf70 localizedkey" in rendered
+        )
+        # priv survives a parse->render->parse cycle (was dropped when render
+        # gated the priv segment on the now-empty priv_protocol).
+        assert codec.parse(rendered).snmp.model_dump() == tree.snmp.model_dump()
+
+    def test_sanitizer_does_not_leak_priv_key(self, codec, tree):
+        """Security regression: the original priv/auth key MUST NOT survive
+        verbatim into the sanitized output (dogfood mesh residual-secret
+        sweep finding)."""
+        from netcanon.tools.sanitize import sanitize_intent
+
+        sanitized, _subs = sanitize_intent(tree)
+        out = codec.render(sanitized)
+        for secret in ("0xd1e3bf70", "0x9e902c38"):
+            assert secret not in out, f"sanitizer leaked SNMPv3 key {secret!r}"
+        # the redaction placeholders ARE present (priv actually rendered).
+        assert "priv REDACTED-PRIV-1 localizedkey" in out
+
+
+# ---------------------------------------------------------------------------
 # Phase 2c — HSRP (CanonicalVRRPGroup mode="hsrp")
 # ---------------------------------------------------------------------------
 

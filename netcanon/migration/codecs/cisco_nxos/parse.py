@@ -178,15 +178,24 @@ _SNMP_HOST_RE = re.compile(
 )
 # NX-OS SNMPv3 USM user:
 #   snmp-server user <name> [<group>] auth <proto> <key>
-#       [priv <proto> <key>] [localized[V2]key] [engineID <id>]
+#       [priv [<cipher>] <key>] [localized[V2]key] [engineID <id>]
 # Keys are 0x-prefixed localized digests on the wire — preserved
-# verbatim.  ``priv`` is optional (auth-no-priv users); ``localizedV2key``
-# (NX-OS 10.x digest) is detected but not modelled — render always emits
-# the older ``localizedkey`` form (declared lossy).
+# verbatim.  ``priv`` is optional (auth-no-priv users); the privacy
+# CIPHER inside ``priv`` is ALSO optional — NX-OS emits ``priv <cipher>
+# <key>`` (e.g. ``priv aes-128 0x…``) when a cipher is configured but the
+# bare ``priv <key>`` form (default DES, no explicit cipher) just as
+# often.  The cipher must therefore match an enumerated token set
+# (``aes-128``/``aes-192``/``aes-256``/``des``/``3des``); a greedy
+# ``(\S+)\s+(\S+)`` instead swallowed the priv KEY as the "cipher" and
+# the trailing ``localizedkey`` keyword as the "key", landing the real
+# priv key in the un-sanitized ``priv_protocol`` field — an SNMPv3
+# priv-key disclosure through the sanitizer (dogfood mesh, napalm NX-OS
+# captures).  ``localizedV2key`` (NX-OS 10.x digest) is detected but not
+# modelled — render always emits the older ``localizedkey`` form (lossy).
 _SNMP_V3_USER_RE = re.compile(
     r"^snmp-server\s+user\s+(\S+)(?:\s+(\S+))?"
     r"\s+auth\s+(md5|sha|sha224|sha256|sha384|sha512)\s+(\S+)"
-    r"(?:\s+priv\s+(\S+)\s+(\S+))?"
+    r"(?:\s+priv\s+(?:(aes-128|aes-192|aes-256|3des|des)\s+)?(\S+))?"
     r"(?:\s+localized(V2)?key)?"
     r"(?:\s+engineID\s+(\S+))?\s*$",
     re.IGNORECASE | re.MULTILINE,

@@ -28,6 +28,20 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`cisco_nxos` SNMPv3 `priv` key no longer leaks through the
+  sanitizer** (surfaced by the dogfood mesh harness on real napalm
+  NX-OS captures). The USM parser assumed `priv <cipher> <key>` (two
+  tokens), but NX-OS just as often emits the bare `priv <key>` form
+  (default DES, no explicit cipher). The greedy regex then captured
+  the real priv key as the "cipher" -- landing it in the un-sanitized
+  `priv_protocol` field -- and the trailing `localizedkey` keyword as
+  the key. `netcanon sanitize` therefore re-emitted the privacy key
+  verbatim. The cipher is now matched against an enumerated token set
+  (`aes-128`/`aes-192`/`aes-256`/`des`/`3des`) so the bare form parses
+  the key into the redacted `priv_passphrase`; render emits `priv`
+  whenever a passphrase is set, so the default-DES form also
+  round-trips faithfully instead of dropping the key.
+
 - **`cisco_iosxe` (NETCONF) auto-detection no longer over-claims NETCONF
   envelopes it can't parse** (surfaced by the dogfood mesh harness on
   real configs). The `probe()` matched any `<rpc-reply>`/`<data>` envelope,
