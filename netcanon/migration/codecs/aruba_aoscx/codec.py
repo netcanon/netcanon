@@ -156,7 +156,8 @@ class ArubaAOSCXCodec(CodecBase):
             # ── Phase 2: LAGs (`interface lag N`) ──
             "/lags/lag/name",
             "/lags/lag/members",
-            "/lags/lag/mode",
+            # /lags/lag/mode is LOSSY, not supported — see the lossy list
+            # below (passive re-parses as static; audit bb47f21 T0-1).
             # ── Phase 2: local users (`user X group G password ciphertext`) ──
             "/local-users/user/name",
             "/local-users/user/role",
@@ -176,6 +177,16 @@ class ArubaAOSCXCodec(CodecBase):
             "/vxlan-vnis/vni",
         ],
         lossy=[
+            LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "AOS-CX renders the LAG `lacp mode`, but a `passive` LACP "
+                    "bundle re-parses as `static` -- the passive mode is not "
+                    "preserved (audit bb47f21 T0-1, verified by round-trip "
+                    "probe)."
+                ),
+                severity="warn",
+            ),
             LossyPath(
                 path="/routing-instances/instance/instance-type",
                 reason=(

@@ -63,6 +63,13 @@ from ..base import ParseError
 
 logger = logging.getLogger(__name__)
 
+# ``channel-group N mode active|passive|on`` → canonical LAG mode.  ``on`` is
+# a static (non-LACP) bundle, canonicalised to "static"; an unknown token
+# falls back to the LAG default "active".  Mirrors
+# ``cisco_nxos._NXOS_LAG_MODE_MAP`` so the mode round-trips (audit bb47f21
+# T0-1: the Arista parser used to discard this token and hard-code "active").
+_LAG_MODE_MAP = {"active": "active", "passive": "passive", "on": "static"}
+
 
 # ---------------------------------------------------------------------------
 # Regex patterns — module-level so they compile once per import.
@@ -628,6 +635,9 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
     # Track pending LAG member ↔ channel-group bindings so we
     # can reverse-link after interfaces are materialised.
     lag_members: dict[int, list[str]] = {}
+    # Per-channel LACP mode captured from ``channel-group N mode <X>`` so it
+    # round-trips instead of defaulting to "active" (audit bb47f21 T0-1).
+    lag_modes: dict[int, str] = {}
     # GAP-EVPN-2: switch-level VXLAN settings are captured inside
     # ``interface Vxlan1`` but apply globally to every CanonicalVxlan
     # record produced from that stanza.  Stash them as parse-time
@@ -707,7 +717,7 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         # Indented = sub-command of the currently-open stanza.
         if current_iface is not None:
             _apply_iface_subcommand(
-                current_iface, stripped, lag_members, intent,
+                current_iface, stripped, lag_members, lag_modes, intent,
                 vxlan_state,
             )
         elif current_vlan is not None and stripped.startswith("name "):
@@ -742,10 +752,12 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
             intent.lags.append(CanonicalLAG(
                 name=lag_name,
                 members=sorted(set(members)),
-                mode="active",
+                mode=lag_modes.get(chan_id, "active"),
             ))
         else:
             existing.members = sorted(set(existing.members + members))
+            if chan_id in lag_modes:
+                existing.mode = lag_modes[chan_id]
         # Reverse-link on each member interface.
         for member in members:
             m_iface = iface_by_name.get(member)
@@ -922,6 +934,7 @@ def _apply_iface_subcommand(  # noqa: C901
     iface: CanonicalInterface,
     line: str,
     lag_members: dict[int, list[str]],
+    lag_modes: dict[int, str],
     intent: CanonicalIntent,
     vxlan_state: dict[str, Any] | None = None,
 ) -> None:
@@ -1092,12 +1105,19 @@ def _apply_iface_subcommand(  # noqa: C901
                 iface.tunnel_type = "ipip"
         return
     if line.startswith("channel-group "):
-        # ``channel-group 1 mode active`` — LAG membership.
+        # ``channel-group 1 mode active`` — LAG membership + LACP mode.
         parts = line.split()
         if len(parts) >= 2:
             try:
                 chan_id = int(parts[1])
                 lag_members.setdefault(chan_id, []).append(iface.name)
+                # Capture the LACP mode token (parts[3] after ``mode``) so a
+                # passive / static (``on``) bundle round-trips instead of
+                # silently defaulting to "active" (audit bb47f21 T0-1).
+                if len(parts) >= 4 and parts[2].lower() == "mode":
+                    lag_modes[chan_id] = _LAG_MODE_MAP.get(
+                        parts[3].lower(), "active"
+                    )
             except ValueError:
                 pass
         return

@@ -578,7 +578,6 @@ def test_render_l2_and_lag_grammar(codec: ArubaAOSCXCodec) -> None:
     "/interfaces/interface/lag-member-of",
     "/vlans/vlan/untagged-ports",
     "/lags/lag/name",
-    "/lags/lag/mode",
     "/local-users/user/name",
     "/local-users/user/role",
     "/snmp/community",
@@ -595,6 +594,10 @@ def test_matrix_supported(codec: ArubaAOSCXCodec, path: str) -> None:
 
 @pytest.mark.parametrize("path", [
     "/interfaces/interface/config/type",
+    # audit bb47f21 T0-1: AOS-CX renders the LAG `lacp mode` but a `passive`
+    # bundle re-parses as `static`, so the mode is lossy (was wrongly listed
+    # supported — the value-corruption the LAG-mode fidelity guard now pins).
+    "/lags/lag/mode",
     "/local-users/user/privilege-level",
     "/snmp/v3-user/auth-passphrase",
     # PR-2a (audit e5b77d7): the SNMPv3 sub-field leaves are now WALKED, so

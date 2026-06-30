@@ -167,6 +167,16 @@ class OPNsenseCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "OPNsense `lagg` uses a single `lacp` proto with no "
+                    "active/passive distinction, so a `passive` LACP bundle "
+                    "re-parses as `active` (audit bb47f21 T0-1, verified by "
+                    "round-trip probe)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/routing/static-route/gateway",
                 reason=(
                     "Renders no <staticroutes> block (see /routing/static-route), "
