@@ -393,6 +393,89 @@ class TestDiffEfficiency:
         assert spy.call_count == 1
 
 
+class TestDiffContextFold:
+    """audit 276eaeb #18: opt-in `context` collapses cold equal runs out of
+    the JSON diff payload, so two large near-identical configs don't
+    serialise tens of thousands of unchanged lines.  Default (no `context`)
+    is the full report, unchanged."""
+
+    def _seed_pair(self, client):
+        """Two diff-compatible Cisco configs sharing a long common block
+        with a single differing line in the middle — enough cold equal
+        runs to fold."""
+        from datetime import UTC, datetime
+
+        storage = client.app.state.storage
+        common = "\n".join(f"line{i}" for i in range(100))
+        left = f"{common}\nCHANGED-LEFT\n{common}\n"
+        right = f"{common}\nCHANGED-RIGHT\n{common}\n"
+        rec_l = storage.save(
+            device_type="Cisco", host="10.7.7.1",
+            timestamp=datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC),
+            extension="cfg", content=left, device_profile_id=None,
+        )
+        rec_r = storage.save(
+            device_type="Cisco", host="10.7.7.2",
+            timestamp=datetime(2026, 1, 1, 0, 0, 1, tzinfo=UTC),
+            extension="cfg", content=right, device_profile_id=None,
+        )
+        return rec_l.filename, rec_r.filename
+
+    def test_context_omitted_returns_full_report(self, client):
+        left, right = self._seed_pair(client)
+        report = client.post(
+            "/api/v1/configs/diff", json={"left": left, "right": right}
+        ).json()
+        # No fold requested → no `collapsed` key, every line present.
+        assert "collapsed" not in report["stats"]
+        assert len(report["lines"]) > 150  # ~200 equal + the change rows
+
+    def test_context_folds_cold_equal_runs(self, client):
+        left, right = self._seed_pair(client)
+        full = client.post(
+            "/api/v1/configs/diff", json={"left": left, "right": right}
+        ).json()
+        folded = client.post(
+            "/api/v1/configs/diff",
+            json={"left": left, "right": right, "context": 3},
+        ).json()
+
+        assert folded["stats"]["collapsed"] > 0
+        assert len(folded["lines"]) < len(full["lines"])
+        # The `equal` stat still reflects the FULL diff, not the folded view.
+        assert folded["stats"]["equal"] == full["stats"]["equal"]
+        # Invariant: nothing is lost — visible + collapsed == full line count.
+        assert (
+            len(folded["lines"]) + folded["stats"]["collapsed"]
+            == len(full["lines"])
+        )
+        # The actual change survives the fold (it is never cold).
+        texts = [line["text"] for line in folded["lines"]]
+        assert "CHANGED-LEFT" in texts
+        assert "CHANGED-RIGHT" in texts
+
+    def test_large_context_collapses_nothing(self, client):
+        left, right = self._seed_pair(client)
+        full = client.post(
+            "/api/v1/configs/diff", json={"left": left, "right": right}
+        ).json()
+        folded = client.post(
+            "/api/v1/configs/diff",
+            json={"left": left, "right": right, "context": 10_000},
+        ).json()
+        # Context wider than the file → nothing is cold.
+        assert folded["stats"]["collapsed"] == 0
+        assert len(folded["lines"]) == len(full["lines"])
+
+    def test_negative_context_rejected_422(self, client):
+        left, right = self._seed_pair(client)
+        resp = client.post(
+            "/api/v1/configs/diff",
+            json={"left": left, "right": right, "context": -1},
+        )
+        assert resp.status_code == 422
+
+
 class TestDiffOutput:
     """Structural checks on the diff body — stats, line kinds, numbers."""
 
