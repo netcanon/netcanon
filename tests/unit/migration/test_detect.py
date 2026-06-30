@@ -74,11 +74,27 @@ class TestCiscoNETCONFProbe:
         assert hit is not None
         assert hit[0] >= 90
 
-    def test_matches_rpc_reply(self):
-        raw = '<rpc-reply><data></data></rpc-reply>'
+    def test_matches_rpc_reply_with_interfaces(self):
+        # A NETCONF envelope carrying an <interfaces> payload is parseable.
+        raw = ('<rpc-reply><data><interfaces><interface><name>Gi1</name>'
+               '</interface></interfaces></data></rpc-reply>')
         hit = CiscoIOSXECodec.probe(raw)
         assert hit is not None
         assert hit[0] >= 50
+
+    def test_ignores_netconf_envelope_without_interfaces(self):
+        """dogfood mesh bb47f21: a NETCONF reply whose payload is NOT
+        OpenConfig <interfaces> (e.g. an IOS-XR <cli> cli-cfg blob) must
+        NOT be claimed — the stub can't parse it, so claiming it routes to
+        a guaranteed 'no <interfaces> element found' parse failure."""
+        bare = '<rpc-reply><data></data></rpc-reply>'
+        assert CiscoIOSXECodec.probe(bare) is None
+        xr_cli = (
+            '<rpc-reply><data>'
+            '<cli xmlns="http://cisco.com/ns/yang/Cisco-IOS-XR-cli-cfg">'
+            '!! IOS XR Configuration\nhostname r1\n</cli></data></rpc-reply>'
+        )
+        assert CiscoIOSXECodec.probe(xr_cli) is None
 
     def test_ignores_opnsense(self):
         raw = '<opnsense><system/></opnsense>'

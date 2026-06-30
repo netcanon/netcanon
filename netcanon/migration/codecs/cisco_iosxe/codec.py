@@ -956,10 +956,18 @@ class CiscoIOSXECodec(CodecBase):
                 95,
                 "OpenConfig YANG namespace found — NETCONF payload",
             )
-        # <rpc-reply> is the NETCONF envelope; almost always contains
-        # openconfig in practice but we rank it lower just in case.
-        if "<rpc-reply" in lowered or "<data>" in lowered:
-            return (70, "NETCONF envelope tag present")
+        # <rpc-reply> / <data> is the NETCONF envelope, but this stub can
+        # ONLY consume an OpenConfig `<interfaces>` payload.  A NETCONF reply
+        # carrying some OTHER payload (e.g. an IOS-XR `<cli>` cli-cfg blob)
+        # has no `<interfaces>` element, so claiming it here just routes it
+        # to a parse that fails with "no <interfaces> element found" — a
+        # confident mis-detection.  Require the `<interfaces>` element to be
+        # present before claiming the envelope (dogfood mesh: IOS-XR-cli-in-
+        # NETCONF was mis-detected as cisco_iosxe).
+        if ("<rpc-reply" in lowered or "<data>" in lowered) and (
+            "<interfaces" in lowered
+        ):
+            return (70, "NETCONF envelope with <interfaces> payload")
         # Bare OpenConfig-shaped <interfaces> with XML namespace.
         if ("<interfaces" in lowered and "xmlns" in lowered
                 and "<interface>" in lowered):
