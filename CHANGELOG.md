@@ -26,6 +26,17 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`cisco_iosxe` (NETCONF) auto-detection no longer over-claims NETCONF
+  envelopes it can't parse** (surfaced by the dogfood mesh harness on
+  real configs). The `probe()` matched any `<rpc-reply>`/`<data>` envelope,
+  so an IOS-XR config delivered as `<rpc-reply><data><cli>...` was
+  confidently mis-detected as `cisco_iosxe` and then failed parse with
+  "no <interfaces> element found". The envelope branch now requires an
+  `<interfaces>` payload (the only subtree the stub consumes); the
+  OpenConfig-namespace and bare-`<interfaces>` paths are unchanged.
+
 ## [0.4.10] - 2026-06-30
 
 ### Fixed
