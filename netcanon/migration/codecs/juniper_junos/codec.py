@@ -159,6 +159,17 @@ class JunosCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "Junos renders LACP `active`/`passive` faithfully, but a "
+                    "`static` (non-LACP) aggregate carries no `lacp` statement "
+                    "and re-parses as `active` -- the static/LACP distinction "
+                    "is dropped (audit bb47f21 T0-1, verified by round-trip "
+                    "probe)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "Junos renders only IETF VRRP; a cross-family source mode "

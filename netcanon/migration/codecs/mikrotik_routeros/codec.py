@@ -162,6 +162,15 @@ class MikroTikRouterOSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "MikroTik bonding `mode=802.3ad` (LACP) has no passive "
+                    "variant, so a `passive` bundle re-parses as `active` "
+                    "(audit bb47f21 T0-1, verified by round-trip probe)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "RouterOS renders only IETF VRRP; a cross-family source "

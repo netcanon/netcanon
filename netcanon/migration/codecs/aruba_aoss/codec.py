@@ -158,6 +158,16 @@ class ArubaAOSSCodec(CodecBase):
         ],
         lossy=[
             LossyPath(
+                path="/lags/lag/mode",
+                reason=(
+                    "AOS-S trunk LACP does not preserve the active/passive "
+                    "distinction on re-parse; a `passive` bundle re-parses as "
+                    "`active` (audit bb47f21 T0-1, verified by round-trip "
+                    "probe)."
+                ),
+                severity="warn",
+            ),
+            LossyPath(
                 path="/interfaces/interface/vrrp-groups/group/mode",
                 reason=(
                     "AOS-S renders only IETF VRRP; a cross-family source mode "

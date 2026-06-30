@@ -26,6 +26,21 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Arista LACP mode no longer silently corrupted on round-trip**
+  (audit bb47f21 T0-1). The `arista_eos` parser read `channel-group N
+  mode <X>` but kept only the channel id and hard-coded the LAG
+  `mode="active"`, so a `passive` or static (`on`) Arista bundle
+  re-parsed as `active` -- `parse(render(x)) != x`, reported `ok` by the
+  live validator. The parser now captures the mode token via a map
+  (mirroring `cisco_nxos`), so active/passive/static round-trip. Codecs
+  that genuinely cannot preserve the mode -- verified by a round-trip
+  probe: `aruba_aoscx` (passive->static), `aruba_aoss`, `juniper_junos`
+  (static->active), `mikrotik_routeros`, `opnsense` (passive->active) --
+  now declare `/lags/lag/mode` lossy so the loss surfaces instead of
+  reporting `ok`. A registry-wide LAG-mode value-fidelity guard pins it.
+
 ## [0.4.9] - 2026-06-29
 
 ### Added
