@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.10] - 2026-06-30
+
 ### Fixed
 
 - **Arista LACP mode no longer silently corrupted on round-trip**
