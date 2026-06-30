@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.9] - 2026-06-29
+
 ### Added
 
 - **`POST /api/v1/configs/diff` accepts an opt-in `context` fold control**
