@@ -221,7 +221,16 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         # https://docs.opnsense.org/manual/settings_general.html.
         for dns_el in sys_el.findall("dnsserver"):
             if dns_el.text and dns_el.text.strip():
-                intent.dns_servers.append(dns_el.text.strip())
+                # Normally one IP per element, but real-world configs
+                # occasionally cram several into a single element
+                # (``<dnsserver>10.0.1.10, 10.0.1.11</dnsserver>``).  Split
+                # on commas so each resolver becomes its own canonical entry —
+                # otherwise the whole "10.0.1.10, 10.0.1.11" string renders as
+                # a single bogus name-server downstream.  Mirrors the
+                # per-DHCP-zone comma handling further below.
+                intent.dns_servers.extend(
+                    s.strip() for s in dns_el.text.split(",") if s.strip()
+                )
         # Local users — <system>/<user> entries.  OPNsense stores
         # users at the same level as <hostname>, each with name,
         # descr, password (bcrypt $2y$), uid, and an optional

@@ -28,6 +28,28 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`mikrotik_routeros` no longer aborts a whole config over a bare
+  host address** (surfaced by the dogfood mesh harness on real
+  RouterOS `.rsc` exports). `/ip address` rows for loopbacks and VRRP
+  VIPs are commonly written `address=X ... network=X` with no CIDR
+  mask; the parser raised `ParseError: address 'X' missing CIDR
+  prefix` and dropped the entire device. A host whose network base
+  equals the host itself is only consistent with a `/32`, so the
+  parser now infers `/32` for a prefix-less address instead of failing
+  (20 real corpus configs went from hard-fail to clean parse). An
+  address carrying an explicit but non-numeric prefix (`X/bogus`)
+  still raises.
+
+- **`opnsense` splits comma-joined system DNS servers** (surfaced by
+  the dogfood mesh harness on real `config.xml`). A `<system>` config
+  that crams several resolvers into one element
+  (`<dnsserver>10.0.1.10, 10.0.1.11</dnsserver>`) was parsed as a
+  single bogus DNS entry, which then rendered as one malformed
+  name-server downstream (`ip name-server 10.0.1.10, 10.0.1.11`,
+  reparsing to `10.0.1.10,`). System `<dnsserver>` values are now
+  split on commas so each resolver becomes its own canonical entry,
+  matching the existing per-DHCP-zone handling.
+
 - **`cisco_nxos` SNMPv3 `priv` key no longer leaks through the
   sanitizer** (surfaced by the dogfood mesh harness on real napalm
   NX-OS captures). The USM parser assumed `priv <cipher> <key>` (two
