@@ -1018,7 +1018,15 @@ def run_reconciliation(mesh_json_path: Path) -> dict[str, Any]:
 
     return {
         "started_utc": started,
-        "mesh_json": mesh_json_path.relative_to(_REPO_ROOT).as_posix(),
+        # Display path only.  A mesh JSON handed in from outside the repo
+        # tree (e.g. a pytest tmp_path when a CI guard reconciles an
+        # in-memory mesh) isn't relative to _REPO_ROOT — fall back to the
+        # bare filename rather than letting relative_to() raise.
+        "mesh_json": (
+            mesh_json_path.relative_to(_REPO_ROOT).as_posix()
+            if mesh_json_path.is_relative_to(_REPO_ROOT)
+            else mesh_json_path.name
+        ),
         "mesh_run_started_utc": mesh.get("started_utc"),
         "cells_total": len(cells_out),
         "expectation_yamls_loaded": len(expectations),
