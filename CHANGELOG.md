@@ -26,6 +26,8 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.11] - 2026-06-30
+
 ### Fixed
 
 - **`/api/v1/sanitize` (and the `netcanon sanitize` CLI) no longer
