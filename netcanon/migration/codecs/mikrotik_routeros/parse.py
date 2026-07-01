@@ -803,21 +803,27 @@ def _parse_ip_address(
         iface_name = kv.get("interface")
         if not addr or not iface_name:
             continue
-        if "/" not in addr:
-            raise ParseError(
-                f"mikrotik_routeros: address {addr!r} missing CIDR prefix",
-                path=f"/ip address/{iface_name}",
-                snippet=line[:120],
-            )
-        ip_str, prefix_str = addr.split("/", 1)
-        try:
-            prefix_len = int(prefix_str)
-        except ValueError as e:
-            raise ParseError(
-                f"mikrotik_routeros: invalid CIDR prefix {prefix_str!r}",
-                path=f"/ip address/{iface_name}",
-                snippet=line[:120],
-            ) from e
+        if "/" in addr:
+            ip_str, prefix_str = addr.split("/", 1)
+            try:
+                prefix_len = int(prefix_str)
+            except ValueError as e:
+                raise ParseError(
+                    f"mikrotik_routeros: invalid CIDR prefix {prefix_str!r}",
+                    path=f"/ip address/{iface_name}",
+                    snippet=line[:120],
+                ) from e
+        else:
+            # No CIDR prefix on the address.  Real-world RouterOS configs
+            # (loopbacks, VRRP VIPs, rows authored/exported without the mask)
+            # commonly write ``address=X ... network=X`` — a host whose network
+            # base equals the host itself, which is only consistent with a /32.
+            # Infer /32 rather than aborting the entire config: it's the
+            # faithful reading of ``address==network`` and the safe, non-
+            # over-claiming default when the mask is simply absent.  Observed
+            # across the dogfood corpus on lo/loopback0/vrrpN host rows.
+            ip_str = addr
+            prefix_len = 32
         # Route VIP rows to the VRRP scratch — don't materialise a
         # phantom CanonicalInterface for ``vrrpN`` pseudo-names.
         if vrrp_scratch is not None and iface_name in vrrp_scratch:

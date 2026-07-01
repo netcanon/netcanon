@@ -212,13 +212,20 @@ class TestParseErrors:
         with pytest.raises(ParseError, match="looks like JSON"):
             MikroTikRouterOSCodec().parse('{"key": "value"}')
 
-    def test_ip_address_missing_prefix_raises(self):
+    def test_ip_address_missing_prefix_infers_host_32(self):
+        # Real RouterOS configs write bare host addresses (loopbacks, VRRP
+        # VIPs) as ``address=X ... network=X`` with no CIDR mask.  A host
+        # equal to its own network base is only consistent with /32, so we
+        # infer /32 rather than aborting the whole config.
         raw = (
             "/ip address\n"
-            "add address=10.0.0.2 interface=ether1\n"
+            "add address=10.0.0.2 interface=ether1 network=10.0.0.2\n"
         )
-        with pytest.raises(ParseError, match="missing CIDR prefix"):
-            MikroTikRouterOSCodec().parse(raw)
+        tree = MikroTikRouterOSCodec().parse(raw)
+        iface = next(i for i in tree.interfaces if i.name == "ether1")
+        assert len(iface.ipv4_addresses) == 1
+        assert iface.ipv4_addresses[0].ip == "10.0.0.2"
+        assert iface.ipv4_addresses[0].prefix_length == 32
 
     def test_ip_address_bogus_prefix_raises(self):
         raw = (

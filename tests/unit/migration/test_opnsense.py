@@ -56,6 +56,22 @@ class TestParse:
         assert tree.domain == "example.com"
         assert len(tree.interfaces) == 1
 
+    def test_system_dnsserver_comma_joined_splits(self):
+        """Real configs sometimes cram several resolvers into a single
+        ``<dnsserver>`` element (``10.0.1.10, 10.0.1.11``) instead of one
+        element per IP.  Each must become its own canonical entry, else the
+        whole comma-joined string renders as one bogus name-server (e.g.
+        ``ip name-server 10.0.1.10, 10.0.1.11`` → reparses to ``10.0.1.10,``).
+        """
+        xml = (
+            '<?xml version="1.0"?><opnsense><system>'
+            "<hostname>fw01</hostname>"
+            "<dnsserver>10.0.1.10, 10.0.1.11</dnsserver>"
+            "</system></opnsense>"
+        )
+        tree = OPNsenseCodec().parse(xml)
+        assert tree.dns_servers == ["10.0.1.10", "10.0.1.11"]
+
     def test_zone_interfaces_flatten_to_list(self):
         """OPNsense's native XML has <wan>, <lan>, <opt1> keyed by role,
         each carrying a ``<if>`` child that names the underlying physical
