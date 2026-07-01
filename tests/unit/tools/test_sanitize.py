@@ -42,6 +42,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalVRRPGroup,
     CanonicalVxlan,
 )
+from netcanon.migration.codecs.base import ParseError
 from netcanon.tools.sanitize import (
     SanitizationResult,
     Substitution,
@@ -715,6 +716,24 @@ class TestSanitizeTextEndToEnd:
     def test_unknown_codec_raises(self):
         with pytest.raises(ValueError, match="[Uu]nknown source codec"):
             sanitize_text("", "no_such_codec")
+
+    def test_out_of_range_input_raises_parse_error_not_validation_error(self):
+        # An NX-OS HSRP group-id of 301 exceeds the VRRP 0-255 range that
+        # CanonicalVRRPGroup.group_id enforces, so parse constructs an
+        # invalid model and pydantic raises ValidationError.  sanitize_text
+        # must convert that to a ParseError (contract) so the HTTP route
+        # returns a clean 400 rather than leaking a 500.  (Surfaced by the
+        # live /sanitize dogfood on a real NX-OS capture.)
+        raw = (
+            "feature hsrp\n"
+            "interface Vlan10\n"
+            "  no shutdown\n"
+            "  ip address 10.0.0.2/24\n"
+            "  hsrp 301\n"
+            "    ip 10.0.0.1\n"
+        )
+        with pytest.raises(ParseError, match="could not be represented"):
+            sanitize_text(raw, "cisco_nxos")
 
 
 # ---------------------------------------------------------------------------

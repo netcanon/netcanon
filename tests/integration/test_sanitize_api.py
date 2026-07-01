@@ -130,6 +130,27 @@ class TestSanitizeEndpointErrors:
         )
         assert response.status_code == 422
 
+    def test_out_of_range_input_returns_400_not_500(self, client):
+        """Input that parses structurally but yields an out-of-range
+        canonical value (NX-OS HSRP group-id 301 > the VRRP 0-255 range)
+        must return a clean 400, not a 500 leaking a pydantic
+        ValidationError.  Surfaced by the live /sanitize dogfood."""
+        raw = (
+            b"feature hsrp\n"
+            b"interface Vlan10\n"
+            b"  no shutdown\n"
+            b"  ip address 10.0.0.2/24\n"
+            b"  hsrp 301\n"
+            b"    ip 10.0.0.1\n"
+        )
+        response = client.post(
+            "/api/v1/sanitize",
+            data={"source_vendor": "cisco_nxos"},
+            files={"config": ("tor.cfg", raw, "text/plain")},
+        )
+        assert response.status_code == 400
+        assert "parse" in response.json()["detail"].lower()
+
 
 class TestSanitizeEndpointConsistency:
     """The HTTP endpoint must produce the same result as direct
