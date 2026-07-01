@@ -28,6 +28,19 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`/api/v1/sanitize` (and the `netcanon sanitize` CLI) no longer
+  returns 500 on input that yields an out-of-range canonical value**
+  (surfaced by the dogfood mesh harness driving the LIVE endpoint). A
+  config that parses structurally but maps to a field outside its
+  canonical constraint -- e.g. an NX-OS `hsrp 301` group-id exceeding
+  the VRRP 0-255 range that `CanonicalVRRPGroup.group_id` enforces --
+  made the codec's `parse()` raise a pydantic `ValidationError` (not the
+  contract's `ParseError`), which escaped the route's `except ParseError`
+  and surfaced as a 500. `sanitize_text` now converts a parse-time
+  `ValidationError` into a `ParseError`, so the endpoint returns a clean
+  400 and the CLI reports it instead of dumping a traceback. (The
+  `/migration/plan` path already degraded to a failed job, not a 500.)
+
 - **`mikrotik_routeros` no longer aborts a whole config over a bare
   host address** (surfaced by the dogfood mesh harness on real
   RouterOS `.rsc` exports). `/ip address` rows for loopbacks and VRRP

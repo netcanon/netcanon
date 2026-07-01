@@ -133,7 +133,10 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
+from pydantic import ValidationError
+
 from ..migration.canonical.intent import CanonicalIntent
+from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
 
 #: A DNS hostname: dot-separated labels (alnum, internal hyphen, and
@@ -222,7 +225,25 @@ def sanitize_text(
             f"Unknown source codec: {source_codec_name!r}. "
             f"See netcanon.migration.codecs.registry.list_codecs()."
         ) from e
-    intent = codec.parse(raw)
+    try:
+        intent = codec.parse(raw)
+    except ValidationError as e:
+        # The input parsed structurally but produced a canonical model that
+        # violates a field constraint (e.g. an NX-OS HSRP group-id > the
+        # VRRP 0-255 range mapped onto CanonicalVRRPGroup.group_id).  That's
+        # unparseable-as-canonical INPUT, not a server fault — surface it as
+        # a ParseError so callers honour the documented contract: the HTTP
+        # route returns 400 instead of leaking a 500, and the CLI reports it
+        # cleanly rather than dumping a pydantic traceback.
+        errs = e.errors()
+        detail = (
+            f"{'.'.join(str(x) for x in errs[0]['loc'])}: {errs[0]['msg']}"
+            if errs else str(e)
+        )
+        raise ParseError(
+            f"{source_codec_name}: input could not be represented as a "
+            f"valid canonical config ({detail})"
+        ) from e
     sanitized_intent, substitutions = sanitize_intent(intent)
 
     if dry_run:
