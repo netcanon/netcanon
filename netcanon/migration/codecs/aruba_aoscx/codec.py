@@ -434,12 +434,13 @@ class ArubaAOSCXCodec(CodecBase):
             UnsupportedPath(
                 path="/interfaces/interface/dot1q-vlan",
                 reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
+                    "AOS-CX has NO routed sub-interface construct (no "
+                    "`<parent>.<subid>` naming) — tagged L3 is done via "
+                    "SVIs (`interface vlan N`), not `encapsulation dot1q` "
+                    "sub-interfaces.  So the routed-subif 802.1Q tag (GAP "
+                    "7) is architecturally unsupported here, not merely "
+                    "un-wired: a cross-vendor source's tag is flagged as a "
+                    "drop rather than mis-rendered."
                 ),
             ),
             UnsupportedPath(
