@@ -152,6 +152,22 @@ _CONFIG_HEADER_RE = re.compile(r"^config\s+(.+?)\s*$", re.IGNORECASE)
 _EDIT_HEADER_RE = re.compile(r"^edit\s+(.+?)\s*$", re.IGNORECASE)
 _SET_RE = re.compile(r"^set\s+(\S+)\s*(.*)$", re.IGNORECASE)
 _COMMENT_RE = re.compile(r"^\s*#")
+#: FortiOS release from the ``#config-version`` header, e.g.
+#: ``#config-version=FG100E-7.2.13-FW-build1762-...`` → ``7.2.13``.  The
+#: model token has no fixed length (FGT70G / FGVM64 / FG100E), so the lazy
+#: ``\S+?`` stops at the first hyphen after the model, before the triple.
+_VERSION_RE = re.compile(r"#config-version=\S+?-(\d+\.\d+\.\d+)", re.MULTILINE)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the FortiOS release from the ``#config-version`` header.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.  Returns ``""``
+    when the header is absent.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
 
 
 def _tokenize_set(value: str) -> list[str]:
@@ -895,6 +911,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
         source_vendor="fortigate",
         source_format="cli-fortigate",
     )
+    intent.source_version = _extract_version(raw)
 
     blocks = _parse_blocks(raw)
     # Track which top-level paths we saw vs which we dispatched — the

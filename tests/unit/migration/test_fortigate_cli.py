@@ -195,6 +195,29 @@ class TestParse:
         tree = FortiGateCLICodec().parse(_MIN)
         assert tree.hostname == "test-fgt"
 
+    def test_source_version_parsed(self):
+        """FortiOS release captured from the ``#config-version`` header;
+        the variable-length model token is skipped, the triple captured."""
+        raw = (
+            "#config-version=FG100E-7.2.13-FW-build1762-260128:"
+            "opmode=1:vdom=0:user=admin\n"
+            "config system global\n"
+            '    set hostname "fgt1"\n'
+            "end\n"
+        )
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.source_version == "7.2.13"
+
+    def test_source_version_absent(self):
+        """No ``#config-version`` header → honest empty string."""
+        raw = (
+            "config system global\n"
+            '    set hostname "fgt1"\n'
+            "end\n"
+        )
+        tree = FortiGateCLICodec().parse(raw)
+        assert tree.source_version == ""
+
     def test_interface_with_ip(self):
         tree = FortiGateCLICodec().parse(_MIN)
         port1 = tree.interfaces[0]

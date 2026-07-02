@@ -56,6 +56,21 @@ class TestParse:
         assert tree.domain == "example.com"
         assert len(tree.interfaces) == 1
 
+    def test_source_version_not_captured_from_config_schema(self):
+        """The top-level ``<version>`` in config.xml is the config-SCHEMA
+        revision (bumped by migrations), NOT the OPNsense OS release, which
+        is never written to config.xml.  source_version must stay empty
+        rather than conflate the two axes — see the NOTE in parse_intent."""
+        xml = (
+            '<?xml version="1.0"?><opnsense>'
+            "<version>11.2</version>"
+            "<system><hostname>fw01</hostname></system>"
+            "</opnsense>"
+        )
+        tree = OPNsenseCodec().parse(xml)
+        assert tree.hostname == "fw01"
+        assert tree.source_version == ""
+
     def test_system_dnsserver_comma_joined_splits(self):
         """Real configs sometimes cram several resolvers into a single
         ``<dnsserver>`` element (``10.0.1.10, 10.0.1.11``) instead of one

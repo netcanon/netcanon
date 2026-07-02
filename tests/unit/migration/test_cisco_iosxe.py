@@ -120,6 +120,32 @@ class TestParse:
         tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
         assert tree.interfaces[0].enabled is True
 
+    def test_source_version_from_system_state(self):
+        """A get-config reply carrying the OpenConfig system subtree yields
+        the release; the extractor matches ``<software-version>``
+        namespace-agnostically (metadata only)."""
+        xml = (
+            '<?xml version="1.0"?>\n'
+            "<rpc-reply><data>\n"
+            '<system xmlns="http://openconfig.net/yang/system">\n'
+            "  <state><software-version>17.09.04a</software-version></state>\n"
+            "</system>\n"
+            '<interfaces xmlns="http://openconfig.net/yang/interfaces">\n'
+            "  <interface><name>Gi0/0/0</name>"
+            "<config><name>Gi0/0/0</name><enabled>true</enabled></config>"
+            "</interface>\n"
+            "</interfaces>\n"
+            "</data></rpc-reply>\n"
+        )
+        tree = CiscoIOSXECodec().parse(xml)
+        assert tree.source_version == "17.09.04a"
+
+    def test_source_version_absent_on_interface_fragment(self):
+        """An interface-only fragment carries no system subtree — the
+        common case — so source_version is honestly empty."""
+        tree = CiscoIOSXECodec().parse(_MIN_FRAGMENT)
+        assert tree.source_version == ""
+
 
 class TestParseErrors:
     def test_malformed_xml_raises_parse_error(self):

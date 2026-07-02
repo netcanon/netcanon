@@ -62,6 +62,38 @@ class TestParseScalars:
         intent = JunosCodec().parse(raw)
         assert intent.hostname == "real-host"
 
+    def test_source_version_set_form(self):
+        """``set version`` (display-set) captured into source_version."""
+        raw = (
+            "set version 25.4R1.12\n"
+            "set system host-name r1\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "25.4R1.12"
+
+    def test_source_version_service_release(self):
+        """Hyphenated service-release token captured whole."""
+        raw = "set version 18.4R1-S1.1\nset system host-name r1\n"
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "18.4R1-S1.1"
+
+    def test_source_version_block_form(self):
+        """Block-form ``version X;`` is captured from the original input
+        (before the block→set conversion), trailing semicolon stripped."""
+        raw = (
+            "system {\n"
+            '    host-name r1;\n'
+            "}\n"
+            "version 21.4R3.15;\n"
+        )
+        intent = JunosCodec().parse(raw)
+        assert intent.source_version == "21.4R3.15"
+
+    def test_source_version_absent(self):
+        """No version statement → honest empty string."""
+        intent = JunosCodec().parse("set system host-name r1\n")
+        assert intent.source_version == ""
+
 
 # ---------------------------------------------------------------------------
 # Parse — interfaces

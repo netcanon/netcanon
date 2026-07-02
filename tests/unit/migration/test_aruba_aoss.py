@@ -182,6 +182,20 @@ class TestParse:
         tree = ArubaAOSSCodec().parse(_MIN)
         assert tree.hostname == "test-sw"
 
+    def test_source_version_parsed(self):
+        """AOS-S release captured from the config-editor banner comment."""
+        raw = (
+            "; JL258A Configuration Editor; Created on release #WC.16.10.0005\n"
+            + _MIN
+        )
+        tree = ArubaAOSSCodec().parse(raw)
+        assert tree.source_version == "WC.16.10.0005"
+
+    def test_source_version_absent(self):
+        """No release banner (e.g. a template render) → honest empty."""
+        tree = ArubaAOSSCodec().parse(_MIN)
+        assert tree.source_version == ""
+
     def test_vlan_centric_membership(self):
         """The architecturally interesting test: VLAN carries its own
         port list (what Aruba natively does, what the canonical model

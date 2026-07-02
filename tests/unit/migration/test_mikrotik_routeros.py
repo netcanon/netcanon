@@ -91,6 +91,17 @@ class TestParse:
         tree = MikroTikRouterOSCodec().parse(_MIN)
         assert tree.hostname == "router1"
 
+    def test_source_version_parsed(self):
+        """RouterOS release captured from the export header comment."""
+        raw = "# 2026-04-21 20:35:02 by RouterOS 7.18.2\n" + _MIN
+        tree = MikroTikRouterOSCodec().parse(raw)
+        assert tree.source_version == "7.18.2"
+
+    def test_source_version_absent(self):
+        """No export header comment → honest empty string."""
+        tree = MikroTikRouterOSCodec().parse(_MIN)
+        assert tree.source_version == ""
+
     def test_parse_single_ethernet_interface(self):
         tree = MikroTikRouterOSCodec().parse(_MIN)
         ifaces = tree.interfaces

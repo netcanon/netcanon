@@ -93,6 +93,16 @@ class TestR3Fields:
 
 
 class TestParseCLI:
+    def test_source_version(self):
+        """IOS-XE release captured from the running-config ``version`` line."""
+        tree = CiscoIOSXECLICodec().parse("version 17.9\nhostname r1\n")
+        assert tree.source_version == "17.9"
+
+    def test_source_version_absent(self):
+        """Partial capture with no ``version`` header → honest empty string."""
+        tree = CiscoIOSXECLICodec().parse(_MINIMAL_CLI)
+        assert tree.source_version == ""
+
     def test_minimal_cli(self):
         tree = CiscoIOSXECLICodec().parse(_MINIMAL_CLI)
         ifaces = tree.interfaces

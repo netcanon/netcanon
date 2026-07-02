@@ -202,6 +202,14 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         source_vendor="opnsense",
         source_format="xml-opnsense",
     )
+    # NOTE: source_version is intentionally left empty for OPNsense.
+    # The only version-like element in config.xml is the top-level
+    # ``<version>`` (e.g. ``11.2``), which is the config-SCHEMA revision
+    # (bumped by config migrations), NOT the OPNsense OS/firmware release
+    # (25.x / 24.x — never written to config.xml).  Capturing the schema
+    # rev into source_version would conflate two different axes and poison
+    # any downstream "version as a translation vector" analysis, so we
+    # honestly record nothing rather than a misleading value.
 
     # ----- <system> block -----
     sys_el = root.find("system")

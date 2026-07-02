@@ -188,6 +188,25 @@ _GLOBAL_VARP_MAC_RE = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
+#: EOS release from the ``! device:`` banner, e.g.
+#: ``! device: sw1 (DCS-7280SR, EOS-4.27.0F)`` → ``4.27.0F``.  The banner
+#: is the only place EOS emits its release string; the ``.swi`` boot line
+#: carries an image *filename* (``vEOS-lab.swi``), not a version, so we
+#: anchor on the parenthesised ``EOS-<ver>)`` form to avoid matching it.
+#: Captures the full token (4-segment ``4.21.1.1F`` and ``4.22.4M-2GB``).
+_VERSION_RE = re.compile(r"EOS-([\w.\-]+)\)")
+
+
+def _extract_version(raw: str) -> str:
+    """Return the EOS release string from the ``! device:`` banner.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path synthesises a fresh banner rather than echoing this, so it
+    is informational.  Returns ``""`` when no banner is present.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
+
 
 def _vrrp_group_for(
     iface: CanonicalInterface, gid: int, mode: str = "vrrp",
@@ -377,6 +396,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
     m = _HOSTNAME_RE.search(raw)
     if m:
         intent.hostname = m.group(1)
+    intent.source_version = _extract_version(raw)
     for dns_m in _DNS_SERVER_RE.finditer(raw):
         intent.dns_servers.append(dns_m.group(1))
     m = _DNS_DOMAIN_RE.search(raw)
