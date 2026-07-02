@@ -483,6 +483,11 @@ def _parse_interface_bridge(
         )
         if "comment" in kv:
             iface.description = kv["comment"]
+        # Admin-state — a bridge/loopback added with ``disabled=yes`` is
+        # shut; mirror the ethernet/vlan handlers so a disabled loopback
+        # round-trips instead of silently coming back up.
+        if "disabled" in kv:
+            iface.enabled = kv["disabled"].lower() == "no"
 
 
 def _parse_interface_bonding(

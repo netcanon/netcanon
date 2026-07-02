@@ -279,6 +279,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
             parts.append(f"name={_quote_if_needed(iface.name)}")
+            if not iface.enabled:
+                parts.append("disabled=yes")
             lines.append(" ".join(parts))
             emitted_bridge_names.add(iface.name)
         # Loopback interfaces — same /interface bridge section,
@@ -296,6 +298,8 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             if iface.description:
                 parts.append(f'comment="{_escape(iface.description)}"')
             parts.append(f"name={_quote_if_needed(iface.name)}")
+            if not iface.enabled:
+                parts.append("disabled=yes")
             lines.append(" ".join(parts))
             emitted_bridge_names.add(iface.name)
         # The synthetic add is idempotent — track which bridge
@@ -433,6 +437,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(f"interface={_quote_if_needed(vlan_parent_name)}")
             parts.append(f"name={_quote_if_needed(iface.name)}")
             parts.append(f"vlan-id={vid}")
+            # Admin-state: a shut VLAN SVI must carry disabled=yes, else
+            # RouterOS defaults it up and the shutdown silently inverts on
+            # reparse (the ethernet path above already emits this).
+            if not iface.enabled:
+                parts.append("disabled=yes")
             lines.append(" ".join(parts))
             rendered_vlan_ids.add(vid)
         # VLANs defined in intent.vlans but without a matching
