@@ -718,18 +718,20 @@ class TestSanitizeTextEndToEnd:
             sanitize_text("", "no_such_codec")
 
     def test_out_of_range_input_raises_parse_error_not_validation_error(self):
-        # An NX-OS HSRP group-id of 301 exceeds the VRRP 0-255 range that
-        # CanonicalVRRPGroup.group_id enforces, so parse constructs an
+        # An NX-OS HSRP group-id of 5000 exceeds the 0-4095 HSRPv2 range
+        # that CanonicalVRRPGroup.group_id enforces, so parse constructs an
         # invalid model and pydantic raises ValidationError.  sanitize_text
         # must convert that to a ParseError (contract) so the HTTP route
-        # returns a clean 400 rather than leaking a 500.  (Surfaced by the
-        # live /sanitize dogfood on a real NX-OS capture.)
+        # returns a clean 400 rather than leaking a 500.  (The guard was
+        # first surfaced by the live /sanitize dogfood on `hsrp 301`, which
+        # now parses since the group_id ceiling widened 255->4095; 5000
+        # keeps a genuinely out-of-range value under test.)
         raw = (
             "feature hsrp\n"
             "interface Vlan10\n"
             "  no shutdown\n"
             "  ip address 10.0.0.2/24\n"
-            "  hsrp 301\n"
+            "  hsrp 5000\n"
             "    ip 10.0.0.1\n"
         )
         with pytest.raises(ParseError, match="could not be represented"):

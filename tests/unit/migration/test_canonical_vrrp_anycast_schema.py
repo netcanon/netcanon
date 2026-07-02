@@ -97,12 +97,16 @@ class TestCanonicalVRRPGroupValidation:
             CanonicalVRRPGroup(group_id=0)
 
     def test_group_id_upper_bound(self):
+        # HSRPv2 (mode="hsrp") groups run 0-4095; the field ceiling is the
+        # VRRP/HSRP union (4095), so 4096 is the first out-of-range value.
         with pytest.raises(ValidationError):
-            CanonicalVRRPGroup(group_id=256)
+            CanonicalVRRPGroup(group_id=4096)
 
     def test_group_id_boundary_ok(self):
         CanonicalVRRPGroup(group_id=1)
-        CanonicalVRRPGroup(group_id=255)
+        CanonicalVRRPGroup(group_id=255)  # VRRP VRID max
+        CanonicalVRRPGroup(group_id=301, mode="hsrp")  # HSRPv2 > 255
+        CanonicalVRRPGroup(group_id=4095, mode="hsrp")  # HSRPv2 max
 
     def test_priority_lower_bound(self):
         with pytest.raises(ValidationError):

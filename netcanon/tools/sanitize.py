@@ -229,8 +229,9 @@ def sanitize_text(
         intent = codec.parse(raw)
     except ValidationError as e:
         # The input parsed structurally but produced a canonical model that
-        # violates a field constraint (e.g. an NX-OS HSRP group-id > the
-        # VRRP 0-255 range mapped onto CanonicalVRRPGroup.group_id).  That's
+        # violates a field constraint (e.g. an HSRP group-id above the
+        # 0-4095 HSRPv2 range that CanonicalVRRPGroup.group_id enforces).
+        # That's
         # unparseable-as-canonical INPUT, not a server fault — surface it as
         # a ParseError so callers honour the documented contract: the HTTP
         # route returns 400 instead of leaking a 500, and the CLI reports it
