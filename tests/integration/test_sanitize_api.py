@@ -132,15 +132,16 @@ class TestSanitizeEndpointErrors:
 
     def test_out_of_range_input_returns_400_not_500(self, client):
         """Input that parses structurally but yields an out-of-range
-        canonical value (NX-OS HSRP group-id 301 > the VRRP 0-255 range)
-        must return a clean 400, not a 500 leaking a pydantic
-        ValidationError.  Surfaced by the live /sanitize dogfood."""
+        canonical value (NX-OS HSRP group-id 5000 > the 0-4095 HSRPv2
+        range) must return a clean 400, not a 500 leaking a pydantic
+        ValidationError.  Surfaced by the live /sanitize dogfood on
+        `hsrp 301`, which now parses since the ceiling widened to 4095."""
         raw = (
             b"feature hsrp\n"
             b"interface Vlan10\n"
             b"  no shutdown\n"
             b"  ip address 10.0.0.2/24\n"
-            b"  hsrp 301\n"
+            b"  hsrp 5000\n"
             b"    ip 10.0.0.1\n"
         )
         response = client.post(

@@ -748,6 +748,32 @@ class TestPhase2cHSRP:
             }
         assert groups(tree) == groups(codec.parse(rendered))
 
+    def test_hsrpv2_group_above_255_parses_and_round_trips(self, codec):
+        """NX-OS HSRPv2 groups run 0-4095; a group > 255 (`hsrp 301`) must
+        parse + represent, not raise a ValidationError.  Was rejected by
+        the old `group_id` le=255 constraint (the class that produced the
+        #229 sanitize 500); the ceiling is now 4095."""
+        raw = (
+            "!Command: show running-config\n"
+            "hostname FHRP\n"
+            "feature hsrp\n"
+            "interface Vlan30\n"
+            "  no shutdown\n"
+            "  ip address 10.30.30.2/24\n"
+            "  hsrp 301\n"
+            "    ip 10.30.30.1\n"
+        )
+        tree = codec.parse(raw)
+        g = next(i for i in tree.interfaces if i.name == "Vlan30").vrrp_groups[0]
+        assert g.group_id == 301
+        assert g.mode == "hsrp"
+        rendered = codec.render(tree)
+        assert "  hsrp 301" in rendered
+        reparsed = next(
+            i for i in codec.parse(rendered).interfaces if i.name == "Vlan30"
+        )
+        assert reparsed.vrrp_groups[0].group_id == 301
+
     def test_vrrp_groups_declared_lossy(self, codec):
         # FHRP normalises to HSRP on NX-OS render → the mode discriminator
         # is lossy cross-vendor.

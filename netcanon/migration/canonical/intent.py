@@ -533,7 +533,13 @@ class CanonicalVRRPGroup(BaseModel):
       wire-protocol-distinct from IETF VRRP).
 
     Attributes:
-        group_id: VRRP VRID (1-255) or CARP VHID (1-255).  Required.
+        group_id: FHRP group number.  Required.  VRRP VRID and CARP VHID
+            are 1-255, but HSRPv2 (``mode="hsrp"``) extends to 4095, so the
+            field bound is the union (1-4095).  A VRRP / CARP source never
+            emits a group > 255, so the wider ceiling only ever admits a
+            legitimate HSRPv2 group — it does not need per-mode validation.
+            (Lower bound stays 1: VRRP/CARP require it; HSRP group 0 is a
+            valid but unhandled edge, out of scope here.)
         mode: Wire-protocol discriminator.  String literal (not enum)
             so codecs can extend it without a schema change.  Known
             values: ``"vrrp"`` (default — IETF VRRPv2 / VRRPv3),
@@ -586,7 +592,7 @@ class CanonicalVRRPGroup(BaseModel):
     ``docs/v0.2.0-planning/``.)
     """
 
-    group_id: int = Field(ge=1, le=255)
+    group_id: int = Field(ge=1, le=4095)
     mode: str = "vrrp"  # "vrrp" | "hsrp" | "carp"
     virtual_ips: list[str] = Field(default_factory=list)
     virtual_ipv6s: list[str] = Field(default_factory=list)
