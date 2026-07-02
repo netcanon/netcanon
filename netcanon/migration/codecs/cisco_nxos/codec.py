@@ -659,6 +659,12 @@ class CiscoNXOSCodec(CodecBase):
         if re.search(r"^interface\s+nve1\b", raw_prefix,
                      re.MULTILINE | re.IGNORECASE):
             nxos_specific += 1
+        # NX-API management plane (``nxapi http port`` / ``feature nxapi``)
+        # is NX-OS-exclusive and commonly the FIRST management line — it
+        # lands inside the 500-byte probe window even when the `feature`
+        # feature-set lines sit deeper in the config.
+        if re.search(r"^nxapi\b", raw_prefix, re.MULTILINE | re.IGNORECASE):
+            nxos_specific += 1
 
         if "!command: show running-config" in lowered:
             if nxos_specific >= 1:
@@ -670,6 +676,17 @@ class CiscoNXOSCodec(CodecBase):
                          raw_prefix, re.MULTILINE | re.IGNORECASE):
                 return (98, "NX-OS !Command banner + CIDR addressing")
             return (90, "NX-OS !Command banner")
+
+        # RANCID / oxidized collection header — a definitive vendor
+        # declaration (real config repos prepend it), higher-signal than
+        # IOS-lookalike structure.  Without it, marker-light NX-OS (bare
+        # BGP / NTP / SSH snippets carrying only `feature X` or nothing
+        # structural) scored 0-70 here and lost the alphabetical tie to
+        # `cisco_iosxe_cli` (dogfood detection sweep).  Mirrors the
+        # arista_eos RANCID marker; zero false-positive (it names NX-OS).
+        if re.search(r"^!\s*RANCID-CONTENT-TYPE:\s*cisco-nx\b",
+                     raw_prefix, re.MULTILINE | re.IGNORECASE):
+            return (97, "RANCID-CONTENT-TYPE: cisco-nx header")
 
         # No banner — lean on NX-OS-specific markers only.
         if nxos_specific >= 2:

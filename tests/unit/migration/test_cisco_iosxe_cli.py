@@ -20,6 +20,7 @@ from netcanon.migration.codecs.base import ParseError, RenderError
 from netcanon.migration.codecs.cisco_iosxe import CiscoIOSXECodec
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.models.migration import MigrationJobStatus
+from netcanon.services.migration_detect import detect_codec
 from netcanon.services.migration_pipeline import run_plan
 
 pytestmark = pytest.mark.unit
@@ -42,6 +43,57 @@ end
 # ---------------------------------------------------------------------------
 # R3 field declarations
 # ---------------------------------------------------------------------------
+
+
+class TestProbeNXOSDeferral:
+    """Detection: the IOS-CLI probe must NOT steal NX-OS captures that
+    carry the NX-OS-exclusive ``feature`` keyword or a RANCID cisco-nx
+    header (dogfood detection label-noise sweep — 38 configs)."""
+
+    def test_feature_keyword_defers_to_nxos(self):
+        """`feature bgp` (IOS-XE has no ``feature`` command) with CIDR
+        addressing and NO dotted mask → the IOS-CLI probe defers, and
+        detection resolves to NX-OS."""
+        raw = (
+            "feature bgp\n"
+            "hostname nxos-bgp-1\n"
+            "interface Ethernet1\n"
+            "  ip address 192.168.1.2/30\n"
+            "router bgp 1\n"
+        )
+        assert CiscoIOSXECLICodec.probe(raw) is None
+        assert detect_codec(raw)[0].codec == "cisco_nxos"
+
+    def test_feature_plus_dotted_mask_stays_ios(self):
+        """A hybrid carrying BOTH ``feature`` and an IOS-EXCLUSIVE dotted
+        mask is not pure NX-OS (the CIDR-only NX-OS parser can't take it),
+        so the IOS-CLI probe keeps it rather than deferring."""
+        raw = (
+            "feature bgp\n"
+            "hostname dc2_sw2\n"
+            "interface loopback100\n"
+            "  ip address 169.254.255.4 255.255.255.255\n"
+        )
+        assert CiscoIOSXECLICodec.probe(raw) is not None
+
+    def test_rancid_cisco_header_detected(self):
+        """Bare ``cisco`` RANCID header (IOS/IOS-XE classic) is claimed;
+        ``cisco-nx`` / ``cisco-xr`` are pinned out by the end-of-line."""
+        raw = (
+            "!RANCID-CONTENT-TYPE: cisco\n"
+            "!\n"
+            "hostname r1\n"
+            "interface GigabitEthernet0/0\n"
+        )
+        result = CiscoIOSXECLICodec.probe(raw)
+        assert result is not None
+        assert result[0] >= 95
+        assert "cisco" in result[1]
+
+    def test_rancid_cisco_nx_not_claimed_as_ios(self):
+        """The bare-``cisco`` match must NOT fire on a ``cisco-nx`` header."""
+        raw = "!RANCID-CONTENT-TYPE: cisco-nx\n!\nhostname nxos_ntp\n"
+        assert detect_codec(raw)[0].codec == "cisco_nxos"
 
 
 class TestR3Fields:

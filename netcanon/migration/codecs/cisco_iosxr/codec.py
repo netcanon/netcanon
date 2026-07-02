@@ -629,6 +629,14 @@ class CiscoIOSXRCodec(CodecBase):
         if re.search(r"^!!\s+IOS XR Configuration", raw_prefix, re.MULTILINE):
             return (98, "IOS XR Configuration banner present")
 
+        # RANCID / oxidized collection header — a definitive vendor
+        # declaration for marker-light XR captures (bare BGP / SSH
+        # snippets lacking the banner and 4-segment ports).  Zero
+        # false-positive (it names XR).
+        if re.search(r"^!\s*RANCID-CONTENT-TYPE:\s*cisco-xr\b",
+                     raw_prefix, re.MULTILINE | re.IGNORECASE):
+            return (97, "RANCID-CONTENT-TYPE: cisco-xr header")
+
         hits = 0
         if re.search(
             r"^interface\s+(?:GigabitEthernet|TenGigE|HundredGigE|FortyGigE|"

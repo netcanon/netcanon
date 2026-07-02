@@ -79,6 +79,20 @@ class TestProbe:
         )
         assert codec.probe(raw) == (98, "IOS XR Configuration banner present")
 
+    def test_rancid_cisco_xr_header_detected(self, codec):
+        """RANCID collection header is a definitive XR declaration for
+        marker-light captures lacking the banner + 4-segment ports."""
+        raw = (
+            "!RANCID-CONTENT-TYPE: cisco-xr\n"
+            "!\n"
+            "hostname pe1\n"
+        )
+        result = codec.probe(raw)
+        assert result is not None
+        score, reason = result
+        assert score >= 95
+        assert "cisco-xr" in reason
+
     def test_marker_fallback_without_banner(self, codec):
         """A 4-segment-port + ipv4-address + MgmtEth config without the
         banner still scores high on XR-specific markers."""

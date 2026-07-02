@@ -439,6 +439,14 @@ class JunosCodec(CodecBase):
         # / banner framing so real captures don't bypass the guard.
         if detect_input_shape(raw_prefix) is not None:
             return None
+        # RANCID / oxidized collection header — the Junos comment char is
+        # ``#`` (with or without a following space).  A definitive vendor
+        # declaration that claims block-form / marker-light captures the
+        # set-form structural markers below don't match (RANCID collects
+        # the hierarchical config; the parser converts block->set-form).
+        if re.search(r"^#\s*RANCID-CONTENT-TYPE:\s*juniper\b",
+                     raw_prefix, re.MULTILINE | re.IGNORECASE):
+            return (97, "RANCID-CONTENT-TYPE: juniper header")
         if re.search(
             r"^set version \d",
             raw_prefix, re.MULTILINE,
