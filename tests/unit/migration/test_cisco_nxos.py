@@ -458,6 +458,39 @@ interface Ethernet1/6
 """
 
 
+class TestRoutedSubifDot1q:
+    """GAP 7 wiring: routed sub-interface ``encapsulation dot1q N`` <->
+    CanonicalInterface.dot1q_vlan (NOT access_vlan)."""
+
+    _RAW = (
+        "!Command: show running-config\n"
+        "hostname r1\n"
+        "interface Ethernet1/1.100\n"
+        "  no switchport\n"
+        "  encapsulation dot1q 100\n"
+        "  ip address 10.0.0.1/30\n"
+    )
+
+    def test_parse(self, codec):
+        sub = next(
+            i for i in codec.parse(self._RAW).interfaces
+            if i.name == "Ethernet1/1.100"
+        )
+        assert sub.dot1q_vlan == 100
+        assert sub.access_vlan is None  # NOT the L2 access field
+        assert sub.switchport_mode is None
+
+    def test_round_trip(self, codec):
+        out = codec.render(codec.parse(self._RAW))
+        assert "  encapsulation dot1q 100" in out
+        assert "switchport access vlan" not in out.lower()
+        sub = next(
+            i for i in codec.parse(out).interfaces
+            if i.name == "Ethernet1/1.100"
+        )
+        assert sub.dot1q_vlan == 100
+
+
 class TestPhase2L2:
     @pytest.fixture
     def tree(self, codec):

@@ -134,6 +134,7 @@ class CiscoNXOSCodec(CodecBase):
             # Interfaces — L2 switchport + LAG membership (Phase 2a)
             "/interfaces/interface/switchport-mode",
             "/interfaces/interface/access-vlan",
+            "/interfaces/interface/dot1q-vlan",  # GAP 7: routed-subif `encapsulation dot1q N`
             "/interfaces/interface/trunk-allowed-vlans",
             "/interfaces/interface/trunk-native-vlan",
             "/interfaces/interface/lag-member-of",
@@ -470,17 +471,6 @@ class CiscoNXOSCodec(CodecBase):
             ),
         ],
         unsupported=[
-            UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
-                ),
-            ),
             UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(

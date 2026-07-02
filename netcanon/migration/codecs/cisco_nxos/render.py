@@ -374,6 +374,38 @@ def _render_nve(tree: CanonicalIntent) -> list[str]:
     return block
 
 
+def _render_switchport_lines(iface) -> list[str]:
+    """The L2 switchport config lines for an interface (empty for the
+    inherently-L3 kinds: SVI / loopback / mgmt / VTEP / tunnel).
+
+    Extracted from ``_render_interface`` to keep it under the cyclomatic-
+    complexity gate.  Physical, LAG, and unknown cross-vendor names default
+    to L2 on NX-OS, so a routed one gets an explicit ``no switchport``.
+    """
+    kind = _port_names.classify_port_name(iface.name).kind
+    if kind in ("svi", "loopback", "mgmt", "vtep", "tunnel"):
+        return []
+    out: list[str] = []
+    if iface.switchport_mode == "access":
+        if iface.access_vlan is not None:
+            out.append(f"  switchport access vlan {iface.access_vlan}")
+        else:
+            out.append("  switchport mode access")
+    elif iface.switchport_mode == "trunk":
+        out.append("  switchport mode trunk")
+        if iface.trunk_native_vlan is not None:
+            out.append(
+                f"  switchport trunk native vlan {iface.trunk_native_vlan}"
+            )
+        if iface.trunk_allowed_vlans:
+            vlist = _coalesce_vlan_ids(sorted(set(iface.trunk_allowed_vlans)))
+            out.append(f"  switchport trunk allowed vlan {vlist}")
+    elif iface.ipv4_addresses or iface.ipv6_addresses:
+        # Routed physical / LAG port — state the L3 intent explicitly.
+        out.append("  no switchport")
+    return out
+
+
 def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     """Render one interface stanza.
 
@@ -395,32 +427,13 @@ def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     if iface.mtu is not None:
         block.append(f"  mtu {iface.mtu}")
 
-    kind = _port_names.classify_port_name(iface.name).kind
-    # Switchport applies to L2-capable ports.  Exclude the inherently-L3
-    # kinds (SVI / loopback / mgmt / VTEP / tunnel); everything else —
-    # physical, LAG, and unknown cross-vendor names that default to L2 on
-    # NX-OS — is switchport-eligible.
-    if kind not in ("svi", "loopback", "mgmt", "vtep", "tunnel"):
-        if iface.switchport_mode == "access":
-            if iface.access_vlan is not None:
-                block.append(f"  switchport access vlan {iface.access_vlan}")
-            else:
-                block.append("  switchport mode access")
-        elif iface.switchport_mode == "trunk":
-            block.append("  switchport mode trunk")
-            if iface.trunk_native_vlan is not None:
-                block.append(
-                    f"  switchport trunk native vlan {iface.trunk_native_vlan}"
-                )
-            if iface.trunk_allowed_vlans:
-                vlist = _coalesce_vlan_ids(sorted(set(iface.trunk_allowed_vlans)))
-                block.append(f"  switchport trunk allowed vlan {vlist}")
-        elif iface.ipv4_addresses or iface.ipv6_addresses:
-            # Routed physical / LAG port — state the L3 intent explicitly.
-            block.append("  no switchport")
+    block.extend(_render_switchport_lines(iface))
 
     if iface.vrf:
         block.append(f"  vrf member {iface.vrf}")
+    # GAP 7: routed sub-interface 802.1Q tag (lowercase dot1q on NX-OS).
+    if iface.dot1q_vlan is not None:
+        block.append(f"  encapsulation dot1q {iface.dot1q_vlan}")
     for addr in iface.ipv4_addresses:
         line = f"  ip address {addr.ip}/{addr.prefix_length}"
         if addr.is_secondary:

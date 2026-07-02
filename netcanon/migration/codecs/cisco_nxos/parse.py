@@ -120,6 +120,11 @@ _VRF_MEMBER_RE = re.compile(r"^\s+vrf\s+member\s+(\S+)\s*$", re.IGNORECASE)
 # ``no switchport`` is consumed (it marks the port routed) but sets no
 # canonical field — ``switchport_mode=None`` already means "routed".
 _NO_SWITCHPORT_RE = re.compile(r"^\s+no\s+switchport\s*$", re.IGNORECASE)
+#: GAP 7: routed sub-interface 802.1Q tag — NX-OS writes lowercase
+#: ``encapsulation dot1q <vlan>`` (e.g. under ``interface Ethernet1/1.100``).
+_ENCAP_DOT1Q_RE = re.compile(
+    r"^\s+encapsulation\s+dot1q\s+(\d+)\b", re.IGNORECASE,
+)
 _SWITCHPORT_MODE_RE = re.compile(
     r"^\s+switchport\s+mode\s+(\S+)", re.IGNORECASE,
 )
@@ -602,6 +607,7 @@ def _new_iface_scratch(name: str) -> dict:
         "kind": "",
         "switchport_mode": None,
         "access_vlan": None,
+        "dot1q_vlan": None,
         "trunk_allowed": [],
         "trunk_native": None,
         "lag_member_of": None,
@@ -751,6 +757,15 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
             current["fabric_forwarding_anycast"] = True
             return
 
+        # ── GAP 7: routed sub-interface 802.1Q tag ──
+        # ``encapsulation dot1q <vlan>`` on a sub-interface (e.g.
+        # ``interface Ethernet1/1.100``) → dedicated dot1q_vlan, NOT
+        # access_vlan (a routed sub-iface is L3, not an L2 access port).
+        em = _ENCAP_DOT1Q_RE.match(line)
+        if em:
+            current["dot1q_vlan"] = int(em.group(1))
+            return
+
         # ── L2 switchport (Phase 2) ──
         if _NO_SWITCHPORT_RE.match(line):
             # Routed port — leave switchport_mode None (render emits
@@ -864,6 +879,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         kind=kind,
         switchport_mode=raw.get("switchport_mode"),
         access_vlan=raw.get("access_vlan"),
+        dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),
         lag_member_of=raw.get("lag_member_of"),
