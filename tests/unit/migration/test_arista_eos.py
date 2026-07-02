@@ -954,6 +954,37 @@ class TestProbe:
         score, _ = result
         assert score >= 90  # 3+ markers
 
+    def test_swi_boot_image_signal(self):
+        # A `.swi` boot image is Arista-unique (Cisco boots `.bin`); marker-
+        # light EOS with this line (but no `! device:` banner) must not fall
+        # through to cisco_iosxe_cli.  Dogfood detection label-noise finding
+        # (batfish eos_mlag was detected as cisco_iosxe_cli @margin 90).
+        raw = (
+            "! boot system flash:/EOS-4.19.1F.swi\n"
+            "!\n"
+            "hostname eos_mlag\n"
+            "interface Port-Channel1\n"
+        )
+        result = AristaEOSCodec.probe(raw)
+        assert result is not None
+        score, reason = result
+        assert score >= 95
+        assert ".swi" in reason
+
+    def test_rancid_content_type_header_signal(self):
+        # RANCID/oxidized collection header — explicit vendor declaration.
+        raw = (
+            "!RANCID-CONTENT-TYPE: arista\n"
+            "!\n"
+            "hostname arista_dhcp_relay\n"
+            "ip dhcp relay always-on\n"
+        )
+        result = AristaEOSCodec.probe(raw)
+        assert result is not None
+        score, reason = result
+        assert score >= 95
+        assert "RANCID" in reason
+
     def test_no_signal_returns_none(self):
         raw = "hostname router1\ninterface GigabitEthernet0/0\n"
         # Cisco-ish grammar — Arista probe shouldn't claim it.
