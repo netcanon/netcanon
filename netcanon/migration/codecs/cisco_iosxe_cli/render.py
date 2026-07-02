@@ -295,6 +295,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # — ``ip address ip-address mask [secondary [vrf vrf-name]]``.
         # Round-trips with the parse-side companion that drops the
         # ``secondary`` token before storing in the canonical list.
+        # GAP 7: routed sub-interface 802.1Q tag.  Emitted before the IP
+        # so the tag precedes the routed address (IOS-XE convention).
+        # Capital Q matches Cisco's canonical style.
+        if iface.dot1q_vlan is not None:
+            body.append(f" encapsulation dot1Q {iface.dot1q_vlan}")
         for idx, addr in enumerate(iface.ipv4_addresses):
             mask = _prefix_to_mask(addr.prefix_length, vendor="cisco_iosxe_cli")
             suffix = " secondary" if idx > 0 else ""

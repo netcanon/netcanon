@@ -201,6 +201,38 @@ _FABRIC_AG_MODE_RE = re.compile(
     r"^\s+fabric\s+forwarding\s+mode\s+anycast-gateway\s*$",
     re.IGNORECASE,
 )
+#: GAP 7: routed sub-interface 802.1Q tag, ``encapsulation dot1Q <vlan>``
+#: (IOS-XE writes a capital Q; ``re.IGNORECASE`` tolerates lowercase).
+#: The optional trailing ``native`` keyword is not modelled here.
+_ENCAP_DOT1Q_RE = re.compile(
+    r"^\s+encapsulation\s+dot1q\s+(\d+)\b", re.IGNORECASE,
+)
+
+
+def _parse_iface_l3_markers(line: str, current: dict[str, Any]) -> bool:
+    """Consume a routed-interface L3 marker line into *current*; return
+    ``True`` if the line was handled.
+
+    Two markers live here (extracted from ``_on_line`` to keep it under
+    the cyclomatic-complexity gate):
+
+    * ``fabric forwarding mode anycast-gateway`` — SD-Access per-SVI
+      marker.  Sets a flag; at stanza-close (``_build_canonical_interface``)
+      every primary IPv4 address gets ``virtual_gateway_address = ip`` to
+      mirror the NX-OS / IOS-XE SD-Access shape (the primary IP IS the
+      anycast IP).
+    * ``encapsulation dot1Q <vlan>`` (GAP 7) — the 802.1Q tag on a routed
+      sub-interface (e.g. ``GigabitEthernet0/1.100``).  Stored on the
+      dedicated ``dot1q_vlan`` field, NOT access_vlan (an L2 concept).
+    """
+    if _FABRIC_AG_MODE_RE.match(line):
+        current["fabric_forwarding_anycast"] = True
+        return True
+    em = _ENCAP_DOT1Q_RE.match(line)
+    if em:
+        current["dot1q_vlan"] = int(em.group(1))
+        return True
+    return False
 
 
 #: Interface-name prefix → IANA ifType hint.
@@ -883,15 +915,10 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:  # noqa: C901
         if _dispatch_vrrp_line(line, current):
             return
 
-        # ── SD-Access anycast-gateway per-SVI discriminator ──
-        # ``fabric forwarding mode anycast-gateway`` marks the SVI's
-        # primary IP as the anycast gateway.  We set the flag here; at
-        # stanza-close time (``_build_canonical_interface``) every
-        # primary IPv4 address gets ``virtual_gateway_address = ip`` to
-        # mirror the NX-OS / IOS-XE SD-Access shape (the primary IP IS
-        # the anycast IP).
-        if _FABRIC_AG_MODE_RE.match(line):
-            current["fabric_forwarding_anycast"] = True
+        # Routed-interface L3 markers: SD-Access anycast-gateway mode +
+        # the GAP-7 sub-interface 802.1Q tag.  Extracted to a helper to
+        # keep _on_line under the cyclomatic-complexity gate.
+        if _parse_iface_l3_markers(line, current):
             return
 
     # Loop skeleton (open on `interface`, close on `!`-comment / dedent,
@@ -1095,6 +1122,7 @@ def _build_canonical_interface(raw: dict[str, Any]) -> CanonicalInterface:
         ],
         switchport_mode=switchport_mode,
         access_vlan=raw.get("access_vlan"),
+        dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
         voice_vlan=raw.get("voice_vlan"),
         trunk_allowed_vlans=raw.get("trunk_allowed", []),
         trunk_native_vlan=raw.get("trunk_native"),

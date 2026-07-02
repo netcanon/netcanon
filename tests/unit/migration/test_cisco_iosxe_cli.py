@@ -96,6 +96,56 @@ class TestProbeNXOSDeferral:
         assert detect_codec(raw)[0].codec == "cisco_nxos"
 
 
+class TestRoutedSubifDot1q:
+    """GAP 7 wiring: routed sub-interface ``encapsulation dot1Q N`` <->
+    CanonicalInterface.dot1q_vlan (NOT access_vlan)."""
+
+    def test_parse_encapsulation_dot1q(self):
+        raw = (
+            "interface GigabitEthernet0/1.100\n"
+            " encapsulation dot1Q 100\n"
+            " ip address 192.168.100.1 255.255.255.0\n"
+            "!\n"
+        )
+        sub = next(
+            i for i in CiscoIOSXECLICodec().parse(raw).interfaces
+            if i.name == "GigabitEthernet0/1.100"
+        )
+        assert sub.dot1q_vlan == 100
+        assert sub.access_vlan is None  # NOT the L2 access field
+        assert sub.switchport_mode is None
+
+    def test_round_trip(self):
+        raw = (
+            "interface GigabitEthernet0/1.100\n"
+            " encapsulation dot1Q 100\n"
+            " ip address 192.168.100.1 255.255.255.0\n"
+            "!\n"
+        )
+        codec = CiscoIOSXECLICodec()
+        out = codec.render(codec.parse(raw))
+        assert " encapsulation dot1Q 100" in out
+        assert "switchport access vlan" not in out.lower()
+        sub = next(
+            i for i in codec.parse(out).interfaces
+            if i.name == "GigabitEthernet0/1.100"
+        )
+        assert sub.dot1q_vlan == 100
+
+    def test_junos_routed_subif_translates_to_encapsulation(self):
+        """End-to-end: a Junos routed sub-interface tag now renders as
+        IOS-XE ``encapsulation dot1Q`` (was dropped before this wiring)."""
+        from netcanon.migration.codecs.juniper_junos import JunosCodec
+        jraw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.0.0.1/30\n"
+        )
+        out = CiscoIOSXECLICodec().render(JunosCodec().parse(jraw))
+        assert " encapsulation dot1Q 100" in out
+        assert "switchport access vlan" not in out.lower()
+
+
 class TestR3Fields:
     def test_direction_is_bidirectional(self):
         # The codec was originally parse_only; render path was added
