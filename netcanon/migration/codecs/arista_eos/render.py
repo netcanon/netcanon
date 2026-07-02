@@ -511,6 +511,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             or not iface.enabled
             or iface.switchport_mode is not None
             or iface.access_vlan is not None
+            or iface.dot1q_vlan is not None  # GAP 7: routed-subif tag
             or bool(iface.trunk_allowed_vlans)
             or bool(iface.lag_member_of)
             # Wave B: VRRP groups on a routed SVI / port count as
@@ -538,11 +539,20 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         if iface.description:
             out.append(f"   description {iface.description}")
         # L3 flip needed when we emit an IP address on a port that
-        # doesn't already indicate L3 (Ethernet<N> physical).
-        if iface.ipv4_addresses and iface.name.lower().startswith(
-            "ethernet"
-        ):
+        # doesn't already indicate L3 (Ethernet<N> physical).  A routed
+        # sub-interface (name contains ``.``) is inherently L3 on EOS and
+        # takes NO ``no switchport`` — it carries ``encapsulation dot1q``
+        # instead (Batfish rejects ``no switchport`` on a sub-interface).
+        if (iface.ipv4_addresses
+                and iface.name.lower().startswith("ethernet")
+                and "." not in iface.name):
             out.append("   no switchport")
+        # GAP 7: routed sub-interface 802.1Q tag.  The EOS form REQUIRES
+        # the ``vlan`` keyword (``encapsulation dot1q vlan N``) — the bare
+        # ``dot1q N`` form is rejected by EOS (verified vs an independent
+        # Batfish parse).
+        if iface.dot1q_vlan is not None:
+            out.append(f"   encapsulation dot1q vlan {iface.dot1q_vlan}")
         # GAP 6: per-interface VRF membership.  Must emit BEFORE
         # ``ip address`` so EOS correctly binds the IP into the
         # VRF's routing table.

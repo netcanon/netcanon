@@ -227,6 +227,41 @@ class TestParseUsers:
 # ---------------------------------------------------------------------------
 
 
+class TestRoutedSubifDot1q:
+    """GAP 7 wiring: routed sub-interface ``encapsulation dot1q vlan N``
+    <-> CanonicalInterface.dot1q_vlan.  The ``vlan`` keyword is required
+    on EOS (bare ``dot1q N`` is rejected — Batfish-verified)."""
+
+    _RAW = (
+        "hostname r1\n"
+        "interface Ethernet1.100\n"
+        "   encapsulation dot1q vlan 100\n"
+        "   ip address 10.0.0.1/30\n"
+        "!\n"
+    )
+
+    def test_parse(self):
+        sub = next(
+            i for i in AristaEOSCodec().parse(self._RAW).interfaces
+            if i.name == "Ethernet1.100"
+        )
+        assert sub.dot1q_vlan == 100
+        assert sub.access_vlan is None  # NOT the L2 access field
+
+    def test_round_trip_emits_vlan_keyword(self):
+        codec = AristaEOSCodec()
+        out = codec.render(codec.parse(self._RAW))
+        # EOS form REQUIRES the ``vlan`` keyword.
+        assert "   encapsulation dot1q vlan 100" in out
+        # A sub-interface is inherently L3 on EOS — no ``no switchport``.
+        assert "no switchport" not in out
+        sub = next(
+            i for i in codec.parse(out).interfaces
+            if i.name == "Ethernet1.100"
+        )
+        assert sub.dot1q_vlan == 100
+
+
 class TestParseInterfaces:
     def test_interface_ethernet_l3(self):
         raw = (

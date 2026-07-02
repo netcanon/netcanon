@@ -371,6 +371,8 @@ class TestShipBeforeWireUnsupportedDeclarations:
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/interfaces/interface/ipv6/address/virtual-gateway-address",
             "/anycast-gateway-mac",
+            # GAP 7 — routed sub-interface `encapsulation dot1q vlan N`.
+            "/interfaces/interface/dot1q-vlan",
         },
         # Wave B — see commit feat(aruba_aoss): wire VRRP groups.
         # AOS-S has no native anycast grammar; those paths stay

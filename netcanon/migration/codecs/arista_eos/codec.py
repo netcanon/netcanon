@@ -116,6 +116,7 @@ class AristaEOSCodec(CodecBase):
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
+            "/interfaces/interface/dot1q-vlan",   # GAP 7: routed-subif `encapsulation dot1q vlan N`
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
@@ -318,17 +319,6 @@ class AristaEOSCodec(CodecBase):
             ),
         ],
         unsupported=[
-            UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
-                ),
-            ),
             UnsupportedPath(
                 path="/interfaces/interface/voice-vlan",
                 reason=(
