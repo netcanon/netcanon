@@ -241,10 +241,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # too much to auto-collapse across them).
         if iface.vrf:
             continue
-        # Skip access-vlan / switchport / trunk-configured
+        # Skip access-vlan / dot1q-tagged / switchport / trunk-configured
         # interfaces.  Collapse only ROUTED or BARE interfaces.
         if (
             iface.access_vlan is not None
+            or iface.dot1q_vlan is not None
             or iface.switchport_mode is not None
             or iface.trunk_allowed_vlans
         ):
@@ -417,13 +418,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 unit_num = int(m.group("unit"))
         if parent is not None and unit_num is not None:
             # Sub-interface — emit under parent / unit <N>.
-            # GAP 7: include access_vlan in the "renderable"
-            # predicate so a bare sub-interface carrying only a
-            # vlan-id (no description / no IP) still emits lines
-            # and round-trips.
+            # GAP 7: include the routed-subif 802.1Q tag (dot1q_vlan)
+            # in the "renderable" predicate so a bare sub-interface
+            # carrying only a vlan-id (no description / no IP) still
+            # emits lines and round-trips.
             sub_has_renderable = (
                 has_renderable_attr
-                or iface.access_vlan is not None
+                or iface.dot1q_vlan is not None
             )
             if iface.description:
                 out.append(
@@ -434,11 +435,11 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                 out.append(
                     f"set interfaces {parent} unit {unit_num} disable"
                 )
-            # GAP 7: per-unit 802.1Q tag.
-            if iface.access_vlan is not None:
+            # GAP 7: per-unit 802.1Q tag on the routed sub-interface.
+            if iface.dot1q_vlan is not None:
                 out.append(
                     f"set interfaces {parent} unit {unit_num} "
-                    f"vlan-id {iface.access_vlan}"
+                    f"vlan-id {iface.dot1q_vlan}"
                 )
             # Sub-finding 9b: DHCP client.  Junos models the DHCP
             # client as a property of ``family inet`` (replacing the

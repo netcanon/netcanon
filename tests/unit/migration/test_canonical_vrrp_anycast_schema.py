@@ -319,6 +319,10 @@ class TestShipBeforeWireUnsupportedDeclarations:
         "/interfaces/interface/ipv6/address/virtual-gateway-address",
         "/anycast-gateway-mac",
         "/routing/static-route/vrf",
+        # GAP 7 — routed sub-interface 802.1Q tag.  Junos is the first
+        # (source) codec wired; every other codec declares it unsupported
+        # (ship-before-wire) until its encapsulation-dot1Q equivalent lands.
+        "/interfaces/interface/dot1q-vlan",
     )
 
     # Per-codec wire-up state.  Each codec's set lists the paths it
@@ -352,6 +356,9 @@ class TestShipBeforeWireUnsupportedDeclarations:
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/interfaces/interface/ipv6/address/virtual-gateway-address",
             "/routing/static-route/vrf",
+            # GAP 7 — routed sub-interface 802.1Q tag (`unit N vlan-id`),
+            # parsed to + rendered from CanonicalInterface.dot1q_vlan.
+            "/interfaces/interface/dot1q-vlan",
         },
         # Wave B + C — see commit feat(arista_eos): wire VRRP +
         # VARP.  Per-IP virtual-gateway-mac is ``lossy`` (Arista

@@ -132,6 +132,11 @@ class JunosCodec(CodecBase):
             "/interfaces/interface/dhcp-client-v6",          # IPv6 dhcpv6-client (no SLAAC keyword on Junos)
             "/interfaces/interface/tunnel-type",             # gr- / ip- / st0 prefix discriminator
             "/interfaces/interface/config/vrf",   # GAP 6
+            # GAP 7: routed sub-interface 802.1Q tag (`unit N vlan-id`).
+            # Junos is the first (source) codec wired for this dedicated
+            # surface; other codecs declare it unsupported (ship-before-wire)
+            # until their `encapsulation dot1Q`-equivalent is wired.
+            "/interfaces/interface/dot1q-vlan",
             "/vlans/vlan/id",
             "/vlans/vlan/name",
             "/routing/static-route",
