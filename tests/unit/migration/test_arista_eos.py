@@ -39,6 +39,36 @@ class TestParseScalars:
         intent = AristaEOSCodec().parse("hostname sw-edge-01\n")
         assert intent.hostname == "sw-edge-01"
 
+    def test_source_version(self):
+        """EOS release captured from the ``! device:`` banner (metadata)."""
+        raw = (
+            "! device: sw1 (DCS-7280SR-48C6, EOS-4.27.0F)\n"
+            "hostname sw1\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert intent.source_version == "4.27.0F"
+
+    def test_source_version_four_segment_and_swi_line(self):
+        """Full 4-segment release captured; the ``.swi`` boot line (an image
+        filename, not a version) must NOT be mistaken for the release."""
+        raw = (
+            "! device: r1 (vEOS, EOS-4.23.0.1F)\n"
+            "hostname r1\n"
+            "boot system flash:/vEOS-lab.swi\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        assert intent.source_version == "4.23.0.1F"
+
+    def test_source_version_maintenance_suffix(self):
+        raw = "! device: s1 (DCS-7150S-64-CL, EOS-4.22.4M-2GB)\nhostname s1\n"
+        intent = AristaEOSCodec().parse(raw)
+        assert intent.source_version == "4.22.4M-2GB"
+
+    def test_source_version_absent(self):
+        """No banner → honest empty string, not a spurious capture."""
+        intent = AristaEOSCodec().parse("hostname sw1\n")
+        assert intent.source_version == ""
+
     def test_dns_servers(self):
         raw = (
             "hostname sw1\n"

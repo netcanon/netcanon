@@ -338,7 +338,14 @@ class TestRoundTripStable:
         first = codec.parse(raw)
         rendered = codec.render(first)
         second = codec.parse(rendered)
-        assert first == second, (
+        # source_version is parser-stamped metadata (the "Created on
+        # release #" banner); render doesn't re-emit it, so exclude it
+        # from the same-vendor round-trip — mirrors the generic harness.
+        first_d = first.model_dump()
+        second_d = second.model_dump()
+        first_d.pop("source_version", None)
+        second_d.pop("source_version", None)
+        assert first_d == second_d, (
             "kitchen-sink fixture lost canonical state through "
             "render → parse — a feature is silently asymmetric"
         )

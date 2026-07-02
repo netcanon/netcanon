@@ -137,6 +137,9 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         source_vendor="juniper_junos",
         source_format="cli-junos-set",
     )
+    # Extract from the ORIGINAL input (``stripped``), not the possibly
+    # block→set-converted ``raw`` — the regex handles either form.
+    intent.source_version = _extract_version(stripped)
 
     # Interface accumulator — Junos set-form spreads interface
     # config across many lines; we collect per-iface state
@@ -826,6 +829,27 @@ def _tokenise_set(payload: str) -> list[str]:
         return shlex.split(payload, posix=True)
     except ValueError:
         return payload.split()
+
+
+#: Junos release string.  Present in BOTH forms as a top-level statement:
+#: set-form ``set version 25.4R1.12`` (``display set``) and block-form
+#: ``version 25.4R1.12;`` — the optional ``set`` prefix + optional trailing
+#: ``;`` make one regex cover both.  ``[\w.\-]+`` excludes the block-form
+#: semicolon.  Extracted from the ORIGINAL input (pre block→set conversion).
+_VERSION_RE = re.compile(
+    r'^(?:set\s+)?version\s+"?([\w.\-]+)"?;?\s*$', re.MULTILINE
+)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the Junos release from the top-level ``version`` statement.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.  Returns ``""``
+    when the capture carries no version statement.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
 
 
 # ---------------------------------------------------------------------------

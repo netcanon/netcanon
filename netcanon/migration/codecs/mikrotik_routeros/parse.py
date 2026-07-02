@@ -96,6 +96,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         source_vendor="mikrotik_routeros",
         source_format="cli-mikrotik",
     )
+    intent.source_version = _extract_version(raw)
 
     # Pre-process: join `\` line continuations.
     joined = _join_continuations(raw)
@@ -222,6 +223,22 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
 
 _SECTION_RE = re.compile(r"^(/[a-zA-Z][a-zA-Z0-9 \-]*)$")
 _COMMENT_RE = re.compile(r"^\s*#")
+#: RouterOS release from the export header comment, e.g.
+#: ``# 2026-04-21 20:35:02 by RouterOS 7.18.2`` → ``7.18.2`` (also matches
+#: the older ``by RouterOS 6.48.6`` form).  Versions are 2-3 dotted
+#: components; ``\d[\w.]*`` captures the whole token.
+_VERSION_RE = re.compile(r"RouterOS\s+(\d[\w.]*)", re.MULTILINE)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the RouterOS release from the export header comment.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.  Returns ``""``
+    when the header comment is absent.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
 
 
 def _join_continuations(raw: str) -> str:

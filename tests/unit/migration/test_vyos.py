@@ -286,6 +286,20 @@ def test_parse_hostname(codec: VyOSCodec) -> None:
     assert codec.parse(_SAMPLE).hostname == "vyos-sample"
 
 
+def test_source_version_release_comment(codec: VyOSCodec) -> None:
+    """The OS release is captured from the ``// Release version:`` trailer."""
+    raw = _SAMPLE + "// Release version: 1.4-rolling-202307070317\n"
+    assert codec.parse(raw).source_version == "1.4-rolling-202307070317"
+
+
+def test_source_version_ignores_config_schema_version(codec: VyOSCodec) -> None:
+    """``_SAMPLE`` carries ``// vyos-config-version:`` (a config-SCHEMA
+    migration marker) but no ``// Release version:`` — source_version must
+    stay empty, NOT capture the schema version (data-quality: the schema
+    rev is a different axis from the OS release)."""
+    assert codec.parse(_SAMPLE).source_version == ""
+
+
 def test_parse_ethernet_l3(codec: VyOSCodec) -> None:
     intent = codec.parse(_SAMPLE)
     eth0 = next(i for i in intent.interfaces if i.name == "eth0")

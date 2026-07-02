@@ -320,6 +320,24 @@ def _unquote(s: str) -> str:
     return s
 
 
+#: AOS-Switch (ProVision) release from the ``Created on release #`` banner
+#: comment, e.g. ``; JL258A Configuration Editor; Created on release
+#: #WC.16.10.0005`` → ``WC.16.10.0005``.  Rendered templates omit the
+#: release token (``Created via template render``) → honest ``""``.
+_VERSION_RE = re.compile(r"Created on release #(\S+)", re.MULTILINE)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the AOS-Switch release from the config-editor banner comment.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.  Returns ``""``
+    when no release banner is present.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
+
+
 def _dest_to_cidr(dest: str) -> str:
     """Accept either ``A.B.C.D/N`` or just ``A.B.C.D``; default /32."""
     if "/" in dest:
@@ -804,6 +822,7 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
         source_vendor="aruba_aoss",
         source_format="cli-aruba-aoss",
     )
+    intent.source_version = _extract_version(raw)
 
     lines = raw.splitlines()
     i = 0

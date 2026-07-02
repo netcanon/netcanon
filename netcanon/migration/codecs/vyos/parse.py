@@ -88,6 +88,7 @@ single-device SVD ``vlan-to-vni``, per-VRF static routes (``vrf name
 from __future__ import annotations
 
 import logging
+import re
 
 from ...canonical.intent import (
     CanonicalIntent,
@@ -126,6 +127,27 @@ def _unquote(value: str) -> str:
     if len(v) >= 2 and v[0] == v[-1] and v[0] in ("'", '"'):
         return v[1:-1]
     return v
+
+
+#: VyOS OS release from the trailing ``// Release version:`` comment
+#: block, e.g. ``// Release version: 1.4-rolling-202307070317`` → the
+#: whole token.  This is the ACTUAL firmware version — deliberately NOT
+#: the ``// vyos-config-version: "..."`` line, which is a config-schema
+#: migration marker, not the OS release (matching "Release version"
+#: literally excludes it).
+_VERSION_RE = re.compile(r"//\s+Release\s+version:\s+(\S+)", re.MULTILINE)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the VyOS release from the trailing ``// Release version:``
+    comment.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.  Returns ``""``
+    when the trailing comment block is absent.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1) if m else ""
 
 
 def _split_header(header: str) -> tuple[str, str]:
@@ -304,11 +326,18 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             snippet=raw.lstrip()[:120],
         )
 
+    # Capture the OS release from the trailing "// Release version:"
+    # comment on the ORIGINAL input, before the set→brace conversion (the
+    # trailing comment block is a brace-form artifact and may not survive
+    # conversion).
+    _source_version = _extract_version(raw)
+
     # Accept set-form (`show configuration commands`) by converting it to
     # the equivalent curly-brace text up front; idempotent on brace input.
     raw = _setform_to_brace(raw)
 
     intent = CanonicalIntent(source_vendor="vyos", source_format="cli-vyos")
+    intent.source_version = _source_version
 
     # Per-interface scratch keyed by canonical name (preserves first-seen
     # order via ``iface_order``).

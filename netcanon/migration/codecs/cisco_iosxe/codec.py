@@ -84,6 +84,7 @@ Round-trip invariant (proven in unit tests):
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar
 from xml.etree import ElementTree as ET
@@ -127,6 +128,32 @@ logger = logging.getLogger(__name__)
 # without having to track which exact prefix the device used.
 _NS_IF = "http://openconfig.net/yang/interfaces"
 _NS_IP = "http://openconfig.net/yang/interfaces/ip"
+
+#: OpenConfig system-state software version, e.g.
+#: ``openconfig-system:system/state/software-version``.  Unlike the CLI
+#: sibling (``cisco_iosxe_cli``), the NETCONF/OpenConfig wire format
+#: carries the release in a ``<software-version>`` element, not a
+#: ``version`` line — so we match the element namespace-agnostically.
+#: Interface-only ``<interfaces>`` fragments carry no system subtree, so
+#: absence is the honest common case (→ ``""``); a full ``get-config``
+#: reply that includes ``<system>`` yields the release.  The element text
+#: is captured with a single greedy ``[^<]+`` (stops at the closing tag)
+#: and stripped in Python — NOT wrapped in ``\s*``, whose overlap with
+#: ``[^<]`` is a polynomial-ReDoS backtracking hazard on hostile input.
+_VERSION_RE = re.compile(
+    r"<(?:[\w.-]+:)?software-version>([^<]+)</", re.IGNORECASE
+)
+
+
+def _extract_version(raw: str) -> str:
+    """Return the IOS-XE release from an OpenConfig ``<software-version>``
+    element, or ``""`` when the payload carries no system subtree.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); the
+    render path does not echo it, so it is informational.
+    """
+    m = _VERSION_RE.search(raw)
+    return m.group(1).strip() if m else ""
 
 
 @register
@@ -784,6 +811,7 @@ class CiscoIOSXECodec(CodecBase):
             source_vendor="cisco_iosxe",
             source_format="xml-netconf",
         )
+        intent.source_version = _extract_version(raw)
         for idx, iface_el in enumerate(interfaces_el.findall(_q("interface"))):
             raw_iface = _parse_interface(iface_el, idx=idx)
             intent.interfaces.append(_iface_dict_to_canonical(raw_iface))

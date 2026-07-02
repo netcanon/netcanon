@@ -203,4 +203,11 @@ def test_round_trip_stable():
     tree1 = codec.parse(raw)
     emitted = codec.render(tree1)
     tree2 = codec.parse(emitted)
-    assert tree1 == tree2
+    # source_version is parser-stamped metadata (the #config-version
+    # header); render doesn't re-emit it, so exclude it from the
+    # same-vendor round-trip — mirrors the generic harness's _compare.
+    d1 = tree1.model_dump()
+    d2 = tree2.model_dump()
+    d1.pop("source_version", None)
+    d2.pop("source_version", None)
+    assert d1 == d2

@@ -230,6 +230,10 @@ def _infer_type(iface_name: str) -> str:
 
 
 _HOSTNAME_RE = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: Running-config ``version 17.9`` header — first token after a column-0
+#: ``version`` keyword is the IOS/IOS-XE release.  Partial/tolerance
+#: captures omit the header, so absence is honest (→ ``""``).
+_VERSION_RE = re.compile(r"^version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_RE = re.compile(r"^vlan\s+(\d+)", re.IGNORECASE)
 _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 _STATIC_ROUTE_RE = re.compile(
@@ -427,6 +431,7 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
     # System-level fields
     intent.hostname = _extract_hostname(raw)
+    intent.source_version = _extract_version(raw)
 
     # Top-level system services: domain name, DNS resolvers, NTP
     # servers.  Mirrors arista_eos prior art — same wire syntax in the
@@ -536,6 +541,17 @@ def parse_intent(raw: str) -> CanonicalIntent:
 
 def _extract_hostname(raw: str) -> str:
     m = _HOSTNAME_RE.search(raw)
+    return m.group(1) if m else ""
+
+
+def _extract_version(raw: str) -> str:
+    """Return the IOS/IOS-XE release from the running-config ``version`` line.
+
+    Stored as :attr:`CanonicalIntent.source_version` (metadata only); render
+    synthesises its own preamble rather than echoing this, so it is
+    informational.  Returns ``""`` for partial captures with no header.
+    """
+    m = _VERSION_RE.search(raw)
     return m.group(1) if m else ""
 
 
