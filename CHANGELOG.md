@@ -26,6 +26,21 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`mikrotik_routeros` no longer silently re-enables a shut interface**
+  (surfaced by the dogfood negation-semantics sweep). A source interface
+  administratively down (`enabled=False`) rendered to RouterOS as a VLAN
+  SVI, bridge, or loopback dropped the `disabled=yes` attribute — only the
+  physical-ethernet path emitted it — so RouterOS defaulted the interface
+  up and the shutdown silently INVERTED on reparse (a shut interface came
+  back up). The vlan/bridge/loopback `add` paths now emit `disabled=yes`
+  when the interface is disabled, and the bridge parser reads `disabled=`
+  so a shut loopback round-trips too. Was 10 real shut→up inversions on
+  the aruba_aoscx / cisco_iosxr → mikrotik pairs; the lone remaining case
+  (iosxr→aruba_aoss loopback) is a genuine AOS-S platform limitation
+  (loopbacks are always-up), not a defect.
+
 ## [0.4.11] - 2026-06-30
 
 ### Fixed

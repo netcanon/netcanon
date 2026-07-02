@@ -242,6 +242,33 @@ class TestParseErrors:
 
 
 class TestRender:
+    def test_shut_vlan_svi_and_loopback_round_trip_disabled(self):
+        """A shut (enabled=False) VLAN SVI or loopback MUST render
+        ``disabled=yes`` and round-trip as disabled.  Otherwise RouterOS
+        defaults the interface up and the admin-down state silently INVERTS
+        on reparse — a dangerous shut-becomes-up translation surfaced by the
+        dogfood negation-semantics sweep (was 10 real inversions on the
+        aruba_aoscx/cisco_iosxr -> mikrotik pairs).  The ethernet path
+        already emitted disabled=; the vlan/bridge/loopback add-paths did not.
+        """
+        tree = CanonicalIntent(
+            interfaces=[
+                CanonicalInterface(
+                    name="vlan100", interface_type="ianaift:l3ipvlan",
+                    enabled=False),
+                CanonicalInterface(
+                    name="lo0", interface_type="ianaift:softwareLoopback",
+                    enabled=False),
+            ],
+            vlans=[CanonicalVlan(id=100, name="vlan100")],
+        )
+        text = MikroTikRouterOSCodec().render(tree)
+        assert text.count("disabled=yes") >= 2, text
+        rt = MikroTikRouterOSCodec().parse(text)
+        by_name = {i.name: i for i in rt.interfaces}
+        assert by_name["vlan100"].enabled is False
+        assert by_name["lo0"].enabled is False
+
     def test_render_deterministic(self):
         tree = MikroTikRouterOSCodec().parse(_MIN)
         a = MikroTikRouterOSCodec().render(tree)
