@@ -28,6 +28,17 @@ timestamp if your timezone matters for an audit.
 
 ### Fixed
 
+- **`arista_eos` auto-detection no longer mis-classifies marker-light EOS
+  configs as `cisco_iosxe_cli`** (surfaced by the dogfood detection
+  label-noise sweep). Real EOS configs whose only vendor tell was a `.swi`
+  boot image or a `!RANCID-CONTENT-TYPE: arista` collection header — with no
+  `! device: … EOS-` banner — scored 0 on the Arista probe and fell through
+  to the generic IOS-CLI codec (batfish `eos_mlag` / `arista-originator` /
+  `arista_dhcp_relay` were detected as `cisco_iosxe_cli` at margin 70-90).
+  The probe now recognises the Arista-unique `.swi` boot image (Cisco boots
+  `.bin`) and the `RANCID-CONTENT-TYPE` header. Corpus detection agreement
+  vs batfish's own filename labels rose 81% → 94%.
+
 - **`mikrotik_routeros` no longer silently re-enables a shut interface**
   (surfaced by the dogfood negation-semantics sweep). A source interface
   administratively down (`enabled=False`) rendered to RouterOS as a VLAN

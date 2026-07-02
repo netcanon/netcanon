@@ -462,6 +462,25 @@ class AristaEOSCodec(CodecBase):
             return None
         if re.search(r"^!\s*device:.*EOS-", raw_prefix, re.MULTILINE):
             return (98, "Arista EOS '! device: ... EOS-' banner present")
+        # EOS software image: the ``.swi`` (SWitch Image) extension on a
+        # ``boot system`` line is Arista-unique (Cisco boots ``.bin``), and
+        # real captures carry it even without the ``! device:`` banner.
+        # Tolerate a leading ``! `` (the boot line is often a header comment).
+        # Without this, marker-light EOS configs (mlag/BGP topologies) fell
+        # through to cisco_iosxe_cli — surfaced by the dogfood detection
+        # label-noise sweep (batfish eos_mlag / arista-originator detected as
+        # cisco_iosxe_cli at margin 70-90).
+        if re.search(r"^!?\s*boot system\b.*\.swi\b", raw_prefix, re.MULTILINE):
+            return (95, "Arista EOS boot image (.swi)")
+        # RANCID / oxidized collection header — an explicit, operator-tool
+        # vendor declaration (real config repos carry it).  Zero false-positive
+        # (it names the vendor) and higher-signal than IOS-lookalike content,
+        # so marker-light EOS (dhcp-relay / interface / misc feature snippets)
+        # stops falling through to cisco_iosxe_cli.  Same dogfood label-noise
+        # finding as the .swi marker above.
+        if re.search(r"^!\s*RANCID-CONTENT-TYPE:\s*arista\b",
+                     raw_prefix, re.MULTILINE | re.IGNORECASE):
+            return (97, "RANCID-CONTENT-TYPE: arista header")
         hits = 0
         if re.search(r"^daemon TerminAttr", raw_prefix, re.MULTILINE):
             hits += 1
