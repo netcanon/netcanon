@@ -311,6 +311,33 @@ class TestParsePhase2:
         assert [v.id for v in intent.vlans] == [100]
         assert intent.vlans[0].name == ""
 
+    def test_dot1q_on_interface_dot1q_vlan_field(self, codec, kitchen_sink):
+        """GAP 7: the tag is now ALSO recorded on the sub-interface's
+        dedicated dot1q_vlan (not only synthesised as a VLAN record)."""
+        sub = next(
+            i for i in codec.parse(kitchen_sink).interfaces
+            if i.name == "GigabitEthernet0/0/0/1.100"
+        )
+        assert sub.dot1q_vlan == 100
+
+    def test_dot1q_tag_differs_from_unit_number(self, codec):
+        """A sub-interface whose unit number differs from its 802.1Q tag
+        renders the TRUE tag (the old unit==vlan_id workaround dropped it)."""
+        raw = (
+            "!! IOS XR Configuration 7.5.2\n"
+            "interface GigabitEthernet0/0/0/1.100\n"
+            " encapsulation dot1q 50\n"
+            " ipv4 address 10.0.0.1 255.255.255.252\n"
+            "!\n"
+        )
+        intent = codec.parse(raw)
+        sub = next(
+            i for i in intent.interfaces
+            if i.name == "GigabitEthernet0/0/0/1.100"
+        )
+        assert sub.dot1q_vlan == 50
+        assert " encapsulation dot1q 50" in codec.render(intent)
+
 
 # ---------------------------------------------------------------------------
 # Round-trip
