@@ -1141,6 +1141,17 @@ def _apply_iface_subcommand(  # noqa: C901
             except ValueError:
                 pass
         return
+    # GAP 7: routed sub-interface 802.1Q tag.  EOS writes
+    # ``encapsulation dot1q vlan N`` (the ``vlan`` keyword is required —
+    # verified vs an independent Batfish parse); ``split()[-1]`` also
+    # tolerates a bare ``encapsulation dot1q N``.  Stored on the dedicated
+    # dot1q_vlan field, NOT access_vlan (a routed sub-iface is L3).
+    if line.startswith("encapsulation dot1q "):
+        try:
+            iface.dot1q_vlan = int(line.split()[-1])
+        except ValueError:
+            pass
+        return
     # ``switchport mode access`` / ``switchport access vlan N`` /
     # ``switchport trunk allowed vlan L`` — parse-and-record.
     if line.startswith("switchport access vlan "):
