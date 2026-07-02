@@ -85,10 +85,9 @@ def render_intent(tree: CanonicalIntent) -> str:
         lines.extend(_render_vrf(ri))
 
     # ── Interfaces (XR show-output-ish order) ──
-    vlan_ids = {v.id for v in tree.vlans}
     lag_mode_by_name = {lag.name: lag.mode for lag in tree.lags}
     for iface in _sort_interfaces_iosxr(tree.interfaces):
-        lines.extend(_render_interface(iface, vlan_ids, lag_mode_by_name))
+        lines.extend(_render_interface(iface, lag_mode_by_name))
 
     # ── Static routes (default VRF + per-VRF) ──
     lines.extend(_render_router_static(tree.static_routes))
@@ -245,7 +244,7 @@ def _render_router_static(routes: list) -> list[str]:
     return out
 
 
-def _render_interface(iface, vlan_ids: set, lag_mode_by_name: dict) -> list[str]:
+def _render_interface(iface, lag_mode_by_name: dict) -> list[str]:
     """Render one ``interface <name>`` stanza (``!``-terminated).
 
     IPv4 emits the dotted-mask form (``ipv4 address X Y``); IPv6 emits
@@ -266,10 +265,12 @@ def _render_interface(iface, vlan_ids: set, lag_mode_by_name: dict) -> list[str]
         block.append(f" mtu {iface.mtu}")
     if iface.vrf:
         block.append(f" vrf {iface.vrf}")
-    if "." in iface.name:
-        unit = _subinterface_unit(iface.name)
-        if unit is not None and unit in vlan_ids:
-            block.append(f" encapsulation dot1q {unit}")
+    # GAP 7: routed sub-interface 802.1Q tag.  Emitted directly from the
+    # dedicated dot1q_vlan field (was previously inferred from the
+    # sub-iface unit number matching a synthesised VLAN id, which dropped
+    # the tag whenever unit != tag).
+    if iface.dot1q_vlan is not None:
+        block.append(f" encapsulation dot1q {iface.dot1q_vlan}")
     for addr in iface.ipv4_addresses:
         line = f" ipv4 address {addr.ip} {_prefix_to_mask(addr.prefix_length, vendor='cisco_iosxr')}"
         if addr.is_secondary:
@@ -286,19 +287,6 @@ def _render_interface(iface, vlan_ids: set, lag_mode_by_name: dict) -> list[str]
             block.append(f" bundle id {m.group(1)} mode {mode}")
     block.append("!")
     return block
-
-
-def _subinterface_unit(name: str) -> int | None:
-    """Return the numeric unit suffix of a sub-interface name, or None.
-
-    ``GigabitEthernet0/0/0/1.100`` → ``100``; a name with a non-numeric
-    or absent suffix returns ``None``.
-    """
-    tail = name.rsplit(".", 1)[-1]
-    try:
-        return int(tail)
-    except ValueError:
-        return None
 
 
 #: Interface-kind render order: Loopback → MgmtEth → physical →

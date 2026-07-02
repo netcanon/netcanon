@@ -325,6 +325,7 @@ def _new_iface_scratch(name: str) -> dict:
         "ipv6": [],
         "vrf": "",
         "lag_member_of": None,
+        "dot1q_vlan": None,
     }
 
 
@@ -391,6 +392,18 @@ def _parse_interfaces(raw: str) -> list[CanonicalInterface]:
         if vm:
             current["vrf"] = vm.group(1)
             return
+        # GAP 7: routed sub-interface 802.1Q tag.  ``encapsulation dot1q
+        # <vid>`` also feeds _parse_dot1q_vlans (VLAN synthesis for
+        # VLAN-centric targets); here we ALSO record it on the interface's
+        # dedicated dot1q_vlan so the render emits the true tag (not just
+        # when the sub-iface unit number coincides with the tag).
+        em = _ENCAP_DOT1Q_RE.match(line)
+        if em:
+            try:
+                current["dot1q_vlan"] = int(em.group(1))
+            except ValueError:
+                pass
+            return
 
     # Loop skeleton (open on `interface`, close on `!`/dedent, flush at EOF)
     # is the shared codecs/_scanner helper; the vendor regex cascade above
@@ -430,6 +443,7 @@ def _build_canonical_interface(raw: dict) -> CanonicalInterface:
         ],
         vrf=raw.get("vrf", ""),
         lag_member_of=raw.get("lag_member_of"),
+        dot1q_vlan=raw.get("dot1q_vlan"),  # GAP 7: routed-subif 802.1Q tag
     )
 
 
