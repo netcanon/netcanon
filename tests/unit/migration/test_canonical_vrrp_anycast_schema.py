@@ -341,6 +341,8 @@ class TestShipBeforeWireUnsupportedDeclarations:
             "/interfaces/interface/ipv4/address/virtual-gateway-address",
             "/anycast-gateway-mac",
             "/routing/static-route/vrf",
+            # GAP 7 — routed sub-interface `encapsulation dot1Q N`.
+            "/interfaces/interface/dot1q-vlan",
         },
         # NETCONF stub — every path still ``unsupported`` (the
         # codec's matrix declares every canonical surface unsupported

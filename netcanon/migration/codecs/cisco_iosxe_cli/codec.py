@@ -119,6 +119,7 @@ class CiscoIOSXECLICodec(CodecBase):
             "/interfaces/interface/ipv6/address/prefix-length",  # GAP-EVPN-3
             "/interfaces/interface/dhcp-client-v6",          # IPv6 DHCPv6 / SLAAC
             "/interfaces/interface/tunnel-type",             # GRE / IPIP / IPSEC / VXLAN discriminator
+            "/interfaces/interface/dot1q-vlan",              # GAP 7: routed-subif `encapsulation dot1Q N`
             # ``switchport voice vlan <N>`` — parsed (_SWITCHPORT_VOICE_RE)
             # and rendered, so it fully round-trips same-vendor (blind-audit
             # 65f9c01 #11; targets that can't carry it declare it unsupported).
@@ -317,17 +318,6 @@ class CiscoIOSXECLICodec(CodecBase):
             ),
         ],
         unsupported=[
-            UnsupportedPath(
-                path="/interfaces/interface/dot1q-vlan",
-                reason=(
-                    "Routed sub-interface 802.1Q tag (Cisco "
-                    "`encapsulation dot1Q N` / Junos `unit N vlan-id`) is "
-                    "not yet wired for this codec.  Declared unsupported "
-                    "(ship-before-wire, GAP 7) so a routed sub-interface "
-                    "tag is flagged as a drop, not silently mis-rendered "
-                    "as an L2 access-mode VLAN."
-                ),
-            ),
             # ── Tier-1 surfaces this codec drops on render — declared so the
             #    live validation report flags the loss instead of reporting
             #    `severity: ok` (2026-06 adversarial review #9). ──
