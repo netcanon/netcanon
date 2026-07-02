@@ -26,6 +26,27 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.12] - 2026-07-02
+
+### Added
+
+- **`source_version` is now captured on parse by all 12 codecs** (was
+  3). Each codec's parser records the source device's firmware/OS
+  release into `CanonicalIntent.source_version`: the running-config
+  `version` line (Cisco IOS-XE), the `! device: (…, EOS-4.27.0F)`
+  banner (Arista EOS), `set version` / block-form `version X;` (Junos),
+  the `Created on release #` banner (Aruba AOS-Switch), the
+  `#config-version` header (FortiGate), the `by RouterOS` export header
+  (MikroTik), the trailing `// Release version:` comment (VyOS — not the
+  `vyos-config-version` schema marker), and the OpenConfig
+  `<software-version>` element (Cisco IOS-XE NETCONF). OPNsense records
+  an honest empty string — its `config.xml` carries only a config-schema
+  revision, not the OS release, so conflating them would poison the
+  data. The field is metadata only: render does not echo it and it is
+  excluded from the round-trip and cross-vendor comparators, so
+  behaviour is unchanged — this lays the data groundwork for future
+  version-aware translation.
+
 ### Fixed
 
 - **`arista_eos` auto-detection no longer mis-classifies marker-light EOS
