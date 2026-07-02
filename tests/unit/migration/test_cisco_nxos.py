@@ -78,6 +78,36 @@ class TestProbe:
             98, "NX-OS !Command banner + structural markers",
         )
 
+    def test_rancid_cisco_nx_header_detected(self, codec):
+        """RANCID collection header is a definitive NX-OS declaration — a
+        marker-light snippet (no !Command banner, no structural markers)
+        must still be claimed rather than lose the alphabetical tie-break
+        to cisco_iosxe_cli (dogfood detection label-noise sweep)."""
+        raw = (
+            "!RANCID-CONTENT-TYPE: cisco-nx\n"
+            "!\n"
+            "hostname nxos_ntp\n"
+        )
+        result = codec.probe(raw)
+        assert result is not None
+        score, reason = result
+        assert score >= 95
+        assert "cisco-nx" in reason
+
+    def test_nxapi_is_nxos_marker(self, codec):
+        """``nxapi http port`` (NX-API mgmt plane) is NX-OS-exclusive and
+        lands in the 500-byte probe window even when the `feature` lines
+        sit deeper in the config (dogfood detection sweep — leaf2 case)."""
+        raw = (
+            "hostname leaf2\n"
+            "nxapi http port 80\n"
+            "interface Ethernet1/1\n"
+            "  ip address 10.0.0.1/32\n"
+        )
+        result = codec.probe(raw)
+        assert result is not None
+        assert result[0] >= 70
+
     def test_iosxe_classic_banner_rejected(self, codec):
         """IOS-XE classic banners are a hard NOT-NX-OS signal even if a
         stray ``!Command:`` line appears later in a multi-capture paste."""

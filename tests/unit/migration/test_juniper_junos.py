@@ -377,6 +377,18 @@ class TestProbe:
         score, _ = result
         assert score >= 85  # 4 markers → strong signal
 
+    def test_rancid_juniper_header_detected(self):
+        """RANCID collection header (Junos comment char ``#``, with or
+        without a space) is a definitive Juniper declaration — claims
+        block-form / marker-light captures the set-form markers miss."""
+        for header in ("# RANCID-CONTENT-TYPE: juniper", "#RANCID-CONTENT-TYPE: juniper"):
+            raw = header + "\nsystem {\n    host-name r1;\n}\n"
+            result = JunosCodec.probe(raw)
+            assert result is not None, header
+            score, reason = result
+            assert score >= 95, header
+            assert "juniper" in reason
+
     def test_non_junos_returns_none(self):
         """Cisco IOS-like text must NOT probe as Junos."""
         raw = (

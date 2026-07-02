@@ -575,10 +575,37 @@ class CiscoIOSXECLICodec(CodecBase):
             r"|^nv\s+overlay\s+evpn\b"
             r"|^\s+vn-segment\s+\d+"
             r"|^interface\s+lag\s+\d"
-            r"|^\s+vrf\s+attach\b",
+            r"|^\s+vrf\s+attach\b"
+            r"|^nxapi\b",  # NX-API mgmt plane — NX-OS-exclusive
             raw_prefix, re.IGNORECASE | re.MULTILINE,
         ):
             return None
+
+        # GENERAL NX-OS `feature <name>` keyword: IOS-XE has NO `feature`
+        # command at all (see the comment above), so it is NX-OS-exclusive
+        # and we defer.  GUARD: a dotted-decimal mask (`ip address A.B.C.D
+        # M.M.M.M`) is IOS-EXCLUSIVE (NX-OS only writes CIDR `/N`), so a
+        # config carrying BOTH `feature` and a dotted mask is an IOS /
+        # synthetic hybrid — keep it here rather than hand it to the
+        # CIDR-only NX-OS parser.  Without this, marker-light NX-OS
+        # (`feature bgp` BGP snippets, no `!Command` banner) tied
+        # cisco_iosxe_cli at 70/90 on generic IOS-shape markers and lost
+        # the alphabetical tie-break (dogfood detection sweep, 38 configs).
+        if (re.search(r"^feature\s+\S+", raw_prefix,
+                      re.IGNORECASE | re.MULTILINE)
+                and not re.search(
+                    r"^\s+ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+",
+                    raw_prefix, re.IGNORECASE | re.MULTILINE)):
+            return None
+
+        # RANCID / oxidized collection header naming bare ``cisco`` —
+        # IOS / IOS-XE classic, distinct from ``cisco-nx`` / ``cisco-xr``
+        # (which the deferral blocks above already routed to the NX-OS /
+        # XR probes).  ``\s*$`` pins the bare value so ``cisco-nx`` /
+        # ``cisco-xr`` can't match here.  A definitive vendor declaration.
+        if re.search(r"^!\s*RANCID-CONTENT-TYPE:\s*cisco\s*$",
+                     raw_prefix, re.MULTILINE | re.IGNORECASE):
+            return (97, "RANCID-CONTENT-TYPE: cisco header")
 
         # Cisco-specific banners — each unambiguous on its own.  The
         # ``show running-config`` echo is now ONLY a confidence
