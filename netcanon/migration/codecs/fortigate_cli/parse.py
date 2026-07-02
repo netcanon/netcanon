@@ -154,9 +154,13 @@ _SET_RE = re.compile(r"^set\s+(\S+)\s*(.*)$", re.IGNORECASE)
 _COMMENT_RE = re.compile(r"^\s*#")
 #: FortiOS release from the ``#config-version`` header, e.g.
 #: ``#config-version=FG100E-7.2.13-FW-build1762-...`` → ``7.2.13``.  The
-#: model token has no fixed length (FGT70G / FGVM64 / FG100E), so the lazy
-#: ``\S+?`` stops at the first hyphen after the model, before the triple.
-_VERSION_RE = re.compile(r"#config-version=\S+?-(\d+\.\d+\.\d+)", re.MULTILINE)
+#: model token has no fixed length (FGT70G / FGVM64 / FG100E) but is always
+#: alphanumeric, so ``[A-Za-z0-9]+`` matches it exactly up to the hyphen
+#: delimiter — deliberately NOT ``\S+?`` (whose overlap with the ``-``
+#: delimiter is a polynomial-ReDoS backtracking hazard on hostile input).
+_VERSION_RE = re.compile(
+    r"#config-version=[A-Za-z0-9]+-(\d+\.\d+\.\d+)", re.MULTILINE
+)
 
 
 def _extract_version(raw: str) -> str:

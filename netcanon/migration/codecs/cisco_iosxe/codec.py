@@ -136,9 +136,12 @@ _NS_IP = "http://openconfig.net/yang/interfaces/ip"
 #: ``version`` line — so we match the element namespace-agnostically.
 #: Interface-only ``<interfaces>`` fragments carry no system subtree, so
 #: absence is the honest common case (→ ``""``); a full ``get-config``
-#: reply that includes ``<system>`` yields the release.
+#: reply that includes ``<system>`` yields the release.  The element text
+#: is captured with a single greedy ``[^<]+`` (stops at the closing tag)
+#: and stripped in Python — NOT wrapped in ``\s*``, whose overlap with
+#: ``[^<]`` is a polynomial-ReDoS backtracking hazard on hostile input.
 _VERSION_RE = re.compile(
-    r"<(?:[\w.-]+:)?software-version>\s*([^<]+?)\s*</", re.IGNORECASE
+    r"<(?:[\w.-]+:)?software-version>([^<]+)</", re.IGNORECASE
 )
 
 
