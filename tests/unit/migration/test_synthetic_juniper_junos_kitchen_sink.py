@@ -201,9 +201,11 @@ def test_populates_every_expected_canonical_field():
     g1 = iface_by_name["ge-0/0/1"]
     assert g1.mtu == 9100
 
-    # ge-0/0/1.100 — sub-interface with per-unit vlan-id (access_vlan)
+    # ge-0/0/1.100 — routed sub-interface with per-unit 802.1Q tag
+    # (dot1q_vlan, NOT the L2 access_vlan field — GAP 7)
     g1_100 = iface_by_name["ge-0/0/1.100"]
-    assert g1_100.access_vlan == 100
+    assert g1_100.dot1q_vlan == 100
+    assert g1_100.access_vlan is None
     assert any(a.ip == "10.100.0.1" for a in g1_100.ipv4_addresses)
 
     # lo0 — IPv4 + IPv6 global + IPv6 link-local (scope inferred)

@@ -363,10 +363,12 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             enabled=state.get("enabled", True),
             description=state.get("description", ""),
             interface_type=_infer_iface_type(name),
-            # GAP 7: per-unit 802.1Q tag surfaces on
-            # CanonicalInterface.access_vlan.  None = untagged
-            # (the common case for unit 0) or not-specified.
             access_vlan=state.get("access_vlan"),
+            # GAP 7: the per-unit 802.1Q tag on a routed sub-interface
+            # surfaces on the DEDICATED CanonicalInterface.dot1q_vlan
+            # (not access_vlan).  None = untagged (the common case for
+            # unit 0) or not a tagged routed sub-interface.
+            dot1q_vlan=state.get("dot1q_vlan"),
             # interface-range / structural collapse: mtu may
             # have been populated from a ``set interfaces
             # interface-range <r> mtu <N>`` line via the
@@ -1511,15 +1513,17 @@ def _apply_interfaces(  # noqa: C901
             and tokens[3] == "virtual-gateway-v6-mac"
         ):
             target_state["v6_mac"] = tokens[4]
-        # GAP 7: ``unit <N> vlan-id <tag>`` — the per-unit 802.1Q tag.
-        # Semantically equivalent to Cisco ``encapsulation dot1Q N``
-        # on a sub-interface; stores as CanonicalInterface.access_vlan
-        # (same field access-mode switchports use).  Does NOT set
-        # switchport_mode — Junos sub-interfaces are L3 on a tagged
-        # VLAN, not L2 access ports.
+        # GAP 7: ``unit <N> vlan-id <tag>`` — the per-unit 802.1Q tag on a
+        # ROUTED sub-interface.  Cisco ``encapsulation dot1Q N`` equivalent;
+        # stores as CanonicalInterface.dot1q_vlan (a DEDICATED L3 surface),
+        # NOT access_vlan — a routed sub-interface must never mis-render as
+        # ``switchport access vlan N`` on a switchport-centric target.  Does
+        # NOT set switchport_mode (these are L3-on-a-tagged-VLAN, not L2
+        # access ports).  access_vlan stays reserved for the genuine L2
+        # ``family ethernet-switching`` access case.
         if len(tokens) >= 5 and tokens[3] == "vlan-id":
             try:
-                target_state["access_vlan"] = int(tokens[4])
+                target_state["dot1q_vlan"] = int(tokens[4])
             except ValueError:
                 pass
 

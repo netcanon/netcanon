@@ -26,6 +26,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalVRRPGroup,
 )
 from netcanon.migration.codecs.base import ParseError, RenderError
+from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
 from netcanon.migration.codecs.juniper_junos import JunosCodec
 from netcanon.migration.codecs.juniper_junos.port_names import (
     classify_port_name,
@@ -1019,6 +1020,21 @@ class TestSubInterfaces:
         assert sub.ipv4_addresses[0].ip == "10.1.100.1"
         assert sub.ipv4_addresses[0].prefix_length == 24
 
+    def test_routed_subif_not_mis_rendered_as_access_vlan_cross_vendor(self):
+        """GAP 7 end-to-end: a Junos routed sub-interface tag must NOT
+        become ``switchport access vlan N`` on a Cisco IOS-XE CLI target
+        (the semantic inversion this dedicated field fixes).  IOS-XE-CLI
+        declares dot1q-vlan unsupported (ship-before-wire), so it DROPS the
+        tag rather than emitting an L2 access-port line."""
+        raw = (
+            "set interfaces ge-0/0/0 unit 100 vlan-id 100\n"
+            "set interfaces ge-0/0/0 unit 100 family inet "
+            "address 10.0.0.1/30\n"
+        )
+        intent = JunosCodec().parse(raw)
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "switchport access vlan" not in out.lower()
+
     def test_parse_unit_description_on_subiface(self):
         raw = (
             "set interfaces ge-0/0/0 unit 100 description "
@@ -1143,10 +1159,10 @@ class TestSubInterfaces:
 class TestPerUnitVlanTagging:
     """``set interfaces <parent> unit <N> vlan-id <tag>`` is Junos's
     per-subinterface 802.1Q tag primitive — semantically equivalent to
-    Cisco's ``encapsulation dot1Q <N>`` on a subinterface.  Stores on
-    CanonicalInterface.access_vlan (the existing field access-mode
-    switchports use) without setting switchport_mode (Junos sub-
-    interfaces are L3 on a tagged VLAN, not L2 access ports).
+    Cisco's ``encapsulation dot1Q <N>`` on a subinterface.  Stores on the
+    DEDICATED CanonicalInterface.dot1q_vlan field (NOT access_vlan, an L2
+    switchport concept) without setting switchport_mode (Junos sub-
+    interfaces are L3 on a tagged VLAN, not L2 access ports).  GAP 7.
     """
 
     def test_parse_vlan_id_on_unit(self):
@@ -1161,7 +1177,8 @@ class TestPerUnitVlanTagging:
             None,
         )
         assert sub is not None
-        assert sub.access_vlan == 100
+        assert sub.dot1q_vlan == 100
+        assert sub.access_vlan is None  # NOT the L2 access-mode field
         # switchport_mode stays None — this is L3 on a tagged VLAN.
         assert sub.switchport_mode is None
 
@@ -1176,7 +1193,7 @@ class TestPerUnitVlanTagging:
             None,
         )
         assert sub is not None
-        assert sub.access_vlan == 100
+        assert sub.dot1q_vlan == 100
 
     def test_parse_vlan_id_non_integer_rejected(self):
         """Malformed ``vlan-id abc`` silently no-ops rather than crashing."""
@@ -1191,7 +1208,7 @@ class TestPerUnitVlanTagging:
             None,
         )
         assert sub is not None
-        assert sub.access_vlan is None  # bad token silently dropped
+        assert sub.dot1q_vlan is None  # bad token silently dropped
         # Rest of the unit's config still parses.
         assert len(sub.ipv4_addresses) == 1
 
@@ -1200,7 +1217,7 @@ class TestPerUnitVlanTagging:
             interfaces=[
                 CanonicalInterface(
                     name="ge-0/0/0.100",
-                    access_vlan=100,
+                    dot1q_vlan=100,
                     ipv4_addresses=[
                         CanonicalIPv4Address(
                             ip="10.1.100.1", prefix_length=24,
@@ -1213,13 +1230,13 @@ class TestPerUnitVlanTagging:
         assert "set interfaces ge-0/0/0 unit 100 vlan-id 100" in out
 
     def test_render_vlan_id_alone_emits_set_line(self):
-        """Sub-interface with only access_vlan (no IP, no description)
+        """Sub-interface with only dot1q_vlan (no IP, no description)
         still emits the vlan-id line — it IS renderable content."""
         intent = CanonicalIntent(
             interfaces=[
                 CanonicalInterface(
                     name="ge-0/0/0.100",
-                    access_vlan=100,
+                    dot1q_vlan=100,
                 ),
             ],
         )
@@ -1249,12 +1266,12 @@ class TestPerUnitVlanTagging:
         sub2_second = next(
             i for i in second.interfaces if i.name == "ge-0/0/0.200"
         )
-        assert sub1_first.access_vlan == sub1_second.access_vlan == 100
-        assert sub2_second.access_vlan == 200
+        assert sub1_first.dot1q_vlan == sub1_second.dot1q_vlan == 100
+        assert sub2_second.dot1q_vlan == 200
 
     def test_unit_0_vlan_id_collapses_into_parent(self):
         """``unit 0 vlan-id N`` is uncommon but legal Junos — stores
-        on the parent interface's access_vlan (unit 0 collapses into
+        on the parent interface's dot1q_vlan (unit 0 collapses into
         parent per the v1 convention)."""
         raw = (
             "set interfaces ge-0/0/0 unit 0 vlan-id 42\n"
@@ -1265,7 +1282,8 @@ class TestPerUnitVlanTagging:
             None,
         )
         assert parent is not None
-        assert parent.access_vlan == 42
+        assert parent.dot1q_vlan == 42
+        assert parent.access_vlan is None
 
     def test_render_channelized_subiface_splits_correctly(self):
         """Regression: channelized port names contain ``:<N>`` (the
@@ -1285,7 +1303,7 @@ class TestPerUnitVlanTagging:
             interfaces=[
                 CanonicalInterface(
                     name="xe-0/0/6:2.10",
-                    access_vlan=10,
+                    dot1q_vlan=10,
                     ipv4_addresses=[
                         CanonicalIPv4Address(
                             ip="10.10.20.1", prefix_length=31,
@@ -1323,9 +1341,9 @@ class TestPerUnitVlanTagging:
         first = codec.parse(raw)
         rendered = codec.render(first)
         second = codec.parse(rendered)
-        # Both sub-interfaces should materialise with the same access_vlan
+        # Both sub-interfaces should materialise with the same dot1q_vlan
         # after the round-trip (the regression had second-parse showing
-        # access_vlan=None because render emitted the malformed form).
+        # the tag None because render emitted the malformed form).
         for first_iface in first.interfaces:
             second_iface = next(
                 (i for i in second.interfaces if i.name == first_iface.name),
@@ -1334,9 +1352,9 @@ class TestPerUnitVlanTagging:
             assert second_iface is not None, (
                 f"{first_iface.name} disappeared on round-trip"
             )
-            assert first_iface.access_vlan == second_iface.access_vlan, (
-                f"{first_iface.name} access_vlan unstable: "
-                f"{first_iface.access_vlan} -> {second_iface.access_vlan}"
+            assert first_iface.dot1q_vlan == second_iface.dot1q_vlan, (
+                f"{first_iface.name} dot1q_vlan unstable: "
+                f"{first_iface.dot1q_vlan} -> {second_iface.dot1q_vlan}"
             )
 
 

@@ -189,7 +189,19 @@ class CanonicalInterface(BaseModel):
         ipv6_addresses: IPv6 address records on this interface.
         switchport_mode: Switchport state.  ``"access"`` | ``"trunk"`` |
             ``None`` (means "not a switchport" — routed port).
-        access_vlan: VLAN ID for access mode.
+        access_vlan: VLAN ID for an L2 access-mode switchport.  This is
+            the layer-2 access-port membership — NOT the 802.1Q tag on a
+            routed sub-interface (see ``dot1q_vlan``).  ``switchport_mode``
+            is ``"access"`` when this is meaningful.
+        dot1q_vlan: 802.1Q VLAN tag on a ROUTED (layer-3) sub-interface —
+            the vendor-neutral form of Cisco ``encapsulation dot1Q N``,
+            Junos ``unit N vlan-id N``, Arista ``encapsulation dot1q vlan
+            N``.  Distinct from ``access_vlan``: this interface routes
+            tagged traffic (carries an IP), it is not an L2 access port.
+            ``None`` = untagged / not a tagged routed sub-interface.
+            Kept separate so a routed sub-interface never mis-renders as
+            ``switchport access vlan N`` on a switchport-centric target
+            (GAP 7).
         trunk_allowed_vlans: VLAN IDs allowed on trunk.
         trunk_native_vlan: Native (untagged) VLAN ID on trunk.
         voice_vlan: Voice VLAN ID for IP phone traffic.
@@ -271,6 +283,7 @@ class CanonicalInterface(BaseModel):
     ipv6_addresses: list[CanonicalIPv6Address] = Field(default_factory=list)
     switchport_mode: str | None = None
     access_vlan: int | None = None
+    dot1q_vlan: int | None = None
     trunk_allowed_vlans: list[int] = Field(default_factory=list)
     trunk_native_vlan: int | None = None
     voice_vlan: int | None = None
