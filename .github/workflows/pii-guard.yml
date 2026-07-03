@@ -25,10 +25,12 @@ jobs:
       - name: git grep tracked files for leaked identifiers
         run: |
           # Scope: tracked files only.  The review dossier under
-          # docs/codebase-review/ intentionally quotes these values and is
-          # gitignored, so git grep never sees it.  Commit-message /
-          # Co-authored-by trailer hygiene is enforced locally by
-          # scripts/git-hooks/pre-push (see its header for how to enable it).
+          # docs/codebase-review/ intentionally quotes these values; it is
+          # gitignored (see .gitignore) so git grep never sees it, and the
+          # tracked-path assertion below fails closed if it is ever force-
+          # added anyway.  Commit-message / Co-authored-by trailer hygiene is
+          # enforced locally by scripts/git-hooks/pre-push (see its header for
+          # how to enable it).
           #
           # The patterns use regex character classes (`[i]` = a literal
           # `i`, `[\]` = a literal backslash) for two reasons:
@@ -58,3 +60,24 @@ jobs:
             exit 1
           fi
           echo "PII guard: clean — no leaked identifiers in tracked files."
+
+      - name: No PII / unlicensed review directory is tracked
+        run: |
+          # Path-based companion to the content grep above.  Two directories
+          # must NEVER be committed:
+          #   * docs/codebase-review/ — quotes the scrubbed PII verbatim.
+          #   * docs/reviews/2026-06-19-run3-verification/ — third-party
+          #     device configs with no redistributable licence; these match
+          #     NEITHER pattern in the content grep, so only a path check can
+          #     catch them.
+          # .gitignore keeps them out on a normal `git add`; this asserts the
+          # guarantee actually held (a `git add -f`, a stale pre-.gitignore
+          # commit, or a bad merge would slip past the ignore rule).  Fails
+          # closed on any tracked path under either directory.
+          tracked=$(git ls-files -- docs/codebase-review 'docs/reviews/2026-06-19-run3-verification')
+          if [ -n "${tracked}" ]; then
+            echo "::error::A PII / unlicensed review directory is tracked in git (must be gitignored, never committed):"
+            echo "${tracked}"
+            exit 1
+          fi
+          echo "PII-dir guard: clean — no forbidden review directory is tracked."
