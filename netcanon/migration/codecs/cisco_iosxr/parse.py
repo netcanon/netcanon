@@ -143,10 +143,16 @@ _ROUTER_STATIC_RE = re.compile(r"^router\s+static\s*$", re.IGNORECASE)
 _AF_IPV4_UNICAST_RE = re.compile(
     r"^address-family\s+ipv4\s+unicast\b", re.IGNORECASE,
 )
+_AF_IPV6_UNICAST_RE = re.compile(
+    r"^address-family\s+ipv6\s+unicast\b", re.IGNORECASE,
+)
 _STATIC_VRF_RE = re.compile(r"^vrf\s+(\S+)", re.IGNORECASE)
-#: A static-route leaf: ``<dest>/<prefix> <token>...`` (CIDR destination).
+#: A static-route leaf: ``<dest>/<prefix> <token>...`` (CIDR destination,
+#: IPv4 or IPv6).  The destination char class covers both dotted-decimal
+#: (``10.0.0.0/8``) and colon-hex (``2001:db8::/32``) prefixes; the address
+#: family is discriminated by the enclosing ``address-family`` block.
 _STATIC_LEAF_RE = re.compile(
-    r"^(\d+\.\d+\.\d+\.\d+/\d+)\s+(.+)$",
+    r"^([0-9A-Fa-f:.]+/\d+)\s+(.+)$",
 )
 
 # ── VRF top-level stanza + route-target blocks (Phase 2) ──
@@ -647,9 +653,9 @@ def _parse_static_leaf(
     iface = ""
     for tok in m.group(2).split():
         try:
-            ipaddress.IPv4Address(tok)
+            ipaddress.ip_address(tok)  # IPv4 or IPv6 next-hop
             gateway = tok
-        except ipaddress.AddressValueError:
+        except ValueError:
             if not iface:
                 iface = tok
     return CanonicalStaticRoute(
@@ -691,7 +697,7 @@ def _parse_router_static(raw: str) -> list[CanonicalStaticRoute]:
             in_block = False
             continue
 
-        if _AF_IPV4_UNICAST_RE.match(stripped):
+        if _AF_IPV4_UNICAST_RE.match(stripped) or _AF_IPV6_UNICAST_RE.match(stripped):
             in_af = True
             continue
         vrfm = _STATIC_VRF_RE.match(stripped)

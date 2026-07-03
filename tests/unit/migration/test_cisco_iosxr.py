@@ -200,6 +200,34 @@ class TestParse:
         assert by_dest["10.99.0.0/16"].vrf == "CUSTOMER-A"
         assert by_dest["10.99.0.0/16"].gateway == "203.0.113.2"
 
+    def test_parse_ipv6_static_routes_under_ipv6_af(self, codec):
+        # Capstone: routes under ``address-family ipv6 unicast`` (default +
+        # per-VRF) now parse — gateway, interface-only, and per-VRF forms.
+        raw = (
+            "!! IOS XR Configuration\n"
+            "hostname r1\n"
+            "router static\n"
+            " address-family ipv6 unicast\n"
+            "  2001:db8:1::/48 2001:db8::1\n"
+            "  2001:db8:23::2/128 BVI500\n"
+            " !\n"
+            " vrf RED\n"
+            "  address-family ipv6 unicast\n"
+            "   2001:db8:a::/48 2001:db8::9\n"
+            "  !\n"
+            " !\n"
+            "!\n"
+        )
+        by_dest = {r.destination: r for r in codec.parse(raw).static_routes}
+        assert by_dest["2001:db8:1::/48"].gateway == "2001:db8::1"
+        assert by_dest["2001:db8:1::/48"].vrf == ""
+        # Interface-only v6 next-hop (BVI500) → interface, no gateway.
+        assert by_dest["2001:db8:23::2/128"].interface == "BVI500"
+        assert by_dest["2001:db8:23::2/128"].gateway == ""
+        # Per-VRF v6 route tagged with its VRF.
+        assert by_dest["2001:db8:a::/48"].vrf == "RED"
+        assert by_dest["2001:db8:a::/48"].gateway == "2001:db8::9"
+
     def test_non_contiguous_mask_tolerated(self, codec):
         """A malformed mask drops the address rather than crashing the
         whole parse."""
