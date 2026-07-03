@@ -41,8 +41,9 @@ Semantic notes:
 from __future__ import annotations
 
 import logging
+import threading
 from collections import OrderedDict
-from collections.abc import Iterator, ValuesView
+from collections.abc import Iterator
 
 from ..models.backup import BackupJob
 from .job_store import FileJobStore
@@ -92,6 +93,16 @@ class BackupJobRegistry:
         self._store = job_store
         self._max = max_memory_jobs
         self._cache: OrderedDict[str, BackupJob] = OrderedDict()
+        # Guards every access to ``self._cache``.  FastAPI runs sync ``def``
+        # routes in a threadpool and the scheduler / backup worker runs on its
+        # own thread, so reads (list / dashboard) race writes (job create /
+        # status update) — and every read does an LRU ``move_to_end``
+        # mutation.  Without this lock, a reader iterating a live ``values()``
+        # view while a writer inserts raised ``RuntimeError: OrderedDict
+        # mutated during iteration`` (a user-visible 500).  Held only for
+        # brief in-memory operations — NEVER across the disk ``load_one`` in
+        # ``__getitem__`` — so it can't serialise the backup/disk hot path.
+        self._lock = threading.Lock()
         if warm_cache and max_memory_jobs > 0:
             self._warm_from_disk()
 
@@ -139,20 +150,21 @@ class BackupJobRegistry:
             # Caching disabled — drop on the floor; disk persistence
             # is the responsibility of the caller (job_store.save).
             return
-        if job_id in self._cache:
-            # Existing entry: move to MRU + replace.
-            self._cache.move_to_end(job_id)
+        with self._lock:
+            if job_id in self._cache:
+                # Existing entry: move to MRU + replace.
+                self._cache.move_to_end(job_id)
+                self._cache[job_id] = job
+                return
             self._cache[job_id] = job
-            return
-        self._cache[job_id] = job
-        if len(self._cache) > self._max:
-            # Pop the LRU entry (the oldest insertion still in cache).
-            evicted_id, _ = self._cache.popitem(last=False)
-            logger.debug(
-                "BackupJobRegistry evicted %s (cache at cap %d)",
-                evicted_id,
-                self._max,
-            )
+            if len(self._cache) > self._max:
+                # Pop the LRU entry (the oldest insertion still in cache).
+                evicted_id, _ = self._cache.popitem(last=False)
+                logger.debug(
+                    "BackupJobRegistry evicted %s (cache at cap %d)",
+                    evicted_id,
+                    self._max,
+                )
 
     def __getitem__(self, job_id: str) -> BackupJob:
         """Return the job with this ID.
@@ -163,10 +175,13 @@ class BackupJobRegistry:
         entry).  If absent from disk, ``KeyError`` is raised — same
         semantics as a plain ``dict``.
         """
-        if job_id in self._cache:
-            self._cache.move_to_end(job_id)
-            return self._cache[job_id]
-        # Lazy-load from disk.
+        with self._lock:
+            if job_id in self._cache:
+                self._cache.move_to_end(job_id)
+                return self._cache[job_id]
+        # Memory miss — hit disk OUTSIDE the lock so the (potentially slow)
+        # I/O never serialises the in-memory hot path, then promote via
+        # __setitem__ (which re-takes the lock).
         job = self._store.load_one(job_id)
         if job is None:
             raise KeyError(job_id)
@@ -183,8 +198,9 @@ class BackupJobRegistry:
         """
         if not isinstance(job_id, str):
             return False
-        if job_id in self._cache:
-            return True
+        with self._lock:
+            if job_id in self._cache:
+                return True
         return (self._store._dir / f"{job_id}.json").exists()
 
     def __len__(self) -> int:
@@ -196,16 +212,29 @@ class BackupJobRegistry:
         return len(self._cache)
 
     def __iter__(self) -> Iterator[str]:
-        """Iterate memory-resident job IDs in insertion (LRU) order."""
-        return iter(self._cache)
+        """Iterate a snapshot of memory-resident job IDs (LRU order).
 
-    def values(self) -> ValuesView[BackupJob]:
-        """Memory-resident jobs.  Order is LRU (oldest first)."""
-        return self._cache.values()
+        Snapshots under the lock so iteration is safe against concurrent
+        cache mutation (see :meth:`values`)."""
+        with self._lock:
+            return iter(list(self._cache))
 
-    def keys(self):
-        """Memory-resident job IDs.  Order is LRU."""
-        return self._cache.keys()
+    def values(self) -> list[BackupJob]:
+        """Snapshot of memory-resident jobs, LRU order (oldest first).
+
+        Returns a *list copy* taken under the lock — NOT a live
+        ``dict_values`` view — so a caller can iterate / sort it while
+        another thread mutates the cache without raising ``RuntimeError:
+        OrderedDict mutated during iteration``.
+        """
+        with self._lock:
+            return list(self._cache.values())
+
+    def keys(self) -> list[str]:
+        """Snapshot list of memory-resident job IDs, LRU order (see
+        :meth:`values`)."""
+        with self._lock:
+            return list(self._cache.keys())
 
     def get(
         self, job_id: str, default: BackupJob | None = None,
