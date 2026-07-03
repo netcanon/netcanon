@@ -1019,15 +1019,21 @@ def _routeros_auth_kv(authentication: str) -> list[str]:
 
 
 def _vlan_id_for(name: str, vlans: list[CanonicalVlan]) -> int | None:
-    """Find the VLAN id for an interface name.
+    """Find the 802.1Q tag for a VLAN interface name.
 
-    Matches on either a ``vlanN`` convention (id parsed from name) or
-    an entry in ``vlans`` whose ``name`` equals the interface name.
+    Prefer the canonical VLAN record whose ``name`` matches the interface —
+    its ``id`` is the authoritative tag.  Fall back to the ``vlanN``
+    name-digit convention only when no record matches (i.e. the tag equals
+    the name suffix).  Consulting the record FIRST is required because an
+    interface's name digits can differ from its tag (e.g. ``name=vlan202``
+    carrying ``vlan-id=20``); the old name-first order rendered the wrong
+    tag (202) AND, by poisoning the rendered-id dedup set, emitted a phantom
+    duplicate for the real tag.
     """
-    m = re.match(r"^vlan(\d+)$", name, re.IGNORECASE)
-    if m:
-        return int(m.group(1))
     for v in vlans:
         if v.name == name:
             return v.id
+    m = re.match(r"^vlan(\d+)$", name, re.IGNORECASE)
+    if m:
+        return int(m.group(1))
     return None
