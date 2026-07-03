@@ -1222,9 +1222,17 @@ def _apply_iface_subcommand(  # noqa: C901
     if line.startswith("vrf ") and not line.startswith((
         "vrf instance", "vrf definition",
     )):
-        parts = line.split(None, 1)
-        if len(parts) >= 2:
-            iface.vrf = parts[1].strip()
+        parts = line.split()
+        # EOS interface VRF assignment has two syntaxes: modern ``vrf <name>``
+        # and legacy ``vrf forwarding <name>``.  Strip the optional
+        # ``forwarding`` keyword so the canonical VRF name is ``<name>`` (not
+        # ``forwarding <name>``) — otherwise every target renders a bogus
+        # space-bearing VRF name.  A bare ``vrf forwarding`` (no trailing
+        # token) is the modern form of a VRF literally named ``forwarding``.
+        if len(parts) >= 3 and parts[1] == "forwarding":
+            iface.vrf = parts[2]
+        elif len(parts) >= 2:
+            iface.vrf = parts[1]
         return
     # --- Classic VRRP (Wave B) -------------------------------------
     # Arista EOS multi-line VRRP grammar, both modern (``ipv4`` /
