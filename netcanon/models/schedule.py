@@ -101,3 +101,47 @@ class ScheduleCreate(BaseModel):
                 "At least one of target_type_keys or target_device_ids must be non-empty"
             )
         return self
+
+
+class ScheduleDevicePublic(BaseModel):
+    """Read-side view of :class:`ScheduleDevice` with credentials removed.
+
+    The legacy inline ``devices`` list stores per-device ``password`` /
+    ``enable_password`` (plaintext in memory, encrypted at rest, decrypted on
+    load for backup use).  Every schedule API response serialises through
+    :class:`BackupSchedulePublic`, whose ``devices`` use THIS model — so those
+    credentials are *write-only* over the API: they never appear in any GET /
+    POST / toggle response.  A guard test
+    (``tests/unit/test_backup_schedule_public.py``) pins the field set to
+    ``ScheduleDevice``'s minus ``{password, enable_password}`` so a new
+    ``ScheduleDevice`` field cannot silently fail to surface (or a credential
+    field leak back in).
+    """
+
+    type_key: str
+    host: str
+    port: int
+    username: str
+
+
+class BackupSchedulePublic(BaseModel):
+    """Read-side view of :class:`BackupSchedule`.
+
+    Identical field set to :class:`BackupSchedule`, but the inline ``devices``
+    carry no credentials (:class:`ScheduleDevicePublic`).  Used as the
+    ``response_model`` for the list / create / toggle schedule routes so inline
+    device credentials never cross the API boundary — the same write-only
+    paradigm as :class:`netcanon.models.device_profile.DeviceProfilePublic`.
+    """
+
+    id: str
+    name: str
+    enabled: bool
+    interval_minutes: int
+    devices: list[ScheduleDevicePublic] = []
+    target_type_keys: list[str] = []
+    target_device_ids: list[str] = []
+    created_at: datetime
+    last_run_at: datetime | None = None
+    next_run_at: datetime | None = None
+    last_job_id: str | None = None

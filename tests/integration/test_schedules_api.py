@@ -80,6 +80,40 @@ class TestListSchedules:
         timestamps = [item["created_at"] for item in items]
         assert timestamps == sorted(timestamps, reverse=True)
 
+    def test_get_omits_legacy_inline_device_credentials(self, client):
+        """SEC-1 (2026-07-03 review): a legacy inline-device schedule must
+        not echo the device password / enable_password over the read API.
+
+        Inline devices can't be created via ``POST`` (``ScheduleCreate``
+        accepts only target lists), so inject one straight into the registry
+        the route reads — the same shape a pre-profile schedule loads from
+        disk — and assert the serialised response is credential-free.
+        """
+        from netcanon.models.schedule import BackupSchedule, ScheduleDevice
+
+        sched = BackupSchedule(
+            name="legacy inline",
+            interval_minutes=60,
+            devices=[
+                ScheduleDevice(
+                    type_key="Cisco", host="10.0.0.1", port=22,
+                    username="admin", password="PLAINTEXT-PW-XYZ",
+                    enable_password="ENABLE-PW-XYZ",
+                )
+            ],
+        )
+        client.app.state.schedules[sched.id] = sched
+
+        resp = client.get("/api/v1/schedules/")
+        assert resp.status_code == 200
+        # Neither secret may appear anywhere in the serialised response.
+        assert "PLAINTEXT-PW-XYZ" not in resp.text
+        assert "ENABLE-PW-XYZ" not in resp.text
+        item = next(s for s in resp.json() if s["id"] == sched.id)
+        assert item["devices"][0]["username"] == "admin"  # non-secret survives
+        assert "password" not in item["devices"][0]
+        assert "enable_password" not in item["devices"][0]
+
 
 # ---------------------------------------------------------------------------
 # POST /api/v1/schedules/
