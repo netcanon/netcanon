@@ -100,3 +100,15 @@ _pr-archive-pre-public.md
 # Holds pulled SSH keys, any decrypted secrets, the scratch-VM ledger, and the
 # PVE build/watch/destroy scripts. NEVER commit — contains credentials.
 /local/
+
+# Uncommittable review artifacts — MUST never be tracked (nor reach the sdist).
+#   * docs/codebase-review/ — the 2026-06 codebase-review dossier quotes the
+#     scrubbed personal identifiers (email / operator-machine path) verbatim.
+#   * docs/reviews/2026-06-19-run3-verification/ — holds third-party device
+#     configs used to verify a run that carry no redistributable licence.
+# The pii-guard workflow's content scan only catches the PII strings; the
+# run3-verification configs match no pattern, so ignoring these paths here —
+# plus the tracked-path assertion in .github/workflows/pii-guard.yml — is what
+# actually keeps them out of the tree and the published PyPI source tarball.
+docs/codebase-review/
+docs/reviews/2026-06-19-run3-verification/
