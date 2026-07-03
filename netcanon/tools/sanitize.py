@@ -133,10 +133,7 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from pydantic import ValidationError
-
 from ..migration.canonical.intent import CanonicalIntent
-from ..migration.codecs.base import ParseError
 from ..migration.codecs.registry import get_codec
 
 #: A DNS hostname: dot-separated labels (alnum, internal hyphen, and
@@ -225,26 +222,14 @@ def sanitize_text(
             f"Unknown source codec: {source_codec_name!r}. "
             f"See netcanon.migration.codecs.registry.list_codecs()."
         ) from e
-    try:
-        intent = codec.parse(raw)
-    except ValidationError as e:
-        # The input parsed structurally but produced a canonical model that
-        # violates a field constraint (e.g. an HSRP group-id above the
-        # 0-4095 HSRPv2 range that CanonicalVRRPGroup.group_id enforces).
-        # That's
-        # unparseable-as-canonical INPUT, not a server fault — surface it as
-        # a ParseError so callers honour the documented contract: the HTTP
-        # route returns 400 instead of leaking a 500, and the CLI reports it
-        # cleanly rather than dumping a pydantic traceback.
-        errs = e.errors()
-        detail = (
-            f"{'.'.join(str(x) for x in errs[0]['loc'])}: {errs[0]['msg']}"
-            if errs else str(e)
-        )
-        raise ParseError(
-            f"{source_codec_name}: input could not be represented as a "
-            f"valid canonical config ({detail})"
-        ) from e
+    # ``codec.parse`` converts any canonical-model ValidationError into a
+    # ParseError at the CodecBase boundary (base._validation_error_as_parse_
+    # error) — so an out-of-range parsed value (e.g. an HSRP group-id above
+    # CanonicalVRRPGroup.group_id's ceiling, a VLAN id > 4094) already
+    # surfaces here as the documented ParseError, which the HTTP route maps
+    # to 400 and the CLI reports cleanly.  No per-call pydantic handling
+    # needed (this generalised #229's single sanitize-boundary conversion).
+    intent = codec.parse(raw)
     sanitized_intent, substitutions = sanitize_intent(intent)
 
     if dry_run:
