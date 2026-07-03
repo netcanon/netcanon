@@ -277,6 +277,12 @@ _VRF_IP_ROUTE_RE = re.compile(
     r"^\s+ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
     re.IGNORECASE,
 )
+#: ``  ipv6 route <prefix>/<len> <nh> [<pref>]`` nested in a ``vrf context``
+#: block (does not overlap the v4 form; ``ipv6`` != ``ip``).
+_VRF_IPV6_ROUTE_RE = re.compile(
+    r"^\s+ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    re.IGNORECASE,
+)
 # ── VXLAN-EVPN (Phase 4) ──
 #: ``vni <N>`` inside a ``vrf context`` block → the VRF's L3VNI (symmetric
 #: IRB).  Authoritative VRF↔L3VNI binding; the matching ``interface nve1 /
@@ -324,6 +330,12 @@ _VLAN_NAME_RE = re.compile(r"^\s+name\s+(.+)", re.IGNORECASE)
 #: NOT match this top-level anchor and are deferred to Phase 3.
 _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
+    re.IGNORECASE,
+)
+#: ``ipv6 route <prefix>/<len> <nh> [<pref>]`` — top-level (default VRF)
+#: IPv6 static route (does not overlap the v4 anchor above).
+_STATIC_ROUTE_V6_RE = re.compile(
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
     re.IGNORECASE,
 )
 _SVI_NAME_RE = re.compile(r"^Vlan(\d+)$", re.IGNORECASE)
@@ -528,6 +540,13 @@ def _parse_routing_instances(
                 current.rt_imports.append(rt)
             if direction in ("export", "both"):
                 current.rt_exports.append(rt)
+            return
+        route6_m = _VRF_IPV6_ROUTE_RE.match(line)
+        if route6_m:
+            per_vrf_routes.append(_make_static_route_v6(
+                route6_m.group(1), route6_m.group(2), route6_m.group(3),
+                vrf=current.name,
+            ))
             return
         route_m = _VRF_IP_ROUTE_RE.match(line)
         if route_m:
@@ -1072,6 +1091,33 @@ def _make_static_route(
     )
 
 
+def _make_static_route_v6(
+    dest: str,
+    gw_or_iface: str,
+    metric_str: str | None,
+    vrf: str = "",
+) -> CanonicalStaticRoute:
+    """Build a :class:`CanonicalStaticRoute` from matched ``ipv6 route``
+    tokens.  ``dest`` is already ``<prefix>/<len>`` form; a next-hop that
+    parses as an IPv6 address becomes ``gateway``, otherwise an egress
+    ``interface`` (directly-attached next-hop)."""
+    metric = int(metric_str) if metric_str else 0
+    gateway = ""
+    iface = ""
+    try:
+        ipaddress.IPv6Address(gw_or_iface)
+        gateway = gw_or_iface
+    except ipaddress.AddressValueError:
+        iface = gw_or_iface
+    return CanonicalStaticRoute(
+        destination=dest,
+        gateway=gateway,
+        interface=iface,
+        metric=metric,
+        vrf=vrf,
+    )
+
+
 def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """Extract top-level ``ip route`` lines (default VRF) from NX-OS text.
 
@@ -1087,6 +1133,12 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
+        m6 = _STATIC_ROUTE_V6_RE.match(line)
+        if m6:
+            routes.append(_make_static_route_v6(
+                m6.group(1), m6.group(2), m6.group(3),
+            ))
+            continue
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue

@@ -278,6 +278,37 @@ class TestParse:
         assert "ipv6 route 2001:db8:a::/48 2001:db8::9" in out  # inside vrf context
         assert "ip route 2001" not in out  # v6 never on the bare ``ip route``
 
+    def test_parse_ipv6_static_route_default_and_per_vrf(self, codec):
+        # Capstone: NX-OS now parses ``ipv6 route`` back (top-level default
+        # VRF + nested inside ``vrf context``), so v6 routes round-trip.
+        raw = (
+            "!Command: show running-config\n"
+            "hostname R1\n"
+            "vrf context TENANT\n"
+            "  ipv6 route 2001:db8:a::/48 2001:db8::9\n"
+            "ipv6 route 2001:db8:1::/48 2001:db8::1\n"
+        )
+        by_dest = {r.destination: r for r in codec.parse(raw).static_routes}
+        assert by_dest["2001:db8:1::/48"].gateway == "2001:db8::1"
+        assert by_dest["2001:db8:1::/48"].vrf == ""
+        assert by_dest["2001:db8:a::/48"].gateway == "2001:db8::9"
+        assert by_dest["2001:db8:a::/48"].vrf == "TENANT"
+
+    def test_ipv6_static_route_round_trip(self, codec):
+        intent = CanonicalIntent(hostname="R1", static_routes=[
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+            CanonicalStaticRoute(
+                destination="2001:db8:a::/48", gateway="2001:db8::9", vrf="TENANT",
+            ),
+        ])
+        reparsed = codec.parse(codec.render(intent))
+        got = sorted((r.destination, r.gateway, r.vrf)
+                     for r in reparsed.static_routes if ":" in r.destination)
+        assert got == [
+            ("2001:db8:1::/48", "2001:db8::1", ""),
+            ("2001:db8:a::/48", "2001:db8::9", "TENANT"),
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Round-trip
