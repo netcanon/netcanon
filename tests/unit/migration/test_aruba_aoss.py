@@ -273,6 +273,25 @@ class TestParse:
         tree = ArubaAOSSCodec().parse(raw)
         assert tree.vlans[0].ipv4_addresses[0].prefix_length == 24
 
+    def test_ipv6_static_route_render_and_round_trip(self):
+        # AOS-S keys the AF off the keyword: v6 destinations use ``ipv6
+        # route`` (no ``ipv6 default-gateway`` form — a v6 default is just
+        # ``ipv6 route ::/0 <gw>``).  Emitting ``ip route <v6>`` is invalid.
+        intent = CanonicalIntent(hostname="sw", static_routes=[
+            CanonicalStaticRoute(destination="0.0.0.0/0", gateway="192.0.2.254"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+            CanonicalStaticRoute(destination="::/0", gateway="2001:db8::9"),
+        ])
+        out = ArubaAOSSCodec().render(intent)
+        assert "ip default-gateway 192.0.2.254" in out
+        assert "ipv6 route 2001:db8:1::/48 2001:db8::1" in out
+        assert "ipv6 route ::/0 2001:db8::9" in out
+        assert "ip route 2001" not in out  # v6 never on the bare ``ip route``
+        reparsed = ArubaAOSSCodec().parse(out)
+        v6 = sorted((r.destination, r.gateway) for r in reparsed.static_routes
+                    if ":" in r.destination)
+        assert v6 == [("2001:db8:1::/48", "2001:db8::1"), ("::/0", "2001:db8::9")]
+
     def test_comment_character_is_semicolon(self):
         """Lines starting with ';' must be ignored (AOS-S doesn't use '!')."""
         raw = '; a banner comment\nhostname "survived"\n'
