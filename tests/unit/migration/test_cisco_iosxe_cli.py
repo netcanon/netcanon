@@ -544,6 +544,61 @@ class TestRender:
         assert "ip route 192.168.0.0 255.255.255.0 10.0.0.1" in out
         assert "ip route vrf" not in out
 
+    def test_ipv6_static_route_renders_without_crash(self):
+        # Regression: an IPv6 static route (prefix len > 32) arriving from a
+        # cross-vendor source (e.g. VyOS ``route6``) used to be forced through
+        # the IPv4 ``ip route <dest> <mask>`` path and blew up _prefix_to_mask
+        # with ``prefix length 64 out of range`` — a hard RenderError that
+        # aborted the whole config.  It must now render as the ``ipv6 route``
+        # prefix form (IOS-XE's IPv6 static-route keyword) instead.  Build the
+        # canonical tree directly since the IOS-XE parser does not read v6
+        # routes (its ``ipv6 route`` round-trip is separate follow-up work).
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalStaticRoute,
+        )
+        intent = CanonicalIntent(hostname="r1", static_routes=[
+            CanonicalStaticRoute(
+                destination="2001:db8:2fe:ffff::/64",
+                gateway="2001:db8:200:102::5",
+            ),
+        ])
+        out = CiscoIOSXECLICodec().render(intent)  # must not raise RenderError
+        assert "ipv6 route 2001:db8:2fe:ffff::/64 2001:db8:200:102::5" in out
+        assert "ip route 2001" not in out  # never the IPv4 keyword/mask form
+
+    def test_ipv6_default_and_vrf_static_routes_render(self):
+        # ``::/0`` default and a per-VRF v6 route both use the ``ipv6 route``
+        # keyword; the VRF qualifier sits between the keyword and the prefix.
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalStaticRoute,
+        )
+        intent = CanonicalIntent(hostname="r1", static_routes=[
+            CanonicalStaticRoute(destination="::/0", gateway="2001:db8::1"),
+            CanonicalStaticRoute(
+                destination="2001:db8:a::/48", gateway="2001:db8::9", vrf="RED",
+            ),
+        ])
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "ipv6 route ::/0 2001:db8::1" in out
+        assert "ipv6 route vrf RED 2001:db8:a::/48 2001:db8::9" in out
+
+    def test_ipv4_and_ipv6_static_routes_coexist(self):
+        # A mixed v4/v6 route set renders each on the correct keyword — v4
+        # keeps the dotted-mask ``ip route`` form, v6 the ``ipv6 route`` form.
+        from netcanon.migration.canonical.intent import (
+            CanonicalIntent,
+            CanonicalStaticRoute,
+        )
+        intent = CanonicalIntent(hostname="r1", static_routes=[
+            CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="fe80::1"),
+        ])
+        out = CiscoIOSXECLICodec().render(intent)
+        assert "ip route 10.0.0.0 255.0.0.0 192.0.2.1" in out
+        assert "ipv6 route 2001:db8:1::/48 fe80::1" in out
+
     def test_render_emits_vlan_database_and_svi(self):
         intent = CiscoIOSXECLICodec().parse(
             "vlan 10\n name USERS\n!\n"
