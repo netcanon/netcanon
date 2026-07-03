@@ -249,3 +249,85 @@ class TestToggleSchedule:
     def test_toggle_nonexistent_id_returns_404(self, client):
         resp = client.post("/api/v1/schedules/nonexistent-id/toggle")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# CONC-2: delete-during-run must not resurrect the schedule
+# ---------------------------------------------------------------------------
+
+
+class TestScheduleDeleteResurrection:
+    """A schedule deleted DURING its run must not be resurrected by the run's
+    post-completion ``save`` (2026-07-03 review, CONC-2).
+
+    ``_run_scheduled_backup_inner`` captures the schedule, awaits a
+    minutes-long ``run_backup_job``, then persists ``last_run_at`` /
+    ``next_run_at``.  If the operator deletes the schedule in that window, the
+    (formerly unconditional) save rewrote the deleted JSON and resurrected it
+    on the next startup reload.  The fix re-checks membership under
+    ``SCHEDULE_REGISTRY_LOCK`` before saving.
+
+    The run is driven directly (not via APScheduler) with ``run_backup_job``
+    monkeypatched, so the delete lands deterministically mid-run.
+    """
+
+    @staticmethod
+    def _cisco_profile(app):
+        from netcanon.models.device_profile import DeviceProfile
+
+        profile = DeviceProfile(
+            name="sw", type_key="Cisco", host="10.0.0.1", port=22,
+            username="admin", password="pw",
+        )
+        # A resolvable target so the coroutine reaches run_backup_job + the
+        # post-run save (an empty target set short-circuits before both).
+        app.state.device_profiles[profile.id] = profile
+        return profile
+
+    async def test_delete_during_run_is_not_resurrected(
+        self, client, monkeypatch,
+    ):
+        from pathlib import Path
+
+        from netcanon.api.routes.schedules import _run_scheduled_backup_inner
+        from netcanon.services import backup_runner
+
+        app = client.app
+        self._cisco_profile(app)
+        sid = _create_schedule(client)["id"]
+        store_dir = Path(app.state.schedule_store._dir)
+        assert (store_dir / f"{sid}.json").exists()
+
+        # The awaited backup simulates the operator deleting the schedule
+        # mid-run (registry + disk), exactly as the delete route does.
+        def _delete_mid_run(*args, **kwargs):
+            app.state.schedules.pop(sid, None)
+            app.state.schedule_store.delete(sid)
+
+        monkeypatch.setattr(backup_runner, "run_backup_job", _delete_mid_run)
+        await _run_scheduled_backup_inner(sid, app)
+
+        assert sid not in app.state.schedules
+        assert not (store_dir / f"{sid}.json").exists(), (
+            "deleted schedule was resurrected on disk by the post-run save"
+        )
+
+    async def test_normal_run_still_persists(self, client, monkeypatch):
+        """Negative control: when NOT deleted, the post-run save still runs."""
+        from pathlib import Path
+
+        from netcanon.api.routes.schedules import _run_scheduled_backup_inner
+        from netcanon.services import backup_runner
+
+        app = client.app
+        self._cisco_profile(app)
+        sid = _create_schedule(client)["id"]
+
+        monkeypatch.setattr(
+            backup_runner, "run_backup_job", lambda *a, **k: None,
+        )
+        await _run_scheduled_backup_inner(sid, app)
+
+        assert sid in app.state.schedules
+        assert app.state.schedules[sid].last_run_at is not None
+        assert (Path(app.state.schedule_store._dir) / f"{sid}.json").exists()
