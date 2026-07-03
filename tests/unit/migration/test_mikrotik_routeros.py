@@ -19,6 +19,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalIPv6Address,
+    CanonicalLAG,
     CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
@@ -367,6 +368,42 @@ class TestRender:
         )
         out = MikroTikRouterOSCodec().render(tree)
         assert "name=vlan10 vlan-id=10" in out
+
+    def test_kv_values_with_spaces_are_quoted(self):
+        # Defensive: bonding ``name=`` and ``/ip|/ipv6 address interface=``
+        # take free-form names.  A cross-vendor verbatim name with a space
+        # (aruba ``lag 1`` / ``loopback 0``) must be quoted or RouterOS's
+        # key=value grammar truncates it at the first space on re-parse.
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="loopback 0",
+                ipv4_addresses=[CanonicalIPv4Address(ip="192.168.1.1", prefix_length=32)],
+                ipv6_addresses=[CanonicalIPv6Address(ip="2001:db8::1", prefix_length=128)],
+            )],
+            lags=[CanonicalLAG(name="lag 1", members=["1/1/1", "1/1/2"])],
+        )
+        codec = MikroTikRouterOSCodec()
+        out = codec.render(tree)
+        assert 'name="lag 1"' in out
+        assert 'interface="loopback 0"' in out          # /ip address
+        assert out.count('interface="loopback 0"') == 2  # + /ipv6 address
+        reparsed = codec.parse(out)
+        assert [lag.name for lag in reparsed.lags] == ["lag 1"]
+        lo = next(i for i in reparsed.interfaces if i.name == "loopback 0")
+        assert [a.ip for a in lo.ipv4_addresses] == ["192.168.1.1"]
+
+    def test_kv_space_free_values_stay_unquoted(self):
+        # No-op for the common case — space-free identifiers render bare.
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(
+                name="ether1",
+                ipv4_addresses=[CanonicalIPv4Address(ip="10.0.0.1", prefix_length=24)],
+            )],
+            lags=[CanonicalLAG(name="bond1", members=["ether2"])],
+        )
+        out = MikroTikRouterOSCodec().render(tree)
+        assert "name=bond1" in out
+        assert "interface=ether1" in out
 
 
 class TestRoundTrip:

@@ -329,7 +329,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             parts.append(
                 f"mode={_CANONICAL_MODE_TO_ROUTEROS_BONDING.get(lag.mode, '802.3ad')}"
             )
-            parts.append(f"name={lag.name}")
+            parts.append(f"name={_quote_if_needed(lag.name)}")
             lines.append(" ".join(parts))
         lines.append("")
 
@@ -487,7 +487,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ip address")
         for ip, prefix, iface_name in ip_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={iface_name}"
+                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
@@ -501,7 +501,7 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         lines.append("/ipv6 address")
         for ip, prefix, iface_name in ip6_rows:
             lines.append(
-                f"add address={ip}/{prefix} interface={iface_name}"
+                f"add address={ip}/{prefix} interface={_quote_if_needed(iface_name)}"
             )
         lines.append("")
 
