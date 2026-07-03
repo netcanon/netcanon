@@ -361,16 +361,40 @@ jobs:
           echo "renders (catches packaging-bug class where /health"
           echo "works but Jinja templates are missing from the wheel —"
           echo "the v0.1.0-rc1/rc2 regression that motivated this check)."
-          if curl -fsS -o /dev/null http://127.0.0.1:8000/; then
-            echo "Smoke test passed (health + dashboard render)."
+          if ! curl -fsS -o /dev/null http://127.0.0.1:8000/; then
+            echo "FAIL: /health returned 200 but / did not."
+            echo "Likely cause: a template file (or partial under"
+            echo "templates/_partials/) is missing from the built wheel"
+            echo "— check pyproject.toml [tool.setuptools.package-data]"
+            echo "and confirm every templates/* path the renderer needs"
+            echo "is covered by the glob list."
+            echo "--- container logs ---"
+            docker logs smoke
+            exit 1
+          fi
+          echo "Dashboard renders."
+          echo
+          echo "Now verifying the translator VENDOR REGISTRY actually loaded."
+          echo "The app boots and / renders even with ZERO vendors (empty"
+          echo "dropdown), so a bare 200 check misses the packaging-bug class"
+          echo "where netcanon/migration/vendors/*.yaml is absent from the"
+          echo "git-less wheel (the .dockerignore excludes .git, so"
+          echo "setuptools_scm's file-finder can't backfill them — only the"
+          echo "package-data globs ship). load_vendors() then logs 'Loaded 0"
+          echo "vendor(s)' and the codec<->vendor grouping is dead."
+          adapters=$(curl -fsS http://127.0.0.1:8000/api/v1/migration/adapters)
+          if echo "${adapters}" | grep -qE '"vendor_display_name" *: *"[^"]'; then
+            echo "Smoke test passed (health + dashboard + non-empty vendor registry)."
             exit 0
           fi
-          echo "FAIL: /health returned 200 but / did not."
-          echo "Likely cause: a template file (or partial under"
-          echo "templates/_partials/) is missing from the built wheel"
-          echo "— check pyproject.toml [tool.setuptools.package-data]"
-          echo "and confirm every templates/* path the renderer needs"
-          echo "is covered by the glob list."
+          echo "FAIL: /api/v1/migration/adapters returned no non-empty"
+          echo "vendor_display_name — the vendor registry is EMPTY in the image."
+          echo "Fix: ensure pyproject.toml [tool.setuptools.package-data]"
+          echo "includes the 'migration/vendors/*.yaml' glob (it is NOT pulled"
+          echo "in by the setuptools_scm file-finder in the .git-less Docker"
+          echo "build context)."
+          echo "--- adapters response ---"
+          echo "${adapters}"
           echo "--- container logs ---"
           docker logs smoke
           exit 1
