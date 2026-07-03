@@ -261,6 +261,23 @@ class TestParse:
         # Exactly one instance — no phantom duplicate from the route harvest.
         assert [r.name for r in intent.routing_instances] == ["TENANT"]
 
+    def test_render_ipv6_static_route_uses_ipv6_keyword(self, codec):
+        # NX-OS keys the AF off the keyword: an IPv6 destination must render
+        # ``ipv6 route`` (``ip route <v6>`` is invalid CLI).  Covers both the
+        # default-VRF and per-VRF (vrf context) render paths.
+        intent = CanonicalIntent(hostname="R1", static_routes=[
+            CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+            CanonicalStaticRoute(
+                destination="2001:db8:a::/48", gateway="2001:db8::9", vrf="TENANT",
+            ),
+        ])
+        out = codec.render(intent)
+        assert "ip route 10.0.0.0/8 192.0.2.1" in out
+        assert "ipv6 route 2001:db8:1::/48 2001:db8::1" in out
+        assert "ipv6 route 2001:db8:a::/48 2001:db8::9" in out  # inside vrf context
+        assert "ip route 2001" not in out  # v6 never on the bare ``ip route``
+
 
 # ---------------------------------------------------------------------------
 # Round-trip
