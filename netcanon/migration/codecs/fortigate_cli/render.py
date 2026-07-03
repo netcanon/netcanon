@@ -939,23 +939,43 @@ def render_intent(tree: Any) -> str:  # noqa: C901
             out.append("    next")
         out.append("end")
 
-    # --- router static ---
-    if tree.static_routes:
-        out.append("config router static")
-        for idx, route in enumerate(tree.static_routes, start=1):
-            out.append(f"    edit {idx}")
+    # --- router static (IPv4) / router static6 (IPv6) ---
+    # FortiOS keeps IPv4 and IPv6 static routes in SEPARATE stanzas:
+    # ``config router static`` uses ``set dst <ip> <mask>`` (dotted mask),
+    # while ``config router static6`` uses ``set dst <prefix>/<len>`` (no
+    # mask).  Forcing a v6 destination through the v4 mask path raised
+    # RenderError on the >32 prefix length.
+    v4_routes = [r for r in tree.static_routes if ":" not in (r.destination or "")]
+    v6_routes = [r for r in tree.static_routes if ":" in (r.destination or "")]
+
+    def _emit_route_body(route: object, v6: bool) -> None:
+        if v6:
+            out.append(f"        set dst {route.destination}")
+        else:
             dst_ip, dst_prefix = _split_cidr(route.destination)
-            dst_mask = _prefix_to_mask(dst_prefix)
-            out.append(f"        set dst {dst_ip} {dst_mask}")
-            if route.gateway:
-                out.append(f"        set gateway {route.gateway}")
-            if route.interface:
-                out.append(f'        set device "{route.interface}"')
-            if route.description:
-                # FortiOS uses ``set comment`` (singular) on
-                # ``config router static`` entries; max 255 chars.
-                # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
-                out.append(f'        set comment "{route.description}"')
+            out.append(f"        set dst {dst_ip} {_prefix_to_mask(dst_prefix)}")
+        if route.gateway:
+            out.append(f"        set gateway {route.gateway}")
+        if route.interface:
+            out.append(f'        set device "{route.interface}"')
+        if route.description:
+            # FortiOS uses ``set comment`` (singular) on static-route
+            # entries; max 255 chars.
+            # Ref: https://docs.fortinet.com/document/fortigate/7.4.0/cli-reference/522620/config-router-static
+            out.append(f'        set comment "{route.description}"')
+
+    if v4_routes:
+        out.append("config router static")
+        for idx, route in enumerate(v4_routes, start=1):
+            out.append(f"    edit {idx}")
+            _emit_route_body(route, v6=False)
+            out.append("    next")
+        out.append("end")
+    if v6_routes:
+        out.append("config router static6")
+        for idx, route in enumerate(v6_routes, start=1):
+            out.append(f"    edit {idx}")
+            _emit_route_body(route, v6=True)
             out.append("    next")
         out.append("end")
 
