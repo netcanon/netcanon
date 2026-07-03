@@ -320,6 +320,42 @@ class TestParseInterfaces:
         by_name = {i.name: i.mtu for i in intent.interfaces}
         assert by_name == {"Ethernet1": 1600, "Ethernet2": 1700}
 
+    def test_interface_vrf_forwarding_legacy_keyword_stripped(self):
+        """EOS accepts two interface-VRF syntaxes: modern ``vrf <name>`` and
+        legacy ``vrf forwarding <name>``.  The parser must strip the optional
+        ``forwarding`` keyword so the canonical VRF name is ``mgmt`` — not
+        ``forwarding mgmt`` (which would render a bogus space-bearing VRF on
+        every target, e.g. a Junos routing-instance called ``forwarding mgmt``).
+        """
+        raw = (
+            "hostname sw1\n"
+            "interface Ethernet1\n"
+            "   no switchport\n"
+            "   vrf forwarding mgmt\n"
+            "   ip address 10.0.0.1/31\n"
+            "!\n"
+        )
+        iface = AristaEOSCodec().parse(raw).interfaces[0]
+        assert iface.vrf == "mgmt"
+
+    def test_interface_vrf_modern_form_unchanged(self):
+        """The modern ``vrf <name>`` form (and a VRF literally named
+        ``forwarding``) must still parse to the bare name."""
+        raw = (
+            "hostname sw1\n"
+            "interface Ethernet1\n"
+            "   no switchport\n"
+            "   vrf BLUE\n"
+            "!\n"
+            "interface Ethernet2\n"
+            "   no switchport\n"
+            "   vrf forwarding\n"
+            "!\n"
+        )
+        by_name = {i.name: i.vrf for i in AristaEOSCodec().parse(raw).interfaces}
+        assert by_name["Ethernet1"] == "BLUE"
+        assert by_name["Ethernet2"] == "forwarding"
+
     def test_interface_loopback(self):
         raw = (
             "hostname sw1\n"
