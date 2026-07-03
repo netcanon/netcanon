@@ -807,6 +807,41 @@ class TestPhase2cHSRP:
         )
         assert reparsed.vrrp_groups[0].group_id == 301
 
+    def test_hsrp_union_edge_values_parse_and_round_trip(self, codec):
+        """HSRP legitimately uses group 0 (HSRPv1 default) and priority 0-255
+        (255 = highest); the VRRP-centric bounds (group_id ge=1, priority
+        1-254) rejected all three, which the CodecBase boundary turns into a
+        ParseError.  The `group_id` ge=0 / `priority` 0-255 union widening
+        lets them parse + round-trip instead of being dropped."""
+        raw = (
+            "!Command: show running-config\n"
+            "hostname FHRP\n"
+            "feature hsrp\n"
+            "interface Vlan40\n"
+            "  no shutdown\n"
+            "  ip address 10.40.40.2/24\n"
+            "  hsrp 0\n"          # HSRPv1 group 0
+            "    priority 255\n"  # HSRP max priority
+            "    ip 10.40.40.1\n"
+            "interface Vlan41\n"
+            "  no shutdown\n"
+            "  ip address 10.40.41.2/24\n"
+            "  hsrp 5\n"
+            "    priority 0\n"    # HSRP min priority
+            "    ip 10.40.41.1\n"
+        )
+        tree = codec.parse(raw)  # must NOT raise
+        g40 = next(i for i in tree.interfaces if i.name == "Vlan40").vrrp_groups[0]
+        assert (g40.group_id, g40.priority) == (0, 255)
+        g41 = next(i for i in tree.interfaces if i.name == "Vlan41").vrrp_groups[0]
+        assert (g41.group_id, g41.priority) == (5, 0)
+        # Round-trip: the edge values survive render + reparse.
+        reparsed = codec.parse(codec.render(tree))
+        r40 = next(i for i in reparsed.interfaces if i.name == "Vlan40").vrrp_groups[0]
+        r41 = next(i for i in reparsed.interfaces if i.name == "Vlan41").vrrp_groups[0]
+        assert (r40.group_id, r40.priority) == (0, 255)
+        assert (r41.group_id, r41.priority) == (5, 0)
+
     def test_vrrp_groups_declared_lossy(self, codec):
         # FHRP normalises to HSRP on NX-OS render → the mode discriminator
         # is lossy cross-vendor.

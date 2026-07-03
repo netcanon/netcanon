@@ -670,7 +670,13 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                             f"virtual-ip-address per vrid; secondary "
                             f"{extra} dropped"
                         )
-                if group.priority != 100:
+                if group.priority == 255:
+                    # AOS-S has no ``priority 255`` line — priority 255 IS
+                    # the RFC 5798 address-owner role, expressed via the
+                    # ``owner`` keyword.  Inverse of the parse mapping, so a
+                    # native ``owner`` config round-trips to ``owner``.
+                    lines.append("      owner")
+                elif group.priority != 100:
                     lines.append(f"      priority {group.priority}")
                 if group.preempt:
                     lines.append("      preempt")
