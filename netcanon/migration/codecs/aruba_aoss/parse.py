@@ -466,12 +466,14 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
         # Implausible span — refuse to materialise (DoS clamp).  Keep the two
         # endpoints as literal port names; a real AOS-S range never exceeds a
         # few hundred ports, so this only ever fires on malformed / hostile
-        # input, and we log it rather than silently dropping coverage.
+        # input, and we log it rather than silently dropping coverage.  Log
+        # only the derived span + cap (integers) — NOT the raw ``lo``/``hi``
+        # tokens, which are parsed config values (CodeQL clear-text-logging).
         logger.warning(
-            "aruba_aoss: refusing to expand implausible port range %s-%s "
-            "(span %d > %d); keeping the endpoints as literal port names "
-            "instead of materialising the range.",
-            lo, hi, num_hi - num_lo + 1, _MAX_PORT_RANGE_SPAN,
+            "aruba_aoss: refusing to expand an implausible port range "
+            "(span %d > cap %d); keeping the two endpoints as literal port "
+            "names instead of materialising the range.",
+            num_hi - num_lo + 1, _MAX_PORT_RANGE_SPAN,
         )
         return [lo, hi]
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
