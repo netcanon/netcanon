@@ -26,6 +26,57 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.15] - 2026-07-03
+
+### Fixed
+
+- **IPv6 static routes now round-trip correctly across every codec.**  A
+  cross-vendor dogfood mesh over a large real-world corpus surfaced that an
+  IPv6 static route (a `CanonicalStaticRoute` with a v6 destination) was
+  mishandled by most codecs: FortiGate and Cisco IOS-XE CLI **crashed**
+  (`RenderError: prefix length ... out of range`) by forcing the route
+  through the IPv4 dotted-mask path; Arista EOS, Cisco NX-OS and both Aruba
+  codecs emitted an invalid `ip route <v6-prefix>` (wrong keyword); and
+  Cisco IOS-XR filed the route under `address-family ipv4 unicast`.  Each
+  now emits its native form -- `ipv6 route <prefix> <next-hop>` (IOS-XE CLI
+  #251, NX-OS #254, Arista #253, Aruba AOS-CX #255, AOS-S #256),
+  `config router static6` (FortiGate #252), and `address-family ipv6
+  unicast` (IOS-XR #257) -- and the Cisco codecs parse the v6 form back so
+  the route survives a round-trip (IOS-XE CLI #258, NX-OS #259, IOS-XR
+  #260).  Junos, MikroTik and VyOS were already correct; OPNsense and the
+  IOS-XE NETCONF codec continue to declare the static-route surface lossy.
+- **Arista EOS: an indented `!` comment no longer closes the interface
+  stanza.**  A `!`-prefixed comment between interface sub-commands (e.g. a
+  `! review:` note the renderer emits for an un-translatable attribute) was
+  treated as an end-of-stanza delimiter, silently dropping every
+  sub-command after it (mtu / ip address / ...) on reparse.  Only a
+  column-0 `!` closes the block now.  (#249)
+- **Arista EOS: the legacy `vrf forwarding <name>` interface syntax now
+  parses to `<name>`.**  The parser captured the `forwarding` keyword into
+  the VRF name (`forwarding mgmt` instead of `mgmt`), which then rendered a
+  bogus space-bearing VRF on every target.  (#250)
+- **MikroTik RouterOS: a VLAN's `vlan-id` is taken from the VLAN record,
+  not the interface-name digits.**  An SVI whose name digits differed from
+  its 802.1Q tag (`name=vlan202` carrying tag `20`) rendered the wrong
+  `vlan-id` and, via a poisoned dedup set, a phantom duplicate VLAN.  (#261)
+- **MikroTik RouterOS: free-form `name=` / `interface=` values containing a
+  space are quoted.**  Three render sites emitted the value bare (unlike
+  their peers), so a name with a space truncated at the first space on
+  reparse; the quoting helper is a no-op for the common space-free case.
+  (#262)
+- **Cisco IOS-XR: `source_version` is extracted from the newer
+  `!! IOS XR Configuration version = <rel>` banner** (as well as the older
+  `... Configuration <rel>` form), instead of capturing the literal word
+  `version`.  (#263)
+
+### Dependencies
+
+- Bump the Python base image `3.14.5` -> `3.14.6-slim-bookworm` (tag +
+  digest, both build stages).  (#232)
+- Bump the github-actions group: `actions/checkout` v6 -> v7,
+  `actions/setup-python` -> v6.2.0, and digest bumps for
+  `softprops/action-gh-release` and `zizmorcore/zizmor-action`.  (#210)
+
 ## [0.4.14] - 2026-07-02
 
 ### Fixed
