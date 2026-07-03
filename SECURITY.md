@@ -189,8 +189,13 @@ Restore the original key (or re-enter the credential) to recover; see the
 
 `DeviceProfile`, `ScheduleDevice`, and all other model objects always hold
 **plaintext** credential strings in memory.  Encryption is a storage-layer
-concern only.  Credential fields are **never logged** (verified by
-`tests/unit/test_logging_config.py`).
+concern only.  Credential fields are **never logged**: the store loaders
+decrypt credentials in memory *before* validating, so a validation failure
+could otherwise surface the freshly-decrypted secret through a pydantic
+`ValidationError`'s captured input.  Both loaders route their error path
+through `scrub_exc_for_log`, which formats a `ValidationError` from its field
+locations + error types only (never the input value).  Verified by
+`tests/unit/test_credential_log_redaction.py`.
 
 ### Backup artifacts are stored in plaintext (deliberate; use an encrypted volume)
 
