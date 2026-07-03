@@ -201,6 +201,28 @@ def test_parse_static_route(codec: ArubaAOSCXCodec) -> None:
     assert route.gateway == "198.51.100.2"
 
 
+def test_ipv6_static_route_render_and_round_trip(codec: ArubaAOSCXCodec) -> None:
+    # AOS-CX keys the AF off the keyword: an IPv6 destination must render
+    # ``ipv6 route`` (``ip route <v6>`` is invalid CLI) and round-trip.
+    from netcanon.migration.canonical.intent import (
+        CanonicalIntent,
+        CanonicalStaticRoute,
+    )
+    intent = CanonicalIntent(hostname="r1", static_routes=[
+        CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+        CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+    ])
+    out = codec.render(intent)
+    assert "ip route 10.0.0.0/8 192.0.2.1" in out
+    assert "ipv6 route 2001:db8:1::/48 2001:db8::1" in out
+    assert "ip route 2001" not in out  # v6 never on the bare ``ip route``
+    reparsed = codec.parse(out)
+    assert any(
+        r.destination == "2001:db8:1::/48" and r.gateway == "2001:db8::1"
+        for r in reparsed.static_routes
+    )
+
+
 # ---------------------------------------------------------------------------
 # Multi-token interface names + stanza interception
 # ---------------------------------------------------------------------------

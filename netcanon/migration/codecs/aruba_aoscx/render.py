@@ -217,15 +217,18 @@ def _render_snmp(snmp) -> list[str]:
 
 
 def _render_static_route(route) -> str:
-    """Render one default-VRF static route as ``ip route DEST/N GW [dist]``.
+    """Render one default-VRF static route as ``ip route DEST/N GW [dist]``
+    (or ``ipv6 route`` for an IPv6 destination).
 
     ``destination`` is already CIDR (``X/N``).  Next-hop is the gateway
     IP, or the interface name for a directly-attached next-hop.  A
     non-zero ``metric`` re-emits as the trailing administrative-distance
-    token.
+    token.  AOS-CX keys the address family off the keyword: an IPv6
+    destination uses ``ipv6 route`` (``ip route <v6>`` is invalid CLI).
     """
     nexthop = route.gateway or route.interface
-    out = f"ip route {route.destination} {nexthop}".rstrip()
+    keyword = "ipv6 route" if ":" in (route.destination or "") else "ip route"
+    out = f"{keyword} {route.destination} {nexthop}".rstrip()
     if route.metric:
         out += f" {route.metric}"
     return out
