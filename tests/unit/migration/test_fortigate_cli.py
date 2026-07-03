@@ -347,6 +347,59 @@ class TestRender:
         assert "set gateway 10.0.0.1" in out
         assert 'set device "port1"' in out
 
+    def test_ipv6_static_route_renders_static6_without_crash(self):
+        # Regression: an IPv6 static route (prefix len > 32) used to be forced
+        # through the IPv4 ``set dst <ip> <mask>`` path and blew up
+        # _prefix_to_mask with ``prefix length 48 out of range``.  FortiOS
+        # keeps v6 routes in a SEPARATE ``config router static6`` stanza with
+        # the prefix (no-mask) form.
+        tree = CanonicalIntent(static_routes=[
+            CanonicalStaticRoute(
+                destination="2001:db8:1::/48",
+                gateway="2001:db8::1",
+                interface="port2",
+            ),
+        ])
+        out = FortiGateCLICodec().render(tree)  # must not raise RenderError
+        assert "config router static6" in out
+        assert "set dst 2001:db8:1::/48" in out
+        assert "set gateway 2001:db8::1" in out
+        assert 'set device "port2"' in out
+        # v6 must NOT leak into the IPv4 stanza / dotted-mask form.
+        assert "config router static\n" not in out  # no bare v4 block here
+
+    def test_ipv4_and_ipv6_static_routes_split_into_static_and_static6(self):
+        tree = CanonicalIntent(static_routes=[
+            CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+        ])
+        out = FortiGateCLICodec().render(tree)
+        assert "config router static\n" in out
+        assert "set dst 10.0.0.0 255.0.0.0" in out
+        assert "config router static6" in out
+        assert "set dst 2001:db8:1::/48" in out
+
+    def test_ipv6_static_route_round_trip(self):
+        tree = CanonicalIntent(static_routes=[
+            CanonicalStaticRoute(
+                destination="2001:db8:1::/48",
+                gateway="2001:db8::1",
+                interface="port2",
+                description="v6up",
+            ),
+            CanonicalStaticRoute(destination="::/0", gateway="2001:db8::9"),
+        ])
+        codec = FortiGateCLICodec()
+        reparsed = codec.parse(codec.render(tree))
+        got = sorted(
+            (r.destination, r.gateway, r.interface, r.description)
+            for r in reparsed.static_routes
+        )
+        assert got == [
+            ("2001:db8:1::/48", "2001:db8::1", "port2", "v6up"),
+            ("::/0", "2001:db8::9", "", ""),
+        ]
+
 
 # ---------------------------------------------------------------------------
 # Round-trip

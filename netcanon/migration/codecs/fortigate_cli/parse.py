@@ -693,6 +693,31 @@ def _apply_router_static(
         ))
 
 
+def _apply_router_static6(
+    block: _ConfigBlock, intent: CanonicalIntent,
+) -> None:
+    """Parse ``config router static6`` (IPv6 static routes).
+
+    Unlike the IPv4 ``config router static`` form, ``set dst`` here is a
+    single ``<prefix>/<len>`` token (no dotted mask), so the destination
+    is used verbatim.
+    """
+    for edit in block.edits:
+        dst = edit.settings.get("dst")
+        if not dst:
+            continue
+        destination = dst[0]  # already in <prefix>/<len> form
+        gateway_tokens = edit.settings.get("gateway") or [""]
+        device_tokens = edit.settings.get("device") or [""]
+        comment_tokens = edit.settings.get("comment") or [""]
+        intent.static_routes.append(CanonicalStaticRoute(
+            destination=destination,
+            gateway=gateway_tokens[0],
+            interface=device_tokens[0],
+            description=comment_tokens[0],
+        ))
+
+
 def _apply_system_admin(
     block: _ConfigBlock, intent: CanonicalIntent,
 ) -> None:
@@ -876,6 +901,7 @@ _DISPATCH: ClassVar[dict[str, object]] = {
     "system ntp": _apply_system_ntp,
     "system interface": _apply_system_interface,
     "router static": _apply_router_static,
+    "router static6": _apply_router_static6,
     "system snmp sysinfo": _apply_snmp_sysinfo,
     "system snmp community": _apply_snmp_community,
     "system snmp user": _apply_snmp_user,
