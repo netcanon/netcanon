@@ -415,6 +415,46 @@ class TestPlanEndpoint:
         assert resp.status_code == 200
         assert resp.json()["status"] == "completed"
 
+    def test_non_port_override_still_auto_translates_ports(self, client):
+        """Regression (2026-07-03 review, API-1): a request carrying only a
+        NON-port override map (here ``vlan_rename_map``) must NOT disengage
+        the port-name auto-translation.
+
+        The ``/plan`` override branch used to pass ``port_rename_map=None``
+        unless a ``target_profile`` was also present, while a bare ``/plan``
+        passed ``{}``.  ``None`` turns the translator OFF, so merely opening
+        the VLAN pane (or posting any non-port override) silently reverted
+        interface names to verbatim source-vendor form — contradicting the
+        v0.3.2 auto-translate-by-default contract.  cisco_iosxe_cli →
+        juniper_junos renames ``GigabitEthernet1/0/1`` → ``ge-1/0/1``, so the
+        regression is visible in both ``port_renames`` and the rendered text.
+        """
+        iosxe_cli = (
+            "hostname r1\n"
+            "!\n"
+            "interface GigabitEthernet1/0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n"
+            "!\n"
+        )
+        base = {
+            "source": "cisco_iosxe_cli",
+            "target": "juniper_junos",
+            "raw_text": iosxe_cli,
+        }
+        bare = client.post("/api/v1/migration/plan", json=base).json()
+        # A bare /plan auto-translates the port name (Gi… → ge-…).
+        assert bare["port_renames"] == {"GigabitEthernet1/0/1": "ge-1/0/1"}
+
+        with_vlan = client.post(
+            "/api/v1/migration/plan",
+            json={**base, "vlan_rename_map": {}},
+        ).json()
+        # Adding a vlan-only override must engage the SAME auto-translation,
+        # not disengage it — identical port_renames, translated render.
+        assert with_vlan["port_renames"] == bare["port_renames"]
+        assert "GigabitEthernet1/0/1" not in (with_vlan["rendered"] or "")
+        assert "ge-1/0/1" in (with_vlan["rendered"] or "")
+
 
 class TestPlanPortsEndpoint:
     """``POST /api/v1/migration/plan/ports`` — first per-pane override

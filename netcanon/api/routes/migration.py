@@ -259,10 +259,20 @@ def plan_migration(
         # SNMP overrides posted in the same body.
         job = run_plan_with_overrides(
             source, target, raw_text,
+            # Default to {} (auto port-name translation ENGAGED) whenever the
+            # caller didn't pass an explicit port_rename_map — matching the
+            # bare-request else branch and the v0.3.2 auto-translate-by-default
+            # contract.  Passing None here DISENGAGES the translator entirely
+            # (see run_plan_with_overrides: `if port_rename_map is not None`),
+            # so a request carrying only a non-port override (e.g. a
+            # vlan_rename_map) would otherwise silently render verbatim
+            # source-vendor interface names — the API-1 trap from the
+            # 2026-07-03 review.  target_profile no longer gates this: auto
+            # translation is the default for every non-port-map request.
             port_rename_map=(
                 body.port_rename_map
                 if body.port_rename_map is not None
-                else ({} if body.target_profile is not None else None)
+                else {}
             ),
             vlan_rename_map=body.vlan_rename_map,
             local_user_rename_map=body.local_user_rename_map,

@@ -423,11 +423,14 @@ def run_plan_with_overrides(  # noqa: C901
         target: Target codec.
         raw_text: Source-vendor config text.
         port_rename_map: Optional source-name → target-name override
-            map.  Entries win over the auto-heuristic.  Empty / None
-            = fully auto.  Set to ``{}`` (rather than None) to opt
-            into the rename-aware pipeline with no explicit overrides
-            — this is what the UI sends when the operator has
-            selected a target profile but not yet customised any row.
+            map.  Entries win over the auto-heuristic.  ``{}`` engages
+            the auto-heuristic with no explicit overrides (what the UI
+            sends when the operator opened a rename pane but customised
+            nothing, and what ``POST /plan`` passes by default so a plain
+            translation renders native target-vendor names).  ``None``
+            does NOT run the port-name translator at all — verbatim
+            source names, the legacy :func:`run_plan` behaviour (see the
+            ``if port_rename_map is not None`` guard below).
         vlan_rename_map: Optional source_vlan_id → target_vlan_id
             override map.  Same None-vs-{} sentinel semantics as
             ``port_rename_map``.  Entries with ``None`` values drop
