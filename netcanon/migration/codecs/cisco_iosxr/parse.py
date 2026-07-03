@@ -313,8 +313,14 @@ def _extract_version(raw: str) -> str:
     Stored as :attr:`CanonicalIntent.source_version` (metadata); the
     render path synthesises a fresh banner so it is informational only.
     """
+    # Two banner forms occur in the wild:
+    #   ``!! IOS XR Configuration 6.3.1``            (older)
+    #   ``!! IOS XR Configuration version = 6.2.1``  (newer; also ``version 7.x``)
+    # Skip the optional ``version [=]`` keyword so the capture is the release
+    # number, not the literal word ``version``.
     m = re.search(
-        r"^!!\s+IOS XR Configuration\s+(\S+)", raw, re.MULTILINE,
+        r"^!!\s+IOS XR Configuration\s+(?:version\s*=?\s*)?(\S+)",
+        raw, re.MULTILINE,
     )
     return m.group(1) if m else ""
 
