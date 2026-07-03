@@ -932,13 +932,23 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- Static routes ---
     if tree.static_routes:
+        has_v4 = has_v6 = False
         for route in tree.static_routes:
-            if route.gateway:
-                out.append(
-                    f"ip route {route.destination} {route.gateway}"
-                )
+            if not route.gateway:
+                continue
+            # EOS keys the address family off the keyword: IPv6 destinations
+            # use ``ipv6 route`` (emitting ``ip route <v6>`` is invalid CLI).
+            if ":" in (route.destination or ""):
+                out.append(f"ipv6 route {route.destination} {route.gateway}")
+                has_v6 = True
+            else:
+                out.append(f"ip route {route.destination} {route.gateway}")
+                has_v4 = True
         out.append("!")
-        out.append("ip routing")
+        if has_v4:
+            out.append("ip routing")
+        if has_v6:
+            out.append("ipv6 unicast-routing")
         out.append("!")
 
     out.append("end")
