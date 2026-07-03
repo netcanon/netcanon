@@ -280,6 +280,17 @@ _STATIC_ROUTE_RE = re.compile(
     r"(\s.*)?$",
     re.IGNORECASE,
 )
+# IPv6 static route: ``ipv6 route [vrf <NAME>] <prefix>/<len> <nh> [tail]``.
+# The destination is already prefix (CIDR) form — no dotted mask, unlike the
+# IPv4 form.  Kept separate so ``ip route`` (v4) and ``ipv6 route`` (v6) never
+# overlap (``ipv6`` != ``ip``).  Same ``(\s.*)?`` trailing-token shape as the
+# v4 RE to avoid the polynomial-ReDoS overlap CodeQL flagged (#128).
+_STATIC_ROUTE_V6_RE = re.compile(
+    r"^ipv6\s+route\s+(?:vrf\s+(\S+)\s+)?"
+    r"([0-9A-Fa-f:]+/\d+)\s+(\S+)"
+    r"(\s.*)?$",
+    re.IGNORECASE,
+)
 # ``ip default-gateway X`` is the L2-switch form of a default route.
 # Common on Catalyst switches that have no routing enabled — the switch
 # itself still needs a gateway for its management SVI.  We map it to the
@@ -1328,6 +1339,43 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
+        m6 = _STATIC_ROUTE_V6_RE.match(line)
+        if m6:
+            vrf = m6.group(1) or ""
+            dest = m6.group(2)  # already <prefix>/<len> form
+            gw_or_iface = m6.group(3)
+            gateway = ""
+            iface = ""
+            try:
+                ipaddress.IPv6Address(gw_or_iface)
+                gateway = gw_or_iface
+            except ipaddress.AddressValueError:
+                iface = gw_or_iface
+            metric = 0
+            description = ""
+            tail = (m6.group(4) or "").split()
+            t = 0
+            while t < len(tail):
+                tok = tail[t].lower()
+                if tok == "name" and t + 1 < len(tail):
+                    description = tail[t + 1]
+                    t += 2
+                elif tok in ("tag", "track") and t + 1 < len(tail):
+                    t += 2  # keyword + its value — not modelled
+                elif tail[t].isdigit() and metric == 0:
+                    metric = int(tail[t])
+                    t += 1
+                else:
+                    t += 1
+            routes.append(CanonicalStaticRoute(
+                destination=dest,
+                gateway=gateway,
+                interface=iface,
+                vrf=vrf,
+                metric=metric,
+                description=description,
+            ))
+            continue
         m = _STATIC_ROUTE_RE.match(line)
         if m:
             vrf = m.group(1) or ""

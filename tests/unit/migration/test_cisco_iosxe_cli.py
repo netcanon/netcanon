@@ -599,6 +599,35 @@ class TestRender:
         assert "ip route 10.0.0.0 255.0.0.0 192.0.2.1" in out
         assert "ipv6 route 2001:db8:1::/48 fe80::1" in out
 
+    def test_parse_ipv6_static_route(self):
+        # Capstone: the IOS-XE parser now reads ``ipv6 route`` back (render
+        # emitted it since the v6 render fix), so v6 routes round-trip.
+        intent = CiscoIOSXECLICodec().parse(
+            "ipv6 route 2001:db8:1::/48 2001:db8::1\n"
+            "ipv6 route ::/0 2001:db8::9\n"
+        )
+        v6 = sorted((r.destination, r.gateway) for r in intent.static_routes
+                    if ":" in r.destination)
+        assert v6 == [("2001:db8:1::/48", "2001:db8::1"), ("::/0", "2001:db8::9")]
+
+    def test_parse_per_vrf_ipv6_static_route(self):
+        intent = CiscoIOSXECLICodec().parse(
+            "ipv6 route vrf RED 2001:db8:a::/48 2001:db8::9\n"
+        )
+        match = [r for r in intent.static_routes if r.vrf == "RED"]
+        assert match and match[0].destination == "2001:db8:a::/48"
+        assert match[0].gateway == "2001:db8::9"
+
+    def test_ipv6_static_route_round_trip(self):
+        codec = CiscoIOSXECLICodec()
+        out = codec.render(codec.parse("ipv6 route 2001:db8:1::/48 2001:db8::1\n"))
+        assert "ipv6 route 2001:db8:1::/48 2001:db8::1" in out
+        reparsed = codec.parse(out)
+        assert any(
+            r.destination == "2001:db8:1::/48" and r.gateway == "2001:db8::1"
+            for r in reparsed.static_routes
+        )
+
     def test_render_emits_vlan_database_and_svi(self):
         intent = CiscoIOSXECLICodec().parse(
             "vlan 10\n name USERS\n!\n"
