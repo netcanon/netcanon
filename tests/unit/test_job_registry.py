@@ -366,6 +366,65 @@ class TestRegistrySpecific:
 # ---------------------------------------------------------------------------
 # Pathological / boundary cases
 # ---------------------------------------------------------------------------
+# Thread safety
+# ---------------------------------------------------------------------------
+
+
+class TestConcurrentAccess:
+    """CONC-1 (2026-07-03 review): concurrent reads (list / dashboard) must
+    not race writes (job create / status update).
+
+    Before the registry took a lock, ``values()`` / ``keys()`` / ``__iter__``
+    returned the LIVE ``OrderedDict`` view while ``__setitem__`` inserted /
+    evicted and ``__getitem__`` did ``move_to_end`` — so a reader iterating
+    while a writer mutated raised ``RuntimeError: OrderedDict mutated during
+    iteration``, surfacing as a 500 on the Jobs page.  FastAPI runs sync
+    ``def`` routes in a threadpool and the scheduler runs on its own thread,
+    so this is a real production interleaving.
+    """
+
+    def test_concurrent_writes_and_reads_never_raise(
+        self, store: FileJobStore,
+    ) -> None:
+        import threading
+
+        registry = BackupJobRegistry(
+            store, max_memory_jobs=50, warm_cache=False,
+        )
+        errors: list[str] = []
+        writes = 3000
+        done = threading.Event()
+
+        def writer() -> None:
+            for _ in range(writes):
+                job = _make_job()
+                registry[job.id] = job
+            done.set()
+
+        def reader() -> None:
+            while not done.is_set():
+                try:
+                    for _ in registry.values():
+                        pass
+                    sorted(registry.values(), key=lambda j: j.created_at)
+                    list(registry.keys())
+                    list(iter(registry))
+                except Exception as exc:  # pragma: no cover - regression path
+                    errors.append(f"{type(exc).__name__}: {exc}")
+                    return
+
+        threads = [threading.Thread(target=writer)] + [
+            threading.Thread(target=reader) for _ in range(3)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=30)
+
+        assert not errors, f"concurrent registry access raised: {errors}"
+
+
+# ---------------------------------------------------------------------------
 
 
 class TestEdgeCases:
