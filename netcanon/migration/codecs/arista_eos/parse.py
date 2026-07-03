@@ -90,6 +90,12 @@ _IP_ROUTE_RE = re.compile(
     r"^ip route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)",
     re.MULTILINE,
 )
+_IPV6_ROUTE_RE = re.compile(
+    # ``ipv6 route 2001:db8::/48 2001:db8::1`` — v6 uses the ``ipv6 route``
+    # keyword with the prefix form (does not overlap ``^ip route``).
+    r"^ipv6 route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)",
+    re.MULTILINE,
+)
 _SNMP_COMMUNITY_RE = re.compile(
     # ``snmp-server community public ro`` / ``... rw``.
     r"^snmp-server community\s+(\S+)\s+(ro|rw)",
@@ -416,6 +422,19 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             continue
         intent.static_routes.append(CanonicalStaticRoute(
             destination=f"{ip}/{prefix}",
+            gateway=next_hop,
+            interface="",
+        ))
+    for route_m in _IPV6_ROUTE_RE.finditer(raw):
+        dest, next_hop = route_m.groups()
+        # Same interface-form skip as the v4 branch: only IP next hops
+        # round-trip cleanly onto the canonical gateway.
+        try:
+            ipaddress.IPv6Address(next_hop)
+        except ipaddress.AddressValueError:
+            continue
+        intent.static_routes.append(CanonicalStaticRoute(
+            destination=dest,
             gateway=next_hop,
             interface="",
         ))

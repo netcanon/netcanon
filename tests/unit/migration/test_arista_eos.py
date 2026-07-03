@@ -16,6 +16,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalInterface,
     CanonicalIPv4Address,
     CanonicalLocalUser,
+    CanonicalStaticRoute,
     CanonicalVlan,
     CanonicalVRRPGroup,
 )
@@ -112,6 +113,20 @@ class TestParseScalars:
         intent = AristaEOSCodec().parse(raw)
         assert len(intent.static_routes) == 1
         assert intent.static_routes[0].gateway == "10.0.0.1"
+
+    def test_ipv6_static_route_parsed(self):
+        """EOS keys the AF off the keyword: ``ipv6 route <prefix> <nh>``."""
+        raw = (
+            "hostname sw1\n"
+            "ipv6 route 2001:db8:1::/48 2001:db8::1\n"
+            "ipv6 route ::/0 fe80::1\n"
+        )
+        v6 = [r for r in AristaEOSCodec().parse(raw).static_routes
+              if ":" in r.destination]
+        assert sorted((r.destination, r.gateway) for r in v6) == [
+            ("2001:db8:1::/48", "2001:db8::1"),
+            ("::/0", "fe80::1"),
+        ]
 
 
 # ---------------------------------------------------------------------------
@@ -487,6 +502,32 @@ class TestRender:
     def test_render_rejects_non_canonical(self):
         with pytest.raises(RenderError):
             AristaEOSCodec().render({"not": "canonical"})
+
+    def test_render_ipv6_static_route_uses_ipv6_keyword(self):
+        # EOS: an IPv6 destination must render with the ``ipv6 route``
+        # keyword (``ip route <v6>`` is invalid CLI) and enable
+        # ``ipv6 unicast-routing``.
+        intent = CanonicalIntent(hostname="sw1", static_routes=[
+            CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+        ])
+        out = AristaEOSCodec().render(intent)
+        assert "ip route 10.0.0.0/8 192.0.2.1" in out
+        assert "ipv6 route 2001:db8:1::/48 2001:db8::1" in out
+        assert "ipv6 unicast-routing" in out
+        # v6 dest must never appear on the bare ``ip route`` keyword.
+        assert "ip route 2001" not in out
+
+    def test_ipv6_static_route_round_trip(self):
+        intent = CanonicalIntent(hostname="sw1", static_routes=[
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+        ])
+        codec = AristaEOSCodec()
+        reparsed = codec.parse(codec.render(intent))
+        assert any(
+            r.destination == "2001:db8:1::/48" and r.gateway == "2001:db8::1"
+            for r in reparsed.static_routes
+        )
 
     def test_render_interface_l3_emits_no_switchport(self):
         intent = CanonicalIntent(
