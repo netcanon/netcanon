@@ -26,6 +26,35 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.14] - 2026-07-02
+
+### Fixed
+
+- **Codec `parse()` no longer leaks a raw pydantic validation error.**
+  A parsed value that violates a canonical field constraint — a VLAN id
+  above 4094, an IPv4 prefix length above 32, a VRRP priority above its
+  ceiling, an out-of-range FHRP group id — now surfaces as the
+  documented `ParseError` at the `CodecBase` boundary instead of
+  escaping as a raw `ValidationError`, so the HTTP routes return 400
+  rather than a 500 and the CLI reports cleanly.  This generalises the
+  single sanitize-boundary conversion from 0.4.11 into one uniform guard
+  applied to every codec and every caller (the migrate pipeline, the
+  cross-vendor mesh, sanitize, and the CLI).  (#246)
+
+### Changed
+
+- **FHRP priority / group-id widened to the full HSRP union so
+  legitimate values are preserved rather than rejected.**
+  `CanonicalVRRPGroup.priority` now spans `0-255` (was `1-254`) and
+  `group_id` spans `0-4095` (the lower bound was `1`), representing HSRP
+  group 0, priority 0, and priority 255 (the HSRP maximum / VRRP
+  address-owner value) which the VRRP-centric bounds previously refused
+  (under the 0.4.14 boundary above they became a clean `ParseError`, but
+  the data was still dropped).  FortiGate now preserves a legitimate
+  `set priority 255` verbatim instead of clamping it to 254, and Aruba
+  AOS-S maps `owner` to priority 255 symmetrically (parse `owner` → 255,
+  render 255 → `owner`) so the address-owner role round-trips.  (#247)
+
 ## [0.4.13] - 2026-07-02
 
 ### Added
