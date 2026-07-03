@@ -25,9 +25,12 @@ registry; instances are stateless unless documented otherwise.
 
 from __future__ import annotations
 
+import functools
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
+
+from pydantic import ValidationError
 
 from ...models.migration import CapabilityMatrix
 
@@ -80,6 +83,33 @@ class RenderError(CodecError):
     ) -> None:
         super().__init__(message)
         self.yang_path = yang_path
+
+
+def _validation_error_as_parse_error(
+    codec_name: str, exc: ValidationError
+) -> ParseError:
+    """Convert a pydantic :class:`ValidationError` into a :class:`ParseError`.
+
+    A codec's ``parse`` builds :class:`CanonicalIntent` models from the
+    input.  When a *parsed* value violates a canonical field constraint —
+    an HSRP group-id above ``group_id``'s ``le``, a VLAN id above 4094, an
+    IPv4 prefix length above 32, a VRRP priority above 254, … — pydantic
+    raises a raw ``ValidationError``.  That is unrepresentable-as-canonical
+    INPUT, not a server fault, so every codec boundary surfaces it as the
+    documented ``ParseError`` (see :meth:`CodecBase.parse`).  This keeps the
+    contract uniform: HTTP routes return 400 instead of leaking a 500, the
+    CLI reports a clean message instead of a pydantic traceback, and the
+    sanitize / migrate services need no per-call ``ValidationError`` handling
+    (the fix generalised from #229's single sanitize-boundary conversion).
+    """
+    errs = exc.errors()
+    loc = ".".join(str(x) for x in errs[0]["loc"]) if errs else None
+    detail = f"{loc}: {errs[0]['msg']}" if errs else str(exc)
+    return ParseError(
+        f"{codec_name}: input could not be represented as a valid "
+        f"canonical config ({detail})",
+        path=loc,
+    )
 
 
 #: Canonical catalogue of adapter input formats.  Short strings so they
@@ -220,6 +250,38 @@ class CodecBase(ABC):
     #: is tracked as follow-up work and will clear the declarations
     #: from the affected codec classes when shipped.
     unsupported_rename_categories: ClassVar[frozenset[str]] = frozenset()
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Wrap each subclass's ``parse`` at the class boundary so a pydantic
+        ``ValidationError`` raised while building a canonical model surfaces
+        as the documented :class:`ParseError` — never leaking to callers.
+
+        This is the SINGLE uniform boundary that enforces ``parse``'s
+        ``Raises: ParseError`` contract across every codec and every caller
+        (the migrate pipeline, the cross-vendor mesh, sanitize, the CLI,
+        tests) without each codec repeating a ``try/except ValidationError``.
+        See :func:`_validation_error_as_parse_error` for the rationale.
+
+        Applied only to a subclass that DEFINES ``parse`` in its own body
+        (inherited implementations are already wrapped on the class that
+        defined them), and idempotent — re-decorating a class (e.g. under an
+        ``importlib`` reload) never double-wraps.
+        """
+        super().__init_subclass__(**kwargs)
+        raw_parse = cls.__dict__.get("parse")
+        if raw_parse is None or getattr(raw_parse, "_nc_parse_wrapped", False):
+            return
+
+        @functools.wraps(raw_parse)
+        def _wrapped_parse(self: CodecBase, raw: str) -> Any:
+            try:
+                return raw_parse(self, raw)
+            except ValidationError as exc:
+                codec_name = getattr(self, "name", None) or cls.__name__
+                raise _validation_error_as_parse_error(codec_name, exc) from exc
+
+        _wrapped_parse._nc_parse_wrapped = True  # type: ignore[attr-defined]
+        cls.parse = _wrapped_parse  # type: ignore[assignment]
 
     @property
     @abstractmethod
