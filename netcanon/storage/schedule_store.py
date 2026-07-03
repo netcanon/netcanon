@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 from pathlib import Path
 
 from ..models.schedule import BackupSchedule
@@ -25,6 +26,21 @@ from ..security.credentials import encrypt
 from ..security.migration import migrate_credential_fields, scrub_exc_for_log
 
 logger = logging.getLogger(__name__)
+
+#: Guards cross-thread access to the in-memory schedule registry
+#: (``app.state.schedules``) **together with** its on-disk store — the
+#: schedule-side counterpart of ``DEVICE_PROFILE_REGISTRY_LOCK``.  A
+#: schedule-triggered backup coroutine runs for minutes on the APScheduler
+#: event loop, then persists ``last_run_at`` / ``next_run_at``; meanwhile a
+#: route handler (create / delete / toggle) runs in FastAPI's threadpool.
+#: Without serialisation, a delete that lands DURING a run is undone by the
+#: run's post-completion ``save`` — the schedule is rewritten to disk and
+#: resurrected on the next startup reload.  Hold this lock around every
+#: registry read-modify-write-persist (and delete) critical section.  Only
+#: ever held for the brief dict-mutation + APScheduler call + file-write —
+#: never across an ``await`` or the backup itself — so it cannot deadlock or
+#: stall the event loop.
+SCHEDULE_REGISTRY_LOCK = threading.Lock()
 
 
 class FileScheduleStore:

@@ -25,7 +25,10 @@ from ...models.schedule import (
     ScheduleCreate,
 )
 from ...storage.job_store import FileJobStore
-from ...storage.schedule_store import FileScheduleStore
+from ...storage.schedule_store import (
+    SCHEDULE_REGISTRY_LOCK,
+    FileScheduleStore,
+)
 from ..deps import get_schedule_store, get_scheduler, get_schedules
 
 logger = logging.getLogger(__name__)
@@ -262,15 +265,27 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
         getattr(app.state, "device_profile_store", None),
     )
 
-    schedule.last_run_at = datetime.now(UTC)
-    schedule.last_job_id = job.id
-
-    # Refresh next_run_at from the live scheduler
-    ap_job = app.state.scheduler.get_job(schedule_id)
-    if ap_job and ap_job.next_run_time:
-        schedule.next_run_at = ap_job.next_run_time
-
-    app.state.schedule_store.save(schedule)
+    # A minutes-long backup ran above; the operator may have deleted this
+    # schedule in the meantime.  Re-check existence under the registry lock
+    # before persisting — otherwise this post-run save rewrites the deleted
+    # schedule's JSON and resurrects it on the next startup reload (the delete
+    # route removed it from both the registry and disk).
+    with SCHEDULE_REGISTRY_LOCK:
+        if schedule_id not in schedules:
+            logger.info(
+                "Schedule '%s' (id=%s) was removed during its run; skipping "
+                "the post-run save so it is not resurrected on disk.",
+                schedule.name,
+                schedule_id[:8],
+            )
+            return
+        schedule.last_run_at = datetime.now(UTC)
+        schedule.last_job_id = job.id
+        # Refresh next_run_at from the live scheduler
+        ap_job = app.state.scheduler.get_job(schedule_id)
+        if ap_job and ap_job.next_run_time:
+            schedule.next_run_at = ap_job.next_run_time
+        app.state.schedule_store.save(schedule)
 
 
 # ---------------------------------------------------------------------------
@@ -304,22 +319,26 @@ def create_schedule(
     scheduler=Depends(get_scheduler),
 ) -> BackupSchedule:
     """Create a new recurring backup schedule and register it immediately."""
-    if len(schedules) >= 200:
-        raise HTTPException(
-            status_code=409,
-            detail="Maximum schedule limit reached (200). Delete unused schedules first.",
-        )
-    schedule = BackupSchedule(**body.model_dump())
-    schedules[schedule.id] = schedule
-    schedule_store.save(schedule)
-
-    register_schedule_job(scheduler, schedule, request.app)
-
-    # Capture the first calculated next_run_at
-    ap_job = scheduler.get_job(schedule.id)
-    if ap_job and ap_job.next_run_time:
-        schedule.next_run_at = ap_job.next_run_time
+    # Lock the cap-check + insert + persist as one critical section so the
+    # 200-limit can't be raced past and the save can't collide with a
+    # concurrent delete/toggle (shared registry + shared on-disk store).
+    with SCHEDULE_REGISTRY_LOCK:
+        if len(schedules) >= 200:
+            raise HTTPException(
+                status_code=409,
+                detail="Maximum schedule limit reached (200). Delete unused schedules first.",
+            )
+        schedule = BackupSchedule(**body.model_dump())
+        schedules[schedule.id] = schedule
         schedule_store.save(schedule)
+
+        register_schedule_job(scheduler, schedule, request.app)
+
+        # Capture the first calculated next_run_at
+        ap_job = scheduler.get_job(schedule.id)
+        if ap_job and ap_job.next_run_time:
+            schedule.next_run_at = ap_job.next_run_time
+            schedule_store.save(schedule)
 
     logger.info(
         "Created schedule '%s' (every %d min, id=%s)",
@@ -342,14 +361,19 @@ def delete_schedule(
     scheduler=Depends(get_scheduler),
 ) -> None:
     """Delete a schedule and remove its APScheduler job."""
-    if schedule_id not in schedules:
-        raise HTTPException(
-            status_code=404, detail=f"Schedule not found: {schedule_id!r}"
-        )
-    del schedules[schedule_id]
-    schedule_store.delete(schedule_id)
-    if scheduler.get_job(schedule_id):
-        scheduler.remove_job(schedule_id)
+    # Lock the whole remove (registry + disk + APScheduler job) so it is
+    # atomic w.r.t. a schedule-triggered run's post-completion save — the
+    # save re-checks membership under this same lock, so a delete that wins
+    # the lock keeps the schedule deleted (no resurrection).
+    with SCHEDULE_REGISTRY_LOCK:
+        if schedule_id not in schedules:
+            raise HTTPException(
+                status_code=404, detail=f"Schedule not found: {schedule_id!r}"
+            )
+        del schedules[schedule_id]
+        schedule_store.delete(schedule_id)
+        if scheduler.get_job(schedule_id):
+            scheduler.remove_job(schedule_id)
     logger.info("Deleted schedule %s", schedule_id)
 
 
@@ -366,24 +390,27 @@ def toggle_schedule(
     scheduler=Depends(get_scheduler),
 ) -> BackupSchedule:
     """Flip ``enabled`` on a schedule; registers or removes the APScheduler job."""
-    if schedule_id not in schedules:
-        raise HTTPException(
-            status_code=404, detail=f"Schedule not found: {schedule_id!r}"
-        )
-    schedule = schedules[schedule_id]
-    schedule.enabled = not schedule.enabled
+    # Lock the read-modify-(register|remove)-persist as one critical section
+    # (shared registry + APScheduler + on-disk store), matching create/delete.
+    with SCHEDULE_REGISTRY_LOCK:
+        if schedule_id not in schedules:
+            raise HTTPException(
+                status_code=404, detail=f"Schedule not found: {schedule_id!r}"
+            )
+        schedule = schedules[schedule_id]
+        schedule.enabled = not schedule.enabled
 
-    if schedule.enabled:
-        register_schedule_job(scheduler, schedule, request.app)
-        ap_job = scheduler.get_job(schedule_id)
-        if ap_job and ap_job.next_run_time:
-            schedule.next_run_at = ap_job.next_run_time
-    else:
-        if scheduler.get_job(schedule_id):
-            scheduler.remove_job(schedule_id)
-        schedule.next_run_at = None
+        if schedule.enabled:
+            register_schedule_job(scheduler, schedule, request.app)
+            ap_job = scheduler.get_job(schedule_id)
+            if ap_job and ap_job.next_run_time:
+                schedule.next_run_at = ap_job.next_run_time
+        else:
+            if scheduler.get_job(schedule_id):
+                scheduler.remove_job(schedule_id)
+            schedule.next_run_at = None
 
-    schedule_store.save(schedule)
+        schedule_store.save(schedule)
     logger.info(
         "Schedule '%s' %s", schedule.name, "enabled" if schedule.enabled else "disabled"
     )
