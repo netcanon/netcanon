@@ -49,7 +49,7 @@ exercises a translation we don't currently test.
    `tests/unit/migration/`.
 6. Run the cross-mesh audit
    (`python tools/run_full_mesh.py --matrix`) and commit the
-   regenerated `tests/fixtures/real/PHASE4_RECONCILIATION.md`.
+   regenerated `tests/fixtures/real/CROSS_MESH_RESULTS.md`.
 
 If the fixture surfaces a `CODEC_BUG` cell, that's the goal — we want
 to know.  Open an issue with the bug report template and reference the

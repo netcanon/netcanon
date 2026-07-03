@@ -85,6 +85,13 @@ Licenses below were read from the components' own installed package metadata.
 * python-multipart  — Apache-2.0     — Andrew Dunham and contributors — https://github.com/Kludex/python-multipart
 * python-dotenv     — BSD-3-Clause   — Saurabh Kumar and contributors — https://github.com/theskumar/python-dotenv
 * six               — MIT            — Benjamin Peterson — https://github.com/benjaminp/six
+* pydantic-settings — MIT            — Pydantic Services Inc. and contributors — https://github.com/pydantic/pydantic-settings
+* aiofiles          — Apache-2.0     — Tin Tvrtković and contributors — https://github.com/Tinche/aiofiles
+* APScheduler       — MIT            — Alex Grönholm — https://github.com/agronholm/apscheduler
+* tzlocal           — MIT            — Lennart Regebro and contributors — https://github.com/regebro/tzlocal
+* rich              — MIT            — Will McGugan / Textualize, Inc. — https://github.com/Textualize/rich
+* Pygments          — BSD-2-Clause   — the Pygments team — https://pygments.org
+* ruamel.yaml       — MIT            — Anthon van der Neut — https://pypi.org/project/ruamel.yaml/
 
 Notes
 -----

@@ -268,10 +268,11 @@ class JunosCodec(CodecBase):
                     "— most Junos interfaces have exactly one unit).  "
                     "GAP 4 materialises units 1+ as distinct "
                     "CanonicalInterface entries named "
-                    "``<parent>.<unit>``; per-unit VLAN tagging "
-                    "(``unit N vlan-id 100``) still parses-and-"
-                    "ignores pending a canonical tagged-subinterface "
-                    "model."
+                    "``<parent>.<unit>``, and GAP 7 captures the "
+                    "per-unit 802.1Q tag (``unit N vlan-id``) on "
+                    "``/interfaces/interface/dot1q-vlan`` (round-trips). "
+                    "Per-unit subinterface attributes beyond the address "
+                    "+ 802.1Q tag remain unmodelled."
                 ),
                 severity="warn",
             ),
