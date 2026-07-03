@@ -1369,9 +1369,14 @@
     // No suggestion when the top candidate matches what the operator
     // already picked — they have a different (real) problem.
     if (top.codec === planBody.source) return;
-    var suggestedAdapter = adapterEntry(top.codec);
-    var suggestedLabel = suggestedAdapter
-      ? (suggestedAdapter.vendor_display_name || suggestedAdapter.name)
+    // Resolve the display label from the adapters list the same way as the
+    // top-of-page vendor hint (see the adapters.find calls above).  NB:
+    // adapterEntry() returns {codec, label, desc, …} with NO
+    // vendor_display_name / name keys, so reading those off it rendered a
+    // literal "undefined" in both the banner and the retry button.
+    var suggestedRow = adapters.find(function(x) { return x.name === top.codec; });
+    var suggestedLabel = suggestedRow
+      ? (suggestedRow.vendor_display_name || suggestedRow.name)
       : top.codec;
     // Append the suggestion to the existing red banner.  Inline append
     // keeps the parse-error context visible above the suggestion — the

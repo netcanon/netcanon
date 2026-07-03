@@ -215,6 +215,48 @@ class TestMigrateSubmitFlow:
         severity = mig.banner_severity_class()
         assert severity in ("info", "block")
 
+    def test_parse_failure_suggestion_shows_real_vendor_not_undefined(
+        self, page: Page, base_url: str
+    ):
+        """Regression (2026-07-03 review, UX-1): the parse-failure "Did you
+        mean:" recovery banner + retry button must render the suggested
+        vendor's display name, not a literal "undefined".
+
+        The enrichment read ``.vendor_display_name`` / ``.name`` off
+        ``adapterEntry()``, which returns ``{codec, label, …}`` and has
+        neither key — so both the banner and the "Switch source to … and
+        retry" button showed the word "undefined".
+
+        Deterministic trigger: pick the XML netconf codec (cisco_iosxe) but
+        paste IOS CLI text.  Parse fails (malformed XML) and ``/detect``
+        confidently identifies cisco_iosxe_cli (≠ the selected source), so
+        the async suggestion enrichment fires.  cisco_iosxe_cli's vendor
+        record is "Cisco IOS-XE".
+        """
+        page.goto("/migrate")
+        mig = MigratePage(page)
+        page.wait_for_function(
+            """() => document.querySelector(
+                '[data-testid="migrate-source-select"]'
+            ).options.length > 0"""
+        )
+        mig.pick_source("cisco_iosxe")
+        mig.pick_target("cisco_iosxe")
+        mig.fill_raw(
+            "hostname r1\n!\ninterface GigabitEthernet1/0/1\n"
+            " ip address 10.0.0.1 255.255.255.0\n!\nrouter ospf 1\n!\n"
+        )
+        mig.submit_and_wait()
+        expect(mig.status_summary).to_contain_text("failed")
+        # The suggestion button is appended after the async /detect call.
+        suggest_btn = page.locator(
+            '[data-testid="migrate-parse-failure-detect-suggest"]'
+        )
+        expect(suggest_btn).to_be_visible()
+        btn_text = suggest_btn.text_content() or ""
+        assert "undefined" not in btn_text, btn_text
+        assert "Cisco IOS-XE" in btn_text, btn_text
+
     def test_validation_block_still_shows_result(
         self, page: Page, base_url: str
     ):
