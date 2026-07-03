@@ -231,13 +231,18 @@ Credentials are **not embedded in HTML**.
 
 - **Dashboard (`index.html`)** — the Saved Device `<select>` options include
   only non-sensitive fields (`type_key`, `host`, `port`, `username`).
-  Passwords are fetched via `GET /api/v1/devices/{id}` when a profile is
-  selected; the API call is over localhost HTTP.
 
 - **Devices page (`devices.html`)** — the `data-profile` DOM attribute
   contains only non-sensitive fields (id, name, type_key, host, port,
-  notes, created_at).  `runDeviceBackup()` fetches the full profile from
-  the API before submitting a backup job.
+  notes, created_at).
+
+The browser **never receives the credential.** Every device-profile API
+response is serialised through the write-only `DeviceProfilePublic` model,
+which omits the password / enable-password fields entirely — so
+`GET /api/v1/devices/{id}` returns no secret.  A backup is launched by
+submitting the profile **id**; the server then resolves and decrypts the
+credential from encrypted storage server-side (`backup_runner`), so the
+plaintext secret never crosses the network to the client.
 
 ---
 

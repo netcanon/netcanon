@@ -92,7 +92,7 @@ names the canonical surface, not a blanket guarantee.
 * `dns_servers`, `ntp_servers`, `syslog_servers`, `timezone`
 * `interfaces[].vrrp_groups` (v0.2.0 Wave B — classic FHRP
   redundancy, mode discriminator `vrrp` / `hsrp` / `carp`) — wired
-  across all seven bidirectional codecs.  See
+  across the bidirectional codecs.  See
   [`v0.2.0-planning/01-vrrp-canonical/`](v0.2.0-planning/01-vrrp-canonical/)
   for the design rationale and the
   [Cross-vendor L3-redundancy grammar reference](#cross-vendor-l3-redundancy-grammar-reference)
@@ -254,7 +254,7 @@ output.
 
 | Path | Class | Reason |
 |---|---|---|
-| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority ceiling 254 (255 unrepresentable). |
+| `/interfaces/interface/vrrp-groups/group` | Supported (Wave B) | Parses + renders a global `router vrrp` enable + `vrrp vrid <N> / owner\|priority / virtual-ip-address <Y> / preempt / enable` inside `vlan N` stanzas (AOS-S binds VRRP to the SVI's VLAN, not the L3 interface). The `vrrp vrid` header carries **no** `ip` prefix per the AOS-S 16.10 CLI reference; the legacy `ip vrrp vrid` form is still accepted on parse. `owner` maps to the canonical priority 255 (the RFC 5798 address-owner value — the full 0-255 range is now representable, and render inverts 255 back to `owner`). |
 | `/interfaces/interface/vrrp-groups/group/virtual-ips` | Lossy (Wave B) | AOS-S `virtual-ip-address` accepts only ONE address per vrid; cross-vendor migration from Cisco IOS-XE secondaries or Junos `virtual-address [ list ]` drops the tail with a review comment. |
 | `/interfaces/interface/ipv4/address/virtual-gateway-address` | Unsupported | AOS-S has no anycast-gateway grammar (campus L2/L3 codec). |
 | `/interfaces/interface/ipv6/address/virtual-gateway-address` | Unsupported | Same as IPv4 — no native anycast grammar. |
@@ -275,7 +275,7 @@ output.
 | `/interfaces/interface/ipv6/address/virtual-gateway-mac` | Supported (Wave C) | `virtual-gateway-v6-mac M`. |
 | `/routing/static-route/vrf` | Supported (v0.2.0) | `set routing-instances <NAME> routing-options static route <dest> next-hop <gw>` harvests onto `CanonicalStaticRoute.vrf` and renders back out (the routing-instances dispatcher now descends into `routing-options static`).  Top-level `set routing-options static route` lines round-trip with `vrf=""`.  next-hop form only — `discard` / `reject` blackhole routes and the explicit `rib <name>` form (e.g. IPv6 `inet6.0`) are not modelled, same as the global table; a VRF implied solely by a static route does not materialise an empty routing-instance. |
 | `/anycast-gateway-mac` | Unsupported | Junos has no chassis-wide anycast-gateway MAC; per-IRB-unit overrides live on `CanonicalIPv4Address.virtual_gateway_mac` (the `virtual-gateway-v4-mac` / `-v6-mac` grammar) and round-trip through the supported per-address surface instead.  Cross-vendor migration from a source carrying a system-wide MAC (Arista, NX-OS) must distribute the value across every IRB unit's per-address MAC on the receiving Junos side. |
-| `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, but per-unit VLAN tagging (`unit N vlan-id 100`) parses-and-ignores pending a canonical tagged-subinterface model. |
+| `/interfaces/interface/subinterfaces/subinterface` | Lossy | Unit 0 collapses into the parent; units 1+ materialise as distinct `<parent>.<unit>` interfaces, and per-unit 802.1Q tagging (`unit N vlan-id`) is captured on `/interfaces/interface/dot1q-vlan` (GAP 7 — round-trips). Per-unit subinterface attributes beyond the address + 802.1Q tag remain unmodelled. |
 | `/groups` | Lossy | Apply-groups inheritance is wired for the dispatch surface (system / login / interfaces / protocols / SNMP / routing-options / routing-instances / vlans); group bodies for unsupported surfaces (policy-options, firewall filters, RADIUS server options) parse-and-ignore. |
 | `/evpn-type5-routes/route` | Lossy | Per-prefix records lossy-by-default — VRF-property model uses `CanonicalRoutingInstance.l3_vni`; explicit per-prefix lists not populated by any codec today. |
 | `/routing/bgp` | Unsupported | BGP / IS-IS / OSPF / MPLS stanzas parse-and-ignore in v1; Junos routing-options grammar warrants a dedicated follow-up. |
@@ -548,8 +548,11 @@ The rename modal (Tier-3 rename) shows an amber banner on a pane
 when the active target codec declares that pane's category in
 `unsupported_rename_categories`.  Today only the
 `cisco_iosxe` (NETCONF) and `opnsense` codecs declare anything —
-both list `"snmpv3"` because their SNMPv3 paths are unsupported in
-the codec's render layer.  The banner prevents the ghost-success
+both list `"snmpv3"` (their SNMPv3 render paths are unsupported), and
+`cisco_iosxe` additionally lists `"ports"` (its port-name translation
+is an inherited no-op stub, so a port-rename pane against it warns
+up-front rather than emitting N per-port warnings).  The banner
+prevents the ghost-success
 bug where rename overrides apply to canonical but vanish from
 rendered output.
 
