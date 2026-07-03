@@ -595,8 +595,8 @@ def _parse_vrrp_group_stanza(
 
     Body grammar (AOS-S 16.10 "Basic configuration process" CLI ref):
 
-      * ``owner``                   — VIP owner → ``priority = 254``
-        (canonical ceiling; 255 reserved-but-unrepresentable)
+      * ``owner``                   — VIP owner → ``priority = 255``
+        (RFC 5798 address-owner priority; now representable)
       * ``backup``                  — explicit backup role (no field)
       * ``virtual-ip-address X``    — append to ``virtual_ips``
         (legacy ``X <mask>`` two-token form tolerated; mask dropped)
@@ -643,17 +643,15 @@ def _parse_vrrp_group_stanza(
             continue
 
         # ``owner`` declares this switch the VIP owner — VRRP reserves
-        # priority 255 for the owner (RFC 5798 §6.1).  The canonical
-        # ``priority`` field caps at 254 (255 is intentionally
-        # unrepresentable — the owner role isn't a first-class canonical
-        # concept), so we map ``owner`` to the canonical ceiling 254:
-        # this preserves the "this switch is the highest-priority
-        # master" intent for cross-vendor render rather than silently
-        # dropping to the default 100.  ``backup`` is the complementary
-        # explicit role with no priority implication — consume it
-        # (priority stays whatever ``priority N`` set, or the default).
+        # priority 255 for the owner (RFC 5798 §6.1).  ``CanonicalVRRPGroup.
+        # priority`` now spans the full 0-255 union, so ``owner`` maps to its
+        # true value 255 (was clamped to 254 while 255 was unrepresentable);
+        # render inverts it back to ``owner`` so the role round-trips.
+        # ``backup`` is the complementary explicit role with no priority
+        # implication — consume it (priority stays whatever ``priority N``
+        # set, or the default).
         if stripped.lower() == "owner":
-            group.priority = 254
+            group.priority = 255
             i += 1
             continue
         if stripped.lower() == "backup":

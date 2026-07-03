@@ -547,12 +547,11 @@ class CanonicalVRRPGroup(BaseModel):
 
     Attributes:
         group_id: FHRP group number.  Required.  VRRP VRID and CARP VHID
-            are 1-255, but HSRPv2 (``mode="hsrp"``) extends to 4095, so the
-            field bound is the union (1-4095).  A VRRP / CARP source never
-            emits a group > 255, so the wider ceiling only ever admits a
-            legitimate HSRPv2 group — it does not need per-mode validation.
-            (Lower bound stays 1: VRRP/CARP require it; HSRP group 0 is a
-            valid but unhandled edge, out of scope here.)
+            are 1-255, but HSRP (``mode="hsrp"``) runs 0-4095 (group 0 is
+            valid; HSRPv2 extends the ceiling to 4095), so the field bound is
+            the union (0-4095).  A VRRP / CARP source never emits a group
+            outside 1-255, so the wider range only ever admits a legitimate
+            HSRP group — it needs no per-mode validation.
         mode: Wire-protocol discriminator.  String literal (not enum)
             so codecs can extend it without a schema change.  Known
             values: ``"vrrp"`` (default — IETF VRRPv2 / VRRPv3),
@@ -575,8 +574,13 @@ class CanonicalVRRPGroup(BaseModel):
             group on parse and hoists back to top-level on render.
             Empty string = vendor-default (``00:00:5E:00:01:<VRID>``
             for IETF VRRP; ``00:00:0C:07:AC:<group>`` for HSRP).
-        priority: VRRP priority (1-254).  Higher wins the election.
-            Vendor default is 100.
+        priority: FHRP priority (0-255 — the VRRP/HSRP/GLBP union).
+            Higher wins the election; vendor default is 100.  VRRP itself
+            configures 1-254 (255 = the auto-assigned address owner, 0 = the
+            master-release sentinel), but HSRP / GLBP permit the full 0-255
+            as an operator-set value, so the canonical bound is the union.
+            A VRRP/CARP codec with no native representation for 255/0 maps
+            it (e.g. AOS-S ``owner`` <-> 255) or clamps on render.
         preempt: Whether a higher-priority router preempts the
             current master.  Vendor defaults vary (Cisco: true,
             Junos: false); the canonical default mirrors the most
@@ -605,12 +609,12 @@ class CanonicalVRRPGroup(BaseModel):
     ``docs/v0.2.0-planning/``.)
     """
 
-    group_id: int = Field(ge=1, le=4095)
+    group_id: int = Field(ge=0, le=4095)
     mode: str = "vrrp"  # "vrrp" | "hsrp" | "carp"
     virtual_ips: list[str] = Field(default_factory=list)
     virtual_ipv6s: list[str] = Field(default_factory=list)
     virtual_mac: str = ""
-    priority: int = Field(default=100, ge=1, le=254)
+    priority: int = Field(default=100, ge=0, le=255)
     preempt: bool = True
     advertisement_interval: int = 1
     authentication: str = ""

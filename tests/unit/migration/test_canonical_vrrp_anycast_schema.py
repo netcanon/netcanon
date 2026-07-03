@@ -93,8 +93,9 @@ class TestCanonicalVRRPGroupValidation:
     """Schema enforces VRID and priority ranges per RFC 5798."""
 
     def test_group_id_lower_bound(self):
+        # HSRP group 0 is valid, so 0 is accepted; -1 is the first invalid.
         with pytest.raises(ValidationError):
-            CanonicalVRRPGroup(group_id=0)
+            CanonicalVRRPGroup(group_id=-1)
 
     def test_group_id_upper_bound(self):
         # HSRPv2 (mode="hsrp") groups run 0-4095; the field ceiling is the
@@ -103,24 +104,30 @@ class TestCanonicalVRRPGroupValidation:
             CanonicalVRRPGroup(group_id=4096)
 
     def test_group_id_boundary_ok(self):
+        CanonicalVRRPGroup(group_id=0, mode="hsrp")  # HSRP group 0
         CanonicalVRRPGroup(group_id=1)
         CanonicalVRRPGroup(group_id=255)  # VRRP VRID max
         CanonicalVRRPGroup(group_id=301, mode="hsrp")  # HSRPv2 > 255
         CanonicalVRRPGroup(group_id=4095, mode="hsrp")  # HSRPv2 max
 
     def test_priority_lower_bound(self):
+        # HSRP / GLBP permit priority 0, so 0 is accepted; -1 is first invalid.
         with pytest.raises(ValidationError):
-            CanonicalVRRPGroup(group_id=10, priority=0)
+            CanonicalVRRPGroup(group_id=10, priority=-1)
 
     def test_priority_upper_bound(self):
-        """255 is the reserved "address owner" value per RFC 5798 — we
-        cap at 254 to keep the canonical model declaratively safe."""
+        """The field spans the 0-255 FHRP union — HSRP / GLBP configure the
+        full range, and VRRP's 255 (the RFC 5798 address owner) is now
+        representable (e.g. AOS-S ``owner`` <-> 255).  256 is the first
+        out-of-range value."""
         with pytest.raises(ValidationError):
-            CanonicalVRRPGroup(group_id=10, priority=255)
+            CanonicalVRRPGroup(group_id=10, priority=256)
 
     def test_priority_boundary_ok(self):
+        CanonicalVRRPGroup(group_id=10, priority=0)    # HSRP / GLBP min
         CanonicalVRRPGroup(group_id=10, priority=1)
         CanonicalVRRPGroup(group_id=10, priority=254)
+        CanonicalVRRPGroup(group_id=10, priority=255)  # VRRP owner / HSRP max
 
 
 # ---------------------------------------------------------------------------

@@ -1039,10 +1039,10 @@ class TestVRRPGroups:
         assert len(svi.vrrp_groups) == 1
         g = svi.vrrp_groups[0]
         assert g.group_id == 1
-        # ``owner`` → canonical priority ceiling 254 (model caps at 254;
-        # 255 reserved-but-unrepresentable).  Legacy ``<ip> <mask>`` VIP
+        # ``owner`` → the RFC 5798 address-owner priority 255 (now
+        # representable; was clamped to 254).  Legacy ``<ip> <mask>`` VIP
         # keeps the bare IP (mask dropped, not carried on the canonical).
-        assert g.priority == 254
+        assert g.priority == 255
         assert g.virtual_ips == ["10.40.0.1"]
 
     def test_parse_legacy_ip_vrrp_vrid_still_accepted(self):
@@ -1062,12 +1062,12 @@ class TestVRRPGroups:
         svi = next(i for i in tree.interfaces if i.name == "Vlan9")
         assert svi.vrrp_groups[0].group_id == 9
 
-    def test_owner_maps_to_max_priority_254_and_round_trips(self):
-        """``owner`` parses to the canonical priority ceiling 254 (255
-        is unrepresentable).  Render emits ``priority 254`` (AOS-S
-        accepts an explicit priority; the canonical can't distinguish a
-        254-from-owner from an explicit 254), which re-parses to 254 —
-        round-trip stable."""
+    def test_owner_maps_to_priority_255_and_round_trips(self):
+        """``owner`` parses to the RFC 5798 address-owner priority 255, and
+        render inverts it back to the ``owner`` keyword (AOS-S has no
+        ``priority 255`` line) — so the owner role round-trips to ``owner``,
+        not to a lossy ``priority 254`` as it did while 255 was
+        unrepresentable."""
         raw = (
             "router vrrp\n"
             "vlan 7\n"
@@ -1082,12 +1082,13 @@ class TestVRRPGroups:
         codec = ArubaAOSSCodec()
         tree = codec.parse(raw)
         svi = next(i for i in tree.interfaces if i.name == "Vlan7")
-        assert svi.vrrp_groups[0].priority == 254
+        assert svi.vrrp_groups[0].priority == 255
         out = codec.render(tree)
-        assert "      priority 254" in out
+        assert "      owner" in out
+        assert "priority 255" not in out
         reparsed = codec.parse(out)
         svi2 = next(i for i in reparsed.interfaces if i.name == "Vlan7")
-        assert svi2.vrrp_groups[0].priority == 254
+        assert svi2.vrrp_groups[0].priority == 255
 
     # ----------------------------- Capabilities -----------------------------
 
