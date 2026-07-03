@@ -19,7 +19,11 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ...models.backup import BackupJob, JobStatus
-from ...models.schedule import BackupSchedule, ScheduleCreate
+from ...models.schedule import (
+    BackupSchedule,
+    BackupSchedulePublic,
+    ScheduleCreate,
+)
 from ...storage.job_store import FileJobStore
 from ...storage.schedule_store import FileScheduleStore
 from ..deps import get_schedule_store, get_scheduler, get_schedules
@@ -276,7 +280,7 @@ async def _run_scheduled_backup_inner(schedule_id: str, app) -> None:
 
 @router.get(
     "/",
-    response_model=list[BackupSchedule],
+    response_model=list[BackupSchedulePublic],
     summary="List all backup schedules",
 )
 def list_schedules(
@@ -289,7 +293,7 @@ def list_schedules(
 @router.post(
     "/",
     status_code=201,
-    response_model=BackupSchedule,
+    response_model=BackupSchedulePublic,
     summary="Create a backup schedule",
 )
 def create_schedule(
@@ -351,7 +355,7 @@ def delete_schedule(
 
 @router.post(
     "/{schedule_id}/toggle",
-    response_model=BackupSchedule,
+    response_model=BackupSchedulePublic,
     summary="Enable or disable a schedule",
 )
 def toggle_schedule(
