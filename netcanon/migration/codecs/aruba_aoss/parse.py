@@ -127,6 +127,12 @@ _IP_ROUTE_RE = re.compile(
     r"\s+(\d+\.\d+\.\d+\.\d+)\s*$",
     re.IGNORECASE,
 )
+_IPV6_ROUTE_RE = re.compile(
+    # ``ipv6 route <prefix>/<len> <next-hop>`` — the IPv6 form (does not
+    # overlap ``^ip route``; ``ipv6`` != ``ip``).
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)\s*$",
+    re.IGNORECASE,
+)
 _VLAN_HEADER_RE = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 # ``trunk <port-list> <name> <type>`` — AOS-S link-aggregation form.
 # Examples:
@@ -952,6 +958,15 @@ def parse_intent(raw: str) -> CanonicalIntent:  # noqa: C901
             intent.static_routes.append(CanonicalStaticRoute(
                 destination="0.0.0.0/0",
                 gateway=gw.group(1),
+            ))
+            i += 1
+            continue
+
+        rt6 = _IPV6_ROUTE_RE.match(stripped_line)
+        if rt6:
+            intent.static_routes.append(CanonicalStaticRoute(
+                destination=rt6.group(1),  # already <prefix>/<len>
+                gateway=rt6.group(2),
             ))
             i += 1
             continue

@@ -841,10 +841,15 @@ def render_intent(tree: Any) -> str:  # noqa: C901
                     )
         lines.append("   exit")
 
-    # Static routes.  Default route (0.0.0.0/0) becomes
-    # ``ip default-gateway`` per AOS-S convention.
+    # Static routes.  IPv4 default route (0.0.0.0/0) becomes
+    # ``ip default-gateway`` per AOS-S convention; IPv6 destinations use the
+    # ``ipv6 route`` keyword (AOS-S has no ``ipv6 default-gateway`` form, so
+    # a v6 default is just ``ipv6 route ::/0 <gw>``).  Emitting ``ip route``
+    # for a v6 destination is invalid CLI.
     for route in tree.static_routes:
-        if route.destination in ("0.0.0.0/0", "default"):
+        if ":" in (route.destination or ""):
+            lines.append(f"ipv6 route {route.destination} {route.gateway}")
+        elif route.destination in ("0.0.0.0/0", "default"):
             lines.append(f"ip default-gateway {route.gateway}")
         else:
             lines.append(
