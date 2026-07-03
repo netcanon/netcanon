@@ -26,6 +26,40 @@ timestamp if your timezone matters for an audit.
 
 ## [Unreleased]
 
+## [0.4.13] - 2026-07-02
+
+### Added
+
+- **Routed sub-interface 802.1Q tag now translates across the L3
+  codecs.**  A new `CanonicalInterface.dot1q_vlan` surface captures the
+  802.1Q tag on a *routed* (layer-3) sub-interface — Cisco
+  `encapsulation dot1Q N`, Juniper `unit N vlan-id`, Arista
+  `encapsulation dot1q vlan N` — distinct from the L2 access-VLAN
+  field.  It round-trips and translates across Juniper Junos, Cisco
+  IOS-XE CLI, Cisco NX-OS, Arista EOS, and Cisco IOS-XR.  Previously a
+  Junos routed sub-interface tag was mis-mapped onto the L2 access-VLAN
+  field and rendered as `switchport access vlan N` on a
+  switchport-centric target (a semantic inversion) or silently dropped.
+  Codecs without a routed sub-interface construct (Aruba AOS-CX/AOS-S,
+  FortiGate, MikroTik, OPNsense) honestly declare the surface
+  unsupported.  (GAP 7.)
+
+### Fixed
+
+- **NX-OS auto-detection no longer mis-classifies as Cisco IOS-XE
+  CLI.**  NX-OS configs whose vendor tell is the `feature <name>`
+  keyword, the `nxapi` management plane, or a `!RANCID-CONTENT-TYPE:
+  cisco-nx` collection header now detect as NX-OS instead of losing the
+  alphabetical tie-break to `cisco_iosxe_cli`.  The RANCID/oxidized
+  collection header is now a high-precision detection signal across the
+  Cisco (IOS/NX-OS/IOS-XR), Arista, and Juniper probes.  Corpus
+  detection agreement rose to 100% on the RANCID-labelled configs.
+
+- **NX-OS HSRPv2 groups are now represented instead of rejected.**  The
+  `CanonicalVRRPGroup.group_id` bound widened from 0-255 (VRRP VRID) to
+  0-4095 (the VRRP/HSRP union), so an `hsrp 301` group parses and
+  round-trips rather than raising a validation error.
+
 ## [0.4.12] - 2026-07-02
 
 ### Added
