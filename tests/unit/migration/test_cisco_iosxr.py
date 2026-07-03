@@ -34,6 +34,7 @@ from netcanon.migration.canonical.intent import (
     CanonicalIntent,
     CanonicalInterface,
     CanonicalIPv4Address,
+    CanonicalStaticRoute,
 )
 from netcanon.migration.canonical.port_names import PortIdentity
 from netcanon.migration.codecs.cisco_iosxe_cli import CiscoIOSXECLICodec
@@ -380,6 +381,26 @@ class TestRoundTrip:
         assert "router static" in out
         assert "  192.0.2.0/24 Null0" in out
         assert out.rstrip().endswith("end")
+
+    def test_render_ipv6_static_route_under_ipv6_af(self, codec):
+        # IOS-XR files a static route under the address-family matching its
+        # destination.  A v6 prefix must sit under ``address-family ipv6
+        # unicast`` — not ``ipv4 unicast`` (invalid CLI, and the bug the
+        # dogfood mesh surfaced).  Covers default + per-VRF.
+        intent = CanonicalIntent(hostname="r1", static_routes=[
+            CanonicalStaticRoute(destination="10.0.0.0/8", gateway="192.0.2.1"),
+            CanonicalStaticRoute(destination="2001:db8:1::/48", gateway="2001:db8::1"),
+            CanonicalStaticRoute(
+                destination="2001:db8:a::/48", gateway="2001:db8::9", vrf="RED",
+            ),
+        ])
+        out = codec.render(intent)
+        assert " address-family ipv4 unicast\n  10.0.0.0/8 192.0.2.1" in out
+        assert " address-family ipv6 unicast\n  2001:db8:1::/48 2001:db8::1" in out
+        # The per-VRF v6 route nests under vrf RED / ipv6 unicast.
+        assert "  address-family ipv6 unicast\n   2001:db8:a::/48 2001:db8::9" in out
+        # A v6 prefix must never appear under the ipv4 AF block.
+        assert "ipv4 unicast\n  2001" not in out
 
     def test_render_emits_phase2_grammar(self, codec, kitchen_sink):
         out = codec.render(codec.parse(kitchen_sink))

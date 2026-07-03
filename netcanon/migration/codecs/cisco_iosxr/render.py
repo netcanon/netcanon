@@ -227,18 +227,28 @@ def _render_router_static(routes: list) -> list[str]:
     if not default_routes and not vrf_routes:
         return []
 
+    def _emit_afs(rs: list, indent: str) -> list[str]:
+        """Emit ``address-family {ipv4,ipv6} unicast`` sub-blocks.  IOS-XR
+        files a route under the AF matching its destination — a v6 prefix
+        under ``address-family ipv4 unicast`` is invalid CLI."""
+        blk: list[str] = []
+        for af, family in (("ipv4", False), ("ipv6", True)):
+            af_routes = [
+                r for r in rs if (":" in (r.destination or "")) == family
+            ]
+            if not af_routes:
+                continue
+            blk.append(f"{indent}address-family {af} unicast")
+            for r in af_routes:
+                blk.append(f"{indent} {_static_route_line(r)}")
+            blk.append(f"{indent}!")
+        return blk
+
     out = ["router static"]
-    if default_routes:
-        out.append(" address-family ipv4 unicast")
-        for r in default_routes:
-            out.append(f"  {_static_route_line(r)}")
-        out.append(" !")
+    out.extend(_emit_afs(default_routes, " "))
     for vrf_name, vroutes in vrf_routes.items():
         out.append(f" vrf {vrf_name}")
-        out.append("  address-family ipv4 unicast")
-        for r in vroutes:
-            out.append(f"   {_static_route_line(r)}")
-        out.append("  !")
+        out.extend(_emit_afs(vroutes, "  "))
         out.append(" !")
     out.append("!")
     return out
