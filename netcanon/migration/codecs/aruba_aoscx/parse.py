@@ -267,6 +267,12 @@ _STATIC_ROUTE_RE = re.compile(
     r"^ip\s+route\s+(\d+\.\d+\.\d+\.\d+)/(\d+)\s+(\S+)(?:\s+(\d+))?",
     re.IGNORECASE,
 )
+#: ``ipv6 route <prefix>/<len> <nh> [<dist>]`` — the IPv6 form uses the
+#: ``ipv6 route`` keyword (does not overlap ``^ip route``).
+_STATIC_ROUTE_V6_RE = re.compile(
+    r"^ipv6\s+route\s+([0-9A-Fa-f:]+/\d+)\s+(\S+)(?:\s+(\d+))?",
+    re.IGNORECASE,
+)
 
 #: ``interface vlan <N>`` SVI name (post-capture; the canonical name is
 #: the space-separated ``vlan N``).
@@ -875,6 +881,24 @@ def _parse_static_routes(raw: str) -> list[CanonicalStaticRoute]:
     """
     routes: list[CanonicalStaticRoute] = []
     for line in raw.splitlines():
+        m6 = _STATIC_ROUTE_V6_RE.match(line)
+        if m6:
+            dest, gw_or_iface, metric_str = m6.groups()
+            metric = int(metric_str) if metric_str else 0
+            gateway = ""
+            iface = ""
+            try:
+                ipaddress.IPv6Address(gw_or_iface)
+                gateway = gw_or_iface
+            except ipaddress.AddressValueError:
+                iface = gw_or_iface
+            routes.append(CanonicalStaticRoute(
+                destination=dest,  # already <prefix>/<len>
+                gateway=gateway,
+                interface=iface,
+                metric=metric,
+            ))
+            continue
         m = _STATIC_ROUTE_RE.match(line)
         if not m:
             continue
