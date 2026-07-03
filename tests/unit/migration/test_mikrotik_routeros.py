@@ -342,6 +342,32 @@ class TestRender:
         assert 'name=vlan10' in out
         assert 'vlan-id=10' in out
 
+    def test_vlan_id_from_record_when_name_digits_differ_from_tag(self):
+        # Regression: a VLAN interface whose NAME digits differ from its
+        # 802.1Q tag (name=vlan202 carrying tag 20) must render the tag from
+        # the canonical VLAN record, not the name suffix.  The old name-first
+        # order rendered vlan-id=202 AND emitted a phantom duplicate vlan20.
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="vlan202")],
+            vlans=[CanonicalVlan(id=20, name="vlan202")],
+        )
+        codec = MikroTikRouterOSCodec()
+        out = codec.render(tree)
+        vlan_lines = [ln for ln in out.splitlines() if "vlan-id=" in ln]
+        assert vlan_lines == ["add interface=bridge1 name=vlan202 vlan-id=20"]
+        # No phantom duplicate — exactly one VLAN survives, with the right id.
+        reparsed = codec.parse(out)
+        assert sorted(v.id for v in reparsed.vlans) == [20]
+
+    def test_vlan_id_matching_name_and_tag_unchanged(self):
+        # The common ``vlanN`` convention (name digits == tag) is unaffected.
+        tree = CanonicalIntent(
+            interfaces=[CanonicalInterface(name="vlan10")],
+            vlans=[CanonicalVlan(id=10, name="vlan10")],
+        )
+        out = MikroTikRouterOSCodec().render(tree)
+        assert "name=vlan10 vlan-id=10" in out
+
 
 class TestRoundTrip:
     """parse(render(tree)) == tree for every tree in the supported subset."""
