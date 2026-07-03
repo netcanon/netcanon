@@ -548,7 +548,6 @@ def render_intent(tree: Any) -> str:  # noqa: C901
 
     # --- static routes ---
     for route in tree.static_routes:
-        dest, mask = _cidr_to_dest_mask(route.destination)
         tail = ""
         if route.metric and route.metric > 0:
             tail = f" {route.metric}"
@@ -568,6 +567,17 @@ def render_intent(tree: Any) -> str:  # noqa: C901
         # ``ip route`` keyword and the destination (v0.2.0 — graduated
         # /routing/static-route/vrf from unsupported to supported).
         vrf_prefix = f"vrf {route.vrf} " if route.vrf else ""
+        # IPv6 destinations use the ``ipv6 route`` keyword with the prefix
+        # form (no dotted mask) — forcing them through the IPv4
+        # ``ip route <dest> <mask>`` path raised RenderError on the >32
+        # prefix length.  IOS-XE: ``ipv6 route [vrf X] <prefix>/<len> <nh>``.
+        if ":" in (route.destination or ""):
+            out.append(
+                f"ipv6 route {vrf_prefix}{route.destination} "
+                f"{target}{tail}{name_tail}",
+            )
+            continue
+        dest, mask = _cidr_to_dest_mask(route.destination)
         out.append(f"ip route {vrf_prefix}{dest} {mask} {target}{tail}{name_tail}")
     if tree.static_routes:
         out.append("!")
