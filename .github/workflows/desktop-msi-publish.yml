@@ -72,13 +72,13 @@ jobs:
     name: Test gate (unit + integration)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           ref: ${{ inputs.tag || github.ref }}
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -97,7 +97,7 @@ jobs:
 
     steps:
       - name: Checkout (full history for setuptools_scm)
-        uses: actions/checkout@v6.0.3
+        uses: actions/checkout@v7.0.0
         with:
           # When triggered by workflow_dispatch the user supplies a tag
           # name as `inputs.tag`; checkout's `ref` accepts either a tag
@@ -156,7 +156,7 @@ jobs:
           exit 1
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
           # No `cache: "pip"` -- this is a single-shot publish job
@@ -234,7 +234,7 @@ jobs:
         # softprops/action-gh-release creates the release page if it
         # doesn't yet exist (handy for tags pushed before this workflow
         # existed) and otherwise appends the MSI to the existing one.
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda  # v3
+        uses: softprops/action-gh-release@718ea10b132b3b2eba29c1007bb80653f286566b  # v3
         with:
           tag_name: ${{ inputs.tag || github.ref_name }}
           files: dist/*.msi

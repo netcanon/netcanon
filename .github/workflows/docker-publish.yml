@@ -50,12 +50,12 @@ jobs:
     name: Test gate (unit + integration)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -73,7 +73,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           # Full history so the on-main ancestry guard below can run a
           # merge-base against origin/main (shallow clone lacks the graph).

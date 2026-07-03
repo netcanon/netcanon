@@ -45,14 +45,14 @@ jobs:
     name: Test gate (unit + integration)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           # setuptools_scm needs full history/tags or `pip install -e .`
           # falls back to a 0.0.0 version (matches the build job).
           fetch-depth: 0
           persist-credentials: false
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
       - name: Install dependencies
@@ -70,7 +70,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6.0.3
+      - uses: actions/checkout@v7.0.0
         with:
           # Full history + tags for setuptools_scm to derive the package
           # version from the triggering tag.  Without this, the wheel
@@ -131,7 +131,7 @@ jobs:
           exit 1
 
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: "3.13"
           # No `cache: "pip"` -- this is a single-shot publish job
