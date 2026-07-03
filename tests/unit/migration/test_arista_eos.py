@@ -281,6 +281,45 @@ class TestParseInterfaces:
         assert iface.ipv4_addresses[0].ip == "10.0.0.1"
         assert iface.ipv4_addresses[0].prefix_length == 31
 
+    def test_indented_comment_does_not_close_interface_block(self):
+        """An INDENTED ``! ...`` comment inside an interface block is a
+        comment, not an end-of-stanza delimiter — sub-commands AFTER it must
+        still parse.  Regression: the render emits ``   ! review: ...`` lines
+        for un-translatable attributes (e.g. an HSRP group cross-vendored to
+        EOS), and one sitting before ``mtu 2000`` made arista parse close the
+        stanza early and silently drop the mtu (and everything after it) on
+        reparse.  Only a column-0 ``!`` closes the block."""
+        raw = (
+            "hostname sw1\n"
+            "interface Ethernet0/1\n"
+            "   ! review: vrrp_groups[1].mode='hsrp' has no Arista equivalent\n"
+            "   mtu 2000\n"
+            "   no switchport\n"
+            "   ip address 10.0.0.1/31\n"
+            "!\n"
+        )
+        iface = AristaEOSCodec().parse(raw).interfaces[0]
+        assert iface.name == "Ethernet0/1"
+        assert iface.mtu == 2000
+        assert iface.ipv4_addresses[0].ip == "10.0.0.1"
+
+    def test_column0_bang_still_separates_stanzas(self):
+        """The fix must not break the genuine delimiter: a column-0 ``!``
+        still closes the interface block, so a trailing top-level line does
+        not bleed into the previous interface."""
+        raw = (
+            "hostname sw1\n"
+            "interface Ethernet1\n"
+            "   mtu 1600\n"
+            "!\n"
+            "interface Ethernet2\n"
+            "   mtu 1700\n"
+            "!\n"
+        )
+        intent = AristaEOSCodec().parse(raw)
+        by_name = {i.name: i.mtu for i in intent.interfaces}
+        assert by_name == {"Ethernet1": 1600, "Ethernet2": 1700}
+
     def test_interface_loopback(self):
         raw = (
             "hostname sw1\n"

@@ -678,6 +678,17 @@ def _parse_stanzas(raw: str, intent: CanonicalIntent) -> None:
         line = raw_line.rstrip()
         stripped = line.strip()
         if not stripped or stripped.startswith("!"):
+            # An INDENTED comment (``   ! review: ...``) is a comment WITHIN
+            # the open stanza, NOT an end-of-stanza delimiter.  The render
+            # emits these for un-translatable attributes (e.g. an HSRP group
+            # on an EOS interface, which EOS can't represent), and one can
+            # sit BEFORE a real sub-command line such as ``mtu 2000``.  Only
+            # a column-0 ``!`` is the genuine section delimiter; treating an
+            # indented ``!`` as one silently dropped every sub-command after
+            # it on reparse (``mtu`` / ``no switchport`` / … lost).  Skip the
+            # comment and keep the stanza open.
+            if line.startswith((" ", "\t")) and stripped.startswith("!"):
+                continue
             # End-of-stanza delimiter.  Close whichever is open.
             current_iface = None
             current_vlan = None
