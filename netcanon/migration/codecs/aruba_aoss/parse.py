@@ -368,6 +368,16 @@ _AOS_PORT_SHAPE_RE = re.compile(
     r"^(?:[Tt]rk\d+|\d+(?:/[A-Za-z]?\d+)?|[A-Za-z]\d+)$",
 )
 
+#: DoS clamp on port-range expansion.  A fully-stacked AOS-S chassis tops out
+#: at ~10 stack members x 48 ports ~= 500 ports, so 1024 is generous headroom
+#: for any real device.  Without it, ``_expand_port_range`` materialises
+#: ``range(lo, hi + 1)`` unbounded and the ``_AOS_PORT_SHAPE_RE`` gate accepts
+#: an unbounded ``\d+`` endpoint — so a ~20-byte ``tagged 1-999999999`` in a
+#: VLAN stanza would allocate ~1e9 strings and OOM the worker.  Reachable from
+#: ``POST /plan`` and blind to the 10 MB raw_text cap (amplification, not raw
+#: size).
+_MAX_PORT_RANGE_SPAN = 1024
+
 
 def _parse_port_list(text: str) -> list[str]:
     """Expand AOS-S port-list syntax into individual port names.
@@ -451,6 +461,20 @@ def _expand_port_range(lo: str, hi: str) -> list[str]:
     prefix_lo, num_lo = m_lo.group(1), int(m_lo.group(2))
     prefix_hi, num_hi = m_hi.group(1), int(m_hi.group(2))
     if prefix_lo != prefix_hi or num_hi < num_lo:
+        return [lo, hi]
+    if num_hi - num_lo > _MAX_PORT_RANGE_SPAN:
+        # Implausible span — refuse to materialise (DoS clamp).  Keep the two
+        # endpoints as literal port names; a real AOS-S range never exceeds a
+        # few hundred ports, so this only ever fires on malformed / hostile
+        # input, and we log it rather than silently dropping coverage.  Log
+        # only the derived span + cap (integers) — NOT the raw ``lo``/``hi``
+        # tokens, which are parsed config values (CodeQL clear-text-logging).
+        logger.warning(
+            "aruba_aoss: refusing to expand an implausible port range "
+            "(span %d > cap %d); keeping the two endpoints as literal port "
+            "names instead of materialising the range.",
+            num_hi - num_lo + 1, _MAX_PORT_RANGE_SPAN,
+        )
         return [lo, hi]
     return [f"{prefix_lo}{n}" for n in range(num_lo, num_hi + 1)]
 

@@ -100,6 +100,27 @@ class TestParseDoesNotShredForeignPortNames:
         # Real wire form from cross-vendor ksator_qfx5100 round-trip.
         assert _parse_port_list("xe-0/0/2,1/1") == ["xe-0/0/2", "1/1"]
 
+    def test_implausible_range_is_clamped_not_materialised(self):
+        """PERF-1 (2026-07-03 review): an absurd port-range span must NOT be
+        expanded — the ``_AOS_PORT_SHAPE_RE`` gate accepts an unbounded
+        ``\\d+`` endpoint, so ``tagged 1-999999999`` (reachable via POST
+        /plan) would otherwise allocate ~1e9 strings and OOM the worker.
+
+        The clamp keeps the two endpoints as literal port names and returns
+        near-instantly instead of materialising the range.
+        """
+        import time
+
+        start = time.perf_counter()
+        result = _parse_port_list("1-999999999")
+        elapsed = time.perf_counter() - start
+        assert result == ["1", "999999999"], result
+        assert elapsed < 1.0, f"clamp did not short-circuit ({elapsed:.2f}s)"
+        # A range just past the cap is also clamped (endpoints only).
+        assert _parse_port_list("1-5000") == ["1", "5000"]
+        # A plausible in-cap range still expands fully.
+        assert _parse_port_list("1-10") == [str(n) for n in range(1, 11)]
+
 
 # ---------------------------------------------------------------------------
 # 2. Foreign-vendor port-name format-side
