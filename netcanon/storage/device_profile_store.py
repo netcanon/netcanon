@@ -24,7 +24,7 @@ from pathlib import Path
 
 from ..models.device_profile import DeviceProfile
 from ..security.credentials import encrypt
-from ..security.migration import migrate_credential_fields
+from ..security.migration import migrate_credential_fields, scrub_exc_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -118,8 +118,12 @@ class FileDeviceProfileStore:
 
                 profiles[p.id] = p
             except Exception as exc:
+                # scrub_exc_for_log: migrate_credential_fields decrypted the
+                # credential into `data` above, so a ValidationError here can
+                # carry the plaintext in its input — never log that.
                 logger.error(
-                    "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
+                    "CORRUPT FILE SKIPPED: %s — %s",
+                    path.name, scrub_exc_for_log(exc),
                 )
         logger.info("Loaded %d device profile(s)", len(profiles))
         return profiles

@@ -22,7 +22,7 @@ from pathlib import Path
 
 from ..models.schedule import BackupSchedule
 from ..security.credentials import encrypt
-from ..security.migration import migrate_credential_fields
+from ..security.migration import migrate_credential_fields, scrub_exc_for_log
 
 logger = logging.getLogger(__name__)
 
@@ -108,8 +108,12 @@ class FileScheduleStore:
                     path.name, exc,
                 )
             except Exception as exc:
+                # scrub_exc_for_log: the per-device credential is decrypted
+                # into `dev` above, so a ValidationError here can carry the
+                # plaintext in its input — never log that.
                 logger.error(
-                    "CORRUPT FILE SKIPPED: %s — %s", path.name, exc
+                    "CORRUPT FILE SKIPPED: %s — %s",
+                    path.name, scrub_exc_for_log(exc),
                 )
         logger.info("Loaded %d schedule(s)", len(schedules))
         return schedules
