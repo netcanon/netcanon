@@ -147,6 +147,16 @@ class TestParse:
         assert intent.source_vendor == "cisco_iosxr"
         assert intent.source_format == "cli-iosxr"
 
+    @pytest.mark.parametrize("banner,expected", [
+        ("!! IOS XR Configuration 6.3.1", "6.3.1"),          # older form
+        ("!! IOS XR Configuration version = 6.2.1", "6.2.1"),  # newer form
+        ("!! IOS XR Configuration version 7.3.2", "7.3.2"),  # keyword, no '='
+    ])
+    def test_source_version_banner_variants(self, codec, banner, expected):
+        # Regression: the newer ``version = <rel>`` banner made the extractor
+        # capture the literal word "version" instead of the release number.
+        assert codec.parse(banner + "\nhostname r1\n").source_version == expected
+
     def test_loopback_ipv4_mask_to_prefix(self, codec, kitchen_sink):
         intent = codec.parse(kitchen_sink)
         lo = next(i for i in intent.interfaces if i.name == "Loopback0")
